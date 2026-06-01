@@ -194,6 +194,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
                         item.setForeground(2, QtGui.QBrush(QtGui.QColor(C["warning"])))
                     bucket.addChild(item)
                     self._item_to_id[item] = obj.id
+                    if self._is_module_group_object(obj):
+                        self._add_module_group_runtime_nodes(item, obj)
                     if obj.selected or current_key == f"object:{obj.id}":
                         self.tree.setCurrentItem(item)
                 if label == "Lights":
@@ -465,6 +467,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         for obj in objects:
             if str(getattr(obj, "object_type", "") or "").lower() != "model":
                 continue
+            if self._is_module_group_object(obj):
+                continue
             helpers.extend((obj, node) for node in self._model_helper_nodes(obj))
         return helpers
 
@@ -472,6 +476,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         lights: list[tuple[SceneObjectInstance, object]] = []
         for obj in objects:
             if str(getattr(obj, "object_type", "") or "").lower() != "model":
+                continue
+            if self._is_module_group_object(obj):
                 continue
             lights.extend((obj, node) for node in self._model_light_nodes(obj))
         return lights
@@ -481,6 +487,73 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
 
     def _model_light_nodes(self, obj: SceneObjectInstance) -> list[object]:
         return [node for node in self._model_runtime_nodes(obj) if self._is_light_node(node)]
+
+    def _is_module_group_object(self, obj: SceneObjectInstance) -> bool:
+        metadata = getattr(obj, "metadata", {}) or {}
+        return str(getattr(obj, "object_type", "") or "").lower() == "model" and isinstance(metadata.get("module_group"), dict)
+
+    def _add_module_group_runtime_nodes(self, parent_item: QtWidgets.QTreeWidgetItem, obj: SceneObjectInstance) -> None:
+        for node in self._model_runtime_nodes(obj):
+            kind = self._module_runtime_kind(node)
+            child_count = len(getattr(node, "children", []) or [])
+            item = QtWidgets.QTreeWidgetItem([
+                str(getattr(node, "name", "") or "(unnamed)"),
+                kind,
+                self._module_runtime_state(node, kind),
+                str(child_count) if child_count else "",
+                self._source_label(obj),
+                str(getattr(node, "index", "") if getattr(node, "index", None) is not None else ""),
+            ])
+            item.setIcon(0, self._icon_for_kind(kind.lower()))
+            item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
+            item.setData(0, QtCore.Qt.UserRole, node)
+            item.setData(0, QtCore.Qt.UserRole + 1, f"module-node:{obj.id}:{getattr(node, 'name', '')}:{id(node)}")
+            item.setToolTip(0, self._module_node_tooltip(node, obj, kind))
+            item.setTextAlignment(3, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            parent_item.addChild(item)
+            if kind == "Light":
+                self._light_item_to_node[item] = node
+            elif kind == "Helper":
+                self._helper_item_to_node[item] = node
+
+    def _module_runtime_kind(self, node) -> str:
+        if bool(getattr(node, "is_mesh", False)) or bool(getattr(node, "is_skin", False)):
+            return "Mesh"
+        if self._is_light_node(node):
+            return "Light"
+        if bool(getattr(node, "is_camera", False)):
+            return "Camera"
+        if self._is_helper_node(node):
+            return "Helper"
+        return "Node"
+
+    def _module_runtime_state(self, node, kind: str) -> str:
+        if kind == "Light":
+            return self._light_state_label(node)
+        parts = []
+        if bool(getattr(node, "_gr_hidden", False)):
+            parts.append("hidden")
+        elif bool(getattr(node, "visible", True)):
+            parts.append("visible")
+        type_label = str(getattr(node, "type_label", "") or getattr(node, "node_type", "") or "").strip()
+        if type_label and type_label.lower() != kind.lower():
+            parts.append(type_label)
+        return ", ".join(parts)
+
+    def _module_node_tooltip(self, node, obj: SceneObjectInstance, kind: str) -> str:
+        parts = [
+            f"Name: {getattr(node, 'name', '')}",
+            f"Kind: {kind}",
+            f"Owner: {obj.name}",
+        ]
+        parent_name = str(getattr(getattr(node, "parent", None), "name", "") or "")
+        if parent_name:
+            parts.append(f"Parent: {parent_name}")
+        module_group = (getattr(obj, "metadata", {}) or {}).get("module_group") or {}
+        module_root = str(module_group.get("module_root") or "")
+        if module_root:
+            parts.append(f"Module: {module_root}")
+        return "\n".join(parts)
 
     def _model_runtime_nodes(self, obj: SceneObjectInstance) -> list[object]:
         model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
@@ -588,6 +661,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         color_map = {
             "scene": C["accent"],
             "model": C["gold"],
+            "mesh": C["gold"],
+            "node": C["text2"],
             "light": C["warning"],
             "camera": C["accent2"],
             "helper": C["text2"],

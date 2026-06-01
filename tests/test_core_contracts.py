@@ -3615,6 +3615,43 @@ def test_transform_cache_evict_clears_frame_and_gpu_child_caches() -> None:
     assert invalidated == [parent, child]
 
 
+def test_scene_root_transform_evict_keeps_gpu_mesh_resources_resident() -> None:
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    child = SimpleNamespace(children=[])
+    parent = SimpleNamespace(
+        children=[child],
+        _gr_scene_object_root=True,
+        _gr_scene_gpu_transform=True,
+    )
+
+    invalidated = []
+    transform_invalidations = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(
+            _wt_cache={id(parent): object(), id(child): object()},
+            _frame_view=object(),
+            _frame_verts_cache={id(child): [(0.0, 0.0, 0.0)]},
+            _frame_norms_cache={id(child): [(0.0, 0.0, 1.0)]},
+        ),
+        _gpu_renderer=SimpleNamespace(
+            invalidate_node=lambda node: invalidated.append(node),
+            invalidate_transform_cache=lambda reason: transform_invalidations.append(reason),
+        ),
+    )
+
+    QtViewportWidget._evict_transform_cache(viewport, parent)
+
+    assert viewport._renderer._wt_cache == {}
+    assert viewport._renderer._frame_view is None
+    assert viewport._renderer._frame_verts_cache == {}
+    assert viewport._renderer._frame_norms_cache == {}
+    assert invalidated == []
+    assert transform_invalidations == ["scene object transform changed"]
+
+
 def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
     import inspect
 
@@ -8654,6 +8691,10 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
     assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
+    assert "self.viewport.meshVisibilityChanged.connect(self._on_viewport_mesh_visibility_changed)" in layout_source
+    assert "self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self._on_module_mesh_visibility_changed)" in layout_source
+    assert "_invalidate_renderer_resources(\"module mesh visibility changed\")" not in layout_source
+    assert "_invalidate_renderer_resources(\"mesh visibility changed\")" not in layout_source
     assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")

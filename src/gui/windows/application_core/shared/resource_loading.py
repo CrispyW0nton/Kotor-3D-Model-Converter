@@ -13,7 +13,8 @@ try:
 except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
-from src.core.scene.scene_object import Transform
+from src.core.scene.scene_object import PivotData, Transform
+from src.core.scene.module_scene_import import ModuleRoomPlacement, resolve_module_room_placement
 from src.core.scene.scene_resource_ref import SceneResourceRef
 from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoice, AddModelToSceneDialog
 from src.gui.windows.application_core.application_core_lib.functions.geometry import (
@@ -411,7 +412,24 @@ class ResourceLoadingMixin:
             source_path=label,
             original_name=getattr(model, "name", Path(label).stem if label else "model"),
         )
-    def _placement_transform_for_new_model(self) -> Transform:
+    def _module_room_placement_for_ref(self, ref: SceneResourceRef) -> ModuleRoomPlacement | None:
+        game = str(getattr(ref, "game", "") or self._current_game or self.settings_data.get("default_game") or "K1").upper()
+        resref = str(getattr(ref, "resref", "") or getattr(ref, "original_name", "") or "").strip()
+        if not resref:
+            return None
+        try:
+            return resolve_module_room_placement(
+                game=game,
+                resref=resref,
+                resource_manager=self._resource_manager or self._get_resource_manager(),
+            )
+        except Exception as exc:
+            log.debug("module room placement lookup failed for %s:%s: %s", game, resref, exc)
+            return None
+
+    def _placement_transform_for_new_model(self, module_placement: ModuleRoomPlacement | None = None) -> Transform:
+        if module_placement is not None:
+            return Transform(position=module_placement.position)
         placement = str(self._pending_scene_import_placement or "auto_offset")
         if placement == "origin":
             return Transform()
@@ -439,14 +457,59 @@ class ResourceLoadingMixin:
                 texture_dir = ""
         if texture_dir and texture_dir not in self._scene_texture_dirs:
             self._scene_texture_dirs.append(texture_dir)
+        module_placement = self._module_room_placement_for_ref(ref)
         instance = self.scene_manager.add_model_instance(
             ref,
-            transform=self._placement_transform_for_new_model(),
+            transform=self._placement_transform_for_new_model(module_placement),
             runtime_model=model,
             select=True,
         )
+        if module_placement is not None:
+            self._apply_module_group_metadata(instance, model, module_placement)
         self.scene_manager.active_scene.game = ref.game or self.scene_manager.active_scene.game
         return instance
+
+    def _apply_module_group_metadata(self, instance, model, placement: ModuleRoomPlacement) -> None:
+        instance.group_id = placement.group_id
+        instance.metadata["module_group"] = placement.to_metadata()
+        instance.metadata["child_count"] = self._runtime_model_child_count(model)
+        center = self._model_bounds_center(model)
+        instance.pivot = PivotData(
+            position_local=center,
+            rotation_local=(0.0, 0.0, 0.0),
+            enabled=True,
+            metadata={"source": "model_bounds_center", "scope": "module_group"},
+        )
+        self.scene_manager.mark_dirty()
+
+    @staticmethod
+    def _runtime_model_child_count(model) -> int:
+        if model is None:
+            return 0
+        try:
+            nodes = list(model.all_nodes() or []) if hasattr(model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        root = getattr(model, "root_node", None)
+        return len([node for node in nodes if node is not None and node is not root])
+
+    @staticmethod
+    def _model_bounds_center(model) -> tuple[float, float, float]:
+        if model is None:
+            return (0.0, 0.0, 0.0)
+        try:
+            compute = getattr(model, "compute_bounds", None)
+            if callable(compute):
+                compute()
+            bb_min = tuple(float(v) for v in getattr(model, "bb_min", (0.0, 0.0, 0.0))[:3])
+            bb_max = tuple(float(v) for v in getattr(model, "bb_max", (0.0, 0.0, 0.0))[:3])
+            return (
+                (bb_min[0] + bb_max[0]) * 0.5,
+                (bb_min[1] + bb_max[1]) * 0.5,
+                (bb_min[2] + bb_max[2]) * 0.5,
+            )
+        except Exception:
+            return (0.0, 0.0, 0.0)
     @QtCore.Slot(object, str, str)
     def _on_model_loaded(self, model, path: str, error: str):
         if error:
@@ -752,6 +815,32 @@ class ResourceLoadingMixin:
                 self.viewport.set_selected_meshes(selected, source="module mesh panel")
             except TypeError:
                 self.viewport.set_selected_meshes(selected)
+
+    def _refresh_mesh_visibility_render_state(self, reason: str) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        refresh_scene_transforms = getattr(viewport, "refresh_scene_transforms", None)
+        if callable(refresh_scene_transforms):
+            refresh_scene_transforms(reason=reason)
+            return
+        gpu_renderer = getattr(viewport, "_gpu_renderer", None)
+        invalidate_transform_cache = getattr(gpu_renderer, "invalidate_transform_cache", None)
+        if callable(invalidate_transform_cache):
+            invalidate_transform_cache(reason)
+        refresh = getattr(viewport, "refresh_view", None)
+        if callable(refresh):
+            refresh()
+
+    def _on_viewport_mesh_visibility_changed(self) -> None:
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.refresh_module_mesh_rows()
+        self._refresh_mesh_visibility_render_state("mesh visibility changed")
+
+    def _on_module_mesh_visibility_changed(self) -> None:
+        self._sync_walkmesh_overlay_visibility()
+        self._refresh_mesh_visibility_render_state("module mesh visibility changed")
+
     def _on_sprite_material_selected(self, node) -> None:
         if node is None or bool(getattr(node, "_gr_hidden", False)):
             return

@@ -270,6 +270,7 @@ class ResourcePanelsMixin:
         window.set_navigation_profile(
             self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
         )
+        window.resource_manager = self._resource_manager or self._get_resource_manager()
         window.set_library_rows(getattr(self, "_library_rows", []) or [])
         window.show()
         window.raise_()

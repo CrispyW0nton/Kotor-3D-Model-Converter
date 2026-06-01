@@ -427,8 +427,7 @@ class ViewportPickingHoverMixin:
         setattr(node, "_gr_hidden", bool(hidden))
         if hidden and self._renderer.selected_node is node:
             self.set_selected_node(None)
-        if self._gpu_renderer is not None:
-            self._gpu_renderer.invalidate_node_cache()
+        self._invalidate_mesh_visibility_cache("mesh visibility changed")
         self.meshVisibilityChanged.emit()
         self._request_render()
 
@@ -442,8 +441,7 @@ class ViewportPickingHoverMixin:
             setattr(node, "_gr_hidden", bool(hidden))
             changed = changed or before != bool(hidden)
         if changed:
-            if self._gpu_renderer is not None:
-                self._gpu_renderer.invalidate_node_cache()
+            self._invalidate_mesh_visibility_cache("selected mesh visibility changed")
             self.meshVisibilityChanged.emit()
             self._request_render()
 
@@ -461,8 +459,7 @@ class ViewportPickingHoverMixin:
                 setattr(node, "_gr_hidden", True)
                 changed = True
         if changed:
-            if self._gpu_renderer is not None:
-                self._gpu_renderer.invalidate_node_cache()
+            self._invalidate_mesh_visibility_cache("unselected mesh visibility changed")
             self.meshVisibilityChanged.emit()
             self._request_render()
 
@@ -473,10 +470,20 @@ class ViewportPickingHoverMixin:
                 setattr(node, "_gr_hidden", False)
                 changed = True
         if changed:
-            if self._gpu_renderer is not None:
-                self._gpu_renderer.invalidate_node_cache()
+            self._invalidate_mesh_visibility_cache("all mesh visibility changed")
             self.meshVisibilityChanged.emit()
             self._request_render()
+
+    def _invalidate_mesh_visibility_cache(self, reason: str) -> None:
+        if self._gpu_renderer is None:
+            return
+        invalidate = getattr(self._gpu_renderer, "invalidate_transform_cache", None)
+        if callable(invalidate):
+            invalidate(reason)
+            return
+        invalidate_node_cache = getattr(self._gpu_renderer, "invalidate_node_cache", None)
+        if callable(invalidate_node_cache):
+            invalidate_node_cache()
 
     def _store_selected_mesh_names(self, attr: str, title: str) -> None:
         nodes = [node for node in self._selected_meshes if self._is_selectable_mesh_node(node)]

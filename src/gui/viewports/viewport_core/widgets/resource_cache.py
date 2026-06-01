@@ -17,6 +17,27 @@ class ViewportResourceCacheMixin:
             self._renderer._frame_norms_cache = {}
         except Exception:
             pass
+        scene_transform_only = bool(getattr(node, "_gr_scene_gpu_transform", False)) or bool(
+            getattr(node, "_gr_scene_object_root", False)
+        )
+        if scene_transform_only:
+            stack = list(getattr(node, "children", []) or [])
+            visited = set()
+            while stack:
+                child = stack.pop()
+                cid = id(child)
+                if cid in visited:
+                    continue
+                visited.add(cid)
+                self._renderer._wt_cache.pop(cid, None)
+                stack.extend(getattr(child, "children", []) or [])
+            if self._gpu_renderer is not None:
+                invalidate = getattr(self._gpu_renderer, "invalidate_transform_cache", None)
+                if callable(invalidate):
+                    invalidate("scene object transform changed")
+                else:
+                    self._gpu_renderer.invalidate_node(node)
+            return
         if self._gpu_renderer is not None:
             self._gpu_renderer.invalidate_node(node)
         stack = list(getattr(node, "children", []) or [])

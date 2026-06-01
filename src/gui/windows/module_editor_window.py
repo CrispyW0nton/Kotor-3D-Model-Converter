@@ -43,6 +43,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.layout_manager = layout_manager or getattr(parent, "layout_manager", None)
         self._last_output_dir = ""
         self._library_rows: list[dict[str, Any]] = []
+        self.resource_manager: Any = None
         self._build_actions()
         self._build_menus()
         self._build_ui()
@@ -306,7 +307,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def import_library_asset(self, row: dict[str, Any]) -> None:
         try:
-            item = self.controller.import_library_asset(row)
+            item = self.controller.import_library_asset(row, resource_manager=self.resource_manager)
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Import Library Asset", str(exc))
             return

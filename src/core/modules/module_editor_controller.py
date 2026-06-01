@@ -5,7 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.core.level import KMapProject, KMapSerializer, KMapValidator, LevelExportBridge, LevelExportOptions, LevelScene, new_kmap_project
+from src.core.level import KMapProject, KMapSerializer, KMapValidator, LevelExportBridge, LevelExportOptions, LevelScene, LevelTransform, new_kmap_project
+from src.core.scene.module_scene_import import resolve_module_room_placement
 
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
@@ -98,7 +99,7 @@ class ModuleEditorController:
         self.model.select(blueprint.blueprint_id)
         return blueprint
 
-    def import_library_asset(self, row: dict[str, Any]):
+    def import_library_asset(self, row: dict[str, Any], *, resource_manager: Any = None):
         """Add a game-library asset row to the editable KMAP scene."""
         asset = dict(row or {})
         resref = str(asset.get("resref") or "").strip()
@@ -122,13 +123,26 @@ class ModuleEditorController:
         }
         scene = LevelScene(self.project)
         if category == "Module" or model_class.lower() == "tile":
+            placement = resolve_module_room_placement(game=game, resref=resref, resource_manager=resource_manager)
+            transform = LevelTransform(position=placement.position) if placement is not None else None
+            lyt_entry = {"model": resref, "source": "library", "game": game}
+            if placement is not None:
+                lyt_entry.update(placement.to_metadata())
             room = scene.add_room(
                 str(asset.get("area_label") or resref),
                 model_resref=resref,
-                source_module=str(asset.get("module_code") or asset.get("location") or ""),
+                source_module=str(
+                    (placement.module_code if placement is not None else "")
+                    or asset.get("module_code")
+                    or asset.get("location")
+                    or ""
+                ),
                 module_id=self.model.active_module_id,
-                lyt_entry={"model": resref, "source": "library", "game": game},
+                transform=transform,
+                lyt_entry=lyt_entry,
             )
+            if placement is not None:
+                metadata.setdefault("module_group", placement.to_metadata())
             room.metadata.update(metadata)
             self.model.select(room.room_id)
             self.model.log(f"Imported library room {game}:{resref}.")
