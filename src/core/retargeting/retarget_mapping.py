@@ -308,9 +308,17 @@ def suggest_mixamo_to_aurora_mapping(
             "key_unmapped_reference_nodes": True,
             "basis_conversion": "blender_fbx_to_aurora_negate_xy",
             "source_reference_mode": "source_rest",
+            "hybrid_limb_source_rest_weight": 1.0,
+            "source_quaternion_conversion": "blender_identity",
+            "exact_segment_correction_policy": "mixamo_stable_humanoid",
+            "exact_segment_rotation_anchor": "target_rest",
+            "terminal_twist_correction_policy": "disabled",
             "source_reference_note": (
-                "Mixamo action clips commonly start in an authored pose, so the R3.B writer "
-                "uses the FBX bind/rest pose as the motion reference instead of clip frame 0."
+                "Mixamo action clips keep Blender-evaluated source rotations for roll stability while "
+                "mirroring source positions into Aurora's left/right basis. The R3.B writer uses "
+                "source rest, then exact KOTOR humanoid segment correction includes spine, upper/lower arms, "
+                "and upper/lower legs with target-rest roll anchoring while leaving collar, wrist, "
+                "and ankle roll on the local-basis path to avoid KOTOR humanoid shoulder, hand, and foot deformation."
             ),
         },
     )

@@ -158,6 +158,39 @@ def _normalize_source_reference_mode(mode: str) -> str:
     return aliases[normalized]
 
 
+def _normalize_source_quaternion_conversion(mode: str | None) -> str:
+    """Return how source FBX quaternions should enter Aurora-space math."""
+
+    normalized = str(mode or "ue5_to_aurora").strip().lower().replace("-", "_")
+    aliases = {
+        "ue": "ue5_to_aurora",
+        "ue5": "ue5_to_aurora",
+        "ue5_to_aurora": "ue5_to_aurora",
+        "mirror_xy": "ue5_to_aurora",
+        "identity": "identity",
+        "none": "identity",
+        "blender_identity": "identity",
+        "blender_fbx_identity": "identity",
+        "mixamo_blender_identity": "identity",
+    }
+    if normalized not in aliases:
+        raise ValueError(
+            "source_quaternion_conversion must be 'ue5_to_aurora' or 'identity', "
+            f"got '{mode}'."
+        )
+    return aliases[normalized]
+
+
+def _source_quat_xyzw_to_aurora_wxyz(
+    quat_xyzw: Tuple[float, float, float, float],
+    conversion_mode: str,
+) -> Tuple[float, float, float, float]:
+    if conversion_mode == "identity":
+        x, y, z, w = (float(value) for value in quat_xyzw)
+        return normalize_quat_wxyz((w, x, y, z))
+    return tuple(float(value) for value in aurora_from_ue5_quat(quat_xyzw).to_wxyz())
+
+
 def _curve_reference_mode(reference_mode: str, curve: dict, target_node: ModelNode) -> str:
     """Return the source reference policy for one R3.A curve."""
 
@@ -820,6 +853,10 @@ class AuroraAnimationWriter:
 
         warnings = warnings if warnings is not None else []
         reference_mode = _normalize_source_reference_mode(source_reference_mode)
+        payload_metadata = payload.get("metadata", {}) or {}
+        source_quaternion_conversion = _normalize_source_quaternion_conversion(
+            payload_metadata.get("source_quaternion_conversion")
+        )
         hybrid_weight = _clamped_weight(hybrid_limb_source_rest_weight)
         frame_count = int(payload.get("frame_count") or 0)
         duration = float(payload.get("duration_seconds") or 0.0)
@@ -866,6 +903,7 @@ class AuroraAnimationWriter:
                 target_node=target_node,
                 source_rest=source_rest,
                 aurora_rest_bases=aurora_rest_bases,
+                source_quaternion_conversion=source_quaternion_conversion,
             )
             rotations = []
             for index, frame in enumerate(frames):
@@ -879,6 +917,7 @@ class AuroraAnimationWriter:
                     basis_change,
                     source_reference_frame,
                     source_parent_reference_frame,
+                    source_quaternion_conversion,
                 )
                 if reference_mode == "hybrid_limb_source_rest" and curve_reference_mode == "source_rest":
                     frame_zero_rotation = self._motion_rotation_xyzw_from_ue5_world(
@@ -890,6 +929,7 @@ class AuroraAnimationWriter:
                         basis_change,
                         frames[0],
                         parent_frames[0] if parent_frames else None,
+                        source_quaternion_conversion,
                     )
                     rotations.append(_slerp_xyzw(frame_zero_rotation, source_rest_rotation, hybrid_weight))
                 else:
@@ -984,6 +1024,10 @@ class AuroraAnimationWriter:
                 "R3.B/R3.5 omits Aurora position controllers to preserve PMBAM bind proportions."
             )
         warnings.append("R3.5 per-bone local basis remapping enabled for orientation controllers.")
+        if source_quaternion_conversion == "identity":
+            warnings.append(
+                "R3.5 uses identity Blender-FBX source quaternion conversion for Mixamo-style source clips."
+            )
         if reference_mode == "clip_frame_zero":
             warnings.append(
                 "R3.5 uses source clip frame 0 as the retarget reference pose before applying motion deltas."
@@ -1135,7 +1179,13 @@ class AuroraAnimationWriter:
             bases[key] = quat_to_matrix_wxyz(registry.world_rotation(name))[:3, :3]
         return bases
 
-    def _source_rest_basis_aurora(self, curve: dict, source_rest: Optional[dict]) -> np.ndarray:
+    def _source_rest_basis_aurora(
+        self,
+        curve: dict,
+        source_rest: Optional[dict],
+        *,
+        source_quaternion_conversion: str = "ue5_to_aurora",
+    ) -> np.ndarray:
         """Return the source rest basis converted into Aurora coordinate space."""
 
         basis_data = curve.get("source_rest_basis") or source_rest or {}
@@ -1145,8 +1195,11 @@ class AuroraAnimationWriter:
         if raw_rotation is None and basis_data.get("matrix"):
             raw_rotation = matrix_to_quat_wxyz(np.asarray(basis_data["matrix"], dtype=np.float64))
 
-        ue5_w, ue5_x, ue5_y, ue5_z = self._four_floats(raw_rotation, (1.0, 0.0, 0.0, 0.0))
-        aurora_wxyz = aurora_from_ue5_quat((ue5_x, ue5_y, ue5_z, ue5_w)).to_wxyz()
+        source_w, source_x, source_y, source_z = self._four_floats(raw_rotation, (1.0, 0.0, 0.0, 0.0))
+        aurora_wxyz = _source_quat_xyzw_to_aurora_wxyz(
+            (source_x, source_y, source_z, source_w),
+            source_quaternion_conversion,
+        )
         return quat_to_matrix_wxyz(aurora_wxyz)[:3, :3]
 
     def _basis_change_for_curve(
@@ -1156,6 +1209,7 @@ class AuroraAnimationWriter:
         target_node: ModelNode,
         source_rest: Optional[dict],
         aurora_rest_bases: Dict[str, np.ndarray],
+        source_quaternion_conversion: str = "ue5_to_aurora",
     ) -> np.ndarray:
         """Compute the per-bone source-to-target rest-basis bridge."""
 
@@ -1163,7 +1217,11 @@ class AuroraAnimationWriter:
         aurora_basis = aurora_rest_bases.get(target_key)
         if aurora_basis is None:
             raise ValueError(f"Missing Aurora rest basis for target node '{target_node.name}'")
-        source_basis = self._source_rest_basis_aurora(curve, source_rest)
+        source_basis = self._source_rest_basis_aurora(
+            curve,
+            source_rest,
+            source_quaternion_conversion=source_quaternion_conversion,
+        )
         return compute_basis_change_matrix(source_basis, aurora_basis)
 
     def _motion_rotation_xyzw_from_ue5_world(
@@ -1176,6 +1234,7 @@ class AuroraAnimationWriter:
         basis_change_matrix: Optional[np.ndarray] = None,
         source_reference_frame: Optional[dict] = None,
         source_parent_reference_frame: Optional[dict] = None,
+        source_quaternion_conversion: str = "ue5_to_aurora",
     ) -> List[float]:
         """Convert source world-space bone motion into an Aurora local controller.
 
@@ -1213,6 +1272,7 @@ class AuroraAnimationWriter:
                 basis_change_matrix,
                 source_reference_frame,
                 source_parent_reference_frame,
+                source_quaternion_conversion,
             )
 
         source_delta = quat_mul_wxyz(
@@ -1220,7 +1280,10 @@ class AuroraAnimationWriter:
             (ue5_w, ue5_x, ue5_y, ue5_z),
         )
         delta_w, delta_x, delta_y, delta_z = source_delta
-        aurora_delta = aurora_from_ue5_quat((delta_x, delta_y, delta_z, delta_w)).to_wxyz()
+        aurora_delta = _source_quat_xyzw_to_aurora_wxyz(
+            (delta_x, delta_y, delta_z, delta_w),
+            source_quaternion_conversion,
+        )
         if basis_change_matrix is not None:
             aurora_delta = conjugate_quat_wxyz(aurora_delta, basis_change_matrix)
         bind_local = xyzw_to_wxyz(target_node.rotation)
@@ -1238,6 +1301,7 @@ class AuroraAnimationWriter:
         basis_change_matrix: Optional[np.ndarray] = None,
         source_reference_frame: Optional[dict] = None,
         source_parent_reference_frame: Optional[dict] = None,
+        source_quaternion_conversion: str = "ue5_to_aurora",
     ) -> List[float]:
         ue5_wxyz = frame.get("rotation_wxyz") or (1.0, 0.0, 0.0, 0.0)
         ue5_w, ue5_x, ue5_y, ue5_z = self._four_floats(ue5_wxyz, (1.0, 0.0, 0.0, 0.0))
@@ -1280,13 +1344,19 @@ class AuroraAnimationWriter:
                 source_anim,
             )
             delta_w, delta_x, delta_y, delta_z = source_delta
-            aurora_delta = aurora_from_ue5_quat((delta_x, delta_y, delta_z, delta_w)).to_wxyz()
+            aurora_delta = _source_quat_xyzw_to_aurora_wxyz(
+                (delta_x, delta_y, delta_z, delta_w),
+                source_quaternion_conversion,
+            )
             if basis_change_matrix is not None:
                 aurora_delta = conjugate_quat_wxyz(aurora_delta, basis_change_matrix)
             bind_local = xyzw_to_wxyz(target_node.rotation)
             local_wxyz = quat_mul_wxyz(bind_local, aurora_delta)
         else:
-            aurora_world = aurora_from_ue5_quat((ue5_x, ue5_y, ue5_z, ue5_w)).to_wxyz()
+            aurora_world = _source_quat_xyzw_to_aurora_wxyz(
+                (ue5_x, ue5_y, ue5_z, ue5_w),
+                source_quaternion_conversion,
+            )
             parent = getattr(target_node, "parent", None)
             if parent is not None:
                 parent_world_xyzw = parent.world_transform()[1]

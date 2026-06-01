@@ -867,16 +867,28 @@ def _verified_source_to_aurora_solver_options(profile: Any) -> RetargetSolverOpt
             if metadata.get("hybrid_limb_source_rest_weight") is not None
             else None
         ),
-        basis_conversion=BasisConversion(
-            source_basis=(
-                (-1.0, 0.0, 0.0),
-                (0.0, -1.0, 0.0),
-                (0.0, 0.0, 1.0),
-            ),
-            target_basis=(
-                (1.0, 0.0, 0.0),
-                (0.0, 1.0, 0.0),
-                (0.0, 0.0, 1.0),
-            ),
+        basis_conversion=_basis_conversion_from_metadata(metadata),
+    )
+
+
+def _basis_conversion_from_metadata(metadata: dict[str, Any]) -> BasisConversion | None:
+    basis_name = str(metadata.get("basis_conversion") or "ue5_to_aurora_negate_xy").strip().lower()
+    if basis_name in {
+        "identity",
+        "none",
+        "blender_fbx_to_aurora_identity",
+        "mixamo_blender_identity",
+    }:
+        return None
+    return BasisConversion(
+        source_basis=(
+            (-1.0, 0.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ),
+        target_basis=(
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
         ),
     )

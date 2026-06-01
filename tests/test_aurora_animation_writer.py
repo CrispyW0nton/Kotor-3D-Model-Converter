@@ -30,6 +30,29 @@ def _controller(node, controller_type: int):
     return next(ctrl for ctrl in node.controllers if ctrl["type"] == controller_type)
 
 
+def test_writer_identity_source_quaternion_conversion_preserves_blender_roll() -> None:
+    writer = AuroraAnimationWriter()
+    node = ModelNode(name="bone", rotation=(0.0, 0.0, 0.0, 1.0))
+    frame = {"rotation_wxyz": [0.70710678118, 0.70710678118, 0.0, 0.0]}
+    rest = {"rotation_wxyz": [1.0, 0.0, 0.0, 0.0]}
+
+    identity = writer._motion_rotation_xyzw_from_ue5_world(
+        frame,
+        node,
+        rest,
+        source_quaternion_conversion="identity",
+    )
+    mirrored = writer._motion_rotation_xyzw_from_ue5_world(
+        frame,
+        node,
+        rest,
+        source_quaternion_conversion="ue5_to_aurora",
+    )
+
+    assert identity[0] > 0.0
+    assert mirrored[0] < 0.0
+
+
 @pytest.fixture(autouse=True)
 def _prime_pmbam_supermodel_slots():
     SuperModelResolver.clear_cache()

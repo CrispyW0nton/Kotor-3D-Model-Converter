@@ -488,6 +488,8 @@ class ViewportSceneModelMixin:
         self,
         model,
         offset=(0.0, 0.0, 0.0),
+        *,
+        fit_to_model: bool = True,
     ) -> None:
         """Preview a reference skeleton over the active model (M12/T1202)."""
         self._renderer._ext_skeleton = model
@@ -503,7 +505,7 @@ class ViewportSceneModelMixin:
             ]
         except Exception:
             self._renderer._ext_skel_offset = [0.0, 0.0, 0.0]
-        if offset == (0.0, 0.0, 0.0):
+        if fit_to_model and offset == (0.0, 0.0, 0.0):
             self._fit_external_skeleton_overlay(model)
         self._request_render()
 

@@ -179,6 +179,22 @@ class ViewportConstructionMixin:
         row.addWidget(self.render_flat_button)
         row.addWidget(self._separator())
         row.addWidget(self._icon_button("Frame  F", self.frame_all, "viewport_frame", tooltip="Frame all (F)"))
+        self.center_pivot_button = self._icon_button(
+            "Center Pivot",
+            self.center_pivot_to_selection,
+            "viewport_gimbal",
+            tooltip="Center pivot on the selected object or mesh bounds",
+        )
+        self.center_pivot_button.setObjectName("ViewportCenterPivotButton")
+        row.addWidget(self.center_pivot_button)
+        self.freeze_transform_button = self._icon_button(
+            "Freeze Transforms",
+            self.freeze_selected_transform,
+            "viewport_scale",
+            tooltip="Bake the selected mesh transform into its vertices and reset transform values",
+        )
+        self.freeze_transform_button.setObjectName("ViewportFreezeTransformsButton")
+        row.addWidget(self.freeze_transform_button)
         self.walkmesh_button = self._icon_button(
             "WalkMesh",
             self.toggle_walkmesh,

@@ -60,6 +60,13 @@ from src.core.rendering.gpu_vbo_layout import (
     _VBO_MAIN_ATTRS,
     _VBO_MAIN_FORMAT,
 )
+from src.core.geometry.lightsaber import (
+    is_lightsaber_blade_node,
+    lightsaber_blade_emissive_rgb,
+    lightsaber_blade_procedural_rgba8,
+    lightsaber_blade_texture_cache_key,
+    should_use_procedural_lightsaber_blade_texture,
+)
 from src.core.special.render_constants import INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS
 from src.math.gpu_math import (
     _bas_attachment_local_transform_np,
@@ -134,6 +141,7 @@ class GpuRenderer:
         self._fbo_simple_h: int = 0
         # Placeholder 1×1 white texture (used as diffuse fallback)
         self._white_tex: Optional['moderngl.Texture'] = None
+        self._procedural_lightsaber_textures: Dict[str, 'Image.Image'] = {}
         # FIX-ENVFB: Neutral grey 1×1 environment-map fallback texture.
         # When a node has txi_envmaptexture set but the texture isn't in the
         # texture dict (partial texture load), bind this grey instead of nothing.
@@ -1484,6 +1492,12 @@ class GpuRenderer:
                 has_uvs    = bool(uvs) and len(uvs) > 0
                 node_name  = str(getattr(nd, 'name', '') or '').lower()
 
+                # Stock lightsaber blade planes frequently omit MDL UV arrays;
+                # the GPU path synthesizes UVs and a procedural glow texture for
+                # them, so they are renderable geometry rather than bone helpers.
+                if is_lightsaber_blade_node(nd):
+                    return False
+
                 # Skin nodes with a real texture and UVs are always renderable
                 if is_skin and has_tex and has_uvs:
                     return False
@@ -1586,6 +1600,9 @@ class GpuRenderer:
                             (wa < 0.999) or
                             decal or
                             (na < 0.999 and not has_env))
+                if is_lightsaber_blade_node(node):
+                    tb = 1
+                    is_trans = True
                 return na, tb, is_trans, has_env
 
             # ── PERF-NODECACHE: Three-pass node classification with caching ──
@@ -1668,6 +1685,9 @@ class GpuRenderer:
                             selfillum = _pn.selfillum
                 if _gpu_is_module and _render_mode_int in (1, 2):
                     node_alpha = 1.0
+                _is_blade_node = is_lightsaber_blade_node(node)
+                if _is_blade_node:
+                    selfillum = lightsaber_blade_emissive_rgb(node)
 
                 node_id = id(node)
                 # FIX-SKIN-ANIM: Skin nodes are NOT considered "animated" for VBO
@@ -1886,6 +1906,8 @@ class GpuRenderer:
                     _u['u_shininess'].value = 20.0   # global default
 
                 txi_blend = int(getattr(node, 'txi_blending', 0))
+                if _is_blade_node:
+                    txi_blend = 1
 
                 # FIX-ALPHATEST: Per-node punchthrough alpha-test threshold.
                 # KotOR TPC header bytes [4-7] = float alpha_test_threshold.
@@ -2059,6 +2081,20 @@ class GpuRenderer:
                 if tex_name in ('null', '', 'none'):
                     tex_name = ''
                 diff_img = textures.get(tex_name) if tex_name else None
+                if _is_blade_node and should_use_procedural_lightsaber_blade_texture(
+                    node,
+                    texture_missing=diff_img is None,
+                ) and _PIL:
+                    try:
+                        blade_key = lightsaber_blade_texture_cache_key(node)
+                        diff_img = self._procedural_lightsaber_textures.get(blade_key)
+                        if diff_img is None:
+                            blade_w, blade_h, blade_rgba = lightsaber_blade_procedural_rgba8(node)
+                            diff_img = Image.frombytes("RGBA", (blade_w, blade_h), blade_rgba)
+                            setattr(diff_img, "_gr_gpu_uv_v_flip", True)
+                            self._procedural_lightsaber_textures[blade_key] = diff_img
+                    except Exception as exc:
+                        log.debug("lightsaber procedural blade texture failed: %s", exc)
                 gl_diff = self._tex_cache.get(diff_img) if diff_img else None
                 _tex_gpu_v_flip = bool(getattr(diff_img, '_gr_gpu_uv_v_flip', True))
                 _u['u_uv_v_flip'].value = (
@@ -2343,7 +2379,13 @@ class GpuRenderer:
                     _u['u_model'].write(_mat4_tobytes(model_mat))
                     _u['u_normal_mat'].write(normal_mat.T.astype(np.float32).tobytes())
 
+                _blade_cull_disabled = False
+                if _is_blade_node and self.cull_faces and not self.show_wireframe:
+                    ctx.disable(moderngl.CULL_FACE)
+                    _blade_cull_disabled = True
                 _use_vao.render(moderngl.TRIANGLES)
+                if _blade_cull_disabled:
+                    ctx.enable(moderngl.CULL_FACE)
                 total_tris += _use_tris
 
             # Helper: draw a node with correct KotOR texture routing.
