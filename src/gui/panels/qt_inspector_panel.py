@@ -146,6 +146,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # Maps step_number → QStackedWidget page index for fast lookup.
         self._step_to_index: Dict[int, int] = {}
         self._joint_combos: List[QtWidgets.QComboBox] = []
+        self._symmetry_checkboxes: List[QtWidgets.QCheckBox] = []
         # M6 / T602 — track the active CharacterMode so the inspector
         # can swap between the legacy face-rig stubs and the Head
         # facial-bone palette without rebuilding the whole stack.
@@ -168,6 +169,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._skeleton_template_combo: Optional[QtWidgets.QComboBox] = None
         self._skeleton_template_status: Optional[QtWidgets.QLabel] = None
         self._skeleton_template_status_labels: List[QtWidgets.QLabel] = []
+        self._skeleton_template_completer: Optional[QtWidgets.QCompleter] = None
         self._apply_skeleton_template_btn: Optional[QtWidgets.QPushButton] = None
         self._fit_scale_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_rot_x_spin: Optional[QtWidgets.QDoubleSpinBox] = None
@@ -365,6 +367,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._skeleton_template_combo.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
         self._skeleton_template_combo.setMaxVisibleItems(18)
         self._skeleton_template_combo.setMinimumWidth(160)
+        self._configure_skeleton_template_search()
         self._skeleton_template_combo.setToolTip(
             "Pick the shipped KOTOR body/creature model that the imported mesh "
             "should match for scale, orientation, hooks, and animation retargeting."
@@ -372,12 +375,18 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._skeleton_template_combo.currentIndexChanged.connect(
             self._on_skeleton_template_index_changed
         )
+        self._skeleton_template_combo.editTextChanged.connect(
+            self._show_skeleton_template_completions
+        )
         if self._skeleton_template_combo.lineEdit() is not None:
             self._skeleton_template_combo.lineEdit().setPlaceholderText(
                 "Search resref, e.g. pmbam or n_sithsoldier"
             )
             self._skeleton_template_combo.lineEdit().returnPressed.connect(
                 self._emit_skeleton_template_from_text
+            )
+            self._skeleton_template_combo.lineEdit().textEdited.connect(
+                self._show_skeleton_template_completions
             )
         template_row.addWidget(self._skeleton_template_combo, 1)
         template_layout.addLayout(template_row)
@@ -642,6 +651,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         symmetry_cb.setToolTip("Mirror placement across the X axis "
                                "(driven by the viewport mirror-pair map).")
         symmetry_cb.toggled.connect(self.symmetryToggled.emit)
+        self._symmetry_checkboxes.append(symmetry_cb)
         symmetry_row.addWidget(symmetry_cb)
         symmetry_row.addStretch(1)
         layout.addLayout(symmetry_row)
@@ -920,11 +930,49 @@ class QtInspectorPanel(QtWidgets.QWidget):
         label.setStyleSheet(f"color:{colour}; font-size:8pt;")
         label.setText(message)
 
-    def set_skeleton_template_options(self, options: Iterable[object]) -> None:
+    def _configure_skeleton_template_search(self) -> None:
+        """Configure as-you-type lookup for the KOTOR base model picker."""
+        combo = getattr(self, "_skeleton_template_combo", None)
+        if combo is None:
+            return
+        completer = QtWidgets.QCompleter(combo.model(), combo)
+        completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        completer.setFilterMode(QtCore.Qt.MatchContains)
+        completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+        completer.setMaxVisibleItems(18)
+        completer.setWrapAround(False)
+        combo.setCompleter(completer)
+        self._skeleton_template_completer = completer
+
+    def _show_skeleton_template_completions(self, text: str) -> None:
+        """Open the indexed model suggestion popup while the user types."""
+        combo = getattr(self, "_skeleton_template_combo", None)
+        completer = getattr(self, "_skeleton_template_completer", None)
+        if combo is None or completer is None or not combo.isEnabled():
+            return
+        needle = str(text or "").strip()
+        if not needle:
+            completer.popup().hide()
+            return
+        completer.setCompletionPrefix(needle)
+        if completer.completionCount() <= 0:
+            completer.popup().hide()
+            return
+        rect = combo.rect()
+        rect.setWidth(max(rect.width(), 320))
+        completer.complete(rect)
+
+    def set_skeleton_template_options(
+        self,
+        options: Iterable[object],
+        *,
+        select_first: bool = False,
+    ) -> None:
         """Populate the body-rig skeleton-template picker (M12 / T1202)."""
         combo = getattr(self, "_skeleton_template_combo", None)
         if combo is None:                                  # pragma: no cover
             return
+        previous_text = combo.currentText()
 
         def _field(option: object, name: str, default: object = "") -> object:
             if isinstance(option, dict):
@@ -971,14 +1019,17 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         has_options = combo.count() > 0
         combo.setEnabled(has_options)
-        if combo.completer() is not None:
-            combo.completer().setFilterMode(QtCore.Qt.MatchContains)
-            combo.completer().setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+        self._configure_skeleton_template_search()
         if self._apply_skeleton_template_btn is not None:
             self._apply_skeleton_template_btn.setEnabled(has_options)
         if has_options:
-            combo.setCurrentIndex(0)
-            self.skeletonTemplateSelected.emit(str(combo.currentData() or ""))
+            if select_first:
+                combo.setCurrentIndex(0)
+                self.skeletonTemplateSelected.emit(str(combo.currentData() or ""))
+            else:
+                combo.setCurrentIndex(-1)
+                if previous_text and combo.lineEdit() is not None:
+                    combo.lineEdit().setText(previous_text)
         else:
             self.set_skeleton_template_status(
                 "No skeleton templates found for this game/mode.",
@@ -2037,6 +2088,22 @@ class QtInspectorPanel(QtWidgets.QWidget):
             if idx == current_idx:
                 return step
         return _STEP_LOAD                                    # pragma: no cover
+
+    def set_symmetry_enabled(self, enabled: bool) -> None:
+        """Synchronize every inspector Symmetry checkbox without re-emitting."""
+        value = bool(enabled)
+        for checkbox in self._symmetry_checkboxes:
+            checkbox.blockSignals(True)
+            try:
+                checkbox.setChecked(value)
+            finally:
+                checkbox.blockSignals(False)
+
+    def symmetry_enabled(self) -> bool:
+        """Return the visible inspector Symmetry state."""
+        if not self._symmetry_checkboxes:
+            return True
+        return bool(self._symmetry_checkboxes[0].isChecked())
 
     def set_fit_adjustment(
         self,

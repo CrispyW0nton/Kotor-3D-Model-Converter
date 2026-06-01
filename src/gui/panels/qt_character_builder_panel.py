@@ -35,6 +35,12 @@ from src.gui.qt_lib.assets.qt_theme import (
     update_legacy_palette,
 )
 from src.gui.qt_lib.panels.qt_workflow_rail import QtWorkflowRail
+from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+from src.systems.bas.preview_composer import (
+    bas_slot_for_preview_socket,
+    bas_socket_for_slot,
+    build_bas_preview_model,
+)
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -464,6 +470,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._restore_settings()
         self._sync_from_scene()
         self._update_title()
+        self._refresh_skeleton_template_options()
         theme_manager = getattr(parent, "theme_manager", None)
         layout_manager = getattr(parent, "layout_manager", None)
         if theme_manager is not None:
@@ -915,12 +922,26 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot(bool)
     def _on_joint_symmetry_toggled(self, enabled: bool) -> None:
-        """Mirror the inspector Symmetry checkbox into the viewport HUD."""
+        """Mirror the shared Symmetry toggle into toolbar, inspector, and viewport."""
+        enabled = bool(enabled)
+        action = getattr(self, "_symmetry_action", None)
+        if action is not None and action.isChecked() != enabled:
+            action.blockSignals(True)
+            try:
+                action.setChecked(enabled)
+            finally:
+                action.blockSignals(False)
+        inspector = getattr(self, "inspector", None)
+        if inspector is not None and hasattr(inspector, "set_symmetry_enabled"):
+            try:
+                inspector.set_symmetry_enabled(enabled)
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_symmetry_enabled failed")
         viewport = getattr(self, "viewport", None)
         if viewport is None or not hasattr(viewport, "set_joint_symmetry"):
             return
         try:
-            viewport.set_joint_symmetry(bool(enabled))
+            viewport.set_joint_symmetry(enabled)
         except Exception:                                   # pragma: no cover
             log.exception("viewport.set_joint_symmetry failed")
 
@@ -1030,7 +1051,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         result = _wf.update_body_guide_from_node(
             self._acurig,
             node,
-            auto_mirror=False,
+            auto_mirror=bool(
+                getattr(getattr(self, "viewport", None), "joint_symmetry_enabled", False)
+            ),
         )
         if not getattr(result, "ok", False):
             return
@@ -1325,7 +1348,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                     and hasattr(self.viewport, "set_external_skeleton")
                 ):
                     self.viewport.set_external_skeleton(
-                        self._selected_skeleton_template_model
+                        self._selected_skeleton_template_model,
+                        fit_to_model=False,
                     )
                 if hasattr(self.viewport, "clear_acurig_guides"):
                     self.viewport.clear_acurig_guides()
@@ -1559,6 +1583,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             from src.core.animation.animation_engine import SuperModelResolver
         except ImportError:                                 # pragma: no cover
             from core.animation.animation_engine import SuperModelResolver  # type: ignore
+        if getattr(SuperModelResolver, "_resource_manager", None) is not self._resource_manager:
+            try:
+                SuperModelResolver.clear_cache()
+            except Exception:                               # pragma: no cover
+                log.debug("SuperModelResolver.clear_cache failed", exc_info=True)
         SuperModelResolver.configure(self._resource_manager)
 
         viewport = getattr(self, "viewport", None)
@@ -1819,7 +1848,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_external_skeleton"):
             try:
-                viewport.set_external_skeleton(template_model)
+                viewport.set_external_skeleton(template_model, fit_to_model=False)
             except Exception:                               # pragma: no cover
                 log.exception("viewport.set_external_skeleton failed")
 
@@ -2649,6 +2678,38 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             self._update_title()
             self._schedule_live_validation("motions_assigned")
 
+    def _sync_motion_controls_to_scene(self, workflow_module=None) -> Optional[Any]:
+        """Apply the inspector's motion dropdowns before library/preview queries."""
+        try:
+            _wf = workflow_module or self._workflow_module()
+        except Exception:                                  # pragma: no cover
+            return None
+
+        source = "model"
+        if hasattr(self.inspector, "selected_motion_source"):
+            source = self.inspector.selected_motion_source()
+        supermodel = ""
+        if hasattr(self.inspector, "selected_motion_supermodel"):
+            supermodel = self.inspector.selected_motion_supermodel()
+
+        result = _wf.assign_motion_source(
+            self.scene,
+            source,
+            supermodel=supermodel,
+        )
+        if hasattr(self.inspector, "set_motion_assignment_status"):
+            try:
+                kind = "ok" if result.ok else "warning"
+                if result.code in ("no_body", "unknown_source"):
+                    kind = "error"
+                self.inspector.set_motion_assignment_status(
+                    result.message,
+                    kind=kind,
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("inspector.set_motion_assignment_status failed")
+        return result
+
     @QtCore.Slot()
     def _on_run_rom_test_requested(self) -> None:
         """Assign and run the generated range-of-motion preview."""
@@ -2731,6 +2792,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         from core.characters import headless_body_workflow as _wf
 
         self._ensure_game_resource_manager()
+        self._sync_motion_controls_to_scene(_wf)
 
         result = _wf.available_preview_animations(self.scene)
         library = (
@@ -2782,6 +2844,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """
         from core.characters import headless_body_workflow as _wf
 
+        self._ensure_game_resource_manager()
+        self._sync_motion_controls_to_scene(_wf)
         result = self._start_preview_animation(anim_name)
         if result is None:
             result = _wf.play_preview_animation(
@@ -2965,11 +3029,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         elif manager is not None and clean_resref:
             item_model = manager.load_model(clean_resref, str(game or "K1").upper())
 
+        bas_slot = bas_slot_for_preview_socket(socket, clean_resref)
+        bas_socket = bas_socket_for_slot(bas_slot) if bas_slot else str(socket or "rhand")
+
         spec = _ap.AttachmentSpec(
             item_model=item_model,
             item_resref=clean_resref,
             item_path=item_path,
-            socket=str(socket or "rhand"),
+            socket=bas_socket,
             attachment_type=_attachment_type_from_resref(clean_resref),
         )
         result = _ap.attach_item_to_preview(self.scene, spec)
@@ -2986,7 +3053,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             self._show_attachment_preview_model(
                 body=getattr(result, "body_model", None),
                 item=getattr(result, "item_model", None),
-                socket_world_transform=getattr(result, "socket_world_transform", None),
+                socket_name=bas_socket,
+                bas_slot=bas_slot,
+                item_resref=clean_resref,
             )
             self._schedule_live_validation("preview_attachment")
 
@@ -2995,28 +3064,47 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         *,
         body: Any,
         item: Any,
-        socket_world_transform: Any,
+        socket_name: str,
+        bas_slot: str,
+        item_resref: str,
     ) -> None:
-        if body is None or item is None or not socket_world_transform:
+        if body is None or item is None:
             return
         try:
-            import copy
-            preview = copy.deepcopy(body)
-            item_copy = copy.deepcopy(item)
-            body_root = getattr(preview, "root_node", None)
-            item_root = getattr(item_copy, "root_node", None)
-            if body_root is None or item_root is None:
+            slot = str(bas_slot or bas_slot_for_preview_socket(socket_name, item_resref) or "").strip()
+            if not slot:
                 return
-            position, rotation = socket_world_transform
-            item_root.parent = body_root
-            item_root.position = tuple(position)
-            item_root.rotation = tuple(rotation)
-            body_root.children.append(item_root)
-            preview.name = f"{getattr(body, 'name', 'body')}_preview"
+            transform = default_bas_attachment_transform(slot, item_resref)
+            preview = build_bas_preview_model(
+                body_model=body,
+                attachment_models={slot: item},
+                attachment_transforms={slot: transform},
+                name=f"{getattr(body, 'name', 'body')}_bas_preview",
+            )
             setattr(self.scene, "preview_model", preview)
+            metadata = getattr(self.scene, "metadata", None)
+            if isinstance(metadata, dict):
+                metadata.setdefault("body_attachment_system", {})
+                metadata["body_attachment_system"].update({
+                    "active": True,
+                    "preview_owner": "character_builder",
+                    "attachments": {slot: str(item_resref or getattr(item, "name", "") or "")},
+                    "layers": [{
+                        "slot": slot,
+                        "socket": bas_socket_for_slot(slot),
+                        "resref": str(item_resref or getattr(item, "name", "") or ""),
+                        "enabled": True,
+                    }],
+                })
             viewport = getattr(self, "viewport", None)
             if viewport is not None and hasattr(viewport, "load_model"):
                 viewport.load_model(preview)
+            if hasattr(self.inspector, "set_preview_attachment_status"):
+                label = str(item_resref or getattr(item, "name", "") or "attachment")
+                self.inspector.set_preview_attachment_status(
+                    f"BAS preview attached {label} to {bas_socket_for_slot(slot)}.",
+                    kind="ok",
+                )
         except Exception:                                  # pragma: no cover
             log.exception("Could not build attachment preview model")
 

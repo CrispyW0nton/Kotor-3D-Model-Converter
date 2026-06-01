@@ -6,6 +6,10 @@ from typing import Dict, List, Optional, Tuple
 
 from src.adapters.gpu.moderngl_runtime import Image, _NUMPY, _PIL, moderngl, np
 from src.adapters.gpu.viewport_probe import _gr_gpu_probe
+from src.core.geometry.lightsaber import (
+    is_lightsaber_blade_node,
+    synthetic_lightsaber_blade_uvs,
+)
 from src.core.rendering.gpu_vbo_layout import _split_vbo_attributes_for_gpu
 from src.math.gpu_math import (
     _bas_attachment_local_transform_np,
@@ -342,6 +346,7 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
                     anim_pose_node=None,
                     is_module: bool = False,
                     bone_index_remap: Optional[Dict[int, int]] = None,
+                    local_scale: float | tuple[float, float, float] | None = None,
                     apply_skin_node_transform_for_bind: bool = True) -> Tuple[Optional[np.ndarray],
                                                       Optional[np.ndarray]]:
     """
@@ -402,6 +407,24 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
             v_arr = np.zeros((n_verts, 3), dtype=np.float64)
     except (ValueError, TypeError):
         v_arr = np.zeros((n_verts, 3), dtype=np.float64)
+    if local_scale is not None:
+        try:
+            if isinstance(local_scale, (tuple, list)):
+                scale_vec = np.asarray(
+                    [
+                        float(local_scale[0]),
+                        float(local_scale[1]),
+                        float(local_scale[2]),
+                    ],
+                    dtype=np.float64,
+                )
+            else:
+                value = float(local_scale)
+                scale_vec = np.asarray([value, value, value], dtype=np.float64)
+            if np.all(np.isfinite(scale_vec)):
+                v_arr = v_arr * scale_vec
+        except Exception:
+            pass
 
     n_norms = len(norms)
     if n_norms > 0:
@@ -518,7 +541,13 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
         if np.any(bad_uv):
             uv_arr[bad_uv] = 0.5
     else:
-        uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
+        synthetic = []
+        if is_lightsaber_blade_node(node):
+            synthetic = synthetic_lightsaber_blade_uvs(verts)
+        if len(synthetic) == n_verts:
+            uv_arr = np.asarray(synthetic, dtype=np.float32)
+        else:
+            uv_arr = np.full((n_verts, 2), 0.5, dtype=np.float32)
         n_uvs = n_verts  # for consistent indexing below
 
     # UV1/lightmap coordinates follow the same texture-vertex indexing rules as

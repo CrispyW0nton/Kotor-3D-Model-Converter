@@ -31,6 +31,7 @@ class ViewportDragInteractionsMixin:
         self._gimbal_dragging = False
         self._clear_mesh_hover(reason="gizmo drag started")
         self._transform_gizmo.begin_drag(handle, (x, y), self.camera)
+        self._prepare_transform_gizmo_symmetry(node)
         self._renderer.is_interactive = True
         self._frame_governor.begin_interaction("gizmo drag")
         self._request_render(fast=True, reason="gizmo drag started", gizmo=True, overlay=True)
@@ -38,6 +39,7 @@ class ViewportDragInteractionsMixin:
 
     def _cancel_transform_gizmo_drag(self) -> None:
         node = getattr(getattr(self._transform_gizmo, "controller", None), "object", None)
+        self._restore_transform_gizmo_symmetry()
         self._transform_gizmo.cancel_drag()
         self._transform_gizmo_dragging = False
         self._renderer.is_interactive = False
@@ -71,6 +73,7 @@ class ViewportDragInteractionsMixin:
                 after_pivot_rotation=after.pivot_rotation,
             )
             self._notify_node_moved(node)
+        self._commit_transform_gizmo_symmetry()
         self._request_render(reason="gizmo drag ended", gizmo=True, selection=True, overlay=True)
 
     def _press_lmb(self, event) -> None:
@@ -198,6 +201,7 @@ class ViewportDragInteractionsMixin:
         if self._transform_gizmo_dragging:
             self._transform_gizmo.drag((x, y), self.camera, self.canvas.height())
             node = getattr(getattr(self._transform_gizmo, "controller", None), "object", None)
+            self._apply_transform_gizmo_symmetry()
             if node is not None:
                 self._notify_node_moved(node, live=True)
             dirty = {"scene": True, "gizmo": True}
@@ -684,6 +688,16 @@ class ViewportDragInteractionsMixin:
                 wp,
             )
             return
+        promoted_root = self._promoted_model_root_for_mesh_transform(node)
+        if promoted_root is not None:
+            self._apply_model_gimbal_drag(
+                dx_screen,
+                dy_screen,
+                world_per_px,
+                axis,
+                wp,
+            )
+            return
 
         if self._renderer.gimbal_mode == 1:
             def axis_delta(axis_name: str):
@@ -742,6 +756,84 @@ class ViewportDragInteractionsMixin:
                 node.rotation = tuple(v / ll for v in new_rot)
 
         self._evict_transform_cache(node)
+
+    def _prepare_transform_gizmo_symmetry(self, node) -> None:
+        self._transform_gizmo_mirror_nodes = []
+        self._transform_gizmo_mirror_start_positions = {}
+        if (
+            node is None
+            or not self._joint_symmetry_enabled
+            or self._transform_gizmo.mode != GizmoMode.TRANSLATE
+            or self._is_selected_model_root(node)
+            or self._promoted_model_root_for_mesh_transform(node) is not None
+        ):
+            return
+        partner = self._joint_mirror_partner(node)
+        if partner is None:
+            return
+        self._transform_gizmo_mirror_nodes = [partner]
+        try:
+            self._transform_gizmo_mirror_start_positions[id(partner)] = tuple(partner.position)
+        except Exception:
+            self._transform_gizmo_mirror_start_positions[id(partner)] = (0.0, 0.0, 0.0)
+
+    def _apply_transform_gizmo_symmetry(self) -> None:
+        if not self._transform_gizmo_mirror_nodes or self._transform_gizmo.mode != GizmoMode.TRANSLATE:
+            return
+        node = getattr(self._transform_gizmo, "selected_object", None)
+        original = getattr(getattr(self._transform_gizmo, "controller", None), "original", None)
+        if node is None or original is None:
+            return
+        try:
+            pos = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+            start = tuple(float(v) for v in original.position[:3])
+        except Exception:
+            return
+        delta = (pos[0] - start[0], pos[1] - start[1], pos[2] - start[2])
+        for mirror_node in self._transform_gizmo_mirror_nodes:
+            mirror_start = self._transform_gizmo_mirror_start_positions.get(id(mirror_node))
+            if mirror_start is None:
+                continue
+            mirror_node.position = (
+                mirror_start[0] - delta[0],
+                mirror_start[1] + delta[1],
+                mirror_start[2] + delta[2],
+            )
+            self._evict_transform_cache(mirror_node)
+
+    def _restore_transform_gizmo_symmetry(self) -> None:
+        for mirror_node in self._transform_gizmo_mirror_nodes:
+            start = self._transform_gizmo_mirror_start_positions.get(id(mirror_node))
+            if start is None:
+                continue
+            mirror_node.position = tuple(start)
+            self._evict_transform_cache(mirror_node)
+        self._transform_gizmo_mirror_nodes = []
+        self._transform_gizmo_mirror_start_positions = {}
+
+    def _commit_transform_gizmo_symmetry(self) -> None:
+        mirror_nodes = list(self._transform_gizmo_mirror_nodes)
+        starts = dict(self._transform_gizmo_mirror_start_positions)
+        self._transform_gizmo_mirror_nodes = []
+        self._transform_gizmo_mirror_start_positions = {}
+        for mirror_node in mirror_nodes:
+            before_pos = starts.get(id(mirror_node))
+            if before_pos is None:
+                continue
+            try:
+                after_pos = tuple(mirror_node.position)
+                rot = tuple(mirror_node.rotation)
+            except Exception:
+                continue
+            self._commit_node_transform(
+                mirror_node,
+                before_pos,
+                rot,
+                after_pos,
+                rot,
+                "Gizmo Translate Mirror",
+            )
+            self._notify_node_moved(mirror_node)
 
     def _is_selected_model_root(self, node) -> bool:
         return bool(

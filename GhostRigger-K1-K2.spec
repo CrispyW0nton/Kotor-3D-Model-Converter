@@ -118,8 +118,12 @@ else:
 datas = [
     # Bundle app assets plus GUI resources loaded by package-relative paths.
     ('assets', 'assets'),
+    ('config', 'config'),
+    ('knowledge_base/retargeting', 'knowledge_base/retargeting'),
+    ('scripts', 'scripts'),
     ('src/gui/icons', 'src/gui/icons'),
     ('src/gui/fonts', 'src/gui/fonts'),
+    ('src/systems/bas/models', 'src/systems/bas/models'),
 ]
 
 # ── Analysis ──────────────────────────────────────────────────────────────

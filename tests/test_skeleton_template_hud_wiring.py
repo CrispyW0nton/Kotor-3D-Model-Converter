@@ -40,10 +40,20 @@ _VIEWPORT_SOURCE_FILES = (
     "src/gui/viewports/viewport_core/widgets/variants.py",
 )
 
+_SPLIT_SOURCE_MAP = {
+    "src/gui/rendering/frame_core/renderer_meshes.py": "src/core/rendering/frame_core/renderer_meshes.py",
+    "src/gui/rendering/frame_core/renderer_overlays.py": "src/core/rendering/frame_core/renderer_overlays.py",
+    "src/gui/rendering/frame_core/texture_cache.py": "src/core/rendering/frame_core/texture_cache.py",
+    "src/gui/rendering/gpu_core/diagnostics.py": "src/core/rendering/gpu_diagnostics_records.py",
+    "src/gui/rendering/gpu_core/resources.py": "src/adapters/rendering/moderngl_resources.py",
+    "src/gui/rendering/gpu_core/renderer.py": "src/adapters/rendering/moderngl_renderer_impl.py",
+}
+
 
 def _read(relpath: str) -> str:
     if relpath == "src/gui/viewports/qt_viewport.py":
         return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
+    relpath = _SPLIT_SOURCE_MAP.get(relpath, relpath)
     return (ROOT / relpath).read_text(encoding="utf-8")
 
 
@@ -100,14 +110,24 @@ def test_template_selection_previews_external_skeleton_overlay() -> None:
     builder = _read("src/gui/panels/qt_character_builder_panel.py")
     viewport = _read("src/gui/viewports/qt_viewport.py")
 
-    assert "viewport.set_external_skeleton(template_model)" in builder
+    assert "viewport.set_external_skeleton(template_model, fit_to_model=False)" in builder
     assert "fit_reference_model=self._selected_skeleton_template_model" in builder
     assert "clear_external_skeleton" in builder
     assert "def set_external_skeleton" in viewport
+    assert "fit_to_model: bool = True" in viewport
     assert "self._renderer._ext_skeleton = model" in viewport
     assert "_fit_external_skeleton_overlay" in viewport
     assert "self._renderer._ext_skel_scale = scale" in viewport
     assert "def clear_external_skeleton" in viewport
+
+
+def test_shared_viewport_exposes_pivot_and_freeze_toolbar_actions() -> None:
+    viewport = _read("src/gui/viewports/qt_viewport.py")
+
+    assert "ViewportCenterPivotButton" in viewport
+    assert "ViewportFreezeTransformsButton" in viewport
+    assert "def center_pivot_to_selection" in viewport
+    assert "def freeze_selected_transform" in viewport
 
 
 def test_complete_character_load_and_texture_folder_prompt_are_wired() -> None:
@@ -138,6 +158,17 @@ def test_manual_import_fit_controls_are_wired() -> None:
     assert "viewport.frame_all()" in builder
     assert "def apply_external_model_fit_adjustment" in workflow
     assert "translation_delta" in workflow
+
+
+def test_motion_library_loader_syncs_inspector_supermodel_before_listing() -> None:
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+
+    assert "def _sync_motion_controls_to_scene" in builder
+    assert "selected_motion_source" in builder
+    assert "selected_motion_supermodel" in builder
+    assert "_sync_motion_controls_to_scene(_wf)" in builder
+    assert "available_animation_library(self.scene)" in builder
+    assert "SuperModelResolver.clear_cache()" in builder
 
 
 def test_open_scene_rehydrates_saved_source_models_for_viewport() -> None:
@@ -198,6 +229,8 @@ def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
     assert "GizmoMode.SCALE" in viewport
     assert "return \"[S]\" if self._compact_controls else \"[Scale]\"" in viewport
     assert "def _apply_model_gimbal_drag" in viewport
+    assert "def _promoted_model_root_for_mesh_transform" in viewport
+    assert "self._mesh_transform_promotes_to_model_root = True" in viewport
     assert "apply_external_model_fit_adjustment" in viewport
     assert "translation_delta=translation_delta" in viewport
     assert "scale_delta=scale_delta" in viewport
@@ -238,12 +271,20 @@ def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
     assert "def _is_external_skeleton_node" in viewport
     assert "_external_world_delta_to_local" in viewport
     assert "lcollar_dum/rcollar_dum" in viewport
+    assert "_prepare_transform_gizmo_symmetry" in viewport
+    assert "_apply_transform_gizmo_symmetry" in viewport
+    assert "_commit_transform_gizmo_symmetry" in viewport
     assert "self._symmetry_action.toggled.connect(self._on_joint_symmetry_toggled)" in builder
+    assert "action.setChecked(enabled)" in builder
+    assert "inspector.set_symmetry_enabled(enabled)" in builder
     assert "symmetry_cb.setChecked(True)" in inspector
+    assert "self._symmetry_checkboxes.append(symmetry_cb)" in inspector
+    assert "def set_symmetry_enabled" in inspector
+    assert "def symmetry_enabled" in inspector
     assert "def set_joint_symmetry" in viewport
 
 
-def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
+def test_selected_imported_mesh_outline_uses_projected_mesh_hover_path_not_bbox() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
 
     helper_start = viewport.index("def _draw_hovered_mesh_outline")

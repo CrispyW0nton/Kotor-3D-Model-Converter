@@ -18,6 +18,10 @@ class QtCharacterBuilderViewportWidget(QtViewportWidget):
     VIEWPORT_ROLE = "character_builder"
     DEFAULT_THUMBNAIL_ENABLED = True
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._mesh_transform_promotes_to_model_root = True
+
 
 class QtRetargetViewportWidget(QtViewportWidget):
     """Animation retargeting viewport with workbench-specific defaults."""

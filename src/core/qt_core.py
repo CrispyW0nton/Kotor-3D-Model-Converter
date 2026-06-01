@@ -49,9 +49,11 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     ),
     "characters": (
         "character_builder",
+        "character_export_preflight",
         "creature_appearance",
         "head_workflow",
         "headless_body_workflow",
+        "native_skeleton",
     ),
     "diagnostics": (
         "diagnostics",

@@ -9,10 +9,24 @@ from pathlib import Path
 import pytest
 
 from src.core.animation.animation_engine import (
+    AnimationEngine,
     SuperModelResolver,
     evaluate_aurora_animation_pose,
 )
+from src.core.geometry.lightsaber import (
+    is_lightsaber_blade_node,
+    is_lightsaber_model,
+    lightsaber_blade_preview_quad,
+    lightsaber_blade_color_choices,
+    lightsaber_blade_emissive_rgb,
+    lightsaber_blade_procedural_rgba8,
+    lightsaber_blade_texture_cache_key,
+    set_lightsaber_blade_color_override,
+    should_use_procedural_lightsaber_blade_texture,
+    synthetic_lightsaber_blade_uvs,
+)
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+from src.gui.rendering.gpu_renderer import _build_vbo_data
 from src.core.retargeting.aurora_animation_writer import (
     AuroraAnimationInjectionRequest,
     AuroraAnimationWriter,
@@ -21,6 +35,7 @@ from src.core.validation.animation_block_validator import (
     AnimationBlockValidationError,
     validate_animation_block_against_model,
 )
+from src.gui.rendering.mesh_render_data import _node_uv_array
 
 
 def _quat_axis(axis: str, degrees: float) -> tuple[float, float, float, float]:
@@ -167,6 +182,346 @@ def test_unkeyed_components_fall_back_to_rest() -> None:
     assert pose.local_transforms_by_node["child"].position == pytest.approx((1.0, 2.0, 3.0))
     _assert_quat_equivalent(pose.local_transforms_by_node["child"].rotation, _quat_axis("Z", 10.0))
     _assert_quat_equivalent(pose.local_transforms_by_node["root"].rotation, (0.0, 0.0, 0.0, 1.0))
+
+
+def test_scale_controller_allows_zero_for_lightsaber_ignition() -> None:
+    root = ModelNode(name="root")
+    blade = ModelNode(name="plane365", parent=root, texture="w_lsabresilv01")
+    root.children.append(blade)
+    animation = Animation(
+        name="powerup",
+        length=0.8,
+        nodes=[
+            ModelNode(
+                name="plane365",
+                controllers=[
+                    {
+                        "type": 36,
+                        "name": "scale",
+                        "columns": 1,
+                        "times": [0.0, 0.8],
+                        "values": [[0.0], [1.0]],
+                    }
+                ],
+            )
+        ],
+    )
+    model = KotorModel(name="w_shortsbr_009", root_node=root, animations=[animation])
+    engine = AnimationEngine(model)
+
+    assert engine.play("powerup", loop=False, blend=False)
+    assert engine.evaluate(0.0).nodes["plane365"].scale == pytest.approx(0.0)
+    assert engine.evaluate(0.4).nodes["plane365"].scale == pytest.approx(0.5, abs=1e-6)
+    assert engine.evaluate(0.8).nodes["plane365"].scale == pytest.approx(1.0)
+
+
+def test_lightsaber_blade_material_detection_uses_blade_texture_not_hilt_name() -> None:
+    hilt = ModelNode(name="LghtSbr09", texture="w_shortsbr_001")
+    blade = ModelNode(name="plane365", texture="w_lsabresilv01")
+
+    assert is_lightsaber_blade_node(hilt) is False
+    assert is_lightsaber_blade_node(blade) is True
+    assert max(lightsaber_blade_emissive_rgb(blade)) > 1.0
+
+
+def test_lightsaber_blade_color_prefers_model_variant_over_neutral_mask() -> None:
+    hilt = ModelNode(name="LghtSbr09", texture="w_shortsbr_001")
+    blade = ModelNode(name="plane365", texture="w_lsabresilv01", parent=hilt)
+    hilt.children.append(blade)
+
+    r, g, b = lightsaber_blade_emissive_rgb(blade)
+
+    assert r > b
+    assert g > b
+    assert r >= g
+
+
+def test_lightsaber_yellow_variant_uses_procedural_texture_over_neutral_mask() -> None:
+    hilt = ModelNode(name="LghtSbr09", texture="w_shortsbr_001")
+    blade = ModelNode(name="plane365", texture="w_lsabresilv01", parent=hilt)
+    hilt.children.append(blade)
+
+    assert should_use_procedural_lightsaber_blade_texture(blade, texture_missing=False) is True
+
+
+@pytest.mark.parametrize(
+    ("texture_name", "dominant"),
+    [
+        ("w_lsabreblue01", "blue"),
+        ("w_lsabrered01", "red"),
+        ("w_lsabregren01", "green"),
+        ("w_lsabreyelo01", "yellow"),
+        ("w_lsabrepurp01", "violet"),
+        ("w_lsabregold01", "red"),
+        ("w_lsabreturq01", "blue"),
+        ("w_lsabredgrn01", "green"),
+        ("w_lsabresilv01", "blue"),
+    ],
+)
+def test_stock_lightsaber_blade_textures_use_procedural_game_colour(texture_name: str, dominant: str) -> None:
+    blade = ModelNode(name="plane001", texture=texture_name)
+
+    assert should_use_procedural_lightsaber_blade_texture(blade, texture_missing=False) is True
+
+    r, g, b = lightsaber_blade_emissive_rgb(blade)
+    if dominant == "red":
+        assert r > g
+        assert r > b
+    elif dominant == "green":
+        assert g > r
+        assert g > b
+    elif dominant == "blue":
+        assert b > r
+        assert b > g
+    elif dominant == "violet":
+        assert b > r
+        assert r > g
+    elif dominant == "yellow":
+        assert r > b
+        assert g > b
+
+
+def test_lightsaber_palette_exposes_game_blade_colours() -> None:
+    color_ids = {color.id for color in lightsaber_blade_color_choices()}
+
+    assert {
+        "blue",
+        "green",
+        "red",
+        "yellow",
+        "violet",
+        "viridian",
+        "cyan",
+        "orange",
+        "bronze",
+        "silver",
+    } <= color_ids
+
+
+def test_lightsaber_color_override_is_preview_only_and_forces_procedural_blade() -> None:
+    hilt = ModelNode(name="LghtSbr09", texture="w_shortsbr_001")
+    blade = ModelNode(name="plane365", texture="w_lsabresilv01", parent=hilt)
+    hilt.children.append(blade)
+    model = KotorModel(name="w_shortsbr_009", classification="lightsaber", root_node=hilt)
+
+    assert is_lightsaber_model(model) is True
+    before_key = lightsaber_blade_texture_cache_key(blade)
+    normalized = set_lightsaber_blade_color_override(model, "blue")
+    r, g, b = lightsaber_blade_emissive_rgb(blade)
+
+    assert normalized == "blue"
+    assert b > r
+    assert lightsaber_blade_texture_cache_key(blade) != before_key
+    assert should_use_procedural_lightsaber_blade_texture(blade, texture_missing=False) is True
+    assert blade.texture == "w_lsabresilv01"
+
+
+def test_lightsaber_color_override_can_be_cleared() -> None:
+    hilt = ModelNode(name="LghtSbr09", texture="w_shortsbr_001")
+    blade = ModelNode(name="plane365", texture="w_lsabresilv01", parent=hilt)
+    hilt.children.append(blade)
+    model = KotorModel(name="w_shortsbr_009", classification="lightsaber", root_node=hilt)
+
+    set_lightsaber_blade_color_override(model, "violet")
+    set_lightsaber_blade_color_override(model, None)
+    r, g, b = lightsaber_blade_emissive_rgb(blade)
+
+    assert r > b
+    assert g > b
+
+
+def test_lightsaber_blade_procedural_texture_has_core_and_transparent_edges() -> None:
+    hilt = ModelNode(name="LghtSbr09", texture="w_shortsbr_001")
+    blade = ModelNode(name="plane365", texture="w_lsabresilv01", parent=hilt)
+    hilt.children.append(blade)
+
+    width, height, rgba = lightsaber_blade_procedural_rgba8(blade, width=32, height=64)
+
+    center_idx = ((height // 2) * width + (width // 2)) * 4
+    edge_idx = ((height // 2) * width) * 4
+    center = tuple(rgba[center_idx:center_idx + 4])
+    edge = tuple(rgba[edge_idx:edge_idx + 4])
+    assert center[0] > edge[0]
+    assert center[1] > edge[1]
+    assert center[3] > edge[3]
+    assert edge[3] < 12
+
+
+def test_lightsaber_blade_synthetic_uvs_cover_width_and_length() -> None:
+    verts = [
+        (-0.000177, 0.0, -0.043247),
+        (-0.000177, 0.0, 0.809409),
+        (0.075842, 0.0, -0.043247),
+        (0.075493, 0.0, 0.780075),
+    ]
+
+    uvs = synthetic_lightsaber_blade_uvs(verts)
+
+    assert min(u for u, _v in uvs) == pytest.approx(0.0)
+    assert max(u for u, _v in uvs) == pytest.approx(1.0)
+    assert min(v for _u, v in uvs) == pytest.approx(0.0)
+    assert max(v for _u, v in uvs) == pytest.approx(1.0)
+
+
+def test_lightsaber_blade_helpers_ignore_nonfinite_vertices() -> None:
+    verts = [
+        (math.nan, 0.0, 0.0),
+        (math.inf, 0.0, 1.0),
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0),
+        (0.1, 0.0, 0.0),
+    ]
+
+    uvs = synthetic_lightsaber_blade_uvs(verts)
+    quad = lightsaber_blade_preview_quad(verts)
+
+    assert len(uvs) == 3
+    assert all(math.isfinite(value) for uv in uvs for value in uv)
+    assert quad is not None
+    quad_verts, quad_uvs, _quad_faces, _normal = quad
+    assert all(math.isfinite(value) for vertex in quad_verts for value in vertex)
+    assert all(math.isfinite(value) for uv in quad_uvs for value in uv)
+
+
+def test_lightsaber_blade_helpers_reject_all_nonfinite_vertices() -> None:
+    verts = [(math.nan, 0.0, 0.0), (math.inf, 1.0, 0.0), ("bad", 0.0, 0.0)]
+
+    assert synthetic_lightsaber_blade_uvs(verts) == []
+    assert lightsaber_blade_preview_quad(verts) is None
+
+
+def test_mesh_render_data_pads_synthetic_blade_uvs_after_bad_vertices() -> None:
+    blade = ModelNode(
+        name="plane365",
+        texture="w_lsabresilv01",
+        vertices=[
+            (math.nan, 0.0, 0.0),
+            (0.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.1, 0.0, 0.0),
+            (math.inf, 0.0, 0.0),
+        ],
+        uvs=[],
+    )
+
+    uv_arr = _node_uv_array(blade, "uvs", 5)
+
+    assert uv_arr.shape == (5, 2)
+    assert all(math.isfinite(float(value)) for row in uv_arr.tolist() for value in row)
+
+
+def test_lightsaber_blade_preview_quad_fills_sparse_no_uv_variant() -> None:
+    verts = [
+        (0.0, 0.0, -0.043247),
+        (0.0, 0.0, 0.005365),
+        (0.0, 0.0, 0.932362),
+        (0.0, 0.0, 0.980982),
+        (0.100505, 0.0, -0.043247),
+        (0.100505, 0.0, 0.005365),
+        (-0.102681, 0.0, 0.932362),
+        (-0.102681, 0.0, 0.980982),
+    ]
+
+    quad = lightsaber_blade_preview_quad(verts, edge_inset=0.14)
+
+    assert quad is not None
+    quad_verts, quad_uvs, quad_faces, normal = quad
+    assert len(quad_verts) == 4
+    assert quad_faces == [(0, 1, 2), (1, 3, 2)]
+    assert min(v[2] for v in quad_verts) == pytest.approx(-0.043247)
+    assert max(v[2] for v in quad_verts) == pytest.approx(0.980982)
+    assert min(u for u, _v in quad_uvs) == pytest.approx(0.14)
+    assert max(u for u, _v in quad_uvs) == pytest.approx(0.86)
+    assert normal == (0.0, 1.0, 0.0)
+
+
+def test_gpu_vbo_builder_synthesizes_blade_uvs_when_mdl_omits_them() -> None:
+    blade = ModelNode(
+        name="plane365",
+        texture="w_lsabresilv01",
+        vertices=[
+            (-0.000177, 0.0, -0.043247),
+            (-0.000177, 0.0, 0.809409),
+            (0.075842, 0.0, -0.043247),
+        ],
+        normals=[(0.0, 1.0, 0.0)] * 3,
+        uvs=[],
+        faces=[(0, 1, 2)],
+    )
+
+    vdata, _idx = _build_vbo_data(
+        blade,
+        (0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    )
+
+    assert vdata is not None
+    assert {tuple(row[6:8]) for row in vdata.tolist()} != {(0.5, 0.5)}
+
+
+def test_gpu_vbo_builder_applies_zero_scale_to_local_blade_vertices() -> None:
+    blade = ModelNode(
+        name="plane365",
+        texture="w_lsabresilv01",
+        vertices=[(0.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.1, 0.0, 1.0)],
+        normals=[(0.0, 1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)],
+        faces=[(0, 1, 2)],
+    )
+
+    vdata, _idx = _build_vbo_data(
+        blade,
+        (1.0, 2.0, 3.0),
+        (0.0, 0.0, 0.0, 1.0),
+        local_scale=0.0,
+    )
+
+    assert vdata is not None
+    for row in vdata[:, 0:3].tolist():
+        assert row == pytest.approx([1.0, 2.0, 3.0])
+
+
+def test_gpu_renderer_draws_lightsaber_blade_planes_with_culling_enabled() -> None:
+    np = pytest.importorskip("numpy")
+    pytest.importorskip("PIL")
+    pytest.importorskip("moderngl")
+    from src.gui.rendering.gpu_renderer import GpuRenderer
+    from src.gui.rendering.viewport_core import ArcBallCamera
+
+    blade = ModelNode(
+        name="plane242",
+        texture="w_lsabreblue01",
+        vertices=[
+            (-0.05, 0.0, 0.0),
+            (0.05, 0.0, 0.0),
+            (-0.05, 0.0, 1.0),
+            (0.05, 0.0, 1.0),
+        ],
+        normals=[(0.0, -1.0, 0.0)] * 4,
+        uvs=[],
+        faces=[(0, 1, 2), (1, 3, 2)],
+    )
+    model = KotorModel(
+        name="w_lghtsbr_001",
+        classification="lightsaber",
+        root_node=blade,
+    )
+    renderer = GpuRenderer()
+    renderer.cull_faces = True
+    renderer.show_grid = False
+
+    image = renderer.render(model, ArcBallCamera(), 300, 300, {}, None, 0.0)
+    if image is None:
+        pytest.skip("ModernGL context is unavailable in this environment")
+
+    pixels = np.asarray(image.convert("RGBA"))
+    blue_blade_pixels = (
+        (pixels[:, :, 2] > 100)
+        & (pixels[:, :, 0] < 160)
+        & (pixels[:, :, 1] > 30)
+        & (pixels[:, :, 3] > 0)
+    )
+    assert int(blue_blade_pixels.sum()) > 100
 
 
 def test_quaternion_hemisphere_continuity_uses_shortest_path() -> None:

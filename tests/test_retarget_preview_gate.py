@@ -10,6 +10,7 @@ import pytest
 
 from src.core.animation.animation_engine import SuperModelResolver, evaluate_aurora_animation_pose
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+from src.core.retargeting.coordinate import BasisConversion
 from src.core.retargeting.retarget_preview import (
     RetargetPreviewError,
     RetargetPreviewRequest,
@@ -20,7 +21,22 @@ from src.core.retargeting.retarget_preview import (
 )
 from src.core.retargeting.retarget_profile import RetargetMappingEntry, RetargetProfile
 from src.core.retargeting.retarget_solver import RetargetSolverOptions
-from src.core.retargeting.source_animation import SourcePose, SourceSkeletonClip, SourceSkeletonNode, Transform, normalize_quat_xyzw, quat_dot_xyzw
+from src.core.retargeting.source_animation import (
+    SourcePose,
+    SourceSkeletonClip,
+    SourceSkeletonNode,
+    Transform,
+    normalize_quat_xyzw,
+    quat_dot_xyzw,
+    quat_to_matrix_xyzw,
+)
+from src.core.retargeting.ue5_to_aurora_r3b_preview import (
+    _continuity_aligned_terminal_basis,
+    _mapped_exact_segments,
+    _mapped_terminal_twist_chains,
+    apply_verified_pmbam_segment_pose_correction,
+    _terminal_chain_basis,
+)
 
 
 def _quat_axis(axis: str, degrees: float) -> tuple[float, float, float, float]:
@@ -421,6 +437,7 @@ def test_verified_mixamo_profile_passes_source_rest_reference_policy(monkeypatch
     captured: dict[str, object] = {}
 
     def fake_build_animation(self, *, payload, model, slot_name, **kwargs):
+        captured["payload"] = payload
         captured["kwargs"] = kwargs
         return Animation(
             name=slot_name,
@@ -449,6 +466,56 @@ def test_verified_mixamo_profile_passes_source_rest_reference_policy(monkeypatch
     build_retarget_preview(RetargetPreviewRequest(source, target, profile))
 
     assert captured["kwargs"]["source_reference_mode"] == "source_rest"
+    assert captured["payload"]["metadata"]["source_quaternion_conversion"] == "ue5_to_aurora"
+
+
+def test_verified_mixamo_profile_passes_identity_quaternion_conversion(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.core.retargeting.aurora_animation_writer import AuroraAnimationWriter, CTRL_ORIENTATION
+
+    source = _source_clip(
+        [("mixamorig:Hips", None)],
+        [{"mixamorig:Hips": Transform()}, {"mixamorig:Hips": Transform()}],
+    )
+    target = _target_model([("pelvis_g", None, (0.0, 0.0, 0.0), None)], anims=("pause1",))
+    profile = _profile([RetargetMappingEntry("pelvis", "mixamorig:Hips", "pelvis_g")])
+    profile.name = "verified_mixamo_to_aurora_profile"
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_reference_mode"] = "source_rest"
+    profile.metadata["source_quaternion_conversion"] = "blender_identity"
+
+    captured: dict[str, object] = {}
+
+    def fake_build_animation(self, *, payload, model, slot_name, **kwargs):
+        captured["payload"] = payload
+        captured["kwargs"] = kwargs
+        return Animation(
+            name=slot_name,
+            length=source.duration_seconds,
+            anim_root=model.root_node.name,
+            nodes=[
+                ModelNode(
+                    name=node.name,
+                    controllers=[
+                        {
+                            "type": CTRL_ORIENTATION,
+                            "name": "orientation",
+                            "columns": 4,
+                            "times": [0.0, 1.0],
+                            "values": [list(node.rotation), list(node.rotation)],
+                        }
+                    ],
+                )
+                for node in model.all_nodes()
+            ],
+        )
+
+    monkeypatch.setattr(AuroraAnimationWriter, "build_animation_from_r3a", fake_build_animation)
+    monkeypatch.setattr(AuroraAnimationWriter, "_validate_export_motion_amplitude", lambda *_args, **_kwargs: [])
+
+    build_retarget_preview(RetargetPreviewRequest(source, target, profile))
+
+    assert captured["kwargs"]["source_reference_mode"] == "source_rest"
+    assert captured["payload"]["metadata"]["source_quaternion_conversion"] == "blender_identity"
 
 
 def test_verified_mixamo_root_motion_moves_target_root_only(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -645,7 +712,534 @@ def test_verified_ue5_profile_applies_exact_segment_correction(monkeypatch: pyte
     actual = actual / np.linalg.norm(actual)
 
     assert actual == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
-    assert any("exact PMBAM segment correction" in warning for warning in preview.warnings)
+    assert any("exact KOTOR humanoid segment correction" in warning for warning in preview.warnings)
+
+
+def test_verified_mixamo_segment_correction_uses_visible_blender_basis() -> None:
+    source = _source_clip(
+        [
+            ("mixamorig:RightArm", None),
+            ("mixamorig:RightForeArm", "mixamorig:RightArm"),
+        ],
+        [
+            {
+                "mixamorig:RightArm": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightForeArm": Transform(position=(1.0, 0.0, 0.0)),
+            },
+            {
+                "mixamorig:RightArm": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightForeArm": Transform(position=(0.0, 1.0, 0.0)),
+            },
+        ],
+    )
+    target = _target_model(
+        [
+            ("rootdummy", None, (0.0, 0.0, 0.0), None),
+            ("rbicep_g", "rootdummy", (1.0, 0.0, 0.0), None),
+            ("Rforearm_g", "rbicep_g", (1.0, 0.0, 0.0), None),
+        ],
+        anims=("pause1",),
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("upperarm", "mixamorig:RightArm", "rbicep_g", side="right"),
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_reference_mode"] = "hybrid_limb_source_rest"
+
+    preview = build_retarget_preview(
+        RetargetPreviewRequest(
+            source,
+            target,
+            profile,
+            solver_options=RetargetSolverOptions(
+                rotation_transfer_mode="exact_segment_correction",
+                key_unmapped_reference_nodes=True,
+                source_reference_mode="hybrid_limb_source_rest",
+                basis_conversion=None,
+            ),
+        )
+    )
+
+    pose = evaluate_aurora_animation_pose(preview.preview_model, preview.animation_block, 1.0)
+    parent = np.asarray(pose.world_transforms_by_node["rbicep_g"].position)
+    child = np.asarray(pose.world_transforms_by_node["Rforearm_g"].position)
+    actual = child - parent
+    actual = actual / np.linalg.norm(actual)
+
+    assert actual == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
+    assert any("exact KOTOR humanoid segment correction" in warning for warning in preview.warnings)
+
+
+def test_verified_mixamo_stable_policy_keeps_spine_but_softens_clavicle_exact_correction() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "mixamorig:Spine", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "mixamorig:Spine2", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("clavicle", "mixamorig:RightShoulder", "rcollar_g", side="right"),
+            RetargetMappingEntry("upperarm", "mixamorig:RightArm", "rbicep_g", side="right"),
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+            RetargetMappingEntry("hand", "mixamorig:RightHand", "Rhand_g", side="right"),
+            RetargetMappingEntry("index_base", "mixamorig:RightHandIndex1", "RaFngrB_g", side="right"),
+            RetargetMappingEntry("index_tip", "mixamorig:RightHandIndex3", "RaFngrT_g", side="right"),
+            RetargetMappingEntry("middle_base", "mixamorig:RightHandMiddle1", "RbFngrB_g", side="right"),
+            RetargetMappingEntry("middle_tip", "mixamorig:RightHandMiddle3", "RbFngrT_g", side="right"),
+            RetargetMappingEntry("ring_base", "mixamorig:RightHandRing1", "RcFngrB_g", side="right"),
+            RetargetMappingEntry("ring_tip", "mixamorig:RightHandRing3", "RcFngrT_g", side="right"),
+            RetargetMappingEntry("pinky_base", "mixamorig:RightHandPinky1", "RdFngrB_g", side="right"),
+            RetargetMappingEntry("pinky_tip", "mixamorig:RightHandPinky3", "RdFngrT_g", side="right"),
+            RetargetMappingEntry("thumb_base", "mixamorig:RightHandThumb1", "RThumbB_g", side="right"),
+            RetargetMappingEntry("thumb_tip", "mixamorig:RightHandThumb3", "RThumbT_g", side="right"),
+            RetargetMappingEntry("calf", "mixamorig:RightLeg", "rshin_g", side="right"),
+            RetargetMappingEntry("foot", "mixamorig:RightFoot", "rfoot_g", side="right"),
+            RetargetMappingEntry("toe", "mixamorig:RightToeBase", "rfootT_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["exact_segment_correction_policy"] = "mixamo_stable_humanoid"
+
+    segments = _mapped_exact_segments(profile)
+    source_pairs = {(source_parent, source_child) for source_parent, source_child, _target_parent, _target_child in segments}
+
+    assert ("mixamorig:Spine", "mixamorig:Spine2") in source_pairs
+    assert ("mixamorig:RightShoulder", "mixamorig:RightArm") not in source_pairs
+    assert ("mixamorig:RightArm", "mixamorig:RightForeArm") in source_pairs
+    assert ("mixamorig:RightHand", "mixamorig:RightHandIndex1") not in source_pairs
+    assert ("mixamorig:RightHand", "mixamorig:RightHandMiddle1") in source_pairs
+    assert ("mixamorig:RightHand", "mixamorig:RightHandRing1") not in source_pairs
+    assert ("mixamorig:RightHandIndex1", "mixamorig:RightHandIndex3") in source_pairs
+    assert ("mixamorig:RightHandMiddle1", "mixamorig:RightHandMiddle3") in source_pairs
+    assert ("mixamorig:RightHandRing1", "mixamorig:RightHandRing3") in source_pairs
+    assert ("mixamorig:RightHandPinky1", "mixamorig:RightHandPinky3") in source_pairs
+    assert ("mixamorig:RightHandThumb1", "mixamorig:RightHandThumb3") in source_pairs
+    assert ("mixamorig:RightFoot", "mixamorig:RightToeBase") in source_pairs
+
+
+def test_verified_mixamo_explicit_full_policy_keeps_clavicle_exact_correction() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "mixamorig:Spine", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "mixamorig:Spine2", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("clavicle", "mixamorig:RightShoulder", "rcollar_g", side="right"),
+            RetargetMappingEntry("upperarm", "mixamorig:RightArm", "rbicep_g", side="right"),
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["exact_segment_correction_policy"] = "pmbam_full_humanoid"
+
+    segments = _mapped_exact_segments(profile)
+    source_pairs = {(source_parent, source_child) for source_parent, source_child, _target_parent, _target_child in segments}
+
+    assert ("mixamorig:Spine", "mixamorig:Spine2") in source_pairs
+    assert ("mixamorig:RightShoulder", "mixamorig:RightArm") in source_pairs
+    assert ("mixamorig:RightArm", "mixamorig:RightForeArm") in source_pairs
+
+
+def test_verified_mixamo_stable_policy_disables_terminal_twist_by_default() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+            RetargetMappingEntry("hand", "mixamorig:RightHand", "Rhand_g", side="right"),
+            RetargetMappingEntry("middle_base", "mixamorig:RightHandMiddle1", "RbFngrB_g", side="right"),
+            RetargetMappingEntry("calf", "mixamorig:RightLeg", "rshin_g", side="right"),
+            RetargetMappingEntry("foot", "mixamorig:RightFoot", "rfoot_g", side="right"),
+            RetargetMappingEntry("toe", "mixamorig:RightToeBase", "rfootT_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["exact_segment_correction_policy"] = "mixamo_stable_humanoid"
+
+    assert _mapped_terminal_twist_chains(profile) == []
+
+
+def test_verified_mixamo_segment_correction_uses_target_rest_roll_anchor() -> None:
+    source = _source_clip(
+        [
+            ("mixamorig:RightArm", None),
+            ("mixamorig:RightForeArm", "mixamorig:RightArm"),
+        ],
+        [
+            {
+                "mixamorig:RightArm": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightForeArm": Transform(position=(0.0, 1.0, 0.0)),
+            },
+            {
+                "mixamorig:RightArm": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightForeArm": Transform(position=(0.0, 1.0, 0.0)),
+            },
+        ],
+        duration=1.0,
+    )
+    target = _target_model(
+        [
+            ("rootdummy", None, (0.0, 0.0, 0.0), None),
+            ("rbicep_g", "rootdummy", (0.0, 0.0, 0.0), None),
+            ("Rforearm_g", "rbicep_g", (1.0, 0.0, 0.0), None),
+        ],
+        anims=("pause1",),
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("upperarm", "mixamorig:RightArm", "rbicep_g", side="right"),
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["exact_segment_correction_policy"] = "mixamo_stable_humanoid"
+    profile.metadata["exact_segment_rotation_anchor"] = "target_rest"
+    animation = Animation(
+        name="pause1",
+        length=1.0,
+        nodes=[
+            ModelNode(
+                name="rbicep_g",
+                controllers=[
+                    {
+                        "type": 20,
+                        "times": [0.0, 1.0],
+                        "values": [list(_quat_axis("X", 90.0)), list(_quat_axis("X", 90.0))],
+                    }
+                ],
+            )
+        ],
+    )
+
+    corrected = apply_verified_pmbam_segment_pose_correction(
+        animation=animation,
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+    )
+
+    evaluated = evaluate_aurora_animation_pose(target, animation, 0.0)
+    parent = np.asarray(evaluated.world_transforms_by_node["rbicep_g"].position)
+    child = np.asarray(evaluated.world_transforms_by_node["Rforearm_g"].position)
+    segment = child - parent
+    segment = segment / np.linalg.norm(segment)
+    z_axis = quat_to_matrix_xyzw(evaluated.world_transforms_by_node["rbicep_g"].rotation)[:3, :3] @ np.asarray(
+        (0.0, 0.0, 1.0)
+    )
+
+    assert corrected == 2
+    assert segment == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
+    assert z_axis == pytest.approx((0.0, 0.0, 1.0), abs=1e-6)
+
+
+def test_verified_mixamo_terminal_finger_segment_uses_target_rest_roll_anchor() -> None:
+    source = _source_clip(
+        [
+            ("mixamorig:RightHandMiddle1", None),
+            ("mixamorig:RightHandMiddle3", "mixamorig:RightHandMiddle1"),
+        ],
+        [
+            {
+                "mixamorig:RightHandMiddle1": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightHandMiddle3": Transform(position=(0.0, 1.0, 0.0)),
+            },
+            {
+                "mixamorig:RightHandMiddle1": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightHandMiddle3": Transform(position=(0.0, 1.0, 0.0)),
+            },
+        ],
+        duration=1.0,
+    )
+    target = _target_model(
+        [
+            ("rootdummy", None, (0.0, 0.0, 0.0), None),
+            ("Rhand_g", "rootdummy", (0.0, 0.0, 0.0), None),
+            ("RbFngrB_g", "Rhand_g", (1.0, 0.0, 0.0), None),
+            ("RbFngrT_g", "RbFngrB_g", (1.0, 0.0, 0.0), None),
+        ],
+        anims=("pause1",),
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry(
+                "middle_base",
+                "mixamorig:RightHandMiddle1",
+                "RbFngrB_g",
+                side="right",
+            ),
+            RetargetMappingEntry(
+                "middle_tip",
+                "mixamorig:RightHandMiddle3",
+                "RbFngrT_g",
+                side="right",
+            ),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["exact_segment_correction_policy"] = "mixamo_stable_humanoid"
+    profile.metadata["exact_segment_rotation_anchor"] = "target_rest"
+    animation = Animation(
+        name="pause1",
+        length=1.0,
+        nodes=[
+            ModelNode(
+                name="RbFngrB_g",
+                controllers=[
+                    {
+                        "type": 20,
+                        "times": [0.0, 1.0],
+                        "values": [list(_quat_axis("X", 90.0)), list(_quat_axis("X", 90.0))],
+                    }
+                ],
+            )
+        ],
+    )
+
+    corrected = apply_verified_pmbam_segment_pose_correction(
+        animation=animation,
+        source_clip=source,
+        target_model=target,
+        profile=profile,
+    )
+
+    evaluated = evaluate_aurora_animation_pose(target, animation, 0.0)
+    parent = np.asarray(evaluated.world_transforms_by_node["RbFngrB_g"].position)
+    child = np.asarray(evaluated.world_transforms_by_node["RbFngrT_g"].position)
+    segment = child - parent
+    segment = segment / np.linalg.norm(segment)
+    z_axis = quat_to_matrix_xyzw(evaluated.world_transforms_by_node["RbFngrB_g"].rotation)[:3, :3] @ np.asarray(
+        (0.0, 0.0, 1.0)
+    )
+
+    assert corrected == 2
+    assert segment == pytest.approx((0.0, 1.0, 0.0), abs=1e-6)
+    assert z_axis == pytest.approx((0.0, 0.0, 1.0), abs=1e-6)
+
+
+def test_verified_mixamo_segment_correction_mirrors_positions_to_prevent_crossed_feet() -> None:
+    source = _source_clip(
+        [
+            ("mixamorig:Hips", None),
+            ("mixamorig:LeftUpLeg", "mixamorig:Hips"),
+            ("mixamorig:LeftLeg", "mixamorig:LeftUpLeg"),
+            ("mixamorig:LeftFoot", "mixamorig:LeftLeg"),
+            ("mixamorig:RightUpLeg", "mixamorig:Hips"),
+            ("mixamorig:RightLeg", "mixamorig:RightUpLeg"),
+            ("mixamorig:RightFoot", "mixamorig:RightLeg"),
+        ],
+        [
+            {
+                "mixamorig:Hips": Transform(position=(0.0, 0.0, 0.0)),
+                # Blender-imported Mixamo has the opposite visual left/right X
+                # sign from PMBAM, so the workbench must mirror positions while
+                # preserving Blender source rotations.
+                "mixamorig:LeftUpLeg": Transform(position=(0.5, 0.0, -0.2)),
+                "mixamorig:LeftLeg": Transform(position=(0.5, 0.0, -1.0)),
+                "mixamorig:LeftFoot": Transform(position=(0.5, 0.2, -1.6)),
+                "mixamorig:RightUpLeg": Transform(position=(-0.5, 0.0, -0.2)),
+                "mixamorig:RightLeg": Transform(position=(-0.5, 0.0, -1.0)),
+                "mixamorig:RightFoot": Transform(position=(-0.5, 0.2, -1.6)),
+            },
+            {
+                "mixamorig:Hips": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:LeftUpLeg": Transform(position=(0.45, 0.0, -0.2)),
+                "mixamorig:LeftLeg": Transform(position=(0.4, 0.0, -1.0)),
+                "mixamorig:LeftFoot": Transform(position=(0.35, 0.25, -1.6)),
+                "mixamorig:RightUpLeg": Transform(position=(-0.45, 0.0, -0.2)),
+                "mixamorig:RightLeg": Transform(position=(-0.4, 0.0, -1.0)),
+                "mixamorig:RightFoot": Transform(position=(-0.35, 0.25, -1.6)),
+            },
+        ],
+    )
+    target = _target_model(
+        [
+            ("rootdummy", None, (0.0, 0.0, 0.0), None),
+            ("pelvis_g", "rootdummy", (0.0, 0.0, 0.0), None),
+            ("lthigh_g", "pelvis_g", (-0.5, 0.0, -0.2), None),
+            ("lshin_g", "lthigh_g", (0.0, 0.0, -0.8), None),
+            ("lfoot_g", "lshin_g", (0.0, 0.2, -0.6), None),
+            ("rthigh_g", "pelvis_g", (0.5, 0.0, -0.2), None),
+            ("rshin_g", "rthigh_g", (0.0, 0.0, -0.8), None),
+            ("rfoot_g", "rshin_g", (0.0, 0.2, -0.6), None),
+        ],
+        anims=("pause1",),
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("pelvis", "mixamorig:Hips", "pelvis_g", side="center"),
+            RetargetMappingEntry("thigh", "mixamorig:LeftUpLeg", "lthigh_g", side="left"),
+            RetargetMappingEntry("calf", "mixamorig:LeftLeg", "lshin_g", side="left"),
+            RetargetMappingEntry("foot", "mixamorig:LeftFoot", "lfoot_g", side="left"),
+            RetargetMappingEntry("thigh", "mixamorig:RightUpLeg", "rthigh_g", side="right"),
+            RetargetMappingEntry("calf", "mixamorig:RightLeg", "rshin_g", side="right"),
+            RetargetMappingEntry("foot", "mixamorig:RightFoot", "rfoot_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["source_reference_mode"] = "source_rest"
+    profile.metadata["source_quaternion_conversion"] = "blender_identity"
+    profile.metadata["exact_segment_correction_policy"] = "pmbam_full_humanoid"
+    basis_conversion = BasisConversion(
+        source_basis=((-1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, 1.0)),
+        target_basis=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+    )
+
+    preview = build_retarget_preview(
+        RetargetPreviewRequest(
+            source,
+            target,
+            profile,
+            solver_options=RetargetSolverOptions(
+                rotation_transfer_mode="exact_segment_correction",
+                key_unmapped_reference_nodes=True,
+                source_reference_mode="source_rest",
+                basis_conversion=basis_conversion,
+            ),
+        )
+    )
+
+    for pose in source.sampled_poses:
+        evaluated = evaluate_aurora_animation_pose(target, preview.animation_block, pose.time_seconds)
+        left_foot_x = evaluated.world_transforms_by_node["lfoot_g"].position[0]
+        right_foot_x = evaluated.world_transforms_by_node["rfoot_g"].position[0]
+        assert right_foot_x > left_foot_x
+
+
+def test_verified_mixamo_terminal_twist_correction_aligns_hand_roll_plane() -> None:
+    source = _source_clip(
+        [
+            ("mixamorig:RightForeArm", None),
+            ("mixamorig:RightHand", "mixamorig:RightForeArm"),
+            ("mixamorig:RightHandMiddle1", "mixamorig:RightHand"),
+        ],
+        [
+            {
+                "mixamorig:RightForeArm": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightHand": Transform(position=(1.0, 0.0, 0.0)),
+                "mixamorig:RightHandMiddle1": Transform(position=(1.0, 1.0, 0.0)),
+            },
+            {
+                "mixamorig:RightForeArm": Transform(position=(0.0, 0.0, 0.0)),
+                "mixamorig:RightHand": Transform(position=(1.0, 0.0, 0.0)),
+                "mixamorig:RightHandMiddle1": Transform(position=(1.0, 1.0, 0.0)),
+            },
+        ],
+        duration=1.0,
+    )
+    target = _target_model(
+        [
+            ("rootdummy", None, (0.0, 0.0, 0.0), None),
+            ("Rforearm_g", "rootdummy", (0.0, 0.0, 0.0), None),
+            ("Rhand_g", "Rforearm_g", (1.0, 0.0, 0.0), None),
+            ("RbFngrB_g", "Rhand_g", (0.0, 0.0, 1.0), None),
+        ],
+        anims=("pause1",),
+    )
+    profile = _profile(
+        [
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+            RetargetMappingEntry("hand", "mixamorig:RightHand", "Rhand_g", side="right"),
+            RetargetMappingEntry("middle_base", "mixamorig:RightHandMiddle1", "RbFngrB_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["source_reference_mode"] = "source_rest"
+    profile.metadata["source_quaternion_conversion"] = "blender_identity"
+    profile.metadata["exact_segment_correction_policy"] = "pmbam_full_humanoid"
+
+    preview = build_retarget_preview(
+        RetargetPreviewRequest(
+            source,
+            target,
+            profile,
+            solver_options=RetargetSolverOptions(
+                rotation_transfer_mode="exact_segment_correction",
+                key_unmapped_reference_nodes=True,
+                source_reference_mode="source_rest",
+            ),
+        )
+    )
+
+    evaluated = evaluate_aurora_animation_pose(target, preview.animation_block, 0.0)
+    source_basis = _terminal_chain_basis(
+        source.sampled_poses[0].global_transforms["mixamorig:RightForeArm"].position,
+        source.sampled_poses[0].global_transforms["mixamorig:RightHand"].position,
+        source.sampled_poses[0].global_transforms["mixamorig:RightHandMiddle1"].position,
+    )
+    target_rest_basis = _terminal_chain_basis(
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 0.0, 1.0),
+    )
+    hand_rotation = quat_to_matrix_xyzw(evaluated.world_transforms_by_node["Rhand_g"].rotation)[:3, :3]
+    corrected_basis = hand_rotation @ target_rest_basis
+
+    assert source_basis is not None
+    assert target_rest_basis is not None
+    assert float(np.dot(corrected_basis[:, 0], source_basis[:, 0])) > 0.999
+    assert float(np.dot(corrected_basis[:, 2], source_basis[:, 2])) > 0.999
+
+
+def test_verified_mixamo_terminal_basis_continuity_prevents_roll_plane_flip() -> None:
+    previous = np.eye(3, dtype=np.float64)
+    flipped = np.asarray(
+        (
+            (1.0, -0.0, -0.0),
+            (0.0, -1.0, -0.0),
+            (0.0, -0.0, -1.0),
+        ),
+        dtype=np.float64,
+    )
+
+    corrected = _continuity_aligned_terminal_basis(flipped, previous)
+
+    assert float(np.dot(corrected[:, 0], previous[:, 0])) > 0.999
+    assert float(np.dot(corrected[:, 2], previous[:, 2])) > 0.999
+
+
+def test_verified_mixamo_explicit_limb_only_policy_still_skips_torso_pairs() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "mixamorig:Spine", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "mixamorig:Spine2", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("clavicle", "mixamorig:RightShoulder", "rcollar_g", side="right"),
+            RetargetMappingEntry("upperarm", "mixamorig:RightArm", "rbicep_g", side="right"),
+            RetargetMappingEntry("forearm", "mixamorig:RightForeArm", "Rforearm_g", side="right"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_mixamo_to_aurora_mapping"
+    profile.metadata["source_skeleton_family"] = "mixamo"
+    profile.metadata["exact_segment_correction_policy"] = "mixamo_limb_only"
+
+    segments = _mapped_exact_segments(profile)
+    source_pairs = {(source_parent, source_child) for source_parent, source_child, _target_parent, _target_child in segments}
+
+    assert ("mixamorig:Spine", "mixamorig:Spine2") not in source_pairs
+    assert ("mixamorig:RightShoulder", "mixamorig:RightArm") not in source_pairs
+    assert ("mixamorig:RightArm", "mixamorig:RightForeArm") in source_pairs
+
+
+def test_verified_ue5_segment_policy_keeps_spine_and_clavicle_exact_correction() -> None:
+    profile = _profile(
+        [
+            RetargetMappingEntry("spine", "spine_01", "torso_g", side="center"),
+            RetargetMappingEntry("chest", "spine_03", "torsoUpr_g", side="center"),
+            RetargetMappingEntry("clavicle", "clavicle_l", "lcollar_g", side="left"),
+            RetargetMappingEntry("upperarm", "upperarm_l", "lbicep_g", side="left"),
+            RetargetMappingEntry("forearm", "lowerarm_l", "Lforearm_g", side="left"),
+        ]
+    )
+    profile.metadata["generated_by"] = "verified_ue5_to_aurora_mapping"
+
+    segments = _mapped_exact_segments(profile)
+    source_pairs = {(source_parent, source_child) for source_parent, source_child, _target_parent, _target_child in segments}
+
+    assert ("spine_01", "spine_03") in source_pairs
+    assert ("clavicle_l", "upperarm_l") in source_pairs
+    assert ("upperarm_l", "lowerarm_l") in source_pairs
 
 
 def test_capture_hook_requests_standard_angles(tmp_path: Path) -> None:
