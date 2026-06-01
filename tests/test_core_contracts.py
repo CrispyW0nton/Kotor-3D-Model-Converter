@@ -6737,7 +6737,7 @@ def test_camera_panel_edits_live_camera_transform_and_view_properties() -> None:
 
     from src.core.camera.camera_model import GhostRiggerCamera
     from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
-    from src.math.camera_math import quat_to_euler_degrees
+    from src.math.camera_math import quat, quat_to_euler_degrees
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     node = SimpleNamespace(name="PanelCamera", position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0, 1.0), children=[])
@@ -6872,6 +6872,7 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     from src.core.lighting.light_model import GhostRiggerLight
     from src.core.scene.kmax_scene_manager import KMaxSceneManager
     from src.sequence.sequence_binding import SequenceTargetType
+    from src.math.camera_math import quat, quat_to_euler_degrees
     from src.sequence.sequence_evaluator import SequenceEvaluator
     from src.sequence.sequence_manager import SequenceManager, ensure_sequence_object_id, infer_target_type
     from src.sequence.sequence_model import GhostRiggerLevelSequence
@@ -6879,6 +6880,7 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     from src.sequence.tracks.camera_property_track import CAMERA_PROPERTIES, CameraPropertyTrack
     from src.sequence.tracks.light_property_track import LIGHT_PROPERTIES, LightPropertyTrack
     from src.sequence.tracks.transform_property_track import TransformPropertyTrack
+    from src.sequence.tracks.transform_track import TransformTrack
 
     manager = KMaxSceneManager()
     scene_camera = manager.add_camera_object("Cinematic Camera", name="ShotCam")
@@ -6894,11 +6896,15 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     camera = camera_manager.create_camera(name="ShotCam")
     light_manager = LightManager()
     light = light_manager.add_light(GhostRiggerLight(name="Key", type="spot"))
-    viewport = SimpleNamespace(camera_manager=camera_manager, switched=[])
+    mesh = SimpleNamespace(name="TurretMesh", _gr_hidden=False)
+    viewport = SimpleNamespace(camera_manager=camera_manager, switched=[], transform_refreshes=0, geometry_refreshes=0)
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh])
     viewport.parent = lambda: SimpleNamespace(lighting_panel=SimpleNamespace(manager=light_manager))
     viewport.switch_to_camera = lambda camera_id: viewport.switched.append(camera_id)
     viewport.refresh_cameras = lambda: None
     viewport.refresh_lighting = lambda: None
+    viewport.refresh_scene_transforms = lambda reason="": setattr(viewport, "transform_refreshes", viewport.transform_refreshes + 1)
+    viewport.refresh_model_geometry = lambda: setattr(viewport, "geometry_refreshes", viewport.geometry_refreshes + 1)
     sequence_manager = SequenceManager()
     sequence = GhostRiggerLevelSequence()
     camera_binding = sequence_manager.add_object_binding(sequence, camera.original_ref)
@@ -6922,6 +6928,7 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     assert viewport.switched == [camera.id]
     assert light.original_ref.light_multiplier == 4.25
     assert light.original_ref.light_shadow is False
+    assert mesh._gr_hidden is False
 
     perspective_sequence = GhostRiggerLevelSequence()
     perspective_binding = sequence_manager.add_object_binding(perspective_sequence, camera.original_ref)
@@ -6940,6 +6947,63 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     assert camera.original_ref.position == (5.0, 2.0, 3.0)
     assert camera.field_of_view_degrees == 60.0
     assert viewport.switched == []
+    assert mesh._gr_hidden is False
+    assert viewport.transform_refreshes > 0
+    assert viewport.geometry_refreshes == 0
+
+    base_rotation = (0.442, -0.51, -0.557, 0.483)
+    camera.original_ref.position = (0.0, 0.0, 0.0)
+    camera.original_ref.rotation = base_rotation
+    camera.original_ref._gr_pivot_world = (9.0, 9.0, 9.0)
+    camera.original_ref._gr_gizmo_world_position = (9.0, 9.0, 9.0)
+    rotation_sequence = GhostRiggerLevelSequence()
+    rotation_binding = sequence_manager.add_object_binding(rotation_sequence, camera.original_ref)
+    rotation_position_x = TransformPropertyTrack(parent_binding_id=rotation_binding.binding_id, property_name="position_x")
+    rotation_position_x.add_keyframe(0, 2.0)
+    rotation_z = TransformPropertyTrack(parent_binding_id=rotation_binding.binding_id, property_name="rotation_z")
+    rotation_z.add_keyframe(0, quat_to_euler_degrees(base_rotation)[2])
+    rotation_binding.add_track(rotation_position_x)
+    rotation_binding.add_track(rotation_z)
+    rotation_evaluator = SequenceEvaluator(viewport)
+
+    rotation_evaluator.evaluate(rotation_sequence, 10)
+
+    assert camera.original_ref.position == (2.0, 0.0, 0.0)
+    assert camera.original_ref.rotation == base_rotation
+    assert camera.original_ref._gr_pivot_world == camera.original_ref.position
+    assert camera.original_ref._gr_gizmo_world_position == camera.original_ref.position
+
+    camera.original_ref.rotation = (0.0, 0.0, 1.0, 0.0)
+    rotation_evaluator.evaluate(rotation_sequence, 10)
+
+    assert camera.original_ref.rotation == base_rotation
+
+    transform_sequence = GhostRiggerLevelSequence()
+    transform_binding = sequence_manager.add_object_binding(transform_sequence, camera.original_ref)
+    transform_track = TransformTrack(parent_binding_id=transform_binding.binding_id)
+    transform_track.add_transform_key(
+        0,
+        location=(3.0, 4.0, 5.0),
+        rotation=quat_to_euler_degrees(base_rotation),
+    )
+    transform_binding.add_track(transform_track)
+    camera.original_ref.position = (0.0, 0.0, 0.0)
+    camera.original_ref.rotation = base_rotation
+
+    SequenceEvaluator(viewport).evaluate(transform_sequence, 60)
+
+    assert camera.original_ref.position == (3.0, 4.0, 5.0)
+    assert camera.original_ref.rotation == pytest.approx(quat(base_rotation))
+    assert mesh._gr_hidden is False
+    assert viewport.geometry_refreshes == 0
+
+    sequence_evaluator_source = (ROOT / "src/sequence/sequence_evaluator.py").read_text(encoding="utf-8")
+    scene_models_source = (ROOT / "src/gui/viewports/viewport_core/widgets/scene_models.py").read_text(encoding="utf-8")
+    wgpu_renderer_source = (ROOT / "src/adapters/rendering/wgpu_core/renderer.py").read_text(encoding="utf-8")
+    assert "refresh_model_geometry" not in sequence_evaluator_source
+    assert "def refresh_scene_transforms" in scene_models_source
+    assert "invalidate_transform_cache" in scene_models_source
+    assert "def invalidate_transform_cache" in wgpu_renderer_source
 
 
 def test_sequence_frame_range_edit_keeps_playback_end_tracking_sequence_end() -> None:
@@ -6967,6 +7031,7 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     from types import SimpleNamespace
 
     from src.core.camera.camera_model import GhostRiggerCamera
+    from src.core.gizmo.gizmo_mode import GizmoMode
     from src.core.scene.kmax_scene_manager import KMaxSceneManager
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -7021,6 +7086,15 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert scene_camera.position == (2.0, 3.0, 4.0)
     assert scene_camera.target_position == (2.0, 4.0, 6.0)
     assert tuple(getattr(camera_node, "_gr_gizmo_world_position")) == (2.0, 3.0, 4.0)
+    scene_camera.rotation = (0.0, 0.0, 0.0, 1.0)
+    scene_camera.apply_to_original()
+    viewport._transform_gizmo.set_mode(GizmoMode.TRANSLATE)
+    camera_node.rotation = (0.0, 0.0, 2.0, 0.0)
+    camera_node.position = (3.0, 3.0, 4.0)
+    viewport._notify_node_moved(camera_node, live=True)
+    assert scene_camera.position == (3.0, 3.0, 4.0)
+    assert scene_camera.rotation == (0.0, 0.0, 0.0, 1.0)
+    assert tuple(camera_node.rotation) == (0.0, 0.0, 0.0, 1.0)
 
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     workflow_source = inspect.getsource(QtGhostRiggerMainWindow._add_scene_object_to_sequence)
@@ -7054,6 +7128,8 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert "self._notify_node_moved(node)" in drag_source
     assert "def _notify_node_moved(self, node, *, live: bool = False)" in history_source
     assert "camera.target_position" in history_source
+    assert "translate_preview = bool(live and gizmo_mode == GizmoMode.TRANSLATE)" in history_source
+    assert "self.camera_manager.active_camera_id == camera.id and self.is_camera_view_active()" in history_source
     assert "_gr_transform_previewing" in scene_workflow_source
     assert "payload[\"target_position\"]" in scene_workflow_source
     assert "if live_preview:" in scene_workflow_source
@@ -7081,11 +7157,14 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert "def _request_preview_redraw" in sequence_editor_source
     assert "reason=\"sequence playback\"" in sequence_editor_source
     assert "reason=\"sequence evaluation\"" in sequence_evaluator_source
-    assert "camera=True" in sequence_evaluator_source
+    assert 'camera=bool("cameras" in dirty)' in sequence_evaluator_source
+    assert "from src.math.camera_math import euler_degrees_to_quat, quat_to_euler_degrees" in sequence_evaluator_source
     assert "TransformPropertyTrack" in sequence_editor_source
     assert "def _auto_key_object" in sequence_editor_source
     assert "_on_camera_panel_changed" in sequence_editor_source
     assert "preferred=(TransformPropertyTrack, TransformTrack, CameraPropertyTrack)" in sequence_editor_source
+    assert "self._sequence_changed(evaluate=False)" in sequence_editor_source
+    assert "def _sequence_changed(self, *, evaluate: bool = True)" in sequence_editor_source
     assert "_on_lighting_panel_changed" in sequence_editor_source
     assert "def _delete_selected_outliner_item" in sequence_editor_source
     assert "master_track_types = {\"Camera Cut\", \"Sub Sequence\", \"Event\"}" in sequence_editor_source
@@ -7198,7 +7277,7 @@ def test_camera_gizmo_renderer_is_qt_viewport_adapter_owned() -> None:
     camera = SimpleNamespace(
         position=(0.0, 0.0, 0.0),
         rotation=(0.0, 0.0, 0.0, 1.0),
-        original_ref=SimpleNamespace(position=(3.0, 4.0, 5.0), rotation=(0.0, 0.0, 1.0, 0.0)),
+        original_ref=SimpleNamespace(position=(3.0, 4.0, 5.0), rotation=(0.0, 0.0, 2.0, 0.0)),
     )
     assert renderer._camera_position(camera) == (3.0, 4.0, 5.0)
     assert renderer._camera_rotation(camera) == (0.0, 0.0, 1.0, 0.0)

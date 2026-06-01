@@ -464,6 +464,26 @@ class ViewportSceneModelMixin:
                 pass
         self._request_render(fast=True)
 
+    def refresh_scene_transforms(self, reason: str = "scene transforms changed") -> None:
+        """Refresh scene placement without dropping resident mesh resources."""
+        if self.model is None:
+            return
+        try:
+            self._renderer._wt_cache.clear()
+            self._renderer._frame_view = None
+            self._renderer._frame_verts_cache = {}
+            self._renderer._frame_norms_cache = {}
+        except Exception:
+            pass
+        if self._gpu_renderer is not None:
+            invalidate = getattr(self._gpu_renderer, "invalidate_transform_cache", None)
+            if callable(invalidate):
+                try:
+                    invalidate(reason)
+                except Exception:
+                    pass
+        self._request_render(fast=True, reason=reason, scene=True, overlay=True, gizmo=True)
+
     def set_external_skeleton(
         self,
         model,

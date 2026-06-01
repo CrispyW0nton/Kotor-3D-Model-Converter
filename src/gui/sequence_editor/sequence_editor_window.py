@@ -548,7 +548,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                 binding.add_track(track)
         obj = self.evaluator.resolver.resolve(binding) if binding is not None else self._selected_scene_object()
         self._key_track(track, obj)
-        self._sequence_changed()
+        self._sequence_changed(evaluate=False)
 
     def _key_track(self, track, obj) -> None:
         if self.sequence is None:
@@ -777,7 +777,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             return
         for track in targets:
             self._key_track(track, obj)
-        self._sequence_changed()
+        self._sequence_changed(evaluate=False)
 
     def _copy_keys(self) -> None:
         if self.sequence is not None:
@@ -888,16 +888,47 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _refresh_properties(self) -> None:
         self.properties_panel.refresh_info()
 
-    def _sequence_changed(self) -> None:
+    def _sequence_changed(self, *, evaluate: bool = True) -> None:
         if self.sequence is None:
             return
+        selection_key = self._outliner_selection_key()
         self.sequence.touch()
         self.outliner.set_sequence(self.sequence)
+        self._restore_outliner_selection_key(selection_key)
         self._sync_timeline_row_metrics()
         self.timeline.set_sequence(self.sequence)
         self.properties_panel.refresh()
         self.transport.set_frame_range(self.sequence.start_frame, self.sequence.end_frame)
-        self._evaluate_current(scrubbing=True)
+        if evaluate:
+            self._evaluate_current(scrubbing=True)
+        else:
+            self._last_evaluated_frame = self.sequence.current_frame
+            self.transport.set_frame(self.sequence.current_frame)
+            self._set_status(f"Frame {self.sequence.current_frame} | {self.sequence.name}")
+            self._request_preview_redraw(scrubbing=True)
+
+    def _outliner_selection_key(self) -> tuple[str, str] | None:
+        item = self.outliner.track_list.currentItem()
+        if item is None:
+            return None
+        data = item.data(0, QtCore.Qt.UserRole)
+        if not isinstance(data, tuple) or len(data) != 2:
+            return None
+        return (str(data[0]), str(data[1]))
+
+    def _restore_outliner_selection_key(self, key: tuple[str, str] | None) -> None:
+        if key is None:
+            return
+        tree = self.outliner.track_list
+        root = tree.invisibleRootItem()
+        stack = [root.child(index) for index in range(root.childCount())]
+        while stack:
+            item = stack.pop(0)
+            data = item.data(0, QtCore.Qt.UserRole)
+            if isinstance(data, tuple) and len(data) == 2 and (str(data[0]), str(data[1])) == key:
+                tree.setCurrentItem(item)
+                return
+            stack.extend(item.child(index) for index in range(item.childCount()))
 
     def _sync_timeline_row_metrics(self) -> None:
         track_list = getattr(getattr(self, "outliner", None), "track_list", None)

@@ -317,6 +317,16 @@ class FallbackViewportRenderer(ViewportRendererPort):
         if active is not None and hasattr(active, "invalidate_node_cache"):
             active.invalidate_node_cache()
 
+    def invalidate_transform_cache(self, reason: str = "transforms changed") -> None:
+        active = object.__getattribute__(self, "_active")
+        if active is None:
+            return
+        invalidate = getattr(active, "invalidate_transform_cache", None)
+        if callable(invalidate):
+            invalidate(reason)
+        elif hasattr(active, "invalidate_node_cache"):
+            active.invalidate_node_cache()
+
     def invalidate_all(self) -> None:
         active = object.__getattribute__(self, "_active")
         if active is not None and hasattr(active, "invalidate_all"):

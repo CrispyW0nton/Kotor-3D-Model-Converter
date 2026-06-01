@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from src.math.camera_math import add, camera_forward, cross, length, mul, normalize
+from src.math.camera_math import add, camera_forward, cross, length, mul, normalize, quat
 
 
 class CameraGizmoRenderer:
@@ -168,6 +168,6 @@ class CameraGizmoRenderer:
         if raw is None:
             raw = getattr(camera, "rotation", (0.0, 0.0, 0.0, 1.0))
         try:
-            return tuple(float(v) for v in tuple(raw)[:4])
+            return quat(tuple(float(v) for v in tuple(raw)[:4]))
         except Exception:
             return (0.0, 0.0, 0.0, 1.0)

@@ -3141,6 +3141,10 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._light_resource_revision_key = 0
         self._last_lighting_invalidation_reason = str(reason or "lighting changed")
 
+    def invalidate_transform_cache(self, reason: str = "transforms changed") -> None:
+        self._render_queue_cache.invalidate(str(reason or "transforms changed"))
+        self._gizmo_line_cache.clear()
+
     def invalidate_node(self, node) -> None:
         if node is not None:
             self.resource_cache.release_mesh(id(node))
