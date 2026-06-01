@@ -262,6 +262,13 @@ class SceneWorkflowMixin:
             )
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(scene)
+        active_model = self._active_viewport_model()
+        if hasattr(self, "lighting_panel"):
+            self.lighting_panel.set_model(active_model)
+            self._sync_lighting_helper_visibility_to_viewport()
+        if hasattr(self, "camera_panel") and hasattr(self, "viewport"):
+            self.camera_panel.manager = self.viewport.camera_manager
+            self.camera_panel.refresh()
         self._refresh_scene_animation_entries()
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
@@ -505,8 +512,7 @@ class SceneWorkflowMixin:
             self._syncing_scene_skeleton_selection = False
 
     def _select_scene_object_impl(self, object_id: str) -> None:
-        for obj in self.scene_manager.active_scene.objects:
-            obj.selected = obj.id == object_id
+        self.scene_manager.select_object(object_id)
         if hasattr(self, "viewport"):
             self.viewport.select_scene_object(object_id)
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
@@ -600,8 +606,13 @@ class SceneWorkflowMixin:
             self.properties_panel.show_node(node)
 
     def _delete_scene_object(self, object_id: str) -> None:
-        self.scene_manager.remove_object(object_id)
-        self._refresh_scene_view()
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is not None and obj.object_type == "camera":
+            viewport = getattr(self, "viewport", None)
+            if viewport is not None and getattr(getattr(viewport, "camera_manager", None), "active_camera_id", "") == object_id:
+                viewport.switch_to_perspective()
+        if self.scene_manager.remove_object(object_id):
+            self._refresh_scene_view()
 
     def _duplicate_scene_object(self, object_id: str) -> None:
         duplicate = self.scene_manager.duplicate_object(object_id)
@@ -609,11 +620,11 @@ class SceneWorkflowMixin:
             source = next((obj for obj in self.scene_manager.active_scene.objects if obj.id == object_id), None)
             if source is not None and "_runtime_model" in source.metadata:
                 duplicate.metadata["_runtime_model"] = copy.deepcopy(source.metadata["_runtime_model"])
-            duplicate.transform.position = (
+            self.scene_manager.update_object_transform(duplicate.id, position=(
                 duplicate.transform.position[0] + 2.0,
                 duplicate.transform.position[1],
                 duplicate.transform.position[2],
-            )
+            ))
         self._refresh_scene_view()
 
     def _focus_scene_object(self, object_id: str) -> None:
@@ -621,45 +632,38 @@ class SceneWorkflowMixin:
         self._call_viewport("frame_all")
 
     def _set_scene_object_visible(self, object_id: str, visible: bool) -> None:
-        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
-        if obj is not None:
-            obj.visible = bool(visible)
-            self.scene_manager.mark_dirty()
+        if self.scene_manager.set_object_visibility(object_id, visible):
             self._refresh_scene_view()
             self._invalidate_renderer_resources("scene object visibility changed")
 
     def _set_scene_object_locked(self, object_id: str, locked: bool) -> None:
-        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
-        if obj is not None:
-            obj.locked = bool(locked)
-            self.scene_manager.mark_dirty()
+        if self.scene_manager.set_object_locked(object_id, locked):
             self._refresh_scene_view()
             self._refresh_adjust_pivot_panel()
 
     def _rename_scene_object(self, object_id: str, name: str) -> None:
-        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
-        if obj is not None and name.strip():
-            obj.name = name.strip()
-            self.scene_manager.mark_dirty()
+        if self.scene_manager.rename_object(object_id, name):
             self._refresh_scene_view()
 
     def _on_viewport_scene_node_selected(self, node) -> None:
         object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
         if object_id:
-            for obj in self.scene_manager.active_scene.objects:
-                obj.selected = obj.id == object_id
+            self.scene_manager.select_object(object_id)
             if hasattr(self, "scene_outliner_panel"):
                 self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
             obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
             if obj is not None:
                 self._activate_scene_object_model(obj)
                 self._sync_skeleton_root_for_scene_object(obj)
+                if obj.object_type == "camera" and hasattr(self, "camera_panel"):
+                    self.camera_panel.select_camera_object(node)
+                if obj.object_type == "light" and hasattr(self, "lighting_panel"):
+                    self.lighting_panel.select_light(node)
                 show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
                 if callable(show_scene_object):
                     show_scene_object(obj)
         else:
-            for obj in self.scene_manager.active_scene.objects:
-                obj.selected = False
+            self.scene_manager.clear_selection()
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
         bus = getattr(self, "integration_event_bus", None)
@@ -687,6 +691,39 @@ class SceneWorkflowMixin:
             rotation=rotation,
             scale=scale,
         )
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is not None and obj.object_type == "camera":
+            payload = dict((getattr(obj, "metadata", {}) or {}).get("camera") or {})
+            payload.update(
+                {
+                    "id": object_id,
+                    "scene_object_id": object_id,
+                    "name": str(getattr(node, "name", "") or obj.name),
+                    "position": tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]),
+                    "rotation": tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
+                    "visible": not bool(getattr(node, "_gr_camera_hidden", False)),
+                    "locked": bool(getattr(node, "_gr_camera_locked", False)),
+                    "selected": True,
+                }
+            )
+            self.scene_manager.update_camera_properties(object_id, **payload)
+        elif obj is not None and obj.object_type == "light":
+            payload = dict((getattr(obj, "metadata", {}) or {}).get("light") or {})
+            payload.update(
+                {
+                    "id": object_id,
+                    "scene_object_id": object_id,
+                    "name": str(getattr(node, "name", "") or obj.name),
+                    "position": tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]),
+                    "rotation": tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
+                    "type": str(getattr(node, "light_kind", payload.get("type", "point")) or "point"),
+                    "enabled": bool(getattr(node, "light_enabled", payload.get("enabled", True))),
+                    "visible": not bool(getattr(node, "_gr_light_hidden", False)),
+                    "locked": bool(getattr(node, "_gr_light_locked", False)),
+                    "selected": True,
+                }
+            )
+            self.scene_manager.update_light_properties(object_id, **payload)
         try:
             pivot_local = self.viewport._pivot_local_from_node(node)
             pivot_rotation = self.viewport._quat_to_euler_degrees(getattr(node, "_gr_pivot_rotation", (0.0, 0.0, 0.0, 1.0)))

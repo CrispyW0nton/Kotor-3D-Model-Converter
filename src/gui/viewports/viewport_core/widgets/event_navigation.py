@@ -102,6 +102,9 @@ class ViewportEventNavigationMixin:
                     self.frame_all(); return True
                 if key == QtCore.Qt.Key_Home and no_modifiers:
                     self.frame_all(); return True
+                if key in (QtCore.Qt.Key_Delete, QtCore.Qt.Key_Backspace) and no_modifiers:
+                    if self._delete_selected_scene_objects():
+                        return True
                 if key == QtCore.Qt.Key_Z and no_modifiers:
                     self.frame_selection_or_all(); return True
                 if self._active_gizmo_node() is not None:
@@ -170,6 +173,36 @@ class ViewportEventNavigationMixin:
                     self._snap_key_down = False
                     return True
         return super().eventFilter(obj, event)
+
+    def _delete_selected_scene_objects(self) -> bool:
+        nodes = list(getattr(self, "_selected_viewport_nodes", []) or [])
+        selected = getattr(self._renderer, "selected_node", None)
+        if selected is not None and selected not in nodes:
+            nodes.append(selected)
+        object_ids: list[str] = []
+        seen: set[str] = set()
+        locked = False
+        for node in nodes:
+            object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
+            if not object_id or object_id in seen:
+                continue
+            if bool(getattr(node, "_gr_scene_object_locked", False)):
+                locked = True
+                continue
+            seen.add(object_id)
+            object_ids.append(object_id)
+        if locked and not object_ids:
+            self.statusMessage.emit("Selected scene object is locked.")
+            return True
+        if not object_ids:
+            return False
+        if locked:
+            self.statusMessage.emit("Locked scene objects were not deleted.")
+        for object_id in object_ids:
+            self.sceneObjectDeleteRequested.emit(object_id)
+        self.set_selected_node(None)
+        self._request_render(fast=True, reason="scene object deleted", scene=True, selection=True)
+        return True
 
     def _world_point_from_mouse(self, event) -> tuple[float, float, float]:
         x = int(event.position().x())

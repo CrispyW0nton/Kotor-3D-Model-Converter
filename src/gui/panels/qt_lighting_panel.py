@@ -7,6 +7,7 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
+from src.gui.qt_lib.assets import qt_icon_manager
 from src.core.lighting.light_manager import LightManager
 from src.core.lighting.light_model import GhostRiggerLight
 from src.core.lighting.light_types import (
@@ -28,6 +29,7 @@ class QtLightingPanel(QtWidgets.QWidget):
     helperVisibilityChanged = QtCore.Signal(bool, bool)
     lightChanged = QtCore.Signal()
     lightSelected = QtCore.Signal(object)
+    createLightRequested = QtCore.Signal(str)
     lightmapBakeRequested = QtCore.Signal()
 
     _TYPE_LABELS = ("Point", "Spot", "Directional", "Area", "Ambient", "AuroraPoint", "AuroraAmbient", "AuroraUnknown")
@@ -44,14 +46,14 @@ class QtLightingPanel(QtWidgets.QWidget):
         self._settings_store = LightingSettingsStore()
         self._settings = self._settings_store.load()
         self._icons = {
-            "point": self._icon("#ffe36b", "point"),
-            "aurora_point": self._icon("#ffe36b", "point"),
-            "spot": self._icon("#7bdcff", "spot"),
-            "directional": self._icon("#96ff8f", "directional"),
-            "area": self._icon("#ff9f7b", "area"),
-            "ambient": self._icon("#c0c2ff", "ambient"),
-            "aurora_ambient": self._icon("#c0c2ff", "ambient"),
-            "aurora_unknown": self._icon("#9aa4ad", "point"),
+            "point": qt_icon_manager.get(qt_icon_manager.I.LIGHT_POINT, 16),
+            "aurora_point": qt_icon_manager.get(qt_icon_manager.I.LIGHT_POINT, 16),
+            "spot": qt_icon_manager.get(qt_icon_manager.I.LIGHT_SPOT, 16),
+            "directional": qt_icon_manager.get(qt_icon_manager.I.LIGHT_DIRECTIONAL, 16),
+            "area": qt_icon_manager.get(qt_icon_manager.I.LIGHT_AREA, 16),
+            "ambient": qt_icon_manager.get(qt_icon_manager.I.LIGHT_AMBIENT, 16),
+            "aurora_ambient": qt_icon_manager.get(qt_icon_manager.I.LIGHT_AMBIENT, 16),
+            "aurora_unknown": qt_icon_manager.get(qt_icon_manager.I.LIGHTS, 16),
         }
         self._build()
         self._load_settings_into_ui()
@@ -60,6 +62,25 @@ class QtLightingPanel(QtWidgets.QWidget):
         root = QtWidgets.QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(7)
+
+        create_row = QtWidgets.QHBoxLayout()
+        create_row.setSpacing(4)
+        for label, light_type, icon_name in (
+            ("Point", "point", qt_icon_manager.I.LIGHT_POINT),
+            ("Spot", "spot", qt_icon_manager.I.LIGHT_SPOT),
+            ("Dir", "directional", qt_icon_manager.I.LIGHT_DIRECTIONAL),
+            ("Area", "area", qt_icon_manager.I.LIGHT_AREA),
+            ("Amb", "ambient", qt_icon_manager.I.LIGHT_AMBIENT),
+        ):
+            button = QtWidgets.QToolButton()
+            button.setIcon(qt_icon_manager.get(icon_name, 18))
+            button.setText(label)
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+            button.setToolTip(f"Create {label} light")
+            button.clicked.connect(lambda _checked=False, t=light_type: self.createLightRequested.emit(t))
+            create_row.addWidget(button)
+        create_row.addStretch(1)
+        root.addLayout(create_row)
 
         top_grid = QtWidgets.QGridLayout()
         top_grid.setHorizontalSpacing(6)
@@ -249,33 +270,6 @@ class QtLightingPanel(QtWidgets.QWidget):
         spin.setSingleStep(step)
         spin.valueChanged.connect(lambda _value=0.0: self._apply_editor())
         return spin
-
-    def _icon(self, color: str, kind: str) -> QtGui.QIcon:
-        pix = QtGui.QPixmap(16, 16)
-        pix.fill(QtCore.Qt.transparent)
-        painter = QtGui.QPainter(pix)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setPen(QtGui.QPen(QtGui.QColor(color), 1.5))
-        painter.setBrush(QtGui.QColor(color))
-        if kind == "directional":
-            painter.drawLine(3, 12, 12, 3)
-            painter.drawLine(12, 3, 12, 8)
-            painter.drawLine(12, 3, 7, 3)
-        elif kind == "spot":
-            painter.drawEllipse(3, 3, 5, 5)
-            painter.setBrush(QtCore.Qt.NoBrush)
-            painter.drawLine(6, 8, 2, 14)
-            painter.drawLine(6, 8, 14, 14)
-        elif kind == "area":
-            painter.drawRect(3, 3, 10, 10)
-        elif kind == "ambient":
-            painter.drawEllipse(4, 4, 8, 8)
-            painter.setBrush(QtCore.Qt.NoBrush)
-            painter.drawEllipse(2, 2, 12, 12)
-        else:
-            painter.drawEllipse(4, 4, 8, 8)
-        painter.end()
-        return QtGui.QIcon(pix)
 
     def set_model(self, model) -> None:
         self._model = model

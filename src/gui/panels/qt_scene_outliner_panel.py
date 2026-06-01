@@ -7,6 +7,7 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.scene.scene_object_instance import SceneObjectInstance
+from src.gui.qt_lib.assets import qt_icon_manager
 from src.gui.qt_lib.assets.qt_theme import C, heading
 
 
@@ -522,6 +523,18 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         cached = self._icons.get(key)
         if cached is not None:
             return cached
+        icon_map = {
+            "scene": qt_icon_manager.I.SCENE,
+            "light": qt_icon_manager.I.LIGHTS,
+            "camera": qt_icon_manager.I.CAMERAS,
+            "helper": qt_icon_manager.I.SKELETON,
+        }
+        icon_name = icon_map.get(key)
+        if icon_name:
+            icon = qt_icon_manager.get(icon_name, 18)
+            if not icon.isNull():
+                self._icons[key] = icon
+                return icon
         color_map = {
             "scene": C["accent"],
             "model": C["gold"],

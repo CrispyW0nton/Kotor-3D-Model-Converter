@@ -57,6 +57,7 @@ class QtViewportWidget(
     cameraSelectionChanged = QtCore.Signal(object)
     cameraChanged = QtCore.Signal()
     activeCameraChanged = QtCore.Signal(object)
+    sceneObjectDeleteRequested = QtCore.Signal(str)
     statusMessage = QtCore.Signal(str)
     renderStateChanged = QtCore.Signal(str)
     gpuUploadProgress = QtCore.Signal(int, int)

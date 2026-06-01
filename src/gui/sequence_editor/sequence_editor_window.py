@@ -247,6 +247,8 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.toolbar.saveAsSequence.connect(self._save_sequence_as)
         self.toolbar.renderSequence.connect(self._render_sequence)
         self.toolbar.addSelectedObject.connect(self._add_selected_object)
+        self.toolbar.createCamera.connect(self._create_and_bind_camera)
+        self.toolbar.createLight.connect(self._create_and_bind_light)
         self.toolbar.addTrack.connect(self._add_track)
         self.toolbar.addCameraCut.connect(self._add_camera_cut)
         self.toolbar.setKey.connect(self._set_key)
@@ -389,6 +391,34 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.outliner.track_list.setCurrentItem(self._find_binding_item(binding.binding_id))
         self._set_status(f"Bound {binding.display_name}")
 
+    def _create_and_bind_camera(self, camera_type: str) -> None:
+        if self.sequence is None or self.main_window is None:
+            return
+        creator = getattr(self.main_window, "_create_scene_camera_object", None)
+        if not callable(creator):
+            return
+        scene_obj = creator(str(camera_type or "Cinematic Camera"))
+        if scene_obj is None:
+            return
+        binding = self.manager.add_object_binding(self.sequence, scene_obj)
+        self._sequence_changed()
+        self.outliner.track_list.setCurrentItem(self._find_binding_item(binding.binding_id))
+        self._set_status(f"Created and bound {binding.display_name}")
+
+    def _create_and_bind_light(self, light_type: str) -> None:
+        if self.sequence is None or self.main_window is None:
+            return
+        creator = getattr(self.main_window, "_create_scene_light_object", None)
+        if not callable(creator):
+            return
+        scene_obj = creator(str(light_type or "point"))
+        if scene_obj is None:
+            return
+        binding = self.manager.add_object_binding(self.sequence, scene_obj)
+        self._sequence_changed()
+        self.outliner.track_list.setCurrentItem(self._find_binding_item(binding.binding_id))
+        self._set_status(f"Created and bound {binding.display_name}")
+
     def _add_track(self, track_type: str) -> None:
         if self.sequence is None:
             return
@@ -488,8 +518,25 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             target = camera if camera is not None else obj
             track.add_keyframe(frame, getattr(target, track.property_name, 0.0), select=True)
         elif isinstance(track, LightPropertyTrack) and obj is not None:
-            attr = {"intensity": "light_multiplier", "radius": "light_radius", "color": "light_color"}.get(track.property_name, track.property_name)
-            track.add_keyframe(frame, getattr(obj, attr, 0.0), select=True)
+            attr = {
+                "enabled": "light_enabled",
+                "visible": "_gr_light_hidden",
+                "color": "light_color",
+                "intensity": "light_multiplier",
+                "radius": "light_radius",
+                "cone_angle": "light_cone_degrees",
+                "area_size": "light_area_size",
+                "ambient_only": "light_ambient_only",
+                "casts_shadows": "light_shadow",
+                "affects_diffuse": "light_affects_diffuse",
+                "affects_specular": "light_affects_specular",
+                "affects_lightmap": "light_affects_lightmap",
+                "affects_environment": "light_affects_environment",
+            }.get(track.property_name, track.property_name)
+            value = getattr(obj, attr, 0.0)
+            if track.property_name == "visible":
+                value = not bool(value)
+            track.add_keyframe(frame, value, select=True)
         elif isinstance(track, MaterialTrack) and obj is not None:
             attr = {"opacity": "alpha", "material_color": "diffuse"}.get(track.property_name, track.property_name)
             track.add_keyframe(frame, getattr(obj, attr, 0.0), select=True)

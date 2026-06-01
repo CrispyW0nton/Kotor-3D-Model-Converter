@@ -6754,6 +6754,174 @@ def test_camera_letterbox_render_burns_opaque_black_bars() -> None:
     assert image.getpixel((50, 5)) == (0, 0, 0, 255)
 
 
+def test_kmax_scene_camera_and_light_objects_are_first_class_scene_objects(tmp_path) -> None:
+    from src.core.scene.kmax_scene_manager import KMaxSceneManager
+    from src.core.scene.kmax_serializer import KMaxSerializer
+    from src.core.scene.scene_object import Transform
+
+    manager = KMaxSceneManager()
+    camera = manager.add_camera_object(
+        "Target Camera",
+        Transform(position=(1.0, 2.0, 3.0), rotation=(10.0, 20.0, 30.0)),
+        name="ShotCam",
+    )
+    light = manager.add_light_object(
+        "spot",
+        Transform(position=(-1.0, 0.5, 4.0)),
+        name="KeyLight",
+        properties={"color": (0.4, 0.6, 1.0), "intensity": 3.5, "cone_angle": 35.0},
+    )
+    manager.update_camera_properties(camera.id, focal_length_mm=50.0, target_enabled=True)
+    manager.update_light_properties(light.id, radius=9.0, affects_lightmap=False)
+    adopted_camera = manager.add_camera_object("Free Camera", name="AdoptedCam", object_id="camera-panel-id", select=False)
+    adopted_light = manager.add_light_object("point", name="AdoptedLight", object_id="light-panel-id", select=False)
+
+    path = tmp_path / "camera_light_scene.kmax"
+    manager.save_kmax(path)
+    payload = KMaxSerializer.to_dict(KMaxSerializer.load(path))
+
+    assert [obj["object_type"] for obj in payload["objects"]] == ["camera", "light", "camera", "light"]
+    assert payload["cameras"][0]["scene_object_id"] == camera.id
+    assert payload["cameras"][0]["camera_type"] == "Target Camera"
+    assert payload["cameras"][0]["focal_length_mm"] == 50.0
+    assert payload["lights"][0]["scene_object_id"] == light.id
+    assert payload["lights"][0]["type"] == "spot"
+    assert payload["lights"][0]["radius"] == 9.0
+    assert payload["lights"][0]["affects_lightmap"] is False
+    assert adopted_camera.id == "camera-panel-id"
+    assert adopted_light.id == "light-panel-id"
+
+
+def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
+    from types import SimpleNamespace
+
+    from src.core.camera.camera_manager import CameraManager
+    from src.core.lighting.light_manager import LightManager
+    from src.core.lighting.light_model import GhostRiggerLight
+    from src.core.scene.kmax_scene_manager import KMaxSceneManager
+    from src.sequence.sequence_binding import SequenceTargetType
+    from src.sequence.sequence_evaluator import SequenceEvaluator
+    from src.sequence.sequence_manager import SequenceManager, ensure_sequence_object_id, infer_target_type
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.camera_cut_track import CameraCutTrack
+    from src.sequence.tracks.camera_property_track import CAMERA_PROPERTIES, CameraPropertyTrack
+    from src.sequence.tracks.light_property_track import LIGHT_PROPERTIES, LightPropertyTrack
+
+    manager = KMaxSceneManager()
+    scene_camera = manager.add_camera_object("Cinematic Camera", name="ShotCam")
+    scene_light = manager.add_light_object("area", name="Fill")
+    assert ensure_sequence_object_id(scene_camera) == scene_camera.id
+    assert infer_target_type(scene_camera) == SequenceTargetType.CAMERA
+    assert ensure_sequence_object_id(scene_light) == scene_light.id
+    assert infer_target_type(scene_light) == SequenceTargetType.LIGHT
+    assert {"focal_length_mm", "field_of_view_degrees", "focus_distance", "aperture_f_stop", "near_clip", "far_clip", "letterbox_ratio", "target_position"} <= CAMERA_PROPERTIES
+    assert {"enabled", "visible", "color", "intensity", "radius", "cone_angle", "area_size", "ambient_only", "casts_shadows", "affects_diffuse", "affects_specular", "affects_lightmap", "affects_environment"} <= LIGHT_PROPERTIES
+
+    camera_manager = CameraManager()
+    camera = camera_manager.create_camera(name="ShotCam")
+    light_manager = LightManager()
+    light = light_manager.add_light(GhostRiggerLight(name="Key", type="spot"))
+    viewport = SimpleNamespace(camera_manager=camera_manager, switched=[])
+    viewport.parent = lambda: SimpleNamespace(lighting_panel=SimpleNamespace(manager=light_manager))
+    viewport.switch_to_camera = lambda camera_id: viewport.switched.append(camera_id)
+    viewport.refresh_cameras = lambda: None
+    viewport.refresh_lighting = lambda: None
+    sequence_manager = SequenceManager()
+    sequence = GhostRiggerLevelSequence()
+    camera_binding = sequence_manager.add_object_binding(sequence, camera.original_ref)
+    focal_track = CameraPropertyTrack(parent_binding_id=camera_binding.binding_id, property_name="focal_length_mm")
+    focal_track.add_keyframe(10, 75.0)
+    camera_binding.add_track(focal_track)
+    cut_track = CameraCutTrack()
+    cut_track.add_cut(camera_binding.binding_id, 0, 20, "ShotCam")
+    sequence.master_tracks.append(cut_track)
+    light_binding = sequence_manager.add_object_binding(sequence, light.original_ref)
+    intensity = LightPropertyTrack(parent_binding_id=light_binding.binding_id, property_name="intensity")
+    shadow = LightPropertyTrack(parent_binding_id=light_binding.binding_id, property_name="casts_shadows")
+    intensity.add_keyframe(10, 4.25)
+    shadow.add_keyframe(10, False)
+    light_binding.add_track(intensity)
+    light_binding.add_track(shadow)
+
+    SequenceEvaluator(viewport).evaluate(sequence, 10)
+
+    assert camera.focal_length_mm == 75.0
+    assert viewport.switched == [camera.id]
+    assert light.original_ref.light_multiplier == 4.25
+    assert light.original_ref.light_shadow is False
+
+
+def test_sequence_frame_range_edit_keeps_playback_end_tracking_sequence_end() -> None:
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+
+    sequence = GhostRiggerLevelSequence(end_frame=240, playback_end_frame=240)
+
+    sequence.set_frame_range(0, 6)
+    assert sequence.end_frame == 6
+    assert sequence.playback_end_frame == 6
+
+    sequence.set_frame_range(0, 60)
+    assert sequence.end_frame == 60
+    assert sequence.playback_end_frame == 60
+
+    sequence.playback_start_frame = 10
+    sequence.playback_end_frame = 24
+    sequence.set_frame_range(0, 120)
+
+    assert sequence.playback_start_frame == 10
+    assert sequence.playback_end_frame == 24
+
+
+def test_scene_camera_light_authoring_uses_registered_svg_icons_and_delete_signal() -> None:
+    required_icons = {
+        "camera_free.svg",
+        "camera_target.svg",
+        "camera_cinematic.svg",
+        "light_point.svg",
+        "light_spot.svg",
+        "light_directional.svg",
+        "light_area.svg",
+        "light_ambient.svg",
+    }
+    icon_dir = ROOT / "src/gui/icons"
+    assert required_icons <= {path.name for path in icon_dir.glob("*.svg")}
+
+    icon_manager_source = (ROOT / "src/gui/assets/qt_icon_manager.py").read_text(encoding="utf-8")
+    camera_panel_source = (ROOT / "src/gui/panels/qt_camera_panel.py").read_text(encoding="utf-8")
+    lighting_panel_source = (ROOT / "src/gui/panels/qt_lighting_panel.py").read_text(encoding="utf-8")
+    sequence_toolbar_source = (ROOT / "src/gui/sequence_editor/sequence_toolbar.py").read_text(encoding="utf-8")
+    event_source = (ROOT / "src/gui/viewports/viewport_core/widgets/event_navigation.py").read_text(encoding="utf-8")
+    viewport_source = (ROOT / "src/gui/viewports/viewport_core/widgets/viewport_widget.py").read_text(encoding="utf-8")
+    main_layout_source = (ROOT / "src/gui/windows/application_core/shared/main_layout.py").read_text(encoding="utf-8")
+    chrome_source = (ROOT / "src/gui/windows/application_core/shared/window_chrome.py").read_text(encoding="utf-8")
+    viewport_tools_source = (ROOT / "src/gui/windows/application_core/shared/viewport_tools.py").read_text(encoding="utf-8")
+    sequence_property_source = (ROOT / "src/gui/sequence_editor/sequence_property_panel.py").read_text(encoding="utf-8")
+
+    for icon_name in ("SCENE", "CAMERA_FREE", "CAMERA_TARGET", "CAMERA_CINEMATIC", "LIGHT_POINT", "LIGHT_SPOT", "LIGHT_DIRECTIONAL", "LIGHT_AREA", "LIGHT_AMBIENT"):
+        assert icon_name in icon_manager_source
+    assert "qt_icon_manager.get(icon_name, 18)" in camera_panel_source
+    assert "qt_icon_manager.get(icon_name, 18)" in lighting_panel_source
+    assert "createCamera = QtCore.Signal(str)" in sequence_toolbar_source
+    assert "createLight = QtCore.Signal(str)" in sequence_toolbar_source
+    assert "sceneObjectDeleteRequested = QtCore.Signal(str)" in viewport_source
+    assert "Key_Delete" in event_source
+    assert "sceneObjectDeleteRequested.emit(object_id)" in event_source
+    assert "sceneObjectDeleteRequested.connect(self._delete_scene_object)" in main_layout_source
+    assert "self.scene_manager.select_object(object_id)" in (ROOT / "src/gui/windows/application_core/shared/scene_workflow.py").read_text(encoding="utf-8")
+    assert "viewport.switch_to_perspective()" in (ROOT / "src/gui/windows/application_core/shared/scene_workflow.py").read_text(encoding="utf-8")
+    assert 'addMenu("Create")' in chrome_source
+    assert '"Create Camera"' in chrome_source
+    assert '"Create Light"' in chrome_source
+    assert 'self._icon("camera_free")' in chrome_source
+    assert 'self._icon("light_point")' in chrome_source
+    assert "object_id=object_id" in viewport_tools_source
+    assert "scene_manager.add_camera_object" in viewport_tools_source
+    assert "scene_manager.add_light_object" in viewport_tools_source
+    assert "all_lights(include_deleted=True)" in viewport_tools_source
+    assert "scene_manager.remove_light_object(object_id)" in viewport_tools_source
+    assert "sequence.set_frame_range" in sequence_property_source
+
+
 def test_camera_overlays_are_qt_viewport_adapter_owned() -> None:
     """Camera overlay drawing is adapter-owned, with the old GUI path as a facade."""
     import sys

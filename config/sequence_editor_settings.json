@@ -1,7 +1,7 @@
 {
   "auto_key_enabled": false,
   "last_opened_sequence": "",
-  "loop_playback": false,
+  "loop_playback": true,
   "playback_speed": 1.0,
   "recent_sequences": [],
   "selected_layout_mode": "Timeline Only",

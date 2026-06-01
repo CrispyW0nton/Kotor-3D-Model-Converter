@@ -19,6 +19,7 @@ _cache: dict[str, QtGui.QIcon] = {}
 
 
 class I:
+    SCENE = "scene"
     NEW_SCENE = "new_scene"
     OPEN = "open"
     SAVE = "save"
@@ -40,6 +41,14 @@ class I:
     SEQUENCE = "sequence"
     LIGHTS = "lights"
     CAMERAS = "cameras"
+    CAMERA_FREE = "camera_free"
+    CAMERA_TARGET = "camera_target"
+    CAMERA_CINEMATIC = "camera_cinematic"
+    LIGHT_POINT = "light_point"
+    LIGHT_SPOT = "light_spot"
+    LIGHT_DIRECTIONAL = "light_directional"
+    LIGHT_AREA = "light_area"
+    LIGHT_AMBIENT = "light_ambient"
     RIG = "rig"
     NORMALMAP = "normalmap"
     RESOURCES = "resources"
@@ -92,6 +101,14 @@ LABEL_TO_ICON: dict[str, str] = {
     "sequence": I.SEQUENCE,
     "lights": I.LIGHTS,
     "cameras": I.CAMERAS,
+    "free camera": I.CAMERA_FREE,
+    "target camera": I.CAMERA_TARGET,
+    "cinematic camera": I.CAMERA_CINEMATIC,
+    "point light": I.LIGHT_POINT,
+    "spot light": I.LIGHT_SPOT,
+    "directional light": I.LIGHT_DIRECTIONAL,
+    "area light": I.LIGHT_AREA,
+    "ambient light": I.LIGHT_AMBIENT,
     "normalmap": I.NORMALMAP,
     "normmap": I.NORMALMAP,
     "search": I.SEARCH,

@@ -198,6 +198,22 @@ class WindowChromeMixin:
         self._configure_dock_toggle_action(self.lighting_panel_action, "lighting", lambda: self._show_workspace_dock("lighting"))
         self.camera_panel_action = QtGui.QAction(self._icon("cameras"), "Open Camera Panel", self)
         self._configure_dock_toggle_action(self.camera_panel_action, "cameras", lambda: self._show_workspace_dock("cameras"))
+        self.create_free_camera_action = QtGui.QAction(self._icon("camera_free"), "Free Camera", self)
+        self.create_free_camera_action.triggered.connect(lambda: self._create_scene_camera_object("Free Camera"))
+        self.create_target_camera_action = QtGui.QAction(self._icon("camera_target"), "Target Camera", self)
+        self.create_target_camera_action.triggered.connect(lambda: self._create_scene_camera_object("Target Camera"))
+        self.create_cinematic_camera_action = QtGui.QAction(self._icon("camera_cinematic"), "Cinematic Camera", self)
+        self.create_cinematic_camera_action.triggered.connect(lambda: self._create_scene_camera_object("Cinematic Camera"))
+        self.create_point_light_action = QtGui.QAction(self._icon("light_point"), "Point Light", self)
+        self.create_point_light_action.triggered.connect(lambda: self._create_scene_light_object("point"))
+        self.create_spot_light_action = QtGui.QAction(self._icon("light_spot"), "Spot Light", self)
+        self.create_spot_light_action.triggered.connect(lambda: self._create_scene_light_object("spot"))
+        self.create_directional_light_action = QtGui.QAction(self._icon("light_directional"), "Directional Light", self)
+        self.create_directional_light_action.triggered.connect(lambda: self._create_scene_light_object("directional"))
+        self.create_area_light_action = QtGui.QAction(self._icon("light_area"), "Area Light", self)
+        self.create_area_light_action.triggered.connect(lambda: self._create_scene_light_object("area"))
+        self.create_ambient_light_action = QtGui.QAction(self._icon("light_ambient"), "Ambient Light", self)
+        self.create_ambient_light_action.triggered.connect(lambda: self._create_scene_light_object("ambient"))
         self.render_frame_action = QtGui.QAction("Render Camera Still...", self)
         self.render_frame_action.triggered.connect(self._open_render_frame_dialog)
         self.twoda_panel_action = QtGui.QAction(self._icon("twoda"), "Open 2DA Browser", self)
@@ -379,6 +395,18 @@ class WindowChromeMixin:
         tools_menu.addSeparator()
         tools_menu.addAction(self.validate_character_action)
 
+        create_menu = self.menuBar().addMenu("Create")
+        camera_menu = create_menu.addMenu(self._icon("cameras"), "Camera")
+        camera_menu.addAction(self.create_free_camera_action)
+        camera_menu.addAction(self.create_target_camera_action)
+        camera_menu.addAction(self.create_cinematic_camera_action)
+        light_menu = create_menu.addMenu(self._icon("lights"), "Light")
+        light_menu.addAction(self.create_point_light_action)
+        light_menu.addAction(self.create_spot_light_action)
+        light_menu.addAction(self.create_directional_light_action)
+        light_menu.addAction(self.create_area_light_action)
+        light_menu.addAction(self.create_ambient_light_action)
+
         ipc_menu = self.menuBar().addMenu("IPC")
         server_action = QtGui.QAction("GhostRigger Server (port 7001) - This Program", self)
         server_action.setEnabled(False)
@@ -533,8 +561,22 @@ class WindowChromeMixin:
             self.save_ascii_action,
             self.compile_action,
         ])
+        camera_create_button = self._menu_button("Create Camera", "camera_cinematic", [
+            self.create_free_camera_action,
+            self.create_target_camera_action,
+            self.create_cinematic_camera_action,
+        ])
+        light_create_button = self._menu_button("Create Light", "light_point", [
+            self.create_point_light_action,
+            self.create_spot_light_action,
+            self.create_directional_light_action,
+            self.create_area_light_action,
+            self.create_ambient_light_action,
+        ])
         layout.addWidget(import_button)
         layout.addWidget(export_button)
+        layout.addWidget(camera_create_button)
+        layout.addWidget(light_create_button)
 
         layout.addStretch(1)
         layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))

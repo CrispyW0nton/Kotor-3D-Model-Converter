@@ -9,6 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.core.camera.camera_manager import CameraManager
 from src.core.camera.camera_model import CAMERA_TYPES, GhostRiggerCamera
 from src.core.camera.camera_presets import FRAMING_PRESETS, LENS_PRESETS, LETTERBOX_PRESETS, RESOLUTION_PRESETS, SENSOR_PRESETS
+from src.gui.qt_lib.assets import qt_icon_manager
 
 
 class QtCameraPanel(QtWidgets.QWidget):
@@ -40,19 +41,30 @@ class QtCameraPanel(QtWidgets.QWidget):
         root.setSpacing(7)
 
         create_row = QtWidgets.QHBoxLayout()
-        for label, camera_type in (
-            ("Free", "Free Camera"),
-            ("Target", "Target Camera"),
-            ("Cine", "Cinematic Camera"),
+        for label, camera_type, icon_name in (
+            ("Free", "Free Camera", qt_icon_manager.I.CAMERA_FREE),
+            ("Target", "Target Camera", qt_icon_manager.I.CAMERA_TARGET),
+            ("Cine", "Cinematic Camera", qt_icon_manager.I.CAMERA_CINEMATIC),
         ):
-            button = QtWidgets.QPushButton(label)
+            button = QtWidgets.QToolButton()
+            button.setIcon(qt_icon_manager.get(icon_name, 18))
+            button.setText(label)
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
             button.setToolTip(f"Create {camera_type}")
             button.clicked.connect(lambda _checked=False, t=camera_type: self.createCameraRequested.emit(t))
             create_row.addWidget(button)
-        from_view = QtWidgets.QPushButton("From View")
+        from_view = QtWidgets.QToolButton()
+        from_view.setIcon(qt_icon_manager.get(qt_icon_manager.I.CAMERA_CINEMATIC, 18))
+        from_view.setText("From View")
+        from_view.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        from_view.setToolTip("Create camera from current view")
         from_view.clicked.connect(self.createFromViewRequested.emit)
         create_row.addWidget(from_view)
-        render = QtWidgets.QPushButton("Render")
+        render = QtWidgets.QToolButton()
+        render.setIcon(qt_icon_manager.get(qt_icon_manager.I.CAMERAS, 18))
+        render.setText("Render")
+        render.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        render.setToolTip("Render camera still")
         render.clicked.connect(self.renderFrameRequested.emit)
         create_row.addWidget(render)
         root.addLayout(create_row)

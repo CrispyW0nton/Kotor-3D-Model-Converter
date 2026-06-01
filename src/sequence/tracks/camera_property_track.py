@@ -17,8 +17,16 @@ CAMERA_PROPERTIES = {
     "far_clip",
     "letterbox_ratio",
     "show_letterbox",
+    "show_safe_frame",
     "sensor_width_mm",
     "sensor_height_mm",
+    "target_enabled",
+    "target_position",
+    "target_object_id",
+    "aspect_ratio_width",
+    "aspect_ratio_height",
+    "resolution_width",
+    "resolution_height",
 }
 
 

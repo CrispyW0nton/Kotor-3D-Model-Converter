@@ -251,10 +251,12 @@ class SequenceEvaluator:
         camera_manager = getattr(self.viewport, "camera_manager", None)
         camera = camera_manager.find_by_original(obj) if camera_manager is not None else None
         target = camera if camera is not None else obj
-        if property_name == "field_of_view_degrees" and camera is not None and any(
-            key.value is not None for key in []
-        ):
-            setattr(target, property_name, value)
+        if property_name == "field_of_view_degrees" and camera is not None:
+            camera.set_field_of_view(float(value))
+        elif property_name == "focal_length_mm" and camera is not None:
+            camera.set_focal_length(float(value))
+        elif property_name == "target_position":
+            setattr(target, property_name, _vec3(value, getattr(target, property_name, (0.0, 0.0, 1.0))))
         elif hasattr(target, property_name):
             setattr(target, property_name, value)
         if camera is not None:
@@ -270,6 +272,7 @@ class SequenceEvaluator:
             "cone_angle": "light_cone_degrees",
             "area_size": "light_area_size",
             "ambient_only": "light_ambient_only",
+            "casts_shadows": "light_shadow",
             "affects_diffuse": "light_affects_diffuse",
             "affects_specular": "light_affects_specular",
             "affects_lightmap": "light_affects_lightmap",

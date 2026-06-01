@@ -195,11 +195,153 @@ class ViewportToolsMixin:
         self.viewport.revert_baked_lightmaps()
         self._log("Reverted baked lightmap preview/apply overrides.", "info")
     def _on_camera_panel_changed(self) -> None:
+        self._sync_scene_cameras_from_viewport_manager()
         self.viewport.refresh_cameras()
         self.camera_panel.refresh()
+        if hasattr(self, "scene_outliner_panel"):
+            self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
     def _sync_camera_panel_from_viewport(self) -> None:
+        self._sync_scene_cameras_from_viewport_manager()
         self.camera_panel.manager = self.viewport.camera_manager
         self.camera_panel.refresh()
+        if hasattr(self, "scene_outliner_panel"):
+            self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+    def _on_lighting_panel_changed(self) -> None:
+        self._sync_scene_lights_from_panel_manager()
+        self.viewport.refresh_lighting()
+        if hasattr(self, "scene_outliner_panel"):
+            self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+    def _create_scene_camera_object(self, camera_type: str = "Cinematic Camera", *, make_active: bool = False):
+        from src.core.camera.camera_model import GhostRiggerCamera
+        from src.core.scene.scene_object import Transform
+
+        camera = GhostRiggerCamera(camera_type=camera_type)
+        if camera_type == "Target Camera":
+            camera.target_enabled = True
+        adapter = getattr(getattr(self, "viewport", None), "_camera_adapter", None)
+        if adapter is not None:
+            adapter.update_camera_from_view(camera)
+        rotation = (0.0, 0.0, 0.0)
+        try:
+            rotation = self.viewport._quat_to_euler_degrees(camera.rotation)
+        except Exception:
+            pass
+        obj = self.scene_manager.add_camera_object(
+            camera_type,
+            Transform(position=camera.position, rotation=rotation),
+            properties=camera,
+            select=True,
+        )
+        self._refresh_scene_view()
+        self._select_scene_object(obj.id)
+        if make_active and hasattr(self, "viewport"):
+            self.viewport.switch_to_camera(obj.id)
+        return obj
+    def _create_scene_camera_from_view(self):
+        return self._create_scene_camera_object("Cinematic Camera", make_active=True)
+    def _duplicate_scene_camera_object(self, camera_id: str):
+        duplicate = self.scene_manager.duplicate_camera_object(camera_id) or self.scene_manager.duplicate_object(camera_id)
+        if duplicate is not None:
+            position = (
+                duplicate.transform.position[0] + 0.35,
+                duplicate.transform.position[1] + 0.35,
+                duplicate.transform.position[2],
+            )
+            self.scene_manager.update_object_transform(duplicate.id, position=position)
+        self._refresh_scene_view()
+        return duplicate
+    def _delete_scene_camera_object(self, camera_id: str) -> bool:
+        if hasattr(self, "viewport") and getattr(self.viewport.camera_manager, "active_camera_id", "") == camera_id:
+            self.viewport.switch_to_perspective()
+        ok = self.scene_manager.remove_camera_object(camera_id) or self.scene_manager.remove_object(camera_id)
+        if ok:
+            self._refresh_scene_view()
+        return ok
+    def _create_scene_light_object(self, light_type: str = "point"):
+        from src.core.scene.scene_object import Transform
+
+        position = (0.0, 0.0, 0.0)
+        camera = getattr(getattr(self, "viewport", None), "camera", None)
+        target = getattr(camera, "target", None)
+        if target is not None:
+            try:
+                position = tuple(float(v) for v in target[:3])
+            except Exception:
+                position = (0.0, 0.0, 0.0)
+        obj = self.scene_manager.add_light_object(light_type, Transform(position=position), select=True)
+        self._refresh_scene_view()
+        self._select_scene_object(obj.id)
+        return obj
+    def _sync_scene_cameras_from_viewport_manager(self) -> None:
+        manager = getattr(getattr(self, "viewport", None), "camera_manager", None)
+        scene_manager = getattr(self, "scene_manager", None)
+        if manager is None or scene_manager is None:
+            return
+        for camera in manager.get_all_cameras():
+            object_id = str(getattr(camera, "id", "") or "")
+            node = getattr(camera, "original_ref", None)
+            if not object_id:
+                continue
+            try:
+                rotation = self.viewport._quat_to_euler_degrees(getattr(node, "rotation", camera.rotation))
+            except Exception:
+                rotation = None
+            changed = scene_manager.update_object_transform(
+                object_id,
+                position=tuple(float(v) for v in camera.position[:3]),
+                rotation=rotation,
+            )
+            if changed:
+                scene_manager.update_camera_properties(object_id, **camera.serialize())
+                continue
+            from src.core.scene.scene_object import Transform
+
+            scene_manager.add_camera_object(
+                getattr(camera, "camera_type", "Cinematic Camera"),
+                Transform(position=tuple(float(v) for v in camera.position[:3]), rotation=rotation or (0.0, 0.0, 0.0)),
+                name=str(getattr(camera, "name", "") or "Camera"),
+                properties=camera,
+                object_id=object_id,
+                select=bool(getattr(camera, "selected", False)),
+            )
+    def _sync_scene_lights_from_panel_manager(self) -> None:
+        panel = getattr(self, "lighting_panel", None)
+        scene_manager = getattr(self, "scene_manager", None)
+        if panel is None or scene_manager is None:
+            return
+        for light in panel.manager.all_lights(include_deleted=True):
+            object_id = str(getattr(light, "id", "") or "")
+            if not object_id:
+                continue
+            if bool(getattr(light, "deleted", False)):
+                scene_obj = next((obj for obj in scene_manager.active_scene.objects if obj.id == object_id), None)
+                if scene_obj is not None and getattr(scene_obj, "object_type", "") == "light":
+                    scene_manager.remove_light_object(object_id)
+                continue
+            changed = scene_manager.update_object_transform(
+                object_id,
+                position=tuple(float(v) for v in light.position[:3]),
+            )
+            payload = {
+                key: value
+                for key, value in light.__dict__.items()
+                if key != "original_ref" and not str(key).startswith("_")
+            }
+            if changed:
+                scene_manager.update_light_properties(object_id, **payload)
+                continue
+            if str(getattr(light, "source_type", "") or "") == "Aurora":
+                continue
+            from src.core.scene.scene_object import Transform
+
+            scene_manager.add_light_object(
+                str(getattr(light, "type", "point") or "point"),
+                Transform(position=tuple(float(v) for v in light.position[:3])),
+                name=str(getattr(light, "name", "") or "Light"),
+                properties=payload,
+                object_id=object_id,
+                select=bool(getattr(light, "selected", False)),
+            )
     def _open_render_frame_dialog(self) -> None:
         cameras = self.viewport.camera_manager.get_all_cameras()
         active_id = self.viewport.camera_manager.active_camera_id

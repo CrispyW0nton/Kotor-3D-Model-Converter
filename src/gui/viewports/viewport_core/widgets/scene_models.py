@@ -153,6 +153,13 @@ class ViewportSceneModelMixin:
         composite = KotorModel(name=scene_name or "Untitled Scene", root_node=root)
         first_model = None
         for instance in visible:
+            object_type = str(getattr(instance, "object_type", "") or "").lower()
+            if object_type == "camera":
+                root.children.append(self._build_scene_camera_node(instance, root, ModelNode, NodeFlags))
+                continue
+            if object_type == "light":
+                root.children.append(self._build_scene_light_node(instance, root, ModelNode, NodeFlags))
+                continue
             runtime_model = (getattr(instance, "metadata", {}) or {}).get("_runtime_model")
             model_root = getattr(runtime_model, "root_node", None)
             if runtime_model is None or model_root is None:
@@ -212,6 +219,88 @@ class ViewportSceneModelMixin:
         except Exception:
             pass
         return composite
+
+    def _build_scene_camera_node(self, instance, root, model_node_type, node_flags):
+        transform = getattr(instance, "transform", None)
+        position = tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3])
+        rotation = self._euler_degrees_to_quat(getattr(transform, "rotation", (0.0, 0.0, 0.0)))
+        payload = dict((getattr(instance, "metadata", {}) or {}).get("camera") or {})
+        payload.update(
+            {
+                "id": instance.id,
+                "scene_object_id": instance.id,
+                "name": getattr(instance, "name", "Camera"),
+                "position": position,
+                "rotation": rotation,
+                "visible": bool(getattr(instance, "visible", True)),
+                "locked": bool(getattr(instance, "locked", False)),
+                "selected": bool(getattr(instance, "selected", False)),
+            }
+        )
+        node = model_node_type(
+            name=str(getattr(instance, "name", "") or "Camera"),
+            flags=int(node_flags.CAMERA),
+            position=position,
+            rotation=rotation,
+        )
+        node.parent = root
+        node.children = []
+        setattr(node, "is_camera", True)
+        setattr(node, "_gr_camera_id", instance.id)
+        setattr(node, "_gr_camera_data", payload)
+        setattr(node, "_gr_camera_selected", bool(getattr(instance, "selected", False)))
+        setattr(node, "_gr_camera_hidden", not bool(getattr(instance, "visible", True)))
+        setattr(node, "_gr_camera_locked", bool(getattr(instance, "locked", False)))
+        setattr(node, "_gr_scene_object_id", instance.id)
+        setattr(node, "_gr_scene_object_root", True)
+        setattr(node, "_gr_scene_object_root_ref", node)
+        setattr(node, "_gr_scene_object_name", getattr(instance, "name", "Camera"))
+        setattr(node, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
+        setattr(node, "_gr_scene_gpu_transform", True)
+        setattr(node, "_gr_scale", tuple(float(v) for v in getattr(transform, "scale", (1.0, 1.0, 1.0))[:3]))
+        return node
+
+    def _build_scene_light_node(self, instance, root, model_node_type, node_flags):
+        transform = getattr(instance, "transform", None)
+        position = tuple(float(v) for v in getattr(transform, "position", (0.0, 0.0, 0.0))[:3])
+        rotation = self._euler_degrees_to_quat(getattr(transform, "rotation", (0.0, 0.0, 0.0)))
+        payload = dict((getattr(instance, "metadata", {}) or {}).get("light") or {})
+        node = model_node_type(
+            name=str(getattr(instance, "name", "") or "Light"),
+            flags=int(node_flags.LIGHT),
+            position=position,
+            rotation=rotation,
+        )
+        node.parent = root
+        node.children = []
+        setattr(node, "_gr_light_id", instance.id)
+        setattr(node, "_gr_light_selected", bool(getattr(instance, "selected", False)))
+        setattr(node, "_gr_light_hidden", not bool(getattr(instance, "visible", True)))
+        setattr(node, "_gr_light_locked", bool(getattr(instance, "locked", False)))
+        setattr(node, "_gr_light_group_id", str(getattr(instance, "group_id", "") or payload.get("group_id", "") or ""))
+        setattr(node, "_gr_light_metadata", dict(payload.get("metadata") or {}))
+        setattr(node, "_gr_scene_object_id", instance.id)
+        setattr(node, "_gr_scene_object_root", True)
+        setattr(node, "_gr_scene_object_root_ref", node)
+        setattr(node, "_gr_scene_object_name", getattr(instance, "name", "Light"))
+        setattr(node, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
+        setattr(node, "_gr_scene_gpu_transform", True)
+        setattr(node, "_gr_scale", tuple(float(v) for v in getattr(transform, "scale", (1.0, 1.0, 1.0))[:3]))
+        setattr(node, "source_type", str(payload.get("source_type") or "Scene"))
+        setattr(node, "light_kind", str(payload.get("type") or "point"))
+        setattr(node, "light_enabled", bool(payload.get("enabled", True)))
+        setattr(node, "light_color", tuple(float(v) for v in payload.get("color", (1.0, 1.0, 1.0))[:3]))
+        setattr(node, "light_radius", float(payload.get("radius", 5.0) or 0.0))
+        setattr(node, "light_multiplier", float(payload.get("intensity", 1.0) or 0.0))
+        setattr(node, "light_cone_degrees", float(payload.get("cone_angle", 45.0) or 45.0))
+        setattr(node, "light_area_size", float(payload.get("area_size", 1.0) or 0.0))
+        setattr(node, "light_ambient_only", bool(payload.get("ambient_only", False)))
+        setattr(node, "light_shadow", bool(payload.get("casts_shadows", True)))
+        setattr(node, "light_affects_diffuse", bool(payload.get("affects_diffuse", True)))
+        setattr(node, "light_affects_specular", bool(payload.get("affects_specular", True)))
+        setattr(node, "light_affects_lightmap", bool(payload.get("affects_lightmap", True)))
+        setattr(node, "light_affects_environment", bool(payload.get("affects_environment", True)))
+        return node
 
     def _tag_scene_object_nodes(self, node, object_id: str, root_node) -> None:
         stack = [node]
