@@ -100,7 +100,7 @@ def export_kotor_to_unreal_preview(request: KotorToUnrealExportRequest) -> Expor
 
     def manifest_writer(context: ExportJobContext, _result: ExportJobResult) -> Path:
         staged_manifest = context.staged_path_for(manifest_path)
-        staged_manifest.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        context.write_text(manifest_path, json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return staged_manifest
 
     return run_export_job(

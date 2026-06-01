@@ -7,10 +7,10 @@ import time
 from src.core.rendering.renderer_backend import RendererBackend
 from src.core.rendering.renderer_capabilities import DIAGNOSTIC_DISPLAY_MODES, RendererCapabilities
 from src.core.rendering.viewport_display import ViewportDisplayOptions
-from src.core.rendering.renderer_interface import IViewportRenderer
+from src.core.ports import ViewportRendererPort
 
 
-class NullDiagnosticRenderer(IViewportRenderer):
+class NullDiagnosticRenderer(ViewportRendererPort):
     name = "Null Diagnostic"
     backend_id = RendererBackend.NULL_DIAGNOSTIC.value
 

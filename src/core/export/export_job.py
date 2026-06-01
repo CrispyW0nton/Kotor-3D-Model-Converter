@@ -76,6 +76,16 @@ class ExportJobContext:
                 return staged
         raise KeyError(f"No staged output path registered for {final_path}")
 
+    def write_bytes(self, path: str | Path, data: bytes) -> None:
+        staged = self.staged_path_for(Path(path))
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_bytes(bytes(data or b""))
+
+    def write_text(self, path: str | Path, text: str, *, encoding: str = "utf-8") -> None:
+        staged = self.staged_path_for(Path(path))
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_text(str(text), encoding=encoding)
+
 
 @dataclass
 class ExportJobResult:

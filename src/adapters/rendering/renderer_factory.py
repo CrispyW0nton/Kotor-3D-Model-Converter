@@ -13,12 +13,13 @@ from src.adapters.rendering.null_renderer import NullDiagnosticRenderer
 from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label
 from src.core.rendering.renderer_capabilities import RendererCapabilities
 from src.core.rendering.renderer_settings import RendererSettings
+from src.core.ports import ViewportRendererPort
 from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
 log = logging.getLogger(__name__)
 
 
-def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings | None = None):
+def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings | None = None) -> ViewportRendererPort:
     if backend == RendererBackend.MODERNGL_GL330:
         return ModernGLRenderer()
     if backend in {RendererBackend.WGPU_AUTO, RendererBackend.WGPU_D3D12, RendererBackend.WGPU_VULKAN, RendererBackend.WGPU_OPENGL}:
@@ -116,7 +117,7 @@ def renderer_capabilities_snapshot() -> list[RendererCapabilities]:
     return caps
 
 
-class FallbackViewportRenderer:
+class FallbackViewportRenderer(ViewportRendererPort):
     """GpuRenderer-compatible proxy that selects and falls back between backends."""
 
     _INTERNAL_ATTRS = {
@@ -186,7 +187,7 @@ class FallbackViewportRenderer:
             except Exception:
                 log.debug("RendererFactory: could not apply renderer attribute %s", name, exc_info=True)
 
-    def _activate_next(self):
+    def _activate_next(self) -> ViewportRendererPort:
         failed = object.__getattribute__(self, "_failed")
         for backend in object.__getattribute__(self, "_order"):
             if backend in failed:
@@ -211,7 +212,7 @@ class FallbackViewportRenderer:
         return renderer
 
     @property
-    def active_renderer(self):
+    def active_renderer(self) -> ViewportRendererPort | None:
         return object.__getattribute__(self, "_active")
 
     @property
@@ -358,7 +359,7 @@ class FallbackViewportRenderer:
         return dict(object.__getattribute__(self, "_last_diagnostics"))
 
 
-def create_viewport_renderer(settings: RendererSettings | dict | None = None) -> FallbackViewportRenderer:
+def create_viewport_renderer(settings: RendererSettings | dict | None = None) -> ViewportRendererPort:
     if isinstance(settings, dict) or settings is None:
         settings = RendererSettings.from_settings(settings or {})
     return FallbackViewportRenderer(settings)

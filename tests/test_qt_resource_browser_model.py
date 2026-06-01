@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from PySide6 import QtCore
 
-from src.core.project.resource_address import ResourceAddress
-from src.core.resources.game_resource_provider import (
+from src.core.ports import (
     GameResourceQuery,
     GameResourceRecord,
-    InMemoryGameResourceProvider,
 )
+from src.core.project.resource_address import ResourceAddress
+from src.core.resources.game_resource_provider import InMemoryGameResourceProvider
 from src.gui.qt_lib.panels.qt_resource_browser_model import (
     ResourceBrowserColumn,
     ResourceBrowserRole,

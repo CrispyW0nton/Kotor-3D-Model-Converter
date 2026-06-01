@@ -107,6 +107,7 @@ def test_core_ports_define_named_headless_boundaries() -> None:
         TextureDecoder,
         ViewportRendererPort,
     )
+    from src.core.export.export_job import ExportJobContext
     from src.core.rendering.renderer_interface import IViewportRenderer
     from src.core.resources.game_resource_provider import GameResourceProvider as ResourceProviderProtocol
 
@@ -114,6 +115,10 @@ def test_core_ports_define_named_headless_boundaries() -> None:
     assert ViewportRendererPort is IViewportRenderer
     assert inspect.isclass(TextureDecodeResult)
     assert inspect.isclass(ScriptCompileResult)
+    assert isinstance(
+        ExportJobContext(request=None, staging_dir=ROOT, output_map={}),  # type: ignore[arg-type]
+        FileWriterPort,
+    )
     for protocol in (FileWriterPort, GameResourceProvider, ScriptCompilerPort, TextureDecoder):
         assert getattr(protocol, "_is_protocol", False)
 
@@ -379,6 +384,67 @@ def test_backend_reorganization_plan_does_not_reopen_completed_lightmap_slice() 
     assert "larger lightmap bake services remain a future slice" not in source
     assert "src/core/lighting/lightmap_baker.py" in source
     assert "src/adapters/gpu/lightmap_baker.py" in source
+
+
+def test_backend_reorganization_plan_classifies_compatibility_facades() -> None:
+    """Compatibility facades should have explicit permanence decisions."""
+    source = (ROOT / "docs/architecture/backend_reorganization_plan.md").read_text(encoding="utf-8")
+
+    assert "## Compatibility Facade Policy" in source
+    for facade, decision in {
+        "`src.core.qt_core`": "Frozen public compatibility API",
+        "`src.gui.camera`": "Transitional compatibility path",
+        "`src.gui.lighting`": "Transitional compatibility path",
+        "`src.gui.rendering`": "Transitional compatibility path",
+        "`src.gui.textures`": "Transitional compatibility path",
+        "`src.gui.gizmo`": "Transitional compatibility path",
+    }.items():
+        assert facade in source
+        assert decision in source
+
+    assert "New runtime code must not import these facades." in source
+    assert "Retirement candidates" in source
+
+
+def test_resource_browser_uses_core_ports_resource_boundary() -> None:
+    """Resource-browser models should consume the provider through the port package."""
+    source = (ROOT / "src/gui/panels/qt_resource_browser_model.py").read_text(encoding="utf-8")
+
+    assert "from src.core.ports import (" in source
+    assert "from src.core.resources.game_resource_provider import" not in source
+
+
+def test_export_job_context_implements_file_writer_port() -> None:
+    """Export jobs should expose staged file writes through the core file-writer port."""
+    source = (ROOT / "src/core/export/export_job.py").read_text(encoding="utf-8")
+    ue_export_source = (ROOT / "src/core/retargeting/ue_fbx_exporter.py").read_text(encoding="utf-8")
+
+    assert "def write_bytes(self, path: str | Path, data: bytes) -> None:" in source
+    assert "def write_text(self, path: str | Path, text: str, *, encoding: str = \"utf-8\") -> None:" in source
+    assert "context.write_text(manifest_path" in ue_export_source
+
+
+def test_null_renderer_uses_viewport_renderer_port_boundary() -> None:
+    """Concrete viewport renderer adapters should consume the named renderer port."""
+    source = (ROOT / "src/adapters/rendering/null_renderer.py").read_text(encoding="utf-8")
+
+    assert "from src.core.ports import ViewportRendererPort" in source
+    assert "class NullDiagnosticRenderer(ViewportRendererPort):" in source
+    assert "from src.core.rendering.renderer_interface import IViewportRenderer" not in source
+
+
+def test_renderer_factory_proxy_uses_viewport_renderer_port_boundary() -> None:
+    """Renderer factory proxy should expose the named viewport renderer port."""
+    from src.adapters.rendering.renderer_factory import FallbackViewportRenderer, create_viewport_renderer
+    from src.core.ports import ViewportRendererPort
+
+    source = (ROOT / "src/adapters/rendering/renderer_factory.py").read_text(encoding="utf-8")
+
+    assert "from src.core.ports import ViewportRendererPort" in source
+    assert "class FallbackViewportRenderer(ViewportRendererPort):" in source
+    assert ") -> ViewportRendererPort:" in source
+    assert issubclass(FallbackViewportRenderer, ViewportRendererPort)
+    assert isinstance(create_viewport_renderer(None), ViewportRendererPort)
 
 
 def test_gui_backend_compatibility_paths_stay_thin() -> None:
