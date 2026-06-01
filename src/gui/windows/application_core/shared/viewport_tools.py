@@ -287,12 +287,13 @@ class ViewportToolsMixin:
                 rotation = self.viewport._quat_to_euler_degrees(getattr(node, "rotation", camera.rotation))
             except Exception:
                 rotation = None
-            changed = scene_manager.update_object_transform(
+            scene_manager.update_object_transform(
                 object_id,
                 position=tuple(float(v) for v in camera.position[:3]),
                 rotation=rotation,
             )
-            if changed:
+            existing = next((obj for obj in scene_manager.active_scene.objects if obj.id == object_id), None)
+            if existing is not None:
                 scene_manager.update_camera_properties(object_id, **camera.serialize())
                 continue
             from src.core.scene.scene_object import Transform

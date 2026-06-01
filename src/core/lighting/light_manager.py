@@ -7,7 +7,7 @@ from typing import Any, Iterable
 
 from src.core.lighting.aurora_light_adapter import AuroraLightAdapter
 from src.core.lighting.light_grouping import LightGroup, LightGrouping
-from src.core.lighting.light_model import GhostRiggerLight
+from src.core.lighting.light_model import GhostRiggerLight, _quat, _vec3
 from src.core.lighting.light_selection import LightSelection
 
 
@@ -57,6 +57,7 @@ class LightManager:
         for light in self.selected_lights():
             if light.locked:
                 continue
+            self._sync_live_transform(light, changes)
             for key, value in changes.items():
                 if hasattr(light, key):
                     setattr(light, key, value)
@@ -65,10 +66,20 @@ class LightManager:
     def apply_to_light(self, light: GhostRiggerLight, **changes: Any) -> None:
         if light.locked:
             return
+        self._sync_live_transform(light, changes)
         for key, value in changes.items():
             if hasattr(light, key):
                 setattr(light, key, value)
         light.apply_to_original()
+
+    def _sync_live_transform(self, light: GhostRiggerLight, changes: dict[str, Any]) -> None:
+        obj = light.original_ref
+        if obj is None:
+            return
+        if "position" not in changes:
+            light.position = _vec3(getattr(obj, "position", light.position), light.position)
+        if "rotation" not in changes:
+            light.rotation = _quat(getattr(obj, "rotation", light.rotation), light.rotation)
 
     def group_selected(self, name: str | None = None) -> LightGroup | None:
         ids = list(self.selection.selected_ids)

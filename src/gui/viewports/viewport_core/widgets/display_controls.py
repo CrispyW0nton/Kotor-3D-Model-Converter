@@ -301,12 +301,20 @@ class ViewportDisplayControlsMixin:
         self._request_render()
 
     def set_light_helper_visibility(self, helpers: bool, volumes: bool) -> None:
+        button = getattr(self, "light_helpers_button", None)
+        if button is not None:
+            with QtCore.QSignalBlocker(button):
+                button.setChecked(bool(helpers) and bool(volumes))
         for target in (self._renderer, self._gpu_renderer):
             if target is None:
                 continue
             setattr(target, "show_light_gizmos", bool(helpers))
             setattr(target, "show_light_radius_volumes", bool(volumes))
         self._request_render()
+
+    def toggle_light_helpers(self, checked: bool = False) -> None:
+        enabled = bool(checked)
+        self.set_light_helper_visibility(enabled, enabled)
 
     def refresh_lighting(self) -> None:
         if self._gpu_renderer is not None:

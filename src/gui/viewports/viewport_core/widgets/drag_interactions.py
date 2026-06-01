@@ -37,11 +37,14 @@ class ViewportDragInteractionsMixin:
         return True
 
     def _cancel_transform_gizmo_drag(self) -> None:
+        node = getattr(getattr(self._transform_gizmo, "controller", None), "object", None)
         self._transform_gizmo.cancel_drag()
         self._transform_gizmo_dragging = False
         self._renderer.is_interactive = False
         self._renderer._wt_cache.clear()
         self._frame_governor.end_interaction("gizmo drag cancelled")
+        if node is not None:
+            self._notify_node_moved(node)
         self._request_render(reason="gizmo drag cancelled", gizmo=True, overlay=True)
 
     def _commit_transform_gizmo_drag(self) -> None:

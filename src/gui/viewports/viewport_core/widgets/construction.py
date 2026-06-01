@@ -83,6 +83,15 @@ class ViewportConstructionMixin:
             tooltip="Show or hide dummy helper markers",
         )
         self.dummy_helpers_button.setObjectName("ViewportDummyHelpersButton")
+        self.light_helpers_button = self._icon_button(
+            "Light Helpers + Volumes",
+            self.toggle_light_helpers,
+            "viewport_light_helpers",
+            checkable=True,
+            active=True,
+            tooltip="Show or hide light helpers and volume previews",
+        )
+        self.light_helpers_button.setObjectName("ViewportLightHelpersButton")
         self.bones_button = self._icon_button(
             "Bones  B",
             self.toggle_bones,
@@ -135,6 +144,7 @@ class ViewportConstructionMixin:
         row.addWidget(self.solid_wire_button)
         row.addWidget(self.mesh_hover_button)
         row.addWidget(self.dummy_helpers_button)
+        row.addWidget(self.light_helpers_button)
         row.addWidget(self.bones_button)
         row.addWidget(self.texture_button)
         row.addWidget(self.grid_button)
@@ -260,6 +270,8 @@ class ViewportConstructionMixin:
         self._renderer.show_wireframe = False
         self._renderer.show_grid = self.grid_button.isChecked()
         self._renderer.show_dummy_helpers = self.dummy_helpers_button.isChecked()
+        self._renderer.show_light_gizmos = self.light_helpers_button.isChecked()
+        self._renderer.show_light_radius_volumes = self.light_helpers_button.isChecked()
         self._renderer.render_mode = "realistic"
         self._set_display_options(self._rebuild_display_options_from_renderer(), announce=False)
         self._sync_shade_buttons()

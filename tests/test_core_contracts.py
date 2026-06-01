@@ -4505,6 +4505,8 @@ def test_qt_lighting_panel_editor_refresh_preserves_selected_light() -> None:
         name="AuroraLight223",
         is_light=True,
         light_kind="point",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
         light_radius=11.75,
         light_enabled=True,
         light_multiplier=1.0,
@@ -4515,13 +4517,18 @@ def test_qt_lighting_panel_editor_refresh_preserves_selected_light() -> None:
     panel = QtLightingPanel()
     panel.set_model(SimpleNamespace(all_nodes=lambda: [first, second]))
     panel.tree.setCurrentItem(panel.tree.topLevelItem(1))
+    second.position = (4.0, 5.0, 6.0)
 
     panel.radius_spin.setValue(12.25)
 
     assert panel._selected is second
     assert second.light_radius == 12.25
+    assert second.position == (4.0, 5.0, 6.0)
     assert first.light_radius == 1.5
     assert panel.tree.currentItem().data(0, QtCore.Qt.UserRole) is second
+    assert panel.findChild(QtWidgets.QGroupBox, "AddLightToSceneGroup") is not None
+    assert panel.findChild(QtWidgets.QGroupBox, "LightingSystemGroup") is not None
+    assert panel.pos_spins == []
 
 
 def test_qt_viewport_can_pick_light_gizmos() -> None:
@@ -4675,12 +4682,18 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
     viewport = QtViewportWidget()
     try:
         helper_button = viewport.findChild(QtWidgets.QPushButton, "ViewportDummyHelpersButton")
+        light_helper_button = viewport.findChild(QtWidgets.QPushButton, "ViewportLightHelpersButton")
         mode_button = viewport.findChild(QtWidgets.QToolButton, "ViewportSelectionModeButton")
 
         assert helper_button is viewport.dummy_helpers_button
+        assert light_helper_button is viewport.light_helpers_button
         assert viewport.dummy_helpers_button.isCheckable()
         assert viewport.dummy_helpers_button.isChecked() is True
+        assert viewport.light_helpers_button.isCheckable()
+        assert viewport.light_helpers_button.isChecked() is True
         assert bool(getattr(viewport._renderer, "show_dummy_helpers", False)) is True
+        assert bool(getattr(viewport._renderer, "show_light_gizmos", False)) is True
+        assert bool(getattr(viewport._renderer, "show_light_radius_volumes", False)) is True
         assert mode_button is viewport.selection_mode_button
         assert [action.data() for action in mode_button.menu().actions()] == [
             "object",
@@ -4698,6 +4711,10 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
         viewport.set_dummy_helper_visibility(False)
         assert viewport.dummy_helpers_button.isChecked() is False
         assert bool(getattr(viewport._renderer, "show_dummy_helpers", True)) is False
+        viewport.set_light_helper_visibility(False, False)
+        assert viewport.light_helpers_button.isChecked() is False
+        assert bool(getattr(viewport._renderer, "show_light_gizmos", True)) is False
+        assert bool(getattr(viewport._renderer, "show_light_radius_volumes", True)) is False
     finally:
         viewport.deleteLater()
 
@@ -6928,6 +6945,17 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     camera_node._gr_pivot_edit_mode = "affect_object_only"
     camera_node._gr_pivot_world = (8.0, 8.0, 8.0)
     assert tuple(viewport._gizmo_world_position(camera_node)) == tuple(camera_node.position)
+    scene_camera = viewport.camera_manager.find_by_original(camera_node)
+    assert scene_camera is not None
+    scene_camera.target_enabled = True
+    scene_camera.target_position = (0.0, 1.0, 2.0)
+    scene_camera.position = tuple(camera_node.position)
+    scene_camera.apply_to_original()
+    camera_node.position = (2.0, 3.0, 4.0)
+    viewport._notify_node_moved(camera_node, live=True)
+    assert scene_camera.position == (2.0, 3.0, 4.0)
+    assert scene_camera.target_position == (2.0, 4.0, 6.0)
+    assert tuple(getattr(camera_node, "_gr_gizmo_world_position")) == (2.0, 3.0, 4.0)
 
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     workflow_source = inspect.getsource(QtGhostRiggerMainWindow._add_scene_object_to_sequence)
@@ -6956,8 +6984,11 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert "bool(getattr(obj, \"is_light\", False)) or bool(getattr(obj, \"is_camera\", False))" in transform_gizmo_source
     assert "from src.systems.bas.model_recipe import BAS_SLOT_ORDER" in viewport_tools_source
     assert "self._notify_node_moved(node, live=True)" in drag_source
+    assert "self._notify_node_moved(node)" in drag_source
     assert "def _notify_node_moved(self, node, *, live: bool = False)" in history_source
+    assert "camera.target_position" in history_source
     assert "_gr_transform_previewing" in scene_workflow_source
+    assert "payload[\"target_position\"]" in scene_workflow_source
     assert "if live_preview:" in scene_workflow_source
     assert "if bool(getattr(node, \"_gr_transform_previewing\", False)):" in editor_services_source
     assert "H - 72 - text_h" in renderer_overlay_source
@@ -6982,9 +7013,16 @@ def test_scene_camera_light_authoring_uses_registered_svg_icons_and_delete_signa
         "light_directional.svg",
         "light_area.svg",
         "light_ambient.svg",
+        "viewport_light_helpers.svg",
+        "lighting_mode_scene.svg",
+        "lighting_mode_shader.svg",
+        "lighting_complexity_basic.svg",
+        "lighting_rig_kotor.svg",
     }
     icon_dir = ROOT / "src/gui/icons"
     assert required_icons <= {path.name for path in icon_dir.glob("*.svg")}
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 
     icon_manager_source = (ROOT / "src/gui/assets/qt_icon_manager.py").read_text(encoding="utf-8")
     camera_panel_source = (ROOT / "src/gui/panels/qt_camera_panel.py").read_text(encoding="utf-8")
@@ -6992,15 +7030,23 @@ def test_scene_camera_light_authoring_uses_registered_svg_icons_and_delete_signa
     sequence_toolbar_source = (ROOT / "src/gui/sequence_editor/sequence_toolbar.py").read_text(encoding="utf-8")
     event_source = (ROOT / "src/gui/viewports/viewport_core/widgets/event_navigation.py").read_text(encoding="utf-8")
     viewport_source = (ROOT / "src/gui/viewports/viewport_core/widgets/viewport_widget.py").read_text(encoding="utf-8")
+    viewport_construction_source = (ROOT / "src/gui/viewports/viewport_core/widgets/construction.py").read_text(encoding="utf-8")
+    viewport_display_source = (ROOT / "src/gui/viewports/viewport_core/widgets/display_controls.py").read_text(encoding="utf-8")
     main_layout_source = (ROOT / "src/gui/windows/application_core/shared/main_layout.py").read_text(encoding="utf-8")
     chrome_source = (ROOT / "src/gui/windows/application_core/shared/window_chrome.py").read_text(encoding="utf-8")
     viewport_tools_source = (ROOT / "src/gui/windows/application_core/shared/viewport_tools.py").read_text(encoding="utf-8")
     sequence_property_source = (ROOT / "src/gui/sequence_editor/sequence_property_panel.py").read_text(encoding="utf-8")
 
-    for icon_name in ("SCENE", "CAMERA_FREE", "CAMERA_TARGET", "CAMERA_CINEMATIC", "LIGHT_POINT", "LIGHT_SPOT", "LIGHT_DIRECTIONAL", "LIGHT_AREA", "LIGHT_AMBIENT"):
+    for icon_name in ("SCENE", "CAMERA_FREE", "CAMERA_TARGET", "CAMERA_CINEMATIC", "LIGHT_POINT", "LIGHT_SPOT", "LIGHT_DIRECTIONAL", "LIGHT_AREA", "LIGHT_AMBIENT", "VIEWPORT_LIGHT_HELPERS", "LIGHTING_MODE_SCENE", "LIGHTING_COMPLEXITY_BASIC", "LIGHTING_RIG_KOTOR"):
         assert icon_name in icon_manager_source
     assert "qt_icon_manager.get(icon_name, 18)" in camera_panel_source
     assert "qt_icon_manager.get(icon_name, 18)" in lighting_panel_source
+    assert '"Add Light to Scene"' in lighting_panel_source
+    assert '"Lighting System"' in lighting_panel_source
+    assert '"Texture Maps:"' in lighting_panel_source
+    assert '"position"' not in inspect.getsource(QtLightingPanel._apply_editor)
+    assert "ViewportLightHelpersButton" in viewport_construction_source
+    assert "toggle_light_helpers" in viewport_display_source
     assert "createCamera = QtCore.Signal(str)" in sequence_toolbar_source
     assert "createLight = QtCore.Signal(str)" in sequence_toolbar_source
     assert "sceneObjectDeleteRequested = QtCore.Signal(str)" in viewport_source

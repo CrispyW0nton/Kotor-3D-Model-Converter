@@ -137,7 +137,13 @@ class ViewportHistoryAnimationMixin:
             if bool(getattr(node, "is_camera", False)):
                 camera = self.camera_manager.find_by_original(node)
                 if camera is not None:
-                    camera.position = tuple(float(v) for v in getattr(node, "position", camera.position)[:3])
+                    new_position = tuple(float(v) for v in getattr(node, "position", camera.position)[:3])
+                    old_position = tuple(float(v) for v in tuple(camera.position)[:3])
+                    if str(getattr(node, "_gr_pivot_edit_mode", "") or "") != "affect_pivot_only":
+                        delta = tuple(new_position[i] - old_position[i] for i in range(3))
+                        if any(abs(value) > 1e-9 for value in delta):
+                            camera.target_position = tuple(float(camera.target_position[i]) + delta[i] for i in range(3))
+                    camera.position = new_position
                     camera.rotation = tuple(float(v) for v in getattr(node, "rotation", camera.rotation)[:4])
                     camera.metadata["helper_size"] = float(getattr(node, "_gr_helper_size", camera.metadata.get("helper_size", 1.0)) or 1.0)
                     camera.apply_to_original()
@@ -152,6 +158,12 @@ class ViewportHistoryAnimationMixin:
                     light.position = tuple(float(v) for v in getattr(node, "position", light.position)[:3])
                     light.rotation = tuple(float(v) for v in getattr(node, "rotation", light.rotation)[:4])
                     light.apply_to_original()
+            if str(getattr(node, "_gr_pivot_edit_mode", "") or "") != "affect_pivot_only":
+                try:
+                    position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                    setattr(node, "_gr_gizmo_world_position", position)
+                except Exception:
+                    pass
             if self.on_node_moved:
                 self.on_node_moved(node)
             self.nodeMoved.emit(node)

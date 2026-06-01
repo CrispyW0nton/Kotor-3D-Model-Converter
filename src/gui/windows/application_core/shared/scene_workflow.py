@@ -414,13 +414,12 @@ class SceneWorkflowMixin:
         return applied
 
     def _sync_lighting_helper_visibility_to_viewport(self) -> None:
-        panel = getattr(self, "lighting_panel", None)
         viewport = getattr(self, "viewport", None)
-        if panel is None or viewport is None or not hasattr(viewport, "set_light_helper_visibility"):
+        if viewport is None or not hasattr(viewport, "set_light_helper_visibility"):
             return
-        helpers = bool(getattr(getattr(panel, "show_helpers_check", None), "isChecked", lambda: True)())
-        volumes = bool(getattr(getattr(panel, "show_volumes_check", None), "isChecked", lambda: False)())
-        viewport.set_light_helper_visibility(helpers, volumes)
+        button = getattr(viewport, "light_helpers_button", None)
+        enabled = bool(getattr(button, "isChecked", lambda: True)())
+        viewport.set_light_helper_visibility(enabled, enabled)
 
     def _refresh_scene_animation_entries(self) -> None:
         panel = getattr(self, "content_browser_panel", getattr(self, "animation_library_panel", None))
@@ -713,6 +712,8 @@ class SceneWorkflowMixin:
         )
         obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
         if obj is not None and obj.object_type == "camera":
+            camera = getattr(getattr(self, "viewport", None), "camera_manager", None)
+            camera = camera.find_by_original(node) if camera is not None else None
             payload = dict((getattr(obj, "metadata", {}) or {}).get("camera") or {})
             payload.update(
                 {
@@ -726,6 +727,9 @@ class SceneWorkflowMixin:
                     "selected": True,
                 }
             )
+            if camera is not None:
+                payload["target_position"] = tuple(float(v) for v in tuple(camera.target_position)[:3])
+                payload["target_enabled"] = bool(getattr(camera, "target_enabled", False))
             self.scene_manager.update_camera_properties(object_id, **payload)
         elif obj is not None and obj.object_type == "light":
             payload = dict((getattr(obj, "metadata", {}) or {}).get("light") or {})

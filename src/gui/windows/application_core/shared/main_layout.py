@@ -315,7 +315,6 @@ class MainWindowLayoutMixin:
         self.lighting_panel.mapToggled.connect(self.viewport.set_texture_map_enabled)
         self.lighting_panel.lightmapSettingsChanged.connect(self.viewport.set_lightmap_settings)
         self.lighting_panel.shaderComplexityChanged.connect(self.viewport.set_shader_complexity_mode)
-        self.lighting_panel.helperVisibilityChanged.connect(self.viewport.set_light_helper_visibility)
         self.lighting_panel.lightChanged.connect(self._on_lighting_panel_changed)
         self.lighting_panel.lightChanged.connect(lambda payload=None: self._record_lighting_event(payload))
         self.lighting_panel.lightSelected.connect(lambda node: self.viewport.set_selected_node(node, source="lighting panel"))
