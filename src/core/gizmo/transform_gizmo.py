@@ -65,7 +65,13 @@ class TransformGizmo:
             self.position = (0.0, 0.0, 0.0)
             self.orientation = (0.0, 0.0, 0.0, 1.0)
             return
-        position = getattr(obj, "_gr_pivot_world", None)
+        if (
+            (bool(getattr(obj, "is_light", False)) or bool(getattr(obj, "is_camera", False)))
+            and str(getattr(obj, "_gr_pivot_edit_mode", "") or "") != "affect_pivot_only"
+        ):
+            position = getattr(obj, "position", (0.0, 0.0, 0.0))
+        else:
+            position = getattr(obj, "_gr_pivot_world", None)
         if position is None:
             position = getattr(obj, "_gr_gizmo_world_position", None)
         if position is None:

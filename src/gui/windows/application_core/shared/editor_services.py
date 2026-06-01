@@ -89,12 +89,16 @@ class EditorServicesMixin:
             service.request_resource_invalidation(reason)
 
     def _record_transform_event(self, node) -> None:
+        if bool(getattr(node, "_gr_transform_previewing", False)):
+            return
         bus = getattr(self, "integration_event_bus", None)
         if bus is not None:
             bus.transformChanged.emit(node)
             bus.record_scene_update("transform changed", node)
 
     def _record_pivot_event(self, node) -> None:
+        if bool(getattr(node, "_gr_transform_previewing", False)):
+            return
         bus = getattr(self, "integration_event_bus", None)
         if bus is not None:
             bus.pivotChanged.emit(node)

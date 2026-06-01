@@ -107,38 +107,63 @@ class ResourceModelLoadWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.game.kotor_loader import load_model_from_bytes
-            from src.core.geometry.model_data import GameVersion
-            from src.core.assets.resource_manager import ResourceManager
-
-            mgr = ResourceManager()
-            if self.k1_dir:
-                mgr.set_k1_dir(self.k1_dir)
-            if self.k2_dir:
-                mgr.set_k2_dir(self.k2_dir)
-
-            self.progress.emit("Reading model resource into RAM", 1, 5)
-            mdl = mgr.get_mdl(self.resref, self.game)
-            if not mdl:
-                raise FileNotFoundError(f"{self.game}:{self.resref}.mdl")
-            self.progress.emit("Reading MDX resource", 2, 5)
-            mdx = mgr.get_mdx(self.resref, self.game) or b""
-            game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
-            self.progress.emit("Parsing binary MDL/MDX", 3, 5)
-            model = load_model_from_bytes(mdl, mdx, game_version=game_version)
-            if model is None:
-                raise RuntimeError(f"Could not parse {self.game}:{self.resref}.mdl")
-            model.game_version = game_version
-            model._gr_source_mdl_bytes = mdl
-            model._gr_source_mdx_bytes = mdx
-            model._gr_source_resref = self.resref
-            model._gr_source_game = self.game
-            self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
-            _prebuild_gpu_mesh_data_for_model(model)
-            self.progress.emit("Handing model to viewport", 5, 5)
-            self.finished.emit(model, f"{self.game}:{self.resref}", "")
+            model, label = load_resource_model_from_game_resources(
+                self.resref,
+                self.game,
+                self.k1_dir,
+                self.k2_dir,
+                progress=lambda message, step, total: self.progress.emit(message, step, total),
+            )
+            self.finished.emit(model, label, "")
         except Exception:
             self.finished.emit(None, f"{self.game}:{self.resref}", traceback.format_exc())
+
+
+def load_resource_model_from_game_resources(
+    resref: str,
+    game: str,
+    k1_dir: str = "",
+    k2_dir: str = "",
+    *,
+    progress=None,
+):
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.game.kotor_loader import load_model_from_bytes
+    from src.core.geometry.model_data import GameVersion
+
+    game = str(game or "").upper()
+
+    def report(message: str, step: int, total: int) -> None:
+        if progress is not None:
+            progress(message, step, total)
+
+    mgr = ResourceManager()
+    if k1_dir:
+        mgr.set_k1_dir(k1_dir)
+    if k2_dir:
+        mgr.set_k2_dir(k2_dir)
+
+    report("Reading model resource into RAM", 1, 5)
+    mdl = mgr.get_mdl(resref, game)
+    if not mdl:
+        raise FileNotFoundError(f"{game}:{resref}.mdl")
+    report("Reading MDX resource", 2, 5)
+    mdx = mgr.get_mdx(resref, game) or b""
+    game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+    report("Parsing binary MDL/MDX", 3, 5)
+    model = load_model_from_bytes(mdl, mdx, game_version=game_version)
+    if model is None:
+        raise RuntimeError(f"Could not parse {game}:{resref}.mdl")
+    model.game_version = game_version
+    model._gr_source_mdl_bytes = mdl
+    model._gr_source_mdx_bytes = mdx
+    model._gr_source_resref = resref
+    model._gr_source_game = game
+    report("Preparing GPU mesh buffers in RAM", 4, 5)
+    _prebuild_gpu_mesh_data_for_model(model)
+    report("Handing model to viewport", 5, 5)
+    return model, f"{game}:{resref}"
+
 
 class LibraryScanWorker(QtCore.QObject):
     finished = QtCore.Signal(list, str)

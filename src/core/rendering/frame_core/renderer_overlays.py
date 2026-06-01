@@ -1243,7 +1243,10 @@ class RendererOverlayMixin:
             else:
                 warn = "⚠ No renderable geometry – check MDL/MDX paths"
                 warn_col = (255, 120, 80)
-            draw.text((W//2 - 220, H//2 - 8), warn, fill=warn_col)
+            bbox = draw.textbbox((0, 0), warn)
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
+            draw.text(((W - text_w) // 2, max(12, H - 72 - text_h)), warn, fill=warn_col)
         elif self.show_texture and tex_ok == 0 and tex_total > 0:
             warn = f"⚠ {tex_total} texture(s) referenced but none loaded – set texture directory"
             warn_y = animation_row_y + hud_row_step if (self._anim_pose is not None and self._anim_name) else stats_row_y + hud_row_step

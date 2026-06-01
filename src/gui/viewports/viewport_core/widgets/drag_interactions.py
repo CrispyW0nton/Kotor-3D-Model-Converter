@@ -194,6 +194,9 @@ class ViewportDragInteractionsMixin:
         x, y = int(event.position().x()), int(event.position().y())
         if self._transform_gizmo_dragging:
             self._transform_gizmo.drag((x, y), self.camera, self.canvas.height())
+            node = getattr(getattr(self._transform_gizmo, "controller", None), "object", None)
+            if node is not None:
+                self._notify_node_moved(node, live=True)
             self._request_render(fast=True, reason="gizmo drag", scene=True, gizmo=True)
             return
         if self._gimbal_dragging and self._renderer.selected_node:

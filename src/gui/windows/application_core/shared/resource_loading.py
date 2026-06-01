@@ -25,6 +25,7 @@ from src.gui.windows.application_core.application_core_lib.shared.workers import
     ModelListItem,
     ModelLoadWorker,
     ResourceModelLoadWorker,
+    load_resource_model_from_game_resources,
 )
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform, normalize_bas_transform
 from src.systems.bas.model_recipe import BAS_SLOT_ORDER, load_bas_model_recipe
@@ -172,26 +173,26 @@ class ResourceLoadingMixin:
         self.statusBar().showMessage(f"Loading {game}:{resref}...")
         self._show_progress_toast("Loading model", f"Loading {game}:{resref} from game resources...")
         self._current_game = game.upper()
+        QtCore.QTimer.singleShot(0, lambda: self._load_resource_model_on_ui_thread(resref, game))
 
-        worker = ResourceModelLoadWorker(
-            resref,
-            game,
-            self.k1_dir_edit.text().strip(),
-            self.k2_dir_edit.text().strip(),
-        )
-        thread = QtCore.QThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.progress.connect(self._on_model_load_progress)
-        worker.finished.connect(self._on_model_loaded)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda: setattr(self, "_worker_thread", None))
-        thread.finished.connect(lambda: setattr(self, "_model_worker", None))
-        self._worker_thread = thread
-        self._model_worker = worker
-        thread.start()
+    def _load_resource_model_on_ui_thread(self, resref: str, game: str) -> None:
+        def progress(message: str, step: int, total: int) -> None:
+            self._on_model_load_progress(message, step, total)
+            app = QtWidgets.QApplication.instance()
+            if app is not None:
+                app.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+
+        try:
+            model, label = load_resource_model_from_game_resources(
+                resref,
+                game,
+                self.k1_dir_edit.text().strip(),
+                self.k2_dir_edit.text().strip(),
+                progress=progress,
+            )
+            self._on_model_loaded(model, label, "")
+        except Exception:
+            self._on_model_loaded(None, f"{str(game or '').upper()}:{resref}", traceback.format_exc())
     def _open_model(self, _checked: bool = False, *, ascii_only: bool = False):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,

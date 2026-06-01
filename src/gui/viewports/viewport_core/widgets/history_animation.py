@@ -127,36 +127,51 @@ class ViewportHistoryAnimationMixin:
             self._undo_stack.pop(0)
         return True
 
-    def _notify_node_moved(self, node) -> None:
-        if bool(getattr(node, "is_camera", False)):
-            camera = self.camera_manager.find_by_original(node)
-            if camera is not None:
-                camera.position = tuple(float(v) for v in getattr(node, "position", camera.position)[:3])
-                camera.rotation = tuple(float(v) for v in getattr(node, "rotation", camera.rotation)[:4])
-                camera.metadata["helper_size"] = float(getattr(node, "_gr_helper_size", camera.metadata.get("helper_size", 1.0)) or 1.0)
-                camera.apply_to_original()
-                self.camera_manager._store_on_model()
-                if self.camera_manager.active_camera_id == camera.id:
-                    self.update_view_from_camera(camera)
-                self.cameraChanged.emit()
-        if bool(getattr(node, "is_light", False)):
-            light_manager = getattr(getattr(getattr(self, "window", lambda: None)(), "lighting_panel", None), "manager", None)
-            light = light_manager.find_by_original(node) if light_manager is not None else None
-            if light is not None and not bool(getattr(light, "locked", False)):
-                light.position = tuple(float(v) for v in getattr(node, "position", light.position)[:3])
-                light.rotation = tuple(float(v) for v in getattr(node, "rotation", light.rotation)[:4])
-                light.apply_to_original()
-        if self.on_node_moved:
-            self.on_node_moved(node)
-        self.nodeMoved.emit(node)
-        if node is getattr(self._renderer, "selected_node", None):
-            self._transform_gizmo.update_from_object_transform()
-        self._sync_transform_typein_bar()
-        if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
-            try:
-                self._renderer.on_bone_moved(node.name, node.position)
-            except Exception:
-                pass
+    def _notify_node_moved(self, node, *, live: bool = False) -> None:
+        if node is None:
+            return
+        previous_preview = bool(getattr(node, "_gr_transform_previewing", False))
+        if live:
+            setattr(node, "_gr_transform_previewing", True)
+        try:
+            if bool(getattr(node, "is_camera", False)):
+                camera = self.camera_manager.find_by_original(node)
+                if camera is not None:
+                    camera.position = tuple(float(v) for v in getattr(node, "position", camera.position)[:3])
+                    camera.rotation = tuple(float(v) for v in getattr(node, "rotation", camera.rotation)[:4])
+                    camera.metadata["helper_size"] = float(getattr(node, "_gr_helper_size", camera.metadata.get("helper_size", 1.0)) or 1.0)
+                    camera.apply_to_original()
+                    self.camera_manager._store_on_model()
+                    if self.camera_manager.active_camera_id == camera.id:
+                        self.update_view_from_camera(camera)
+                    self.cameraChanged.emit()
+            if bool(getattr(node, "is_light", False)):
+                light_manager = getattr(getattr(getattr(self, "window", lambda: None)(), "lighting_panel", None), "manager", None)
+                light = light_manager.find_by_original(node) if light_manager is not None else None
+                if light is not None and not bool(getattr(light, "locked", False)):
+                    light.position = tuple(float(v) for v in getattr(node, "position", light.position)[:3])
+                    light.rotation = tuple(float(v) for v in getattr(node, "rotation", light.rotation)[:4])
+                    light.apply_to_original()
+            if self.on_node_moved:
+                self.on_node_moved(node)
+            self.nodeMoved.emit(node)
+            if node is getattr(self._renderer, "selected_node", None):
+                self._transform_gizmo.update_from_object_transform()
+            self._sync_transform_typein_bar()
+            if self._renderer.rig_edit_mode and self._renderer.on_bone_moved:
+                try:
+                    self._renderer.on_bone_moved(node.name, node.position)
+                except Exception:
+                    pass
+        finally:
+            if live:
+                if previous_preview:
+                    setattr(node, "_gr_transform_previewing", True)
+                else:
+                    try:
+                        delattr(node, "_gr_transform_previewing")
+                    except Exception:
+                        setattr(node, "_gr_transform_previewing", False)
 
     def set_anim_base_pose(self, base_pose) -> None:
         self._renderer.set_anim_base_pose(base_pose)

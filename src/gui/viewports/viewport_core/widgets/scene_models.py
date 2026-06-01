@@ -258,6 +258,7 @@ class ViewportSceneModelMixin:
         setattr(node, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
         setattr(node, "_gr_scene_gpu_transform", True)
         setattr(node, "_gr_scale", tuple(float(v) for v in getattr(transform, "scale", (1.0, 1.0, 1.0))[:3]))
+        self._tag_scene_helper_pivot(node, instance, position)
         return node
 
     def _build_scene_light_node(self, instance, root, model_node_type, node_flags):
@@ -300,7 +301,25 @@ class ViewportSceneModelMixin:
         setattr(node, "light_affects_specular", bool(payload.get("affects_specular", True)))
         setattr(node, "light_affects_lightmap", bool(payload.get("affects_lightmap", True)))
         setattr(node, "light_affects_environment", bool(payload.get("affects_environment", True)))
+        self._tag_scene_helper_pivot(node, instance, position)
         return node
+
+    def _tag_scene_helper_pivot(self, node, instance, position) -> None:
+        pivot_world_fn = getattr(self, "_pivot_world_from_instance", None)
+        pivot_world = (
+            pivot_world_fn(instance)
+            if callable(pivot_world_fn)
+            else tuple(float(v) for v in position[:3])
+        )
+        pivot_data = getattr(instance, "pivot", None)
+        pivot_local = tuple(float(v) for v in getattr(pivot_data, "position_local", (0.0, 0.0, 0.0))[:3])
+        pivot_rotation = self._euler_degrees_to_quat(getattr(pivot_data, "rotation_local", (0.0, 0.0, 0.0)))
+        setattr(node, "_gr_pivot_world", pivot_world)
+        setattr(node, "_gr_pivot_local", pivot_local)
+        setattr(node, "_gr_pivot_world_dirty", False)
+        setattr(node, "_gr_pivot_rotation", pivot_rotation)
+        setattr(node, "_gr_reference_rotation", pivot_rotation)
+        setattr(node, "_gr_pivot_edit_mode", getattr(self, "_pivot_edit_mode", "affect_object_only"))
 
     def _tag_scene_object_nodes(self, node, object_id: str, root_node) -> None:
         stack = [node]

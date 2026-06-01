@@ -694,6 +694,7 @@ class SceneWorkflowMixin:
         object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
         if not object_id:
             return
+        live_preview = bool(getattr(node, "_gr_transform_previewing", False))
         rotation = None
         scale = None
         try:
@@ -760,8 +761,10 @@ class SceneWorkflowMixin:
             )
         except Exception:
             log.debug("Could not persist scene pivot edit", exc_info=True)
-        self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        if live_preview:
+            return
+        self._update_scene_chrome()
         self._record_transform_event(node)
         self._record_pivot_event(node)
         if hasattr(self, "scene_outliner_panel"):

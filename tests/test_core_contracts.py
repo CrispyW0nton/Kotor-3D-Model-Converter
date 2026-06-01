@@ -3623,12 +3623,16 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
         QtProgressToast,
         ResourceModelLoadWorker,
     )
+    from src.gui.windows.application_core.shared.workers import load_resource_model_from_game_resources
 
     file_source = inspect.getsource(ModelLoadWorker.run)
     toast_source = inspect.getsource(QtProgressToast)
     window_source = inspect.getsource(QtGhostRiggerMainWindow)
+    start_resource_source = inspect.getsource(QtGhostRiggerMainWindow._start_resource_load)
+    ui_resource_source = inspect.getsource(QtGhostRiggerMainWindow._load_resource_model_on_ui_thread)
     get_resource_manager_source = inspect.getsource(QtGhostRiggerMainWindow._get_resource_manager)
     resource_source = inspect.getsource(ResourceModelLoadWorker.run)
+    resource_loader_source = inspect.getsource(load_resource_model_from_game_resources)
     viewport_preload_source = inspect.getsource(__import__(
         "src.gui.qt_lib.viewports.qt_viewport",
         fromlist=["QtViewportWidget"],
@@ -3643,7 +3647,12 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
     assert "self.progress.emit" in file_source
     assert "_prebuild_gpu_mesh_data_for_model(model)" in file_source
     assert "self.progress.emit" in resource_source
-    assert "_prebuild_gpu_mesh_data_for_model(model)" in resource_source
+    assert "_prebuild_gpu_mesh_data_for_model(model)" in resource_loader_source
+    assert "load_resource_model_from_game_resources" in resource_source
+    assert "_load_resource_model_on_ui_thread" in start_resource_source
+    assert "ResourceModelLoadWorker(" not in start_resource_source
+    assert "load_resource_model_from_game_resources" in ui_resource_source
+    assert "QThread" not in ui_resource_source
     assert "def update_progress" in toast_source
     assert "worker.progress.connect(self._on_model_load_progress)" in window_source
     assert "gpuUploadProgress.connect(self._on_viewport_gpu_upload_progress)" in window_source
@@ -6891,6 +6900,7 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
 
     manager = KMaxSceneManager()
     light = manager.add_light_object("point", name="MoveLight")
+    camera_obj = manager.add_camera_object("Cinematic Camera", name="MoveCamera", select=False)
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     viewport = QtViewportWidget()
     viewport.load_scene_instances(manager.active_scene.objects, scene_name="Light Move Smoke")
@@ -6899,14 +6909,38 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
         for node in viewport.model.all_nodes()
         if str(getattr(node, "_gr_scene_object_id", "") or "") == light.id
     )
+    camera_node = next(
+        node
+        for node in viewport.model.all_nodes()
+        if str(getattr(node, "_gr_scene_object_id", "") or "") == camera_obj.id
+    )
 
     assert getattr(light_node, "is_light", False) is True
+    assert getattr(camera_node, "is_camera", False) is True
+    assert tuple(getattr(light_node, "_gr_pivot_world")) == tuple(light_node.position)
+    assert tuple(getattr(camera_node, "_gr_pivot_world")) == tuple(camera_node.position)
     viewport.set_selected_node(light_node)
     assert getattr(viewport._renderer, "selected_node", None) is light_node
+    assert tuple(viewport._gizmo_world_position(light_node)) == tuple(light_node.position)
+    light_node._gr_pivot_edit_mode = "affect_pivot_only"
+    light_node._gr_pivot_world = (3.0, 2.0, 1.0)
+    assert tuple(viewport._gizmo_world_position(light_node)) == (3.0, 2.0, 1.0)
+    camera_node._gr_pivot_edit_mode = "affect_object_only"
+    camera_node._gr_pivot_world = (8.0, 8.0, 8.0)
+    assert tuple(viewport._gizmo_world_position(camera_node)) == tuple(camera_node.position)
 
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     workflow_source = inspect.getsource(QtGhostRiggerMainWindow._add_scene_object_to_sequence)
     outliner_source = (ROOT / "src/gui/panels/qt_scene_outliner_panel.py").read_text(encoding="utf-8")
+    drag_source = (ROOT / "src/gui/viewports/viewport_core/widgets/drag_interactions.py").read_text(encoding="utf-8")
+    history_source = (ROOT / "src/gui/viewports/viewport_core/widgets/history_animation.py").read_text(encoding="utf-8")
+    scene_models_source = (ROOT / "src/gui/viewports/viewport_core/widgets/scene_models.py").read_text(encoding="utf-8")
+    state_helpers_source = (ROOT / "src/gui/viewports/viewport_core/widgets/state_helpers.py").read_text(encoding="utf-8")
+    transform_gizmo_source = (ROOT / "src/core/gizmo/transform_gizmo.py").read_text(encoding="utf-8")
+    scene_workflow_source = (ROOT / "src/gui/windows/application_core/shared/scene_workflow.py").read_text(encoding="utf-8")
+    editor_services_source = (ROOT / "src/gui/windows/application_core/shared/editor_services.py").read_text(encoding="utf-8")
+    viewport_tools_source = (ROOT / "src/gui/windows/application_core/shared/viewport_tools.py").read_text(encoding="utf-8")
+    renderer_overlay_source = (ROOT / "src/core/rendering/frame_core/renderer_overlays.py").read_text(encoding="utf-8")
     sequence_track_list_source = (ROOT / "src/gui/sequence_editor/sequence_track_list_widget.py").read_text(encoding="utf-8")
     sequence_editor_source = (ROOT / "src/gui/sequence_editor/sequence_editor_window.py").read_text(encoding="utf-8")
 
@@ -6916,6 +6950,17 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert "Add to Sequence" in outliner_source
     assert "_expanded_item_keys" in outliner_source
     assert "_restore_expanded_item_keys" in outliner_source
+    assert "def _tag_scene_helper_pivot" in scene_models_source
+    assert "_tag_scene_helper_pivot(node, instance, position)" in scene_models_source
+    assert "_gr_pivot_edit_mode" in state_helpers_source
+    assert "bool(getattr(obj, \"is_light\", False)) or bool(getattr(obj, \"is_camera\", False))" in transform_gizmo_source
+    assert "from src.systems.bas.model_recipe import BAS_SLOT_ORDER" in viewport_tools_source
+    assert "self._notify_node_moved(node, live=True)" in drag_source
+    assert "def _notify_node_moved(self, node, *, live: bool = False)" in history_source
+    assert "_gr_transform_previewing" in scene_workflow_source
+    assert "if live_preview:" in scene_workflow_source
+    assert "if bool(getattr(node, \"_gr_transform_previewing\", False)):" in editor_services_source
+    assert "H - 72 - text_h" in renderer_overlay_source
     assert "addSelectedObjectRequested = QtCore.Signal()" in sequence_track_list_source
     assert "addTrackRequested = QtCore.Signal(str)" in sequence_track_list_source
     assert "deleteSelectionRequested = QtCore.Signal()" in sequence_track_list_source

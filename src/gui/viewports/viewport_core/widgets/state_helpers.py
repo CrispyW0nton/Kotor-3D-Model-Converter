@@ -35,6 +35,21 @@ class ViewportStateMixin:
             return None
         if self._is_external_skeleton_node(node):
             return self._external_overlay_world_position(node)
+        if bool(getattr(node, "is_light", False)) or bool(getattr(node, "is_camera", False)):
+            if str(getattr(node, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only":
+                pivot_world = getattr(node, "_gr_pivot_world", None)
+                if pivot_world is not None:
+                    try:
+                        return tuple(float(v) for v in pivot_world[:3])
+                    except Exception:
+                        pass
+            else:
+                try:
+                    position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                    setattr(node, "_gr_gizmo_world_position", position)
+                    return position
+                except Exception:
+                    pass
         pivot_local = getattr(node, "_gr_pivot_local", None)
         if pivot_local is not None and not bool(getattr(node, "_gr_pivot_world_dirty", False)):
             try:

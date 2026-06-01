@@ -14,6 +14,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
 from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
 from src.gui.viewports.viewport_core.widget_scaffold import create_custom_viewport_widget
+from src.systems.bas.model_recipe import BAS_SLOT_ORDER
 
 log = logging.getLogger(__name__)
 
