@@ -39,7 +39,7 @@ def _load_local_game_paths() -> None:
 
 
 def _game_version(game: str):
-    from src.core.qt_core.geometry.model_data import GameVersion
+    from src.core.geometry.model_data import GameVersion
 
     return GameVersion.K2 if str(game).lower() in {"k2", "tsl", "kotor2"} else GameVersion.K1
 
@@ -61,14 +61,14 @@ def _resource_pair(game: str, resref: str) -> tuple[str, ResourceEntry, Optional
 
 
 def _load_pykotor_model(game: str, resref: str):
-    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
+    from src.core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     _, mdl, mdx = _resource_pair(game, resref)
     return read_mdl_safe(mdl.data, source_ext=mdx.data if mdx is not None else None)
 
 
 def _load_ghostrigger_model(game: str, resref: str):
-    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+    from src.core.game.kotor_loader import load_model_from_bytes
 
     _, mdl, mdx = _resource_pair(game, resref)
     model = load_model_from_bytes(
@@ -332,7 +332,7 @@ def _get_game_library():
 
 def validate_textures(game: str, resref: str) -> dict[str, Any]:
     """Validate that GhostRigger-referenced textures are present and decodable."""
-    from src.core.qt_core.game.kotor_loader import load_tpc_as_pil
+    from src.core.game.kotor_loader import load_tpc_as_pil
 
     model = _load_ghostrigger_model(game, resref)
     _, _, _ = _resource_pair(game, resref)

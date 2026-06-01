@@ -21,6 +21,8 @@ import logging
 import threading
 from typing import Optional, Tuple, Dict, Any
 
+from src.adapters.qt_ipc.threading import marshal_to_gui_thread
+
 log = logging.getLogger(__name__)
 
 # ── Port constants (per GHOSTWORKS_BLUEPRINT.md Section 3.1) ────────────────
@@ -82,33 +84,12 @@ def ipc_call(
 
 def _marshal_to_gui_thread(cb, *args) -> None:
     """
-    T002 — Qt-first callback marshaling (M3/T304: Tk fallback removed).
-
-    Schedule ``cb(*args)`` on the main GUI thread:
-
-      1. If a Qt application is running (``QCoreApplication.instance()`` is
-         not None) use ``QTimer.singleShot(0, ...)`` to defer onto the Qt
-         event loop. This is the production path.
-      2. Otherwise (headless / unit tests / no event loop) invoke the
-         callback directly in the worker thread.
-
-    The legacy Tk fallback (``tk._default_root.after(0, ...)``) was
-    deleted in M3/T304 along with the rest of the Tk codepath.
-
-    All marshaling exceptions are swallowed; the direct-call fallback runs
-    so the callback never silently disappears.
+    Schedule ``cb(*args)`` through the Qt IPC adapter when an event loop is
+    active, otherwise invoke it directly for headless runs and tests.
     """
-    # ── 1. Qt path ────────────────────────────────────────────────────
-    try:
-        from PySide6.QtCore import QCoreApplication, QTimer  # noqa: PLC0415
-        app = QCoreApplication.instance()
-        if app is not None:
-            QTimer.singleShot(0, lambda: cb(*args))
-            return
-    except Exception:
-        pass
+    if marshal_to_gui_thread(cb, *args):
+        return
 
-    # ── 2. Headless fallback ──────────────────────────────────────────
     try:
         cb(*args)
     except Exception as exc:
@@ -125,7 +106,7 @@ def ipc_call_async(
     """
     Non-blocking IPC call — runs in a daemon thread.
     ``on_result(success, response)`` is marshaled back to the GUI main
-    thread via :func:`_marshal_to_gui_thread` (Qt → Tk → direct fallback).
+    thread via :func:`_marshal_to_gui_thread`.
     """
     def _worker():
         ok, resp = ipc_call(port, action, payload, sender)

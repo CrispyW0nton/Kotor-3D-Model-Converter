@@ -151,6 +151,31 @@ class GhostRiggerLevelSequence:
         self.current_frame = self.clamp_frame(frame)
         return self.current_frame
 
+    def set_frame_range(self, start_frame: int, end_frame: int) -> tuple[int, int]:
+        old_start = int(self.start_frame)
+        old_end = int(self.end_frame)
+        old_playback_start = int(self.playback_start_frame)
+        old_playback_end = int(self.playback_end_frame)
+        new_start = int(start_frame)
+        new_end = max(new_start, int(end_frame))
+        playback_start_tracks_range = old_playback_start <= old_start
+        playback_end_tracks_range = old_playback_end >= old_end
+        self.start_frame = new_start
+        self.end_frame = new_end
+        if playback_start_tracks_range or old_playback_start < new_start or old_playback_start > new_end:
+            self.playback_start_frame = new_start
+        else:
+            self.playback_start_frame = old_playback_start
+        if old_playback_end < self.playback_start_frame:
+            self.playback_end_frame = self.playback_start_frame
+        elif playback_end_tracks_range or old_playback_end > new_end:
+            self.playback_end_frame = new_end
+        else:
+            self.playback_end_frame = old_playback_end
+        self.playback_end_frame = max(self.playback_start_frame, min(new_end, int(self.playback_end_frame)))
+        self.set_current_frame(self.current_frame)
+        return self.start_frame, self.end_frame
+
     def get_current_frame(self) -> int:
         return int(self.current_frame)
 

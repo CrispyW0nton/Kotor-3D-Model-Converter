@@ -25,11 +25,11 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Set
 
 try:
-    from ..core.model_data import (
+    from ..core.geometry.model_data import (
         KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
     )
 except ImportError:
-    from core.qt_core.geometry.model_data import (  # type: ignore[no-redef]
+    from core.geometry.model_data import (  # type: ignore[no-redef]
         KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
     )
 

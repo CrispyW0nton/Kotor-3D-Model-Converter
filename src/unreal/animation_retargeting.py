@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 import math
 from typing import Dict, Iterable, Optional
 
-from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
-from src.core.qt_core.geometry.model_data import Animation
+from src.core.animation.animation_engine import AnimPose, NodePose
+from src.core.geometry.model_data import Animation
 
 
 _ALIASES: Dict[str, tuple[str, ...]] = {
@@ -589,7 +589,7 @@ def _sample_retargeted_animation(
     report: BoneMappingReport,
     name_suffix: str,
 ) -> tuple[Animation, BoneMappingReport]:
-    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.animation.animation_engine import AnimationEngine
 
     length = float(getattr(source_animation, "length", 0.0) or 0.0)
     sample_rate = max(1.0, float(cfg.bake_sample_rate or 30.0))

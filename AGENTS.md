@@ -99,14 +99,59 @@ if a new file under `src/gui/` imports tkinter.
 
 ## Qt imports
 
-- `src.gui.qt_lib.rendering.viewport_core` - Tk-free rendering core.
+- `src.gui.rendering.frame_core.renderer` - Tk-free software frame-rendering backend.
+- `src.gui.camera.arcball_camera` - ArcBall camera state.
+- `src.gui.textures.tpc` / `src.gui.textures.txi` - TPC/TXI texture helpers.
+- `src.gui.qt_lib.viewports.viewport_display` - viewport display mode state.
+- `src.gui.qt_lib.viewports.viewport_navigation` - viewport navigation profiles.
 - `src.gui.qt_lib.viewports.qt_viewport` - Qt viewport widgets.
 - `src.gui.qt_lib.windows.qt_main_window` - Qt main window entry point.
 - `src.gui.qt_lib.<category>.<module>` - canonical Qt GUI import route.
 
 Do not add `from .viewport import ...` anywhere; that shim no longer exists.
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
-`_clean_tex_name`, etc. through `src.gui.qt_lib.rendering.viewport_core`.
+  `_clean_tex_name`, etc. through `src.math.frame_math`.
+  Viewport display and navigation modules live under `src/gui/viewports/`;
+  do not add new viewport-owned modules under `src/gui/rendering/`.
+  The software frame-renderer backend lives under `src/gui/rendering/frame_core/`,
+  ArcBall camera state under `src/gui/camera/`, and TPC/TXI texture helpers under
+  `src/gui/textures/`. Keep the `src/gui/viewports/frame_renderer.py` facade thin.
+
+## Math helpers
+
+- Shared project math helpers live under `src/math/`.
+- Do not add new math helper modules under `src/gui/`, renderer backend folders,
+  viewport folders, camera folders, or gizmo folders. Keep those old paths as
+  compatibility shims only when needed.
+- Import canonical math helpers directly from `src.math.*`, for example
+  `src.math.frame_math`, `src.math.gpu_math`, `src.math.camera_math`,
+  `src.math.transform_math`, and `src.math.viewcube_math`.
+
+## Qt viewport module structure
+
+- Keep `src/gui/viewports/qt_viewport.py` as a lazy public compatibility
+  facade. Do not put implementation back into this file.
+- Keep `src/gui/viewports/viewport_core/widget.py` as a lazy widget facade.
+  Do not grow it into another large implementation module.
+- Shared viewport imports and helper APIs belong under
+  `src/gui/viewports/viewport_core/shared/`, split by responsibility:
+  dependency imports, icon helpers, selection-mode constants, joint-dot
+  palette helpers, weight heat-map helpers, and similar non-widget support.
+- Actual viewport widgets belong under `src/gui/viewports/viewport_core/widgets/`.
+  New standalone viewport widgets should be added as focused modules there and
+  exported through the lazy facade when they are part of the public viewport API.
+- `QtViewportWidget` behavior is composed from focused mixin modules in
+  `viewport_core/widgets/` (`construction`, `scene_models`, `display_controls`,
+  `camera_workflow`, `measurement_controls`, `transform_camera`,
+  `selection_mesh`, `history_animation`, `event_navigation`,
+  `rendering_pipeline`, `overlay_layers`, `picking_hover`,
+  `drag_interactions`, `resource_cache`, and `state_helpers`). Patch the owning
+  mixin module instead of editing unrelated viewport behavior.
+- If a new viewport feature needs many methods, create a new focused mixin
+  module and add it to `QtViewportWidget` deliberately. Preserve the existing
+  public import path through `src.gui.qt_lib.viewports.qt_viewport`.
+- Update the source-contract tests that assemble viewport source from split
+  files when adding a new viewport module that those contracts need to inspect.
 
 ## UI/workbench boundaries
 

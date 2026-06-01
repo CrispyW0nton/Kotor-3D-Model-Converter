@@ -1,90 +1,9 @@
-"""Qt worker wrapper for background lightmap bakes."""
+"""Compatibility facade for the Qt lightmap bake worker."""
 
 from __future__ import annotations
 
-try:
-    from PySide6 import QtCore
-except Exception:  # pragma: no cover
-    QtCore = None
+from importlib import import_module
+import sys
 
-from .lightmap_bake_job import LightmapBakeJob
-from .lightmap_baker import LightmapBaker
-
-
-if QtCore is not None:
-
-    class LightmapBakeWorker(QtCore.QObject):
-        progress = QtCore.Signal(str, int, int, str)
-        finished = QtCore.Signal(object)
-
-        def __init__(self, job: LightmapBakeJob, baker: LightmapBaker | None = None):
-            super().__init__()
-            self.job = job
-            self.baker = baker or LightmapBaker()
-            self._cancelled = False
-            self.job.progress = self.progress.emit
-            self.job.should_cancel = lambda: self._cancelled
-
-        @QtCore.Slot()
-        def run(self) -> None:
-            self.finished.emit(self.baker.bake(self.job))
-
-        @QtCore.Slot()
-        def cancel(self) -> None:
-            self._cancelled = True
-
-
-    class LightmapPreviewBakeWorker(QtCore.QObject):
-        finished = QtCore.Signal(object)
-
-        def __init__(self, mesh: object, lights: list[object], settings, baker: LightmapBaker | None = None):
-            super().__init__()
-            self.mesh = mesh
-            self.lights = list(lights)
-            self.settings = settings
-            self.baker = baker or LightmapBaker()
-            self._cancelled = False
-
-        @QtCore.Slot()
-        def run(self) -> None:
-            self.finished.emit(
-                self.baker.bake_preview(
-                    self.mesh,
-                    self.lights,
-                    self.settings,
-                    should_cancel=lambda: self._cancelled,
-                )
-            )
-
-        @QtCore.Slot()
-        def cancel(self) -> None:
-            self._cancelled = True
-
-else:
-
-    class LightmapBakeWorker:  # type: ignore[no-redef]
-        def __init__(self, job: LightmapBakeJob, baker: LightmapBaker | None = None):
-            self.job = job
-            self.baker = baker or LightmapBaker()
-            self._cancelled = False
-
-        def run(self):
-            return self.baker.bake(self.job)
-
-        def cancel(self) -> None:
-            self._cancelled = True
-
-
-    class LightmapPreviewBakeWorker:  # type: ignore[no-redef]
-        def __init__(self, mesh: object, lights: list[object], settings, baker: LightmapBaker | None = None):
-            self.mesh = mesh
-            self.lights = list(lights)
-            self.settings = settings
-            self.baker = baker or LightmapBaker()
-            self._cancelled = False
-
-        def run(self):
-            return self.baker.bake_preview(self.mesh, self.lights, self.settings, should_cancel=lambda: self._cancelled)
-
-        def cancel(self) -> None:
-            self._cancelled = True
+_module = import_module("src.gui.dialogs.lightmap_bake_worker")
+sys.modules[__name__] = _module

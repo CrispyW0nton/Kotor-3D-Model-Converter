@@ -6,21 +6,21 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
-from src.gui.lighting.lightmap_bake_job import LightmapBakeJob
-from src.gui.lighting.lightmap_bake_settings import LightmapBakeSettings
-from src.gui.lighting.lightmap_baker import LightmapBaker
-from src.gui.lighting.lightmap_export_bridge import (
+from src.adapters.gpu.lightmap_baker import LightmapBaker
+from src.adapters.gpu.lightmap_gpu_solver import LightmapGpuSolver
+from src.core.lighting.lightmap_bake_job import LightmapBakeJob
+from src.core.lighting.lightmap_bake_settings import LightmapBakeSettings
+from src.core.lighting.lightmap_export_bridge import (
     export_baked_lightmap_manifest,
     get_baked_lightmap_assignments,
     resolve_lightmap_for_material,
 )
-from src.gui.lighting.lightmap_gpu_solver import LightmapGpuSolver
-from src.gui.lighting.lightmap_lighting_solver import LightmapLightingSolver
-from src.gui.lighting.lightmap_rasterizer import LightmapRasterizer
-from src.gui.lighting.lightmap_padding import LightmapPadding
-from src.gui.lighting.lightmap_uv_validator import LightmapUVValidator
-from src.gui.lighting.uv_atlas_generator import UVAtlasGenerator
+from src.core.lighting.lightmap_lighting_solver import LightmapLightingSolver
+from src.core.lighting.lightmap_padding import LightmapPadding
+from src.core.lighting.lightmap_rasterizer import LightmapRasterizer
+from src.core.lighting.lightmap_uv_validator import LightmapUVValidator
+from src.core.lighting.uv_atlas_generator import UVAtlasGenerator
+from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
 
 
 def _model_with_lightmapped_triangle() -> tuple[KotorModel, ModelNode]:

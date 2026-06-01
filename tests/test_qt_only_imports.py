@@ -2,7 +2,7 @@
 tests/test_qt_only_imports.py — Qt-only imports guard (M0/T005, M3/T305)
 
 Guard rail: every module in the Qt subtree (``src/gui/qt_*.py``) and the
-new Tk-free rendering core (``src/gui/viewport_core.py``) MUST import
+Tk-free viewport frame-rendering core MUST import
 without ``tkinter`` being available. After M3/T302 deleted the legacy
 Tk modules this is extended to ``src/gui/*.py`` — no file under
 ``src/gui/`` may import tkinter — and to a guard that the eight deleted
@@ -53,9 +53,9 @@ _GUI_DIR = _REPO_ROOT / "src" / "gui"
 
 # Files that MUST remain Tk-free.
 #   * Every qt_*.py — the canonical Qt UI subtree.
-#   * viewport_core.py — the Tk-free rendering split from T001.
+#   * rendering/frame_core/*.py - the Tk-free viewport frame-rendering backend split.
 _QT_FILES = sorted(_GUI_DIR.rglob("qt_*.py"))
-_VIEWPORT_CORE = _GUI_DIR / "rendering" / "viewport_core.py"
+_VIEWPORT_CORE_FILES = sorted((_GUI_DIR / "rendering" / "frame_core").glob("*.py"))
 
 # Files that are EXPECTED to import tkinter — empty after M3/T302.
 #
@@ -116,18 +116,65 @@ def test_theme_precache_uses_startup_logger_instead_of_direct_console_prints():
     assert "Theme precache built %s in %.1f ms" in source
 
 
+def test_startup_log_cleanup_removes_prior_run_logs(monkeypatch, tmp_path):
+    import main
+
+    log_dir = tmp_path / "Logs"
+    log_dir.mkdir()
+    for name in (
+        "ghostrigger_2026-05-29_231500.log",
+        "pykotor.log",
+        "debug_pykotor.LOG",
+    ):
+        (log_dir / name).write_text("old run\n", encoding="utf-8")
+    (log_dir / "keep.txt").write_text("not a log\n", encoding="utf-8")
+    archive_dir = log_dir / "archive"
+    archive_dir.mkdir()
+    (archive_dir / "nested.log").write_text("not in root\n", encoding="utf-8")
+
+    monkeypatch.setattr(main, "_LOG_DIR", str(log_dir))
+
+    assert main._clear_startup_logs() == 3
+    assert [path.name for path in log_dir.iterdir() if path.is_file() and path.suffix.lower() == ".log"] == []
+    assert (log_dir / "keep.txt").exists()
+    assert (archive_dir / "nested.log").exists()
+
+
+def test_exit_log_prune_keeps_only_current_run_log(monkeypatch, tmp_path):
+    import main
+
+    log_dir = tmp_path / "Logs"
+    log_dir.mkdir()
+    current = log_dir / "ghostrigger_2026-05-30_130000.log"
+    stale = log_dir / "ghostrigger_2026-05-30_125900.log"
+    pykotor = log_dir / "pykotor.log"
+    for path in (current, stale, pykotor):
+        path.write_text("run\n", encoding="utf-8")
+    (log_dir / "notes.txt").write_text("keep\n", encoding="utf-8")
+
+    monkeypatch.setattr(main, "_LOG_DIR", str(log_dir))
+
+    assert main._prune_non_current_logs(str(current)) == 2
+    assert current.exists()
+    assert not stale.exists()
+    assert not pykotor.exists()
+    assert (log_dir / "notes.txt").exists()
+
+
 def test_log_panel_embeds_python_terminal():
     """The bottom output area should split log output and a live Python console."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     pytest.importorskip("PySide6")
     from PySide6 import QtWidgets
-    from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtPythonTerminalPanel
+    from src.gui.qt_lib.panels.qt_log_panel import PythonLogSyntaxHighlighter, QtLogPanel, QtPythonTerminalPanel
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     panel = QtLogPanel()
     try:
         assert panel.content_splitter.count() == 2
         assert isinstance(panel.terminal, QtPythonTerminalPanel)
+        assert isinstance(panel.highlighter, PythonLogSyntaxHighlighter)
+        assert panel.text.objectName() == "PythonLogInspector"
         assert panel.save_button.parent().objectName() == "LogFooter"
         assert panel.terminal.run_button.parent().objectName() == "PythonTerminalInputRow"
         for button in (panel.save_button, panel.copy_button, panel.clear_button):
@@ -183,6 +230,42 @@ def test_log_panel_embeds_python_terminal():
         panel.deleteLater()
 
 
+def test_log_panel_handler_surfaces_python_exceptions():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6 import QtWidgets
+    from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtLogPanelHandler
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLogPanel()
+    handler = QtLogPanelHandler(panel)
+    try:
+        panel.show()
+        app.processEvents()
+        try:
+            raise RuntimeError("tool inspector crash")
+        except RuntimeError:
+            record = logging.LogRecord(
+                name="tests.log_inspector",
+                level=logging.ERROR,
+                pathname="tests/test_qt_only_imports.py",
+                lineno=1,
+                msg="Exception while running inspector",
+                args=(),
+                exc_info=sys.exc_info(),
+            )
+            handler.emit(record)
+        app.processEvents()
+        text = panel.get_text()
+        assert "ERROR  tests.log_inspector  Exception while running inspector" in text
+        assert "Traceback (most recent call last):" in text
+        assert "RuntimeError: tool inspector crash" in text
+        assert panel.text.hasFocus()
+    finally:
+        handler.close()
+        panel.deleteLater()
+
+
 def _collect_tkinter_imports(path: pathlib.Path) -> list[tuple[int, str]]:
     """Return [(lineno, statement-text)] for every tkinter import in *path*."""
     src = path.read_text(encoding="utf-8")
@@ -216,11 +299,12 @@ def test_qt_subtree_has_no_tkinter_imports(path: pathlib.Path):
     )
 
 
-def test_viewport_core_has_no_tkinter_imports():
-    """src/gui/viewport_core.py is the Tk-free rendering split (T001)."""
-    hits = _collect_tkinter_imports(_VIEWPORT_CORE)
+@pytest.mark.parametrize("path", _VIEWPORT_CORE_FILES, ids=lambda p: p.name)
+def test_viewport_core_has_no_tkinter_imports(path: pathlib.Path):
+    """src/gui/rendering/frame_core/*.py is the Tk-free rendering split."""
+    hits = _collect_tkinter_imports(path)
     assert hits == [], (
-        f"viewport_core.py must remain Tk-free; offending lines:\n  "
+        f"{path.name} must remain Tk-free; offending lines:\n  "
         + "\n  ".join(f"L{ln}: {stmt}" for ln, stmt in hits)
     )
 
@@ -297,6 +381,56 @@ def test_gui_root_only_keeps_central_qt_lib():
 # (pykotor, moderngl, numpy, PIL, ...). When any of those are unavailable
 # (e.g. a slim CI image) we skip the live probe and rely on Layer 1.
 
+
+
+def test_internal_imports_use_canonical_module_owners():
+    """Code should import owning modules directly instead of compatibility shims."""
+    shim_modules = {
+        "src.gui.camera.camera_math",
+        "src.gui.gizmo.transform_math",
+        "src.gui.rendering.frame_core.math_helpers",
+        "src.gui.rendering.gpu_core.math_helpers",
+        "src.gui.rendering.viewport_core",
+        "src.gui.rendering.viewport_display",
+        "src.gui.rendering.viewport_navigation",
+        "src.gui.qt_lib.gizmo.transform_math",
+        "src.gui.qt_lib.rendering.viewport_core",
+        "src.gui.qt_lib.rendering.viewport_display",
+        "src.gui.qt_lib.rendering.viewport_navigation",
+        "src.gui.qt_lib.viewports.frame_renderer",
+        "src.gui.qt_lib.viewports.viewcube_math",
+        "src.gui.viewports.frame_renderer",
+        "src.gui.viewports.viewcube_math",
+    }
+    scan_roots = [
+        _REPO_ROOT / "main.py",
+        _REPO_ROOT / "scripts",
+        _REPO_ROOT / "src",
+        _REPO_ROOT / "tests",
+    ]
+    offenders: list[tuple[pathlib.Path, int, str]] = []
+    for root in scan_roots:
+        paths = [root] if root.is_file() else sorted(root.rglob("*.py"))
+        for path in paths:
+            if any(part == "__pycache__" for part in path.parts):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    if mod in shim_modules:
+                        offenders.append((path, node.lineno, f"from {mod} import ..."))
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if alias.name in shim_modules:
+                            offenders.append((path, node.lineno, f"import {alias.name}"))
+    assert not offenders, (
+        "Import canonical owner modules instead of compatibility shims:\n  "
+        + "\n  ".join(
+            f"{path.relative_to(_REPO_ROOT)}:{lineno}: {stmt}"
+            for path, lineno, stmt in offenders
+        )
+    )
 
 
 def test_application_imports_use_central_qt_lib():
@@ -485,6 +619,43 @@ def test_qt_main_window_imports_without_tkinter(monkeypatch):
     importlib.import_module("src.gui.qt_lib.windows.qt_main_window")
 
 
+def test_application_core_imports_route_through_application_core_lib() -> None:
+    """Application-core internals should use the central facade route."""
+
+    application_core = _GUI_DIR / "windows" / "application_core"
+    forbidden_prefixes = (
+        "src.gui.windows.application_core.functions",
+        "src.gui.windows.application_core.shared",
+        "src.gui.windows.application_core.toolboxes",
+    )
+    violations: list[str] = []
+    for path in sorted(application_core.rglob("*.py")):
+        if path.name == "application_core_lib.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module.startswith(forbidden_prefixes):
+                    violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno}: {module}")
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith(forbidden_prefixes):
+                        violations.append(f"{path.relative_to(_REPO_ROOT)}:{node.lineno}: {alias.name}")
+
+    assert violations == []
+
+
+def test_application_core_lib_exposes_canonical_groups() -> None:
+    from src.gui.windows.application_core.application_core_lib.functions.geometry import _bounds_center
+    from src.gui.windows.application_core.application_core_lib.shared.workers import ModelLoadWorker
+    from src.gui.windows.application_core.application_core_lib.toolboxes.workspace_docks import WorkspaceDockMixin
+
+    assert _bounds_center(((0, 0, 0), (2, 4, 6))) == (1.0, 2.0, 3.0)
+    assert ModelLoadWorker.__name__ == "ModelLoadWorker"
+    assert WorkspaceDockMixin.__name__ == "WorkspaceDockMixin"
+
+
 @pytest.mark.skipif(
     not _runtime_deps_available(),
     reason="PySide6 / pykotor / moderngl / numpy / PIL not installed in this env",
@@ -496,8 +667,8 @@ def test_viewport_core_imports_without_tkinter(monkeypatch):
     for mod_name in list(sys.modules):
         if mod_name == "src.gui.qt_lib" or mod_name.startswith("src.gui.qt_lib."):
             sys.modules.pop(mod_name, None)
-    sys.modules.pop("src.gui.rendering.viewport_core", None)
-    importlib.import_module("src.gui.qt_lib.rendering.viewport_core")
+    sys.modules.pop("src.gui.rendering.frame_core.renderer", None)
+    importlib.import_module("src.gui.rendering.frame_core.renderer")
 
 
 def test_fbx_sdk_loader_reports_missing_without_import_crash(monkeypatch):
@@ -541,7 +712,13 @@ def test_fbx_sdk_loader_accepts_fbx_without_fbxcommon(monkeypatch):
 
 
 def test_main_window_routes_fbx_menu_to_optional_sdk_bridge():
-    text = (_REPO_ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8")
+    text = "\n".join(
+        [
+            (_REPO_ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8"),
+            (_REPO_ROOT / "src/gui/windows/application_core/shared/model_io.py").read_text(encoding="utf-8"),
+            (_REPO_ROOT / "src/gui/windows/application_core/shared/window_chrome.py").read_text(encoding="utf-8"),
+        ]
+    )
 
     assert "def _auto_detect_fbx_import_backend" in text
     assert "def _choose_fbx_import_backend" in text

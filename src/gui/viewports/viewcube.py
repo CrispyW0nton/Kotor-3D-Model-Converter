@@ -7,7 +7,7 @@ from typing import Callable
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .viewcube_math import (
+from src.math.viewcube_math import (
     CUBE_VERTICES,
     FACE_DIRECTIONS,
     FACE_LABELS,

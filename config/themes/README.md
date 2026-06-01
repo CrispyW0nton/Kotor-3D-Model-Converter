@@ -48,6 +48,9 @@ up/down controls: `spinbox.buttonBackground`, `spinbox.buttonHover`,
 `spinbox.buttonPressed`, `spinbox.buttonBorder`, and `spinbox.arrow`.
 These keep themed `QSpinBox` and `QDoubleSpinBox` steppers as legible as the
 native Default theme.
+Transform-style numeric controls can also consume `axis.x`, `axis.y`,
+`axis.z`, and `axis.text` for compact X/Y/Z badges and axis-coded spin boxes.
+The Camera toolbox uses these tokens for position, rotation, and target rows.
 The Theme Editor owns Matrix bar appearance. Its Matrix Bar tab writes
 `matrixBar.style`, `matrixBar.glyphs`, `matrixBar.fontFamily`, and
 `matrixBar.imagePath` into the theme `<styles>` section, along with

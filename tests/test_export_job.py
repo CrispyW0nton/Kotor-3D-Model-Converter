@@ -12,6 +12,7 @@ from src.core.export.export_job import (
     ExportOutputSpec,
     run_export_job,
 )
+from src.core.ports import FileWriterPort
 from src.core.validation.validation_bus import (
     ValidationBus,
     ValidationIssue,
@@ -51,7 +52,8 @@ def test_successful_export_writes_staging_then_promotes(tmp_path: Path) -> None:
     def writer(context: ExportJobContext) -> None:
         staged = context.staged_path_for(final)
         assert not final.exists()
-        staged.write_text("hello", encoding="utf-8")
+        assert isinstance(context, FileWriterPort)
+        context.write_text(final, "hello", encoding="utf-8")
         seen_staged.append(staged)
 
     result = run_export_job(_request(final), writer=writer)
@@ -59,6 +61,25 @@ def test_successful_export_writes_staging_then_promotes(tmp_path: Path) -> None:
     assert result.succeeded is True
     assert result.status == ExportJobStatus.SUCCEEDED
     assert final.read_text(encoding="utf-8") == "hello"
+    assert seen_staged and not seen_staged[0].parent.exists()
+
+
+def test_export_context_file_writer_port_writes_bytes_to_staging(tmp_path: Path) -> None:
+    final = tmp_path / "out" / "payload.bin"
+    seen_staged: list[Path] = []
+
+    def writer(context: ExportJobContext) -> None:
+        assert isinstance(context, FileWriterPort)
+        staged = context.staged_path_for(final)
+        context.write_bytes(final, b"payload")
+        seen_staged.append(staged)
+        assert staged.exists()
+        assert final.exists() is False
+
+    result = run_export_job(_request(final), writer=writer)
+
+    assert result.succeeded is True
+    assert final.read_bytes() == b"payload"
     assert seen_staged and not seen_staged[0].parent.exists()
 
 
@@ -217,7 +238,8 @@ def test_manifest_writer_output_is_promoted(tmp_path: Path) -> None:
 
     def manifest_writer(context: ExportJobContext, result) -> Path:
         staged_manifest = context.staged_path_for(manifest)
-        staged_manifest.write_text(
+        context.write_text(
+            manifest,
             json.dumps({"job_id": result.job_id, "kind": result.kind}),
             encoding="utf-8",
         )

@@ -1,7 +1,12 @@
-"""Public UV channel metadata records for the lightmap baker."""
+"""Compatibility facade for backend lightmap UV channel records.
+
+Canonical owner: :mod:`src.core.lighting.uv_channel_info`.
+"""
 
 from __future__ import annotations
 
-from .lightmap_uv_validator import UVChannelInfo
+from importlib import import_module
+import sys
 
-__all__ = ["UVChannelInfo"]
+_module = import_module("src.core.lighting.uv_channel_info")
+sys.modules[__name__] = _module

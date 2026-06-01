@@ -79,10 +79,7 @@ class SequencePropertyPanel(QtWidgets.QWidget):
             return
         sequence.name = self.name_edit.text().strip() or "New Sequence"
         sequence.description = self.desc_edit.toPlainText()
-        sequence.start_frame = int(self.start_spin.value())
-        sequence.end_frame = max(sequence.start_frame, int(self.end_spin.value()))
-        sequence.playback_start_frame = max(sequence.start_frame, sequence.playback_start_frame)
-        sequence.playback_end_frame = min(sequence.end_frame, max(sequence.playback_start_frame, sequence.playback_end_frame))
+        sequence.set_frame_range(int(self.start_spin.value()), int(self.end_spin.value()))
         sequence.frame_rate = float(self.rate_combo.currentData())
         sequence.display_rate = sequence.frame_rate
         sequence.set_current_frame(sequence.current_frame)

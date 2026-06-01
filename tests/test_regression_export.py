@@ -29,7 +29,7 @@ def _golden_cases() -> list[dict[str, Any]]:
 
 
 def _resource_manager():
-    from src.core.qt_core.assets.resource_manager import ResourceManager
+    from src.core.assets.resource_manager import ResourceManager
 
     manager = ResourceManager()
     if K1_PATH.exists():
@@ -40,7 +40,7 @@ def _resource_manager():
 
 
 def _load_game_model(game: str, resref: str, scratch: Path):
-    from src.core.qt_core.game.kotor_loader import load_model_from_file
+    from src.core.game.kotor_loader import load_model_from_file
 
     manager = _resource_manager()
     game_key = game.upper()
@@ -65,8 +65,8 @@ def _model_for_case(case: dict[str, Any], tmp_path: Path):
         )
 
     if case.get("kind") == "composite":
-        from src.core.qt_core.workflow import composite_workflow as cw
-        from src.core.qt_core.geometry.model_data import CharacterMode, CharacterScene, PartSlot
+        from src.core.workflow import composite_workflow as cw
+        from src.core.geometry.model_data import CharacterMode, CharacterScene, PartSlot
 
         body_resref = str(case["body_resref"])
         head_resref = str(case["head_resref"])

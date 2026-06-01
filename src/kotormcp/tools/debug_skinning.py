@@ -101,7 +101,7 @@ class _DebugSession:
         self._start_time = time.time()
         # Lazy-init renderer
         try:
-            from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+            from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer
             self.renderer = GpuRenderer()
         except Exception as e:
             log.warning(f"DebugSession: GpuRenderer init failed: {e}")
@@ -130,7 +130,7 @@ class _DebugSession:
         self._model_textures = {}  # clear texture cache on path change
         # FIX-TEXLOAD-D5: Initialize ResourceManager for texture pipeline.
         try:
-            from src.core.qt_core.assets.resource_manager import ResourceManager
+            from src.core.assets.resource_manager import ResourceManager
             rm = ResourceManager()
             ok = rm.set_k1_dir(path)
             if ok:
@@ -246,7 +246,7 @@ class _DebugSession:
             return {"ok": False, "error": f"Model '{resref}' not found in game BIFs"}
 
         try:
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.game.kotor_loader import load_model_from_bytes
             model = load_model_from_bytes(mdl_bytes, mdx_bytes)
         except Exception as e:
             return {"ok": False, "error": f"Parse failed: {e}"}
@@ -262,7 +262,7 @@ class _DebugSession:
 
         # Init animation engine
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine
+            from src.core.animation.animation_engine import AnimationEngine
             self.anim_engine = AnimationEngine(model)
         except Exception as e:
             log.warning(f"AnimationEngine init failed: {e}")
@@ -270,7 +270,7 @@ class _DebugSession:
 
         # Init skin uploader
         try:
-            from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+            from src.core.animation.gpu_skinning import MatrixPaletteUploader
             self.skin_uploader = MatrixPaletteUploader()
             n_bones = self.skin_uploader.build_inverse_bind_pose(model)
         except Exception as e:
@@ -440,7 +440,7 @@ class _DebugSession:
             return {"ok": False, "error": "No renderer available"}
 
         try:
-            from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+            from src.core.camera.arcball_camera import ArcBallCamera
             camera = ArcBallCamera()
             camera.azimuth = self.camera_azimuth
             camera.elevation = self.camera_elevation
@@ -458,7 +458,7 @@ class _DebugSession:
             # resource chain: Override > module ERFs > TexturePacks > BIF.
             if not self._model_textures and self._resource_manager is not None:
                 try:
-                    from src.core.qt_core.assets.resource_manager import resolve_model_textures
+                    from src.core.assets.resource_manager import resolve_model_textures
                     self._model_textures = resolve_model_textures(
                         self.model, self._resource_manager, game='K1')
                     log.info(f"DebugSession: loaded {len(self._model_textures)} textures")

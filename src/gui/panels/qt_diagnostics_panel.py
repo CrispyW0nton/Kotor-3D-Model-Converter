@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional
 
 from PySide6 import QtCore, QtWidgets
 
-from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+from src.core.rendering.hardware_info import collect_hardware_diagnostics
 
 
 class QtDiagnosticsPanel(QtWidgets.QWidget):

@@ -51,11 +51,11 @@ from typing import Dict, List, Optional, Tuple, Set, Any
 from enum import Enum
 
 try:
-    from ..core.model_data import (
+    from ..core.geometry.model_data import (
         KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
     )
 except ImportError:
-    from core.qt_core.geometry.model_data import (  # type: ignore[no-redef]
+    from core.geometry.model_data import (  # type: ignore[no-redef]
         KotorModel, ModelNode, NodeFlags, VertexSkinData, BoneWeight
     )
 
@@ -1075,13 +1075,13 @@ class GRig:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  GRig Panel Data Model  (for the Tkinter UI in main_window.py)
+#  GRig Panel Data Model
 # ─────────────────────────────────────────────────────────────────────────────
 
 class GRigPanelState:
     """
     Lightweight state object held by the GRig UI panel.
-    Bridges GRig engine ↔ Tkinter callbacks.
+    Bridges GRig engine state to presentation callbacks.
     """
     def __init__(self):
         self.grig             = GRig()

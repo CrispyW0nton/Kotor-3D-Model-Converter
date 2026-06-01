@@ -38,7 +38,7 @@ import pytest
 
 
 # ── Path setup ──────────────────────────────────────────────────────────────
-# Allow `from src.core.qt_core.geometry.model_data import ...` regardless of how pytest is
+# Allow `from src.core.geometry.model_data import ...` regardless of how pytest is
 # invoked (conftest.py already does this, but we repeat it defensively so
 # this test can also be run standalone via ``python -m pytest tests/...``).
 ROOT = Path(__file__).resolve().parents[1]
@@ -574,7 +574,7 @@ def test_detect_character_mode_manifest_coverage():
     without a KotOR install).
     """
     try:
-        from src.core.qt_core.game.kotor_loader import load_model_from_file
+        from src.core.game.kotor_loader import load_model_from_file
     except Exception as exc:
         pytest.skip(f"kotor_loader unavailable: {exc}")
 

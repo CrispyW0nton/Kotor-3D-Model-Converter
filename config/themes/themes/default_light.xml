@@ -73,6 +73,10 @@
         <color name="text.gold" value="#9A7300"/>
         <color name="accent.primary" value="#1F6FEB"/>
         <color name="accent.secondary" value="#008C7E"/>
+        <color name="axis.x" value="#C93434"/>
+        <color name="axis.y" value="#1B8F45"/>
+        <color name="axis.z" value="#1F6FEB"/>
+        <color name="axis.text" value="#FFFFFF"/>
         <color name="transformBar.background" value="#EEF2F6"/>
         <color name="transformBar.border" value="#C8D1DB"/>
         <color name="matrixBar.background" value="#EAF0F7"/>

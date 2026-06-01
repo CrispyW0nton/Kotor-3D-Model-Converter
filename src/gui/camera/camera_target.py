@@ -1,13 +1,9 @@
-"""Camera target handle records."""
+"""Compatibility facade for :mod:`src.core.camera.camera_target`."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from importlib import import_module
+import sys
 
-
-@dataclass
-class CameraTarget:
-    camera_id: str
-    position: tuple[float, float, float]
-    selected: bool = False
-    locked: bool = False
+_module = import_module("src.core.camera.camera_target")
+sys.modules[__name__] = _module

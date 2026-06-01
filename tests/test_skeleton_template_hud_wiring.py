@@ -13,8 +13,37 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_VIEWPORT_SOURCE_FILES = (
+    "src/gui/viewports/viewport_core/shared/dependencies.py",
+    "src/gui/viewports/viewport_core/shared/icons.py",
+    "src/gui/viewports/viewport_core/shared/joint_palette.py",
+    "src/gui/viewports/viewport_core/shared/selection_modes.py",
+    "src/gui/viewports/viewport_core/shared/weight_heatmap.py",
+    "src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
+    "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
+    "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
+    "src/gui/viewports/viewport_core/widgets/state_helpers.py",
+    "src/gui/viewports/viewport_core/widgets/construction.py",
+    "src/gui/viewports/viewport_core/widgets/scene_models.py",
+    "src/gui/viewports/viewport_core/widgets/display_controls.py",
+    "src/gui/viewports/viewport_core/widgets/camera_workflow.py",
+    "src/gui/viewports/viewport_core/widgets/measurement_controls.py",
+    "src/gui/viewports/viewport_core/widgets/transform_camera.py",
+    "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
+    "src/gui/viewports/viewport_core/widgets/history_animation.py",
+    "src/gui/viewports/viewport_core/widgets/event_navigation.py",
+    "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
+    "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
+    "src/gui/viewports/viewport_core/widgets/picking_hover.py",
+    "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
+    "src/gui/viewports/viewport_core/widgets/resource_cache.py",
+    "src/gui/viewports/viewport_core/widgets/variants.py",
+)
+
 
 def _read(relpath: str) -> str:
+    if relpath == "src/gui/viewports/qt_viewport.py":
+        return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
     return (ROOT / relpath).read_text(encoding="utf-8")
 
 
@@ -162,7 +191,7 @@ def test_shift_snaps_viewport_rotation_gimbal_to_ten_degrees() -> None:
 
 def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
-    core = _read("src/gui/rendering/viewport_core.py")
+    core = _read("src/gui/rendering/frame_core/renderer_overlays.py")
 
     assert "self._transform_gizmo.cycle_mode()" in viewport
     assert "def set_gimbal_mode" in viewport
@@ -179,7 +208,7 @@ def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
 
 
 def test_rotation_gimbal_rings_are_hit_testable() -> None:
-    core = _read("src/gui/rendering/viewport_core.py")
+    core = _read("src/gui/rendering/frame_core/renderer_overlays.py")
 
     assert "_gimbal_handle_lines" in core
     assert "self._gimbal_handle_lines.append" in core
@@ -198,7 +227,7 @@ def test_viewport_supports_multi_joint_marquee_and_group_drag() -> None:
 
 def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
-    core = _read("src/gui/rendering/viewport_core.py")
+    core = _read("src/gui/rendering/frame_core/renderer_overlays.py")
     builder = _read("src/gui/panels/qt_character_builder_panel.py")
     inspector = _read("src/gui/panels/qt_inspector_panel.py")
 
@@ -217,12 +246,16 @@ def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
 def test_selected_imported_mesh_outline_uses_projected_mesh_hull_not_bbox() -> None:
     viewport = _read("src/gui/viewports/qt_viewport.py")
 
-    outline_start = viewport.index("def _draw_selected_model_outline")
-    outline_end = viewport.index("def _evict_transform_cache", outline_start)
-    outline_src = viewport[outline_start:outline_end]
+    helper_start = viewport.index("def _draw_hovered_mesh_outline")
+    helper_end = viewport.index("def _draw_selected_model_outline", helper_start)
+    outline_src = viewport[helper_start:helper_end]
+    selected_start = viewport.index("def _draw_selected_model_outline")
+    selected_end = viewport.index("def _draw_mesh_subobject_selection", selected_start)
+    selected_src = viewport[selected_start:selected_end]
 
-    assert "mesh_nodes()" in outline_src
-    assert "hull = lower[:-1] + upper[:-1]" in outline_src
+    assert "self._draw_hovered_mesh_outline(draw, w, h)" in selected_src
+    assert "_projected_mesh_bounds(node, w, h)" in outline_src
+    assert "edge_faces" in outline_src
     assert "_get_render_bounds()" not in outline_src
 
 
@@ -237,7 +270,7 @@ def test_viewport_preloads_textures_for_skin_nodes() -> None:
 
 def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
     workflow = _read("src/core/characters/headless_body_workflow.py")
-    viewport = _read("src/gui/rendering/viewport_core.py")
+    viewport = _read("src/gui/rendering/frame_core/renderer_meshes.py")
 
     assert "def _mark_external_import" in workflow
     assert 'setattr(node, "_external_imported", True)' in workflow
@@ -247,8 +280,15 @@ def test_external_dcc_imports_disable_kotor_uv_seam_repair() -> None:
 
 
 def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -> None:
-    viewport = _read("src/gui/rendering/viewport_core.py")
-    gpu = _read("src/gui/rendering/gpu_renderer.py")
+    viewport = (
+        _read("src/gui/rendering/frame_core/renderer_meshes.py")
+        + _read("src/gui/rendering/frame_core/texture_cache.py")
+    )
+    gpu = (
+        _read("src/gui/rendering/gpu_core/diagnostics.py")
+        + _read("src/gui/rendering/gpu_core/resources.py")
+        + _read("src/gui/rendering/gpu_core/renderer.py")
+    )
 
     assert "FIX-EDGEBLEED (CPU)" in viewport
     assert "FIX-EDGEBLEED (GPU)" in viewport

@@ -8,10 +8,10 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.lighting.lightmap_bake_job import LightmapBakeJob
-from src.gui.lighting.lightmap_bake_settings import LightmapBakeSettings, SUPPORTED_LIGHTMAP_RESOLUTIONS
-from src.gui.lighting.lightmap_bake_worker import LightmapBakeWorker, LightmapPreviewBakeWorker
-from src.gui.lighting.lightmap_baker import LightmapBaker
+from src.adapters.gpu.lightmap_baker import LightmapBaker
+from src.core.lighting.lightmap_bake_job import LightmapBakeJob
+from src.core.lighting.lightmap_bake_settings import LightmapBakeSettings, SUPPORTED_LIGHTMAP_RESOLUTIONS
+from src.gui.dialogs.lightmap_bake_worker import LightmapBakeWorker, LightmapPreviewBakeWorker
 from src.gui.qt_lib.dialogs.lightmap_preview_window import LightmapPreviewWindow
 from src.gui.qt_lib.dialogs.uv_geometry_preview_window import UVGeometryPreviewWindow
 from src.gui.qt_lib.dialogs.uv_preview_window import UVPreviewWindow

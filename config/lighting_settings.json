@@ -1,6 +1,6 @@
 {
   "diffuse_map": true,
-  "environment_map": true,
+  "environment_map": false,
   "last_selected_light": "",
   "light_table_visible_columns": [
     "enabled",
@@ -15,9 +15,9 @@
   "lightmap_mode": "disabled",
   "normal_map": true,
   "scene_lighting_mode": "scene",
-  "selected_lighting_rig_preset": "kotor_original",
-  "shader_complexity_mode": "basic",
-  "show_light_helpers": true,
-  "show_light_radius_volumes": true,
+  "selected_lighting_rig_preset": "none",
+  "shader_complexity_mode": "full_complexity",
+  "show_light_helpers": false,
+  "show_light_radius_volumes": false,
   "specular_map": true
 }

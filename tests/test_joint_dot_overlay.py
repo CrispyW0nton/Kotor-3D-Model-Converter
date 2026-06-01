@@ -688,7 +688,7 @@ def test_t404_snap_to_view_unknown_preset_is_noop():
 
 def test_t404_viewcube_actions_match_legacy_orientation_presets():
     """The ViewCube action map preserves the old F/B/L/R/T/Bo targets."""
-    from src.gui.qt_lib.viewports.viewcube_math import ViewAction
+    from src.math.viewcube_math import ViewAction
 
     app, w = _make_widget()
     expected = {
@@ -755,7 +755,7 @@ def test_t404_ortho_button_label_tracks_state():
 
 def test_external_import_joint_dots_use_preserved_gltf_world_positions():
     """External FBX/glTF skeleton overlays should not use KotOR-only bind math."""
-    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "viewport_core.py").read_text(
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "frame_core" / "renderer_overlays.py").read_text(
         encoding="utf-8"
     )
 
@@ -764,7 +764,7 @@ def test_external_import_joint_dots_use_preserved_gltf_world_positions():
 
 
 def test_external_template_skeleton_overlay_is_scaled_and_uncluttered():
-    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "viewport_core.py").read_text(
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "frame_core" / "renderer_overlays.py").read_text(
         encoding="utf-8"
     )
 
@@ -774,7 +774,7 @@ def test_external_template_skeleton_overlay_is_scaled_and_uncluttered():
 
 
 def test_viewport_texture_cache_loads_common_external_dcc_images():
-    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "viewport_core.py").read_text(
+    source = (_REPO_ROOT / "src" / "gui" / "rendering" / "frame_core" / "texture_cache.py").read_text(
         encoding="utf-8"
     )
 
@@ -797,7 +797,7 @@ def test_t404_snap_view_hidden_when_canvas_too_narrow():
 
 def test_t404_viewcube_face_region_requests_orientation():
     """ViewCube face regions request the same target as the old view buttons."""
-    from src.gui.qt_lib.viewports.viewcube_math import FACE_DIRECTIONS, ViewAction, ViewCubeRegion
+    from src.math.viewcube_math import FACE_DIRECTIONS, ViewAction, ViewCubeRegion
 
     app, w = _make_widget()
     try:
@@ -1070,7 +1070,7 @@ def test_t406_body_modes_reset_canonical_front():
 
 
 def _mesh_node_t407(name: str, texture: str = "pmha01"):
-    from core.qt_core.geometry.model_data import ModelNode, NodeFlags
+    from src.core.geometry.model_data import ModelNode, NodeFlags
 
     node = ModelNode()
     node.name = name
@@ -1085,7 +1085,7 @@ def _mesh_node_t407(name: str, texture: str = "pmha01"):
 
 
 def _model_t407(name: str, child):
-    from core.qt_core.geometry.model_data import KotorModel, ModelClassification, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelClassification, ModelNode
 
     model = KotorModel()
     model.name = name
@@ -1099,8 +1099,9 @@ def _model_t407(name: str, child):
 
 
 def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
-    from core.qt_core.geometry.model_data import is_animation_supermodel
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    from src.core.geometry.model_data import is_animation_supermodel
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     model = _model_t407("s_male02", _mesh_node_t407("eyeRA"))
     model.animations = [object()]
@@ -1113,7 +1114,8 @@ def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
 
 
 def test_t407_normal_head_inner_geometry_still_renders():
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     model = _model_t407("pmhc01", _mesh_node_t407("eyeRA"))
 

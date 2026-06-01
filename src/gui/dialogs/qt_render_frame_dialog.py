@@ -7,7 +7,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
 
-from src.gui.camera.camera_render_settings import RenderSettings
+from src.core.camera.camera_render_settings import RenderSettings
 
 
 class QtRenderFrameDialog(QtWidgets.QDialog):

@@ -106,8 +106,8 @@ def _max_abs_delta_4x4(a, b) -> float:
 
 
 def _setup_resource_manager():
-    from src.core.qt_core.animation.animation_engine import SuperModelResolver
-    from src.core.qt_core.assets.resource_manager import ResourceManager
+    from src.core.animation.animation_engine import SuperModelResolver
+    from src.core.assets.resource_manager import ResourceManager
 
     rm = ResourceManager()
     if not rm.set_k1_dir(K1_DIR):
@@ -128,9 +128,9 @@ def _render_under_g5(*, rm, resref: str, game: str,
     if the render failed. The dump JSONL is written by the renderer
     as a side effect.
     """
-    from src.core.qt_core.assets.resource_manager import resolve_model_textures
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera
+    from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.assets.resource_manager import resolve_model_textures
 
     prior_formula = os.environ.get("GHOSTRIGGER_SKIN_FORMULA")
     prior_dump = os.environ.get("GHOSTRIGGER_SKIN_DUMP")
@@ -247,7 +247,7 @@ def _build_offline_g5_palette(model, skin_node) -> Tuple[
     palette is row-major float matrices indexed by ``palette_slot``
     and ``skin_world`` is the bind-pose skin node world matrix.
     """
-    from src.core.qt_core.animation.gpu_skinning import (
+    from src.core.animation.gpu_skinning import (
         MatrixPaletteUploader,
         _SKIN_FORMULA_ENV,
         _SKIN_FORMULA_G5,

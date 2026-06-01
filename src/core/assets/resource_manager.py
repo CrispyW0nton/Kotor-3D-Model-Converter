@@ -1171,8 +1171,6 @@ def audit_model_textures(model, manager: Optional[ResourceManager] = None,
         return {"model_name": getattr(model, 'name', '?'),
                 "error": "ResourceManager not ready (no game dir set)"}
 
-    from src.core.qt_core.assets.resource_manager import RES_TPC, RES_TGA
-
     model_name = getattr(model, 'name', getattr(model, 'model_name', '?'))
     all_nodes_fn = getattr(model, 'all_nodes', None)
     nodes = list(all_nodes_fn()) if all_nodes_fn else []

@@ -54,6 +54,28 @@ class KMaxScene:
 
     def sync_collections(self) -> None:
         self.model_instances = [obj for obj in self.objects if obj.object_type == "model"]
+        self.lights = [self._asset_payload(obj, "light") for obj in self.objects if obj.object_type == "light"]
+        self.cameras = [self._asset_payload(obj, "camera") for obj in self.objects if obj.object_type == "camera"]
+
+    @staticmethod
+    def _asset_payload(obj: SceneObjectInstance, key: str) -> dict[str, Any]:
+        metadata = dict(getattr(obj, "metadata", {}) or {})
+        payload = dict(metadata.get(key) or {})
+        payload.setdefault("id", obj.id)
+        payload["scene_object_id"] = obj.id
+        payload["name"] = obj.name
+        payload["visible"] = bool(obj.visible)
+        payload["locked"] = bool(obj.locked)
+        payload["selected"] = bool(obj.selected)
+        payload["object_type"] = obj.object_type
+        payload["transform"] = obj.transform.to_dict()
+        source = dict(metadata.get("source") or {})
+        if source:
+            payload["source"] = source
+        runtime = dict(metadata.get("runtime") or {})
+        if runtime:
+            payload["runtime"] = runtime
+        return payload
 
     def mark_dirty(self) -> None:
         self.dirty = True

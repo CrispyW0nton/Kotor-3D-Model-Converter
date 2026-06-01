@@ -7,8 +7,37 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_VIEWPORT_SOURCE_FILES = (
+    "src/gui/viewports/viewport_core/shared/dependencies.py",
+    "src/gui/viewports/viewport_core/shared/icons.py",
+    "src/gui/viewports/viewport_core/shared/joint_palette.py",
+    "src/gui/viewports/viewport_core/shared/selection_modes.py",
+    "src/gui/viewports/viewport_core/shared/weight_heatmap.py",
+    "src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
+    "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
+    "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
+    "src/gui/viewports/viewport_core/widgets/state_helpers.py",
+    "src/gui/viewports/viewport_core/widgets/construction.py",
+    "src/gui/viewports/viewport_core/widgets/scene_models.py",
+    "src/gui/viewports/viewport_core/widgets/display_controls.py",
+    "src/gui/viewports/viewport_core/widgets/camera_workflow.py",
+    "src/gui/viewports/viewport_core/widgets/measurement_controls.py",
+    "src/gui/viewports/viewport_core/widgets/transform_camera.py",
+    "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
+    "src/gui/viewports/viewport_core/widgets/history_animation.py",
+    "src/gui/viewports/viewport_core/widgets/event_navigation.py",
+    "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
+    "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
+    "src/gui/viewports/viewport_core/widgets/picking_hover.py",
+    "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
+    "src/gui/viewports/viewport_core/widgets/resource_cache.py",
+    "src/gui/viewports/viewport_core/widgets/variants.py",
+)
+
 
 def _read(relpath: str) -> str:
+    if relpath == "src/gui/viewports/qt_viewport.py":
+        return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
     return (ROOT / relpath).read_text(encoding="utf-8")
 
 

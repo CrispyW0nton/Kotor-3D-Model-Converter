@@ -10,6 +10,7 @@ from .material_track import MaterialTrack
 from .rig_track import RigTrack
 from .sub_sequence_track import SubSequenceSection, SubSequenceTrack
 from .transform_track import TransformTrack
+from .transform_property_track import TransformPropertyTrack
 from .visibility_track import VisibilityTrack
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "SubSequenceSection",
     "SubSequenceTrack",
     "TransformTrack",
+    "TransformPropertyTrack",
     "VisibilityTrack",
 ]

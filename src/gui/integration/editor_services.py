@@ -8,8 +8,8 @@ from typing import Any, Callable
 
 from PySide6 import QtCore
 
-from src.gui.rendering.renderer_backend import RendererBackend, normalize_renderer_backend
-from src.gui.rendering.renderer_capabilities import (
+from src.core.rendering.renderer_backend import RendererBackend, normalize_renderer_backend
+from src.core.rendering.renderer_capabilities import (
     DIAGNOSTIC_DISPLAY_MODES,
     MODERNGL_DISPLAY_MODES,
     WGPU_DISPLAY_MODES,

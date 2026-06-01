@@ -47,6 +47,10 @@
         <color name="text.gold" value="#D8C66A"/>
         <color name="accent.primary" value="#00FF7A"/>
         <color name="accent.secondary" value="#00D7B5"/>
+        <color name="axis.x" value="#FF4B5E"/>
+        <color name="axis.y" value="#00FF7A"/>
+        <color name="axis.z" value="#45B7FF"/>
+        <color name="axis.text" value="#001A0E"/>
         <color name="matrixBar.background" value="#050A08"/>
         <color name="matrixBar.glyph" value="#00FF7A"/>
         <color name="matrixBar.text" value="#00FF7A"/>

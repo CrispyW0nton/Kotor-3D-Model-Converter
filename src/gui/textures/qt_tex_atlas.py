@@ -2,5 +2,9 @@
 
 from __future__ import annotations
 
-from src.gui.qt_lib.textures.tex_atlas import *  # noqa: F401,F403
+from importlib import import_module
+import sys
+
+_module = import_module("src.core.graphics.tex_atlas")
+sys.modules[__name__] = _module
 

@@ -139,8 +139,8 @@ def _ghost_references(node: Any) -> tuple[dict[int, int], list[dict[str, Any]]]:
 def diagnose(game: str, resref: str, print_source: bool = False) -> int:
     configure_paths()
     from kotormcp.tools.ghostrigger_tools import _resource_pair
-    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
-    from src.core.qt_core.game import kotor_loader
+    from src.core.game import kotor_loader
+    from src.core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     _, mdl, mdx = _resource_pair(game, resref)
     pk_mdl = read_mdl_safe(mdl.data, source_ext=mdx.data if mdx is not None else b"")

@@ -159,11 +159,12 @@ def _foreground_metrics(path: Path, background: tuple[int, int, int]) -> dict[st
 
 
 def _render_png(model: Any, game: str, resref: str, out_dir: Path) -> dict[str, Any]:
-    import src.gui.qt_lib.rendering.viewport_core as viewport_mod
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    import src.core.rendering.frame_core.colors as viewport_colors
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
-    old_bg = getattr(viewport_mod, "_BG", (18, 18, 40, 255))
-    viewport_mod._BG = (0, 0, 0, 255)
+    old_bg = getattr(viewport_colors, "_BG", (18, 18, 40, 255))
+    viewport_colors._BG = (0, 0, 0, 255)
     renderer = FrameRenderer(ArcBallCamera())
     renderer.show_texture = False
     renderer.show_bones = False
@@ -176,7 +177,7 @@ def _render_png(model: Any, game: str, resref: str, out_dir: Path) -> dict[str, 
         path = out_dir / f"{game}_{resref}_visual_audit.png"
         image.save(path)
     finally:
-        viewport_mod._BG = old_bg
+        viewport_colors._BG = old_bg
 
     metrics = _foreground_metrics(path, (0, 0, 0))
     metrics["path"] = str(path)
@@ -204,7 +205,8 @@ def _select_models(limit: int) -> list[str]:
 
 
 def audit_model(resref: str, out_dir: Path) -> dict[str, Any]:
-    from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     result: dict[str, Any] = {"game": "k2", "resref": resref}
     try:

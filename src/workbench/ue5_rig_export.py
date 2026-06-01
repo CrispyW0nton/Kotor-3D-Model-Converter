@@ -15,6 +15,8 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
+from src.adapters.files import LocalFileWriter
+from src.core.ports import FileWriterPort
 from src.core.retargeting.fbx_exporter import (
     BLENDER_SCRIPT,
     FBXExportManifest,
@@ -40,6 +42,7 @@ class UE5RigExportRequest:
     animation_name: str
     output_dir: Path
     rename_map_path: Path | None = None
+    file_writer: FileWriterPort | None = None
 
 
 @dataclass(frozen=True)
@@ -107,8 +110,9 @@ def export_ue5_rig(request: UE5RigExportRequest) -> UE5RigExportResult:
             rename_map_path=Path(request.rename_map_path or DEFAULT_RENAME_MAP_PATH),
             setup_notes_path=setup_notes_path,
         )
-        _write_json(manifest_path, workbench_manifest)
-        _write_setup_notes(setup_notes_path, workbench_manifest)
+        file_writer = request.file_writer or LocalFileWriter()
+        _write_json(manifest_path, workbench_manifest, file_writer)
+        _write_setup_notes(setup_notes_path, workbench_manifest, file_writer)
         return UE5RigExportResult(
             success=True,
             fbx_path=Path(export_manifest.fbx_path),
@@ -314,7 +318,7 @@ def _build_workbench_manifest(
     }
 
 
-def _write_setup_notes(path: Path, manifest: dict[str, Any]) -> None:
+def _write_setup_notes(path: Path, manifest: dict[str, Any], file_writer: FileWriterPort) -> None:
     source = manifest["source"]
     output = manifest["output"]
     skeleton = manifest["skeleton"]
@@ -397,12 +401,11 @@ To play it without retargeting, open the imported Animation Sequence asset and a
 
 Generated automatically. Re-export from Ghost Rigger if settings change.
 """
-    path.write_text(text, encoding="utf-8")
+    file_writer.write_text(path, text, encoding="utf-8")
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+def _write_json(path: Path, payload: dict[str, Any], file_writer: FileWriterPort) -> None:
+    file_writer.write_text(path, json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _git_commit_sha() -> str:

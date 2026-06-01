@@ -10,7 +10,7 @@ The template is saved as ASCII MDL + a JSON manifest alongside it.
 
 Usage
 -----
-    from core.qt_core.templates.template_builder import build_humanoid_template
+    from core.templates.template_builder import build_humanoid_template
     model = build_humanoid_template(game_version='K1')
     model.name = 'gr_humanoid_template'
 
@@ -356,19 +356,7 @@ def build_humanoid_template(
     -------
     KotorModel ready for export as ASCII or binary MDL.
     """
-    import sys, os
-    _src = os.path.join(os.path.dirname(__file__), '..', '..')
-    if _src not in sys.path:
-        sys.path.insert(0, _src)
-
-    try:
-        from core.qt_core.geometry.model_data import (  # type: ignore
-            KotorModel, ModelNode, NodeFlags, GameVersion, Animation,
-        )
-    except ImportError:
-        from src.core.qt_core.geometry.model_data import (  # type: ignore
-            KotorModel, ModelNode, NodeFlags, GameVersion, Animation,
-        )
+    from ..geometry.model_data import Animation, GameVersion, KotorModel, ModelNode, NodeFlags
 
     gv = GameVersion.K2 if game_version.upper() == 'K2' else GameVersion.K1
 
@@ -443,9 +431,9 @@ def _add_placeholder_body(model, root_node, node_map):
     """Add a simple low-poly T-pose body mesh to make the template visible."""
     try:
         try:
-            from core.qt_core.geometry.model_data import ModelNode, NodeFlags  # type: ignore
+            from core.geometry.model_data import ModelNode, NodeFlags  # type: ignore
         except ImportError:
-            from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags  # type: ignore
+            from src.core.geometry.model_data import ModelNode, NodeFlags  # type: ignore
         mesh_flags = int(NodeFlags.HEADER | NodeFlags.MESH)
         body = ModelNode(name='gr_body_placeholder', flags=mesh_flags)
         body.parent  = root_node
@@ -625,9 +613,9 @@ def validate_animations_via_pykotor(
     # Fallback: parse using kotor_loader (PyKotor direct)
     try:
         try:
-            from core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.game.kotor_loader import load_model_from_bytes  # type: ignore
         except ImportError:
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from src.core.game.kotor_loader import load_model_from_bytes  # type: ignore
 
         model = load_model_from_bytes(mdl_bytes, mdx_bytes)
         if model is None:

@@ -35,7 +35,7 @@ def _load_module_direct(name: str, path: pathlib.Path):
 try:
     picker = _load_module_direct(
         "ghostrigger_skeleton_template_picker_under_test",
-        _SRC_DIR / "core" / "skeleton_template_picker.py",
+        _SRC_DIR / "core" / "animation_retargeting" / "skeleton_template_picker.py",
     )
 except Exception as exc:  # pragma: no cover
     pytest.skip(f"skeleton_template_picker unavailable: {exc}",

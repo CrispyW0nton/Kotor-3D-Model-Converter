@@ -111,6 +111,23 @@ Clear any active animation pose from the viewport:
 viewport().clear_animation_pose()
 ```
 
+Create a focused custom viewport widget module:
+
+```python
+create_viewport_widget("Orbit Gizmo")
+```
+
+Create a viewport behavior mixin scaffold:
+
+```python
+create_viewport_widget("orbit selection", kind="mixin")
+```
+
+The scaffold is written under `src/gui/viewports/viewport_core/widgets/` and
+returns the created path, class name, module name, and next steps. Use
+`public_export=True` when the new widget should become part of the public lazy
+viewport API.
+
 ## Logging
 
 Write to the Output Log from the terminal:
@@ -118,4 +135,3 @@ Write to the Output Log from the terminal:
 ```python
 window._log("Hello from the Python terminal", "info")
 ```
-

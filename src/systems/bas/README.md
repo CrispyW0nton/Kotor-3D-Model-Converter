@@ -8,9 +8,12 @@ not be replaced by skeletal grafting or by cached bind-pose placement.
 
 - The body remains the animation owner. Body playback must continue to run on
   the original body model.
+- BAS defaults to the headless-body workflow. Full-body characters use a
+  separate BAS mode where the existing head is not replaced, but equipment can
+  still follow authored hooks on the full model.
 - Attachments are layers, not new body bones. BAS heads, weapons, masks,
   armbands, and future equipment attach to game dummy/socket nodes such as
-  `headhook`, `lhand`, and `rhand`.
+  `headhook`, `MaskHook`, `GoggleHook`, `lhand`, `rhand`, and `pelvis_g`.
 - BAS layers follow the animated socket transform every frame. WGPU/D3D and ModernGL/OpenGL must both resolve the live animation pose before drawing an
   attachment.
 - BAS skin meshes stay out of the body skin palette. Attached head skins are
@@ -23,6 +26,9 @@ not be replaced by skeletal grafting or by cached bind-pose placement.
   the item into the body skeleton, or disturb lightsaber identity placement.
 - The anatomical `L. HAND` and `R. HAND` slots are sockets only. Items attach
   through `L. Weapon` and `R. Wep`.
+- Head equipment attaches through `MaskHook` and `GoggleHook` on the attached
+  head for headless-body BAS builds, or on the loaded character model in
+  full-body BAS mode. Belts attach to the waist through `pelvis_g`.
 
 These rules prevent the classic BAS failure modes: exploding body meshes,
 detached/static heads, weapons frozen in bind pose, or duplicate head/body bones

@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from .kmax_scene import KMAX_FILE_TYPE, KMAX_FILE_VERSION, KMaxScene, utc_now_iso
 from .kmax_validator import KMaxValidator, KMaxValidationResult
+from .scene_object import Transform
 from .scene_object_instance import SceneObjectInstance
 
 
@@ -68,6 +70,7 @@ class KMaxSerializer:
         scene_block = migrated.get("scene") or {}
         object_payloads = migrated.get("objects") or migrated.get("models") or []
         objects = [SceneObjectInstance.from_dict(obj) for obj in object_payloads if isinstance(obj, dict)]
+        objects.extend(cls._legacy_asset_objects(migrated, objects))
         scene = KMaxScene(
             id=str(scene_block.get("id") or ""),
             name=str(scene_block.get("name") or "Untitled Scene"),
@@ -87,6 +90,49 @@ class KMaxSerializer:
         )
         scene.sync_collections()
         return scene
+
+    @classmethod
+    def _legacy_asset_objects(
+        cls,
+        data: dict[str, Any],
+        existing: list[SceneObjectInstance],
+    ) -> list[SceneObjectInstance]:
+        existing_ids = {obj.id for obj in existing}
+        created: list[SceneObjectInstance] = []
+        for object_type, key in (("light", "lights"), ("camera", "cameras")):
+            for entry in data.get(key) or []:
+                if not isinstance(entry, dict):
+                    continue
+                object_id = str(entry.get("scene_object_id") or entry.get("id") or "")
+                if not object_id:
+                    object_id = f"{object_type}-{uuid4().hex}"
+                if object_id in existing_ids:
+                    continue
+                existing_ids.add(object_id)
+                transform = entry.get("transform") if isinstance(entry.get("transform"), dict) else None
+                if transform is None:
+                    transform = {"position": entry.get("position", (0.0, 0.0, 0.0))}
+                payload = dict(entry)
+                payload["id"] = object_id
+                payload.setdefault("scene_object_id", object_id)
+                created.append(
+                    SceneObjectInstance(
+                        id=object_id,
+                        name=str(entry.get("name") or object_type.title()),
+                        object_type=object_type,
+                        transform=Transform.from_dict(transform),
+                        visible=bool(entry.get("visible", True)),
+                        locked=bool(entry.get("locked", False)),
+                        selected=bool(entry.get("selected", False)),
+                        group_id=str(entry.get("group_id") or ""),
+                        metadata={
+                            object_type: payload,
+                            "source": dict(entry.get("source") or {}),
+                            "runtime": dict(entry.get("runtime") or {}),
+                        },
+                    )
+                )
+        return created
 
     @staticmethod
     def validate(data: dict[str, Any]) -> KMaxValidationResult:

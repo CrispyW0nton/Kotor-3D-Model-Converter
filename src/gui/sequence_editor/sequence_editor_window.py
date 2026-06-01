@@ -24,6 +24,7 @@ from src.sequence.tracks.light_property_track import LightPropertyTrack
 from src.sequence.tracks.material_track import MaterialTrack
 from src.sequence.tracks.rig_track import RigTrack
 from src.sequence.tracks.sub_sequence_track import SubSequenceTrack
+from src.sequence.tracks.transform_property_track import TransformPropertyTrack
 from src.sequence.tracks.transform_track import TransformTrack
 from src.sequence.tracks.visibility_track import VisibilityTrack
 
@@ -90,6 +91,12 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self._play_timer.timeout.connect(self._tick_playback)
         if self.source_viewport is not None and hasattr(self.source_viewport, "nodeMoved"):
             self.source_viewport.nodeMoved.connect(self._on_scene_object_changed)
+        camera_panel = getattr(main_window, "camera_panel", None)
+        if camera_panel is not None and hasattr(camera_panel, "cameraChanged"):
+            camera_panel.cameraChanged.connect(self._on_camera_panel_changed)
+        lighting_panel = getattr(main_window, "lighting_panel", None)
+        if lighting_panel is not None and hasattr(lighting_panel, "lightChanged"):
+            lighting_panel.lightChanged.connect(self._on_lighting_panel_changed)
 
     def apply_ghost_theme(self, theme) -> None:
         update_legacy_palette(theme)
@@ -110,8 +117,12 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
         self.outliner.setMinimumWidth(layout.panel("animationLibrary").min_width)
         self.properties_panel.setMinimumWidth(layout.panel("properties").min_width)
+        if hasattr(self.outliner, "apply_ghost_layout"):
+            self.outliner.apply_ghost_layout(layout)
+        self._sync_timeline_row_metrics()
         if hasattr(self.timeline, "apply_ghost_layout"):
             self.timeline.apply_ghost_layout(layout)
+            self._sync_timeline_row_metrics()
         if hasattr(self.transport, "apply_ghost_layout"):
             self.transport.apply_ghost_layout(layout)
 
@@ -247,6 +258,8 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.toolbar.saveAsSequence.connect(self._save_sequence_as)
         self.toolbar.renderSequence.connect(self._render_sequence)
         self.toolbar.addSelectedObject.connect(self._add_selected_object)
+        self.toolbar.createCamera.connect(self._create_and_bind_camera)
+        self.toolbar.createLight.connect(self._create_and_bind_light)
         self.toolbar.addTrack.connect(self._add_track)
         self.toolbar.addCameraCut.connect(self._add_camera_cut)
         self.toolbar.setKey.connect(self._set_key)
@@ -265,6 +278,11 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.transport.speedChanged.connect(self.playback.set_speed)
         self.outliner.track_list.trackSelected.connect(self._on_track_selected)
         self.outliner.track_list.bindingSelected.connect(self._on_binding_selected)
+        self.outliner.track_list.addSelectedObjectRequested.connect(self._add_selected_object)
+        self.outliner.track_list.addTrackRequested.connect(self._add_track)
+        self.outliner.track_list.addCameraCutRequested.connect(self._add_camera_cut)
+        self.outliner.track_list.deleteSelectionRequested.connect(self._delete_selected_outliner_item)
+        self.outliner.track_list.hierarchyChanged.connect(self._sync_timeline_rows)
         self.properties_panel.sequenceChanged.connect(self._sequence_changed)
         self.refresh_library_btn.clicked.connect(self._refresh_sequence_combo)
         self.sequence_combo.activated.connect(self._load_selected_combo_sequence)
@@ -289,8 +307,9 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.sequence = sequence
         self.playback.set_sequence(sequence)
         self.evaluator.capture_original_state(sequence)
-        self.timeline.set_sequence(sequence)
         self.outliner.set_sequence(sequence)
+        self._sync_timeline_row_metrics()
+        self.timeline.set_sequence(sequence)
         self.properties_panel.set_sequence(sequence)
         self.transport.set_frame_range(sequence.start_frame, sequence.end_frame)
         self.transport.set_frame(sequence.current_frame)
@@ -389,6 +408,34 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.outliner.track_list.setCurrentItem(self._find_binding_item(binding.binding_id))
         self._set_status(f"Bound {binding.display_name}")
 
+    def _create_and_bind_camera(self, camera_type: str) -> None:
+        if self.sequence is None or self.main_window is None:
+            return
+        creator = getattr(self.main_window, "_create_scene_camera_object", None)
+        if not callable(creator):
+            return
+        scene_obj = creator(str(camera_type or "Cinematic Camera"))
+        if scene_obj is None:
+            return
+        binding = self.manager.add_object_binding(self.sequence, scene_obj)
+        self._sequence_changed()
+        self.outliner.track_list.setCurrentItem(self._find_binding_item(binding.binding_id))
+        self._set_status(f"Created and bound {binding.display_name}")
+
+    def _create_and_bind_light(self, light_type: str) -> None:
+        if self.sequence is None or self.main_window is None:
+            return
+        creator = getattr(self.main_window, "_create_scene_light_object", None)
+        if not callable(creator):
+            return
+        scene_obj = creator(str(light_type or "point"))
+        if scene_obj is None:
+            return
+        binding = self.manager.add_object_binding(self.sequence, scene_obj)
+        self._sequence_changed()
+        self.outliner.track_list.setCurrentItem(self._find_binding_item(binding.binding_id))
+        self._set_status(f"Created and bound {binding.display_name}")
+
     def _add_track(self, track_type: str) -> None:
         if self.sequence is None:
             return
@@ -396,24 +443,51 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if binding is None:
             obj = self._selected_scene_object()
             binding = self.manager.add_object_binding(self.sequence, obj) if obj is not None else None
-        if binding is None and track_type != "Camera Cut":
+        master_track_types = {"Camera Cut", "Sub Sequence", "Event"}
+        if binding is None and track_type not in master_track_types:
             QtWidgets.QMessageBox.information(self, "Add Track", "Select or bind an object first.")
             return
         track = self._make_track(track_type, binding)
-        if isinstance(track, CameraCutTrack):
+        if isinstance(track, CameraCutTrack) or (binding is None and isinstance(track, (SubSequenceTrack, EventTrack))):
             self.sequence.master_tracks.append(track)
         elif binding is not None:
             binding.add_track(track)
         self._sequence_changed()
         self._set_status(f"Added {track.track_type} track")
 
+    def _delete_selected_outliner_item(self) -> None:
+        if self.sequence is None:
+            return
+        track = self.outliner.track_list.selected_track()
+        binding = self.outliner.track_list.selected_binding()
+        if track is not None:
+            removed = False
+            if track in self.sequence.master_tracks:
+                self.sequence.master_tracks = [item for item in self.sequence.master_tracks if item.track_id != track.track_id]
+                removed = True
+            elif binding is not None:
+                before = len(binding.tracks)
+                binding.tracks = [item for item in binding.tracks if item.track_id != track.track_id]
+                removed = len(binding.tracks) != before
+            if removed:
+                self._sequence_changed()
+                self._set_status(f"Deleted {track.track_type} track")
+            return
+        if binding is not None and self.sequence.remove_binding(binding.binding_id):
+            self._sequence_changed()
+            self._set_status(f"Deleted binding {binding.display_name}")
+
     def _make_track(self, track_type: str, binding) -> Any:
+        base_type, property_name = self._split_track_spec(track_type)
+        track_type = base_type
         if track_type == "Transform":
             return TransformTrack(parent_binding_id=getattr(binding, "binding_id", ""))
+        if track_type == "Transform Property":
+            return TransformPropertyTrack(parent_binding_id=binding.binding_id, property_name=property_name or "position")
         if track_type == "Camera Property":
-            return CameraPropertyTrack(parent_binding_id=binding.binding_id, property_name="focal_length_mm")
+            return CameraPropertyTrack(parent_binding_id=binding.binding_id, property_name=property_name or "focal_length_mm")
         if track_type == "Light Property":
-            return LightPropertyTrack(parent_binding_id=binding.binding_id, property_name="intensity")
+            return LightPropertyTrack(parent_binding_id=binding.binding_id, property_name=property_name or "intensity")
         if track_type == "Visibility":
             return VisibilityTrack(parent_binding_id=binding.binding_id)
         if track_type == "Material":
@@ -427,6 +501,14 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if track_type == "Sub Sequence":
             return SubSequenceTrack()
         return TransformTrack(parent_binding_id=getattr(binding, "binding_id", ""))
+
+    @staticmethod
+    def _split_track_spec(track_type: str) -> tuple[str, str]:
+        text = str(track_type or "")
+        if ":" not in text:
+            return text, ""
+        base, prop = text.split(":", 1)
+        return base.strip(), prop.strip()
 
     def _add_camera_cut(self) -> None:
         if self.sequence is None:
@@ -466,7 +548,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                 binding.add_track(track)
         obj = self.evaluator.resolver.resolve(binding) if binding is not None else self._selected_scene_object()
         self._key_track(track, obj)
-        self._sequence_changed()
+        self._sequence_changed(evaluate=False)
 
     def _key_track(self, track, obj) -> None:
         if self.sequence is None:
@@ -480,6 +562,8 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                 scale=getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))),
                 select=True,
             )
+        elif isinstance(track, TransformPropertyTrack) and obj is not None:
+            track.add_keyframe(frame, self._transform_property_value(obj, track.property_name), select=True)
         elif isinstance(track, VisibilityTrack) and obj is not None:
             visible = not bool(getattr(obj, "_gr_hidden", getattr(obj, "_gr_light_hidden", getattr(obj, "_gr_camera_hidden", False))))
             track.add_keyframe(frame, visible, select=True)
@@ -488,8 +572,25 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             target = camera if camera is not None else obj
             track.add_keyframe(frame, getattr(target, track.property_name, 0.0), select=True)
         elif isinstance(track, LightPropertyTrack) and obj is not None:
-            attr = {"intensity": "light_multiplier", "radius": "light_radius", "color": "light_color"}.get(track.property_name, track.property_name)
-            track.add_keyframe(frame, getattr(obj, attr, 0.0), select=True)
+            attr = {
+                "enabled": "light_enabled",
+                "visible": "_gr_light_hidden",
+                "color": "light_color",
+                "intensity": "light_multiplier",
+                "radius": "light_radius",
+                "cone_angle": "light_cone_degrees",
+                "area_size": "light_area_size",
+                "ambient_only": "light_ambient_only",
+                "casts_shadows": "light_shadow",
+                "affects_diffuse": "light_affects_diffuse",
+                "affects_specular": "light_affects_specular",
+                "affects_lightmap": "light_affects_lightmap",
+                "affects_environment": "light_affects_environment",
+            }.get(track.property_name, track.property_name)
+            value = getattr(obj, attr, 0.0)
+            if track.property_name == "visible":
+                value = not bool(value)
+            track.add_keyframe(frame, value, select=True)
         elif isinstance(track, MaterialTrack) and obj is not None:
             attr = {"opacity": "alpha", "material_color": "diffuse"}.get(track.property_name, track.property_name)
             track.add_keyframe(frame, getattr(obj, attr, 0.0), select=True)
@@ -497,6 +598,27 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             track.add_event_key(frame, "Custom Event", {})
         else:
             track.add_keyframe(frame, None, select=True)
+
+    def _transform_property_value(self, obj, property_name: str):
+        prop = str(property_name or "")
+        position = tuple(float(v) for v in tuple(getattr(obj, "position", (0.0, 0.0, 0.0)))[:3])
+        rotation = quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        scale = tuple(float(v) for v in tuple(getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))))[:3])
+        values = {
+            "position": position,
+            "position_x": position[0],
+            "position_y": position[1],
+            "position_z": position[2],
+            "rotation": rotation,
+            "rotation_x": rotation[0],
+            "rotation_y": rotation[1],
+            "rotation_z": rotation[2],
+            "scale": scale,
+            "scale_x": scale[0],
+            "scale_y": scale[1],
+            "scale_z": scale[2],
+        }
+        return values.get(prop, position)
 
     def _set_frame(self, frame: int) -> None:
         if self.sequence is None:
@@ -521,10 +643,39 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self._last_evaluated_frame = self.sequence.current_frame
         self.transport.set_frame(self.sequence.current_frame)
         self._set_status(f"Frame {self.sequence.current_frame} | {self.sequence.name}")
+        self._request_preview_redraw(scrubbing=scrubbing)
+
+    def _request_preview_redraw(self, *, scrubbing: bool) -> None:
+        viewport = self._preview_viewport()
+        if viewport is None:
+            return
+        request = getattr(viewport, "_request_render", None)
+        if callable(request):
+            try:
+                request(
+                    fast=True,
+                    reason="sequence playback" if not scrubbing else "sequence scrub",
+                    scene=True,
+                    camera=True,
+                    overlay=True,
+                    lighting=True,
+                    gizmo=True,
+                    selection=True,
+                )
+                return
+            except Exception:
+                pass
+        refresh = getattr(viewport, "refresh_view", None)
+        if callable(refresh):
+            try:
+                refresh()
+            except Exception:
+                pass
 
     def _tick_playback(self) -> None:
         if self.sequence is None:
             return
+        self._set_preview_playback_active(True)
         previous = self.sequence.current_frame
         tick = self.playback.tick()
         self.transport.set_playing(tick.playing)
@@ -532,14 +683,34 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self._evaluate_current(scrubbing=False, previous_frame=previous)
         if not tick.playing:
             self._play_timer.stop()
+            self._set_preview_playback_active(False)
 
     def _toggle_play(self) -> None:
         self.playback.toggle_play()
         self.transport.set_playing(self.playback.playing)
+        self._set_preview_playback_active(self.playback.playing)
         if self.playback.playing:
             self._play_timer.start()
         else:
             self._play_timer.stop()
+
+    def _set_preview_playback_active(self, active: bool) -> None:
+        viewport = self._preview_viewport()
+        if viewport is None:
+            return
+        setter = getattr(viewport, "set_animation_playback_active", None)
+        if callable(setter):
+            try:
+                setter(bool(active), reason="sequence playback")
+                return
+            except Exception:
+                pass
+        governor = getattr(viewport, "_frame_governor", None)
+        if governor is not None and hasattr(governor, "set_animation_playing"):
+            try:
+                governor.set_animation_playing(bool(active), "sequence playback")
+            except Exception:
+                pass
 
     def _previous_key(self) -> None:
         if self.sequence is None:
@@ -567,15 +738,46 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _on_scene_object_changed(self, obj) -> None:
         if not self.auto_key_enabled or self.sequence is None or obj is None:
             return
+        self._auto_key_object(obj, preferred=(TransformPropertyTrack, TransformTrack), create_transform=True)
+
+    def _on_camera_panel_changed(self) -> None:
+        if not self.auto_key_enabled or self.sequence is None:
+            return
+        camera = getattr(getattr(self.main_window, "camera_panel", None), "_selected", None)
+        obj = getattr(camera, "original_ref", None)
+        self._auto_key_object(
+            obj,
+            preferred=(TransformPropertyTrack, TransformTrack, CameraPropertyTrack),
+            create_transform=False,
+        )
+
+    def _on_lighting_panel_changed(self) -> None:
+        if not self.auto_key_enabled or self.sequence is None:
+            return
+        obj = getattr(getattr(self.main_window, "lighting_panel", None), "_selected", None)
+        self._auto_key_object(obj, preferred=(LightPropertyTrack,), create_transform=False)
+
+    def _auto_key_object(self, obj, *, preferred: tuple[type, ...], create_transform: bool) -> None:
+        if self.sequence is None or obj is None:
+            return
         object_id = ensure_sequence_object_id(obj)
         binding = next((item for item in self.sequence.bindings if item.target_object_id == object_id), None)
         if binding is None:
             return
-        for track in binding.tracks:
-            if isinstance(track, TransformTrack):
-                self._key_track(track, obj)
-                self._sequence_changed()
-                break
+        selected = self.outliner.track_list.selected_track()
+        if selected is not None and selected.parent_binding_id == binding.binding_id and isinstance(selected, preferred):
+            targets = [selected]
+        else:
+            targets = [track for track in binding.tracks if isinstance(track, preferred)]
+        if not targets and create_transform:
+            track = TransformTrack(parent_binding_id=binding.binding_id)
+            binding.add_track(track)
+            targets = [track]
+        if not targets:
+            return
+        for track in targets:
+            self._key_track(track, obj)
+        self._sequence_changed(evaluate=False)
 
     def _copy_keys(self) -> None:
         if self.sequence is not None:
@@ -686,15 +888,60 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _refresh_properties(self) -> None:
         self.properties_panel.refresh_info()
 
-    def _sequence_changed(self) -> None:
+    def _sequence_changed(self, *, evaluate: bool = True) -> None:
         if self.sequence is None:
             return
+        selection_key = self._outliner_selection_key()
         self.sequence.touch()
-        self.timeline.set_sequence(self.sequence)
         self.outliner.set_sequence(self.sequence)
+        self._restore_outliner_selection_key(selection_key)
+        self._sync_timeline_row_metrics()
+        self.timeline.set_sequence(self.sequence)
         self.properties_panel.refresh()
         self.transport.set_frame_range(self.sequence.start_frame, self.sequence.end_frame)
-        self._evaluate_current(scrubbing=True)
+        if evaluate:
+            self._evaluate_current(scrubbing=True)
+        else:
+            self._last_evaluated_frame = self.sequence.current_frame
+            self.transport.set_frame(self.sequence.current_frame)
+            self._set_status(f"Frame {self.sequence.current_frame} | {self.sequence.name}")
+            self._request_preview_redraw(scrubbing=True)
+
+    def _outliner_selection_key(self) -> tuple[str, str] | None:
+        item = self.outliner.track_list.currentItem()
+        if item is None:
+            return None
+        data = item.data(0, QtCore.Qt.UserRole)
+        if not isinstance(data, tuple) or len(data) != 2:
+            return None
+        return (str(data[0]), str(data[1]))
+
+    def _restore_outliner_selection_key(self, key: tuple[str, str] | None) -> None:
+        if key is None:
+            return
+        tree = self.outliner.track_list
+        root = tree.invisibleRootItem()
+        stack = [root.child(index) for index in range(root.childCount())]
+        while stack:
+            item = stack.pop(0)
+            data = item.data(0, QtCore.Qt.UserRole)
+            if isinstance(data, tuple) and len(data) == 2 and (str(data[0]), str(data[1])) == key:
+                tree.setCurrentItem(item)
+                return
+            stack.extend(item.child(index) for index in range(item.childCount()))
+
+    def _sync_timeline_row_metrics(self) -> None:
+        track_list = getattr(getattr(self, "outliner", None), "track_list", None)
+        if track_list is None or not hasattr(self, "timeline"):
+            return
+        self.timeline.set_row_metrics(
+            row_height=track_list.row_height(),
+            ruler_height=track_list.header_height(),
+        )
+
+    def _sync_timeline_rows(self) -> None:
+        self._sync_timeline_row_metrics()
+        self.timeline.update()
 
     def _apply_layout_mode(self, mode: str) -> None:
         wants_viewport = mode in {"Timeline + Viewport", "Dual Viewport + Timeline", "Curve Editor + Viewport", "Camera Cut Review + Viewport"}

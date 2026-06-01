@@ -18,8 +18,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.converters.mesh_converter import FBXExporter
-from src.core.qt_core.assets.resource_manager import ResourceManager
-from src.core.qt_core.export.unity_export_bridge import export_model_for_unity
+from src.core.assets.resource_manager import ResourceManager
+from src.core.export.unity_export_bridge import export_model_for_unity
 
 
 class _ResourceTextureCache:

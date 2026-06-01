@@ -14,7 +14,7 @@ from typing import Iterable
 from PySide6 import QtCore
 
 from src.core.project.resource_address import ResourceAddress
-from src.core.resources.game_resource_provider import (
+from src.core.ports import (
     GameResourceProvider,
     GameResourceQuery,
     GameResourceRecord,

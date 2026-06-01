@@ -189,9 +189,9 @@ class SkeletonTemplateQueryResult:
 
 def _import_character_builder():  # pragma: no cover - import shim
     try:
-        from src.core.qt_core.characters import character_builder as _cb  # type: ignore
+        from src.core.characters import character_builder as _cb  # type: ignore
     except ImportError:
-        from core.qt_core.characters import character_builder as _cb      # type: ignore
+        from core.characters import character_builder as _cb      # type: ignore
     return _cb
 
 

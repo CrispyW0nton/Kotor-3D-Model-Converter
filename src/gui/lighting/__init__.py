@@ -1,25 +1,33 @@
-"""Editable lighting workflow helpers for the Qt viewport."""
+"""Compatibility package for editable lighting workflow helpers."""
 
-from .light_types import (
-    LightSourceType,
-    LightType,
-    LightingRigPreset,
-    LightmapMode,
-    SceneLightingMode,
-    ShaderComplexityMode,
-)
-from .light_model import GhostRiggerLight
-from .light_grouping import LightGroup
-from .light_manager import LightManager
+from __future__ import annotations
 
-__all__ = [
-    "GhostRiggerLight",
-    "LightGroup",
-    "LightManager",
-    "LightSourceType",
-    "LightType",
-    "LightingRigPreset",
-    "LightmapMode",
-    "SceneLightingMode",
-    "ShaderComplexityMode",
-]
+from importlib import import_module
+from typing import Any
+
+_EXPORTS = {
+    "GhostRiggerLight": "src.core.lighting.light_model",
+    "LightGroup": "src.core.lighting.light_grouping",
+    "LightManager": "src.core.lighting.light_manager",
+    "LightSourceType": "src.core.lighting.light_types",
+    "LightType": "src.core.lighting.light_types",
+    "LightingRigPreset": "src.core.lighting.light_types",
+    "LightmapMode": "src.core.lighting.light_types",
+    "SceneLightingMode": "src.core.lighting.light_types",
+    "ShaderComplexityMode": "src.core.lighting.light_types",
+}
+
+__all__ = tuple(_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    target = _EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(target), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))

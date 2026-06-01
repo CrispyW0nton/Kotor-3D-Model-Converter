@@ -18,6 +18,7 @@ LIGHT_PROPERTIES = {
     "cone_angle",
     "area_size",
     "ambient_only",
+    "casts_shadows",
     "affects_diffuse",
     "affects_specular",
     "affects_lightmap",

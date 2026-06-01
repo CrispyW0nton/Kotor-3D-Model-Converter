@@ -18,7 +18,8 @@ from src.gui.libtheme.theme_loader import ThemeLoader
 from src.gui.libtheme.theme_manager import ThemeManager
 from src.gui.libtheme.layout_manager import LayoutManager
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog
-from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+from src.core.camera.arcball_camera import ArcBallCamera
+from src.core.rendering.frame_core.renderer import FrameRenderer
 from src.gui.qt_lib.viewports.qt_transform_typein_bar import transform_bar_stylesheet
 
 
@@ -808,8 +809,8 @@ def test_viewport_chrome_and_renderer_use_theme_tokens() -> None:
 
 
 def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
-    from src.gui.rendering.renderer_backend import RendererBackend
-    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.renderer_backend import RendererBackend
 
     theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_classic.xml")
     assert theme is not None
@@ -829,8 +830,8 @@ def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
 
 
 def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
-    from src.gui.rendering.renderer_backend import RendererBackend
-    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.renderer_backend import RendererBackend
 
     renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
 
@@ -851,8 +852,8 @@ def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
 
 
 def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
-    from src.gui.rendering.renderer_backend import RendererBackend
-    from src.gui.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.renderer_backend import RendererBackend
 
     renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
     renderer.format = "bgra8unorm-srgb"
@@ -875,8 +876,8 @@ def test_viewport_emits_persistent_render_state_status() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.gui.qt_lib.rendering.renderer_backend import RendererBackend
-    from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+    from src.core.rendering.renderer_backend import RendererBackend
+    from src.core.rendering.renderer_settings import RendererSettings
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -906,7 +907,7 @@ def test_viewport_renderer_settings_noop_does_not_recreate_wgpu_surface() -> Non
 
     from PySide6 import QtWidgets
 
-    from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+    from src.core.rendering.renderer_settings import RendererSettings
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     class FakeRenderer:
@@ -971,7 +972,7 @@ def test_native_viewport_theme_keeps_overlay_render_path_available() -> None:
 
     pytest.importorskip("PIL")
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])

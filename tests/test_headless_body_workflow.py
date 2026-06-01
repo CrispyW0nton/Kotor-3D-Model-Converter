@@ -1450,7 +1450,7 @@ def test_t1204_animation_library_lists_real_supermodel_chain(monkeypatch):
         def load_model(self, resref, game="K1"):
             return super_model if str(resref).lower() == "s_male02" else None
 
-    from src.core.qt_core.animation.animation_engine import SuperModelResolver
+    from src.core.animation.animation_engine import SuperModelResolver
 
     SuperModelResolver.clear_cache()
     SuperModelResolver.configure(_RM())

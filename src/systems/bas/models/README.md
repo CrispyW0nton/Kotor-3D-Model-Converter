@@ -19,8 +19,11 @@ Each recipe uses the `ghostrigger.bas.model` schema and currently stores:
 
 - `game`: source game used for the body and attachments, such as `K1` or `K2`.
 - `body`: the base body resref/name/supermodel.
-- `layers`: ordered BAS layers for `BODY`, `HEAD`, `L. HAND`, `R. HAND`,
-  `L. Weapon`, and `R. Wep`.
+- `mode`: either `headless_body` for the normal headless-body BAS workflow or
+  `full_body` when the loaded character already owns the head and only equipment
+  hooks should be used.
+- `layers`: ordered BAS layers for `BODY`, `HEAD`, `MASK`, `GOGGLES`,
+  `L. HAND`, `R. HAND`, `L. Weapon`, `BELT`, and `R. Wep`.
 - `layers[].transform`: per-layer local position, rotation quaternion, and scale
   relative to the socket. These values are preserved so heads and equipment can
   later get alignment/tweak controls without changing the file format.
@@ -30,6 +33,9 @@ Each recipe uses the `ghostrigger.bas.model` schema and currently stores:
 
 Hand slots are sockets only. Actual weapon models belong in `left_weapon` and
 `right_weapon`, which follow the `lhand` and `rhand` dummy/socket nodes.
+Head equipment models belong in `mask` and `goggles`, which follow `MaskHook`
+and `GoggleHook` on the attached head or full-body character. Belt models belong
+in `belt`, which follows the waist socket `pelvis_g`.
 
 ## Generated Files
 

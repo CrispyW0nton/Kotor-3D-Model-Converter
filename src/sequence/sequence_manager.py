@@ -16,7 +16,12 @@ from .sequence_serialization import SEQUENCE_EXTENSION, load_sequence_file, save
 def ensure_sequence_object_id(obj: object | None) -> str:
     if obj is None:
         return ""
-    for attr in ("_gr_camera_id", "_gr_light_id", "_gr_sequence_id"):
+    object_type = str(getattr(obj, "object_type", "") or "").lower()
+    if object_type in {"camera", "light", "model", "helper"}:
+        value = str(getattr(obj, "id", "") or "")
+        if value:
+            return value
+    for attr in ("_gr_scene_object_id", "_gr_camera_id", "_gr_light_id", "_gr_sequence_id"):
         value = str(getattr(obj, attr, "") or "")
         if value:
             return value
@@ -31,6 +36,11 @@ def ensure_sequence_object_id(obj: object | None) -> str:
 def infer_target_type(obj: object | None) -> SequenceTargetType:
     if obj is None:
         return SequenceTargetType.UNKNOWN
+    object_type = str(getattr(obj, "object_type", "") or "").lower()
+    if object_type == "camera":
+        return SequenceTargetType.CAMERA
+    if object_type == "light":
+        return SequenceTargetType.LIGHT
     if bool(getattr(obj, "is_camera", False)) or bool(getattr(obj, "_gr_camera_id", "")):
         return SequenceTargetType.CAMERA
     if bool(getattr(obj, "is_light", False)) or bool(getattr(obj, "_gr_light_id", "")) or hasattr(obj, "light_multiplier"):

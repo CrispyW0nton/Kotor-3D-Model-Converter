@@ -98,7 +98,7 @@ class CrossGamePorter:
 
     Usage::
 
-        from src.core.qt_core.mdl.mdl_porter import CrossGamePorter
+        from src.core.mdl.mdl_porter import CrossGamePorter
         porter = CrossGamePorter(texture_map={'old_tex': 'new_tex'})
         ported = porter.port(model, target_game='K2')
 

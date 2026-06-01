@@ -1508,6 +1508,28 @@ def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
     )
 
 
+def test_startup_renderer_and_hardware_scans_log_before_main_window_not_splash() -> None:
+    import inspect
+
+    from src.gui.qt_lib.windows import qt_main_window
+    from src.gui.qt_lib.windows.qt_main_window import _collect_prewindow_startup_diagnostics
+
+    run_source = inspect.getsource(qt_main_window.run)
+    diagnostics_source = inspect.getsource(_collect_prewindow_startup_diagnostics)
+
+    assert "Scanning renderers" not in run_source
+    assert "Scanning hardware" not in run_source
+    assert "startup_diagnostics = _collect_prewindow_startup_diagnostics(settings_data)" in run_source
+    assert "splash = QtStartupSplash" in run_source
+    assert "win.show()" in run_source
+    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("splash = QtStartupSplash")
+    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("win = QtGhostRiggerMainWindow")
+    assert "renderer_capabilities_snapshot()" in diagnostics_source
+    assert "collect_hardware_diagnostics(" in diagnostics_source
+    assert "Startup renderer scan" in diagnostics_source
+    assert "before Qt main-window initialization" in diagnostics_source
+
+
 def test_startup_windows_use_primary_screen_not_cursor_screen() -> None:
     import inspect
 
@@ -1712,6 +1734,27 @@ def test_progress_toast_reapplies_active_theme_on_show() -> None:
     assert "current_theme" in apply_source
     assert "get_theme()" in apply_source
     assert hasattr(QtProgressToast, "apply_native_theme")
+
+
+def test_progress_toast_is_compact_and_anchored_to_viewport_canvas() -> None:
+    import inspect
+
+    import src.gui.qt_lib.windows.qt_main_window as main_window_module
+    from src.gui.qt_lib.windows import progress_toast as progress_toast_module
+    from src.gui.qt_lib.windows.qt_main_window import QtProgressToast
+
+    toast_source = inspect.getsource(QtProgressToast)
+    main_source = inspect.getsource(main_window_module)
+
+    assert main_window_module.QtProgressToast is progress_toast_module.QtProgressToast
+    assert "from src.gui.qt_lib.windows.progress_toast import QtProgressPanel, QtProgressToast" in main_source
+    assert "class QtProgressToast" not in main_source
+    assert "setFixedWidth(280)" in toast_source
+    assert "QtProgressPanel(self, compact=True)" in toast_source
+    assert 'getattr(parent, "viewport", None)' in toast_source
+    assert 'getattr(viewport, "canvas", None)' in toast_source
+    assert "rect.bottom() - self.height()" in toast_source
+    assert "target.mapToGlobal" in toast_source
 
 
 def test_progress_panel_stylesheet_tracks_theme_tokens() -> None:

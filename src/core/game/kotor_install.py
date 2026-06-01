@@ -455,7 +455,7 @@ class KotorInstallation:
         if data is None:
             return None
         try:
-            from src.gui.qt_lib.rendering.viewport_core import _load_tpc_bytes
+            from src.core.graphics.tpc import _load_tpc_bytes
             img = _load_tpc_bytes(data)
             if img is None:
                 # Fallback: try PIL direct (TGA)

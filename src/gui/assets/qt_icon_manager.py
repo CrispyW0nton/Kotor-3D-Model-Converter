@@ -19,6 +19,7 @@ _cache: dict[str, QtGui.QIcon] = {}
 
 
 class I:
+    SCENE = "scene"
     NEW_SCENE = "new_scene"
     OPEN = "open"
     SAVE = "save"
@@ -40,6 +41,43 @@ class I:
     SEQUENCE = "sequence"
     LIGHTS = "lights"
     CAMERAS = "cameras"
+    CAMERA_FREE = "camera_free"
+    CAMERA_TARGET = "camera_target"
+    CAMERA_CINEMATIC = "camera_cinematic"
+    VIEWPORT_SELECT_CAMERAS = "viewport_select_cameras"
+    VIEWPORT_LOCK_CAMERA = "viewport_lock_camera"
+    LIGHT_POINT = "light_point"
+    LIGHT_SPOT = "light_spot"
+    LIGHT_DIRECTIONAL = "light_directional"
+    LIGHT_AREA = "light_area"
+    LIGHT_AMBIENT = "light_ambient"
+    VIEWPORT_LIGHT_HELPERS = "viewport_light_helpers"
+    LIGHTING_MODE_SCENE = "lighting_mode_scene"
+    LIGHTING_MODE_UNLIT = "lighting_mode_unlit"
+    LIGHTING_MODE_FULLBRIGHT = "lighting_mode_fullbright"
+    LIGHTING_MODE_LIGHTMAP = "lighting_mode_lightmap"
+    LIGHTING_MODE_DIFFUSE = "lighting_mode_diffuse"
+    LIGHTING_MODE_NORMAL = "lighting_mode_normal"
+    LIGHTING_MODE_SPECULAR = "lighting_mode_specular"
+    LIGHTING_MODE_ENVIRONMENT = "lighting_mode_environment"
+    LIGHTING_MODE_SHADER = "lighting_mode_shader"
+    LIGHTING_MODE_PHOTOREAL = "lighting_mode_photoreal"
+    LIGHTING_COMPLEXITY_OFF = "lighting_complexity_off"
+    LIGHTING_COMPLEXITY_BASIC = "lighting_complexity_basic"
+    LIGHTING_COMPLEXITY_OVERDRAW = "lighting_complexity_overdraw"
+    LIGHTING_COMPLEXITY_TEXTURE = "lighting_complexity_texture"
+    LIGHTING_COMPLEXITY_LIGHTING = "lighting_complexity_lighting"
+    LIGHTING_COMPLEXITY_FULL = "lighting_complexity_full"
+    LIGHTING_RIG_NONE = "lighting_rig_none"
+    LIGHTING_RIG_KOTOR = "lighting_rig_kotor"
+    LIGHTING_RIG_NEUTRAL = "lighting_rig_neutral"
+    LIGHTING_RIG_WARM = "lighting_rig_warm"
+    LIGHTING_RIG_COLD = "lighting_rig_cold"
+    LIGHTING_RIG_TORCH = "lighting_rig_torch"
+    LIGHTING_RIG_MOON = "lighting_rig_moon"
+    LIGHTING_RIG_SOFTBOX = "lighting_rig_softbox"
+    LIGHTING_RIG_UNREAL = "lighting_rig_unreal"
+    LIGHTING_RIG_MAX = "lighting_rig_max"
     RIG = "rig"
     NORMALMAP = "normalmap"
     RESOURCES = "resources"
@@ -92,6 +130,25 @@ LABEL_TO_ICON: dict[str, str] = {
     "sequence": I.SEQUENCE,
     "lights": I.LIGHTS,
     "cameras": I.CAMERAS,
+    "free camera": I.CAMERA_FREE,
+    "target camera": I.CAMERA_TARGET,
+    "cinematic camera": I.CAMERA_CINEMATIC,
+    "point light": I.LIGHT_POINT,
+    "spot light": I.LIGHT_SPOT,
+    "directional light": I.LIGHT_DIRECTIONAL,
+    "area light": I.LIGHT_AREA,
+    "ambient light": I.LIGHT_AMBIENT,
+    "light helpers": I.VIEWPORT_LIGHT_HELPERS,
+    "scene lit": I.LIGHTING_MODE_SCENE,
+    "unlit": I.LIGHTING_MODE_UNLIT,
+    "fullbright": I.LIGHTING_MODE_FULLBRIGHT,
+    "lightmap preview": I.LIGHTING_MODE_LIGHTMAP,
+    "diffuse only": I.LIGHTING_MODE_DIFFUSE,
+    "normal only": I.LIGHTING_MODE_NORMAL,
+    "specular only": I.LIGHTING_MODE_SPECULAR,
+    "environment only": I.LIGHTING_MODE_ENVIRONMENT,
+    "shader complexity": I.LIGHTING_MODE_SHADER,
+    "photoreal preview": I.LIGHTING_MODE_PHOTOREAL,
     "normalmap": I.NORMALMAP,
     "normmap": I.NORMALMAP,
     "search": I.SEARCH,

@@ -11,20 +11,26 @@ from typing import Any
 
 BAS_MODEL_RECIPE_SCHEMA = "ghostrigger.bas.model"
 BAS_MODEL_RECIPE_VERSION = 1
-BAS_SLOT_ORDER = ("body", "head", "left_hand", "right_hand", "left_weapon", "right_weapon")
+BAS_SLOT_ORDER = ("body", "head", "mask", "goggles", "left_hand", "right_hand", "left_weapon", "belt", "right_weapon")
 BAS_SOCKET_BY_SLOT = {
     "head": "headhook",
+    "mask": "MaskHook",
+    "goggles": "GoggleHook",
     "left_hand": "lhand",
     "right_hand": "rhand",
     "left_weapon": "lhand",
+    "belt": "pelvis_g",
     "right_weapon": "rhand",
 }
 BAS_SLOT_LABELS = {
     "body": "BODY",
     "head": "HEAD",
+    "mask": "MASK",
+    "goggles": "GOGGLES",
     "left_hand": "L. HAND",
     "right_hand": "R. HAND",
     "left_weapon": "L. Weapon",
+    "belt": "BELT",
     "right_weapon": "R. Wep",
 }
 
@@ -62,6 +68,7 @@ def build_bas_model_recipe(
     attachment_transforms: dict[str, dict[str, Any]] | None = None,
     game: str = "",
     build_name: str = "",
+    mode: str = "headless_body",
 ) -> dict[str, Any]:
     attachment_models = attachment_models or {}
     attachment_resrefs = attachment_resrefs or {}
@@ -82,11 +89,21 @@ def build_bas_model_recipe(
             "game": body["game"],
         }
     ]
-    for slot in ("head", "left_hand", "right_hand", "left_weapon", "right_weapon"):
+    mode_key = str(mode or "headless_body").strip().lower()
+    if mode_key not in {"headless_body", "full_body"}:
+        mode_key = "headless_body"
+
+    for slot in BAS_SLOT_ORDER:
+        if slot == "body":
+            continue
         resref = str(attachment_resrefs.get(slot, "") or "").strip()
         model = attachment_models.get(slot)
         model_info = bas_model_identity(model, fallback=resref) if model is not None else {}
-        state = "socket" if slot in {"left_hand", "right_hand"} else ("attached" if resref or model is not None else "empty")
+        state = (
+            "socket"
+            if slot in {"left_hand", "right_hand"} or (slot == "head" and mode_key == "full_body")
+            else ("attached" if resref or model is not None else "empty")
+        )
         layers.append(
             {
                 "slot": slot,
@@ -112,6 +129,7 @@ def build_bas_model_recipe(
         "recipe_id": recipe_stem,
         "display_name": clean_build_name or f"{body['name']} BAS",
         "build_name": clean_build_name or recipe_stem,
+        "mode": mode_key,
         "body": body,
         "layers": layers,
         "attachments": {
@@ -123,6 +141,7 @@ def build_bas_model_recipe(
             "body_animation_owner": "body",
             "attachment_transform_mode": "socket_follower",
             "attachment_skinning": "isolated_from_body_palette",
+            "body_mode": mode_key,
             "notes": "BAS JSON stores a lightweight recipe. Source MDL/MDX assets stay referenced by game/resref.",
         },
     }

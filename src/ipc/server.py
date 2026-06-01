@@ -23,6 +23,8 @@ import logging
 import threading
 from typing import Callable, Optional, Dict, Any
 
+from src.adapters.qt_ipc.threading import marshal_to_gui_thread
+
 log = logging.getLogger(__name__)
 
 # ── IPC Port Assignment (per GHOSTWORKS_BLUEPRINT.md Section 3.1) ──────────
@@ -135,7 +137,7 @@ class GhostRiggerIPCServer:
                         payload = body.get("payload", body)
                         resref = payload.get("resref", body.get("resref", ""))
                         module_dir = payload.get("module_dir", body.get("module_dir", ""))
-                        # Schedule callback on the main thread (Tkinter)
+                        # Schedule callback on the main thread when Qt is active.
                         self._schedule_callback(cb, resref, module_dir)
                     else:
                         self._schedule_callback(cb)
@@ -181,8 +183,9 @@ class GhostRiggerIPCServer:
                 body = {}
 
             targets = body.get("modules", [
-                "src.gui.qt_lib.rendering.viewport_core",
-                "src.gui.qt_lib.rendering.gpu_renderer",
+                "src.core.rendering.frame_core.renderer",
+                "src.adapters.rendering.moderngl_legacy_bridge",
+                "src.adapters.rendering.moderngl_scene_helpers",
                 "src.core.kotor_loader",
             ])
             reloaded: list[str] = []
@@ -329,33 +332,11 @@ class GhostRiggerIPCServer:
         finally:
             self._running = False
 
-    # ── GUI-thread callback scheduling (Qt-only, M3/T304) ─────────────────
-    #
-    # T002 — IPC handler callbacks must run on the main GUI thread because
-    # they typically mutate Qt widgets. The order is:
-    #
-    #   1. Qt: ``QTimer.singleShot(0, ...)`` if a ``QCoreApplication`` is
-    #      running. This is the production path.
-    #   2. Direct: call the callback inline in the HTTP worker thread.
-    #      Used by unit tests and headless runs.
-    #
-    # The legacy Tk fallback (``tk._default_root.after(0, ...)``) was
-    # removed in M3/T304 together with the rest of the Tk codepath.
-    # All errors are logged; we never raise out of the marshaling helper.
-
     def _schedule_callback(self, cb: Callable, *args):
-        """Execute a callback safely on the main GUI thread (Qt → direct)."""
-        # ── 1. Qt path ────────────────────────────────────────────────
-        try:
-            from PySide6.QtCore import QCoreApplication, QTimer  # noqa: PLC0415
-            app = QCoreApplication.instance()
-            if app is not None:
-                QTimer.singleShot(0, lambda: cb(*args))
-                return
-        except Exception:
-            pass
+        """Execute a callback through Qt when active, otherwise directly."""
+        if marshal_to_gui_thread(cb, *args):
+            return
 
-        # ── 2. Headless / direct fallback ─────────────────────────────
         try:
             cb(*args)
         except Exception as exc:

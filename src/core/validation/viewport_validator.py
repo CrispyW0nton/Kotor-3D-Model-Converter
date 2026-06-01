@@ -131,14 +131,9 @@ class ViewportValidator:
             logger.debug("Could not configure fixture supermodel resolver", exc_info=True)
 
     def _init_renderer(self, model):
-        from src.gui.qt_lib.rendering.viewport_core import ArcBallCamera, FrameRenderer
+        from src.adapters.qt_viewport.frame_renderer import create_validation_frame_renderer
 
-        renderer = FrameRenderer(ArcBallCamera())
-        renderer.show_texture = False
-        renderer.show_bones = False
-        renderer.show_grid = False
-        renderer.show_light_gizmos = False
-        renderer.set_model(model)
+        renderer = create_validation_frame_renderer(model)
         self._renderer = renderer
         return renderer
 

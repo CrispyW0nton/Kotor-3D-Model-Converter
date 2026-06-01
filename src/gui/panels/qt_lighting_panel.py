@@ -7,17 +7,18 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
-from src.gui.lighting.light_manager import LightManager
-from src.gui.lighting.light_model import GhostRiggerLight
-from src.gui.lighting.light_types import (
+from src.gui.qt_lib.assets import qt_icon_manager
+from src.core.lighting.light_manager import LightManager
+from src.core.lighting.light_model import GhostRiggerLight
+from src.core.lighting.light_types import (
     LightType,
     LightingRigPreset,
     LightmapMode,
     SceneLightingMode,
     ShaderComplexityMode,
 )
-from src.gui.lighting.lighting_rig_presets import LightingRigPresets
-from src.gui.lighting.settings import LightingSettings, LightingSettingsStore
+from src.core.lighting.lighting_rig_presets import LightingRigPresets
+from src.core.lighting.settings import LightingSettings, LightingSettingsStore
 
 
 class QtLightingPanel(QtWidgets.QWidget):
@@ -28,11 +29,44 @@ class QtLightingPanel(QtWidgets.QWidget):
     helperVisibilityChanged = QtCore.Signal(bool, bool)
     lightChanged = QtCore.Signal()
     lightSelected = QtCore.Signal(object)
+    createLightRequested = QtCore.Signal(str)
     lightmapBakeRequested = QtCore.Signal()
 
     _TYPE_LABELS = ("Point", "Spot", "Directional", "Area", "Ambient", "AuroraPoint", "AuroraAmbient", "AuroraUnknown")
     _TYPE_VALUES = ("point", "spot", "directional", "area", "ambient", "aurora_point", "aurora_ambient", "aurora_unknown")
     _COLUMNS = ("Enabled", "Color", "Name", "Type", "Radius", "Intensity", "Cone", "Group", "Visible", "Locked", "Source")
+    _LIGHTING_MODE_ICONS = {
+        "scene": qt_icon_manager.I.LIGHTING_MODE_SCENE,
+        "unlit": qt_icon_manager.I.LIGHTING_MODE_UNLIT,
+        "fullbright": qt_icon_manager.I.LIGHTING_MODE_FULLBRIGHT,
+        "lightmap_preview": qt_icon_manager.I.LIGHTING_MODE_LIGHTMAP,
+        "diffuse_only": qt_icon_manager.I.LIGHTING_MODE_DIFFUSE,
+        "normal_only": qt_icon_manager.I.LIGHTING_MODE_NORMAL,
+        "specular_only": qt_icon_manager.I.LIGHTING_MODE_SPECULAR,
+        "environment_only": qt_icon_manager.I.LIGHTING_MODE_ENVIRONMENT,
+        "shader_complexity": qt_icon_manager.I.LIGHTING_MODE_SHADER,
+        "photoreal_preview": qt_icon_manager.I.LIGHTING_MODE_PHOTOREAL,
+    }
+    _COMPLEXITY_ICONS = {
+        "off": qt_icon_manager.I.LIGHTING_COMPLEXITY_OFF,
+        "basic": qt_icon_manager.I.LIGHTING_COMPLEXITY_BASIC,
+        "overdraw": qt_icon_manager.I.LIGHTING_COMPLEXITY_OVERDRAW,
+        "texture_cost": qt_icon_manager.I.LIGHTING_COMPLEXITY_TEXTURE,
+        "lighting_cost": qt_icon_manager.I.LIGHTING_COMPLEXITY_LIGHTING,
+        "full_complexity": qt_icon_manager.I.LIGHTING_COMPLEXITY_FULL,
+    }
+    _RIG_ICONS = {
+        "none": qt_icon_manager.I.LIGHTING_RIG_NONE,
+        "kotor_original": qt_icon_manager.I.LIGHTING_RIG_KOTOR,
+        "neutral_studio": qt_icon_manager.I.LIGHTING_RIG_NEUTRAL,
+        "cinematic_warm": qt_icon_manager.I.LIGHTING_RIG_WARM,
+        "cinematic_cold": qt_icon_manager.I.LIGHTING_RIG_COLD,
+        "interior_torch": qt_icon_manager.I.LIGHTING_RIG_TORCH,
+        "exterior_moonlight": qt_icon_manager.I.LIGHTING_RIG_MOON,
+        "photoreal_softbox": qt_icon_manager.I.LIGHTING_RIG_SOFTBOX,
+        "unreal_preview": qt_icon_manager.I.LIGHTING_RIG_UNREAL,
+        "max_style_preview": qt_icon_manager.I.LIGHTING_RIG_MAX,
+    }
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -44,14 +78,14 @@ class QtLightingPanel(QtWidgets.QWidget):
         self._settings_store = LightingSettingsStore()
         self._settings = self._settings_store.load()
         self._icons = {
-            "point": self._icon("#ffe36b", "point"),
-            "aurora_point": self._icon("#ffe36b", "point"),
-            "spot": self._icon("#7bdcff", "spot"),
-            "directional": self._icon("#96ff8f", "directional"),
-            "area": self._icon("#ff9f7b", "area"),
-            "ambient": self._icon("#c0c2ff", "ambient"),
-            "aurora_ambient": self._icon("#c0c2ff", "ambient"),
-            "aurora_unknown": self._icon("#9aa4ad", "point"),
+            "point": qt_icon_manager.get(qt_icon_manager.I.LIGHT_POINT, 16),
+            "aurora_point": qt_icon_manager.get(qt_icon_manager.I.LIGHT_POINT, 16),
+            "spot": qt_icon_manager.get(qt_icon_manager.I.LIGHT_SPOT, 16),
+            "directional": qt_icon_manager.get(qt_icon_manager.I.LIGHT_DIRECTIONAL, 16),
+            "area": qt_icon_manager.get(qt_icon_manager.I.LIGHT_AREA, 16),
+            "ambient": qt_icon_manager.get(qt_icon_manager.I.LIGHT_AMBIENT, 16),
+            "aurora_ambient": qt_icon_manager.get(qt_icon_manager.I.LIGHT_AMBIENT, 16),
+            "aurora_unknown": qt_icon_manager.get(qt_icon_manager.I.LIGHTS, 16),
         }
         self._build()
         self._load_settings_into_ui()
@@ -61,36 +95,90 @@ class QtLightingPanel(QtWidgets.QWidget):
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(7)
 
-        top_grid = QtWidgets.QGridLayout()
-        top_grid.setHorizontalSpacing(6)
-        top_grid.setVerticalSpacing(5)
+        create_group = QtWidgets.QGroupBox("Add Light to Scene")
+        create_group.setObjectName("AddLightToSceneGroup")
+        create_row = QtWidgets.QGridLayout(create_group)
+        create_row.setContentsMargins(6, 8, 6, 6)
+        create_row.setHorizontalSpacing(4)
+        create_row.setVerticalSpacing(4)
+        for column, (label, light_type, icon_name) in enumerate((
+            ("Point", "point", qt_icon_manager.I.LIGHT_POINT),
+            ("Spot", "spot", qt_icon_manager.I.LIGHT_SPOT),
+            ("Directional", "directional", qt_icon_manager.I.LIGHT_DIRECTIONAL),
+            ("Area", "area", qt_icon_manager.I.LIGHT_AREA),
+            ("Ambient", "ambient", qt_icon_manager.I.LIGHT_AMBIENT),
+        )):
+            button = self._tool_button(icon_name, f"Create {label} light")
+            button.setToolTip(f"Create {label} light")
+            button.clicked.connect(lambda _checked=False, t=light_type: self.createLightRequested.emit(t))
+            create_row.addWidget(button, 0, column)
+        root.addWidget(create_group)
+
+        lighting_group = QtWidgets.QGroupBox("Lighting System")
+        lighting_group.setObjectName("LightingSystemGroup")
+        lighting_grid = QtWidgets.QGridLayout(lighting_group)
+        lighting_grid.setContentsMargins(6, 8, 6, 6)
+        lighting_grid.setHorizontalSpacing(5)
+        lighting_grid.setVerticalSpacing(5)
         self.mode_combo = QtWidgets.QComboBox()
         for mode in SceneLightingMode:
             self.mode_combo.addItem(mode.label, mode.value)
         self.mode_combo.currentIndexChanged.connect(lambda _index=0: self._emit_mode())
-        top_grid.addWidget(QtWidgets.QLabel("Mode"), 0, 0)
-        top_grid.addWidget(self.mode_combo, 0, 1)
+        self.mode_combo.hide()
 
         self.shader_complexity_combo = QtWidgets.QComboBox()
         for mode in ShaderComplexityMode:
             self.shader_complexity_combo.addItem(mode.label, mode.value)
         self.shader_complexity_combo.currentIndexChanged.connect(lambda _index=0: self._emit_shader_complexity())
-        top_grid.addWidget(QtWidgets.QLabel("Complexity"), 0, 2)
-        top_grid.addWidget(self.shader_complexity_combo, 0, 3)
+        self.shader_complexity_combo.hide()
 
         self.rig_preset_combo = QtWidgets.QComboBox()
         for preset in LightingRigPreset:
             self.rig_preset_combo.addItem(preset.label, preset.value)
         self.rig_preset_combo.currentIndexChanged.connect(lambda _index=0: self._apply_rig_preset())
-        top_grid.addWidget(QtWidgets.QLabel("Rig"), 1, 0)
-        top_grid.addWidget(self.rig_preset_combo, 1, 1, 1, 3)
-        root.addLayout(top_grid)
+        self.rig_preset_combo.hide()
+        self.mode_buttons: dict[str, QtWidgets.QToolButton] = {}
+        self.shader_complexity_buttons: dict[str, QtWidgets.QToolButton] = {}
+        self.rig_preset_buttons: dict[str, QtWidgets.QToolButton] = {}
+        row = 0
+        row = self._add_button_grid(
+            lighting_grid,
+            row,
+            "Scene Lighting Modes",
+            [(mode.value, mode.label, self._LIGHTING_MODE_ICONS.get(mode.value, qt_icon_manager.I.LIGHTS)) for mode in SceneLightingMode],
+            self.mode_buttons,
+            self._select_lighting_mode,
+            columns=10,
+        )
+        row = self._add_button_grid(
+            lighting_grid,
+            row,
+            "Lighting Complexity",
+            [(mode.value, mode.label, self._COMPLEXITY_ICONS.get(mode.value, qt_icon_manager.I.LIGHTS)) for mode in ShaderComplexityMode],
+            self.shader_complexity_buttons,
+            self._select_shader_complexity,
+            columns=6,
+        )
+        self._add_button_grid(
+            lighting_grid,
+            row,
+            "Lighting Rigs",
+            [(preset.value, preset.label, self._RIG_ICONS.get(preset.value, qt_icon_manager.I.RIG)) for preset in LightingRigPreset],
+            self.rig_preset_buttons,
+            self._select_rig_preset,
+            columns=10,
+        )
+        lighting_grid.addWidget(self.mode_combo, lighting_grid.rowCount(), 0)
+        lighting_grid.addWidget(self.shader_complexity_combo, lighting_grid.rowCount(), 0)
+        lighting_grid.addWidget(self.rig_preset_combo, lighting_grid.rowCount(), 0)
+        root.addWidget(lighting_group)
 
         maps = CollapsibleGroupBox("Preview")
         maps_layout = QtWidgets.QGridLayout(maps)
         maps_layout.setContentsMargins(8, 8, 8, 8)
-        maps_layout.setHorizontalSpacing(8)
+        maps_layout.setHorizontalSpacing(10)
         maps_layout.setVerticalSpacing(4)
+        maps_layout.addWidget(QtWidgets.QLabel("Texture Maps:"), 0, 0, 1, 3)
         self.map_checks: dict[str, QtWidgets.QCheckBox] = {}
         for idx, (key, label) in enumerate((
             ("diffuse", "Diffuse"),
@@ -103,29 +191,22 @@ class QtLightingPanel(QtWidgets.QWidget):
             check.setChecked(True)
             check.toggled.connect(lambda state, k=key: self._emit_map(k, state))
             self.map_checks[key] = check
-            maps_layout.addWidget(check, idx // 3, idx % 3)
-        self.show_helpers_check = QtWidgets.QCheckBox("Helpers")
-        self.show_helpers_check.setChecked(True)
-        self.show_helpers_check.toggled.connect(lambda _state=False: self._emit_helper_visibility())
-        self.show_volumes_check = QtWidgets.QCheckBox("Volumes")
-        self.show_volumes_check.setChecked(False)
-        self.show_volumes_check.toggled.connect(lambda _state=False: self._emit_helper_visibility())
-        maps_layout.addWidget(self.show_helpers_check, 1, 2)
-        maps_layout.addWidget(self.show_volumes_check, 2, 2)
-        maps_layout.addWidget(QtWidgets.QLabel("LM Intensity"), 2, 0)
+            maps_layout.addWidget(check, 1 + (idx // 3), idx % 3)
+        maps_layout.addWidget(QtWidgets.QLabel("LM Intensity"), 3, 0)
         self.lightmap_intensity_spin = QtWidgets.QDoubleSpinBox()
         self.lightmap_intensity_spin.setRange(0.0, 4.0)
         self.lightmap_intensity_spin.setDecimals(2)
         self.lightmap_intensity_spin.setSingleStep(0.05)
         self.lightmap_intensity_spin.setValue(0.55)
+        self.lightmap_intensity_spin.setMaximumWidth(96)
         self.lightmap_intensity_spin.valueChanged.connect(lambda _value=0.0: self._emit_lightmap_settings())
-        maps_layout.addWidget(self.lightmap_intensity_spin, 2, 1)
-        maps_layout.addWidget(QtWidgets.QLabel("LM Mode"), 3, 0)
+        maps_layout.addWidget(self.lightmap_intensity_spin, 3, 1)
+        maps_layout.addWidget(QtWidgets.QLabel("LM Mode"), 4, 0)
         self.lightmap_mode_combo = QtWidgets.QComboBox()
         for mode in LightmapMode:
             self.lightmap_mode_combo.addItem(mode.label, mode.value)
         self.lightmap_mode_combo.currentIndexChanged.connect(lambda _index=0: self._emit_lightmap_settings())
-        maps_layout.addWidget(self.lightmap_mode_combo, 3, 1, 1, 2)
+        maps_layout.addWidget(self.lightmap_mode_combo, 4, 1, 1, 2)
         root.addWidget(maps)
 
         bake_row = QtWidgets.QHBoxLayout()
@@ -153,38 +234,55 @@ class QtLightingPanel(QtWidgets.QWidget):
         root.addWidget(self.tree, 1)
 
         editor = CollapsibleGroupBox("Selected Light")
-        form = QtWidgets.QFormLayout(editor)
-        form.setContentsMargins(8, 8, 8, 8)
-        form.setSpacing(5)
+        editor_layout = QtWidgets.QGridLayout(editor)
+        editor_layout.setContentsMargins(8, 8, 8, 8)
+        editor_layout.setHorizontalSpacing(6)
+        editor_layout.setVerticalSpacing(5)
+        flags_row = QtWidgets.QHBoxLayout()
+        flags_row.setSpacing(8)
         self.enabled_check = QtWidgets.QCheckBox("Enabled")
         self.enabled_check.toggled.connect(lambda _state=False: self._apply_editor())
-        form.addRow("", self.enabled_check)
+        flags_row.addWidget(self.enabled_check)
+        self.ambient_check = QtWidgets.QCheckBox("Ambient only")
+        self.ambient_check.toggled.connect(lambda _state=False: self._apply_editor())
+        flags_row.addWidget(self.ambient_check)
+        self.shadow_check = QtWidgets.QCheckBox("Cast shadows")
+        self.shadow_check.toggled.connect(lambda _state=False: self._apply_editor())
+        flags_row.addWidget(self.shadow_check)
+        flags_row.addStretch(1)
+        editor_layout.addLayout(flags_row, 0, 0, 1, 6)
         self.name_edit = QtWidgets.QLineEdit()
         self.name_edit.editingFinished.connect(self._apply_editor)
-        form.addRow("Name", self.name_edit)
+        editor_layout.addWidget(QtWidgets.QLabel("Name"), 1, 0)
+        editor_layout.addWidget(self.name_edit, 1, 1)
         self.type_combo = QtWidgets.QComboBox()
         self.type_combo.addItems(self._TYPE_LABELS)
         self.type_combo.currentIndexChanged.connect(lambda _index=0: self._apply_editor())
-        form.addRow("Type", self.type_combo)
+        self.type_combo.setMaximumWidth(150)
+        editor_layout.addWidget(QtWidgets.QLabel("Type"), 1, 2)
+        editor_layout.addWidget(self.type_combo, 1, 3)
         self.color_button = QtWidgets.QPushButton()
         self.color_button.setFixedHeight(20)
+        self.color_button.setMaximumWidth(86)
         self.color_button.clicked.connect(self._choose_color)
-        form.addRow("Color", self.color_button)
+        editor_layout.addWidget(QtWidgets.QLabel("Color"), 1, 4)
+        editor_layout.addWidget(self.color_button, 1, 5)
         self.radius_spin = self._double_spin(0.01, 500.0, 0.25, 2)
-        form.addRow("Radius", self.radius_spin)
         self.intensity_spin = self._double_spin(0.0, 100.0, 0.1, 2)
-        form.addRow("Intensity", self.intensity_spin)
         self.cone_spin = self._double_spin(1.0, 179.0, 1.0, 1)
-        form.addRow("Cone Angle", self.cone_spin)
         self.area_spin = self._double_spin(0.0, 100.0, 0.1, 2)
-        form.addRow("Area Size", self.area_spin)
-        self.ambient_check = QtWidgets.QCheckBox("Ambient only")
-        self.ambient_check.toggled.connect(lambda _state=False: self._apply_editor())
-        form.addRow("", self.ambient_check)
-        self.shadow_check = QtWidgets.QCheckBox("Cast shadows")
-        self.shadow_check.toggled.connect(lambda _state=False: self._apply_editor())
-        form.addRow("", self.shadow_check)
+        for spin in (self.radius_spin, self.intensity_spin, self.cone_spin, self.area_spin):
+            spin.setMaximumWidth(90)
+        for column, (label, spin) in enumerate((
+            ("Radius", self.radius_spin),
+            ("Intensity", self.intensity_spin),
+            ("Cone", self.cone_spin),
+            ("Area", self.area_spin),
+        )):
+            editor_layout.addWidget(QtWidgets.QLabel(label), 2, column * 2)
+            editor_layout.addWidget(spin, 2, column * 2 + 1)
         affects = QtWidgets.QHBoxLayout()
+        affects.setSpacing(8)
         self.affect_diffuse_check = QtWidgets.QCheckBox("Diffuse")
         self.affect_specular_check = QtWidgets.QCheckBox("Specular")
         self.affect_lightmap_check = QtWidgets.QCheckBox("Lightmap")
@@ -192,20 +290,15 @@ class QtLightingPanel(QtWidgets.QWidget):
         for check in (self.affect_diffuse_check, self.affect_specular_check, self.affect_lightmap_check, self.affect_environment_check):
             check.toggled.connect(lambda _state=False: self._apply_editor())
             affects.addWidget(check)
-        form.addRow("Affects", affects)
-        pos_row = QtWidgets.QHBoxLayout()
-        rot_row = QtWidgets.QHBoxLayout()
-        self.pos_spins = [self._double_spin(-100000.0, 100000.0, 0.1, 3) for _ in range(3)]
-        self.rot_spins = [self._double_spin(-360.0, 360.0, 1.0, 2) for _ in range(3)]
-        for spin in self.pos_spins:
-            pos_row.addWidget(spin)
-        for spin in self.rot_spins:
-            rot_row.addWidget(spin)
-        form.addRow("Position", pos_row)
-        form.addRow("Rotation", rot_row)
+        affects.addStretch(1)
+        editor_layout.addWidget(QtWidgets.QLabel("Affects"), 3, 0)
+        editor_layout.addLayout(affects, 3, 1, 1, 5)
+        self.pos_spins: list[QtWidgets.QDoubleSpinBox] = []
+        self.rot_spins: list[QtWidgets.QDoubleSpinBox] = []
         self.group_edit = QtWidgets.QLineEdit()
         self.group_edit.editingFinished.connect(self._apply_group_name)
-        form.addRow("Group", self.group_edit)
+        editor_layout.addWidget(QtWidgets.QLabel("Group"), 4, 0)
+        editor_layout.addWidget(self.group_edit, 4, 1, 1, 5)
         root.addWidget(editor)
 
         self._set_editor_enabled(False)
@@ -222,6 +315,9 @@ class QtLightingPanel(QtWidgets.QWidget):
             f"QPushButton {{ background:{theme.color('button.background')}; color:{theme.color('button.text')}; border:1px solid {theme.color('panel.border')}; padding:1px 6px; min-height:{theme.metric('button.height', 16)}px; min-width:{theme.metric('button.minWidth', 64)}px; }}"
             f"QPushButton:hover {{ background:{theme.color('button.hover')}; }}"
             f"QPushButton:checked {{ background:{theme.color('button.checked')}; color:{theme.color('button.checkedText', theme.color('button.accentText'))}; }}"
+            f"QToolButton {{ background:{theme.color('button.background')}; border:1px solid {theme.color('panel.border')}; padding:1px; }}"
+            f"QToolButton:hover {{ background:{theme.color('button.hover')}; }}"
+            f"QToolButton:checked {{ background:{theme.color('button.checked')}; }}"
         )
         self.tree.setAlternatingRowColors(True)
 
@@ -250,32 +346,76 @@ class QtLightingPanel(QtWidgets.QWidget):
         spin.valueChanged.connect(lambda _value=0.0: self._apply_editor())
         return spin
 
-    def _icon(self, color: str, kind: str) -> QtGui.QIcon:
-        pix = QtGui.QPixmap(16, 16)
-        pix.fill(QtCore.Qt.transparent)
-        painter = QtGui.QPainter(pix)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setPen(QtGui.QPen(QtGui.QColor(color), 1.5))
-        painter.setBrush(QtGui.QColor(color))
-        if kind == "directional":
-            painter.drawLine(3, 12, 12, 3)
-            painter.drawLine(12, 3, 12, 8)
-            painter.drawLine(12, 3, 7, 3)
-        elif kind == "spot":
-            painter.drawEllipse(3, 3, 5, 5)
-            painter.setBrush(QtCore.Qt.NoBrush)
-            painter.drawLine(6, 8, 2, 14)
-            painter.drawLine(6, 8, 14, 14)
-        elif kind == "area":
-            painter.drawRect(3, 3, 10, 10)
-        elif kind == "ambient":
-            painter.drawEllipse(4, 4, 8, 8)
-            painter.setBrush(QtCore.Qt.NoBrush)
-            painter.drawEllipse(2, 2, 12, 12)
-        else:
-            painter.drawEllipse(4, 4, 8, 8)
-        painter.end()
-        return QtGui.QIcon(pix)
+    def _tool_button(self, icon_name: str, tooltip: str, *, checkable: bool = False) -> QtWidgets.QToolButton:
+        button = QtWidgets.QToolButton()
+        button.setIcon(qt_icon_manager.get(icon_name, 18))
+        button.setIconSize(QtCore.QSize(18, 18))
+        button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        button.setCheckable(checkable)
+        button.setAutoRaise(False)
+        button.setFixedSize(28, 24)
+        button.setCursor(QtCore.Qt.PointingHandCursor)
+        button.setToolTip(tooltip)
+        return button
+
+    def _add_button_grid(
+        self,
+        layout: QtWidgets.QGridLayout,
+        row: int,
+        title: str,
+        items: list[tuple[str, str, str]],
+        buttons: dict[str, QtWidgets.QToolButton],
+        callback,
+        *,
+        columns: int,
+    ) -> int:
+        label = QtWidgets.QLabel(title)
+        layout.addWidget(label, row, 0, 1, columns)
+        for idx, (value, tooltip, icon_name) in enumerate(items):
+            button = self._tool_button(icon_name, tooltip, checkable=True)
+            button.clicked.connect(lambda _checked=False, v=value: callback(v))
+            buttons[str(value)] = button
+            layout.addWidget(button, row + 1 + (idx // columns), idx % columns)
+        return row + 2 + max(0, (len(items) - 1) // columns)
+
+    def _sync_button_group(self, buttons: dict[str, QtWidgets.QToolButton], value: str) -> None:
+        for key, button in buttons.items():
+            with QtCore.QSignalBlocker(button):
+                button.setChecked(key == value)
+
+    def _select_lighting_mode(self, mode: str) -> None:
+        if self._updating:
+            return
+        mode = str(mode or "scene")
+        self._set_combo_data(self.mode_combo, mode, emit=False)
+        self._settings.scene_lighting_mode = mode
+        self._sync_button_group(self.mode_buttons, mode)
+        self._save_settings()
+        self.lightingModeChanged.emit(mode)
+
+    def _select_shader_complexity(self, mode: str) -> None:
+        if self._updating:
+            return
+        mode = str(mode or "off")
+        self._set_combo_data(self.shader_complexity_combo, mode, emit=False)
+        self._settings.shader_complexity_mode = mode
+        self._sync_button_group(self.shader_complexity_buttons, mode)
+        self._save_settings()
+        self.shaderComplexityChanged.emit(mode)
+
+    def _select_rig_preset(self, preset: str) -> None:
+        if self._updating:
+            return
+        preset = str(preset or "none")
+        self._set_combo_data(self.rig_preset_combo, preset, emit=False)
+        self.manager.remove_generated_rig()
+        for light in LightingRigPresets.create(preset):
+            self.manager.add_light(light)
+        self._settings.selected_lighting_rig_preset = preset
+        self._sync_button_group(self.rig_preset_buttons, preset)
+        self._save_settings()
+        self.refresh()
+        self.lightChanged.emit()
 
     def set_model(self, model) -> None:
         self._model = model
@@ -443,8 +583,6 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.affect_specular_check.setChecked(bool(active.affects_specular))
         self.affect_lightmap_check.setChecked(bool(active.affects_lightmap))
         self.affect_environment_check.setChecked(bool(active.affects_environment))
-        for idx, spin in enumerate(self.pos_spins):
-            spin.setValue(float(active.position[idx]))
         self._set_rotation_editor(active.rotation)
         group = self.manager.grouping.groups.get(active.group_id)
         self.group_edit.setText(group.name if group else "")
@@ -474,7 +612,6 @@ class QtLightingPanel(QtWidgets.QWidget):
             "affects_specular": bool(self.affect_specular_check.isChecked()),
             "affects_lightmap": bool(self.affect_lightmap_check.isChecked()),
             "affects_environment": bool(self.affect_environment_check.isChecked()),
-            "position": tuple(float(spin.value()) for spin in self.pos_spins),
         }
         if len(selected) == 1 and self.name_edit.text().strip() and self.name_edit.text() != "Multiple":
             changes["name"] = self.name_edit.text().strip()
@@ -585,19 +722,13 @@ class QtLightingPanel(QtWidgets.QWidget):
         if self._updating:
             return
         preset = str(self.rig_preset_combo.currentData() or "none")
-        self.manager.remove_generated_rig()
-        for light in LightingRigPresets.create(preset):
-            self.manager.add_light(light)
-        self._settings.selected_lighting_rig_preset = preset
-        self._save_settings()
-        self.refresh()
-        self.lightChanged.emit()
+        self._select_rig_preset(preset)
 
     def _emit_mode(self) -> None:
+        if self._updating:
+            return
         mode = str(self.mode_combo.currentData() or "scene")
-        self._settings.scene_lighting_mode = mode
-        self._save_settings()
-        self.lightingModeChanged.emit(mode)
+        self._select_lighting_mode(mode)
 
     def _emit_map(self, key: str, state: bool) -> None:
         setattr(self._settings, f"{key}_map", bool(state))
@@ -605,14 +736,14 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.mapToggled.emit(key, bool(state))
 
     def _emit_shader_complexity(self) -> None:
+        if self._updating:
+            return
         mode = str(self.shader_complexity_combo.currentData() or "off")
-        self._settings.shader_complexity_mode = mode
-        self._save_settings()
-        self.shaderComplexityChanged.emit(mode)
+        self._select_shader_complexity(mode)
 
     def _emit_helper_visibility(self) -> None:
-        helpers = bool(self.show_helpers_check.isChecked())
-        volumes = bool(self.show_volumes_check.isChecked())
+        helpers = bool(self._settings.show_light_helpers)
+        volumes = bool(self._settings.show_light_radius_volumes)
         self._settings.show_light_helpers = helpers
         self._settings.show_light_radius_volumes = volumes
         self._save_settings()
@@ -628,21 +759,26 @@ class QtLightingPanel(QtWidgets.QWidget):
 
     def _load_settings_into_ui(self) -> None:
         self._updating = True
-        self._set_combo_data(self.mode_combo, self._settings.scene_lighting_mode)
-        self._set_combo_data(self.shader_complexity_combo, self._settings.shader_complexity_mode)
-        self._set_combo_data(self.rig_preset_combo, self._settings.selected_lighting_rig_preset)
+        self._set_combo_data(self.mode_combo, self._settings.scene_lighting_mode, emit=False)
+        self._set_combo_data(self.shader_complexity_combo, self._settings.shader_complexity_mode, emit=False)
+        self._set_combo_data(self.rig_preset_combo, self._settings.selected_lighting_rig_preset, emit=False)
+        self._sync_button_group(self.mode_buttons, self._settings.scene_lighting_mode)
+        self._sync_button_group(self.shader_complexity_buttons, self._settings.shader_complexity_mode)
+        self._sync_button_group(self.rig_preset_buttons, self._settings.selected_lighting_rig_preset)
         for key, check in self.map_checks.items():
             check.setChecked(bool(getattr(self._settings, f"{key}_map", True)))
         self.lightmap_intensity_spin.setValue(float(self._settings.lightmap_intensity))
-        self._set_combo_data(self.lightmap_mode_combo, self._settings.lightmap_mode)
-        self.show_helpers_check.setChecked(bool(self._settings.show_light_helpers))
-        self.show_volumes_check.setChecked(bool(self._settings.show_light_radius_volumes))
+        self._set_combo_data(self.lightmap_mode_combo, self._settings.lightmap_mode, emit=False)
         self._updating = False
 
-    def _set_combo_data(self, combo: QtWidgets.QComboBox, data: str) -> None:
+    def _set_combo_data(self, combo: QtWidgets.QComboBox, data: str, *, emit: bool = True) -> None:
         idx = combo.findData(data)
         if idx >= 0:
-            combo.setCurrentIndex(idx)
+            if emit:
+                combo.setCurrentIndex(idx)
+            else:
+                with QtCore.QSignalBlocker(combo):
+                    combo.setCurrentIndex(idx)
 
     def _save_settings(self) -> None:
         if self._updating:

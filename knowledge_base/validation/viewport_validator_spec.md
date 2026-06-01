@@ -10,8 +10,8 @@ Sprint: 3 R2.75
 ## Source APIs
 
 - Loader: binary MDL/MDX uses `src.core.kotor_loader.load_model_from_bytes`; ASCII MDL uses `src.core.mdl_parser.MDLAsciiParser`.
-- Renderer: `src.gui.qt_lib.rendering.viewport_core.FrameRenderer`.
-- Camera: `src.gui.qt_lib.rendering.viewport_core.ArcBallCamera`.
+- Renderer: `src.gui.rendering.frame_core.renderer.FrameRenderer`.
+- Camera: `src.gui.camera.arcball_camera.ArcBallCamera`.
 - Animation: `src.core.animation_engine.AnimationEngine` and `SuperModelResolver`.
 - Fixture supermodels: `src.core.retargeting.sampler.StockCorpusResourceManager` for `tests/fixtures/kotor_stock`.
 

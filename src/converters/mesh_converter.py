@@ -936,7 +936,7 @@ class OBJExporter:
                 log.debug(f"Could not copy baked lightmap '{path}': {exc}")
         if saved:
             try:
-                from src.gui.lighting.lightmap_export_bridge import export_baked_lightmap_manifest
+                from src.core.lighting.lightmap_export_bridge import export_baked_lightmap_manifest
 
                 export_baked_lightmap_manifest(model, out_dir)
             except Exception as exc:

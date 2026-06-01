@@ -12,9 +12,9 @@ from src.core.walkmesh import walkmesh_editor
 
 def _import_module_format():
     try:
-        from src.core.qt_core.modules import module_format as mf  # type: ignore
-    except ImportError:
         from src.core.modules import module_format as mf  # type: ignore
+    except ImportError:
+        from core.modules import module_format as mf  # type: ignore
     return mf
 
 

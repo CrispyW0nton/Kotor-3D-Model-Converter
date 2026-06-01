@@ -13,15 +13,15 @@ from src.gui.libtheme import LayoutManager, ThemeManager
 from src.gui.libtheme.style_tokens import VALID_BUTTON_MODES
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
-from src.gui.qt_lib.rendering.viewport_navigation import (
+from src.core.rendering.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
     VIEWPORT_NAVIGATION_PROFILES,
     normalize_viewport_navigation_profile,
 )
-from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
-from src.gui.qt_lib.rendering.renderer_capabilities import RendererCapabilities
-from src.gui.qt_lib.rendering.hardware_info import HardwareDiagnostics
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.core.rendering.renderer_capabilities import RendererCapabilities
+from src.core.rendering.hardware_info import HardwareDiagnostics
+from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.dialogs.qt_dialogs import show_viewport_navigation_reference
 from src.measurement.unit_settings import MeasurementSettings
 from src.measurement.unit_system import CANONICAL_UNITS, UNIT_SYMBOLS
