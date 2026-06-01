@@ -1,5 +1,72 @@
 {
-  "cameras": [],
+  "cameras": [
+    {
+      "aperture_f_stop": 5.6,
+      "aspect_ratio_height": 9,
+      "aspect_ratio_width": 16,
+      "camera_type": "Cinematic Camera",
+      "deleted": false,
+      "enabled": true,
+      "far_clip": 1000.0,
+      "field_of_view_degrees": 54.43222311461495,
+      "focal_length_mm": 35.0,
+      "focus_distance": 5.0026438221074345,
+      "id": "5d9e985c-7a9e-4c25-bfa1-85d2dd9b77ca",
+      "letterbox_ratio": 2.39,
+      "locked": false,
+      "metadata": {
+        "active_selection": true,
+        "helper_size": 1.0
+      },
+      "name": "Camera",
+      "near_clip": 0.001,
+      "object_type": "camera",
+      "position": [
+        -3.8863305690901484,
+        0.5389202534818478,
+        0.6946903074111229
+      ],
+      "resolution_height": 720,
+      "resolution_width": 1280,
+      "rotation": [
+        -0.4422641407065954,
+        0.5101137622469991,
+        0.5573746657025843,
+        -0.4832389279064769
+      ],
+      "scene_object_id": "5d9e985c-7a9e-4c25-bfa1-85d2dd9b77ca",
+      "selected": true,
+      "sensor_height_mm": 24.0,
+      "sensor_width_mm": 36.0,
+      "show_letterbox": true,
+      "show_safe_frame": true,
+      "target_enabled": false,
+      "target_object_id": "",
+      "target_position": [
+        1.0464128632829808,
+        -0.16750546686076812,
+        0.25259287144496534
+      ],
+      "transform": {
+        "position": [
+          -3.8863305690901484,
+          0.5389202534818478,
+          0.6946903074111229
+        ],
+        "rotation": [
+          84.93000000000008,
+          6.3611093629270335e-15,
+          -98.15000000000028
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    }
+  ],
   "file_type": "GhostRiggerKMax",
   "file_version": 1,
   "kmap_references": [],
@@ -37,7 +104,7 @@
       "position": [
         0.001,
         0.159,
-        0.9815181987303236
+        1.2691112154286868
       ],
       "radius": 1.25,
       "rotation": [
@@ -47,13 +114,13 @@
         1.0
       ],
       "scene_object_id": "cee790fc-199e-45a3-aed3-6aa0b053b91d",
-      "selected": true,
+      "selected": false,
       "source_type": "Aurora",
       "transform": {
         "position": [
           0.001,
           0.159,
-          0.9815181987303236
+          1.2691112154286868
         ],
         "rotation": [
           0.0,
@@ -231,7 +298,7 @@
           "position": [
             0.001,
             0.159,
-            0.9815181987303236
+            1.2691112154286868
           ],
           "radius": 1.25,
           "rotation": [
@@ -241,13 +308,13 @@
             1.0
           ],
           "scene_object_id": "cee790fc-199e-45a3-aed3-6aa0b053b91d",
-          "selected": true,
+          "selected": false,
           "source_type": "Aurora",
           "transform": {
             "position": [
               0.001,
               0.159,
-              0.9815181987303236
+              1.2691112154286868
             ],
             "rotation": [
               0.0,
@@ -280,7 +347,7 @@
           0.0
         ]
       },
-      "selected": true,
+      "selected": false,
       "source_ref": {
         "game": "K1",
         "metadata": {},
@@ -295,12 +362,130 @@
         "position": [
           0.001,
           0.159,
-          0.9815181987303236
+          1.2691112154286868
         ],
         "rotation": [
           0.0,
           0.0,
           0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "",
+      "id": "5d9e985c-7a9e-4c25-bfa1-85d2dd9b77ca",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "camera": {
+          "aperture_f_stop": 5.6,
+          "aspect_ratio_height": 9,
+          "aspect_ratio_width": 16,
+          "camera_type": "Cinematic Camera",
+          "deleted": false,
+          "enabled": true,
+          "far_clip": 1000.0,
+          "field_of_view_degrees": 54.43222311461495,
+          "focal_length_mm": 35.0,
+          "focus_distance": 5.0026438221074345,
+          "id": "5d9e985c-7a9e-4c25-bfa1-85d2dd9b77ca",
+          "letterbox_ratio": 2.39,
+          "locked": false,
+          "metadata": {
+            "active_selection": true,
+            "helper_size": 1.0
+          },
+          "name": "Camera",
+          "near_clip": 0.001,
+          "position": [
+            -3.8863305690901484,
+            0.5389202534818478,
+            0.6946903074111229
+          ],
+          "resolution_height": 720,
+          "resolution_width": 1280,
+          "rotation": [
+            -0.4422641407065954,
+            0.5101137622469991,
+            0.5573746657025843,
+            -0.4832389279064769
+          ],
+          "scene_object_id": "5d9e985c-7a9e-4c25-bfa1-85d2dd9b77ca",
+          "selected": true,
+          "sensor_height_mm": 24.0,
+          "sensor_width_mm": 36.0,
+          "show_letterbox": true,
+          "show_safe_frame": true,
+          "target_enabled": false,
+          "target_object_id": "",
+          "target_position": [
+            1.0464128632829808,
+            -0.16750546686076812,
+            0.25259287144496534
+          ],
+          "transform": {
+            "position": [
+              -3.8863305690901484,
+              0.5389202534818478,
+              0.6946903074111229
+            ],
+            "rotation": [
+              84.93000000000008,
+              6.3611093629270335e-15,
+              -98.15000000000028
+            ],
+            "scale": [
+              1.0,
+              1.0,
+              1.0
+            ]
+          },
+          "visible": true
+        }
+      },
+      "name": "Camera",
+      "object_type": "camera",
+      "pivot": {
+        "enabled": true,
+        "metadata": {},
+        "position_local": [
+          1.1726042026773458,
+          0.34677529211389047,
+          -4.602525524493733
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": true,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "",
+        "resource_type": "model",
+        "resref": "",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -3.8863305690901484,
+          0.5389202534818478,
+          0.6946903074111229
+        ],
+        "rotation": [
+          84.93000000000008,
+          6.3611093629270335e-15,
+          -98.15000000000028
         ],
         "scale": [
           1.0,
@@ -316,7 +501,7 @@
     "description": "",
     "game": "K1",
     "id": "dff61523-c011-49e1-b564-2850afea73ba",
-    "modified_at": "2026-06-01T11:50:27Z",
+    "modified_at": "2026-06-01T12:49:43Z",
     "name": "Untitled Scene",
     "units": {
       "display_unit": "cm",

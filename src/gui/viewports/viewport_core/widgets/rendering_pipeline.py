@@ -157,9 +157,11 @@ class ViewportRenderingPipelineMixin:
             return False
         governor = getattr(self, "_frame_governor", None)
         dirty_flags = dict(getattr(governor, "dirty_flags", {}) or {})
+        selected_node = getattr(getattr(self, "_renderer", None), "selected_node", None)
         if (
             self._gpu_renderer_supports_native_gizmo_drawing()
             and bool(dirty_flags.get("gizmo", False))
+            and not bool(getattr(selected_node, "is_camera", False))
             and not any(
                 bool(dirty_flags.get(name, False))
                 for name in ("camera", "overlay", "resources", "selection", "lighting", "diagnostics", "hud")

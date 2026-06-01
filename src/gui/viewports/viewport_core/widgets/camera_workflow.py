@@ -16,7 +16,7 @@ class ViewportCameraWorkflowMixin:
             else:
                 self.switch_to_perspective()
         self._refresh_camera_view_combo()
-        self._request_render()
+        self._request_render(fast=True, reason="camera settings changed", camera=True, overlay=True, scene=True)
 
     def create_scene_camera(self, camera_type: str = "Cinematic Camera"):
         camera = self.camera_controller.create_camera(camera_type=camera_type, from_current_view=True)
@@ -96,7 +96,7 @@ class ViewportCameraWorkflowMixin:
 
     def update_view_from_camera(self, camera) -> None:
         self._camera_adapter.update_view_from_camera(camera)
-        self._request_render()
+        self._request_render(fast=True, reason="camera view refreshed", camera=True, overlay=True, scene=True)
 
     def update_camera_from_view(self, camera=None) -> None:
         target = camera or self.camera_manager.get_active_camera()
@@ -107,6 +107,7 @@ class ViewportCameraWorkflowMixin:
         self._camera_adapter.update_camera_from_view(target)
         self.camera_manager._store_on_model()
         self.cameraChanged.emit()
+        self._request_render(fast=True, reason="active camera updated from viewport", camera=True, overlay=True, scene=True)
 
     def align_active_camera_to_view(self):
         camera = self.camera_controller.align_active_camera_to_view()

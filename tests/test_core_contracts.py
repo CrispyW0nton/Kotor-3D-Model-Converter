@@ -3134,7 +3134,8 @@ def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
     assert "not self._gpu_renderer_supports_native_gizmo_drawing()" in source
     assert 'backend_id.startswith("wgpu_")' in native_gizmo_source
     assert "supports_gizmo_drawing" in native_gizmo_source
-    assert 'reason="gizmo drag", scene=True, gizmo=True' in drag_source
+    assert 'dirty.update({"camera": True, "overlay": True})' in drag_source
+    assert 'self._request_render(fast=True, reason="gizmo drag", **dirty)' in drag_source
     assert "self._notify_node_moved(node)" not in drag_source
     assert "_gpu_renderer_supports_native_gizmo_drawing()" in skip_source
     assert "pipeline_gizmo_triangles" in wgpu_pipeline_source
@@ -6728,6 +6729,38 @@ def test_camera_manager_serializes_scene_cameras_and_active_camera() -> None:
     assert restored.get_all_cameras()[0].name == "Camera001"
 
 
+def test_camera_panel_edits_live_camera_transform_and_view_properties() -> None:
+    from types import SimpleNamespace
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6 import QtWidgets
+
+    from src.core.camera.camera_model import GhostRiggerCamera
+    from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
+    from src.math.camera_math import quat_to_euler_degrees
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    node = SimpleNamespace(name="PanelCamera", position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0, 1.0), children=[])
+    source_camera = GhostRiggerCamera(name="PanelCamera", original_ref=node)
+    source_camera.apply_to_original()
+    model = SimpleNamespace(_base_nodes=[node])
+    model.all_nodes = lambda: list(model._base_nodes)
+    panel = QtCameraPanel()
+    panel.set_model(model)
+    camera = panel.manager.get_all_cameras()[0]
+    panel.manager.select_camera(camera.id)
+    panel._load_editor(camera)
+    changed: list[bool] = []
+    panel.cameraChanged.connect(lambda: changed.append(True))
+
+    panel.rot_spins[2].setValue(45.0)
+    panel.fov_spin.setValue(55.0)
+
+    assert changed
+    assert quat_to_euler_degrees(getattr(node, "rotation"))[2] == pytest.approx(45.0)
+    assert getattr(node, "_gr_camera_data")["field_of_view_degrees"] == pytest.approx(55.0)
+
+
 def test_render_output_builds_incrementing_camera_paths(tmp_path) -> None:
     from pathlib import Path
 
@@ -6759,6 +6792,19 @@ def test_qt_viewport_exposes_cinematic_camera_workflow_methods() -> None:
     assert "def render_still_frame" in source
     assert "_camera_hit_test" in source
     assert "_draw_active_camera_overlays" in source
+    event_source = (ROOT / "src/gui/viewports/viewport_core/widgets/event_navigation.py").read_text(encoding="utf-8")
+    transform_source = (ROOT / "src/gui/viewports/viewport_core/widgets/transform_camera.py").read_text(encoding="utf-8")
+    workflow_source = (ROOT / "src/gui/viewports/viewport_core/widgets/camera_workflow.py").read_text(encoding="utf-8")
+    panel_source = (ROOT / "src/gui/panels/qt_camera_panel.py").read_text(encoding="utf-8")
+    assert "and not self._lock_view_to_camera" not in event_source
+    assert "if self.is_camera_view_active():\n                    self.update_camera_from_view()" in event_source
+    assert "if self.is_camera_view_active():\n            self.update_camera_from_view()" in event_source
+    assert "active camera updated from viewport" in workflow_source
+    assert "camera settings changed" in workflow_source
+    assert "if self.is_camera_view_active():\n            self.update_camera_from_view()" in transform_source
+    assert 'not bool(getattr(selected_node, "is_camera", False))' in (ROOT / "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py").read_text(encoding="utf-8")
+    assert "camera.rotation = euler_degrees_to_quat" in panel_source
+    assert "rotation = quat_to_euler_degrees(camera.rotation)" in panel_source
 
 
 def test_camera_letterbox_render_burns_opaque_black_bars() -> None:
@@ -7106,12 +7152,22 @@ def test_camera_gizmo_renderer_is_qt_viewport_adapter_owned() -> None:
     assert gui_camera_gizmo_module is adapter_camera_gizmo_module
     assert sys.modules["src.gui.camera.camera_gizmo_renderer"] is adapter_camera_gizmo_module
     assert QtLibCameraGizmoRenderer is AdapterCameraGizmoRenderer
+    renderer = AdapterCameraGizmoRenderer()
+    camera = SimpleNamespace(
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        original_ref=SimpleNamespace(position=(3.0, 4.0, 5.0), rotation=(0.0, 0.0, 1.0, 0.0)),
+    )
+    assert renderer._camera_position(camera) == (3.0, 4.0, 5.0)
+    assert renderer._camera_rotation(camera) == (0.0, 0.0, 1.0, 0.0)
 
     adapter_source = (ROOT / "src/adapters/qt_viewport/camera_gizmo_renderer.py").read_text(encoding="utf-8")
     gui_source = (ROOT / "src/gui/camera/camera_gizmo_renderer.py").read_text(encoding="utf-8")
     dependencies_source = (ROOT / "src/gui/viewports/viewport_core/shared/dependencies.py").read_text(encoding="utf-8")
 
     assert "class CameraGizmoRenderer" in adapter_source
+    assert "def _camera_position" in adapter_source
+    assert "def _camera_rotation" in adapter_source
     assert "from src.math.camera_math import" in adapter_source
     assert "PySide6" not in adapter_source
     assert "src.gui." not in adapter_source

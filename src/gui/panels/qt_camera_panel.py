@@ -9,6 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.core.camera.camera_manager import CameraManager
 from src.core.camera.camera_model import CAMERA_TYPES, GhostRiggerCamera
 from src.core.camera.camera_presets import FRAMING_PRESETS, LENS_PRESETS, LETTERBOX_PRESETS, RESOLUTION_PRESETS, SENSOR_PRESETS
+from src.math.camera_math import euler_degrees_to_quat, quat_to_euler_degrees
 from src.gui.qt_lib.assets import qt_icon_manager
 
 
@@ -308,8 +309,9 @@ class QtCameraPanel(QtWidgets.QWidget):
         self.locked_check.setChecked(camera.locked)
         for idx, spin in enumerate(self.pos_spins):
             spin.setValue(float(camera.position[idx]))
-        for spin in self.rot_spins:
-            spin.setValue(0.0)
+        rotation = quat_to_euler_degrees(camera.rotation)
+        for idx, spin in enumerate(self.rot_spins):
+            spin.setValue(float(rotation[idx]))
         self.target_enabled_check.setChecked(camera.target_enabled)
         for idx, spin in enumerate(self.target_spins):
             spin.setValue(float(camera.target_position[idx]))
@@ -330,7 +332,7 @@ class QtCameraPanel(QtWidgets.QWidget):
         self.letterbox_spin.setValue(float(camera.letterbox_ratio))
         self._updating = False
 
-    def _apply_editor(self) -> None:
+    def _apply_editor(self, source: object | None = None) -> None:
         if self._updating or self._selected is None:
             return
         camera = self._selected
@@ -340,12 +342,14 @@ class QtCameraPanel(QtWidgets.QWidget):
         camera.visible = self.visible_check.isChecked()
         camera.locked = self.locked_check.isChecked()
         camera.position = tuple(float(spin.value()) for spin in self.pos_spins)
+        camera.rotation = euler_degrees_to_quat(tuple(float(spin.value()) for spin in self.rot_spins))
         camera.target_enabled = self.target_enabled_check.isChecked()
         camera.target_position = tuple(float(spin.value()) for spin in self.target_spins)
         camera.focus_distance = float(self.focus_spin.value())
         if abs(camera.sensor_width_mm - float(self.sensor_w_spin.value())) > 1e-6 or abs(camera.sensor_height_mm - float(self.sensor_h_spin.value())) > 1e-6:
             camera.set_sensor(float(self.sensor_w_spin.value()), float(self.sensor_h_spin.value()))
-        if self.sender() is self.fov_spin:
+        source = source or self.sender()
+        if source is self.fov_spin:
             camera.set_field_of_view(float(self.fov_spin.value()))
         else:
             camera.set_focal_length(float(self.focal_spin.value()))
@@ -498,14 +502,14 @@ class QtCameraPanel(QtWidgets.QWidget):
         spin.setRange(minimum, maximum)
         spin.setDecimals(decimals)
         spin.setSingleStep(step)
-        spin.valueChanged.connect(lambda _value=0.0: self._apply_editor())
+        spin.valueChanged.connect(lambda _value=0.0, source=spin: self._apply_editor(source=source))
         return spin
 
     def _int_spin(self, minimum: int, maximum: int, step: int) -> QtWidgets.QSpinBox:
         spin = QtWidgets.QSpinBox()
         spin.setRange(minimum, maximum)
         spin.setSingleStep(step)
-        spin.valueChanged.connect(lambda _value=0: self._apply_editor())
+        spin.valueChanged.connect(lambda _value=0, source=spin: self._apply_editor(source=source))
         return spin
 
     def _row(self, widgets) -> QtWidgets.QHBoxLayout:

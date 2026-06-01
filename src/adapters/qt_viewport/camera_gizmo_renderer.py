@@ -88,7 +88,7 @@ class CameraGizmoRenderer:
             self._draw_camera(draw, camera, camera.id == active_camera_id, projector, width, height)
 
     def _draw_camera(self, draw, camera, active: bool, projector, width: int, height: int) -> None:
-        pos = tuple(camera.position)
+        pos = self._camera_position(camera)
         p = projector(pos[0], pos[1], pos[2], width, height)
         if p is None:
             return
@@ -108,7 +108,8 @@ class CameraGizmoRenderer:
     def _draw_target(self, draw, camera, color, projector, width: int, height: int) -> None:
         target = tuple(camera.target_position)
         tp = projector(target[0], target[1], target[2], width, height)
-        cp = projector(camera.position[0], camera.position[1], camera.position[2], width, height)
+        pos = self._camera_position(camera)
+        cp = projector(pos[0], pos[1], pos[2], width, height)
         if tp is None:
             return
         x, y = int(tp[0]), int(tp[1])
@@ -119,8 +120,8 @@ class CameraGizmoRenderer:
             draw.line([int(cp[0]), int(cp[1]), x, y], fill=(color[0], color[1], color[2], 150), width=1)
 
     def _draw_frustum(self, draw, camera, color, projector, width: int, height: int) -> None:
-        pos = tuple(camera.position)
-        forward = camera_forward(camera.rotation)
+        pos = self._camera_position(camera)
+        forward = camera_forward(self._camera_rotation(camera))
         if bool(getattr(camera, "target_enabled", False)):
             forward = normalize((camera.target_position[0] - pos[0], camera.target_position[1] - pos[1], camera.target_position[2] - pos[2]))
         right = normalize(cross(forward, (0.0, 0.0, 1.0)))
@@ -150,3 +151,23 @@ class CameraGizmoRenderer:
                     if cp is not None:
                         for point in screen:
                             draw.line([int(cp[0]), int(cp[1]), point[0], point[1]], fill=(color[0], color[1], color[2], 125), width=1)
+
+    def _camera_position(self, camera) -> tuple[float, float, float]:
+        node = getattr(camera, "original_ref", None)
+        raw = getattr(node, "position", None) if node is not None else None
+        if raw is None:
+            raw = getattr(camera, "position", (0.0, 0.0, 0.0))
+        try:
+            return tuple(float(v) for v in tuple(raw)[:3])
+        except Exception:
+            return (0.0, 0.0, 0.0)
+
+    def _camera_rotation(self, camera) -> tuple[float, float, float, float]:
+        node = getattr(camera, "original_ref", None)
+        raw = getattr(node, "rotation", None) if node is not None else None
+        if raw is None:
+            raw = getattr(camera, "rotation", (0.0, 0.0, 0.0, 1.0))
+        try:
+            return tuple(float(v) for v in tuple(raw)[:4])
+        except Exception:
+            return (0.0, 0.0, 0.0, 1.0)

@@ -78,12 +78,10 @@ class ViewportEventNavigationMixin:
                     self._cancel_transform_gizmo_drag()
                     return True
             if et == QtCore.QEvent.Wheel:
-                if self.is_camera_view_active() and not self._lock_view_to_camera:
-                    return True
                 steps = event.angleDelta().y() / 120.0
                 hover_cleared = self._clear_viewport_hover(request=False)
                 self.camera.zoom(steps)
-                if self.is_camera_view_active() and self._lock_view_to_camera:
+                if self.is_camera_view_active():
                     self.update_camera_from_view()
                 self._renderer.is_interactive = False
                 self._request_render(reason="camera zoom", camera=True, overlay=True, selection=hover_cleared)
@@ -235,8 +233,6 @@ class ViewportEventNavigationMixin:
         self._request_render(fast=True)
 
     def _navigation_action(self, button, modifiers) -> str:
-        if self.is_camera_view_active() and not self._lock_view_to_camera:
-            return ""
         alt = has_modifier(modifiers, QtCore.Qt.AltModifier)
         shift = has_modifier(modifiers, QtCore.Qt.ShiftModifier)
         ctrl = has_modifier(modifiers, QtCore.Qt.ControlModifier)
@@ -287,7 +283,7 @@ class ViewportEventNavigationMixin:
             self.camera.pan(dx, dy, self.canvas.height())
         elif self._nav_dragging == "zoom":
             self.camera.zoom((-dy + dx) / 120.0)
-        if self.is_camera_view_active() and self._lock_view_to_camera:
+        if self.is_camera_view_active():
             self.update_camera_from_view()
         self._renderer.is_interactive = self._fast_drag_enabled
         self._request_render(fast=True, reason=f"camera {self._nav_dragging}", camera=True, overlay=True)
@@ -548,8 +544,6 @@ class ViewportEventNavigationMixin:
 
     def animate_to_orientation(self, azimuth: float, elevation: float) -> None:
         """Smoothly interpolate the arcball camera to an azimuth/elevation."""
-        if self.is_camera_view_active() and not self._lock_view_to_camera:
-            self.switch_to_perspective()
         from_az = float(self.camera.azimuth)
         from_el = float(self.camera.elevation)
         to_az, to_el = float(azimuth), float(elevation)
@@ -565,10 +559,8 @@ class ViewportEventNavigationMixin:
         """Orbit the existing camera in response to a ViewCube drag."""
         if self._snap_anim_timer.isActive():
             self._snap_anim_timer.stop()
-        if self.is_camera_view_active() and not self._lock_view_to_camera:
-            self.switch_to_perspective()
         self.camera.orbit(float(daz), float(del_))
-        if self.is_camera_view_active() and self._lock_view_to_camera:
+        if self.is_camera_view_active():
             self.update_camera_from_view()
         self._renderer.is_interactive = self._fast_drag_enabled
         if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
@@ -649,7 +641,7 @@ class ViewportEventNavigationMixin:
             # Snap to exact target to defeat float drift.
             self.camera.azimuth   = to_az % 360.0
             self.camera.elevation = to_el
-        if self.is_camera_view_active() and self._lock_view_to_camera:
+        if self.is_camera_view_active():
             self.update_camera_from_view()
         if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
             self._viewcube_widget.update()
@@ -699,7 +691,9 @@ class ViewportEventNavigationMixin:
                 btn.setText("Ortho" if new_val else "Persp")
         if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None:
             self._viewcube_widget.update()
-        self._request_render()
+        if self.is_camera_view_active():
+            self.update_camera_from_view()
+        self._request_render(fast=True, reason="camera projection changed", camera=True, overlay=True)
 
     @property
     def ortho_mode(self) -> bool:

@@ -200,7 +200,10 @@ class ViewportDragInteractionsMixin:
             node = getattr(getattr(self._transform_gizmo, "controller", None), "object", None)
             if node is not None:
                 self._notify_node_moved(node, live=True)
-            self._request_render(fast=True, reason="gizmo drag", scene=True, gizmo=True)
+            dirty = {"scene": True, "gizmo": True}
+            if node is not None and bool(getattr(node, "is_camera", False)):
+                dirty.update({"camera": True, "overlay": True})
+            self._request_render(fast=True, reason="gizmo drag", **dirty)
             return
         if self._gimbal_dragging and self._renderer.selected_node:
             if (

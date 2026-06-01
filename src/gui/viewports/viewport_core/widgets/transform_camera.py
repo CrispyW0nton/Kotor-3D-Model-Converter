@@ -114,6 +114,8 @@ class ViewportTransformCameraMixin:
         if self.model:
             bb_min, bb_max = self._renderer._get_render_bounds()
             self.camera.frame_bounds(bb_min, bb_max)
+        if self.is_camera_view_active():
+            self.update_camera_from_view()
         self._request_render()
 
     def frame_selection_or_all(self) -> None:
@@ -123,6 +125,8 @@ class ViewportTransformCameraMixin:
         else:
             self.frame_all()
             return
+        if self.is_camera_view_active():
+            self.update_camera_from_view()
         self._request_render()
 
     def reset_camera(self) -> None:
@@ -130,6 +134,8 @@ class ViewportTransformCameraMixin:
         if self.model:
             bb_min, bb_max = self._renderer._get_render_bounds()
             self.camera.frame_bounds(bb_min, bb_max, reset_view=True)
+        if self.is_camera_view_active():
+            self.update_camera_from_view()
         self._request_render()
 
     # ── M6 / T605 — Head-mode camera preset ──────────────────────────

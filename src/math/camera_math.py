@@ -92,6 +92,45 @@ def multiply_quat(a: Quat, b: Quat) -> Quat:
     )
 
 
+def quat_to_euler_degrees(q: object) -> Vec3:
+    try:
+        x, y, z, w = [float(v) for v in list(q)[:4]]  # type: ignore[arg-type]
+    except Exception:
+        return (0.0, 0.0, 0.0)
+    x, y, z, w = normalize_quat((x, y, z, w))
+    sinr_cosp = 2.0 * (w * x + y * z)
+    cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)
+    sinp = 2.0 * (w * y - z * x)
+    pitch = math.copysign(math.pi / 2.0, sinp) if abs(sinp) >= 1.0 else math.asin(sinp)
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)
+    return (math.degrees(roll), math.degrees(pitch), math.degrees(yaw))
+
+
+def euler_degrees_to_quat(euler: object) -> Quat:
+    try:
+        rx, ry, rz = (math.radians(float(v)) for v in list(euler)[:3])  # type: ignore[arg-type]
+    except Exception:
+        return (0.0, 0.0, 0.0, 1.0)
+
+    def axis_quat(axis: str, angle: float) -> Quat:
+        half = angle * 0.5
+        s = math.sin(half)
+        c = math.cos(half)
+        if axis == "X":
+            return (s, 0.0, 0.0, c)
+        if axis == "Y":
+            return (0.0, s, 0.0, c)
+        return (0.0, 0.0, s, c)
+
+    return multiply_quat(
+        axis_quat("Z", rz),
+        multiply_quat(axis_quat("Y", ry), axis_quat("X", rx)),
+    )
+
+
 def rotate_vector(q: Quat, v: Iterable[float]) -> Vec3:
     x, y, z = vec3(v)
     qx, qy, qz, qw = normalize_quat(q)
