@@ -6783,6 +6783,14 @@ def test_camera_panel_edits_live_camera_transform_and_view_properties() -> None:
     assert [target.id for target in context_targets] == [camera.id]
     assert camera_items[camera.id].isSelected()
     assert panel.tree.currentItem() is camera_items[camera.id]
+    context_pos = panel.tree.visualItemRect(camera_items[camera.id]).center()
+    menu, actions, menu_targets, menu_camera = panel._build_context_menu(context_pos)
+    assert menu.objectName() == "CameraPanelContextMenu"
+    assert menu_camera.id == camera.id
+    assert [target.id for target in menu_targets] == [camera.id]
+    assert {"active", "view_to", "align_to", "rename", "duplicate", "delete", "from_view", "clear"} <= set(actions)
+    assert actions["active"].icon().isNull() is False
+    menu.deleteLater()
 
     panel.rot_spins[2].setValue(45.0)
     panel.fov_spin.setValue(55.0)

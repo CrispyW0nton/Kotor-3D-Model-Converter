@@ -572,31 +572,7 @@ class QtCameraPanel(QtWidgets.QWidget):
             self.alignViewToCameraRequested.emit(camera.id)
 
     def _show_context_menu(self, pos: QtCore.QPoint) -> None:
-        item = self.tree.itemAt(pos)
-        selected = self._context_targets_for_item(item)
-        camera = selected[-1] if selected else None
-        menu = QtWidgets.QMenu(self)
-        menu.setObjectName("CameraPanelContextMenu")
-        actions: dict[str, QtGui.QAction] = {}
-        if camera is not None:
-            title = menu.addAction(self._camera_icon(camera.camera_type), camera.name)
-            title.setEnabled(False)
-            menu.addSeparator()
-            actions["active"] = self._menu_action(menu, "Set Active Camera", qt_icon_manager.I.CAMERA_CINEMATIC)
-            actions["view_to"] = self._menu_action(menu, "View Through Camera", qt_icon_manager.I.CAMERAS)
-            actions["align_to"] = self._menu_action(menu, "Align Camera To Current View", qt_icon_manager.I.VIEWPORT_LOCK_CAMERA)
-            menu.addSeparator()
-            actions["rename"] = self._menu_action(menu, "Rename Camera", qt_icon_manager.I.PROPS)
-            actions["duplicate"] = self._menu_action(menu, "Duplicate Camera", qt_icon_manager.I.PROPS)
-            actions["delete"] = self._menu_action(menu, "Delete Camera", qt_icon_manager.I.CLOSE)
-            menu.addSeparator()
-            actions["lock"] = self._menu_action(menu, "Lock Camera", qt_icon_manager.I.VIEWPORT_LOCK_CAMERA)
-            actions["unlock"] = self._menu_action(menu, "Unlock Camera", qt_icon_manager.I.VIEWPORT_LOCK_CAMERA)
-            actions["show"] = self._menu_action(menu, "Show Camera Helper", qt_icon_manager.I.VIEWPORT_SELECT_CAMERAS)
-            actions["hide"] = self._menu_action(menu, "Hide Camera Helper", qt_icon_manager.I.VIEWPORT_SELECT_CAMERAS)
-            menu.addSeparator()
-        actions["from_view"] = self._menu_action(menu, "Create Camera From Current View", qt_icon_manager.I.VIEWPORT_SELECT_CAMERAS)
-        actions["clear"] = self._menu_action(menu, "Clear Active Camera", qt_icon_manager.I.CAMERAS)
+        menu, actions, selected, camera = self._build_context_menu(pos)
         chosen = menu.exec(self.tree.viewport().mapToGlobal(pos))
         if chosen is None:
             return
@@ -640,6 +616,37 @@ class QtCameraPanel(QtWidgets.QWidget):
                 cam.apply_to_original()
             self.cameraChanged.emit()
         self.refresh()
+
+    def _build_context_menu(
+        self,
+        pos: QtCore.QPoint,
+    ) -> tuple[QtWidgets.QMenu, dict[str, QtGui.QAction], list[GhostRiggerCamera], GhostRiggerCamera | None]:
+        item = self.tree.itemAt(pos)
+        selected = self._context_targets_for_item(item)
+        camera = selected[-1] if selected else None
+        menu = QtWidgets.QMenu(self)
+        menu.setObjectName("CameraPanelContextMenu")
+        actions: dict[str, QtGui.QAction] = {}
+        if camera is not None:
+            title = menu.addAction(self._camera_icon(camera.camera_type), camera.name)
+            title.setEnabled(False)
+            menu.addSeparator()
+            actions["active"] = self._menu_action(menu, "Set Active Camera", qt_icon_manager.I.CAMERA_CINEMATIC)
+            actions["view_to"] = self._menu_action(menu, "View Through Camera", qt_icon_manager.I.CAMERAS)
+            actions["align_to"] = self._menu_action(menu, "Align Camera To Current View", qt_icon_manager.I.VIEWPORT_LOCK_CAMERA)
+            menu.addSeparator()
+            actions["rename"] = self._menu_action(menu, "Rename Camera", qt_icon_manager.I.PROPS)
+            actions["duplicate"] = self._menu_action(menu, "Duplicate Camera", qt_icon_manager.I.PROPS)
+            actions["delete"] = self._menu_action(menu, "Delete Camera", qt_icon_manager.I.CLOSE)
+            menu.addSeparator()
+            actions["lock"] = self._menu_action(menu, "Lock Camera", qt_icon_manager.I.VIEWPORT_LOCK_CAMERA)
+            actions["unlock"] = self._menu_action(menu, "Unlock Camera", qt_icon_manager.I.VIEWPORT_LOCK_CAMERA)
+            actions["show"] = self._menu_action(menu, "Show Camera Helper", qt_icon_manager.I.VIEWPORT_SELECT_CAMERAS)
+            actions["hide"] = self._menu_action(menu, "Hide Camera Helper", qt_icon_manager.I.VIEWPORT_SELECT_CAMERAS)
+            menu.addSeparator()
+        actions["from_view"] = self._menu_action(menu, "Create Camera From Current View", qt_icon_manager.I.VIEWPORT_SELECT_CAMERAS)
+        actions["clear"] = self._menu_action(menu, "Clear Active Camera", qt_icon_manager.I.CAMERAS)
+        return menu, actions, selected, camera
 
     def _context_targets_for_item(self, item: QtWidgets.QTreeWidgetItem | None) -> list[GhostRiggerCamera]:
         if item is None:
