@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
+import math
+
 from src.math.frame_math import _clamp
 
 # ─────────────────────────────────────────────────────────────────────

@@ -28,22 +28,24 @@
 - `workflow/` - shared workflow base classes and composite workflows.
 - `special/` - specialised integration, compatibility, and legacy helpers.
 
-## Central Import Hub
+## Compatibility Facade
 
-`src/core/qt_core.py` is the central backend facade and grouped import hub for common public APIs used by Qt-facing code and tools. It mirrors `src/gui/qt_lib.py`: implementation modules live in subsystem folders, while `qt_core.py` exposes lazy grouped routes such as `src.core.qt_core.modules.module_loader`.
+`src/core/qt_core.py` is a compatibility facade for older public paths and grouped imports. Implementation modules live in subsystem folders, and new code should import those canonical subsystem owners directly. `qt_core.py` exists to keep legacy callers stable while the codebase moves toward clearer package ownership.
 
 It should not contain business logic, file-format logic, GUI widget logic, or broad wildcard imports from implementation modules.
 
-Example:
+Preferred canonical imports:
 
 ```python
-from src.core.qt_core import SceneManager, ModuleLoader, ResourceManager
+from src.core.scene.scene_manager import SceneManager
+from src.core.modules.module_loader import ModuleLoader
+from src.core.assets.resource_manager import ResourceManager
 ```
 
-Use the grouped routes when a caller needs a specialised API that is not part of the curated facade:
+Compatibility imports may remain only where public paths need to stay stable:
 
 ```python
-from src.core.qt_core.modules.module_format import ModuleData
+from src.core.qt_core import SceneManager
 ```
 
 ## Subsystems
@@ -70,18 +72,18 @@ from src.core.module_loader import ModuleLoader
 from src.core.mdl_parser import MDLAsciiParser
 ```
 
-should be migrated to `src.core.qt_core`:
+should be migrated to canonical subsystem owners:
 
 ```python
-from src.core.qt_core import SceneManager, ModuleLoader, MDLAsciiParser
+from src.core.scene.scene_manager import SceneManager
+from src.core.modules.module_loader import ModuleLoader
+from src.core.mdl.mdl_parser import MDLAsciiParser
 ```
 
-or to a grouped route:
+Keep `qt_core.py` as a thin public compatibility facade when older callers still need it:
 
 ```python
-from src.core.qt_core.scene.scene_manager import SceneManager
-from src.core.qt_core.modules.module_loader import ModuleLoader
-from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
+from src.core.qt_core import SceneManager
 ```
 
 ## Rules for Adding New Core Modules
@@ -107,17 +109,19 @@ src/core/new_big_feature/
 
 ## Import Style Guide
 
-GUI and tool consumers should prefer the facade for common backend services:
+New GUI, tool, and backend implementation code should prefer canonical subsystem owners:
 
 ```python
-from src.core.qt_core import KotorModel, SceneManager, ValidationService
+from src.core.geometry.model_data import KotorModel
+from src.core.scene.scene_manager import SceneManager
+from src.core.diagnostics.validation_service import ValidationService
 ```
 
-For specialised APIs outside the facade, GUI and tool consumers should use grouped `qt_core` routes:
+For specialised APIs, continue using the owning subsystem directly:
 
 ```python
-from src.core.qt_core.assets.resource_manager import RES_TPC
-from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+from src.core.assets.resource_manager import RES_TPC
+from src.core.animation.gpu_skinning import MatrixPaletteUploader
 ```
 
 Core subsystem modules should prefer explicit relative imports to other subsystem modules:
@@ -131,4 +135,4 @@ Avoid wildcard imports in implementation modules. Avoid `sys.path` manipulation.
 
 ## Future Expansion Notes
 
-New backend systems should keep GUI concerns at the edges and should expose stable APIs through `qt_core.py` only when they become common cross-subsystem dependencies. If a subsystem grows large, split it into model, controller, service, serializer, adapter, and validator modules inside that subsystem instead of adding root-level files.
+New backend systems should keep GUI concerns at the edges and should expose stable APIs from their owning subsystem first. Add `qt_core.py` compatibility exports only when preserving an existing public import path requires it. If a subsystem grows large, split it into model, controller, service, serializer, adapter, and validator modules inside that subsystem instead of adding root-level files.

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.qt_lib.lighting.lightmap_uv_validator import LightmapUVValidator
+from src.core.lighting.lightmap_uv_validator import LightmapUVValidator
 
 
 class UVGeometryPreviewWindow(QtWidgets.QDialog):

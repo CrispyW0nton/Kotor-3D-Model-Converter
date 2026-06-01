@@ -6,7 +6,8 @@ Import this backend directly when code needs the software ``FrameRenderer``.
 
 from __future__ import annotations
 
-from .diagnostics import _GR_VIEWPORT_PROBE, _GR_VIEWPORT_PROBE_SEEN, _gr_probe, log
+from .dependencies import log
+from .diagnostics import _GR_VIEWPORT_PROBE, _GR_VIEWPORT_PROBE_SEEN, _gr_probe
 from src.math.frame_math import (
     _add,
     _clamp,

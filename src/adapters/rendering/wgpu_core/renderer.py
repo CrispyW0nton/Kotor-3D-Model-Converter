@@ -1,8 +1,73 @@
 from __future__ import annotations
 
-from .resources import *  # noqa: F401,F403
-from src.core.rendering.wgpu_shaders import *  # noqa: F401,F403
-from .shared import *  # noqa: F401,F403
+import dataclasses
+import json
+import logging
+import math
+import os
+import subprocess
+import sys
+import time
+from importlib import util as importlib_util
+from typing import ClassVar
+
+from src.adapters.rendering.null_renderer import NullDiagnosticRenderer
+from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
+from src.adapters.rendering.wgpu_core.shared import _probe_script
+from src.core.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS
+from src.core.rendering.color_utils import _hex_to_rgb_float
+from src.core.rendering.picking import PickHit
+from src.core.rendering.renderer_backend import RendererBackend
+from src.core.rendering.renderer_capabilities import (
+    WGPU_DISPLAY_MODES,
+    WGPU_FALLBACK_DISPLAY_MODES,
+    RendererCapabilities,
+)
+from src.core.rendering.renderer_performance import (
+    RenderQueueCache,
+    TextureResidencyInfo,
+    bounds_intersects_frustum,
+    extract_frustum_planes,
+    group_render_batches,
+    instancing_summary,
+    texture_array_groups,
+)
+from src.core.rendering.renderer_profiler import RendererProfiler
+from src.core.rendering.renderer_settings import RendererSettings
+from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
+from src.core.rendering.wgpu_shared import (
+    SELECTION_YELLOW,
+    WgpuLightResource,
+    WgpuPickResources,
+    WgpuSkeletonResource,
+    _WGPU_BACKENDS,
+    _WGPU_BACKEND_ENV,
+    _WgpuBackendSpec,
+    _adapter_info_dict,
+    _blend_rgb,
+    _format_is_srgb,
+    _joint_marker_segments,
+    _mat4_lookat,
+    _mat4_perspective_wgpu,
+    _mat4_tobytes,
+    _point_distance,
+    _relative_luma,
+    _rgb_float,
+    _srgb_to_linear,
+)
+from src.core.rendering.wgpu_shaders import (
+    _GRID_WGSL,
+    _LINE_WGSL,
+    _MESH_BASIC_WGSL,
+    _MESH_TEXTURED_WGSL,
+    _PICK_WGSL,
+    _SKINNED_LINE_WGSL,
+    _load_mesh_shader,
+    _load_skinned_mesh_shader,
+)
+
+
+log = logging.getLogger(__name__)
 class WgpuRenderer(NullDiagnosticRenderer):
     """Conservative WGPU renderer: Qt surface, clear pass, and grid pass."""
 
@@ -1212,7 +1277,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             return
         try:
             from src.core.rendering.mesh_render_data import iter_mesh_render_data
-            from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data
+            from src.adapters.rendering.moderngl_resources import _build_vbo_data
         except Exception as exc:
             self.last_error = f"mesh adapter unavailable: {exc}"
             return
@@ -2113,7 +2178,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         try:
             from src.core.rendering.mesh_render_data import iter_mesh_render_data
-            from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data
+            from src.adapters.rendering.moderngl_resources import _build_vbo_data
         except Exception as exc:
             diagnostic["result"] = "unavailable"
             diagnostic["reason"] = f"mesh adapter unavailable: {exc}"
@@ -2305,7 +2370,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
 
         try:
             from src.core.rendering.mesh_render_data import iter_mesh_render_data
-            from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data
+            from src.adapters.rendering.moderngl_resources import _build_vbo_data
         except Exception as exc:
             diagnostic["result"] = "unavailable"
             diagnostic["reason"] = f"mesh adapter unavailable: {exc}"

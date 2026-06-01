@@ -44,9 +44,9 @@ TARGETS: Tuple[Tuple[str, str, str], ...] = (
 
 
 def _dump_one(rm, resref: str, game: str, out_path: Path) -> int:
-    from src.core.qt_core.animation.animation_engine import AnimationEngine
-    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
-    from src.gui.qt_lib.rendering.gpu_renderer import _build_skin_dump_record
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.rendering.gpu_diagnostics_records import _build_skin_dump_record
 
     model = rm.load_model(resref, game)
     if model is None:
@@ -116,8 +116,8 @@ def _dump_one(rm, resref: str, game: str, out_path: Path) -> int:
 
 
 def main() -> int:
-    from src.core.qt_core.assets.resource_manager import ResourceManager
-    from src.core.qt_core.animation.animation_engine import SuperModelResolver
+    from src.core.animation.animation_engine import SuperModelResolver
+    from src.core.assets.resource_manager import ResourceManager
 
     rm = ResourceManager()
     if not rm.set_k1_dir(K1_DIR):

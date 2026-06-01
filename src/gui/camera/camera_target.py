@@ -7,4 +7,3 @@ import sys
 
 _module = import_module("src.core.camera.camera_target")
 sys.modules[__name__] = _module
-globals().update(_module.__dict__)

@@ -8,7 +8,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.qt_lib.viewports.viewport_navigation import VIEWPORT_NAVIGATION_HELP
+from src.core.rendering.viewport_navigation import VIEWPORT_NAVIGATION_HELP
 
 
 class QtAboutDialog(QtWidgets.QDialog):

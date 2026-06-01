@@ -92,8 +92,8 @@ def iter_models(game_arg: str = "all", limit: int | None = None):
 def load_ghostrigger_model(game: str, resref: str):
     configure_paths()
     from kotormcp.tools.ghostrigger_tools import _resource_pair
-    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-    from src.core.qt_core.geometry.model_data import GameVersion
+    from src.core.game.kotor_loader import load_model_from_bytes
+    from src.core.geometry.model_data import GameVersion
 
     _, mdl, mdx = _resource_pair(game, resref)
     model = load_model_from_bytes(mdl.data, mdx.data if mdx is not None else b"")

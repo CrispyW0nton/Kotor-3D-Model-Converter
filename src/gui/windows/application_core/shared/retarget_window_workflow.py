@@ -12,9 +12,9 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
-from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import combo_current_retarget_mode
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow

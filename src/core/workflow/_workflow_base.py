@@ -87,18 +87,18 @@ def import_model_data():                                    # pragma: no cover -
     then bare ``core`` ).
     """
     try:
-        from src.core.qt_core.geometry import model_data as _md             # type: ignore
+        from src.core.geometry import model_data as _md             # type: ignore
     except ImportError:
-        from core.qt_core.geometry import model_data as _md                 # type: ignore
+        from core.geometry import model_data as _md                 # type: ignore
     return _md
 
 
 def import_validation_service():                            # pragma: no cover - import shim
     """Return the ``core.validation_service`` module, deferred."""
     try:
-        from src.core.qt_core.diagnostics import validation_service as _vs     # type: ignore
+        from src.core.diagnostics import validation_service as _vs     # type: ignore
     except ImportError:
-        from core.qt_core.diagnostics import validation_service as _vs         # type: ignore
+        from core.diagnostics import validation_service as _vs         # type: ignore
     return _vs
 
 

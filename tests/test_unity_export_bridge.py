@@ -10,14 +10,14 @@ LOCAL_SRC = ROOT / "src"
 if str(LOCAL_SRC) not in sys.path:
     sys.path.insert(0, str(LOCAL_SRC))
 
-from src.core.qt_core.export.unity_export_bridge import (
+from src.core.export.unity_export_bridge import (
     build_output_paths,
     export_model_for_unity,
     inspect_fbx_skin_objects,
     summarize_model,
 )
-from src.core.qt_core.export.unity_import_validator import build_unity_import_manifest
-from src.core.qt_core.geometry.model_data import BoneWeight, KotorModel, ModelNode, NodeFlags, VertexSkinData
+from src.core.export.unity_import_validator import build_unity_import_manifest
+from src.core.geometry.model_data import BoneWeight, KotorModel, ModelNode, NodeFlags, VertexSkinData
 from src.converters.mesh_converter import FBXExporter
 from kotormcp.tools import get_all_tools, handle_tool
 from kotormcp.tools import ghostrigger

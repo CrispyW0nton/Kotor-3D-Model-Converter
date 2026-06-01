@@ -16,17 +16,17 @@ from typing import Optional, Tuple
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.qt_lib.assets.qt_theme import QtFlowLayout, make_horizontal_overflow_area
-from src.gui.qt_lib.rendering.qt_gpu_renderer import (
-    GpuRenderer,
+from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer
+from src.adapters.rendering.moderngl_resources import (
     clear_prebuilt_static_gpu_mesh_data,
     clear_prebuilt_static_gpu_model_data,
-    create_viewport_renderer,
 )
-from src.gui.qt_lib.rendering.renderer_backend import normalize_renderer_backend, renderer_backend_label
-from src.gui.qt_lib.rendering.renderer_performance import ViewportFrameGovernor
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
-from src.gui.qt_lib.rendering.picking import CpuMeshPickingProvider, PickRequest, ray_triangle_intersection
-from src.gui.qt_lib.viewports.viewport_display import (
+from src.adapters.rendering.renderer_factory import create_viewport_renderer
+from src.core.rendering.renderer_backend import normalize_renderer_backend, renderer_backend_label
+from src.core.rendering.renderer_performance import ViewportFrameGovernor
+from src.core.rendering.renderer_settings import RendererSettings
+from src.core.rendering.picking import CpuMeshPickingProvider, PickRequest, ray_triangle_intersection
+from src.core.rendering.viewport_display import (
     ViewportDisplayMode,
     ViewportDisplayOptions,
 )
@@ -34,7 +34,7 @@ from src.gui.qt_lib.viewports.qt_uv_viewer import QtUVViewerWindow
 from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
 from src.core.camera.arcball_camera import ArcBallCamera
 from src.core.rendering.frame_core.renderer import FrameRenderer
-from src.gui.qt_lib.viewports.viewport_navigation import (
+from src.core.rendering.viewport_navigation import (
     DEFAULT_VIEWPORT_NAVIGATION_PROFILE,
     has_modifier,
     normalize_viewport_navigation_profile,
@@ -58,9 +58,9 @@ from src.math.viewcube_math import (
     view_orientation_quaternion,
 )
 from src.gui.qt_lib.panels.axis_mode_control import AxisModeControl
+from src.adapters.qt_viewport.camera_gizmo_renderer import CameraGizmoRenderer
 from src.core.camera.camera_controller import CameraController
 from src.adapters.qt_viewport.camera_overlays import CameraOverlays
-from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer
 from src.core.camera.camera_manager import CameraManager
 from src.core.camera.camera_picker import CameraPicker
 from src.core.camera.camera_viewport_adapter import CameraViewportAdapter

@@ -52,13 +52,13 @@ from typing import Callable, Dict, List, Optional, Tuple
 log = logging.getLogger(__name__)
 
 try:
-    from ..core.model_data import (
+    from ..core.geometry.model_data import (
         KotorModel, ModelNode, NodeFlags, BoneWeight,
         Animation, GameVersion,
     )
     from ..autorig.auto_rigger import AutoRigger, RigExtractor, RigTemplate
 except ImportError:
-    from core.qt_core.geometry.model_data import (                       # type: ignore[no-redef]
+    from core.geometry.model_data import (                               # type: ignore[no-redef]
         KotorModel, ModelNode, NodeFlags, BoneWeight,
         Animation, GameVersion,
     )
@@ -1412,7 +1412,7 @@ def export_as_mdl(model: KotorModel, mdl_path: str, mdx_path: str = "") -> bool:
     err_writer = None
 
     # ── Porter path ─────────────────────────────────────────────────────────
-    for mod_name in ("src.core.mdl_porter", "core.mdl_porter"):
+    for mod_name in ("src.core.mdl.mdl_porter", "core.mdl.mdl_porter"):
         try:
             _mod = importlib.import_module(mod_name)
             _mod.MDLBinaryWriter().write(model, mdl_path, mdx_path)
@@ -1426,7 +1426,7 @@ def export_as_mdl(model: KotorModel, mdl_path: str, mdx_path: str = "") -> bool:
             break
 
     # ── mdl_writer fallback ──────────────────────────────────────────────────
-    for mod_name in ("src.core.mdl_writer", "core.mdl_writer"):
+    for mod_name in ("src.core.mdl.mdl_writer", "core.mdl.mdl_writer"):
         try:
             _mod = importlib.import_module(mod_name)
             _mod.MDLWriter().write_files(model, mdl_path)

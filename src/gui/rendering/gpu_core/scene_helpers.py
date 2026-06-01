@@ -1,9 +1,9 @@
-from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe
-from src.core.rendering.gpu_scene_helpers import (
-    _BASE_SKELETONS,
-    _CompositeModel,
-    _apply_txi_from_textures_to_model,
-    _compute_model_bounds,
-)
+"""Compatibility alias for ModernGL scene helper exports."""
 
-__all__ = tuple(name for name in globals() if not name.startswith("__"))
+from __future__ import annotations
+
+from importlib import import_module
+import sys
+
+_module = import_module("src.adapters.rendering.moderngl_scene_helpers")
+sys.modules[__name__] = _module

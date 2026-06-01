@@ -5,7 +5,7 @@ from __future__ import annotations
 from PIL import Image
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.qt_lib.lighting.lightmap_compare import COMPARISON_MODES, LightmapCompare
+from src.core.lighting.lightmap_compare import COMPARISON_MODES, LightmapCompare
 
 
 class LightmapPreviewWindow(QtWidgets.QDialog):

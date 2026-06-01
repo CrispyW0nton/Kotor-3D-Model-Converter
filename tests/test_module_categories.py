@@ -1,6 +1,6 @@
 """Module location label tests for the game-library browser."""
 
-from src.core.qt_core.modules.module_categories import (
+from src.core.modules.module_categories import (
     get_area_name,
     get_module_info,
     get_modules_by_location,
@@ -60,7 +60,7 @@ def test_library_enrichment_adds_human_area_labels_for_module_models():
     ])
     real_rows = [row for row in rows if not row.get("template")]
 
-    assert real_rows[0]["category"] == "Module"
+    assert real_rows[0]["category"] == "Modules"
     assert real_rows[0]["location"] == "Taris"
     assert real_rows[0]["area_name"] == "South Apartments"
     assert real_rows[0]["area_label"] == "Taris - South Apartments"
@@ -68,5 +68,5 @@ def test_library_enrichment_adds_human_area_labels_for_module_models():
 
 
 def test_library_category_detects_known_room_model_names():
-    assert infer_model_category("m02aa_01a") == "Module"
-    assert infer_model_category("301nar") == "Module"
+    assert infer_model_category("m02aa_01a", "tile") == "Modules"
+    assert infer_model_category("301nar") == "Modules"

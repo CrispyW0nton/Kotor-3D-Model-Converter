@@ -2,7 +2,35 @@
 
 from __future__ import annotations
 
-from .mixin_imports import *  # noqa: F401,F403
+from .mixin_imports import (
+    Image,
+    ImageDraw,
+    _ACCEL_AVAILABLE,
+    _BG,
+    _FACE_MESH_SUBSTRINGS,
+    _INNER_GEO_SUBSTRINGS,
+    _NUMPY,
+    _PIL,
+    _SEL,
+    _WIRE,
+    _accel_depth_sort,
+    _accel_flat_shade_frame,
+    _accel_frustum_cull,
+    _accel_rasterize_frame,
+    _clamp,
+    _clean_tex_name,
+    _compute_flipbook_uv,
+    _dot,
+    _edge_has_seam_global,
+    _float_to_sort_key,
+    _paste_lightmap_triangle,
+    _paste_textured_triangle,
+    _uwrap_global,
+    is_animation_supermodel,
+    log,
+    math,
+    np,
+)
 
 
 class RendererMeshMixin:

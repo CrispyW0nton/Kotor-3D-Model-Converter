@@ -2,7 +2,21 @@
 
 from __future__ import annotations
 
-from .mixin_imports import *  # noqa: F401,F403
+from .mixin_imports import (
+    Iterable,
+    Optional,
+    WalkmeshLoader,
+    WalkmeshOverlay,
+    _AXIS_X,
+    _AXIS_Y,
+    _AXIS_Z,
+    _BG,
+    _clean_tex_name,
+    _dot,
+    is_animation_supermodel,
+    log,
+    math,
+)
 
 
 class RendererOverlayMixin:
@@ -1024,9 +1038,9 @@ class RendererOverlayMixin:
         uv_mesh  = sum(1 for n in visible_nodes if n.vertices)
         # Game version string
         try:
-            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.geometry.model_data import GameVersion
         except ImportError:
-            from core.qt_core.geometry.model_data import GameVersion  # type: ignore
+            from core.geometry.model_data import GameVersion  # type: ignore
         gv_str = "K1" if self.model.game_version == GameVersion.K1 else "K2"
         model_name = str(getattr(self.model, "name", "model") or "model")
         if len(model_name) > 34:

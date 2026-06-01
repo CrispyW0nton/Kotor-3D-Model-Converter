@@ -9,8 +9,8 @@ try:
 except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
-from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.core.rendering.renderer_settings import RendererSettings
+from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.module_editor_window import ModuleEditorWindow
 
 
@@ -21,7 +21,7 @@ class ResourcePanelsMixin:
         if not hasattr(self, "resource_panel"):
             return
         try:
-            from src.core.qt_core.assets import resource_manager as rm
+            from src.core.assets import resource_manager as rm
 
             k1_dir = self.k1_dir_edit.text().strip()
             k2_dir = self.k2_dir_edit.text().strip()
@@ -125,7 +125,7 @@ class ResourcePanelsMixin:
         self.twoda_panel.listbox.clear()
         self.twoda_panel.table.clear()
         try:
-            from src.core.qt_core.assets import resource_manager as rm
+            from src.core.assets import resource_manager as rm
 
             manager = rm.ResourceManager()
             k1_dir = self.k1_dir_edit.text().strip()
@@ -146,8 +146,8 @@ class ResourcePanelsMixin:
         if not name:
             return
         try:
-            from src.core.qt_core.assets import resource_manager as rm
-            from src.core.qt_core.templates.twoda import TwoDA
+            from src.core.assets import resource_manager as rm
+            from src.core.templates.twoda import TwoDA
 
             manager = getattr(self, "_resource_manager", None)
             if manager is None:
@@ -190,8 +190,8 @@ class ResourcePanelsMixin:
         )
     def _validate_current_character(self):
         try:
-            from src.core.qt_core.geometry.model_data import CharacterScene, PartSlot
-            from src.core.qt_core.diagnostics.validation_service import ValidationService
+            from src.core.geometry.model_data import CharacterScene, PartSlot
+            from src.core.diagnostics.validation_service import ValidationService
 
             scene = None
             builder = getattr(self, "_character_builder_window", None)

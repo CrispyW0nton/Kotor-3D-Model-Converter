@@ -715,7 +715,7 @@ def _bas_attachment_socket_node(bas_root):
 
 
 def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
-    from src.core.qt_core.geometry.model_data import (
+    from src.core.geometry.model_data import (
         _quat_mul,
         _quat_normalize,
         _quat_normalize_bind,
@@ -764,7 +764,7 @@ def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
 
 
 def _bas_attachment_local_transform(node, bas_root):
-    from src.core.qt_core.geometry.model_data import (
+    from src.core.geometry.model_data import (
         _quat_mul,
         _quat_normalize,
         _quat_normalize_bind,
@@ -808,7 +808,7 @@ def _bas_attachment_local_transform(node, bas_root):
 def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
     import math
 
-    from src.core.qt_core.geometry.model_data import (
+    from src.core.geometry.model_data import (
         _quat_mul,
         _quat_normalize,
         _quat_normalize_bind,

@@ -18,7 +18,7 @@ from src.measurement.unit_system import UNIT_SYMBOLS, UnitSystem
 # import time.  We isolate the failure so the Qt panel still loads in
 # environments where pykotor is missing (the badge simply stays empty).
 try:
-    from src.core.qt_core.geometry.model_data import CharacterMode, detect_character_mode
+    from src.core.geometry.model_data import CharacterMode, detect_character_mode
     _CHARACTER_MODE_AVAILABLE = True
 except Exception:                                       # pragma: no cover
     CharacterMode = None                                # type: ignore[assignment]

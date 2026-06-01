@@ -16,9 +16,9 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
-from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+from src.core.rendering.hardware_info import collect_hardware_diagnostics
 from src.adapters.rendering.renderer_factory import renderer_capabilities_snapshot
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.windows.application_core.application_core_lib.functions.geometry import _prebuild_gpu_mesh_data_for_model
 from src.gui.windows.application_core.application_core_lib.functions.startup_library import (
     _build_prelaunch_library_input,
@@ -58,7 +58,7 @@ class ModelLoadWorker(QtCore.QObject):
                 or raw[:2] in (b"#\x20", b"# ")
             )
             if is_ascii_mdl:
-                from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
+                from src.core.mdl.mdl_parser import MDLAsciiParser
 
                 self.progress.emit("Parsing ASCII MDL", 2, 5)
                 lines = raw.decode("utf-8", errors="replace").splitlines()
@@ -66,8 +66,8 @@ class ModelLoadWorker(QtCore.QObject):
                 model.mdl_path = str(path)
                 model.mdx_path = ""
             else:
-                from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-                from src.core.qt_core.geometry.model_data import GameVersion
+                from src.core.game.kotor_loader import load_model_from_bytes
+                from src.core.geometry.model_data import GameVersion
 
                 self.progress.emit("Reading MDX bytes", 2, 5)
                 mdx_path = Path(self.mdx_path) if self.mdx_path else path.with_suffix(".mdx")
@@ -83,7 +83,7 @@ class ModelLoadWorker(QtCore.QObject):
             if model is None:
                 raise RuntimeError(f"Could not parse {path.name}")
             if self.game:
-                from src.core.qt_core.geometry.model_data import GameVersion
+                from src.core.geometry.model_data import GameVersion
 
                 model.game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
             self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
@@ -107,9 +107,9 @@ class ResourceModelLoadWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-            from src.core.qt_core.geometry.model_data import GameVersion
-            from src.core.qt_core.assets.resource_manager import ResourceManager
+            from src.core.game.kotor_loader import load_model_from_bytes
+            from src.core.geometry.model_data import GameVersion
+            from src.core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             if self.k1_dir:
@@ -175,9 +175,9 @@ class AnimationLibraryScanWorker(QtCore.QObject):
     @QtCore.Slot()
     def run(self):
         try:
-            from src.core.qt_core.assets.resource_manager import ResourceManager
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.assets.resource_manager import ResourceManager
+            from src.core.game.kotor_loader import load_model_from_bytes
+            from src.core.geometry.model_data import GameVersion
 
             mgr = ResourceManager()
             if self.k1_dir:
@@ -263,7 +263,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
         fail = 0
         total = len(self.rows)
         try:
-            from src.core.qt_core.assets.resource_manager import ResourceManager
+            from src.core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             if self.k1_dir:
@@ -282,7 +282,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         fail += 1
                         continue
 
-                    from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+                    from src.core.game.kotor_loader import load_model_from_bytes
 
                     model = load_model_from_bytes(mdl, mdx)
                     if self.fmt == "obj":
@@ -291,7 +291,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         OBJExporter().export(model, os.path.join(self.out_dir, f"{resref}.obj"))
                         ok += 1
                     elif self.fmt == "ascii":
-                        from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter
+                        from src.core.mdl.mdl_parser import MDLAsciiWriter
 
                         MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
                         ok += 1

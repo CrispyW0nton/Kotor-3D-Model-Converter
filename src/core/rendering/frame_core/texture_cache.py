@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
-from src.math.frame_math import _clean_tex_name
+import os
+import threading
+from typing import Dict, List, Optional, Tuple
+
+from .dependencies import Image, _NUMPY, _PIL, log, np
+from src.math.frame_math import _clean_tex_name, _clamp, _lerp
 from src.core.graphics.tpc import _extract_txi_from_tpc, _is_tpc_data, _is_tpc_file, _load_tpc_bytes
 from src.core.graphics.txi import _apply_txi_to_node, _extract_alpha_test_from_tpc, _parse_txi_string
 

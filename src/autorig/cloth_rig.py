@@ -46,8 +46,7 @@ Module contents:
   3. ClothConstraintPainter — generates per-vertex constraints
   4. ClothRigger          — applies cloth rigging to a ModelNode / KotorModel
   5. ClothRigExporter     — validates and prepares nodes for K1 MDL export
-  6. ClothRigPanel        — Tkinter UI panel for the main window
-  7. ClothRigSimulator    — lightweight PBD physics preview
+  6. ClothRigSimulator    — lightweight PBD physics preview
 
 Usage (programmatic):
     rigger = ClothRigger()
@@ -58,10 +57,7 @@ Usage (export to ASCII MDL):
     ok, issues = exporter.validate(node)
     ascii_lines = exporter.to_ascii_mdl_block(node)
 
-Usage (UI):
-    panel = ClothRigPanel(parent_frame, get_model=lambda: app.model,
-                          on_updated=app._on_model_updated)
-    panel.pack(fill='both', expand=True)
+Qt preset/dialog helpers live in ``src.adapters.qt_autorig.cloth_dialogs``.
 """
 
 from __future__ import annotations
@@ -80,10 +76,10 @@ log = logging.getLogger(__name__)
 def _model_data():
     """Import model_data with fallback for both package and direct sys.path usage."""
     try:
-        from ..core.model_data import ModelNode, KotorModel, NodeFlags
+        from ..core.geometry.model_data import ModelNode, KotorModel, NodeFlags
         return ModelNode, KotorModel, NodeFlags
     except ImportError:
-        from core.qt_core.geometry.model_data import ModelNode, KotorModel, NodeFlags
+        from core.geometry.model_data import ModelNode, KotorModel, NodeFlags
         return ModelNode, KotorModel, NodeFlags
 
 
@@ -670,9 +666,9 @@ class ClothRigExporter:
         # Check DANGLY flag
         try:
             try:
-                from ..core.model_data import NodeFlags
+                from ..core.geometry.model_data import NodeFlags
             except ImportError:
-                from core.qt_core.geometry.model_data import NodeFlags
+                from core.geometry.model_data import NodeFlags
             if not (node.flags & NodeFlags.DANGLY):
                 issues.append("DANGLY flag not set — node is not a danglymesh")
         except Exception:
@@ -760,16 +756,16 @@ class ClothRigExporter:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  ClothRigDialog — Qt-or-headless preset chooser  (M3/T301)
+#  Cloth dialog compatibility wrappers
 # ─────────────────────────────────────────────────────────────────────────────
 #
 #  History
 #  -------
-#  Prior to milestone M3 this file hosted a 620-line ``ClothRigPanel`` class
-#  built directly on tkinter (preset combobox, sliders, listbox, radio
+#  Prior to milestone M3 this file hosted a legacy cloth rig panel class
+#  with its own widget controls (preset combobox, sliders, listbox, radio
 #  buttons, etc.). It was used only by ``src/gui/main_window.py`` — the
-#  frozen legacy Tk shell that M3/T302 deletes — and pulled tkinter into
-#  the autorig import graph for every consumer.
+#  frozen legacy shell that M3/T302 deletes and pulled UI code into the
+#  autorig import graph for every consumer.
 #
 #  The active Qt cloth UI now lives in ``src/gui/qt_retarget_window.py``
 #  under the "Cloth Rigging..." tools menu (see lines 61, 92, 261-387 of
@@ -781,17 +777,15 @@ class ClothRigExporter:
 #  What this block provides
 #  ------------------------
 #  A tiny backend-agnostic helper, ``run_cloth_preset_dialog``, that picks
-#  a cloth preset for callers that previously relied on Tk popups
-#  (``ClothRigPanel.__init__`` line 788, ``ClothRigPanel._make_slider``
-#  line 1204, ``ClothRigPanel._make_small_slider`` line 1216 in the legacy
-#  module). The helper:
+#  a cloth preset for callers that previously relied on UI popups
+#  in the legacy module. The helper:
 #
-#    1.  Uses ``QInputDialog`` if a ``QCoreApplication`` is live.
+#    1.  Delegates optional dialog presentation to the Qt autorig adapter.
 #    2.  Returns the requested default preset (or first available preset)
 #        without raising when running headless / unit-tested.
 #
-#  The result is a plain ``ClothPresetChoice`` dataclass — never a Tk
-#  variable, never a Qt widget — so cloth headless tests keep passing and
+#  The result is a plain ``ClothPresetChoice`` dataclass — never a UI
+#  widget — so cloth headless tests keep passing and
 #  every public surface of this module stays Tk-free.
 
 from dataclasses import dataclass as _dataclass
@@ -814,56 +808,16 @@ class ClothPresetChoice:
     accepted: bool = True
 
 
-def _qt_application_running() -> bool:
-    """Return ``True`` iff a ``QCoreApplication`` instance is live.
-
-    Mirrors the Qt-first marshaling pattern used in ``src/ipc/client.py``
-    and ``src/ipc/server.py`` after M0/T002.
-    """
-    try:
-        from PySide6.QtCore import QCoreApplication  # noqa: PLC0415
-        return QCoreApplication.instance() is not None
-    except Exception:
-        return False
-
-
 def run_cloth_preset_dialog(
     parent=None,
     default_preset: Optional[str] = None,
     title: str = "Cloth Rigging Preset",
     message: str = "Pick a cloth preset to apply to the selected node(s):",
 ) -> ClothPresetChoice:
-    """Pick a cloth preset via Qt when available, default otherwise.
+    """Compatibility wrapper for the Qt cloth preset adapter."""
+    from src.adapters.qt_autorig.cloth_dialogs import run_cloth_preset_dialog as _run_dialog
 
-    Replaces the three Tk popup sites that lived in the deleted
-    ``ClothRigPanel`` class. Parameters mirror what those popups used to
-    accept; the return is always a plain ``ClothPresetChoice`` so headless
-    cloth tests run without an event loop.
-    """
-    available = ClothRigPreset.names()
-    if not available:
-        return ClothPresetChoice(preset_name="", accepted=False)
-
-    chosen_default = default_preset if default_preset in available else available[0]
-
-    if not _qt_application_running():
-        # Headless / unit-test path: hand back the requested default.
-        return ClothPresetChoice(preset_name=chosen_default, accepted=True)
-
-    try:
-        from PySide6.QtWidgets import QInputDialog  # noqa: PLC0415
-        idx = available.index(chosen_default)
-        name, ok = QInputDialog.getItem(
-            parent, title, message, available, idx, False,
-        )
-        if not ok or not name:
-            return ClothPresetChoice(preset_name=chosen_default, accepted=False)
-        return ClothPresetChoice(preset_name=name, accepted=True)
-    except Exception:
-        # If Qt is importable but the dialog blows up (e.g. running under
-        # an offscreen platform plugin that disallows modal dialogs), fall
-        # back to the headless default rather than raise.
-        return ClothPresetChoice(preset_name=chosen_default, accepted=True)
+    return _run_dialog(parent=parent, default_preset=default_preset, title=title, message=message)
 
 
 def confirm_cloth_action(
@@ -871,26 +825,10 @@ def confirm_cloth_action(
     title: str = "Cloth Rigging",
     message: str = "Apply cloth rig to the selected node(s)?",
 ) -> bool:
-    """Yes/no confirmation that does the right thing under Qt or headless.
+    """Compatibility wrapper for the Qt cloth confirmation adapter."""
+    from src.adapters.qt_autorig.cloth_dialogs import confirm_cloth_action as _confirm_action
 
-    Used in place of the second and third Tk popup sites in the deleted
-    ``ClothRigPanel`` (the slider rows that previously invoked
-    ``messagebox.askyesno``). Headless callers always receive ``True`` so
-    automated cloth rigging flows run unattended.
-    """
-    if not _qt_application_running():
-        return True
-
-    try:
-        from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
-        reply = QMessageBox.question(
-            parent, title, message,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        return reply == QMessageBox.StandardButton.Yes
-    except Exception:
-        return True
+    return _confirm_action(parent=parent, title=title, message=message)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

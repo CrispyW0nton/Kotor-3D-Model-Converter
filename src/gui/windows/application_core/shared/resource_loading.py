@@ -158,7 +158,7 @@ class ResourceLoadingMixin:
         self._pending_scene_import_action = action
         if str(resref).lower().startswith("gr_humanoid"):
             try:
-                from src.core.qt_core.templates.template_builder import build_humanoid_template
+                from src.core.templates.template_builder import build_humanoid_template
 
                 self._show_progress_toast("Loading model", f"Building template {game}:{resref}...")
                 game_tag = game.upper() if game else "K1"
@@ -595,7 +595,7 @@ class ResourceLoadingMixin:
         if existing is not None and getattr(self, "_resource_manager_dirs", ("", "")) == (k1_dir, k2_dir):
             return existing
         try:
-            from src.core.qt_core.assets.resource_manager import ResourceManager
+            from src.core.assets.resource_manager import ResourceManager
 
             mgr = ResourceManager()
             if k1_dir:
@@ -688,7 +688,7 @@ class ResourceLoadingMixin:
         game = (self._current_game or self._infer_game_from_model(model)).upper()
         if mgr is not None:
             try:
-                from src.core.qt_core.assets.resource_manager import RES_WOK
+                from src.core.assets.resource_manager import RES_WOK
 
                 for base in candidates:
                     data = mgr.get(base, RES_WOK, game)
@@ -698,7 +698,7 @@ class ResourceLoadingMixin:
                 log.debug("resource walkmesh lookup failed: %s", exc)
     def _load_walkmesh_source(self, source, label: str) -> bool:
         try:
-            from src.core.qt_core.modules.module_format import WOKData
+            from src.core.modules.module_format import WOKData
 
             if isinstance(source, (bytes, bytearray)):
                 source = WOKData.from_bytes(bytes(source))

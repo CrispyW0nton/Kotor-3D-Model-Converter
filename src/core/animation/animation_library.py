@@ -153,9 +153,9 @@ class AnimationLibrary:
     def _do_scan(self, game_library, on_progress):
         """Internal: iterate all models and extract animation metadata."""
         try:
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.game.kotor_loader import load_model_from_bytes
         except ImportError:
-            from core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.game.kotor_loader import load_model_from_bytes  # type: ignore
 
         models = list(game_library.models)
         self.scan_total = len(models)
@@ -253,11 +253,11 @@ class AnimationLibrary:
         Lazy-loads the model from cached bytes on first call.
         """
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.animation.animation_engine import AnimationEngine
+            from src.core.game.kotor_loader import load_model_from_bytes
         except ImportError:
-            from core.qt_core.animation.animation_engine import AnimationEngine  # type: ignore
-            from core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.animation.animation_engine import AnimationEngine  # type: ignore
+            from core.game.kotor_loader import load_model_from_bytes  # type: ignore
 
         if entry._model_obj is None and entry._model_bytes:
             mdl_bytes, mdx_bytes = entry._model_bytes

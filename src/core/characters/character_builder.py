@@ -171,18 +171,18 @@ def load_template(game: str = "K1", part: str = "body") -> Optional["KotorModel"
             # Templates are ASCII MDL — use the GhostRigger ASCII parser which
             # faithfully preserves all 76 nodes (including duplicates).
             try:
-                from core.qt_core.mdl.mdl_parser import MDLAsciiParser  # type: ignore
+                from core.mdl.mdl_parser import MDLAsciiParser  # type: ignore
             except ImportError:
-                from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser  # type: ignore
+                from src.core.mdl.mdl_parser import MDLAsciiParser  # type: ignore
 
             with open(path, "r", encoding="utf-8", errors="replace") as fh:
                 lines = fh.readlines()
             model = MDLAsciiParser().parse(lines)
         else:
             try:
-                from core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+                from core.game.kotor_loader import load_model_from_file  # type: ignore
             except ImportError:
-                from src.core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+                from src.core.game.kotor_loader import load_model_from_file  # type: ignore
             model = load_model_from_file(path)
 
         if model is None:
@@ -232,13 +232,13 @@ def load_game_skeleton_source(
 
     try:
         try:
-            from core.qt_core.game.kotor_install import KotorInstallation  # type: ignore
-            from core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
-            from core.qt_core.geometry.model_data import GameVersion  # type: ignore
+            from core.game.kotor_install import KotorInstallation  # type: ignore
+            from core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.geometry.model_data import GameVersion  # type: ignore
         except ImportError:
-            from src.core.qt_core.game.kotor_install import KotorInstallation  # type: ignore
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
-            from src.core.qt_core.geometry.model_data import GameVersion  # type: ignore
+            from src.core.game.kotor_install import KotorInstallation  # type: ignore
+            from src.core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from src.core.geometry.model_data import GameVersion  # type: ignore
     except Exception as exc:
         log.error("load_game_skeleton_source: import error: %s", exc)
         return None
@@ -556,15 +556,15 @@ def rebuild_templates(out_dir: Optional[str] = None) -> List[str]:
     import json
     try:
         try:
-            from core.qt_core.game.kotor_install import KotorInstallation  # type: ignore
-            from core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
-            from core.qt_core.mdl.mdl_parser import MDLAsciiWriter  # type: ignore
-            from core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+            from core.game.kotor_install import KotorInstallation  # type: ignore
+            from core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from core.mdl.mdl_parser import MDLAsciiWriter  # type: ignore
+            from core.geometry.model_data import NodeFlags  # type: ignore
         except ImportError:
-            from src.core.qt_core.game.kotor_install import KotorInstallation  # type: ignore
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes  # type: ignore
-            from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter  # type: ignore
-            from src.core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+            from src.core.game.kotor_install import KotorInstallation  # type: ignore
+            from src.core.game.kotor_loader import load_model_from_bytes  # type: ignore
+            from src.core.mdl.mdl_parser import MDLAsciiWriter  # type: ignore
+            from src.core.geometry.model_data import NodeFlags  # type: ignore
     except Exception as exc:
         log.error("character_builder.rebuild_templates: import error: %s", exc)
         return []
@@ -693,9 +693,9 @@ class SkeletonSelector:
         """Select only skeleton (non-mesh) nodes."""
         try:
             try:
-                from core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+                from core.geometry.model_data import NodeFlags  # type: ignore
             except ImportError:
-                from src.core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+                from src.core.geometry.model_data import NodeFlags  # type: ignore
             MESH_FLAG = int(NodeFlags.MESH)
             SKIN_FLAG = int(NodeFlags.SKIN)
         except Exception:
@@ -1046,9 +1046,9 @@ def _is_template_skeleton_helper(node: Any) -> bool:
 def _clear_template_render_payload(node: Any) -> None:
     """Turn a reference mesh/helper into an empty transform node."""
     try:
-        from core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+        from core.geometry.model_data import NodeFlags  # type: ignore
     except ImportError:                         # pragma: no cover
-        from src.core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+        from src.core.geometry.model_data import NodeFlags  # type: ignore
 
     for attr in (
         "vertices", "normals", "tangents", "uvs", "uvs_lm", "uvs_2", "uvs_3",
@@ -1077,9 +1077,9 @@ def _clear_template_render_payload(node: Any) -> None:
 def _clean_mesh_payload_node(node: Any) -> Any:
     import copy
     try:
-        from core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+        from core.geometry.model_data import NodeFlags  # type: ignore
     except ImportError:                         # pragma: no cover
-        from src.core.qt_core.geometry.model_data import NodeFlags  # type: ignore
+        from src.core.geometry.model_data import NodeFlags  # type: ignore
 
     cleaned = copy.deepcopy(node)
     try:
@@ -1196,9 +1196,9 @@ def export_character_b1(
     """
     try:
         try:
-            from core.qt_core.characters.creature_appearance import CreatureAssembly  # type: ignore
+            from core.characters.creature_appearance import CreatureAssembly  # type: ignore
         except ImportError:
-            from src.core.qt_core.characters.creature_appearance import CreatureAssembly  # type: ignore
+            from src.core.characters.creature_appearance import CreatureAssembly  # type: ignore
     except Exception as exc:
         return {"ok": False, "message": f"Import error: {exc}",
                 "body_path": None, "head_path": None, "warnings": []}

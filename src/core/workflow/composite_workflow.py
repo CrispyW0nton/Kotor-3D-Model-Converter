@@ -52,65 +52,65 @@ KOTOR_PC_SUPERMODELS = frozenset({
 
 def _import_model_data():                                   # pragma: no cover - import shim
     try:
-        from src.core.qt_core.geometry import model_data as _md             # type: ignore
+        from src.core.geometry import model_data as _md             # type: ignore
     except ImportError:
-        from core.qt_core.geometry import model_data as _md                 # type: ignore
+        from core.geometry import model_data as _md                 # type: ignore
     return _md
 
 
 def _import_body_workflow():                                # pragma: no cover - import shim
     try:
-        from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
+        from src.core.characters import headless_body_workflow as _wf  # type: ignore
     except ImportError:
-        from core.qt_core.characters import headless_body_workflow as _wf      # type: ignore
+        from core.characters import headless_body_workflow as _wf      # type: ignore
     return _wf
 
 
 def _import_head_workflow():                                # pragma: no cover - import shim
     try:
-        from src.core.qt_core.characters import head_workflow as _wf           # type: ignore
+        from src.core.characters import head_workflow as _wf           # type: ignore
     except ImportError:
-        from core.qt_core.characters import head_workflow as _wf               # type: ignore
+        from core.characters import head_workflow as _wf               # type: ignore
     return _wf
 
 
 def _import_character_builder():                            # pragma: no cover - import shim
     try:
-        from src.core.qt_core.characters import character_builder as _cb       # type: ignore
+        from src.core.characters import character_builder as _cb       # type: ignore
     except ImportError:
-        from core.qt_core.characters import character_builder as _cb           # type: ignore
+        from core.characters import character_builder as _cb           # type: ignore
     return _cb
 
 
 def _import_validation_service():                           # pragma: no cover - import shim
     try:
-        from src.core.qt_core.diagnostics import validation_service as _vs      # type: ignore
+        from src.core.diagnostics import validation_service as _vs      # type: ignore
     except ImportError:
-        from core.qt_core.diagnostics import validation_service as _vs          # type: ignore
+        from core.diagnostics import validation_service as _vs          # type: ignore
     return _vs
 
 
 def _import_workflow_base():                                # pragma: no cover - import shim
     try:
-        from src.core.qt_core.workflow import _workflow_base as _wb          # type: ignore
+        from src.core.workflow import _workflow_base as _wb          # type: ignore
     except ImportError:
-        from core.qt_core.workflow import _workflow_base as _wb              # type: ignore
+        from core.workflow import _workflow_base as _wb              # type: ignore
     return _wb
 
 
 def _import_creature_appearance():                          # pragma: no cover - import shim
     try:
-        from src.core.qt_core.characters import creature_appearance as _ca     # type: ignore
+        from src.core.characters import creature_appearance as _ca     # type: ignore
     except ImportError:
-        from core.qt_core.characters import creature_appearance as _ca         # type: ignore
+        from core.characters import creature_appearance as _ca         # type: ignore
     return _ca
 
 
 def _import_scene_io():                                     # pragma: no cover - import shim
     try:
-        from src.core.qt_core.geometry.model_data import SceneIO             # type: ignore
+        from src.core.geometry.model_data import SceneIO             # type: ignore
     except ImportError:
-        from core.qt_core.geometry.model_data import SceneIO                 # type: ignore
+        from core.geometry.model_data import SceneIO                 # type: ignore
     return SceneIO
 
 

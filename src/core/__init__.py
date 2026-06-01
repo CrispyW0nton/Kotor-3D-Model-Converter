@@ -1,6 +1,8 @@
 """GhostRigger core backend package.
 
-Use ``src.core.qt_core`` as the central backend facade and grouped import hub.
+Backend implementation code should import sibling subsystems directly. The
+``qt_core`` module remains a compatibility facade for legacy and public callers
+that still need grouped backend imports.
 """
 
 from __future__ import annotations

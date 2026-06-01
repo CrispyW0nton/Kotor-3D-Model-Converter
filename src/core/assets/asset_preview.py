@@ -37,25 +37,25 @@ SOCKET_ALIASES: dict[str, tuple[str, ...]] = {
 
 def _import_model_data():  # pragma: no cover - import shim
     try:
-        from src.core.qt_core.geometry import model_data as _md  # type: ignore
+        from src.core.geometry import model_data as _md  # type: ignore
     except ImportError:
-        from core.qt_core.geometry import model_data as _md  # type: ignore
+        from core.geometry import model_data as _md  # type: ignore
     return _md
 
 
 def _import_composite_workflow():  # pragma: no cover - import shim
     try:
-        from src.core.qt_core.workflow import composite_workflow as _cw  # type: ignore
+        from src.core.workflow import composite_workflow as _cw  # type: ignore
     except ImportError:
-        from core.qt_core.workflow import composite_workflow as _cw  # type: ignore
+        from core.workflow import composite_workflow as _cw  # type: ignore
     return _cw
 
 
 def _import_kotor_loader():  # pragma: no cover - import shim
     try:
-        from src.core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+        from src.core.game.kotor_loader import load_model_from_file  # type: ignore
     except ImportError:
-        from core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+        from core.game.kotor_loader import load_model_from_file  # type: ignore
     return load_model_from_file
 
 

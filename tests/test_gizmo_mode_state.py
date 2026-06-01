@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 from PIL import Image, ImageDraw
 
-from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode, TransformGizmoMode
-from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
+from src.core.gizmo.gizmo_mode import GizmoMode, TransformGizmoMode
+from src.core.gizmo.transform_gizmo import TransformGizmo
 
 
 class DummyCamera:

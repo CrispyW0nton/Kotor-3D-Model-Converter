@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import inspect
 import os
+import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from types import MethodType, SimpleNamespace
@@ -41,8 +42,15 @@ def test_backend_packages_do_not_import_gui_directly() -> None:
         ROOT / "src/core",
         ROOT / "src/sequence",
         ROOT / "src/converters",
+        ROOT / "src/autorig",
         ROOT / "src/math",
+        ROOT / "src/ipc",
+        ROOT / "src/kotormcp",
+        ROOT / "src/unreal",
+        ROOT / "src/workbench",
+        ROOT / "src/systems",
         ROOT / "src/adapters/gpu",
+        ROOT / "src/resources",
     )
     violations: list[str] = []
 
@@ -65,12 +73,46 @@ def test_backend_packages_do_not_import_gui_directly() -> None:
     assert not violations
 
 
+def test_headless_backend_packages_do_not_route_through_qt_core_facade() -> None:
+    """Headless backend code should import canonical owners, not qt_core shims."""
+    checked_roots = (
+        ROOT / "src/core",
+        ROOT / "src/sequence",
+        ROOT / "src/converters",
+        ROOT / "src/autorig",
+        ROOT / "src/math",
+        ROOT / "src/ipc",
+        ROOT / "src/kotormcp",
+        ROOT / "src/unreal",
+        ROOT / "src/workbench",
+        ROOT / "src/systems",
+        ROOT / "src/adapters/gpu",
+        ROOT / "src/resources",
+        ROOT / "scripts",
+    )
+    allowed = {
+        Path("src/core/__init__.py"),
+        Path("src/core/qt_core.py"),
+    }
+    offenders: list[str] = []
+
+    for root in checked_roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(ROOT)
+            if rel_path in allowed:
+                continue
+            source = path.read_text(encoding="utf-8")
+            if "src.core.qt_core" in source or "core.qt_core" in source:
+                offenders.append(str(rel_path))
+
+    assert offenders == []
+
+
 def test_adapter_gui_imports_are_explicit_boundary_bridges() -> None:
     """Adapter packages may touch GUI code only through named bridge modules."""
-    allowed = {
-        Path("src/adapters/qt_viewport/frame_renderer.py"),
-        Path("src/adapters/rendering/moderngl_legacy_bridge.py"),
-    }
+    allowed: set[Path] = set()
     violations: list[str] = []
 
     for path in (ROOT / "src/adapters").rglob("*.py"):
@@ -94,8 +136,455 @@ def test_adapter_gui_imports_are_explicit_boundary_bridges() -> None:
     assert not violations
 
 
+def test_ipc_callback_dispatch_uses_qt_adapter_boundary() -> None:
+    """IPC should stay headless while Qt callback dispatch lives in an adapter."""
+    ipc_sources = (
+        ROOT / "src/ipc/client.py",
+        ROOT / "src/ipc/server.py",
+    )
+    for path in ipc_sources:
+        source = path.read_text(encoding="utf-8")
+        assert "from src.adapters.qt_ipc.threading import marshal_to_gui_thread" in source
+        for forbidden in ("PySide6", "QtCore", "QtGui", "QtWidgets", "tkinter", "ImageTk"):
+            assert forbidden not in source
+
+    adapter_source = (ROOT / "src/adapters/qt_ipc/threading.py").read_text(encoding="utf-8")
+    assert "from PySide6.QtCore import QCoreApplication, QTimer" in adapter_source
+    assert "QTimer.singleShot(0, lambda: cb(*args))" in adapter_source
+
+
+def test_tracked_non_contract_tests_use_backend_owners_not_gui_facades() -> None:
+    """Ordinary tests should demonstrate canonical backend ownership."""
+    allowed = {
+        Path("tests/test_core_contracts.py"),
+        Path("tests/test_qt_only_imports.py"),
+    }
+    forbidden = (
+        "from src.gui.camera.",
+        "import src.gui.camera.",
+        "src.gui.camera.",
+        "from src.gui.rendering.",
+        "import src.gui.rendering.",
+        "src.gui.rendering.",
+        "from src.gui.lighting.",
+        "import src.gui.lighting.",
+        "src.gui.lighting.",
+        "from src.gui.textures.",
+        "import src.gui.textures.",
+        "src.gui.textures.",
+        "from src.gui.gizmo.",
+        "import src.gui.gizmo.",
+        "src.gui.gizmo.",
+    )
+    tracked = subprocess.run(
+        ["git", "ls-files", "tests/*.py"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.splitlines()
+
+    violations: list[str] = []
+    for raw_path in tracked:
+        rel_path = Path(raw_path)
+        if rel_path in allowed:
+            continue
+        source = (ROOT / rel_path).read_text(encoding="utf-8")
+        if any(token in source for token in forbidden):
+            violations.append(str(rel_path))
+
+    assert violations == []
+
+
+def test_migrated_test_slices_use_backend_owners_not_qt_core_facade() -> None:
+    """Tests migrated with backend slices should import the canonical owners."""
+    checked = (
+        Path("tests/test_animation_retargeting.py"),
+        Path("tests/test_asset_preview.py"),
+        Path("tests/test_character_mode.py"),
+        Path("tests/test_character_builder_template_rig.py"),
+        Path("tests/test_fbx_blender_fallback.py"),
+        Path("tests/test_gizmo_follows_object.py"),
+        Path("tests/test_gizmo_kmax_transform.py"),
+        Path("tests/test_gizmo_mode_state.py"),
+        Path("tests/test_lightmap_baker.py"),
+        Path("tests/test_module_categories.py"),
+        Path("tests/test_headless_body_workflow.py"),
+        Path("tests/test_joint_dot_overlay.py"),
+        Path("tests/test_regression_export.py"),
+        Path("tests/test_regression.py"),
+        Path("tests/test_regression_screens.py"),
+        Path("tests/test_theme_layout_loading.py"),
+        Path("tests/test_unity_export_bridge.py"),
+        Path("tests/test_unity_malak_smoke.py"),
+        Path("tests/test_walkmesh_coload.py"),
+    )
+    offenders = [
+        str(path)
+        for path in checked
+        if "src.core.qt_core" in (ROOT / path).read_text(encoding="utf-8")
+        or "core.qt_core" in (ROOT / path).read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
+
+
+def test_tracked_non_facade_tests_do_not_route_through_qt_core() -> None:
+    """Ordinary tests should avoid qt_core; facade tests cover compatibility paths."""
+    allowed = {
+        Path("tests/test_core_contracts.py"),
+        Path("tests/test_core_imports.py"),
+        Path("tests/test_qt_only_imports.py"),
+    }
+    tracked = subprocess.run(
+        ["git", "ls-files", "tests/*.py"],
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.splitlines()
+
+    offenders = []
+    for raw_path in tracked:
+        rel_path = Path(raw_path)
+        if rel_path in allowed:
+            continue
+        source = (ROOT / rel_path).read_text(encoding="utf-8")
+        if "src.core.qt_core" in source or "core.qt_core" in source:
+            offenders.append(str(rel_path))
+
+    assert offenders == []
+
+
+def test_core_imports_subsystem_smoke_uses_canonical_owners() -> None:
+    """The core import smoke test should exercise real subsystem modules separately from facade routes."""
+    path = ROOT / "tests/test_core_imports.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    subsystem_test = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "test_core_subsystem_imports"
+    )
+    source = ast.get_source_segment(path.read_text(encoding="utf-8"), subsystem_test) or ""
+
+    assert "src.core.qt_core" not in source
+    assert "core.qt_core" not in source
+    assert "from src.core.assets.resource_manager import ResourceManager" in source
+    assert "from src.core.scene.scene_manager import SceneManager" in source
+
+
+def test_runtime_sources_do_not_import_gui_backend_facades() -> None:
+    """Runtime code should use canonical core/adapter owners, not old GUI backend facades."""
+    allowed = {
+        Path("src/gui/dialogs/qt_lightmap_baker_dialog.py"),
+    }
+    forbidden_prefixes = (
+        "src.gui.camera.",
+        "src.gui.rendering.",
+        "src.gui.lighting.",
+        "src.gui.textures.",
+        "src.gui.gizmo.",
+        "src.gui.qt_lib.camera.",
+        "src.gui.qt_lib.rendering.",
+        "src.gui.qt_lib.lighting.",
+        "src.gui.qt_lib.textures.",
+        "src.gui.qt_lib.gizmo.",
+    )
+    violations: list[str] = []
+
+    for root in (ROOT / "src", ROOT / "scripts"):
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(ROOT)
+            if rel_path in allowed:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                imported_modules: list[str] = []
+                if isinstance(node, ast.ImportFrom):
+                    imported_modules.append(node.module or "")
+                elif isinstance(node, ast.Import):
+                    imported_modules.extend(alias.name for alias in node.names)
+                for imported in imported_modules:
+                    if any(imported.startswith(prefix) for prefix in forbidden_prefixes):
+                        violations.append(f"{rel_path}:{node.lineno}: {imported}")
+
+    assert violations == []
+
+
+def test_backend_reorganization_plan_does_not_reopen_completed_lightmap_slice() -> None:
+    """The architecture plan should not describe migrated lightmap bake work as pending."""
+    source = (ROOT / "docs/architecture/backend_reorganization_plan.md").read_text(encoding="utf-8")
+
+    assert "bake services pending" not in source
+    assert "larger lightmap bake services remain a future slice" not in source
+    assert "src/core/lighting/lightmap_baker.py" in source
+    assert "src/adapters/gpu/lightmap_baker.py" in source
+
+
+def test_gui_backend_compatibility_paths_stay_thin() -> None:
+    """Old GUI backend-like paths should stay facades unless explicitly exempted."""
+    checked_roots = (
+        ROOT / "src/gui/camera",
+        ROOT / "src/gui/lighting",
+        ROOT / "src/gui/gizmo",
+        ROOT / "src/gui/textures",
+        ROOT / "src/gui/rendering",
+    )
+    allowed_def_names: dict[Path, set[str]] = {
+        Path("src/gui/camera/__init__.py"): {"__getattr__", "__dir__"},
+        Path("src/gui/gizmo/__init__.py"): {"__getattr__", "__dir__"},
+        Path("src/gui/lighting/__init__.py"): {"__getattr__", "__dir__"},
+        Path("src/gui/rendering/qt_gpu_renderer.py"): {"__getattr__", "__dir__"},
+    }
+
+    offenders: list[str] = []
+    for root in checked_roots:
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(ROOT)
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    offenders.append(f"{rel_path}:{node.lineno}: {node.name}")
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if node.name not in allowed_def_names.get(rel_path, set()):
+                        offenders.append(f"{rel_path}:{node.lineno}: {node.name}")
+
+    assert offenders == []
+
+
+def test_gui_backend_compatibility_paths_do_not_use_wildcard_reexports() -> None:
+    """Old GUI backend-like paths should alias/forward explicitly, not copy symbol tables."""
+    checked_roots = (
+        ROOT / "src/gui/camera",
+        ROOT / "src/gui/lighting",
+        ROOT / "src/gui/gizmo",
+        ROOT / "src/gui/textures",
+        ROOT / "src/gui/rendering",
+    )
+    offenders: list[str] = []
+
+    for root in checked_roots:
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(ROOT)
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+                    offenders.append(f"{rel_path}:{node.lineno}: wildcard import")
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "update"
+                    and isinstance(node.func.value, ast.Call)
+                    and isinstance(node.func.value.func, ast.Name)
+                    and node.func.value.func.id == "globals"
+                ):
+                    offenders.append(f"{rel_path}:{node.lineno}: globals().update")
+
+    assert offenders == []
+
+
+def test_backend_and_adapter_modules_do_not_use_wildcard_import_hubs() -> None:
+    """Backend and adapter modules should name their dependency owners explicitly."""
+    checked_roots = (
+        ROOT / "src/core",
+        ROOT / "src/adapters",
+    )
+    offenders: list[str] = []
+
+    for root in checked_roots:
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(ROOT)
+            source = path.read_text(encoding="utf-8")
+            tree = ast.parse(source, filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+                    offenders.append(f"{rel_path}:{node.lineno}: wildcard import")
+                if (
+                    isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "update"
+                    and isinstance(node.func.value, ast.Call)
+                    and isinstance(node.func.value.func, ast.Name)
+                    and node.func.value.func.id == "globals"
+                ):
+                    offenders.append(f"{rel_path}:{node.lineno}: globals().update")
+
+    assert offenders == []
+
+
+def test_scripts_use_backend_owners_not_backend_facade() -> None:
+    """Headless scripts should not route backend helpers through qt_core."""
+    offenders = [
+        str(path.relative_to(ROOT))
+        for path in (ROOT / "scripts").rglob("*.py")
+        if "src.core.qt_core" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
+
+
+def test_kotormcp_uses_backend_owners_not_backend_facade() -> None:
+    """MCP adapters are headless and should consume canonical backend owners."""
+    offenders = [
+        str(path.relative_to(ROOT))
+        for path in (ROOT / "src/kotormcp").rglob("*.py")
+        if "src.core.qt_core" in path.read_text(encoding="utf-8")
+        or "core.qt_core" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
+
+
+def test_selected_core_runtime_modules_use_backend_owners_not_qt_core_facade() -> None:
+    """Core runtime modules should not route sibling backend helpers through qt_core."""
+    checked = (
+        Path("src/core/animation/animation_library.py"),
+        Path("src/core/animation_retargeting/skeleton_template_picker.py"),
+        Path("src/core/assets/asset_preview.py"),
+        Path("src/core/assets/resource_manager.py"),
+        Path("src/core/characters/character_builder.py"),
+        Path("src/core/characters/head_workflow.py"),
+        Path("src/core/characters/headless_body_workflow.py"),
+        Path("src/core/game/kotor_loader.py"),
+        Path("src/core/graphics/tpc_render_utils.py"),
+        Path("src/core/lighting/lightmap_rasterizer.py"),
+        Path("src/core/modules/module_hydration.py"),
+        Path("src/core/modules/module_layout_service.py"),
+        Path("src/core/modules/module_walkmesh_service.py"),
+        Path("src/core/rendering/mesh_render_data.py"),
+        Path("src/core/rendering/frame_core/dependencies.py"),
+        Path("src/core/rendering/frame_core/renderer_geometry.py"),
+        Path("src/core/rendering/frame_core/renderer_overlays.py"),
+        Path("src/core/templates/template_builder.py"),
+        Path("src/core/workflow/_workflow_base.py"),
+        Path("src/core/workflow/composite_workflow.py"),
+    )
+    offenders = [
+        str(path)
+        for path in checked
+        if "src.core.qt_core" in (ROOT / path).read_text(encoding="utf-8")
+        or "core.qt_core" in (ROOT / path).read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
+
+
+def test_core_implementation_modules_do_not_reference_backend_facade() -> None:
+    """Core implementation modules should not teach or use the qt_core facade."""
+    allowed = {
+        Path("src/core/__init__.py"),
+        Path("src/core/qt_core.py"),
+    }
+    offenders = []
+    for path in (ROOT / "src/core").rglob("*.py"):
+        rel_path = path.relative_to(ROOT)
+        if rel_path in allowed:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "src.core.qt_core" in source or "core.qt_core" in source:
+            offenders.append(str(rel_path))
+
+    assert offenders == []
+
+
+def test_core_implementation_modules_do_not_manipulate_sys_path() -> None:
+    """Core implementation modules should use package imports, not local path hacks."""
+    allowed = {
+        Path("src/core/__init__.py"),
+        Path("src/core/qt_core.py"),
+    }
+    offenders: list[str] = []
+
+    for path in (ROOT / "src/core").rglob("*.py"):
+        rel_path = path.relative_to(ROOT)
+        if rel_path in allowed:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"append", "insert"}
+                and isinstance(node.func.value, ast.Attribute)
+                and node.func.value.attr == "path"
+                and isinstance(node.func.value.value, ast.Name)
+                and node.func.value.value.id == "sys"
+            ):
+                offenders.append(f"{rel_path}:{node.lineno}: sys.path.{node.func.attr}")
+
+    assert offenders == []
+
+
+def test_runtime_sources_do_not_route_through_qt_core_facade() -> None:
+    """Runtime source should consume canonical backend owners, not qt_core compatibility routes."""
+    allowed = {
+        Path("src/core/__init__.py"),
+        Path("src/core/qt_core.py"),
+    }
+    offenders: list[str] = []
+
+    for root in (ROOT / "src", ROOT / "scripts"):
+        if not root.exists():
+            continue
+        for path in root.rglob("*.py"):
+            rel_path = path.relative_to(ROOT)
+            if rel_path in allowed:
+                continue
+            source = path.read_text(encoding="utf-8")
+            if "src.core.qt_core" in source or "core.qt_core" in source:
+                offenders.append(str(rel_path))
+
+    assert offenders == []
+
+
+def test_selected_gui_workflow_modules_use_backend_owners_not_qt_core_facade() -> None:
+    """GUI workflows may consume backend services, but should not route through qt_core."""
+    checked = (
+        Path("src/gui/panels/qt_bottom_strip.py"),
+        Path("src/gui/panels/qt_character_builder_panel.py"),
+        Path("src/gui/panels/qt_inspector_panel.py"),
+        Path("src/gui/panels/qt_library_panel.py"),
+        Path("src/gui/panels/qt_properties_panel.py"),
+        Path("src/gui/panels/qt_workflow_rail.py"),
+        Path("src/gui/windows/application_core/shared/animation_workflow.py"),
+        Path("src/gui/windows/application_core/shared/bas_workflow.py"),
+        Path("src/gui/windows/application_core/functions/geometry.py"),
+        Path("src/gui/windows/application_core/functions/startup_library.py"),
+        Path("src/gui/windows/application_core/shared/model_io.py"),
+        Path("src/gui/windows/application_core/shared/retarget_workflow.py"),
+        Path("src/gui/windows/application_core/shared/resource_loading.py"),
+        Path("src/gui/windows/application_core/shared/resource_panels.py"),
+        Path("src/gui/windows/application_core/shared/scene_workflow.py"),
+        Path("src/gui/windows/application_core/shared/startup_library.py"),
+        Path("src/gui/windows/application_core/shared/viewport_tools.py"),
+        Path("src/gui/windows/application_core/shared/workers.py"),
+        Path("src/gui/viewports/viewport_core/widgets/drag_interactions.py"),
+        Path("src/gui/viewports/viewport_core/widgets/scene_models.py"),
+        Path("src/gui/viewports/viewport_core/widgets/transform_camera.py"),
+        Path("src/gui/windows/qt_unreal_animator.py"),
+    )
+    offenders = [
+        str(path)
+        for path in checked
+        if "src.core.qt_core" in (ROOT / path).read_text(encoding="utf-8")
+        or "core.qt_core" in (ROOT / path).read_text(encoding="utf-8")
+    ]
+
+    assert offenders == []
+
+
 def test_texture_format_helpers_are_backend_owned() -> None:
     """TPC/TXI parsing belongs to core graphics, with GUI paths as facades."""
+    import sys
+
+    import src.core.graphics.tpc as core_tpc_module
+    import src.core.graphics.txi as core_txi_module
+    import src.gui.textures.tpc as gui_tpc_module
+    import src.gui.textures.txi as gui_txi_module
+
     from src.core.graphics.tpc import _is_tpc_data as core_is_tpc_data
     from src.core.graphics.txi import _parse_txi_string as core_parse_txi
     from src.gui.textures.tpc import _is_tpc_data as gui_is_tpc_data
@@ -103,11 +592,32 @@ def test_texture_format_helpers_are_backend_owned() -> None:
 
     assert gui_is_tpc_data is core_is_tpc_data
     assert gui_parse_txi is core_parse_txi
+    assert gui_tpc_module is core_tpc_module
+    assert gui_txi_module is core_txi_module
+    assert sys.modules["src.gui.textures.tpc"] is core_tpc_module
+    assert sys.modules["src.gui.textures.txi"] is core_txi_module
+    for source_path, target_module in (
+        ("src/gui/textures/tpc.py", "src.core.graphics.tpc"),
+        ("src/gui/textures/txi.py", "src.core.graphics.txi"),
+    ):
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert f'import_module("{target_module}")' in source
+        assert "sys.modules[__name__] = _module" in source
+        assert "import *" not in source
     assert "src.gui.textures" not in (ROOT / "src/core/game/kotor_install.py").read_text(encoding="utf-8")
 
 
 def test_software_render_accel_and_texture_array_cache_are_backend_owned() -> None:
     """Software-render acceleration and PIL-to-array caches belong to backend packages."""
+    import sys
+
+    import src.core.rendering.accel as core_accel_module
+    import src.core.graphics.tex_atlas as core_tex_atlas_module
+    import src.gui.rendering.accel as gui_accel_module
+    import src.gui.rendering.qt_accel as qt_gui_accel_module
+    import src.gui.textures.qt_tex_atlas as qt_gui_tex_atlas_module
+    import src.gui.textures.tex_atlas as gui_tex_atlas_module
+
     from src.core.graphics.tex_atlas import TexArrayCache as CoreTexArrayCache
     from src.core.rendering.accel import project_vertices_np as core_project_vertices_np
     from src.core.qt_core.graphics.tex_atlas import TexArrayCache as FacadeTexArrayCache
@@ -119,8 +629,26 @@ def test_software_render_accel_and_texture_array_cache_are_backend_owned() -> No
     assert FacadeTexArrayCache is CoreTexArrayCache
     assert gui_project_vertices_np is core_project_vertices_np
     assert facade_project_vertices_np is core_project_vertices_np
+    assert gui_accel_module is core_accel_module
+    assert qt_gui_accel_module is core_accel_module
+    assert gui_tex_atlas_module is core_tex_atlas_module
+    assert qt_gui_tex_atlas_module is core_tex_atlas_module
+    assert sys.modules["src.gui.rendering.accel"] is core_accel_module
+    assert sys.modules["src.gui.rendering.qt_accel"] is core_accel_module
+    assert sys.modules["src.gui.textures.tex_atlas"] is core_tex_atlas_module
+    assert sys.modules["src.gui.textures.qt_tex_atlas"] is core_tex_atlas_module
     assert "src.gui." not in (ROOT / "src/core/rendering/accel.py").read_text(encoding="utf-8")
     assert "src.gui." not in (ROOT / "src/core/graphics/tex_atlas.py").read_text(encoding="utf-8")
+    for source_path, target_module in (
+        ("src/gui/rendering/accel.py", "src.core.rendering.accel"),
+        ("src/gui/rendering/qt_accel.py", "src.core.rendering.accel"),
+        ("src/gui/textures/tex_atlas.py", "src.core.graphics.tex_atlas"),
+        ("src/gui/textures/qt_tex_atlas.py", "src.core.graphics.tex_atlas"),
+    ):
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert f'import_module("{target_module}")' in source
+        assert "sys.modules[__name__] = _module" in source
+        assert "import *" not in source
 
     frame_deps = (ROOT / "src/core/rendering/frame_core/dependencies.py").read_text(encoding="utf-8")
     assert "src.core.rendering.accel" in frame_deps
@@ -131,37 +659,105 @@ def test_software_render_accel_and_texture_array_cache_are_backend_owned() -> No
 
 def test_tpc_render_utils_are_backend_owned() -> None:
     """Headless TPC/DXT render utilities belong to core graphics."""
+    import sys
+
+    import src.core.graphics.tpc_render_utils as core_module
+    import src.gui.textures.qt_tpc_render_utils as qt_gui_module
+    import src.gui.textures.tpc_render_utils as gui_module
+
     from src.core.graphics.tpc_render_utils import _paste_textured_triangle as core_paste_triangle
     from src.core.graphics.tpc_render_utils import _is_tpc_data as core_is_tpc_data
     from src.core.qt_core.graphics.tpc_render_utils import _is_tpc_data as facade_is_tpc_data
+    from src.gui.textures.qt_tpc_render_utils import _is_tpc_data as qt_gui_is_tpc_data
     from src.gui.textures.tpc_render_utils import _paste_textured_triangle as gui_paste_triangle
     from src.gui.textures.tpc_render_utils import _is_tpc_data as gui_is_tpc_data
 
+    assert gui_module is core_module
+    assert qt_gui_module is core_module
+    assert sys.modules["src.gui.textures.tpc_render_utils"] is core_module
+    assert sys.modules["src.gui.textures.qt_tpc_render_utils"] is core_module
     assert gui_is_tpc_data is core_is_tpc_data
+    assert qt_gui_is_tpc_data is core_is_tpc_data
     assert facade_is_tpc_data is core_is_tpc_data
     assert gui_paste_triangle is core_paste_triangle
 
     core_source = (ROOT / "src/core/graphics/tpc_render_utils.py").read_text(encoding="utf-8")
+    gui_source = (ROOT / "src/gui/textures/tpc_render_utils.py").read_text(encoding="utf-8")
+    qt_gui_source = (ROOT / "src/gui/textures/qt_tpc_render_utils.py").read_text(encoding="utf-8")
     assert "src.gui." not in core_source
     assert "src.core.qt_core" not in core_source
+    assert "core.qt_core" not in core_source
     assert "from src.core.game.kotor_loader import load_tpc_as_pil" in core_source
+    assert '_TARGET = "src.core.graphics.tpc_render_utils"' in gui_source
+    assert '_TARGET = "src.core.graphics.tpc_render_utils"' in qt_gui_source
+    assert "globals().update(" not in gui_source
+    assert "globals().update(" not in qt_gui_source
 
 
 def test_camera_state_and_dtos_are_backend_owned() -> None:
     """Headless camera state/DTO helpers belong to core camera."""
+    import sys
+
+    import src.gui.camera as gui_camera_package
+    import src.core.camera.arcball_camera as core_arcball_module
+    import src.core.camera.camera_model as core_camera_model_module
+    import src.core.camera.camera_render_settings as core_render_settings_module
+    import src.core.camera.render_output as core_render_output_module
+    import src.gui.camera.arcball_camera as gui_arcball_module
+    import src.gui.camera.camera_model as gui_camera_model_module
+    import src.gui.camera.camera_render_settings as gui_render_settings_module
+    import src.gui.camera.render_output as gui_render_output_module
+    import src.gui.camera.camera_math as gui_camera_math_module
+    import src.math.camera_math as core_camera_math_module
+
     from src.core.camera.arcball_camera import ArcBallCamera as CoreArcBallCamera
     from src.core.camera.camera_model import GhostRiggerCamera as CoreGhostRiggerCamera
     from src.core.camera.camera_render_settings import RenderSettings as CoreRenderSettings
     from src.core.camera.render_output import RenderOutput as CoreRenderOutput
+    from src.math.camera_math import camera_forward as core_camera_forward
     from src.gui.camera.arcball_camera import ArcBallCamera as GuiArcBallCamera
     from src.gui.camera.camera_model import GhostRiggerCamera as GuiGhostRiggerCamera
     from src.gui.camera.camera_render_settings import RenderSettings as GuiRenderSettings
     from src.gui.camera.render_output import RenderOutput as GuiRenderOutput
+    from src.gui.camera.camera_math import camera_forward as gui_camera_forward
 
     assert GuiArcBallCamera is CoreArcBallCamera
     assert GuiGhostRiggerCamera is CoreGhostRiggerCamera
     assert GuiRenderSettings is CoreRenderSettings
     assert GuiRenderOutput is CoreRenderOutput
+    assert gui_camera_forward is core_camera_forward
+    assert gui_camera_package.GhostRiggerCamera is CoreGhostRiggerCamera
+    assert gui_camera_package.RenderSettings is CoreRenderSettings
+    assert gui_camera_package.RenderOutput is CoreRenderOutput
+    camera_package_source = (ROOT / "src/gui/camera/__init__.py").read_text(encoding="utf-8")
+    assert '"GhostRiggerCamera": "src.core.camera.camera_model"' in camera_package_source
+    assert '"FrameRenderer": "src.adapters.qt_viewport.still_frame_renderer"' in camera_package_source
+    assert "def __getattr__" in camera_package_source
+    assert "from src.core.camera" not in camera_package_source
+    assert "from .frame_renderer import" not in camera_package_source
+    module_pairs = {
+        "src.gui.camera.arcball_camera": (gui_arcball_module, core_arcball_module),
+        "src.gui.camera.camera_model": (gui_camera_model_module, core_camera_model_module),
+        "src.gui.camera.camera_render_settings": (gui_render_settings_module, core_render_settings_module),
+        "src.gui.camera.render_output": (gui_render_output_module, core_render_output_module),
+        "src.gui.camera.camera_math": (gui_camera_math_module, core_camera_math_module),
+    }
+    for module_path, (gui_module, core_module) in module_pairs.items():
+        assert gui_module is core_module
+        assert sys.modules[module_path] is core_module
+
+    for source_path, target_module in (
+        ("src/gui/camera/arcball_camera.py", "src.core.camera.arcball_camera"),
+        ("src/gui/camera/camera_model.py", "src.core.camera.camera_model"),
+        ("src/gui/camera/camera_render_settings.py", "src.core.camera.camera_render_settings"),
+        ("src/gui/camera/render_output.py", "src.core.camera.render_output"),
+        ("src/gui/camera/camera_math.py", "src.math.camera_math"),
+    ):
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert f'import_module("{target_module}")' in source
+        assert "sys.modules[__name__] = _module" in source
+        assert "import *" not in source
+
     sequence_source = (ROOT / "src/sequence/sequence_render.py").read_text(encoding="utf-8")
     validation_source = (ROOT / "src/core/validation/viewport_validator.py").read_text(encoding="utf-8")
     assert "src.gui.camera.camera_render_settings" not in sequence_source
@@ -171,6 +767,28 @@ def test_camera_state_and_dtos_are_backend_owned() -> None:
 
 def test_camera_workflow_state_is_backend_owned() -> None:
     """Camera workflow records, presets, manager state, adapters, and manifests belong to core camera."""
+    import sys
+
+    import src.gui.camera as gui_camera_package
+    import src.core.camera.camera_controller as core_controller_module
+    import src.core.camera.camera_manager as core_manager_module
+    import src.core.camera.camera_picker as core_picker_module
+    import src.core.camera.camera_presets as core_presets_module
+    import src.core.camera.camera_rig as core_rig_module
+    import src.core.camera.camera_selection as core_selection_module
+    import src.core.camera.camera_target as core_target_module
+    import src.core.camera.camera_viewport_adapter as core_viewport_adapter_module
+    import src.core.camera.render_manifest as core_render_manifest_module
+    import src.gui.camera.camera_controller as gui_controller_module
+    import src.gui.camera.camera_manager as gui_manager_module
+    import src.gui.camera.camera_picker as gui_picker_module
+    import src.gui.camera.camera_presets as gui_presets_module
+    import src.gui.camera.camera_rig as gui_rig_module
+    import src.gui.camera.camera_selection as gui_selection_module
+    import src.gui.camera.camera_target as gui_target_module
+    import src.gui.camera.camera_viewport_adapter as gui_viewport_adapter_module
+    import src.gui.camera.render_manifest as gui_render_manifest_module
+
     from src.core.camera.camera_controller import CameraController as CoreCameraController
     from src.core.camera.camera_manager import CameraManager as CoreCameraManager
     from src.core.camera.camera_picker import CameraPicker as CoreCameraPicker
@@ -203,6 +821,22 @@ def test_camera_workflow_state_is_backend_owned() -> None:
     assert GuiCameraTarget is CoreCameraTarget
     assert GuiCameraViewportAdapter is CoreCameraViewportAdapter
     assert GuiRenderManifestEntry is CoreRenderManifestEntry
+    assert gui_camera_package.CameraManager is CoreCameraManager
+    assert gui_camera_package.FrameRenderer.__name__ == "FrameRenderer"
+    module_pairs = {
+        "camera_controller": (gui_controller_module, core_controller_module),
+        "camera_manager": (gui_manager_module, core_manager_module),
+        "camera_picker": (gui_picker_module, core_picker_module),
+        "camera_presets": (gui_presets_module, core_presets_module),
+        "camera_rig": (gui_rig_module, core_rig_module),
+        "camera_selection": (gui_selection_module, core_selection_module),
+        "camera_target": (gui_target_module, core_target_module),
+        "camera_viewport_adapter": (gui_viewport_adapter_module, core_viewport_adapter_module),
+        "render_manifest": (gui_render_manifest_module, core_render_manifest_module),
+    }
+    for module_name, (gui_module, core_module) in module_pairs.items():
+        assert gui_module is core_module
+        assert sys.modules[f"src.gui.camera.{module_name}"] is core_module
 
     for filename in (
         "camera_controller.py",
@@ -222,6 +856,11 @@ def test_camera_workflow_state_is_backend_owned() -> None:
         assert "QtGui" not in source
         assert "QtCore" not in source
         assert "tkinter" not in source
+        gui_source = (ROOT / "src/gui/camera" / filename).read_text(encoding="utf-8")
+        target_module = f"src.core.camera.{filename.removesuffix('.py')}"
+        assert f'import_module("{target_module}")' in gui_source
+        assert "sys.modules[__name__] = _module" in gui_source
+        assert "globals().update" not in gui_source
 
     for source_path in (
         ROOT / "src/gui/camera/frame_renderer.py",
@@ -239,10 +878,38 @@ def test_camera_workflow_state_is_backend_owned() -> None:
 
 def test_gpu_matrix_helper_is_math_owned() -> None:
     """Shared GPU matrix math should not be owned by GUI diagnostics."""
+    import sys
+
+    import src.adapters.rendering.gpu_diagnostics_exports as adapter_diagnostics_module
+    import src.adapters.rendering.moderngl_resources as adapter_resources_module
+    import src.gui.rendering.gpu_core.diagnostics as gui_diagnostics_module
+    import src.gui.rendering.gpu_core.math_helpers as gui_gpu_math_module
+    import src.math.gpu_math as math_gpu_math_module
+
     from src.math.gpu_math import _matrix_from_pos_quat_np as math_matrix_from_pos_quat
+    from src.adapters.rendering.moderngl_resources import (
+        _matrix_from_pos_quat_np as adapter_matrix_from_pos_quat,
+    )
     from src.gui.rendering.gpu_core.diagnostics import _matrix_from_pos_quat_np as gui_matrix_from_pos_quat
 
+    assert gui_diagnostics_module is adapter_diagnostics_module
+    assert sys.modules["src.gui.rendering.gpu_core.diagnostics"] is adapter_diagnostics_module
+    assert gui_gpu_math_module is math_gpu_math_module
+    assert sys.modules["src.gui.rendering.gpu_core.math_helpers"] is math_gpu_math_module
     assert gui_matrix_from_pos_quat is math_matrix_from_pos_quat
+    assert adapter_matrix_from_pos_quat is math_matrix_from_pos_quat
+    diagnostics_source = (ROOT / "src/gui/rendering/gpu_core/diagnostics.py").read_text(encoding="utf-8")
+    math_helpers_source = (ROOT / "src/gui/rendering/gpu_core/math_helpers.py").read_text(encoding="utf-8")
+    adapter_resources_source = (ROOT / "src/adapters/rendering/moderngl_resources.py").read_text(encoding="utf-8")
+    assert '_TARGET = "src.adapters.rendering.gpu_diagnostics_exports"' in diagnostics_source
+    assert "sys.modules[__name__] = _module" in diagnostics_source
+    assert "globals().update" not in diagnostics_source
+    assert 'import_module("src.math.gpu_math")' in math_helpers_source
+    assert "sys.modules[__name__] = _module" in math_helpers_source
+    assert "import *" not in math_helpers_source
+    assert "from src.math.gpu_math import (" in adapter_resources_source
+    assert "from src.math.gpu_math import *" not in adapter_resources_source
+    assert adapter_resources_module._mat4_from_pos_quat_scale is math_gpu_math_module._mat4_from_pos_quat_scale
     assert "src.gui.rendering.gpu_core.diagnostics" not in (ROOT / "src/math/gpu_math.py").read_text(
         encoding="utf-8"
     )
@@ -250,6 +917,25 @@ def test_gpu_matrix_helper_is_math_owned() -> None:
 
 def test_transform_gizmo_helpers_are_backend_owned() -> None:
     """Renderer-neutral transform gizmo state, picking, and drag policy belong to core gizmo."""
+    import sys
+
+    import src.core.gizmo.gizmo_draw_data as core_draw_data_module
+    import src.core.gizmo.gizmo_mode as core_mode_module
+    import src.core.gizmo.gizmo_picker as core_picker_module
+    import src.core.gizmo.gizmo_renderer as core_renderer_module
+    import src.core.gizmo as core_gizmo_package
+    import src.core.gizmo.transform_controller as core_controller_module
+    import src.core.gizmo.transform_gizmo as core_gizmo_module
+    import src.gui.gizmo as gui_gizmo_package
+    import src.gui.gizmo.gizmo_draw_data as gui_draw_data_module
+    import src.gui.gizmo.gizmo_mode as gui_mode_module
+    import src.gui.gizmo.gizmo_picker as gui_picker_module
+    import src.gui.gizmo.gizmo_renderer as gui_renderer_module
+    import src.gui.gizmo.transform_math as gui_transform_math_module
+    import src.gui.gizmo.transform_controller as gui_controller_module
+    import src.gui.gizmo.transform_gizmo as gui_gizmo_module
+    import src.math.transform_math as math_transform_math_module
+
     from src.core.gizmo.gizmo_draw_data import GizmoRenderData as CoreGizmoRenderData
     from src.core.gizmo.gizmo_mode import GizmoMode as CoreGizmoMode
     from src.core.gizmo.gizmo_picker import GizmoPicker as CoreGizmoPicker
@@ -261,8 +947,10 @@ def test_transform_gizmo_helpers_are_backend_owned() -> None:
     from src.gui.gizmo.gizmo_mode import GizmoMode as GuiGizmoMode
     from src.gui.gizmo.gizmo_picker import GizmoPicker as GuiGizmoPicker
     from src.gui.gizmo.gizmo_renderer import GizmoRenderer as GuiGizmoRenderer
+    from src.gui.gizmo.transform_math import ray_from_mouse as GuiRayFromMouse
     from src.gui.gizmo.transform_controller import TransformController as GuiTransformController
     from src.gui.gizmo.transform_gizmo import TransformGizmo as GuiTransformGizmo
+    from src.math.transform_math import ray_from_mouse as MathRayFromMouse
 
     assert GuiGizmoRenderData is CoreGizmoRenderData
     assert GuiGizmoMode is CoreGizmoMode
@@ -271,6 +959,22 @@ def test_transform_gizmo_helpers_are_backend_owned() -> None:
     assert GuiGizmoRenderer is CoreGizmoRenderer
     assert GuiTransformController is CoreTransformController
     assert GuiTransformGizmo is CoreTransformGizmo
+    assert GuiRayFromMouse is MathRayFromMouse
+    assert gui_gizmo_package.GizmoMode is CoreGizmoMode
+    assert gui_gizmo_package.__all__ == tuple(core_gizmo_package.__all__)
+    assert gui_transform_math_module is math_transform_math_module
+    assert sys.modules["src.gui.gizmo.transform_math"] is math_transform_math_module
+    module_pairs = {
+        "gizmo_draw_data": (gui_draw_data_module, core_draw_data_module),
+        "gizmo_mode": (gui_mode_module, core_mode_module),
+        "gizmo_picker": (gui_picker_module, core_picker_module),
+        "gizmo_renderer": (gui_renderer_module, core_renderer_module),
+        "transform_controller": (gui_controller_module, core_controller_module),
+        "transform_gizmo": (gui_gizmo_module, core_gizmo_module),
+    }
+    for module_name, (gui_module, core_module) in module_pairs.items():
+        assert gui_module is core_module
+        assert sys.modules[f"src.gui.gizmo.{module_name}"] is core_module
 
     for filename in (
         "__init__.py",
@@ -288,6 +992,24 @@ def test_transform_gizmo_helpers_are_backend_owned() -> None:
         assert "QtGui" not in source
         assert "QtCore" not in source
         assert "tkinter" not in source
+        if filename != "__init__.py":
+            gui_source = (ROOT / "src/gui/gizmo" / filename).read_text(encoding="utf-8")
+            target_module = f"src.core.gizmo.{filename.removesuffix('.py')}"
+            assert f'import_module("{target_module}")' in gui_source
+            assert "sys.modules[__name__] = _module" in gui_source
+            assert "globals().update" not in gui_source
+
+    gui_package_source = (ROOT / "src/gui/gizmo/__init__.py").read_text(encoding="utf-8")
+    assert '"GizmoMode": "src.core.gizmo.gizmo_mode"' in gui_package_source
+    assert '"TransformController": "src.core.gizmo.transform_controller"' in gui_package_source
+    assert '"TransformGizmo": "src.core.gizmo.transform_gizmo"' in gui_package_source
+    assert "def __getattr__" in gui_package_source
+    assert "from src.core.gizmo" not in gui_package_source
+    assert "import *" not in gui_package_source
+    transform_math_source = (ROOT / "src/gui/gizmo/transform_math.py").read_text(encoding="utf-8")
+    assert 'import_module("src.math.transform_math")' in transform_math_source
+    assert "sys.modules[__name__] = _module" in transform_math_source
+    assert "import *" not in transform_math_source
 
     viewport_deps = (ROOT / "src/gui/viewports/viewport_core/shared/dependencies.py").read_text(encoding="utf-8")
     assert "src.gui.qt_lib.gizmo.gizmo_mode" not in viewport_deps
@@ -298,6 +1020,11 @@ def test_transform_gizmo_helpers_are_backend_owned() -> None:
 
 def test_gpu_debug_tables_are_backend_owned() -> None:
     """GPU/material diagnostic table generation is backend rendering support."""
+    import sys
+
+    import src.core.rendering.gpu_debug_tables as core_debug_tables_module
+    import src.gui.rendering.gpu_core.debug_tables as gui_debug_tables_module
+
     from src.core.qt_core.rendering.gpu_debug_tables import ModuleDrawItem as FacadeModuleDrawItem
     from src.core.rendering.gpu_debug_tables import ModuleDrawItem as CoreModuleDrawItem
     from src.core.rendering.gpu_debug_tables import debug_material_role_table as core_material_role_table
@@ -311,6 +1038,8 @@ def test_gpu_debug_tables_are_backend_owned() -> None:
     assert PublicModuleDrawItem is CoreModuleDrawItem
     assert gui_material_role_table is core_material_role_table
     assert public_material_role_table is core_material_role_table
+    assert gui_debug_tables_module is core_debug_tables_module
+    assert sys.modules["src.gui.rendering.gpu_core.debug_tables"] is core_debug_tables_module
 
     core_source = (ROOT / "src/core/rendering/gpu_debug_tables.py").read_text(encoding="utf-8")
     assert "src.gui." not in core_source
@@ -321,15 +1050,25 @@ def test_gpu_debug_tables_are_backend_owned() -> None:
     assert "from dataclasses import dataclass" in core_source
     assert "from .diagnostics import" not in core_source
 
-    renderer_source = (ROOT / "src/gui/rendering/gpu_core/renderer.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
-    assert "from src.core.rendering.gpu_debug_tables import *" in renderer_source
+    renderer_source = (ROOT / "src/adapters/rendering/moderngl_renderer_impl.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    gui_facade = (ROOT / "src/gui/rendering/gpu_core/debug_tables.py").read_text(encoding="utf-8")
+    assert "from src.core.rendering.gpu_debug_tables import (" in renderer_source
+    assert "from src.core.rendering.gpu_debug_tables import *" not in renderer_source
     assert '"ModuleDrawItem": "src.core.rendering.gpu_debug_tables"' in public_facade
     assert "src.gui.rendering.gpu_core.debug_tables" not in public_facade
+    assert 'import_module("src.core.rendering.gpu_debug_tables")' in gui_facade
+    assert "sys.modules[__name__] = _module" in gui_facade
+    assert "globals().update" not in gui_facade
 
 
 def test_gpu_shader_sources_are_backend_owned() -> None:
     """ModernGL shader source strings are renderer backend data, not GUI logic."""
+    import sys
+
+    import src.core.rendering.gpu_shaders as core_gpu_shaders_module
+    import src.gui.rendering.gpu_core.shaders as gui_gpu_shaders_module
+
     from src.core.qt_core.rendering.gpu_shaders import _VERT_SRC as facade_vert_src
     from src.core.rendering.gpu_shaders import _FRAG_SRC as core_frag_src
     from src.core.rendering.gpu_shaders import _VERT_SRC as core_vert_src
@@ -341,6 +1080,8 @@ def test_gpu_shader_sources_are_backend_owned() -> None:
     assert facade_vert_src is core_vert_src
     assert public_vert_src is core_vert_src
     assert public_frag_src is core_frag_src
+    assert gui_gpu_shaders_module is core_gpu_shaders_module
+    assert sys.modules["src.gui.rendering.gpu_core.shaders"] is core_gpu_shaders_module
 
     core_source = (ROOT / "src/core/rendering/gpu_shaders.py").read_text(encoding="utf-8")
     assert "src.gui." not in core_source
@@ -351,11 +1092,16 @@ def test_gpu_shader_sources_are_backend_owned() -> None:
     assert "from .diagnostics import" not in core_source
     assert "uniform float u_uv_v_flip" in core_source
 
-    renderer_source = (ROOT / "src/gui/rendering/gpu_core/renderer.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
-    assert "from src.core.rendering.gpu_shaders import *" in renderer_source
+    renderer_source = (ROOT / "src/adapters/rendering/moderngl_renderer_impl.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    gui_facade = (ROOT / "src/gui/rendering/gpu_core/shaders.py").read_text(encoding="utf-8")
+    assert "from src.core.rendering.gpu_shaders import _FRAG_SRC, _GRID_FRAG_SRC, _GRID_VERT_SRC, _VERT_SRC" in renderer_source
+    assert "from src.core.rendering.gpu_shaders import *" not in renderer_source
     assert '"_VERT_SRC": "src.core.rendering.gpu_shaders"' in public_facade
     assert "src.gui.rendering.gpu_core.shaders" not in public_facade
+    assert 'import_module("src.core.rendering.gpu_shaders")' in gui_facade
+    assert "sys.modules[__name__] = _module" in gui_facade
+    assert "globals().update" not in gui_facade
 
 
 def test_gpu_scene_helpers_are_backend_owned() -> None:
@@ -390,24 +1136,34 @@ def test_gpu_scene_helpers_are_backend_owned() -> None:
 
     adapter_scene_source = (ROOT / "src/adapters/rendering/moderngl_scene_helpers.py").read_text(encoding="utf-8")
     gui_scene_source = (ROOT / "src/gui/rendering/gpu_core/scene_helpers.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
     mcp_tool_source = (ROOT / "src/kotormcp/tools/ghostrigger.py").read_text(encoding="utf-8")
     debug_materials_source = (ROOT / "src/kotormcp/tools/debug_materials.py").read_text(encoding="utf-8")
+    backend_plan = (ROOT / "docs/architecture/backend_reorganization_plan.md").read_text(encoding="utf-8")
     assert "from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer" in adapter_scene_source
     assert "from src.core.rendering.gpu_scene_helpers import" in adapter_scene_source
     assert "src.gui." not in adapter_scene_source
-    assert "from src.core.rendering.gpu_scene_helpers import" in gui_scene_source
-    assert "from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe" in gui_scene_source
+    assert 'import_module("src.adapters.rendering.moderngl_scene_helpers")' in gui_scene_source
+    assert "sys.modules[__name__] = _module" in gui_scene_source
     assert "from .renderer import *" not in gui_scene_source
     assert "def render_model_autoframe" not in gui_scene_source
     assert '"_compute_model_bounds": "src.core.rendering.gpu_scene_helpers"' in public_facade
     assert '"render_model_autoframe": "src.adapters.rendering.moderngl_scene_helpers"' in public_facade
     assert "from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe" in mcp_tool_source
     assert "from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe" in debug_materials_source
+    assert "`src.gui.rendering.gpu_core.scene_helpers` as a module alias over the adapter owner" in backend_plan
+    assert "`src/adapters/rendering/moderngl_scene_helpers.py` because it creates and" in backend_plan
 
 
 def test_gpu_benchmark_adapter_imports_renderer_dependencies_explicitly() -> None:
     """The ModernGL benchmark adapter should not rely on scene-helper wildcard side effects."""
+    import sys
+
+    import src.adapters.rendering.moderngl_benchmark as adapter_benchmark_module
+    import src.adapters.rendering.moderngl_cli as adapter_cli_module
+    import src.gui.rendering.gpu_core.benchmark as gui_benchmark_module
+    import src.gui.rendering.gpu_core.cli as gui_cli_module
+
     from src.adapters.rendering.moderngl_benchmark import _benchmark as adapter_benchmark
     from src.adapters.rendering.moderngl_cli import _main as adapter_main
     from src.gui.rendering.gpu_core.benchmark import _benchmark as direct_benchmark
@@ -419,20 +1175,28 @@ def test_gpu_benchmark_adapter_imports_renderer_dependencies_explicitly() -> Non
     assert public_benchmark is adapter_benchmark
     assert direct_main is adapter_main
     assert public_main is adapter_main
+    assert gui_benchmark_module is adapter_benchmark_module
+    assert gui_cli_module is adapter_cli_module
+    assert sys.modules["src.gui.rendering.gpu_core.benchmark"] is adapter_benchmark_module
+    assert sys.modules["src.gui.rendering.gpu_core.cli"] is adapter_cli_module
 
     benchmark_source = (ROOT / "src/adapters/rendering/moderngl_benchmark.py").read_text(encoding="utf-8")
     cli_source = (ROOT / "src/adapters/rendering/moderngl_cli.py").read_text(encoding="utf-8")
     gui_benchmark_source = (ROOT / "src/gui/rendering/gpu_core/benchmark.py").read_text(encoding="utf-8")
     gui_cli_source = (ROOT / "src/gui/rendering/gpu_core/cli.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
     assert "from .scene_helpers import *" not in benchmark_source
     assert "from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer" in benchmark_source
     assert "import numpy as np" in benchmark_source
     assert "from PIL import Image" in benchmark_source
     assert "from src.adapters.rendering.moderngl_benchmark import _benchmark" in cli_source
     assert "from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer" in cli_source
-    assert "from src.adapters.rendering.moderngl_benchmark import *" in gui_benchmark_source
-    assert "from src.adapters.rendering.moderngl_cli import *" in gui_cli_source
+    assert 'import_module("src.adapters.rendering.moderngl_benchmark")' in gui_benchmark_source
+    assert 'import_module("src.adapters.rendering.moderngl_cli")' in gui_cli_source
+    assert "sys.modules[__name__] = _module" in gui_benchmark_source
+    assert "sys.modules[__name__] = _module" in gui_cli_source
+    assert "import *" not in gui_benchmark_source
+    assert "import *" not in gui_cli_source
     assert '"_benchmark": "src.adapters.rendering.moderngl_benchmark"' in public_facade
     assert '"_main": "src.adapters.rendering.moderngl_cli"' in public_facade
 
@@ -459,13 +1223,20 @@ def test_gpu_diagnostics_config_is_backend_owned() -> None:
         assert forbidden not in core_source
 
     diagnostics_source = (ROOT / "src/gui/rendering/gpu_core/diagnostics.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
-    assert "from src.core.rendering.gpu_diagnostics_config import *" in diagnostics_source
-    assert "from src.core.rendering.gpu_diagnostics_records import *" in diagnostics_source
-    assert "from src.adapters.gpu.moderngl_runtime import *" in diagnostics_source
+    adapter_exports = (ROOT / "src/adapters/rendering/gpu_diagnostics_exports.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    assert '_TARGET = "src.adapters.rendering.gpu_diagnostics_exports"' in diagnostics_source
+    assert "sys.modules[__name__] = _module" in diagnostics_source
+    assert '"src.core.rendering.gpu_diagnostics_config"' in adapter_exports
+    assert '"src.core.rendering.gpu_diagnostics_records"' in adapter_exports
+    assert '"src.adapters.gpu.moderngl_runtime"' in adapter_exports
+    assert "def __getattr__" in adapter_exports
+    assert "_EXPORT_MODULES" not in adapter_exports
+    assert "for _module_name in" not in adapter_exports
+    assert "getattr(_module, \"__all__\"" not in adapter_exports
+    assert "import *" not in adapter_exports
     assert "def " not in diagnostics_source
     assert "class " not in diagnostics_source
-    assert len(diagnostics_source.splitlines()) < 40
     assert "def _gl_state_trace_path" not in diagnostics_source
     assert '"_gl_state_trace_path": "src.core.rendering.gpu_diagnostics_config"' in public_facade
 
@@ -695,8 +1466,14 @@ def test_gpu_diagnostics_records_are_backend_owned() -> None:
         assert forbidden not in core_source
 
     diagnostics_source = (ROOT / "src/gui/rendering/gpu_core/diagnostics.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
-    assert "from src.core.rendering.gpu_diagnostics_records import *" in diagnostics_source
+    adapter_exports = (ROOT / "src/adapters/rendering/gpu_diagnostics_exports.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    assert '_TARGET = "src.adapters.rendering.gpu_diagnostics_exports"' in diagnostics_source
+    assert '"src.core.rendering.gpu_diagnostics_records"' in adapter_exports
+    assert "def __getattr__" in adapter_exports
+    assert "_EXPORT_MODULES" not in adapter_exports
+    assert "for _module_name in" not in adapter_exports
+    assert "import *" not in adapter_exports
     assert "def _should_auto_clamp_diffuse" not in diagnostics_source
     assert "def _build_gl_state_trace_record" not in diagnostics_source
     assert "def _build_lm_data_dump_record" not in diagnostics_source
@@ -768,8 +1545,8 @@ def test_renderer_color_utils_are_backend_owned() -> None:
 
     diagnostics_source = (ROOT / "src/gui/rendering/gpu_core/diagnostics.py").read_text(encoding="utf-8")
     wgpu_shared_source = (ROOT / "src/core/rendering/wgpu_shared.py").read_text(encoding="utf-8")
-    gpu_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
-    wgpu_facade = (ROOT / "src/gui/rendering/wgpu_renderer.py").read_text(encoding="utf-8")
+    gpu_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    wgpu_facade = (ROOT / "src/adapters/rendering/wgpu_renderer_exports.py").read_text(encoding="utf-8")
     assert "from src.core.rendering.color_utils import *" in diagnostics_source
     assert "from src.core.rendering.color_utils import _hex_to_rgb_float" in wgpu_shared_source
     assert "def _hex_to_rgb_float" not in diagnostics_source
@@ -792,6 +1569,9 @@ def test_gpu_vbo_layout_helpers_are_backend_owned() -> None:
         _VBO_MAIN_FORMAT as core_main_format,
         _split_vbo_attributes_for_gpu as core_split_vbo_attributes,
     )
+    from src.adapters.rendering.moderngl_resources import (
+        _split_vbo_attributes_for_gpu as adapter_split_vbo_attributes,
+    )
     from src.gui.rendering.gpu_core.resources import (
         _split_vbo_attributes_for_gpu as gui_split_vbo_attributes,
     )
@@ -803,6 +1583,7 @@ def test_gpu_vbo_layout_helpers_are_backend_owned() -> None:
 
     assert facade_main_format == core_main_format == public_main_format == "3f 3f 2f 2f 4f 4f"
     assert facade_bone_ids_format == core_bone_ids_format == public_bone_ids_format == "4i"
+    assert adapter_split_vbo_attributes is core_split_vbo_attributes
     assert gui_split_vbo_attributes is core_split_vbo_attributes
     assert facade_split_vbo_attributes is core_split_vbo_attributes
     assert public_split_vbo_attributes is core_split_vbo_attributes
@@ -818,21 +1599,35 @@ def test_gpu_vbo_layout_helpers_are_backend_owned() -> None:
     assert main[:, 14:18].tolist() == rows[:, 18:22].tolist()
 
     core_source = (ROOT / "src/core/rendering/gpu_vbo_layout.py").read_text(encoding="utf-8")
+    adapter_resources_source = (ROOT / "src/adapters/rendering/moderngl_resources.py").read_text(encoding="utf-8")
     resources_source = (ROOT / "src/gui/rendering/gpu_core/resources.py").read_text(encoding="utf-8")
-    renderer_source = (ROOT / "src/gui/rendering/gpu_core/renderer.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
+    adapter_resources_source = (ROOT / "src/adapters/rendering/moderngl_resources.py").read_text(encoding="utf-8")
+    renderer_source = (ROOT / "src/adapters/rendering/moderngl_renderer_impl.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
     records_source = (ROOT / "src/core/rendering/gpu_diagnostics_records.py").read_text(encoding="utf-8")
 
     assert "src.gui." not in core_source
+    assert "src.gui." not in adapter_resources_source
     assert "def _split_vbo_attributes_for_gpu" not in resources_source
-    assert "from src.core.rendering.gpu_vbo_layout import _split_vbo_attributes_for_gpu" in resources_source
-    assert "from src.core.rendering.gpu_vbo_layout import" in renderer_source
+    assert 'import_module("src.adapters.rendering.moderngl_resources")' in resources_source
+    assert "sys.modules[__name__] = _module" in resources_source
+    assert "import *" not in resources_source
+    assert "from src.core.rendering.gpu_vbo_layout import _split_vbo_attributes_for_gpu" in adapter_resources_source
+    assert "from src.adapters.rendering.moderngl_resources import (" in renderer_source
+    assert "from src.adapters.rendering.moderngl_resources import *" not in renderer_source
+    assert "from src.math.gpu_math import (" in renderer_source
+    assert "from src.math.gpu_math import *" not in renderer_source
     assert '"_split_vbo_attributes_for_gpu": "src.core.rendering.gpu_vbo_layout"' in public_facade
     assert "from src.core.rendering.gpu_vbo_layout import _VBO_BONE_IDS_FORMAT, _VBO_MAIN_FORMAT" in records_source
 
 
 def test_wgpu_shader_sources_are_backend_owned() -> None:
     """WGPU shader source loading and fallback strings belong to core rendering."""
+    import sys
+
+    import src.core.rendering.wgpu_shaders as core_wgpu_shaders_module
+    import src.gui.rendering.wgpu_core.shaders as gui_wgpu_shaders_module
+
     from src.core.qt_core.rendering.wgpu_shaders import _GRID_WGSL as facade_grid_wgsl
     from src.core.rendering.wgpu_shaders import _GRID_WGSL as core_grid_wgsl
     from src.core.rendering.wgpu_shaders import _load_mesh_shader as core_load_mesh_shader
@@ -845,6 +1640,8 @@ def test_wgpu_shader_sources_are_backend_owned() -> None:
     assert public_grid_wgsl is core_grid_wgsl
     assert public_load_mesh_shader is core_load_mesh_shader
     assert "scene_lights" in core_load_mesh_shader()
+    assert gui_wgpu_shaders_module is core_wgpu_shaders_module
+    assert sys.modules["src.gui.rendering.wgpu_core.shaders"] is core_wgpu_shaders_module
 
     core_source = (ROOT / "src/core/rendering/wgpu_shaders.py").read_text(encoding="utf-8")
     assert "src.gui." not in core_source
@@ -859,10 +1656,15 @@ def test_wgpu_shader_sources_are_backend_owned() -> None:
     assert not (ROOT / "src/gui/rendering/shaders/wgpu_mesh_skinned.wgsl").exists()
 
     renderer_source = (ROOT / "src/adapters/rendering/wgpu_core/renderer.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/wgpu_renderer.py").read_text(encoding="utf-8")
-    assert "from src.core.rendering.wgpu_shaders import *" in renderer_source
+    public_facade = (ROOT / "src/adapters/rendering/wgpu_renderer_exports.py").read_text(encoding="utf-8")
+    gui_facade = (ROOT / "src/gui/rendering/wgpu_core/shaders.py").read_text(encoding="utf-8")
+    assert "from src.core.rendering.wgpu_shaders import (" in renderer_source
+    assert "from src.core.rendering.wgpu_shaders import *" not in renderer_source
     assert '"_load_mesh_shader": "src.core.rendering.wgpu_shaders"' in public_facade
     assert "src.gui.rendering.wgpu_core.shaders" not in public_facade
+    assert 'import_module("src.core.rendering.wgpu_shaders")' in gui_facade
+    assert "sys.modules[__name__] = _module" in gui_facade
+    assert "globals().update" not in gui_facade
 
 
 def test_wgpu_shared_dtos_and_helpers_are_backend_owned() -> None:
@@ -897,14 +1699,22 @@ def test_wgpu_shared_dtos_and_helpers_are_backend_owned() -> None:
         assert forbidden not in core_source
 
     gui_shared_source = (ROOT / "src/gui/rendering/wgpu_core/shared.py").read_text(encoding="utf-8")
-    public_facade = (ROOT / "src/gui/rendering/wgpu_renderer.py").read_text(encoding="utf-8")
+    adapter_shared_source = (ROOT / "src/adapters/rendering/wgpu_core/shared.py").read_text(encoding="utf-8")
+    public_facade = (ROOT / "src/adapters/rendering/wgpu_renderer_exports.py").read_text(encoding="utf-8")
     assert 'import_module("src.adapters.rendering.wgpu_core.shared")' in gui_shared_source
+    assert "from src.core.rendering.wgpu_shared import (" in adapter_shared_source
+    assert "from src.core.rendering.wgpu_shared import *" not in adapter_shared_source
     assert '"WgpuMeshResource": "src.core.rendering.wgpu_shared"' in public_facade
     assert '"_srgb_to_linear": "src.core.rendering.wgpu_shared"' in public_facade
 
 
 def test_lightmap_export_bridge_is_backend_owned() -> None:
     """Generated-lightmap export manifests belong to core lighting."""
+    import sys
+
+    import src.core.lighting.lightmap_export_bridge as core_export_bridge_module
+    import src.gui.lighting.lightmap_export_bridge as gui_export_bridge_module
+
     from src.core.lighting.lightmap_export_bridge import (
         export_baked_lightmap_manifest as core_export_manifest,
     )
@@ -913,6 +1723,12 @@ def test_lightmap_export_bridge_is_backend_owned() -> None:
     )
 
     assert gui_export_manifest is core_export_manifest
+    assert gui_export_bridge_module is core_export_bridge_module
+    assert sys.modules["src.gui.lighting.lightmap_export_bridge"] is core_export_bridge_module
+    gui_source = (ROOT / "src/gui/lighting/lightmap_export_bridge.py").read_text(encoding="utf-8")
+    assert 'import_module("src.core.lighting.lightmap_export_bridge")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "import *" not in gui_source
     assert "src.gui.lighting.lightmap_export_bridge" not in (
         ROOT / "src/converters/mesh_converter.py"
     ).read_text(encoding="utf-8")
@@ -920,6 +1736,9 @@ def test_lightmap_export_bridge_is_backend_owned() -> None:
 
 def test_lightmap_bake_support_helpers_are_backend_owned() -> None:
     """Headless lightmap bake support helpers belong to core lighting."""
+    from importlib import import_module
+    import sys
+
     from src.core.lighting.lightmap_bake_job import LightmapBakeJob as CoreLightmapBakeJob
     from src.core.lighting.lightmap_bake_settings import LightmapBakeSettings as CoreLightmapBakeSettings
     from src.core.lighting.lightmap_padding import LightmapPadding as CoreLightmapPadding
@@ -942,29 +1761,40 @@ def test_lightmap_bake_support_helpers_are_backend_owned() -> None:
     assert GuiLightmapUVValidator is CoreLightmapUVValidator
     assert GuiUVAtlasGenerator is CoreUVAtlasGenerator
 
-    core_sources = (
-        "lightmap_bake_job.py",
-        "lightmap_bake_settings.py",
-        "lightmap_compare.py",
-        "lightmap_denoiser.py",
-        "lightmap_lighting_solver.py",
-        "lightmap_manifest.py",
-        "lightmap_output.py",
-        "lightmap_padding.py",
-        "lightmap_rasterizer.py",
-        "lightmap_sampler.py",
-        "lightmap_shadow_solver.py",
-        "lightmap_uv_validator.py",
-        "raycast_backend.py",
-        "uv_atlas_generator.py",
-        "uv_channel_info.py",
+    support_modules = (
+        "lightmap_bake_job",
+        "lightmap_bake_settings",
+        "lightmap_compare",
+        "lightmap_denoiser",
+        "lightmap_lighting_solver",
+        "lightmap_manifest",
+        "lightmap_output",
+        "lightmap_padding",
+        "lightmap_rasterizer",
+        "lightmap_sampler",
+        "lightmap_shadow_solver",
+        "lightmap_uv_validator",
+        "raycast_backend",
+        "uv_atlas_generator",
+        "uv_channel_info",
     )
-    for filename in core_sources:
+    for module_name in support_modules:
+        core_module = import_module(f"src.core.lighting.{module_name}")
+        gui_module = import_module(f"src.gui.lighting.{module_name}")
+        assert gui_module is core_module
+        assert sys.modules[f"src.gui.lighting.{module_name}"] is core_module
+
+        filename = f"{module_name}.py"
         assert "src.gui." not in (ROOT / "src/core/lighting" / filename).read_text(encoding="utf-8")
+        gui_source = (ROOT / "src/gui/lighting" / filename).read_text(encoding="utf-8")
+        assert f'import_module("src.core.lighting.{module_name}")' in gui_source
+        assert "sys.modules[__name__] = _module" in gui_source
+        assert "import *" not in gui_source
 
     for source_path in (
         "src/gui/lighting/lightmap_baker.py",
         "src/gui/lighting/lightmap_bake_worker.py",
+        "src/gui/dialogs/lightmap_bake_worker.py",
         "src/gui/dialogs/qt_lightmap_baker_dialog.py",
     ):
         source = (ROOT / source_path).read_text(encoding="utf-8")
@@ -975,6 +1805,10 @@ def test_lightmap_bake_support_helpers_are_backend_owned() -> None:
 
 def test_lighting_domain_and_render_data_are_backend_owned() -> None:
     """Lighting domain records, settings, and render snapshots belong to core lighting."""
+    from importlib import import_module
+    import sys
+
+    import src.gui.lighting as gui_lighting_package
     from src.core.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS as CoreLightHelperColors
     from src.core.lighting.light_manager import LightManager as CoreLightManager
     from src.core.lighting.light_model import GhostRiggerLight as CoreGhostRiggerLight
@@ -996,22 +1830,41 @@ def test_lighting_domain_and_render_data_are_backend_owned() -> None:
     assert GuiSceneLightingRenderData is CoreSceneLightingRenderData
     assert GuiLightingSettings is CoreLightingSettings
     assert GuiLightHelperColors is CoreLightHelperColors
+    assert gui_lighting_package.GhostRiggerLight is CoreGhostRiggerLight
+    assert gui_lighting_package.LightManager is CoreLightManager
+    assert gui_lighting_package.SceneLightingMode is CoreSceneLightingMode
+    lighting_package_source = (ROOT / "src/gui/lighting/__init__.py").read_text(encoding="utf-8")
+    assert '"GhostRiggerLight": "src.core.lighting.light_model"' in lighting_package_source
+    assert '"SceneLightingMode": "src.core.lighting.light_types"' in lighting_package_source
+    assert "def __getattr__" in lighting_package_source
+    assert "from src.core.lighting" not in lighting_package_source
 
-    for filename in (
-        "aurora_light_adapter.py",
-        "light_export_bridge.py",
-        "light_gizmo_renderer.py",
-        "light_grouping.py",
-        "light_manager.py",
-        "light_model.py",
-        "light_selection.py",
-        "light_types.py",
-        "lighting_rig_presets.py",
-        "render_data.py",
-        "settings.py",
-        "shader_complexity.py",
-    ):
+    domain_modules = (
+        "aurora_light_adapter",
+        "light_export_bridge",
+        "light_gizmo_renderer",
+        "light_grouping",
+        "light_manager",
+        "light_model",
+        "light_selection",
+        "light_types",
+        "lighting_rig_presets",
+        "render_data",
+        "settings",
+        "shader_complexity",
+    )
+    for module_name in domain_modules:
+        core_module = import_module(f"src.core.lighting.{module_name}")
+        gui_module = import_module(f"src.gui.lighting.{module_name}")
+        assert gui_module is core_module
+        assert sys.modules[f"src.gui.lighting.{module_name}"] is core_module
+
+        filename = f"{module_name}.py"
         assert "src.gui." not in (ROOT / "src/core/lighting" / filename).read_text(encoding="utf-8")
+        gui_source = (ROOT / "src/gui/lighting" / filename).read_text(encoding="utf-8")
+        assert f'import_module("src.core.lighting.{module_name}")' in gui_source
+        assert "sys.modules[__name__] = _module" in gui_source
+        assert "import *" not in gui_source
 
     for source_path in (
         "src/gui/panels/qt_lighting_panel.py",
@@ -1027,16 +1880,33 @@ def test_lighting_domain_and_render_data_are_backend_owned() -> None:
         assert "src.gui.lighting.light_gizmo_renderer" not in source
         assert "src.gui.lighting.render_data" not in source
 
+    old_lighting_facade_imports = []
+    old_lighting_facades = (
+        "src.gui.qt_lib.lighting.lightmap_uv_validator",
+        "src.gui.qt_lib.lighting.lightmap_compare",
+        "src.gui.qt_lib.lighting.render_data",
+    )
+    for source_path in (ROOT / "src").rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        if any(facade in source for facade in old_lighting_facades):
+            old_lighting_facade_imports.append(str(source_path.relative_to(ROOT)))
+    assert old_lighting_facade_imports == []
+
 
 def test_lighting_preview_state_and_cache_are_backend_owned() -> None:
     """Lightmap preview state, material-map state, and preview cache belong to core lighting."""
+    from importlib import import_module
+    import sys
+
     from src.core.lighting.lightmap_controller import LightmapController as CoreLightmapController
     from src.core.lighting.material_map_controller import MaterialMapController as CoreMaterialMapController
     from src.core.lighting.preview_cache import LightmapPreviewCache as CoreLightmapPreviewCache
     from src.core.qt_core.lighting.lightmap_controller import LightmapController as FacadeLightmapController
     from src.core.qt_core.lighting.material_map_controller import MaterialMapController as FacadeMaterialMapController
     from src.core.qt_core.lighting.preview_cache import LightmapPreviewCache as FacadeLightmapPreviewCache
+    from src.adapters.qt_viewport.lighting_viewport_controller import LightingViewportController as AdapterLightingViewportController
     from src.gui.lighting.lightmap_controller import LightmapController as GuiLightmapController
+    from src.gui.lighting.lighting_viewport_controller import LightingViewportController as GuiLightingViewportController
     from src.gui.lighting.material_map_controller import MaterialMapController as GuiMaterialMapController
     from src.gui.lighting.preview_cache import LightmapPreviewCache as GuiLightmapPreviewCache
 
@@ -1046,6 +1916,11 @@ def test_lighting_preview_state_and_cache_are_backend_owned() -> None:
     assert FacadeMaterialMapController is CoreMaterialMapController
     assert GuiLightmapPreviewCache is CoreLightmapPreviewCache
     assert FacadeLightmapPreviewCache is CoreLightmapPreviewCache
+    assert GuiLightingViewportController is AdapterLightingViewportController
+    lighting_adapter_module = import_module("src.adapters.qt_viewport.lighting_viewport_controller")
+    lighting_gui_module = import_module("src.gui.lighting.lighting_viewport_controller")
+    assert lighting_gui_module is lighting_adapter_module
+    assert sys.modules["src.gui.lighting.lighting_viewport_controller"] is lighting_adapter_module
 
     material_maps = CoreMaterialMapController()
     material_maps.set_enabled("env", False)
@@ -1063,8 +1938,18 @@ def test_lighting_preview_state_and_cache_are_backend_owned() -> None:
     assert cache.get("a") is None
     assert cache.get("b") is not None
 
-    for filename in ("lightmap_controller.py", "material_map_controller.py", "preview_cache.py"):
+    for module_name in ("lightmap_controller", "material_map_controller", "preview_cache"):
+        core_module = import_module(f"src.core.lighting.{module_name}")
+        gui_module = import_module(f"src.gui.lighting.{module_name}")
+        assert gui_module is core_module
+        assert sys.modules[f"src.gui.lighting.{module_name}"] is core_module
+
+        filename = f"{module_name}.py"
         assert "src.gui." not in (ROOT / "src/core/lighting" / filename).read_text(encoding="utf-8")
+        gui_source = (ROOT / "src/gui/lighting" / filename).read_text(encoding="utf-8")
+        assert f'import_module("src.core.lighting.{module_name}")' in gui_source
+        assert "sys.modules[__name__] = _module" in gui_source
+        assert "import *" not in gui_source
 
     for source_path in (
         "src/gui/lighting/lightmap_baker.py",
@@ -1075,33 +1960,71 @@ def test_lighting_preview_state_and_cache_are_backend_owned() -> None:
         assert "src.gui.lighting.material_map_controller" not in source
         assert "src.gui.lighting.preview_cache" not in source
 
+    adapter_source = (ROOT / "src/adapters/qt_viewport/lighting_viewport_controller.py").read_text(encoding="utf-8")
+    gui_source = (ROOT / "src/gui/lighting/lighting_viewport_controller.py").read_text(encoding="utf-8")
+    assert "class LightingViewportController" in adapter_source
+    assert "from src.core.lighting.lightmap_controller import LightmapController" in adapter_source
+    assert "from src.core.lighting.material_map_controller import MaterialMapController" in adapter_source
+    assert "src.gui." not in adapter_source
+    assert 'import_module("src.adapters.qt_viewport.lighting_viewport_controller")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "import *" not in gui_source
+
 
 def test_lightmap_baker_pipeline_is_backend_owned_with_gui_gpu_adapter() -> None:
     """The lightmap bake pipeline belongs to core; the GUI path only injects the GPU solver default."""
+    from src.adapters.gpu.lightmap_baker import LightmapBaker as AdapterLightmapBaker
+    from src.adapters.gpu.lightmap_gpu_solver import LightmapGpuSolver
     from src.core.lighting.lightmap_baker import LightmapBaker as CoreLightmapBaker
     from src.core.lighting.lightmap_lighting_solver import LightmapLightingSolver
     from src.core.qt_core.lighting.lightmap_baker import LightmapBaker as FacadeLightmapBaker
     from src.gui.lighting.lightmap_baker import LightmapBaker as GuiLightmapBaker
-    from src.gui.lighting.lightmap_gpu_solver import LightmapGpuSolver
 
     assert FacadeLightmapBaker is CoreLightmapBaker
-    assert issubclass(GuiLightmapBaker, CoreLightmapBaker)
-    assert GuiLightmapBaker is not CoreLightmapBaker
+    assert GuiLightmapBaker is AdapterLightmapBaker
+    assert issubclass(AdapterLightmapBaker, CoreLightmapBaker)
+    assert AdapterLightmapBaker is not CoreLightmapBaker
     assert isinstance(CoreLightmapBaker().lighting_solver, LightmapLightingSolver)
     assert not isinstance(CoreLightmapBaker().lighting_solver, LightmapGpuSolver)
-    assert isinstance(GuiLightmapBaker().lighting_solver, LightmapGpuSolver)
+    assert isinstance(AdapterLightmapBaker().lighting_solver, LightmapGpuSolver)
 
     core_source = (ROOT / "src/core/lighting/lightmap_baker.py").read_text(encoding="utf-8")
     for forbidden in ("src.gui.", "PySide6", "QtWidgets", "QtGui", "QtCore", "LightmapGpuSolver"):
         assert forbidden not in core_source
 
+    adapter_source = (ROOT / "src/adapters/gpu/lightmap_baker.py").read_text(encoding="utf-8")
+    assert "from src.core.lighting.lightmap_baker import LightmapBaker as _CoreLightmapBaker" in adapter_source
+    assert "from src.adapters.gpu.lightmap_gpu_solver import LightmapGpuSolver" in adapter_source
+    assert "LightmapGpuSolver(LightmapLightingSolver())" in adapter_source
+    assert "src.gui." not in adapter_source
+
     gui_source = (ROOT / "src/gui/lighting/lightmap_baker.py").read_text(encoding="utf-8")
-    assert "from src.core.lighting.lightmap_baker import LightmapBaker as _CoreLightmapBaker" in gui_source
-    assert "LightmapGpuSolver(LightmapLightingSolver())" in gui_source
+    assert 'import_module("src.adapters.gpu.lightmap_baker")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "class LightmapBaker" not in gui_source
+    assert "LightmapGpuSolver" not in gui_source
+
+    worker_source = (ROOT / "src/gui/dialogs/lightmap_bake_worker.py").read_text(encoding="utf-8")
+    worker_facade_source = (ROOT / "src/gui/lighting/lightmap_bake_worker.py").read_text(encoding="utf-8")
+    dialog_source = (ROOT / "src/gui/dialogs/qt_lightmap_baker_dialog.py").read_text(encoding="utf-8")
+    assert "from src.adapters.gpu.lightmap_baker import LightmapBaker" in worker_source
+    assert "from src.adapters.gpu.lightmap_baker import LightmapBaker" in dialog_source
+    assert "from .lightmap_baker import LightmapBaker" not in worker_source
+    assert 'import_module("src.gui.dialogs.lightmap_bake_worker")' in worker_facade_source
+    assert "sys.modules[__name__] = _module" in worker_facade_source
+    assert "import *" not in worker_facade_source
+    assert "class LightmapBakeWorker" not in worker_facade_source
+    assert "from src.gui.lighting.lightmap_baker import LightmapBaker" not in dialog_source
+    assert "from src.gui.lighting.lightmap_bake_worker import" not in dialog_source
 
 
 def test_lightmap_gpu_solver_is_explicit_gpu_adapter() -> None:
     """The ModernGL lightmap solver is a GPU adapter, not GUI lighting product logic."""
+    import sys
+
+    import src.adapters.gpu.lightmap_gpu_solver as adapter_lightmap_gpu_solver_module
+    import src.gui.lighting.lightmap_gpu_solver as gui_lightmap_gpu_solver_module
+
     from src.adapters.gpu.lightmap_gpu_solver import LightmapGpuSolver as AdapterLightmapGpuSolver
     from src.adapters.gpu.moderngl_context import _create_moderngl_standalone_context
     from src.adapters.gpu.moderngl_runtime import _MODERNGL as AdapterModernGLAvailable
@@ -1116,6 +2039,8 @@ def test_lightmap_gpu_solver_is_explicit_gpu_adapter() -> None:
     from src.gui.qt_lib.lighting.lightmap_gpu_solver import LightmapGpuSolver as QtLibLightmapGpuSolver
 
     assert GuiLightmapGpuSolver is AdapterLightmapGpuSolver
+    assert gui_lightmap_gpu_solver_module is adapter_lightmap_gpu_solver_module
+    assert sys.modules["src.gui.lighting.lightmap_gpu_solver"] is adapter_lightmap_gpu_solver_module
     assert QtLibLightmapGpuSolver is AdapterLightmapGpuSolver
     assert PublicCreateModernGLContext is _create_moderngl_standalone_context
     assert GuiDiagnosticsModernGLAvailable is AdapterModernGLAvailable
@@ -1129,9 +2054,11 @@ def test_lightmap_gpu_solver_is_explicit_gpu_adapter() -> None:
     gui_diagnostics_source = (ROOT / "src/gui/rendering/gpu_core/diagnostics.py").read_text(encoding="utf-8")
     gui_facade_source = (ROOT / "src/gui/lighting/lightmap_gpu_solver.py").read_text(encoding="utf-8")
     gui_baker_source = (ROOT / "src/gui/lighting/lightmap_baker.py").read_text(encoding="utf-8")
-    public_facade_source = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
-    renderer_source = (ROOT / "src/gui/rendering/gpu_core/renderer.py").read_text(encoding="utf-8")
+    adapter_baker_source = (ROOT / "src/adapters/gpu/lightmap_baker.py").read_text(encoding="utf-8")
+    public_facade_source = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    renderer_source = (ROOT / "src/adapters/rendering/moderngl_renderer_impl.py").read_text(encoding="utf-8")
     resources_source = (ROOT / "src/gui/rendering/gpu_core/resources.py").read_text(encoding="utf-8")
+    adapter_resources_source = (ROOT / "src/adapters/rendering/moderngl_resources.py").read_text(encoding="utf-8")
 
     assert "from src.core.lighting.lightmap_lighting_solver import LightmapLightingSolver" in adapter_source
     assert "from src.adapters.gpu.moderngl_context import _create_moderngl_standalone_context" in adapter_source
@@ -1143,22 +2070,44 @@ def test_lightmap_gpu_solver_is_explicit_gpu_adapter() -> None:
     assert "def _create_moderngl_standalone_context" not in gui_diagnostics_source
     assert "def _gr_gpu_probe" not in gui_diagnostics_source
     assert "import numpy as np" not in gui_diagnostics_source
-    assert "from src.adapters.gpu.moderngl_runtime import *" in gui_diagnostics_source
-    assert "from src.adapters.gpu.viewport_probe import *" in gui_diagnostics_source
+    diagnostics_exports_source = (ROOT / "src/adapters/rendering/gpu_diagnostics_exports.py").read_text(
+        encoding="utf-8"
+    )
+    assert '_TARGET = "src.adapters.rendering.gpu_diagnostics_exports"' in gui_diagnostics_source
+    assert '"src.adapters.gpu.moderngl_runtime"' in diagnostics_exports_source
+    assert '"src.adapters.gpu.viewport_probe"' in diagnostics_exports_source
+    assert "def __getattr__" in diagnostics_exports_source
+    assert "_EXPORT_MODULES" not in diagnostics_exports_source
+    assert "for _module_name in" not in diagnostics_exports_source
+    assert "import *" not in diagnostics_exports_source
     assert '"_create_moderngl_standalone_context": "src.adapters.gpu.moderngl_context"' in public_facade_source
     assert '"_gr_gpu_probe": "src.adapters.gpu.viewport_probe"' in public_facade_source
     assert "from .diagnostics import *" not in renderer_source
     assert "from .diagnostics import *" not in resources_source
     assert "from src.adapters.gpu.moderngl_runtime import" in renderer_source
-    assert "from src.adapters.gpu.moderngl_runtime import" in resources_source
-    assert "from src.adapters.gpu.viewport_probe import _gr_gpu_probe" in resources_source
-    assert "from src.adapters.gpu.lightmap_gpu_solver import *" in gui_facade_source
-    assert "from src.adapters.gpu.lightmap_gpu_solver import LightmapGpuSolver" in gui_baker_source
+    assert "from src.adapters.gpu.moderngl_runtime import" in adapter_resources_source
+    assert 'import_module("src.adapters.rendering.moderngl_resources")' in resources_source
+    assert "sys.modules[__name__] = _module" in resources_source
+    assert "import *" not in resources_source
+    assert "from src.adapters.gpu.viewport_probe import _gr_gpu_probe" in adapter_resources_source
+    assert 'import_module("src.adapters.gpu.lightmap_gpu_solver")' in gui_facade_source
+    assert "sys.modules[__name__] = _module" in gui_facade_source
+    assert "import *" not in gui_facade_source
+    assert "from src.adapters.gpu.lightmap_gpu_solver import LightmapGpuSolver" in adapter_baker_source
+    assert 'import_module("src.adapters.gpu.lightmap_baker")' in gui_baker_source
+    assert "sys.modules[__name__] = _module" in gui_baker_source
+    assert "from src.adapters.gpu.lightmap_baker import LightmapBaker" not in gui_baker_source
+    assert "LightmapGpuSolver" not in gui_baker_source
     assert "from .lightmap_gpu_solver import LightmapGpuSolver" not in gui_baker_source
 
 
 def test_light_picker_is_backend_owned() -> None:
     """Screen-space light-helper picking belongs to core lighting."""
+    import sys
+
+    import src.core.lighting.light_picker as core_light_picker_module
+    import src.gui.lighting.light_picker as gui_light_picker_module
+
     from src.core.lighting.light_picker import LightPicker as CoreLightPicker
     from src.core.qt_core.lighting.light_picker import LightPicker as FacadeLightPicker
     from src.gui.lighting.light_picker import LightPicker as GuiLightPicker
@@ -1167,10 +2116,16 @@ def test_light_picker_is_backend_owned() -> None:
     assert GuiLightPicker is CoreLightPicker
     assert FacadeLightPicker is CoreLightPicker
     assert QtLibLightPicker is CoreLightPicker
+    assert gui_light_picker_module is core_light_picker_module
+    assert sys.modules["src.gui.lighting.light_picker"] is core_light_picker_module
 
     core_source = (ROOT / "src/core/lighting/light_picker.py").read_text(encoding="utf-8")
     for forbidden in ("src.gui.", "PySide6", "QtWidgets", "QtGui", "QtCore"):
         assert forbidden not in core_source
+    gui_source = (ROOT / "src/gui/lighting/light_picker.py").read_text(encoding="utf-8")
+    assert 'import_module("src.core.lighting.light_picker")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "import *" not in gui_source
 
     viewport_deps = (ROOT / "src/gui/viewports/viewport_core/shared/dependencies.py").read_text(encoding="utf-8")
     assert "from src.core.lighting.light_picker import LightPicker" in viewport_deps
@@ -1197,7 +2152,12 @@ def test_backend_renderer_dependencies_use_qt_viewport_adapter() -> None:
 
 def test_software_frame_renderer_is_backend_owned() -> None:
     """The Tk-free software FrameRenderer belongs to core rendering."""
+    from importlib import import_module
+    import sys
+
+    import src.core.rendering.frame_core.math_helpers as core_frame_math_helpers_module
     from src.core.rendering.frame_core.renderer import FrameRenderer as CoreFrameRenderer
+    import src.math.frame_math as math_frame_math_module
     from src.gui.rendering.frame_core.renderer import FrameRenderer as GuiFrameRenderer
     from src.gui.rendering.viewport_core import FrameRenderer as ViewportCoreFrameRenderer
     from src.gui.viewports.frame_renderer import FrameRenderer as ViewportFrameRenderer
@@ -1205,6 +2165,30 @@ def test_software_frame_renderer_is_backend_owned() -> None:
     assert GuiFrameRenderer is CoreFrameRenderer
     assert ViewportCoreFrameRenderer is CoreFrameRenderer
     assert ViewportFrameRenderer is CoreFrameRenderer
+    assert core_frame_math_helpers_module is math_frame_math_module
+    assert sys.modules["src.core.rendering.frame_core.math_helpers"] is math_frame_math_module
+
+    frame_core_modules = (
+        "colors",
+        "dependencies",
+        "diagnostics",
+        "math_helpers",
+        "mixin_imports",
+        "rasterizer",
+        "renderer",
+        "renderer_geometry",
+        "renderer_meshes",
+        "renderer_overlays",
+        "renderer_render_loop",
+        "renderer_setup",
+        "renderer_textures",
+        "texture_cache",
+    )
+    for module_name in frame_core_modules:
+        core_module = import_module(f"src.core.rendering.frame_core.{module_name}")
+        gui_module = import_module(f"src.gui.rendering.frame_core.{module_name}")
+        assert gui_module is core_module
+        assert sys.modules[f"src.gui.rendering.frame_core.{module_name}"] is core_module
 
     for source_path in (ROOT / "src/core/rendering/frame_core").glob("*.py"):
         source = source_path.read_text(encoding="utf-8")
@@ -1214,6 +2198,34 @@ def test_software_frame_renderer_is_backend_owned() -> None:
         assert "QtGui" not in source
         assert "QtCore" not in source
         assert "ImageTk" not in source
+
+        if source_path.name != "__init__.py":
+            gui_source = (ROOT / "src/gui/rendering/frame_core" / source_path.name).read_text(encoding="utf-8")
+            module_name = source_path.stem
+            assert f'import_module("src.core.rendering.frame_core.{module_name}")' in gui_source
+            assert "sys.modules[__name__] = _module" in gui_source
+            assert "globals().update" not in gui_source
+
+    core_math_source = (ROOT / "src/core/rendering/frame_core/math_helpers.py").read_text(encoding="utf-8")
+    assert 'import_module("src.math.frame_math")' in core_math_source
+    assert "sys.modules[__name__] = _module" in core_math_source
+    assert "import *" not in core_math_source
+    for source_name in (
+        "diagnostics.py",
+        "colors.py",
+        "rasterizer.py",
+        "texture_cache.py",
+        "mixin_imports.py",
+        "renderer_setup.py",
+        "renderer_render_loop.py",
+        "renderer_textures.py",
+        "renderer_geometry.py",
+        "renderer_meshes.py",
+        "renderer_overlays.py",
+    ):
+        source = (ROOT / "src/core/rendering/frame_core" / source_name).read_text(encoding="utf-8")
+        assert "import *" not in source
+        assert "globals().update" not in source
 
     for source_path in (
         ROOT / "src/adapters/qt_viewport/frame_renderer.py",
@@ -1231,20 +2243,50 @@ def test_software_frame_renderer_is_backend_owned() -> None:
 
 def test_renderer_contract_helpers_are_backend_owned() -> None:
     """Renderer-neutral contracts and helpers belong to core rendering."""
+    import sys
+
+    import src.core.rendering.hardware_info as core_hardware_info_module
+    import src.core.rendering.picking as core_picking_module
+    import src.core.rendering.renderer_backend as core_renderer_backend_module
+    import src.core.rendering.renderer_capabilities as core_renderer_capabilities_module
+    import src.core.rendering.renderer_interface as core_renderer_interface_module
+    import src.core.rendering.renderer_performance as core_renderer_performance_module
+    import src.core.rendering.renderer_profiler as core_renderer_profiler_module
+    import src.core.rendering.renderer_settings as core_renderer_settings_module
+    import src.core.rendering.viewport_display as core_viewport_display_module
+    import src.gui.rendering.hardware_info as gui_hardware_info_module
+    import src.gui.rendering.picking as gui_picking_module
+    import src.gui.rendering.renderer_backend as gui_renderer_backend_module
+    import src.gui.rendering.renderer_capabilities as gui_renderer_capabilities_module
+    import src.gui.rendering.renderer_interface as gui_renderer_interface_module
+    import src.gui.rendering.renderer_performance as gui_renderer_performance_module
+    import src.gui.rendering.renderer_profiler as gui_renderer_profiler_module
+    import src.gui.rendering.renderer_settings as gui_renderer_settings_module
+    import src.gui.rendering.viewport_display as gui_rendering_viewport_display_module
+    import src.gui.viewports.viewport_display as gui_viewport_display_module
+
     from src.core.rendering.picking import PickHit as CorePickHit
     from src.core.rendering.renderer_backend import RendererBackend as CoreRendererBackend
     from src.core.rendering.renderer_capabilities import RendererCapabilities as CoreRendererCapabilities
     from src.core.rendering.renderer_performance import RenderBatchKey as CoreRenderBatchKey
     from src.core.rendering.renderer_settings import RendererSettings as CoreRendererSettings
     from src.core.rendering.viewport_display import ViewportDisplayMode as CoreViewportDisplayMode
+    from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE as CoreDefaultNavProfile
+    from src.core.rendering.viewport_navigation import ViewportNavigationProfile as CoreViewportNavigationProfile
+    from src.core.rendering.viewport_navigation import normalize_viewport_navigation_profile as core_normalize_nav_profile
     from src.core.qt_core.rendering.renderer_backend import RendererBackend as FacadeRendererBackend
+    from src.core.qt_core.rendering.viewport_navigation import ViewportNavigationProfile as FacadeViewportNavigationProfile
     from src.gui.rendering.picking import PickHit as GuiPickHit
     from src.gui.rendering.renderer_backend import RendererBackend as GuiRendererBackend
     from src.gui.rendering.renderer_capabilities import RendererCapabilities as GuiRendererCapabilities
     from src.gui.rendering.renderer_performance import RenderBatchKey as GuiRenderBatchKey
     from src.gui.rendering.renderer_settings import RendererSettings as GuiRendererSettings
     from src.gui.rendering.viewport_display import ViewportDisplayMode as GuiRenderingDisplayMode
+    from src.gui.rendering.viewport_navigation import ViewportNavigationProfile as GuiRenderingNavigationProfile
     from src.gui.viewports.viewport_display import ViewportDisplayMode as GuiViewportDisplayMode
+    from src.gui.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE as GuiDefaultNavProfile
+    from src.gui.viewports.viewport_navigation import ViewportNavigationProfile as GuiViewportNavigationProfile
+    from src.gui.viewports.viewport_navigation import normalize_viewport_navigation_profile as gui_normalize_nav_profile
 
     assert GuiRendererBackend is CoreRendererBackend
     assert FacadeRendererBackend is CoreRendererBackend
@@ -1254,6 +2296,37 @@ def test_renderer_contract_helpers_are_backend_owned() -> None:
     assert GuiRenderBatchKey is CoreRenderBatchKey
     assert GuiViewportDisplayMode is CoreViewportDisplayMode
     assert GuiRenderingDisplayMode is CoreViewportDisplayMode
+    assert GuiViewportNavigationProfile is CoreViewportNavigationProfile
+    assert GuiRenderingNavigationProfile is CoreViewportNavigationProfile
+    assert FacadeViewportNavigationProfile is CoreViewportNavigationProfile
+    assert GuiDefaultNavProfile == CoreDefaultNavProfile
+    assert gui_normalize_nav_profile is core_normalize_nav_profile
+    assert gui_hardware_info_module is core_hardware_info_module
+    assert sys.modules["src.gui.rendering.hardware_info"] is core_hardware_info_module
+
+    module_pairs = {
+        "src.gui.rendering.picking": (gui_picking_module, core_picking_module),
+        "src.gui.rendering.renderer_backend": (gui_renderer_backend_module, core_renderer_backend_module),
+        "src.gui.rendering.renderer_capabilities": (
+            gui_renderer_capabilities_module,
+            core_renderer_capabilities_module,
+        ),
+        "src.gui.rendering.renderer_interface": (gui_renderer_interface_module, core_renderer_interface_module),
+        "src.gui.rendering.renderer_performance": (
+            gui_renderer_performance_module,
+            core_renderer_performance_module,
+        ),
+        "src.gui.rendering.renderer_profiler": (gui_renderer_profiler_module, core_renderer_profiler_module),
+        "src.gui.rendering.renderer_settings": (gui_renderer_settings_module, core_renderer_settings_module),
+        "src.gui.rendering.viewport_display": (
+            gui_rendering_viewport_display_module,
+            core_viewport_display_module,
+        ),
+        "src.gui.viewports.viewport_display": (gui_viewport_display_module, core_viewport_display_module),
+    }
+    for module_path, (gui_module, core_module) in module_pairs.items():
+        assert gui_module is core_module
+        assert sys.modules[module_path] is core_module
 
     core_rendering_sources = (
         "src/core/rendering/renderer_backend.py",
@@ -1265,9 +2338,12 @@ def test_renderer_contract_helpers_are_backend_owned() -> None:
         "src/core/rendering/renderer_profiler.py",
         "src/core/rendering/hardware_info.py",
         "src/core/rendering/viewport_display.py",
+        "src/core/rendering/viewport_navigation.py",
     )
     for source_path in core_rendering_sources:
-        assert "src.gui." not in (ROOT / source_path).read_text(encoding="utf-8")
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert "src.gui." not in source
+        assert "PySide6" not in source
 
     for source_path in (
         "src/gui/rendering/wgpu_core/shared.py",
@@ -1283,16 +2359,110 @@ def test_renderer_contract_helpers_are_backend_owned() -> None:
         assert "src.gui.rendering.renderer_performance" not in source
         assert "src.gui.rendering.renderer_profiler" not in source
         assert "src.gui.viewports.viewport_display" not in source
+        assert "src.gui.viewports.viewport_navigation" not in source
+
+    gui_viewport_navigation = (ROOT / "src/gui/viewports/viewport_navigation.py").read_text(encoding="utf-8")
+    gui_rendering_navigation = (ROOT / "src/gui/rendering/viewport_navigation.py").read_text(encoding="utf-8")
+    assert "from src.core.rendering.viewport_navigation import *" in gui_viewport_navigation
+    assert '_TARGET = "src.core.rendering.viewport_navigation"' in gui_rendering_navigation
+    assert "sys.modules[__name__]" in gui_rendering_navigation
+    gui_hardware_info = (ROOT / "src/gui/rendering/hardware_info.py").read_text(encoding="utf-8")
+    assert 'import_module("src.core.rendering.hardware_info")' in gui_hardware_info
+    assert "sys.modules[_FACADE_NAME] = _module" in gui_hardware_info
+    assert "globals().update" not in gui_hardware_info
+
+    for source_path, target_module in (
+        ("src/gui/rendering/picking.py", "src.core.rendering.picking"),
+        ("src/gui/rendering/renderer_backend.py", "src.core.rendering.renderer_backend"),
+        ("src/gui/rendering/renderer_capabilities.py", "src.core.rendering.renderer_capabilities"),
+        ("src/gui/rendering/renderer_interface.py", "src.core.rendering.renderer_interface"),
+        ("src/gui/rendering/renderer_performance.py", "src.core.rendering.renderer_performance"),
+        ("src/gui/rendering/renderer_profiler.py", "src.core.rendering.renderer_profiler"),
+        ("src/gui/rendering/renderer_settings.py", "src.core.rendering.renderer_settings"),
+        ("src/gui/rendering/viewport_display.py", "src.core.rendering.viewport_display"),
+        ("src/gui/viewports/viewport_display.py", "src.core.rendering.viewport_display"),
+    ):
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert f'import_module("{target_module}")' in source
+        assert "sys.modules[__name__] = _module" in source
+        assert "import *" not in source
+
+    old_navigation_imports = []
+    for source_path in (ROOT / "src").rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        if (
+            "src.gui.qt_lib.viewports.viewport_navigation" in source
+            or "src.gui.viewports.viewport_navigation" in source
+        ):
+            old_navigation_imports.append(str(source_path.relative_to(ROOT)))
+    assert old_navigation_imports == []
+
+    old_rendering_imports = []
+    old_rendering_facades = (
+        "src.gui.qt_lib.rendering.renderer_settings",
+        "src.gui.qt_lib.rendering.renderer_backend",
+        "src.gui.qt_lib.rendering.renderer_capabilities",
+        "src.gui.qt_lib.rendering.hardware_info",
+        "src.gui.qt_lib.rendering.picking",
+        "src.gui.qt_lib.rendering.renderer_performance",
+        "src.gui.qt_lib.rendering.gpu_renderer",
+        "src.gui.qt_lib.rendering.qt_gpu_renderer",
+        "src.gui.qt_lib.viewports.viewport_display",
+    )
+    for source_path in (ROOT / "src").rglob("*.py"):
+        source = source_path.read_text(encoding="utf-8")
+        if any(facade in source for facade in old_rendering_facades):
+            old_rendering_imports.append(str(source_path.relative_to(ROOT)))
+    assert old_rendering_imports == []
 
 
 def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     """Concrete viewport renderer selection belongs to the adapters package."""
+    import sys
+
+    import src.adapters.rendering.direct3d_renderer as adapter_direct3d_module
+    import src.adapters.rendering.moderngl_renderer as adapter_moderngl_module
+    import src.adapters.rendering.null_renderer as adapter_null_module
+    import src.adapters.rendering.moderngl_resources as adapter_resources_module
+    import src.adapters.rendering.moderngl_renderer_impl as adapter_gpu_impl_module
     import src.adapters.rendering.renderer_factory as adapter_factory
     import src.adapters.rendering.wgpu_core.renderer as adapter_wgpu_renderer
+    import src.gui.rendering.direct3d_renderer as gui_direct3d_module
+    import src.gui.rendering.moderngl_renderer as gui_moderngl_module
+    import src.gui.rendering.null_renderer as gui_null_module
+    import src.gui.rendering.gpu_core.resources as gui_resources_module
+    import src.gui.rendering.gpu_core.renderer as gui_gpu_impl_module
     import src.gui.rendering.renderer_factory as gui_factory
     import src.gui.rendering.wgpu_core.renderer as gui_wgpu_renderer
     from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data as bridged_vbo_builder
+    from src.adapters.rendering.moderngl_legacy_bridge import _GlTexCache as bridged_tex_cache
+    from src.adapters.rendering.moderngl_legacy_bridge import _GpuMesh as bridged_gpu_mesh
+    from src.adapters.rendering.moderngl_legacy_bridge import _PREBUILT_STATIC_MESH_ATTR as bridged_prebuilt_attr
+    from src.adapters.rendering.moderngl_legacy_bridge import (
+        _prebuilt_static_gpu_mesh_data as bridged_prebuilt_mesh_data,
+    )
+    from src.adapters.rendering.moderngl_legacy_bridge import (
+        clear_prebuilt_static_gpu_model_data as bridged_clear_prebuilt_model,
+    )
+    from src.adapters.rendering.moderngl_legacy_bridge import (
+        clear_prebuilt_static_gpu_mesh_data as bridged_clear_prebuilt_mesh,
+    )
     from src.adapters.rendering.moderngl_legacy_bridge import moderngl_runtime_available
+    from src.adapters.rendering.moderngl_legacy_bridge import prebuild_static_gpu_mesh_data as bridged_prebuild_mesh
+    from src.adapters.rendering.moderngl_resources import _build_vbo_data as adapter_vbo_builder
+    from src.adapters.rendering.moderngl_resources import _GlTexCache as adapter_tex_cache
+    from src.adapters.rendering.moderngl_resources import _GpuMesh as adapter_gpu_mesh
+    from src.adapters.rendering.moderngl_resources import _PREBUILT_STATIC_MESH_ATTR as adapter_prebuilt_attr
+    from src.adapters.rendering.moderngl_resources import (
+        _prebuilt_static_gpu_mesh_data as adapter_prebuilt_mesh_data,
+    )
+    from src.adapters.rendering.moderngl_resources import (
+        clear_prebuilt_static_gpu_model_data as adapter_clear_prebuilt_model,
+    )
+    from src.adapters.rendering.moderngl_resources import (
+        clear_prebuilt_static_gpu_mesh_data as adapter_clear_prebuilt_mesh,
+    )
+    from src.adapters.rendering.moderngl_resources import prebuild_static_gpu_mesh_data as adapter_prebuild_mesh
     from src.adapters.rendering.direct3d_renderer import Direct3DRenderer as AdapterDirect3DRenderer
     from src.adapters.rendering.moderngl_renderer import ModernGLRenderer as AdapterModernGLRenderer
     from src.adapters.rendering.null_renderer import NullDiagnosticRenderer as AdapterNullDiagnosticRenderer
@@ -1303,6 +2473,13 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     from src.gui.rendering.moderngl_renderer import ModernGLRenderer as GuiModernGLRenderer
     from src.gui.rendering.null_renderer import NullDiagnosticRenderer as GuiNullDiagnosticRenderer
     from src.gui.rendering.gpu_renderer import _build_vbo_data as public_vbo_builder
+    from src.gui.rendering.gpu_renderer import _GlTexCache as public_tex_cache
+    from src.gui.rendering.gpu_renderer import _GpuMesh as public_gpu_mesh
+    from src.gui.rendering.gpu_renderer import _PREBUILT_STATIC_MESH_ATTR as public_prebuilt_attr
+    from src.gui.rendering.gpu_renderer import _prebuilt_static_gpu_mesh_data as public_prebuilt_mesh_data
+    from src.gui.rendering.gpu_renderer import clear_prebuilt_static_gpu_model_data as public_clear_prebuilt_model
+    from src.gui.rendering.gpu_renderer import clear_prebuilt_static_gpu_mesh_data as public_clear_prebuilt_mesh
+    from src.gui.rendering.gpu_renderer import prebuild_static_gpu_mesh_data as public_prebuild_mesh
     from src.gui.rendering.qt_gpu_renderer import create_viewport_renderer as qt_gpu_create_renderer
     from src.gui.rendering.wgpu_core.resources import WgpuResourceCache as GuiWgpuResourceCache
     from src.gui.rendering.wgpu_renderer import WgpuRenderer as PublicWgpuRenderer
@@ -1312,9 +2489,34 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     assert GuiDirect3DRenderer is AdapterDirect3DRenderer
     assert GuiModernGLRenderer is AdapterModernGLRenderer
     assert GuiNullDiagnosticRenderer is AdapterNullDiagnosticRenderer
+    assert gui_direct3d_module is adapter_direct3d_module
+    assert gui_moderngl_module is adapter_moderngl_module
+    assert gui_null_module is adapter_null_module
+    assert gui_resources_module is adapter_resources_module
+    assert gui_gpu_impl_module is adapter_gpu_impl_module
+    assert sys.modules["src.gui.rendering.direct3d_renderer"] is adapter_direct3d_module
+    assert sys.modules["src.gui.rendering.moderngl_renderer"] is adapter_moderngl_module
+    assert sys.modules["src.gui.rendering.null_renderer"] is adapter_null_module
+    assert sys.modules["src.gui.rendering.gpu_core.resources"] is adapter_resources_module
+    assert sys.modules["src.gui.rendering.gpu_core.renderer"] is adapter_gpu_impl_module
     assert PublicWgpuRenderer is AdapterWgpuRenderer
     assert GuiWgpuResourceCache is AdapterWgpuResourceCache
+    assert bridged_vbo_builder is adapter_vbo_builder
+    assert bridged_tex_cache is adapter_tex_cache
+    assert bridged_gpu_mesh is adapter_gpu_mesh
+    assert bridged_prebuilt_attr is adapter_prebuilt_attr
+    assert bridged_prebuilt_mesh_data is adapter_prebuilt_mesh_data
+    assert bridged_clear_prebuilt_model is adapter_clear_prebuilt_model
+    assert bridged_clear_prebuilt_mesh is adapter_clear_prebuilt_mesh
+    assert bridged_prebuild_mesh is adapter_prebuild_mesh
     assert bridged_vbo_builder is public_vbo_builder
+    assert bridged_tex_cache is public_tex_cache
+    assert bridged_gpu_mesh is public_gpu_mesh
+    assert bridged_prebuilt_attr is public_prebuilt_attr
+    assert bridged_prebuilt_mesh_data is public_prebuilt_mesh_data
+    assert bridged_clear_prebuilt_model is public_clear_prebuilt_model
+    assert bridged_clear_prebuilt_mesh is public_clear_prebuilt_mesh
+    assert bridged_prebuild_mesh is public_prebuild_mesh
     assert isinstance(moderngl_runtime_available(), bool)
     assert qt_gpu_create_renderer is adapter_create_renderer
 
@@ -1332,21 +2534,107 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
         assert forbidden not in adapter_source
 
     bridge_source = (ROOT / "src/adapters/rendering/moderngl_legacy_bridge.py").read_text(encoding="utf-8")
-    assert "from src.gui.rendering.gpu_core import renderer as _gpu_renderer_impl" in bridge_source
-    assert "from src.gui.rendering.gpu_core.renderer import GpuRenderer" in bridge_source
-    assert "from src.gui.rendering.gpu_core.resources import _build_vbo_data" in bridge_source
+    assert "from src.adapters.rendering import moderngl_renderer_impl as _gpu_renderer_impl" in bridge_source
+    assert "from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer" in bridge_source
+    assert "src.gui.rendering.gpu_core.renderer" not in bridge_source
+    assert "from src.adapters.rendering.moderngl_resources import (" in bridge_source
+    assert "src.gui.rendering.gpu_core.resources" not in bridge_source
+    assert "_GlTexCache" in bridge_source
+    assert "_GpuMesh" in bridge_source
+    assert "_PREBUILT_STATIC_MESH_ATTR" in bridge_source
+    assert "_prebuilt_static_gpu_mesh_data" in bridge_source
+    assert "_build_vbo_data" in bridge_source
+    assert "clear_prebuilt_static_gpu_model_data" in bridge_source
+    assert "prebuild_static_gpu_mesh_data" in bridge_source
+
+    public_gpu_facade = (ROOT / "src/adapters/rendering/gpu_renderer_exports.py").read_text(encoding="utf-8")
+    assert '"GpuRenderer": "src.adapters.rendering.moderngl_legacy_bridge"' in public_gpu_facade
+    assert '"_build_vbo_data": "src.adapters.rendering.moderngl_resources"' in public_gpu_facade
+    assert '"_GlTexCache": "src.adapters.rendering.moderngl_resources"' in public_gpu_facade
+    assert '"_GpuMesh": "src.adapters.rendering.moderngl_resources"' in public_gpu_facade
+    assert '"_PREBUILT_STATIC_MESH_ATTR": "src.adapters.rendering.moderngl_resources"' in public_gpu_facade
+    assert '"_prebuilt_static_gpu_mesh_data": "src.adapters.rendering.moderngl_resources"' in public_gpu_facade
+    assert '"prebuild_static_gpu_mesh_data": "src.adapters.rendering.moderngl_resources"' in public_gpu_facade
+    assert '"_bas_attachment_local_transform_np": "src.math.gpu_math"' in public_gpu_facade
+    assert '"_mat4_from_pos_quat_scale": "src.math.gpu_math"' in public_gpu_facade
+    assert '"src.gui.rendering.gpu_core.renderer"' not in public_gpu_facade
+    assert '"src.gui.rendering.gpu_core.diagnostics"' not in public_gpu_facade
+    assert '"src.gui.rendering.gpu_core.resources"' not in public_gpu_facade
+    gui_gpu_facade = (ROOT / "src/gui/rendering/gpu_renderer.py").read_text(encoding="utf-8")
+    qt_gpu_facade = (ROOT / "src/gui/rendering/qt_gpu_renderer.py").read_text(encoding="utf-8")
+    assert '_TARGET = "src.adapters.rendering.gpu_renderer_exports"' in gui_gpu_facade
+    assert "sys.modules[__name__]" in gui_gpu_facade
+    assert '_GPU_EXPORTS = "src.adapters.rendering.gpu_renderer_exports"' in qt_gpu_facade
+    assert '"create_viewport_renderer": "src.adapters.rendering.renderer_factory"' in qt_gpu_facade
+    assert "def __getattr__" in qt_gpu_facade
+    assert "import *" not in qt_gpu_facade
+    assert "src.gui.rendering.gpu_renderer" not in gui_gpu_facade
+    assert "src.gui.rendering.gpu_renderer" not in qt_gpu_facade
 
     adapter_wgpu_source = (ROOT / "src/adapters/rendering/wgpu_core/renderer.py").read_text(encoding="utf-8")
-    assert "from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data" in adapter_wgpu_source
+    assert "from src.adapters.rendering.moderngl_resources import _build_vbo_data" in adapter_wgpu_source
+    assert "from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data" not in adapter_wgpu_source
     assert "from src.gui.rendering.gpu_renderer import _build_vbo_data" not in adapter_wgpu_source
+    assert "from .resources import *" not in adapter_wgpu_source
+    assert "from .shared import *" not in adapter_wgpu_source
+    assert "from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache" in adapter_wgpu_source
+    assert "from src.core.rendering.wgpu_shared import (" in adapter_wgpu_source
+
+    adapter_wgpu_resources_source = (ROOT / "src/adapters/rendering/wgpu_core/resources.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from .shared import (" in adapter_wgpu_resources_source
+    assert "from .shared import *" not in adapter_wgpu_resources_source
+    assert "log = logging.getLogger(__name__)" in adapter_wgpu_resources_source
 
     for source_path in (
-        "src/gui/rendering/direct3d_renderer.py",
-        "src/gui/rendering/moderngl_renderer.py",
-        "src/gui/rendering/null_renderer.py",
+        "src/gui/viewports/viewport_core/shared/dependencies.py",
+        "src/kotormcp/tools/debug_skinning.py",
+        "scripts/dump_qbone_renderer_parity_3j4.py",
+        "scripts/skin_3i_step7_visual_gate.py",
     ):
         source = (ROOT / source_path).read_text(encoding="utf-8")
-        assert "from src.adapters.rendering." in source
+        assert "src.adapters.rendering.moderngl_legacy_bridge" in source
+        assert "from src.gui.rendering.gpu_renderer import" not in source
+        assert "src.gui.qt_lib.rendering.gpu_renderer" not in source
+
+    for source_path in (
+        "src/gui/viewports/viewport_core/shared/dependencies.py",
+        "src/gui/windows/application_core/shared/viewport_tools.py",
+        "src/gui/windows/application_core/functions/geometry.py",
+    ):
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert "src.adapters.rendering.moderngl_resources" in source
+        assert "from src.gui.rendering.gpu_renderer import" not in source
+        assert "src.gui.qt_lib.rendering.gpu_renderer" not in source
+
+    regen_script_source = (ROOT / "scripts/regen_skin_3i_step6_dump.py").read_text(encoding="utf-8")
+    assert "from src.core.rendering.gpu_diagnostics_records import _build_skin_dump_record" in regen_script_source
+    assert "src.gui.qt_lib.rendering.gpu_renderer" not in regen_script_source
+
+    ipc_source = (ROOT / "src/ipc/server.py").read_text(encoding="utf-8")
+    mcp_source = (ROOT / "src/kotormcp/tools/ghostrigger.py").read_text(encoding="utf-8")
+    assert "src.adapters.rendering.moderngl_legacy_bridge" in ipc_source
+    assert "src.adapters.rendering.moderngl_scene_helpers" in ipc_source
+    assert "src.adapters.rendering.moderngl_legacy_bridge" in mcp_source
+    assert "src.adapters.rendering.moderngl_scene_helpers" in mcp_source
+    assert "src.core.rendering.gpu_scene_helpers" in mcp_source
+    assert "src.gui.rendering.gpu_core.renderer" not in ipc_source
+    assert "src.gui.rendering.gpu_core.renderer" not in mcp_source
+    assert "src.gui.rendering.gpu_core.scene_helpers" not in mcp_source
+
+    for source_path in (
+        ("src/gui/rendering/direct3d_renderer.py", "src.adapters.rendering.direct3d_renderer"),
+        ("src/gui/rendering/moderngl_renderer.py", "src.adapters.rendering.moderngl_renderer"),
+        ("src/gui/rendering/null_renderer.py", "src.adapters.rendering.null_renderer"),
+        ("src/gui/rendering/gpu_core/resources.py", "src.adapters.rendering.moderngl_resources"),
+        ("src/gui/rendering/gpu_core/renderer.py", "src.adapters.rendering.moderngl_renderer_impl"),
+    ):
+        source_path, target = source_path
+        source = (ROOT / source_path).read_text(encoding="utf-8")
+        assert f'import_module("{target}")' in source
+        assert "sys.modules[__name__] = _module" in source
+        assert "import *" not in source
         assert "class " not in source
         assert "def " not in source
 
@@ -1363,9 +2651,15 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
         assert f'import_module("{target}")' in source
         assert "sys.modules[__name__]" in source
 
-    public_wgpu_facade = (ROOT / "src/gui/rendering/wgpu_renderer.py").read_text(encoding="utf-8")
+    public_wgpu_facade = (ROOT / "src/adapters/rendering/wgpu_renderer_exports.py").read_text(encoding="utf-8")
     assert '"WgpuRenderer": "src.adapters.rendering.wgpu_core.renderer"' in public_wgpu_facade
     assert '"WgpuResourceCache": "src.adapters.rendering.wgpu_core.resources"' in public_wgpu_facade
+    assert "_EXPORT_MODULES" not in public_wgpu_facade
+    assert "for candidate in" not in public_wgpu_facade
+    gui_wgpu_facade = (ROOT / "src/gui/rendering/wgpu_renderer.py").read_text(encoding="utf-8")
+    assert '_TARGET = "src.adapters.rendering.wgpu_renderer_exports"' in gui_wgpu_facade
+    assert "sys.modules[__name__]" in gui_wgpu_facade
+    assert "src.gui.rendering.wgpu_core" not in gui_wgpu_facade
 
     for source_path in (
         "src/gui/rendering/qt_gpu_renderer.py",
@@ -1379,6 +2673,11 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
 
 def test_skeleton_render_data_is_backend_owned() -> None:
     """Skeleton overlay and skinning DTO helpers belong to core rendering."""
+    import sys
+
+    import src.core.rendering.skeleton_render_data as core_skeleton_module
+    import src.gui.rendering.skeleton_render_data as gui_skeleton_module
+
     from src.core.rendering.skeleton_render_data import (
         SkeletonRenderData as CoreSkeletonRenderData,
         build_skeleton_render_data as core_build_skeleton_render_data,
@@ -1394,7 +2693,13 @@ def test_skeleton_render_data_is_backend_owned() -> None:
     assert GuiSkeletonRenderData is CoreSkeletonRenderData
     assert FacadeSkeletonRenderData is CoreSkeletonRenderData
     assert gui_build_skeleton_render_data is core_build_skeleton_render_data
+    assert gui_skeleton_module is core_skeleton_module
+    assert sys.modules["src.gui.rendering.skeleton_render_data"] is core_skeleton_module
     assert "src.gui." not in (ROOT / "src/core/rendering/skeleton_render_data.py").read_text(encoding="utf-8")
+    gui_source = (ROOT / "src/gui/rendering/skeleton_render_data.py").read_text(encoding="utf-8")
+    assert 'import_module("src.core.rendering.skeleton_render_data")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "import *" not in gui_source
 
     for source_path in (
         "src/gui/rendering/mesh_render_data.py",
@@ -1408,6 +2713,15 @@ def test_skeleton_render_data_is_backend_owned() -> None:
 
 def test_mesh_render_data_is_backend_owned_with_gui_vbo_adapter() -> None:
     """Mesh/material render-data DTOs belong to core rendering with explicit GUI VBO injection."""
+    import sys
+
+    import src.adapters.rendering.mesh_render_data as adapter_mesh_module
+    import src.gui.rendering.mesh_render_data as gui_mesh_module
+
+    from src.adapters.rendering.mesh_render_data import (
+        MeshRenderData as AdapterMeshRenderData,
+        iter_mesh_render_data as adapter_iter_mesh_render_data,
+    )
     from src.core.rendering.mesh_render_data import (
         MeshRenderData as CoreMeshRenderData,
         iter_mesh_render_data as core_iter_mesh_render_data,
@@ -1420,14 +2734,29 @@ def test_mesh_render_data_is_backend_owned_with_gui_vbo_adapter() -> None:
         iter_mesh_render_data as gui_iter_mesh_render_data,
     )
 
+    assert AdapterMeshRenderData is CoreMeshRenderData
     assert GuiMeshRenderData is CoreMeshRenderData
     assert FacadeMeshRenderData is CoreMeshRenderData
+    assert gui_mesh_module is adapter_mesh_module
+    assert sys.modules["src.gui.rendering.mesh_render_data"] is adapter_mesh_module
+    assert adapter_iter_mesh_render_data is not core_iter_mesh_render_data
     assert gui_iter_mesh_render_data is not core_iter_mesh_render_data
     assert "src.gui." not in (ROOT / "src/core/rendering/mesh_render_data.py").read_text(encoding="utf-8")
 
+    adapter_source = (ROOT / "src/adapters/rendering/mesh_render_data.py").read_text(encoding="utf-8")
     gui_facade = (ROOT / "src/gui/rendering/mesh_render_data.py").read_text(encoding="utf-8")
-    assert "kwargs.setdefault(\"vbo_builder\", _vbo_builder())" in gui_facade
-    assert "from src.gui.rendering.gpu_renderer import _build_vbo_data" in gui_facade
+    assert "src.gui." not in adapter_source
+    assert "kwargs.setdefault(\"vbo_builder\", _vbo_builder())" in adapter_source
+    assert "from src.adapters.rendering.moderngl_resources import _build_vbo_data" in adapter_source
+    assert "from src.adapters.rendering.moderngl_legacy_bridge import _build_vbo_data" not in adapter_source
+    assert "globals().update" not in adapter_source
+    assert "def __getattr__" in adapter_source
+    assert "_CORE_EXPORTS" in adapter_source
+    assert 'import_module("src.adapters.rendering.mesh_render_data")' in gui_facade
+    assert "sys.modules[__name__] = _module" in gui_facade
+    assert "import *" not in gui_facade
+    assert "def iter_mesh_render_data" not in gui_facade
+    assert "from src.gui.rendering.gpu_renderer import _build_vbo_data" not in gui_facade
 
     for source_path in (
         "src/gui/rendering/wgpu_core/resources.py",
@@ -1439,7 +2768,7 @@ def test_mesh_render_data_is_backend_owned_with_gui_vbo_adapter() -> None:
 
 
 def test_vertex_space_enum_contract() -> None:
-    from src.core.qt_core.geometry.vertex_space import VertexSpace
+    from src.core.geometry.vertex_space import VertexSpace
 
     assert list(VertexSpace) == [
         VertexSpace.NODE_LOCAL,
@@ -1452,60 +2781,60 @@ def test_vertex_space_enum_contract() -> None:
 
 
 def test_compute_vertex_space_aabb_walkmesh() -> None:
-    from src.core.qt_core.geometry.vertex_space import VertexSpace, compute_vertex_space
+    from src.core.geometry.vertex_space import VertexSpace, compute_vertex_space
 
     assert compute_vertex_space(SimpleNamespace(flags=0x0200), None) is VertexSpace.AABB_WALK
 
 
 def test_compute_vertex_space_imported_world() -> None:
-    from src.core.qt_core.geometry.vertex_space import VertexSpace, compute_vertex_space
+    from src.core.geometry.vertex_space import VertexSpace, compute_vertex_space
 
     node = SimpleNamespace(flags=0, _imported=True)
     assert compute_vertex_space(node, None) is VertexSpace.WORLD
 
 
 def test_compute_vertex_space_default_node_local() -> None:
-    from src.core.qt_core.geometry.vertex_space import VertexSpace, compute_vertex_space
+    from src.core.geometry.vertex_space import VertexSpace, compute_vertex_space
 
     assert compute_vertex_space(SimpleNamespace(flags=0), None) is VertexSpace.NODE_LOCAL
 
 
 def test_inner_geometry_name_matching() -> None:
-    from src.core.qt_core.special.render_constants import is_inner_geometry_name
+    from src.core.special.render_constants import is_inner_geometry_name
 
     for name in ("eyeRA", "teethU", "TongueMesh", "gumskin", "JawSkin", "eyelid"):
         assert is_inner_geometry_name(name)
 
 
 def test_face_mesh_name_matching() -> None:
-    from src.core.qt_core.special.render_constants import is_face_mesh_name
+    from src.core.special.render_constants import is_face_mesh_name
 
     for name in ("head", "Face_LOD0", "fchead01", "skullcap"):
         assert is_face_mesh_name(name)
 
 
 def test_inner_geometry_does_not_match_non_inner_names() -> None:
-    from src.core.qt_core.special.render_constants import is_inner_geometry_name
+    from src.core.special.render_constants import is_inner_geometry_name
 
     for name in ("headhook", "model_root", "rootdummy", "random_mesh", ""):
         assert not is_inner_geometry_name(name)
 
 
 def test_read_mdl_safe_importable_and_callable() -> None:
-    from src.core.qt_core.mdl.mdl_reader_wrapper import read_mdl_safe
+    from src.core.mdl.mdl_reader_wrapper import read_mdl_safe
 
     assert callable(read_mdl_safe)
 
 
 def test_pykotor_mdl_binary_fixes_are_idempotent() -> None:
-    from src.core.qt_core.game.pykotor_mdl_io_fix import ensure_pykotor_mdl_binary_fixes
+    from src.core.game.pykotor_mdl_io_fix import ensure_pykotor_mdl_binary_fixes
 
     ensure_pykotor_mdl_binary_fixes()
     ensure_pykotor_mdl_binary_fixes()
 
 
 def test_ascii_mdl_nodes_keep_imported_uv_orientation() -> None:
-    from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
+    from src.core.mdl.mdl_parser import MDLAsciiParser
 
     model = MDLAsciiParser().parse(
         [
@@ -1538,14 +2867,14 @@ def test_ascii_mdl_nodes_keep_imported_uv_orientation() -> None:
 
 
 def test_gpu_shader_has_per_node_uv_v_flip_control() -> None:
-    from src.gui.qt_lib.rendering.gpu_renderer import _VERT_SRC
+    from src.core.rendering.gpu_shaders import _VERT_SRC
 
     assert "uniform float u_uv_v_flip" in _VERT_SRC
     assert "mix(in_uv.y, 1.0 - in_uv.y, u_uv_v_flip)" in _VERT_SRC
 
 
 def test_gpu_ascii_multitexture_split_is_ascii_gated() -> None:
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
 
     source = inspect.getsource(GpuRenderer._render_gpu)
     assert "ASCII/Kotor Tool MDLs use face_mats as per-face texture slots" in source
@@ -1554,7 +2883,7 @@ def test_gpu_ascii_multitexture_split_is_ascii_gated() -> None:
 
 
 def test_viewport_render_loop_is_gpu_only() -> None:
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     render_now = inspect.getsource(QtViewportWidget._render_now)
@@ -1600,8 +2929,8 @@ def test_add_model_to_scene_dialog_stays_compact_under_layout_apply() -> None:
 def test_qt_gpu_viewport_uses_overlay_not_cpu_textured_fallback() -> None:
     import inspect
 
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
 
     frame_source = inspect.getsource(QtViewportWidget._render_frame)
     source = inspect.getsource(QtViewportWidget._draw_gpu_viewport_overlays)
@@ -1655,7 +2984,8 @@ def test_qt_gpu_viewport_keeps_gpu_for_wire_and_texture_off_modes() -> None:
 def test_wgpu_renderer_defers_uncached_uploads_without_caching_fallback_materials() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer, WgpuResourceCache
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
 
     init_source = inspect.getsource(WgpuRenderer.__init__)
     budget_source = inspect.getsource(WgpuRenderer._begin_upload_budget)
@@ -1682,7 +3012,7 @@ def test_wgpu_renderer_defers_uncached_uploads_without_caching_fallback_material
 def test_qt_viewport_grid_toggle_controls_cpu_and_gpu_paths() -> None:
     import inspect
 
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.rendering.frame_core.renderer import FrameRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -1722,7 +3052,7 @@ def test_main_window_help_menu_uses_real_about_dialog() -> None:
 def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
     import inspect
 
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.rendering.frame_core.renderer import FrameRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     stats_source = inspect.getsource(FrameRenderer._draw_stats)
@@ -1738,7 +3068,7 @@ def test_qt_viewport_performance_overlay_stacks_above_stats_badge() -> None:
 def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None:
     import inspect
 
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     stats_source = inspect.getsource(FrameRenderer._draw_stats)
 
@@ -1755,7 +3085,7 @@ def test_viewport_animation_hud_sits_under_model_stats_not_fps_overlay() -> None
 def test_viewport_hud_state_changes_dirty_overlay_immediately() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering.renderer_performance import ViewportFrameGovernor
+    from src.core.rendering.renderer_performance import ViewportFrameGovernor
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     load_source = inspect.getsource(QtViewportWidget.load_model)
@@ -1779,7 +3109,7 @@ def test_viewport_hud_state_changes_dirty_overlay_immediately() -> None:
 def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     gpu_source = inspect.getsource(GpuRenderer.reset_framebuffers)
@@ -1794,7 +3124,7 @@ def test_qt_gpu_viewport_resets_render_targets_on_model_load() -> None:
 def test_gpu_renderer_supports_texture_off_and_wireframe_modes() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
 
     init_source = inspect.getsource(GpuRenderer.__init__)
     render_source = inspect.getsource(GpuRenderer._render_gpu)
@@ -1823,7 +3153,8 @@ def test_gpu_renderer_supports_texture_off_and_wireframe_modes() -> None:
 def test_gpu_renderer_exposes_module_render_modes_and_selection_tint() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer, _FRAG_SRC
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     init_source = inspect.getsource(GpuRenderer.__init__)
@@ -1856,10 +3187,13 @@ def test_gpu_renderer_exposes_module_render_modes_and_selection_tint() -> None:
 def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
     import inspect
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
-    from src.gui.qt_lib.rendering import gpu_renderer
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+    from src.adapters.rendering.moderngl_resources import (
+        clear_prebuilt_static_gpu_model_data,
+        prebuild_static_gpu_mesh_data,
+    )
+    from src.core.geometry.model_data import KotorModel, ModelNode
+    from src.core.rendering.frame_core.renderer import FrameRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     node = ModelNode(
@@ -1872,13 +3206,13 @@ def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
     )
     model = KotorModel(name="prebuild", root_node=node)
 
-    assert gpu_renderer.prebuild_static_gpu_mesh_data(model) == 1
+    assert prebuild_static_gpu_mesh_data(model) == 1
     entry = getattr(node, "_gr_gpu_prebuilt_static_mesh")
     assert entry["model_id"] == id(model)
     assert entry["vdata"].shape[0] == 3
     assert getattr(model, "_gr_bounds_prepared") is True
     assert getattr(model, "_gr_render_bounds") == ((0.0, 0.0, 0.0), (1.0, 1.0, 0.0))
-    assert gpu_renderer.clear_prebuilt_static_gpu_model_data(model) == 1
+    assert clear_prebuilt_static_gpu_model_data(model) == 1
     assert not hasattr(node, "_gr_gpu_prebuilt_static_mesh")
 
     init_source = inspect.getsource(GpuRenderer.__init__)
@@ -1901,8 +3235,8 @@ def test_gpu_static_mesh_prebuild_uses_ram_and_chunked_uploads() -> None:
 
 
 def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinning() -> None:
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
-    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     root = ModelNode(name="N_Bith", flags=int(NodeFlags.HEADER), position=(9.0, 8.0, 7.0))
@@ -1953,8 +3287,8 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
 
 
 def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
-    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -2028,7 +3362,7 @@ def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None
 
 
 def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
-    from src.gui.rendering.gpu_renderer import _scene_authored_world_transform, _scene_gpu_model_matrix
+    from src.math.gpu_math import _scene_authored_world_transform, _scene_gpu_model_matrix
 
     child = SimpleNamespace(
         position=(2.0, 0.0, 0.0),
@@ -2187,7 +3521,7 @@ def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall(
 def test_gpu_auto_clamp_diffuse_is_disabled_for_module_geometry() -> None:
     from types import SimpleNamespace
 
-    from src.gui.qt_lib.rendering.gpu_renderer import _should_auto_clamp_diffuse
+    from src.core.rendering.gpu_diagnostics_records import _should_auto_clamp_diffuse
 
     atlas_like_node = SimpleNamespace(
         txi_clamp_s=False,
@@ -2465,7 +3799,7 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
 
 
 def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> None:
-    from src.gui.qt_lib.rendering.mesh_render_data import _material_data
+    from src.core.rendering.mesh_render_data import _material_data
 
     alpha_card = SimpleNamespace(
         name="torso_g",
@@ -2815,9 +4149,9 @@ def test_transform_gizmo_controller_applies_translate_rotate_scale_and_cancel() 
 
     import pytest
 
-    from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
-    from src.gui.qt_lib.gizmo.transform_controller import TransformController
-    from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
+    from src.core.gizmo.gizmo_mode import GizmoMode
+    from src.core.gizmo.transform_controller import TransformController
+    from src.core.gizmo.transform_gizmo import TransformGizmo
 
     class _Camera:
         fov = 45.0
@@ -2866,7 +4200,7 @@ def test_transform_gizmo_controller_applies_translate_rotate_scale_and_cancel() 
 
 
 def test_gizmo_picker_hits_projected_rotation_polylines() -> None:
-    from src.gui.qt_lib.gizmo.gizmo_picker import GizmoPicker
+    from src.core.gizmo.gizmo_picker import GizmoPicker
 
     picker = GizmoPicker()
     handle = {
@@ -2881,7 +4215,7 @@ def test_gizmo_picker_hits_projected_rotation_polylines() -> None:
 
 
 def test_gizmo_picker_prioritizes_uniform_scale_center_handle() -> None:
-    from src.gui.qt_lib.gizmo.gizmo_picker import GizmoPicker
+    from src.core.gizmo.gizmo_picker import GizmoPicker
 
     picker = GizmoPicker()
     handles = [
@@ -2898,7 +4232,7 @@ def test_qt_viewport_selection_does_not_auto_recenter_but_z_frames_selection() -
     import pytest
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -3032,7 +4366,7 @@ def test_qt_viewport_preserves_module_mesh_node_selection_under_scene_root_tags(
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -3066,7 +4400,7 @@ def test_wgpu_gpu_pick_miss_falls_back_to_cpu_mesh_picker() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.gui.qt_lib.rendering.picking import PickHit
+    from src.core.rendering.picking import PickHit
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -3430,7 +4764,7 @@ def test_wgpu_marquee_selection_uses_gpu_picker_for_mesh_mode() -> None:
 
     from PySide6 import QtCore, QtWidgets
 
-    from src.gui.qt_lib.rendering.picking import PickHit
+    from src.core.rendering.picking import PickHit
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -3465,7 +4799,7 @@ def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> N
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -3501,7 +4835,7 @@ def test_qt_viewport_preserves_null_helper_selection_under_scene_root_tags() -> 
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -3529,7 +4863,7 @@ def test_qt_viewport_preserves_null_helper_selection_under_scene_root_tags() -> 
 
 
 def test_moderngl_selection_stays_on_explicit_node_without_scene_child_expansion() -> None:
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
 
     root = SimpleNamespace(
         name="M01aa_01a",
@@ -3551,7 +4885,7 @@ def test_moderngl_selection_stays_on_explicit_node_without_scene_child_expansion
 
 
 def test_moderngl_child_selection_does_not_select_sibling_meshes_or_lights() -> None:
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
 
     root = SimpleNamespace(
         name="M01aa_01a",
@@ -3591,7 +4925,7 @@ def test_moderngl_child_selection_does_not_select_sibling_meshes_or_lights() -> 
 def test_wgpu_light_helper_line_buffer_matches_gizmo_line_stride(monkeypatch) -> None:
     import numpy as np
 
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     captured = {}
 
@@ -3621,7 +4955,7 @@ def test_wgpu_light_helper_line_buffer_matches_gizmo_line_stride(monkeypatch) ->
 
 
 def test_wgpu_mesh_hover_uses_explicit_hovered_node_and_toggle() -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     renderer = WgpuRenderer()
     hovered = SimpleNamespace(name="Object3258")
@@ -3751,8 +5085,8 @@ def test_qt_viewport_clears_mesh_hover_during_camera_navigation() -> None:
 
 
 def test_wgpu_light_volume_helpers_match_moderngl_editor_sizes() -> None:
-    from src.gui.qt_lib.lighting.light_gizmo_renderer import LIGHT_HELPER_POINT_RADIUS, LIGHT_HELPER_SPOT_LENGTH
-    from src.gui.qt_lib.lighting.render_data import SceneLightRenderData, build_light_volume_line_batches
+    from src.core.lighting.light_gizmo_renderer import LIGHT_HELPER_POINT_RADIUS, LIGHT_HELPER_SPOT_LENGTH
+    from src.core.lighting.render_data import SceneLightRenderData, build_light_volume_line_batches
 
     point = SceneLightRenderData(
         light_id=1,
@@ -3797,7 +5131,7 @@ def test_wgpu_light_volume_helpers_match_moderngl_editor_sizes() -> None:
 
 
 def test_wgpu_light_helper_color_uses_theme_palette_not_light_tint() -> None:
-    from src.gui.qt_lib.lighting.render_data import SceneLightRenderData, build_light_helper_line_batches
+    from src.core.lighting.render_data import SceneLightRenderData, build_light_helper_line_batches
 
     light = SceneLightRenderData(
         light_id=1,
@@ -3834,7 +5168,7 @@ def test_wgpu_light_helper_color_uses_theme_palette_not_light_tint() -> None:
 
 
 def test_light_picker_hits_visible_projected_light_volume_ring() -> None:
-    from src.gui.qt_lib.lighting.light_picker import LightPicker
+    from src.core.lighting.light_picker import LightPicker
 
     node = SimpleNamespace(
         is_light=True,
@@ -3857,8 +5191,8 @@ def test_light_picker_hits_visible_projected_light_volume_ring() -> None:
 
 
 def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
-    from src.gui.qt_lib.viewports.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
     renderer = WgpuRenderer()
     lighting = SimpleNamespace(mode="scene", diffuse_enabled=True)
@@ -3872,8 +5206,8 @@ def test_wgpu_scene_lighting_only_drives_realistic_base_modes() -> None:
 def test_wgpu_bas_attachment_follows_animated_socket_matrix() -> None:
     import numpy as np
 
-    from src.core.qt_core.geometry.model_data import ModelNode
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.geometry.model_data import ModelNode
 
     renderer = WgpuRenderer()
     renderer._active_anim_pose = SimpleNamespace(
@@ -3913,8 +5247,8 @@ def test_wgpu_bas_attachment_follows_animated_socket_matrix() -> None:
 def test_wgpu_bas_head_skin_uses_animated_socket_root_not_head_node_offset() -> None:
     import numpy as np
 
-    from src.core.qt_core.geometry.model_data import ModelNode
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.geometry.model_data import ModelNode
 
     renderer = WgpuRenderer()
     renderer._active_anim_pose = SimpleNamespace(
@@ -3952,8 +5286,9 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     import inspect
     from pathlib import Path
 
-    from src.gui.rendering import mesh_render_data, wgpu_renderer
-    from src.gui.rendering.gpu_core import renderer as gpu_renderer_impl
+    from src.adapters.rendering import mesh_render_data
+    from src.adapters.rendering import moderngl_renderer_impl as gpu_renderer_impl
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     contract_path = Path(__file__).resolve().parents[1] / "src" / "systems" / "bas" / "README.md"
     contract = contract_path.read_text(encoding="utf-8")
@@ -3961,7 +5296,7 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     assert "BAS skin meshes stay out of the body skin palette" in contract
     assert "WGPU/D3D and ModernGL/OpenGL" in contract
 
-    wgpu_source = inspect.getsource(wgpu_renderer.WgpuRenderer._mesh_model_matrix)
+    wgpu_source = inspect.getsource(WgpuRenderer._mesh_model_matrix)
     assert "_gr_bas_attachment_layer" in wgpu_source
     assert "self._active_anim_pose is not None" in wgpu_source
     assert "node_world_matrix(matrix_source, anim_pose=self._active_anim_pose)" in wgpu_source
@@ -3975,6 +5310,61 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     mesh_source = inspect.getsource(mesh_render_data._extract_skinning)
     assert "_gr_bas_attachment_layer" in mesh_source
     assert "BAS attachment layers follow sockets outside body skinning" in mesh_source
+
+
+def test_integration_packages_are_headless_and_classified() -> None:
+    """Integration/system packages stay headless until a deliberate split is planned."""
+    plan_source = (ROOT / "docs/architecture/backend_reorganization_plan.md").read_text(encoding="utf-8")
+    classified_packages = (
+        "src.autorig",
+        "src.formats",
+        "src.infra",
+        "src.io",
+        "src.measurement",
+        "src.mesh_tools",
+        "src.resources",
+        "src.unreal",
+        "src.workbench",
+        "src.systems",
+    )
+    for package_name in classified_packages:
+        assert package_name in plan_source
+
+    forbidden_markers = (
+        "from PySide6",
+        "import PySide6",
+        "QtWidgets",
+        "QtGui",
+        "QtCore",
+        "tkinter",
+        "ImageTk",
+        "from src.gui",
+        "import src.gui",
+        "src.gui.",
+        "from src.core.qt_core",
+        "import src.core.qt_core",
+        "src.core.qt_core.",
+    )
+    offenders: list[str] = []
+    package_dirs = (
+        ROOT / "src/autorig",
+        ROOT / "src/formats",
+        ROOT / "src/infra",
+        ROOT / "src/io",
+        ROOT / "src/measurement",
+        ROOT / "src/mesh_tools",
+        ROOT / "src/resources",
+        ROOT / "src/unreal",
+        ROOT / "src/workbench",
+        ROOT / "src/systems",
+    )
+    for package_dir in package_dirs:
+        for source_path in package_dir.rglob("*.py"):
+            source = source_path.read_text(encoding="utf-8")
+            for marker in forbidden_markers:
+                if marker in source:
+                    offenders.append(f"{source_path.relative_to(ROOT)}: {marker}")
+    assert offenders == []
 
 
 def test_qt_viewport_shader_complexity_does_not_override_lighting_mode() -> None:
@@ -3997,7 +5387,7 @@ def test_qt_viewport_shader_complexity_does_not_override_lighting_mode() -> None
 
 
 def test_wgpu_canvas_draw_sizes_depth_from_current_surface_texture() -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     source = inspect.getsource(WgpuRenderer._draw_to_canvas)
 
@@ -4008,7 +5398,8 @@ def test_wgpu_canvas_draw_sizes_depth_from_current_surface_texture() -> None:
 
 
 def test_wgpu_diffuse_textures_upload_capped_linear_mips(monkeypatch) -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuResourceCache, WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
 
     captured = {"writes": [], "samplers": []}
 
@@ -4072,7 +5463,8 @@ def test_wgpu_diffuse_textures_upload_capped_linear_mips(monkeypatch) -> None:
 
 
 def test_wgpu_lightmaps_remain_single_level_linear_clamped(monkeypatch) -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuResourceCache, WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
 
     captured = {"writes": [], "samplers": []}
 
@@ -4132,7 +5524,7 @@ def test_wgpu_lightmaps_remain_single_level_linear_clamped(monkeypatch) -> None:
 def test_wgpu_render_normals_smooth_compatible_uv_seam_duplicates() -> None:
     import numpy as np
 
-    from src.gui.qt_lib.rendering.mesh_render_data import smooth_render_normals
+    from src.core.rendering.mesh_render_data import smooth_render_normals
 
     positions = np.asarray(
         [
@@ -4160,7 +5552,7 @@ def test_wgpu_render_normals_smooth_compatible_uv_seam_duplicates() -> None:
 
 
 def test_wgpu_render_normals_preserve_hard_edge_duplicate_vertices() -> None:
-    from src.gui.qt_lib.rendering.mesh_render_data import smooth_render_normals
+    from src.core.rendering.mesh_render_data import smooth_render_normals
 
     positions = [
         (0.0, 0.0, 0.0),
@@ -4184,7 +5576,7 @@ def test_wgpu_render_normals_preserve_hard_edge_duplicate_vertices() -> None:
 def test_wgpu_render_data_generates_area_weighted_normals_when_missing() -> None:
     import numpy as np
 
-    from src.gui.qt_lib.rendering.mesh_render_data import iter_mesh_render_data
+    from src.core.rendering.mesh_render_data import iter_mesh_render_data
 
     node = SimpleNamespace(
         name="missing_normals",
@@ -4211,7 +5603,7 @@ def test_wgpu_render_data_generates_area_weighted_normals_when_missing() -> None
 def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypatch) -> None:
     import numpy as np
 
-    from src.gui.qt_lib.rendering import mesh_render_data
+    from src.core.rendering import mesh_render_data
 
     node = SimpleNamespace(
         name="torso",
@@ -4237,7 +5629,7 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
     monkeypatch.setattr(
         mesh_render_data,
         "_extract_node_arrays",
-        lambda _node, *, anim_pose=None: (
+        lambda _node, *, anim_pose=None, vbo_builder=None: (
             positions,
             normals,
             uvs,
@@ -4267,8 +5659,8 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
 
 
 def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
-    from src.gui.qt_lib.viewports.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
     renderer = WgpuRenderer()
     renderer._active_scene = object()
@@ -4300,9 +5692,9 @@ def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
 
 
 def test_animation_skinning_profiles_resolve_content_browser_families() -> None:
-    from src.core.qt_core.animation.animation_engine import AnimationEngine
+    from src.core.animation.animation_engine import AnimationEngine
     from src.core.animation.skinning_profiles import resolve_skinning_profile
-    from src.core.qt_core.geometry.model_data import KotorModel
+    from src.core.geometry.model_data import KotorModel
 
     local_character = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
     skinned_droid = resolve_skinning_profile("P_HK47", "NULL", ["TorsoHoses", "L_hose"], inherited_animation=False, has_skin=True)
@@ -4332,6 +5724,11 @@ def test_animation_skinning_profiles_resolve_content_browser_families() -> None:
 
 
 def test_animation_skinning_profiles_include_generated_character_registry() -> None:
+    import sys
+
+    import src.core.animation.skinning_profiles.generated_character_skinning as compat_generated_module
+    import src.core.animation.skinning_profiles.types.generated_character_skinning as typed_generated_module
+
     from src.core.animation.skinning_profiles import resolve_skinning_profile
     from src.core.animation.skinning_profiles.generated_character_skinning import (
         CHARACTER_SKINNING_PROFILE_ROWS as COMPAT_PROFILE_ROWS,
@@ -4341,10 +5738,19 @@ def test_animation_skinning_profiles_include_generated_character_registry() -> N
         CHARACTER_SKINNING_PROFILE_ROWS,
     )
 
+    assert compat_generated_module is typed_generated_module
+    assert sys.modules["src.core.animation.skinning_profiles.generated_character_skinning"] is typed_generated_module
     assert COMPAT_PROFILE_ROWS is CHARACTER_SKINNING_PROFILE_ROWS
     assert len(CHARACTER_SKINNING_PROFILE_ROWS) >= 600
     assert not any(str(row["resref"]).startswith(("gi_", "or_")) for row in CHARACTER_SKINNING_PROFILE_ROWS)
     assert CHARACTER_SKINNING_PROFILE_BY_KEY["k1:n_darthmalak"]["skin_node_count"] > 0
+
+    compat_source = (ROOT / "src/core/animation/skinning_profiles/generated_character_skinning.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'import_module(f"{__package__}.types.generated_character_skinning")' in compat_source
+    assert "sys.modules[__name__] = _module" in compat_source
+    assert "import *" not in compat_source
 
     malak = resolve_skinning_profile("N_DarthMalak", "NULL", [], inherited_animation=False)
     hk47 = resolve_skinning_profile("P_HK47", "NULL", ["TorsoHoses"], inherited_animation=False)
@@ -4470,8 +5876,8 @@ def test_main_model_load_uses_inherited_animation_panel_loader() -> None:
 
 
 def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkeypatch) -> None:
-    from src.gui.qt_lib.lighting.render_data import SceneLightingRenderData
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.lighting.render_data import SceneLightingRenderData
 
     monkeypatch.setitem(__import__("sys").modules, "wgpu", SimpleNamespace())
     renderer = WgpuRenderer()
@@ -4489,8 +5895,8 @@ def test_wgpu_external_lighting_snapshot_receives_renderer_helper_palette(monkey
 def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> None:
     import numpy as np
 
-    from src.gui.qt_lib.viewports.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
     renderer = WgpuRenderer()
     material = SimpleNamespace(
@@ -4554,8 +5960,8 @@ def test_wgpu_material_uniforms_respect_diffuse_toggle_and_display_options() -> 
 def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
     import numpy as np
 
-    from src.gui.qt_lib.viewports.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
     renderer = WgpuRenderer()
     material = SimpleNamespace(
@@ -4586,7 +5992,7 @@ def test_wgpu_mesh_uniform_marks_selected_mesh_for_shader_fill() -> None:
 
 
 def test_wgpu_mesh_shaders_apply_moderngl_selected_yellow_fill() -> None:
-    from src.gui.qt_lib.rendering import wgpu_renderer
+    from src.core.rendering import wgpu_shaders as wgpu_renderer
 
     expected = "mix(out_color.rgb, vec3<f32>(1.0, 0.78, 0.12), 0.45)"
 
@@ -4604,9 +6010,9 @@ def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
     import inspect
     import numpy as np
 
-    from src.gui.qt_lib.rendering import wgpu_renderer
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
-    from src.gui.qt_lib.viewports.viewport_display import ViewportDisplayMode
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
+    from src.core.rendering.viewport_display import ViewportDisplayMode
 
     create_source = inspect.getsource(WgpuRenderer._create_textured_pipeline)
     mesh_source = inspect.getsource(WgpuRenderer._draw_meshes)
@@ -4619,7 +6025,7 @@ def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
     assert 'draw_pass("additive", additive, self.pipeline_mesh_additive' in mesh_source
     assert 'pass_name).lower() == "additive"' in skin_source
     assert "self._should_draw_selected_mesh_edges(item, mode, edge_overlay)" in mesh_source
-    assert "_uses_sprite_wire_hull" in inspect.getsource(wgpu_renderer.WgpuResourceCache.upload_mesh)
+    assert "_uses_sprite_wire_hull" in inspect.getsource(WgpuResourceCache.upload_mesh)
 
     renderer = WgpuRenderer.__new__(WgpuRenderer)
     glow_card = SimpleNamespace(material=SimpleNamespace(blend_mode="ADDITIVE", sprite_alpha_source=1))
@@ -4632,7 +6038,7 @@ def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
     assert renderer._should_draw_selected_mesh_edges(lighten_glow_card, ViewportDisplayMode.WIREFRAME, False) is True
     assert renderer._should_draw_selected_mesh_edges(opaque_mesh, ViewportDisplayMode.TEXTURED, False) is True
 
-    cache = wgpu_renderer.WgpuResourceCache.__new__(wgpu_renderer.WgpuResourceCache)
+    cache = WgpuResourceCache.__new__(WgpuResourceCache)
     positions = np.asarray(
         [
             (0.0, 0.0, 0.0),
@@ -4650,7 +6056,7 @@ def test_wgpu_routes_saber_sprites_through_additive_blend_pass() -> None:
 
 
 def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     draw_source = inspect.getsource(WgpuRenderer._draw_mesh_item)
     render_source = inspect.getsource(WgpuRenderer.render)
@@ -4662,7 +6068,7 @@ def test_wgpu_mesh_draw_uses_per_draw_uniforms_for_selected_fill() -> None:
 
 
 def test_wgpu_mesh_hover_edges_are_translucent_and_isolated_from_selection_edges() -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     renderer = WgpuRenderer()
     draw_source = inspect.getsource(WgpuRenderer._draw_meshes)
@@ -4678,8 +6084,8 @@ def test_wgpu_mesh_hover_edges_are_translucent_and_isolated_from_selection_edges
 
 
 def test_wgpu_skinned_edge_overlay_uses_skin_palette_during_animation() -> None:
-    from src.gui.qt_lib.rendering import wgpu_renderer
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
+    from src.core.rendering import wgpu_shaders as wgpu_renderer
 
     create_source = inspect.getsource(WgpuRenderer._create_skinned_line_pipeline)
     edge_source = inspect.getsource(WgpuRenderer._draw_edge_items)
@@ -4695,7 +6101,7 @@ def test_wgpu_skinned_edge_overlay_uses_skin_palette_during_animation() -> None:
 
 
 def test_wgpu_render_consumes_mesh_hover_payload() -> None:
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     source = inspect.getsource(WgpuRenderer.render)
@@ -5075,7 +6481,7 @@ def test_cinematic_camera_model_links_focal_length_and_fov() -> None:
     import math
     import pytest
 
-    from src.gui.camera.camera_model import GhostRiggerCamera
+    from src.core.camera.camera_model import GhostRiggerCamera
 
     camera = GhostRiggerCamera()
     camera.set_focal_length(85.0)
@@ -5091,7 +6497,7 @@ def test_cinematic_camera_model_links_focal_length_and_fov() -> None:
 
 def test_camera_manager_serializes_scene_cameras_and_active_camera() -> None:
     from types import SimpleNamespace
-    from src.gui.camera.camera_manager import CameraManager
+    from src.core.camera.camera_manager import CameraManager
 
     model = SimpleNamespace(name="danm13aa", _base_nodes=[])
     model.all_nodes = lambda: list(model._base_nodes)
@@ -5118,8 +6524,8 @@ def test_camera_manager_serializes_scene_cameras_and_active_camera() -> None:
 def test_render_output_builds_incrementing_camera_paths(tmp_path) -> None:
     from pathlib import Path
 
-    from src.gui.camera.camera_render_settings import RenderSettings
-    from src.gui.camera.render_output import RenderOutput
+    from src.core.camera.camera_render_settings import RenderSettings
+    from src.core.camera.render_output import RenderOutput
 
     settings = RenderSettings(output_directory=str(tmp_path), output_format="JPG", filename_prefix="")
     output = RenderOutput()
@@ -5152,7 +6558,7 @@ def test_camera_letterbox_render_burns_opaque_black_bars() -> None:
     from PIL import Image, ImageDraw
 
     from src.adapters.qt_viewport.camera_overlays import CameraOverlays as AdapterCameraOverlays
-    from src.gui.camera.camera_model import GhostRiggerCamera
+    from src.core.camera.camera_model import GhostRiggerCamera
     from src.gui.camera.camera_overlays import CameraOverlays as GuiCameraOverlays
 
     assert GuiCameraOverlays is AdapterCameraOverlays
@@ -5169,29 +6575,78 @@ def test_camera_letterbox_render_burns_opaque_black_bars() -> None:
 
 def test_camera_overlays_are_qt_viewport_adapter_owned() -> None:
     """Camera overlay drawing is adapter-owned, with the old GUI path as a facade."""
+    import sys
+
+    import src.adapters.qt_viewport.camera_overlays as adapter_camera_overlays_module
+    import src.gui.camera.camera_overlays as gui_camera_overlays_module
+
     adapter_source = (ROOT / "src/adapters/qt_viewport/camera_overlays.py").read_text(encoding="utf-8")
     gui_source = (ROOT / "src/gui/camera/camera_overlays.py").read_text(encoding="utf-8")
     dependencies_source = (ROOT / "src/gui/viewports/viewport_core/shared/dependencies.py").read_text(encoding="utf-8")
     still_frame_source = (ROOT / "src/adapters/qt_viewport/still_frame_renderer.py").read_text(encoding="utf-8")
 
     assert "class CameraOverlays" in adapter_source
-    assert "from src.adapters.qt_viewport.camera_overlays import *" in gui_source
+    assert gui_camera_overlays_module is adapter_camera_overlays_module
+    assert sys.modules["src.gui.camera.camera_overlays"] is adapter_camera_overlays_module
+    assert 'import_module("src.adapters.qt_viewport.camera_overlays")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "import *" not in gui_source
     assert "from src.adapters.qt_viewport.camera_overlays import CameraOverlays" in dependencies_source
     assert "from src.adapters.qt_viewport.camera_overlays import CameraOverlays" in still_frame_source
     assert "src.gui.camera.camera_overlays" not in still_frame_source
 
 
+def test_camera_gizmo_renderer_is_qt_viewport_adapter_owned() -> None:
+    """Camera helper/frustum drawing is adapter-owned, with the old GUI path as a facade."""
+    import sys
+
+    import src.adapters.qt_viewport.camera_gizmo_renderer as adapter_camera_gizmo_module
+    import src.gui.camera.camera_gizmo_renderer as gui_camera_gizmo_module
+
+    from src.adapters.qt_viewport.camera_gizmo_renderer import CameraGizmoRenderer as AdapterCameraGizmoRenderer
+    from src.gui.camera.camera_gizmo_renderer import CameraGizmoRenderer as GuiCameraGizmoRenderer
+    from src.gui.qt_lib.camera.camera_gizmo_renderer import CameraGizmoRenderer as QtLibCameraGizmoRenderer
+
+    assert GuiCameraGizmoRenderer is AdapterCameraGizmoRenderer
+    assert gui_camera_gizmo_module is adapter_camera_gizmo_module
+    assert sys.modules["src.gui.camera.camera_gizmo_renderer"] is adapter_camera_gizmo_module
+    assert QtLibCameraGizmoRenderer is AdapterCameraGizmoRenderer
+
+    adapter_source = (ROOT / "src/adapters/qt_viewport/camera_gizmo_renderer.py").read_text(encoding="utf-8")
+    gui_source = (ROOT / "src/gui/camera/camera_gizmo_renderer.py").read_text(encoding="utf-8")
+    dependencies_source = (ROOT / "src/gui/viewports/viewport_core/shared/dependencies.py").read_text(encoding="utf-8")
+
+    assert "class CameraGizmoRenderer" in adapter_source
+    assert "from src.math.camera_math import" in adapter_source
+    assert "PySide6" not in adapter_source
+    assert "src.gui." not in adapter_source
+    assert 'import_module("src.adapters.qt_viewport.camera_gizmo_renderer")' in gui_source
+    assert "sys.modules[__name__] = _module" in gui_source
+    assert "import *" not in gui_source
+    assert "from src.adapters.qt_viewport.camera_gizmo_renderer import CameraGizmoRenderer" in dependencies_source
+    assert "src.gui.camera.camera_gizmo_renderer" not in dependencies_source
+
+
 def test_still_frame_renderer_suppresses_viewport_camera_overlays() -> None:
+    import sys
     from types import SimpleNamespace
 
     from PIL import Image
 
-    from src.gui.camera.camera_model import GhostRiggerCamera
-    from src.gui.camera.camera_render_settings import RenderSettings
+    import src.adapters.qt_viewport.still_frame_renderer as adapter_frame_renderer_module
+    import src.gui.camera.frame_renderer as gui_frame_renderer_module
+    from src.core.camera.camera_model import GhostRiggerCamera
+    from src.core.camera.camera_render_settings import RenderSettings
     from src.adapters.qt_viewport.still_frame_renderer import FrameRenderer as AdapterFrameRenderer
     from src.gui.camera.frame_renderer import FrameRenderer as GuiFrameRenderer
 
     assert GuiFrameRenderer is AdapterFrameRenderer
+    assert gui_frame_renderer_module is adapter_frame_renderer_module
+    assert sys.modules["src.gui.camera.frame_renderer"] is adapter_frame_renderer_module
+    gui_frame_source = (ROOT / "src/gui/camera/frame_renderer.py").read_text(encoding="utf-8")
+    assert 'import_module("src.adapters.qt_viewport.still_frame_renderer")' in gui_frame_source
+    assert "sys.modules[__name__] = _module" in gui_frame_source
+    assert "import *" not in gui_frame_source
 
     calls = []
     viewport = SimpleNamespace(
@@ -5261,7 +6716,7 @@ def test_qt_viewport_uses_profiled_navigation_actions() -> None:
 def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     gpu_source = inspect.getsource(GpuRenderer._draw_grid)
@@ -5647,7 +7102,7 @@ def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjust
 def test_bas_mask_goggles_and_belt_slots_use_socket_layers() -> None:
     from types import MethodType
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     root = ModelNode(name="bodyroot")
@@ -5705,7 +7160,7 @@ def test_qt_animations_panel_exposes_inheritance_supermodel_selector() -> None:
 
 
 def test_animation_resolution_game_override_preserves_model_source_game() -> None:
-    from src.core.qt_core.geometry.model_data import GameVersion, KotorModel
+    from src.core.geometry.model_data import GameVersion, KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     model = KotorModel(name="OverrideSourceGame")
@@ -5718,7 +7173,7 @@ def test_animation_resolution_game_override_preserves_model_source_game() -> Non
 
 
 def test_animation_resolution_context_temporarily_overrides_supermodel() -> None:
-    from src.core.qt_core.geometry.model_data import GameVersion, KotorModel
+    from src.core.geometry.model_data import GameVersion, KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     model = KotorModel(name="OverrideSupermodel", supermodel="S_Male02")
@@ -5740,7 +7195,7 @@ def test_animation_resolution_context_temporarily_overrides_supermodel() -> None
 def test_bas_attachment_preview_parents_item_to_body_socket() -> None:
     from types import MethodType
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     root = ModelNode(name="bodyroot")
@@ -5770,9 +7225,9 @@ def test_bas_attachment_socket_layer_follows_body_dummy_without_skinning() -> No
 
     import pytest
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
-    from src.gui.rendering.mesh_render_data import _extract_skinning, node_world_matrix
+    from src.adapters.rendering.mesh_render_data import _extract_skinning, node_world_matrix
 
     root = ModelNode(name="bodyroot")
     headhook = ModelNode(name="headhook", parent=root)
@@ -5810,9 +7265,9 @@ def test_bas_head_skin_uses_attachment_root_local_bind_space_when_weapon_is_adde
     import numpy as np
     import pytest
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
-    from src.gui.rendering.mesh_render_data import _extract_node_arrays
+    from src.adapters.rendering.mesh_render_data import _extract_node_arrays
 
     root = ModelNode(name="bodyroot")
     headhook = ModelNode(name="headhook", parent=root)
@@ -5868,11 +7323,11 @@ def test_moderngl_bas_head_skin_uses_root_local_vbo_and_socket_draw_matrix() -> 
     import numpy as np
     import pytest
 
-    from src.gui.rendering.gpu_core import renderer as gpu_renderer_impl
-    from src.core.qt_core.geometry.model_data import ModelNode
-    from src.gui.rendering.gpu_renderer import (
+    from src.adapters.rendering import moderngl_renderer_impl as gpu_renderer_impl
+    from src.adapters.rendering.moderngl_resources import _build_vbo_data
+    from src.core.geometry.model_data import ModelNode
+    from src.math.gpu_math import (
         _bas_attachment_local_transform_np,
-        _build_vbo_data,
         _mat4_from_pos_quat_scale,
     )
 
@@ -6070,8 +7525,8 @@ def test_main_window_loads_bas_recipe_as_composed_preview_model(tmp_path) -> Non
 def test_bas_resets_stale_camera_node_wrapper_before_attaching_layers() -> None:
     import copy
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
-    from src.gui.camera.camera_manager import CameraManager
+    from src.core.geometry.model_data import KotorModel, ModelNode
+    from src.core.camera.camera_manager import CameraManager
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     root = ModelNode(name="bodyroot")
@@ -6220,8 +7675,8 @@ def test_animation_source_model_keeps_bas_body_as_animation_owner() -> None:
 
 
 def test_bas_animation_engine_returns_to_body_without_losing_time() -> None:
-    from src.core.qt_core.animation.animation_engine import AnimationEngine
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.geometry.model_data import Animation, KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     body = KotorModel(name="Body")
@@ -6351,7 +7806,7 @@ def test_bas_ignores_anatomical_hand_placeholders() -> None:
 def test_animation_selection_previews_first_frame_without_starting_playback() -> None:
     from types import SimpleNamespace
 
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel
+    from src.core.geometry.model_data import Animation, KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     model = KotorModel(name="PreviewModel")
@@ -6940,7 +8395,7 @@ def test_viewport_widget_scaffold_creates_focused_modules(tmp_path) -> None:
 
 
 def test_qt_main_window_builds_baked_animation_clip() -> None:
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     root = ModelNode(name="rootdummy")
@@ -6977,8 +8432,8 @@ def test_qt_main_window_builds_baked_animation_clip() -> None:
 
 
 def test_mdl_porter_animation_nodes_are_serialized_as_dummy_nodes() -> None:
-    from src.core.qt_core.mdl.mdl_porter import MDLBinaryWriter
-    from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags
+    from src.core.geometry.model_data import ModelNode, NodeFlags
+    from src.core.mdl.mdl_porter import MDLBinaryWriter
 
     anim_node = ModelNode(name="robe", flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN))
     anim_node.controllers = [
@@ -6997,8 +8452,8 @@ def test_mdl_porter_animation_nodes_are_serialized_as_dummy_nodes() -> None:
 
 
 def test_mdl_porter_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
-    from src.core.qt_core.mdl.mdl_porter import MDLBinaryWriter
-    from src.core.qt_core.geometry.model_data import Animation, ModelNode
+    from src.core.geometry.model_data import Animation, ModelNode
+    from src.core.mdl.mdl_porter import MDLBinaryWriter
 
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis")
@@ -7029,7 +8484,7 @@ def test_mdl_porter_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
 
 
 def test_mdl_writer_skin_palette_uses_emitted_node_indices() -> None:
-    from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
 
     writer = MDLBinaryWriter()
     writer._node_index_by_name = {
@@ -7044,8 +8499,8 @@ def test_mdl_writer_skin_palette_uses_emitted_node_indices() -> None:
 
 
 def test_mdl_writer_rebuilds_flat_animation_nodes_as_reachable_tree() -> None:
-    from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
-    from src.core.qt_core.geometry.model_data import Animation, ModelNode
+    from src.core.geometry.model_data import Animation, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
 
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis")
@@ -7082,7 +8537,7 @@ def test_binary_mdl_export_uses_skin_aware_writer() -> None:
 
     source = inspect.getsource(QtGhostRiggerMainWindow._export_mdl_binary)
 
-    assert "from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter" in source
+    assert "from src.core.mdl.mdl_writer import MDLBinaryWriter" in source
 
 
 def test_retarget_apply_promotes_target_model_for_animation_list() -> None:
@@ -7214,8 +8669,8 @@ def test_quinn_control_bones_do_not_enter_viewport_skeleton_overlay() -> None:
 
     from PIL import Image, ImageDraw
 
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
     from src.unreal.quinn import QUINN_FBX, load_quinn_fbx_model, load_quinn_skeleton_asset
 
     if not QUINN_FBX.exists():
@@ -7240,7 +8695,7 @@ def test_quinn_control_bones_do_not_enter_viewport_skeleton_overlay() -> None:
 def test_quinn_aliases_map_common_kotor_supermodel_bones() -> None:
     import pytest
 
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map
     from src.unreal.quinn import QUINN_BONE_MAP, load_quinn_skeleton_asset, unreal_skeleton_model
 
@@ -7324,7 +8779,7 @@ def test_quinn_aliases_include_real_kotor_mesh_bone_nodes() -> None:
 
 
 def test_unreal_bone_map_excludes_dummy_and_hook_helpers() -> None:
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map
 
     source = SimpleNamespace(
@@ -7373,9 +8828,9 @@ def test_unreal_viewport_hides_dummy_and_hook_helpers_from_bone_overlay() -> Non
 
     from PIL import Image, ImageDraw
 
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     root = ModelNode(name="root")
     pelvis = ModelNode(name="pelvis_g", position=(0.0, 0.0, 1.0))
@@ -7414,9 +8869,9 @@ def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:
 
     from PIL import Image, ImageDraw
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.geometry.model_data import KotorModel, ModelNode
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     root = ModelNode(name="root")
     rootdummy = ModelNode(name="rootdummy", position=(0.0, 0.0, 1.0))
@@ -7437,7 +8892,7 @@ def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:
 
 
 def test_unreal_animator_inserts_synthetic_spine_between_pelvis_and_torso() -> None:
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     root = ModelNode(name="s_female03")
@@ -7468,7 +8923,7 @@ def test_unreal_animator_inserts_synthetic_spine_between_pelvis_and_torso() -> N
 
 
 def test_unreal_animator_inserts_synthetic_spine_when_pelvis_and_torso_share_rootdummy() -> None:
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     root = ModelNode(name="s_female03")
@@ -7500,7 +8955,7 @@ def test_unreal_animator_inserts_synthetic_spine_when_pelvis_and_torso_share_roo
 
 
 def test_unreal_animator_repositions_existing_spine_between_pelvis_and_torso() -> None:
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     root = ModelNode(name="s_female03")
@@ -7535,7 +8990,7 @@ def test_unreal_animator_source_bone_browser_lists_and_selects_spine() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -7579,7 +9034,7 @@ def test_unreal_animator_manually_adds_and_deletes_source_synthetic_bones() -> N
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -7679,7 +9134,7 @@ def test_unreal_animator_animation_selection_arms_preview_pose() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -7719,7 +9174,7 @@ def test_unreal_animator_uses_gpu_during_animation_preview() -> None:
 
     from PySide6 import QtWidgets
 
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -7757,9 +9212,9 @@ def test_retarget_pose_applies_source_bind_relative_rotation_to_target_bind() ->
 
     import pytest
 
-    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
-    from src.core.qt_core.animation_retargeting.retargeter import retarget_pose
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.animation.animation_engine import AnimPose, NodePose
+    from src.core.animation_retargeting.retargeter import retarget_pose
+    from src.core.geometry.model_data import ModelNode
 
     src_bind = (0.0, 0.0, math.sin(math.radians(45.0)), math.cos(math.radians(45.0)))
     target_bind = (0.0, math.sin(math.radians(15.0)), 0.0, math.cos(math.radians(15.0)))
@@ -7773,9 +9228,9 @@ def test_retarget_pose_applies_source_bind_relative_rotation_to_target_bind() ->
 
 
 def test_manual_bone_map_override_drives_retarget_pose() -> None:
-    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
-    from src.core.qt_core.animation_retargeting.retargeter import build_bone_map, retarget_pose
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.animation.animation_engine import AnimPose, NodePose
+    from src.core.animation_retargeting.retargeter import build_bone_map, retarget_pose
+    from src.core.geometry.model_data import ModelNode
 
     source = SimpleNamespace(name="source", all_nodes=lambda: [ModelNode(name="source_arm")])
     target = SimpleNamespace(name="target", all_nodes=lambda: [ModelNode(name="target_arm")])
@@ -7796,9 +9251,9 @@ def test_manual_bone_map_override_drives_retarget_pose() -> None:
 def test_preserve_model_scale_scales_position_deltas_by_target_height() -> None:
     import pytest
 
-    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
-    from src.core.qt_core.animation_retargeting.retargeter import RetargetConfig, retarget_pose
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.animation.animation_engine import AnimPose, NodePose
+    from src.core.animation_retargeting.retargeter import RetargetConfig, retarget_pose
+    from src.core.geometry.model_data import KotorModel, ModelNode
 
     src_root = ModelNode(name="root")
     src_head = ModelNode(name="head", position=(0.0, 0.0, 10.0))
@@ -7827,7 +9282,7 @@ def test_preserve_model_scale_scales_position_deltas_by_target_height() -> None:
 
 
 def test_bone_map_reports_interpolated_target_bridge_bones() -> None:
-    from src.core.qt_core.geometry.model_data import ModelNode
+    from src.core.geometry.model_data import ModelNode
     from src.unreal.animation_retargeting import build_bone_map
 
     src_a = ModelNode(name="a")
@@ -7857,8 +9312,8 @@ def test_retarget_pose_bridges_dense_target_chain() -> None:
 
     import pytest
 
-    from src.core.qt_core.animation.animation_engine import AnimPose, NodePose
-    from src.core.qt_core.geometry.model_data import KotorModel, ModelNode
+    from src.core.animation.animation_engine import AnimPose, NodePose
+    from src.core.geometry.model_data import KotorModel, ModelNode
     from src.unreal.animation_retargeting import retarget_pose
 
     source = KotorModel(name="source")
@@ -7901,7 +9356,7 @@ def test_retarget_pose_bridges_dense_target_chain() -> None:
 def test_retarget_animation_bakes_bridge_bones() -> None:
     import math
 
-    from src.core.qt_core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.unreal.animation_retargeting import retarget_animation
 
     source = KotorModel(name="source")
@@ -7942,16 +9397,16 @@ def test_retarget_animation_bakes_bridge_bones() -> None:
 def test_gpu_vbo_splits_skin_bind_and_animated_input_space() -> None:
     import inspect
 
-    from src.gui.qt_lib.rendering import gpu_renderer
+    from src.adapters.rendering import moderngl_resources
 
-    source = inspect.getsource(gpu_renderer._build_vbo_data)
+    source = inspect.getsource(moderngl_resources._build_vbo_data)
     assert "apply_skin_node_transform_for_bind" in source
     assert "not is_skin or bool(apply_skin_node_transform_for_bind)" in source
     assert "elif _node_vs == 1 or is_skin" in source
 
 
 def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
-    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.core.camera.arcball_camera import ArcBallCamera
 
     camera = ArcBallCamera()
     camera.frame_bounds((-1200.0, -900.0, -200.0), (1200.0, 900.0, 200.0), reset_view=True)
@@ -7963,7 +9418,7 @@ def test_arcball_frame_bounds_expands_clip_range_for_large_assets() -> None:
 
 
 def test_arcball_zoom_tightens_near_clip_for_close_animation_inspection() -> None:
-    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.core.camera.arcball_camera import ArcBallCamera
 
     camera = ArcBallCamera()
     camera._near = 0.05
@@ -7981,7 +9436,7 @@ def test_wgpu_frustum_culling_uses_world_space_mesh_bounds() -> None:
 
     import numpy as np
 
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     renderer = WgpuRenderer()
     mesh = SimpleNamespace(
@@ -8014,7 +9469,7 @@ def test_wgpu_frustum_culling_keeps_animated_skinned_meshes_visible() -> None:
 
     import numpy as np
 
-    from src.gui.qt_lib.rendering.wgpu_renderer import WgpuRenderer
+    from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     renderer = WgpuRenderer()
     renderer._active_anim_pose = SimpleNamespace(time=1.0)

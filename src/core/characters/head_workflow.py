@@ -65,25 +65,25 @@ def _import_workflow_base():                                # pragma: no cover -
     we keep the import lazy for symmetry with the rest of the module.
     """
     try:
-        from src.core.qt_core.workflow import _workflow_base as _wb         # type: ignore
+        from src.core.workflow import _workflow_base as _wb         # type: ignore
     except ImportError:
-        from core.qt_core.workflow import _workflow_base as _wb             # type: ignore
+        from core.workflow import _workflow_base as _wb             # type: ignore
     return _wb
 
 
 def _import_model_data():                                   # pragma: no cover - import shim
     try:
-        from src.core.qt_core.geometry import model_data as _md             # type: ignore
+        from src.core.geometry import model_data as _md             # type: ignore
     except ImportError:
-        from core.qt_core.geometry import model_data as _md                 # type: ignore
+        from core.geometry import model_data as _md                 # type: ignore
     return _md
 
 
 def _import_validation_service():                           # pragma: no cover - import shim
     try:
-        from src.core.qt_core.diagnostics import validation_service as _vs     # type: ignore
+        from src.core.diagnostics import validation_service as _vs     # type: ignore
     except ImportError:
-        from core.qt_core.diagnostics import validation_service as _vs         # type: ignore
+        from core.diagnostics import validation_service as _vs         # type: ignore
     return _vs
 
 
@@ -91,9 +91,9 @@ def _import_character_builder():                            # pragma: no cover -
     """Return ``core.character_builder`` (where ``validate_facial_bones``,
     ``find_headhook``, and :class:`LIPPlayback` live)."""
     try:
-        from src.core.qt_core.characters import character_builder as _cb      # type: ignore
+        from src.core.characters import character_builder as _cb      # type: ignore
     except ImportError:
-        from core.qt_core.characters import character_builder as _cb          # type: ignore
+        from core.characters import character_builder as _cb          # type: ignore
     return _cb
 
 
@@ -105,12 +105,12 @@ def _import_lip_reader():                                   # pragma: no cover -
     eagerly pull in pykotor — same pattern the GUI layer uses.
     """
     try:
-        from src.core.qt_core.special import lip_reader as _lr             # type: ignore
+        from src.core.special import lip_reader as _lr             # type: ignore
         return _lr
     except Exception:
         pass
     try:
-        from core.qt_core.special import lip_reader as _lr                 # type: ignore
+        from core.special import lip_reader as _lr                 # type: ignore
         return _lr
     except Exception:
         pass
@@ -119,9 +119,9 @@ def _import_lip_reader():                                   # pragma: no cover -
     import pathlib as _pl
     import sys as _sys
     _here = _pl.Path(__file__).resolve().parent
-    _lr_path = _here / "lip_reader.py"
+    _lr_path = _here.parent / "special" / "lip_reader.py"
     if not _lr_path.is_file():
-        raise ImportError("lip_reader.py not found next to head_workflow.py")
+        raise ImportError("src/core/special/lip_reader.py not found")
     _spec = _u.spec_from_file_location("_gr_lip_reader_inline", str(_lr_path))
     _mod = _u.module_from_spec(_spec)
     _sys.modules[_spec.name] = _mod
@@ -131,7 +131,7 @@ def _import_lip_reader():                                   # pragma: no cover -
 
 def _import_scene_io():                                     # pragma: no cover - import shim
     """Defer the SceneIO import to keep the module pykotor-free at import time."""
-    from src.core.qt_core.geometry.model_data import SceneIO                 # type: ignore[import-untyped]
+    from src.core.geometry.model_data import SceneIO                 # type: ignore[import-untyped]
     return SceneIO
 
 
@@ -421,9 +421,9 @@ def _safe_resref(text: str, fallback: str = "untitled") -> str:
 def _load_mdl(path: str, game_version: str) -> Optional[Any]:
     """Load a KOTOR MDL/MDX pair via the kotor_loader bridge."""
     try:
-        from src.core.qt_core.game.kotor_loader import load_model_from_file
+        from src.core.game.kotor_loader import load_model_from_file
     except ImportError:                                     # pragma: no cover
-        from core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+        from core.game.kotor_loader import load_model_from_file  # type: ignore
     mdx = ""
     base, _ = os.path.splitext(path)
     cand = base + ".mdx"
@@ -436,9 +436,9 @@ def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
     """Load a glTF/GLB/FBX/OBJ via the gltf_importer.auto_import dispatcher."""
     md = _import_model_data()
     try:
-        from src.core.qt_core.export.gltf_importer import auto_import
+        from src.core.export.gltf_importer import auto_import
     except ImportError:                                     # pragma: no cover
-        from core.qt_core.export.gltf_importer import auto_import          # type: ignore
+        from core.export.gltf_importer import auto_import          # type: ignore
     gv = (md.GameVersion.K2
           if str(game_version).upper().endswith("2")
           else md.GameVersion.K1)

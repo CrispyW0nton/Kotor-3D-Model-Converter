@@ -10,7 +10,7 @@ import numpy as np
 from .lightmap_uv_validator import face_uv_attr_for_channel, uv_attr_for_channel
 
 try:
-    from src.core.qt_core.geometry.model_data import _quat_rotate
+    from src.core.geometry.model_data import _quat_rotate
 except Exception:  # pragma: no cover
     _quat_rotate = None
 

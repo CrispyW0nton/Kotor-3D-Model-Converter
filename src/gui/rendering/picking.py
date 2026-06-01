@@ -5,4 +5,8 @@ Canonical owner: :mod:`src.core.rendering.picking`.
 
 from __future__ import annotations
 
-from src.core.rendering.picking import *  # noqa: F401,F403
+from importlib import import_module
+import sys
+
+_module = import_module("src.core.rendering.picking")
+sys.modules[__name__] = _module

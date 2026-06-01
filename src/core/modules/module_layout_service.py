@@ -11,9 +11,9 @@ from src.core.level import KMapProject, LevelScene, LevelTransform, RoomInstance
 
 def _import_module_format():
     try:
-        from src.core.qt_core.modules import module_format as mf  # type: ignore
-    except ImportError:
         from src.core.modules import module_format as mf  # type: ignore
+    except ImportError:
+        from core.modules import module_format as mf  # type: ignore
     return mf
 
 

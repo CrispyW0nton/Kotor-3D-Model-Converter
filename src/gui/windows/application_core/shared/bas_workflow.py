@@ -43,7 +43,7 @@ class BasWorkflowMixin:
             self.body_attachment_panel.set_status(result or f"BAS mode: {mode_key.replace('_', ' ')}.")
     def _bas_mode_for_model(self, model) -> str:
         try:
-            from src.core.qt_core.geometry.model_data import CharacterMode, detect_character_mode
+            from src.core.geometry.model_data import CharacterMode, detect_character_mode
 
             return "headless_body" if detect_character_mode(model) == CharacterMode.HEADLESS_BODY else "full_body"
         except Exception:
@@ -406,7 +406,7 @@ class BasWorkflowMixin:
         if not anim_name:
             return
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:

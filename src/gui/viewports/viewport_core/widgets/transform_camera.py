@@ -156,10 +156,10 @@ class ViewportTransformCameraMixin:
         # ``sys.path`` layout.
         hw = None
         try:
-            from src.core.qt_core.characters import head_workflow as hw       # type: ignore
+            from src.core.characters import head_workflow as hw       # type: ignore
         except Exception:
             try:
-                from core.qt_core.characters import head_workflow as hw      # type: ignore
+                from core.characters import head_workflow as hw      # type: ignore
             except Exception:
                 try:                                      # pragma: no cover
                     import importlib.util as _u

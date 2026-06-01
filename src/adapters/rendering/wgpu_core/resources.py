@@ -1,6 +1,20 @@
 from __future__ import annotations
 
-from .shared import *  # noqa: F401,F403
+import logging
+import math
+import time
+
+from .shared import (
+    WgpuMaterialResource,
+    WgpuMeshResource,
+    WgpuSkinResource,
+    WgpuTextureResource,
+    _rgba8,
+)
+
+log = logging.getLogger(__name__)
+
+
 class WgpuResourceCache:
     """Renderer-owned WGPU resources keyed by GhostRigger object identity."""
 

@@ -144,9 +144,9 @@ class ViewportSceneModelMixin:
         if not visible:
             return None
         try:
-            from src.core.qt_core.geometry.model_data import KotorModel, ModelNode, NodeFlags
-        except Exception:
             from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+        except Exception:
+            from core.geometry.model_data import KotorModel, ModelNode, NodeFlags
 
         root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
         setattr(root, "_gr_scene_composite_root", True)

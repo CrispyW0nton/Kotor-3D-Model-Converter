@@ -2,4 +2,8 @@
 
 from __future__ import annotations
 
-from src.adapters.rendering.direct3d_renderer import *  # noqa: F401,F403
+from importlib import import_module
+import sys
+
+_module = import_module("src.adapters.rendering.direct3d_renderer")
+sys.modules[__name__] = _module

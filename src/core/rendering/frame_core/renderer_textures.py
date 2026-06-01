@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .mixin_imports import *  # noqa: F401,F403
+from .mixin_imports import Image, ModelNode, Optional, _PIL, _clean_tex_name, os
 
 
 class RendererTextureMixin:

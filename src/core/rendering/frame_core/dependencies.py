@@ -11,26 +11,26 @@ from src.measurement.unit_system import UnitSystem
 
 from typing import Optional, Dict, List, Tuple, Iterable
 try:
-    from src.core.qt_core.geometry.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
+    from src.core.geometry.model_data import (KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
                                    KOTOR_BASE_SKELETONS, is_animation_supermodel)
-    from src.core.qt_core.animation.animation_engine import DanglySimulator
-    from src.core.qt_core.walkmesh.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
-    from src.core.qt_core.special.render_constants import (
+    from src.core.animation.animation_engine import DanglySimulator
+    from src.core.walkmesh.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
+    from src.core.special.render_constants import (
         INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
         FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
     )
 except ImportError:
-    from core.qt_core.geometry.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
+    from core.geometry.model_data import (  # type: ignore[no-redef]  # tests add src/ to sys.path
         KotorModel, ModelNode, NodeFlags, _quat_rotate, _quat_conjugate,
         KOTOR_BASE_SKELETONS, is_animation_supermodel
     )
-    from core.qt_core.animation.animation_engine import DanglySimulator  # type: ignore[no-redef]
-    from core.qt_core.special.render_constants import (  # type: ignore[no-redef]
+    from core.animation.animation_engine import DanglySimulator  # type: ignore[no-redef]
+    from core.special.render_constants import (  # type: ignore[no-redef]
         INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS,
         FACE_MESH_SUBSTRINGS as _FACE_MESH_SUBSTRINGS,
     )
     try:
-        from core.qt_core.walkmesh.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
+        from core.walkmesh.walkmesh_renderer import WalkmeshOverlay, WalkmeshLoader, build_draw_list
     except ImportError:
         WalkmeshOverlay = None  # type: ignore
         WalkmeshLoader  = None  # type: ignore
@@ -52,13 +52,13 @@ except ImportError:
     _NUMPY = False
 
 try:
-    from src.core.qt_core.animation.gpu_skinning import (
+    from src.core.animation.gpu_skinning import (
         MatrixPaletteUploader as _MatrixPaletteUploader,
         MAX_BONES as _SKIN_MAX_BONES,
     )
 except ImportError:
     try:
-        from core.qt_core.animation.gpu_skinning import (  # type: ignore[no-redef]
+        from core.animation.gpu_skinning import (  # type: ignore[no-redef]
             MatrixPaletteUploader as _MatrixPaletteUploader,
             MAX_BONES as _SKIN_MAX_BONES,
         )

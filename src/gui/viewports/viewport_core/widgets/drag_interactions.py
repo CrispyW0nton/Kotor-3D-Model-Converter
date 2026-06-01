@@ -840,9 +840,9 @@ class ViewportDragInteractionsMixin:
             return
         try:
             try:
-                from core.qt_core.characters import headless_body_workflow as _wf
+                from core.characters import headless_body_workflow as _wf
             except ImportError:                              # pragma: no cover
-                from src.core.qt_core.characters import headless_body_workflow as _wf  # type: ignore
+                from src.core.characters import headless_body_workflow as _wf  # type: ignore
             result = _wf.apply_external_model_fit_adjustment(
                 self.model,
                 rotation_delta_degrees=rotation_delta,

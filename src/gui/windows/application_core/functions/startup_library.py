@@ -10,14 +10,14 @@ from typing import Optional
 
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
 from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
-from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
+from src.core.rendering.hardware_info import collect_hardware_diagnostics
 from src.adapters.rendering.renderer_factory import renderer_capabilities_snapshot
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.core.rendering.renderer_settings import RendererSettings
 
 log = logging.getLogger(__name__)
 
 def _index_game_libraries_sync(k1_dir: str = "", k2_dir: str = "") -> tuple[object, list[dict]]:
-    from src.core.qt_core.assets.resource_manager import ResourceManager
+    from src.core.assets.resource_manager import ResourceManager
 
     mgr = ResourceManager()
     rows = []

@@ -74,7 +74,7 @@ class ViewportToolsMixin:
             old_model = self._current_model
             if old_model is not None:
                 try:
-                    from src.gui.qt_lib.rendering.gpu_renderer import clear_prebuilt_static_gpu_model_data
+                    from src.adapters.rendering.moderngl_resources import clear_prebuilt_static_gpu_model_data
 
                     clear_prebuilt_static_gpu_model_data(old_model)
                 except Exception:
@@ -157,7 +157,7 @@ class ViewportToolsMixin:
             return "K2"
         return None
     def _game_version(self):
-        from src.core.qt_core.geometry.model_data import GameVersion
+        from src.core.geometry.model_data import GameVersion
 
         default_game = str(self.settings_data.get("default_game") or "K1").upper()
         return GameVersion.K2 if default_game == "K2" else GameVersion.K1
@@ -508,7 +508,7 @@ class ViewportToolsMixin:
         if model is None:
             return
         try:
-            from src.core.qt_core.geometry.model_data import NodeFlags
+            from src.core.geometry.model_data import NodeFlags
 
             for node in model.mesh_nodes() if hasattr(model, "mesh_nodes") else []:
                 node.flags &= ~int(NodeFlags.SKIN)
@@ -539,7 +539,7 @@ class ViewportToolsMixin:
         ) != QtWidgets.QMessageBox.Yes:
             return
         try:
-            from src.core.qt_core.geometry.model_data import NodeFlags
+            from src.core.geometry.model_data import NodeFlags
 
             root = model.root_node
             mesh_nodes = [node for node in model.all_nodes() if getattr(node, "is_mesh", False)]

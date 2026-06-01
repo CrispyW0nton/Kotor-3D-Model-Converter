@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.gui.qt_lib.gizmo.gizmo_mode import GizmoMode
-from src.gui.qt_lib.gizmo.transform_controller import TransformController
-from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
+from src.core.gizmo.gizmo_mode import GizmoMode
+from src.core.gizmo.transform_controller import TransformController
+from src.core.gizmo.transform_gizmo import TransformGizmo
 
 
 class DummyCamera:

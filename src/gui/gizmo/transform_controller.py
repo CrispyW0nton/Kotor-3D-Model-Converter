@@ -7,4 +7,3 @@ import sys
 
 _module = import_module("src.core.gizmo.transform_controller")
 sys.modules[__name__] = _module
-globals().update(_module.__dict__)

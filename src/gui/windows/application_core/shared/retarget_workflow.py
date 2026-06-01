@@ -16,7 +16,7 @@ class RetargetWorkflowMixin:
     """Animation retarget preview, apply, and workbench assignment behavior."""
 
     def _retarget_config(self):
-        from src.core.qt_core.animation_retargeting.retargeter import RetargetConfig
+        from src.core.animation_retargeting.retargeter import RetargetConfig
 
         kwargs = (
             self.animation_retarget_panel.config_kwargs()
@@ -26,7 +26,7 @@ class RetargetWorkflowMixin:
     def _retarget_refresh_mapping(self):
         if self._retarget_source_model is None or self._retarget_target_model is None:
             return None
-        from src.core.qt_core.animation_retargeting.retargeter import build_bone_map
+        from src.core.animation_retargeting.retargeter import build_bone_map
 
         manual_mapping = {}
         if hasattr(self.animation_retarget_panel, "panel"):
@@ -92,7 +92,7 @@ class RetargetWorkflowMixin:
             controller.set_source_kotor_animation_slot(anim_name)
             self._apply_retarget_workbench_mode_status()
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine
+            from src.core.animation.animation_engine import AnimationEngine
 
             self._animation_timer.stop()
             self._animation_engine = None
@@ -295,7 +295,7 @@ class RetargetWorkflowMixin:
             QtWidgets.QMessageBox.information(self, "Retarget", "Set both a source and target model.")
             return
         try:
-            from src.core.qt_core.animation_retargeting.retargeter import retarget_animation
+            from src.core.animation_retargeting.retargeter import retarget_animation
 
             source_anim = next(
                 (
@@ -401,7 +401,7 @@ class RetargetWorkflowMixin:
         anim_name = getattr(anim, "name", "") if anim else ""
         anim_length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
         try:
-            from src.core.qt_core.animation_retargeting.retargeter import retarget_pose
+            from src.core.animation_retargeting.retargeter import retarget_pose
 
             result = retarget_pose(
                 source_pose,

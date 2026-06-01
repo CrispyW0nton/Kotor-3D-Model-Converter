@@ -7,14 +7,14 @@ from types import SimpleNamespace
 
 
 def test_resource_manager_uses_kotor_wok_restype():
-    from src.core.qt_core.assets import resource_manager as rm
+    from src.core.assets import resource_manager as rm
 
     assert rm.RES_WOK == 2016
     assert rm.EXT_TO_TYPE["wok"] == 2016
 
 
 def test_wok_data_rejects_non_bwm_bytes_quickly():
-    from src.core.qt_core.modules.module_format import WOKData
+    from src.core.modules.module_format import WOKData
 
     data = b"PTH V3.28" + (b"\x00" * 4096)
     started = time.perf_counter()
@@ -26,7 +26,7 @@ def test_wok_data_rejects_non_bwm_bytes_quickly():
 
 
 def test_resource_room_coload_uses_exact_wok_resref_before_short_area_name():
-    from src.core.qt_core.assets.resource_manager import RES_WOK
+    from src.core.assets.resource_manager import RES_WOK
     from src.gui.windows.qt_main_window import QtGhostRiggerMainWindow
 
     calls: list[tuple[str, int, str]] = []

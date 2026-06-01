@@ -7,4 +7,3 @@ import sys
 
 _module = import_module("src.core.gizmo.gizmo_mode")
 sys.modules[__name__] = _module
-globals().update(_module.__dict__)

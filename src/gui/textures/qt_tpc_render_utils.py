@@ -1,14 +1,9 @@
 """Qt-facing bridge for TPC render helpers."""
 
-from __future__ import annotations
+from importlib import import_module
+import sys
 
-from src.core.graphics import tpc_render_utils as _core_tpc_render_utils
-
-globals().update(
-    {
-        name: value
-        for name, value in _core_tpc_render_utils.__dict__.items()
-        if not (name.startswith("__") and name.endswith("__"))
-    }
-)
+_TARGET = "src.core.graphics.tpc_render_utils"
+_module = import_module(_TARGET)
+sys.modules[__name__] = _module
 

@@ -8,17 +8,17 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.core.qt_core.animation.animation_engine import AnimationEngine
-from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags, is_animation_supermodel
+from src.core.animation.animation_engine import AnimationEngine
+from src.core.geometry.model_data import ModelNode, NodeFlags, is_animation_supermodel
 from src.unreal.animation_retargeting import build_bone_map, retarget_animation, retarget_pose
 from src.unreal import UnrealSkeletonAsset, load_quinn_fbx_model, load_quinn_skeleton_asset, unreal_skeleton_model
 
-from src.gui.qt_lib.rendering.qt_gpu_renderer import create_viewport_renderer
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.adapters.rendering.renderer_factory import create_viewport_renderer
+from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.assets.qt_theme import heading
 from src.gui.qt_lib.panels.qt_ue5_rig_export_panel import QtUE5RigExportPanel
 from src.gui.qt_lib.viewports.qt_viewport import QtUnrealAnimatorViewportWidget
-from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
 
 _UNREAL_STYLE = """

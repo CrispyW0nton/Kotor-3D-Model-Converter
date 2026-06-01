@@ -24,9 +24,9 @@ from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
 from src.gui.qt_lib.panels.qt_sprite_material_panel import QtSpriteMaterialPanel
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
-from src.gui.qt_lib.viewports.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter, RetargetPreviewUiController
 from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow

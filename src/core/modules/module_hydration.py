@@ -22,17 +22,17 @@ DIALOG_TYPES = {"dlg"}
 
 def _import_module_format():  # pragma: no cover - import shim
     try:
-        from src.core.qt_core.modules import module_format as _mf  # type: ignore
+        from src.core.modules import module_format as _mf  # type: ignore
     except ImportError:
-        from core.qt_core.modules import module_format as _mf  # type: ignore
+        from core.modules import module_format as _mf  # type: ignore
     return _mf
 
 
 def _import_module_loader():  # pragma: no cover - import shim
     try:
-        from src.core.qt_core.modules import module_loader as _ml  # type: ignore
+        from src.core.modules import module_loader as _ml  # type: ignore
     except ImportError:
-        from core.qt_core.modules import module_loader as _ml  # type: ignore
+        from core.modules import module_loader as _ml  # type: ignore
     return _ml
 
 

@@ -561,7 +561,7 @@ def _mdl_to_kotormodel(pk_mdl, game_version: Optional[GameVersion]) -> KotorMode
     # This is the SINGLE source of truth for "does this node need
     # world_transform applied?" — no centroid heuristics allowed.
     try:
-        from src.core.qt_core.geometry.vertex_space import compute_vertex_space
+        from src.core.geometry.vertex_space import compute_vertex_space
         for nd in model.all_nodes():
             nd.vertex_space = int(compute_vertex_space(nd, model))
     except Exception as _vs_exc:

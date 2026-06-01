@@ -8,7 +8,7 @@ import pytest
 from src.core.scene import KMaxSceneManager, PivotData, Transform
 from src.core.scene.kmax_serializer import KMaxSerializer
 from src.core.scene.scene_resource_ref import SceneResourceRef
-from src.gui.qt_lib.gizmo.transform_gizmo import TransformGizmo
+from src.core.gizmo.transform_gizmo import TransformGizmo
 
 
 def test_kmax_transform_and_pivot_restore_gizmo_origin(tmp_path: Path) -> None:

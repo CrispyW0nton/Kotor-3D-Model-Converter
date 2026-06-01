@@ -629,7 +629,7 @@ def _summarize_creature(records: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def _dump_one(rm: Any, resref: str, game: str, out_path: Path) -> int:
-    from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
 
     model = rm.load_model(resref, game)
     if model is None:
@@ -684,7 +684,7 @@ def _dump_one(rm: Any, resref: str, game: str, out_path: Path) -> int:
 
 
 def main() -> int:
-    from src.core.qt_core.assets.resource_manager import ResourceManager
+    from src.core.assets.resource_manager import ResourceManager
 
     rm = ResourceManager()
     if not rm.set_k1_dir(K1_DIR):

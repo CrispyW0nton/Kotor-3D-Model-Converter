@@ -50,25 +50,25 @@ log = logging.getLogger(__name__)
 
 def _import_model_data():                                   # pragma: no cover - import shim
     try:
-        from src.core.qt_core.geometry import model_data as _md             # type: ignore
+        from src.core.geometry import model_data as _md             # type: ignore
     except ImportError:
-        from core.qt_core.geometry import model_data as _md                 # type: ignore
+        from core.geometry import model_data as _md                 # type: ignore
     return _md
 
 
 def _import_validation_service():                           # pragma: no cover - import shim
     try:
-        from src.core.qt_core.diagnostics import validation_service as _vs    # type: ignore
+        from src.core.diagnostics import validation_service as _vs    # type: ignore
     except ImportError:
-        from core.qt_core.diagnostics import validation_service as _vs         # type: ignore
+        from core.diagnostics import validation_service as _vs         # type: ignore
     return _vs
 
 
 def _import_character_builder():                            # pragma: no cover - import shim
     try:
-        from src.core.qt_core.characters import character_builder as _cb      # type: ignore
+        from src.core.characters import character_builder as _cb      # type: ignore
     except ImportError:
-        from core.qt_core.characters import character_builder as _cb          # type: ignore
+        from core.characters import character_builder as _cb          # type: ignore
     return _cb
 
 
@@ -152,9 +152,9 @@ def _resref_from_path(path: str) -> str:
 def _load_mdl(path: str, game_version: str) -> Optional[Any]:
     """Load a KOTOR MDL/MDX pair via the kotor_loader bridge."""
     try:
-        from src.core.qt_core.game.kotor_loader import load_model_from_file
+        from src.core.game.kotor_loader import load_model_from_file
     except ImportError:                                     # pragma: no cover
-        from core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+        from core.game.kotor_loader import load_model_from_file  # type: ignore
     mdx = ""
     base, _ = os.path.splitext(path)
     cand = base + ".mdx"
@@ -167,9 +167,9 @@ def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
     """Load a glTF/GLB/FBX/OBJ via the gltf_importer.auto_import dispatcher."""
     md = _import_model_data()
     try:
-        from src.core.qt_core.export.gltf_importer import auto_import
+        from src.core.export.gltf_importer import auto_import
     except ImportError:                                     # pragma: no cover
-        from core.qt_core.export.gltf_importer import auto_import          # type: ignore
+        from core.export.gltf_importer import auto_import          # type: ignore
     gv = (md.GameVersion.K2
           if str(game_version).upper().endswith("2")
           else md.GameVersion.K1)
@@ -2064,9 +2064,9 @@ def available_preview_animations(scene: Any) -> CheckActorResult:
             available: List[Tuple[str, str]] = []
             missing: List[Tuple[str, str]] = []
             try:
-                from src.core.qt_core.animation.animation_engine import SuperModelResolver
+                from src.core.animation.animation_engine import SuperModelResolver
             except ImportError:                             # pragma: no cover
-                from core.qt_core.animation.animation_engine import SuperModelResolver  # type: ignore
+                from core.animation.animation_engine import SuperModelResolver  # type: ignore
             if getattr(SuperModelResolver, "_resource_manager", None) is not None:
                 for label, anim_name in PREVIEW_ANIMATIONS:
                     anim, _scale = SuperModelResolver.resolve_animation(
@@ -2192,9 +2192,9 @@ def available_animation_library(scene: Any) -> CheckActorResult:
 
     game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
     try:
-        from src.core.qt_core.animation.animation_engine import SuperModelResolver
+        from src.core.animation.animation_engine import SuperModelResolver
     except ImportError:                                     # pragma: no cover
-        from core.qt_core.animation.animation_engine import SuperModelResolver  # type: ignore
+        from core.animation.animation_engine import SuperModelResolver  # type: ignore
 
     entries: List[Tuple[str, str]] = []
     try:
@@ -2655,18 +2655,18 @@ class LaunchWorkflowResult:
 def _import_scene_io():                                     # pragma: no cover - import shim
     """Defer the SceneIO import to keep the module pykotor-free at import time."""
     try:
-        from src.core.qt_core.geometry.model_data import SceneIO  # type: ignore[import-untyped]
+        from src.core.geometry.model_data import SceneIO  # type: ignore[import-untyped]
     except ImportError:
-        from core.qt_core.geometry.model_data import SceneIO      # type: ignore[import-untyped]
+        from core.geometry.model_data import SceneIO      # type: ignore[import-untyped]
     return SceneIO
 
 
 def _import_mdl_binary_writer():                            # pragma: no cover - import shim
     """Defer the KOTOR MDL/MDX writer until export time."""
     try:
-        from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter  # type: ignore
+        from src.core.mdl.mdl_writer import MDLBinaryWriter  # type: ignore
     except ImportError:
-        from core.qt_core.mdl.mdl_writer import MDLBinaryWriter      # type: ignore
+        from core.mdl.mdl_writer import MDLBinaryWriter      # type: ignore
     return MDLBinaryWriter
 
 
@@ -2690,9 +2690,9 @@ def _import_mesh_exporters():                                # pragma: no cover 
 def _load_exported_kotor_model(mdl_path: str) -> Optional[Any]:
     """Reload an exported MDL/MDX pair through GhostRigger's KOTOR loader."""
     try:
-        from src.core.qt_core.game.kotor_loader import load_model_from_file
+        from src.core.game.kotor_loader import load_model_from_file
     except ImportError:                                     # pragma: no cover
-        from core.qt_core.game.kotor_loader import load_model_from_file  # type: ignore
+        from core.game.kotor_loader import load_model_from_file  # type: ignore
     mdx_path = os.path.splitext(mdl_path)[0] + ".mdx"
     return load_model_from_file(mdl_path, mdx_path if os.path.isfile(mdx_path) else "")
 

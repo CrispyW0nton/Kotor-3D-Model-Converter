@@ -255,7 +255,7 @@ class ViewportRenderingPipelineMixin:
                 log.debug("WGPU skeleton render data build failed: %s", exc)
         lighting_render_data = None
         try:
-            from src.gui.qt_lib.lighting.render_data import build_scene_lighting_render_data
+            from src.core.lighting.render_data import build_scene_lighting_render_data
 
             lighting_render_data = build_scene_lighting_render_data(
                 self.model,

@@ -3,7 +3,7 @@ tpc_render_utils.py — Pure-Python TPC/DXT texture and triangle rendering utili
 
 This module contains ONLY headless-safe, GUI-free utility functions originally
 extracted from the legacy viewport.py (deleted in M3/T302) and now living under
-the texture system. It has zero tkinter dependency and can be imported anywhere.
+the texture system. It has no GUI dependency and can be imported anywhere.
 
 Functions exported:
   _is_tpc_data(data)             → bool
@@ -37,7 +37,7 @@ try:
     from src.core.game.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC
 except Exception:
     try:
-        from core.qt_core.game.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC  # type: ignore
+        from core.game.kotor_loader import load_tpc_as_pil as _BRIDGE_TPC  # type: ignore
     except Exception:
         pass
 

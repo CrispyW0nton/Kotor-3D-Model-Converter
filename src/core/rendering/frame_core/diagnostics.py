@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
+import os
 
 _GR_VIEWPORT_PROBE = os.environ.get('GHOSTRIGGER_VIEWPORT_PROBE', '').strip().lower() in ('1', 'true', 'yes', 'on')
 _GR_VIEWPORT_PROBE_SEEN: set = set()

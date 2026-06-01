@@ -32,7 +32,7 @@ class AnimationWorkflowMixin:
         inheritance_game = self._animation_inheritance_game(model)
         inheritance_supermodel = self._animation_inheritance_supermodel(model)
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:
@@ -93,7 +93,7 @@ class AnimationWorkflowMixin:
         inheritance_game = self._animation_inheritance_game(model)
         inheritance_supermodel = self._animation_inheritance_supermodel(model)
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:
@@ -134,7 +134,7 @@ class AnimationWorkflowMixin:
             self._export_mdl_binary()
             return
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:
@@ -206,7 +206,7 @@ class AnimationWorkflowMixin:
         if model is None:
             return
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:
@@ -268,7 +268,7 @@ class AnimationWorkflowMixin:
         if model is None:
             return False
         try:
-            from src.core.qt_core.geometry.model_data import CharacterMode, detect_character_mode
+            from src.core.geometry.model_data import CharacterMode, detect_character_mode
 
             return detect_character_mode(model) == CharacterMode.HEAD
         except Exception:
@@ -346,7 +346,7 @@ class AnimationWorkflowMixin:
         if game not in {"K1", "K2"}:
             return
         try:
-            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.geometry.model_data import GameVersion
 
             model.game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
         except Exception:
@@ -421,8 +421,8 @@ class AnimationWorkflowMixin:
             "success",
         )
     def _build_baked_animation(self, model, anim_name: str, output_name: str, fps: int = 30):
-        from src.core.qt_core.animation.animation_engine import AnimationEngine
-        from src.core.qt_core.geometry.model_data import Animation
+        from src.core.animation.animation_engine import AnimationEngine
+        from src.core.geometry.model_data import Animation
 
         fps = max(1, int(fps or 30))
         engine = AnimationEngine(model)
@@ -557,7 +557,7 @@ class AnimationWorkflowMixin:
         inheritance_game = self._animation_inheritance_game(model)
         inheritance_supermodel = self._animation_inheritance_supermodel(model)
         try:
-            from src.core.qt_core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
             if mgr is not None:
@@ -643,7 +643,7 @@ class AnimationWorkflowMixin:
         )
         if not path:
             return
-        from src.core.qt_core.animation.animation_engine import AnimationEngine
+        from src.core.animation.animation_engine import AnimationEngine
 
         engine = AnimationEngine(model)
         if selected_filter.startswith("BVH") or path.lower().endswith(".bvh"):

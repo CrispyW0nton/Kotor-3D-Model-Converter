@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
+import math
+
+from .dependencies import Image, ImageDraw, _PIL
 from src.math.frame_math import _clamp, _edge_has_seam_global, _lerp, _uwrap_global, _vflip_nontiled, _vflip_tiled
 
 # ─────────────────────────────────────────────────────────────────────

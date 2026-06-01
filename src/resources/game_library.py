@@ -1407,7 +1407,7 @@ class GameLibrary:
     def _scan_texture_names(self, mdl_data: bytes) -> List[str]:
         """Scan binary MDL for texture name fields using the binary parser."""
         try:
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.game.kotor_loader import load_model_from_bytes
             model = load_model_from_bytes(mdl_data, b'')
             names = []
             seen  = set()

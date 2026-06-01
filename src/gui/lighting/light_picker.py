@@ -2,4 +2,8 @@
 
 from __future__ import annotations
 
-from src.core.lighting.light_picker import *  # noqa: F401,F403
+from importlib import import_module
+import sys
+
+_module = import_module("src.core.lighting.light_picker")
+sys.modules[__name__] = _module

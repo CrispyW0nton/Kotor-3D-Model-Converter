@@ -68,7 +68,7 @@ from .cloth_rig import (
     ClothRigExporter,
     ClothRigSimulator,
     # M3/T301 — Qt-or-headless cloth preset chooser (replaces the deleted
-    # Tk ``ClothRigPanel`` class).
+    # dialog helper surface).
     ClothPresetChoice,
     run_cloth_preset_dialog,
     confirm_cloth_action,
@@ -92,6 +92,6 @@ __all__ = [
     # Cloth rigging system (K1/K2)
     "ClothRigConfig", "ClothRigPreset", "ClothConstraintPainter",
     "ClothRigger", "ClothRigExporter", "ClothRigSimulator",
-    # M3/T301 — Qt-or-headless dialog helpers (replaces ClothRigPanel)
+    # M3/T301 - cloth preset chooser compatibility helpers
     "ClothPresetChoice", "run_cloth_preset_dialog", "confirm_cloth_action",
 ]

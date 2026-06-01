@@ -440,20 +440,17 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         if _project_root not in sys.path:
             sys.path.insert(0, _project_root)
 
-        # MCP servers are long-lived, so they can retain stale qt_lib alias
-        # modules from before the GUI package was grouped under src.gui.rendering.
-        # Drop only those known aliases before importing the canonical modules.
+        # MCP servers are long-lived, so drop stale aliases before importing
+        # the canonical core/adapter modules.
         for _mod_name in (
-            "src.gui.rendering.gpu_core.renderer",
-            "src.gui.rendering.gpu_core.scene_helpers",
+            "src.adapters.rendering.moderngl_legacy_bridge",
             "src.adapters.rendering.moderngl_scene_helpers",
+            "src.core.rendering.gpu_scene_helpers",
             "src.core.rendering.frame_core.renderer",
         ):
             _mod = sys.modules.get(_mod_name)
             _target = str(getattr(_mod, "_target", "") or "")
-            if _target.startswith("src.gui.") or (
-                _mod_name == "src.gui.rendering" and getattr(_mod, "__path__", None) == []
-            ):
+            if _target.startswith("src.gui."):
                 sys.modules.pop(_mod_name, None)
         from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer
         from src.adapters.rendering.moderngl_scene_helpers import render_model_autoframe
@@ -694,9 +691,9 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
 
     try:
         try:
-            from src.core.qt_core.export.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
+            from src.core.export.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
         except ImportError:                                      # pragma: no cover - MCP path shim
-            from core.qt_core.export.unity_export_bridge import export_model_for_unity  # type: ignore  # noqa: PLC0415
+            from core.export.unity_export_bridge import export_model_for_unity  # type: ignore  # noqa: PLC0415
 
         result = export_model_for_unity(
             model,
@@ -727,9 +724,9 @@ async def handle_validate_unity_import(arguments: Dict[str, Any]) -> Dict[str, A
 
     try:
         try:
-            from src.core.qt_core.export.unity_import_validator import validate_unity_import_file  # noqa: PLC0415
+            from src.core.export.unity_import_validator import validate_unity_import_file  # noqa: PLC0415
         except ImportError:                                      # pragma: no cover - MCP path shim
-            from core.qt_core.export.unity_import_validator import validate_unity_import_file  # type: ignore  # noqa: PLC0415
+            from core.export.unity_import_validator import validate_unity_import_file  # type: ignore  # noqa: PLC0415
 
         manifest = validate_unity_import_file(
             Path(transfer_path),
@@ -749,14 +746,14 @@ async def handle_run_malak_unity_smoke(arguments: Dict[str, Any]) -> Dict[str, A
 
     try:
         try:
-            from src.core.qt_core.special.unity_malak_smoke import (  # noqa: PLC0415
+            from src.core.special.unity_malak_smoke import (  # noqa: PLC0415
                 DEFAULT_ASSET_PATH,
                 DEFAULT_INSTANCE_NAME,
                 DEFAULT_SCENE_PATH,
                 run_malak_main_menu_smoke,
             )
         except ImportError:  # pragma: no cover - MCP path shim
-            from core.qt_core.special.unity_malak_smoke import (  # type: ignore  # noqa: PLC0415
+            from core.special.unity_malak_smoke import (  # type: ignore  # noqa: PLC0415
                 DEFAULT_ASSET_PATH,
                 DEFAULT_INSTANCE_NAME,
                 DEFAULT_SCENE_PATH,

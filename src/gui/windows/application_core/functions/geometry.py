@@ -97,7 +97,7 @@ def _walkmesh_overlay_offset_for_model(model, wok_data, renderer=None) -> tuple[
     )
 
 def _walkmesh_overlay_node_from_wok(wok_data, label: str, world_offset=(0.0, 0.0, 0.0)):
-    from src.core.qt_core.geometry.model_data import ModelNode, NodeFlags
+    from src.core.geometry.model_data import ModelNode, NodeFlags
 
     ox, oy, oz = (float(world_offset[0]), float(world_offset[1]), float(world_offset[2]))
     raw_name = str(label or "walkmesh").split(":", 1)[-1]
@@ -124,7 +124,7 @@ def _walkmesh_overlay_node_from_wok(wok_data, label: str, world_offset=(0.0, 0.0
 
 def _prebuild_gpu_mesh_data_for_model(model) -> None:
     try:
-        from src.gui.qt_lib.rendering.gpu_renderer import prebuild_static_gpu_mesh_data
+        from src.adapters.rendering.moderngl_resources import prebuild_static_gpu_mesh_data
 
         prebuild_static_gpu_mesh_data(model)
     except Exception:

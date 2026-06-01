@@ -248,7 +248,7 @@ class StartupLibraryMixin:
             written.append(mdx_path)
 
         try:
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
+            from src.core.game.kotor_loader import load_model_from_bytes
 
             model = load_model_from_bytes(mdl, mdx)
             tex_names = {

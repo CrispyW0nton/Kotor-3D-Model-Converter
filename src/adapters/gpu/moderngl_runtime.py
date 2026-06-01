@@ -34,12 +34,12 @@ except ImportError:  # pragma: no cover - optional dependency
     log.info("gpu_renderer: moderngl not installed - GPU viewport rendering unavailable")
 
 try:
-    from core.qt_core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
+    from core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
 
     _GPU_SKINNING = True
 except ImportError:
     try:
-        from src.core.qt_core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
+        from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES as _SKIN_MAX_BONES
 
         _GPU_SKINNING = True
     except ImportError:  # pragma: no cover - optional skinning support

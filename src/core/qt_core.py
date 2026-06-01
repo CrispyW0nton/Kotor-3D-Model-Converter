@@ -1,9 +1,9 @@
 """Central backend library facade for GhostRigger core systems.
 
 Implementation modules live in subsystem folders under ``src.core``. Import
-through this module when code outside those folders needs backend pieces, for
-example ``src.core.qt_core.modules.module_loader`` or stable facade symbols such
-as ``SceneManager`` and ``ResourceManager``.
+backend owners directly in new implementation code. This module remains as a
+compatibility facade for legacy public paths and stable grouped symbols such as
+``SceneManager`` and ``ResourceManager``.
 """
 
 from __future__ import annotations
@@ -146,6 +146,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "renderer_settings",
         "skeleton_render_data",
         "viewport_display",
+        "viewport_navigation",
         "wgpu_shared",
         "wgpu_shaders",
     ),

@@ -7,4 +7,8 @@ the typed profile directory.
 
 from __future__ import annotations
 
-from .types.generated_character_skinning import *  # noqa: F401,F403
+from importlib import import_module
+import sys
+
+_module = import_module(f"{__package__}.types.generated_character_skinning")
+sys.modules[__name__] = _module

@@ -177,8 +177,8 @@ class ModelIoMixin:
         if not path:
             return
         try:
-            from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter
-            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.mdl.mdl_parser import MDLAsciiWriter
+            from src.core.geometry.model_data import GameVersion
 
             mdl = copy.deepcopy(model)
             mdl.game_version = GameVersion.K2 if chosen_gv == "K2" else GameVersion.K1
@@ -203,8 +203,8 @@ class ModelIoMixin:
         if not path:
             return
         try:
-            from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
-            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.mdl.mdl_writer import MDLBinaryWriter
+            from src.core.geometry.model_data import GameVersion
 
             mdl = copy.deepcopy(model)
             mdl.game_version = GameVersion.K2 if chosen_gv == "K2" else GameVersion.K1
@@ -410,8 +410,8 @@ class ModelIoMixin:
         if not path:
             return
         try:
-            from src.core.qt_core.templates.template_builder import build_humanoid_template, save_template_manifest
-            from src.core.qt_core.mdl.mdl_writer import MDLBinaryWriter
+            from src.core.templates.template_builder import build_humanoid_template, save_template_manifest
+            from src.core.mdl.mdl_writer import MDLBinaryWriter
 
             model = build_humanoid_template(game_version=chosen_gv, name=Path(path).stem)
             mdx_path = str(Path(path).with_suffix(".mdx"))
@@ -471,7 +471,7 @@ class ModelIoMixin:
         work_dir.mkdir(parents=True, exist_ok=True)
         ascii_path = work_dir / f"{getattr(model, 'name', 'model')}.mdl"
         try:
-            from src.core.qt_core.mdl.mdl_parser import MDLAsciiWriter
+            from src.core.mdl.mdl_parser import MDLAsciiWriter
 
             MDLAsciiWriter().write(model, str(ascii_path))
         except Exception as exc:
@@ -541,7 +541,7 @@ class ModelIoMixin:
         ) != QtWidgets.QMessageBox.Yes:
             return
         try:
-            from src.core.qt_core.mdl.mdl_porter import CrossGamePorter
+            from src.core.mdl.mdl_porter import CrossGamePorter
 
             ported = CrossGamePorter().port(model, target)
             self._set_model_internal(ported, self._model_path)

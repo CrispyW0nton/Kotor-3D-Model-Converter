@@ -1070,7 +1070,7 @@ def test_t406_body_modes_reset_canonical_front():
 
 
 def _mesh_node_t407(name: str, texture: str = "pmha01"):
-    from core.qt_core.geometry.model_data import ModelNode, NodeFlags
+    from src.core.geometry.model_data import ModelNode, NodeFlags
 
     node = ModelNode()
     node.name = name
@@ -1085,7 +1085,7 @@ def _mesh_node_t407(name: str, texture: str = "pmha01"):
 
 
 def _model_t407(name: str, child):
-    from core.qt_core.geometry.model_data import KotorModel, ModelClassification, ModelNode
+    from src.core.geometry.model_data import KotorModel, ModelClassification, ModelNode
 
     model = KotorModel()
     model.name = name
@@ -1099,9 +1099,9 @@ def _model_t407(name: str, child):
 
 
 def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
-    from core.qt_core.geometry.model_data import is_animation_supermodel
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.geometry.model_data import is_animation_supermodel
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     model = _model_t407("s_male02", _mesh_node_t407("eyeRA"))
     model.animations = [object()]
@@ -1114,8 +1114,8 @@ def test_t407_animation_supermodel_mesh_helpers_are_not_visible():
 
 
 def test_t407_normal_head_inner_geometry_still_renders():
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     model = _model_t407("pmhc01", _mesh_node_t407("eyeRA"))
 

@@ -881,8 +881,8 @@ class CharacterSceneRegistry:
     -----
     ::
 
-        from src.core.qt_core.scene.scene_manager import get_character_registry
-        from src.core.qt_core.geometry.model_data import CharacterScene, PartSlot
+        from src.core.scene.scene_manager import get_character_registry
+        from src.core.geometry.model_data import CharacterScene, PartSlot
 
         reg = get_character_registry()
 

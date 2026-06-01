@@ -16,7 +16,7 @@ Usage
 -----
 ::
 
-    from src.core.qt_core.assets.override_layer import OverrideLayer
+    from src.core.assets.override_layer import OverrideLayer
 
     ol = OverrideLayer(game_dir='/path/to/KotOR')
     ol.scan()                           # index Override/ files

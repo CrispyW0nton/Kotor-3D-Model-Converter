@@ -208,8 +208,8 @@ class SceneWorkflowMixin:
             mgr = self._get_resource_manager()
             if mgr is None:
                 return None, ""
-            from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-            from src.core.qt_core.geometry.model_data import GameVersion
+            from src.core.game.kotor_loader import load_model_from_bytes
+            from src.core.geometry.model_data import GameVersion
 
             game = (ref.game or "K1").upper()
             mdl = mgr.get_mdl(ref.resref, game)
@@ -228,14 +228,14 @@ class SceneWorkflowMixin:
         printable_count = sum(1 for byte in first16 if 0x20 <= byte <= 0x7E or byte in (0x09, 0x0A, 0x0D))
         is_ascii_mdl = printable_count >= 10 or raw[:8].lstrip(b"\x00").startswith(b"newmodel") or raw[:2] in (b"#\x20", b"# ")
         if is_ascii_mdl:
-            from src.core.qt_core.mdl.mdl_parser import MDLAsciiParser
+            from src.core.mdl.mdl_parser import MDLAsciiParser
 
             model = MDLAsciiParser().parse(raw.decode("utf-8", errors="replace").splitlines())
             model.mdl_path = str(path)
             model.mdx_path = ""
             return model
-        from src.core.qt_core.game.kotor_loader import load_model_from_bytes
-        from src.core.qt_core.geometry.model_data import GameVersion
+        from src.core.game.kotor_loader import load_model_from_bytes
+        from src.core.geometry.model_data import GameVersion
 
         mdx_path = path.with_suffix(".mdx")
         mdx = mdx_path.read_bytes() if mdx_path.exists() else b""

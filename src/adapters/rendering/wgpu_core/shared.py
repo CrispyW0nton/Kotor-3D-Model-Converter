@@ -41,7 +41,32 @@ from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.picking import PickHit
 from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions, normalize_display_mode
 from src.core.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS
-from src.core.rendering.wgpu_shared import *  # noqa: F401,F403
+from src.core.rendering.wgpu_shared import (
+    SELECTION_YELLOW,
+    WgpuLightResource,
+    WgpuMaterialResource,
+    WgpuMeshResource,
+    WgpuPickResources,
+    WgpuSkeletonResource,
+    WgpuSkinResource,
+    WgpuTextureResource,
+    _WGPU_BACKENDS,
+    _WGPU_BACKEND_ENV,
+    _WgpuBackendSpec,
+    _adapter_info_dict,
+    _blend_rgb,
+    _format_is_srgb,
+    _joint_marker_segments,
+    _mat4_lookat,
+    _mat4_perspective_wgpu,
+    _mat4_tobytes,
+    _point_distance,
+    _relative_luma,
+    _rgb_float,
+    _rgba8,
+    _srgb_channel_to_linear,
+    _srgb_to_linear,
+)
 
 log = logging.getLogger(__name__)
 

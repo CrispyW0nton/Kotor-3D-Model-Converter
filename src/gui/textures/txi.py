@@ -5,5 +5,8 @@ Canonical owner: :mod:`src.core.graphics.txi`.
 
 from __future__ import annotations
 
-from src.core.graphics.txi import *  # noqa: F401,F403
+from importlib import import_module
+import sys
 
+_module = import_module("src.core.graphics.txi")
+sys.modules[__name__] = _module

@@ -2,7 +2,26 @@
 
 from __future__ import annotations
 
-from .mixin_imports import *  # noqa: F401,F403
+from .mixin_imports import (
+    DanglySimulator,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    _MatrixPaletteUploader,
+    _NUMPY,
+    _SKIN_MAX_BONES,
+    _clamp,
+    _compute_screen_size_ratio,
+    _cross,
+    _gr_probe,
+    _normalize,
+    _quat_rotate,
+    _sub,
+    log,
+    math,
+    np,
+)
 
 
 class RendererGeometryMixin:
@@ -106,10 +125,10 @@ class RendererGeometryMixin:
             return cached
         import math as _math
         try:
-            from src.core.qt_core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,
+            from src.core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,
                                            _quat_normalize, _quat_mul)
         except ImportError:
-            from core.qt_core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
+            from core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
                                          _quat_normalize, _quat_mul)
 
         bas_root = self._bas_attachment_root_for_node(node)
@@ -494,9 +513,9 @@ class RendererGeometryMixin:
         position (the authored skin bind coordinate).
         """
         try:
-            from src.core.qt_core.geometry.model_data import _quat_rotate as _qr, _quat_conjugate
+            from src.core.geometry.model_data import _quat_rotate as _qr, _quat_conjugate
         except ImportError:
-            from core.qt_core.geometry.model_data import _quat_rotate as _qr, _quat_conjugate  # type: ignore
+            from core.geometry.model_data import _quat_rotate as _qr, _quat_conjugate  # type: ignore
 
         v = node.vertices[vi]
 
@@ -802,7 +821,7 @@ class RendererGeometryMixin:
         vs = getattr(node, 'vertex_space', None)
         if vs is not None:
             try:
-                from src.core.qt_core.geometry.vertex_space import VertexSpace
+                from src.core.geometry.vertex_space import VertexSpace
                 if int(vs) == int(VertexSpace.WORLD):
                     return [tuple(v) for v in verts]
             except Exception:
@@ -822,14 +841,14 @@ class RendererGeometryMixin:
                 bas_root = self._bas_attachment_root_for_node(node)
                 if bas_root is not None:
                     try:
-                        from src.core.qt_core.geometry.model_data import (
+                        from src.core.geometry.model_data import (
                             _quat_mul,
                             _quat_normalize,
                             _quat_normalize_bind,
                             _quat_rotate as _qr,
                         )
                     except ImportError:
-                        from core.qt_core.geometry.model_data import (  # type: ignore
+                        from core.geometry.model_data import (  # type: ignore
                             _quat_mul,
                             _quat_normalize,
                             _quat_normalize_bind,

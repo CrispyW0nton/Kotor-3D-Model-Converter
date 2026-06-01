@@ -14,8 +14,8 @@ try:
 except Exception:  # pragma: no cover - defensive fallback for unusual PySide installs
     shiboken6 = None
 
-from src.gui.qt_lib.rendering.renderer_backend import RendererBackend
-from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
+from src.core.rendering.renderer_backend import RendererBackend
+from src.core.rendering.renderer_settings import RendererSettings
 
 _WGPU_BACKEND_TYPES = {
     RendererBackend.WGPU_D3D12.value: "D3D12",
