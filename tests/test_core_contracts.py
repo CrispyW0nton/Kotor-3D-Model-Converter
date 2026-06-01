@@ -73,6 +73,64 @@ def test_backend_packages_do_not_import_gui_directly() -> None:
     assert not violations
 
 
+def test_required_adapter_modules_are_not_gitignored() -> None:
+    """Required adapter source files must not be hidden by broad diagnostic ignores."""
+    required = [
+        "src/adapters/rendering/gpu_diagnostics_exports.py",
+    ]
+    ignored: list[str] = []
+    for path in required:
+        result = subprocess.run(
+            ["git", "ls-files", "--others", "--ignored", "--exclude-standard", "--", path],
+            cwd=ROOT,
+            text=True,
+            check=True,
+            capture_output=True,
+        )
+        if result.stdout.strip():
+            ignored.append(path)
+
+    assert ignored == []
+
+
+def test_core_ports_define_named_headless_boundaries() -> None:
+    """Architecture ports should be importable from stable core ownership."""
+    import inspect
+    import sys
+
+    from src.core.ports import (
+        FileWriterPort,
+        GameResourceProvider,
+        ScriptCompileResult,
+        ScriptCompilerPort,
+        TextureDecodeResult,
+        TextureDecoder,
+        ViewportRendererPort,
+    )
+    from src.core.rendering.renderer_interface import IViewportRenderer
+    from src.core.resources.game_resource_provider import GameResourceProvider as ResourceProviderProtocol
+
+    assert GameResourceProvider is ResourceProviderProtocol
+    assert ViewportRendererPort is IViewportRenderer
+    assert inspect.isclass(TextureDecodeResult)
+    assert inspect.isclass(ScriptCompileResult)
+    for protocol in (FileWriterPort, GameResourceProvider, ScriptCompilerPort, TextureDecoder):
+        assert getattr(protocol, "_is_protocol", False)
+
+    for module_name in (
+        "src.core.ports",
+        "src.core.ports.files",
+        "src.core.ports.resources",
+        "src.core.ports.scripts",
+        "src.core.ports.textures",
+        "src.core.ports.viewport_renderer",
+    ):
+        source = inspect.getsource(sys.modules[module_name])
+        assert "src.gui" not in source
+        assert "PySide6" not in source
+        assert "tkinter" not in source
+
+
 def test_headless_backend_packages_do_not_route_through_qt_core_facade() -> None:
     """Headless backend code should import canonical owners, not qt_core shims."""
     checked_roots = (

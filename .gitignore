@@ -125,6 +125,7 @@ d*_validation*/
 proof_*/
 *_report.txt
 *_diagnostic*.py
+!src/adapters/rendering/gpu_diagnostics_exports.py
 !src/io/fbx/fbx_diagnostics.py
 !src/core/rendering/gpu_diagnostics_records.py
 

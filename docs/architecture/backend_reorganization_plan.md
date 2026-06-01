@@ -5,6 +5,21 @@ Date: 2026-05-31
 This plan tracks the incremental move of reusable backend logic out of GUI
 packages while keeping public import paths stable during migration.
 
+## Lockdown Status
+
+As of 2026-06-01, the broad backend/GUI split is in the stabilization phase.
+The remaining work is tracked as a punch list rather than a single open-ended
+move:
+
+| Item | Status | Notes |
+|---|---|---|
+| Required adapter sources must be tracked despite broad local diagnostic ignores. | Locked | `.gitignore` explicitly un-ignores `src/adapters/rendering/gpu_diagnostics_exports.py`, and a source-contract test checks that required adapter module stays visible to Git. |
+| Decide compatibility-facade permanence. | Ongoing | Old `src.gui.camera`, `src.gui.lighting`, `src.gui.rendering`, `src.gui.textures`, `src.gui.gizmo`, and `src.core.qt_core` paths remain public compatibility routes for now; each slice should continue reducing implementation facades to direct aliases or explicit lazy forwarding. |
+| Add named core port boundaries. | Started | `src.core.ports` now names the stable headless boundaries for `GameResourceProvider`, `TextureDecoder`, `ViewportRendererPort`, `ScriptCompilerPort`, and `FileWriterPort`. Existing concrete callers may migrate gradually as workflow slices are touched. |
+| Classify still-headless top-level packages. | Locked | `src.formats`, `src.io`, `src.resources`, `src.unreal`, `src.workbench`, and `src.systems` are classified in the package map and guarded as headless packages. |
+| Keep workflow services on `ResourceAddress`, `GameResourceProvider`, `ValidationReport` / `ValidationBus`, and `ExportJob`. | Ongoing | These service records exist and are guarded where introduced; future product slices should use them instead of adding new ad-hoc resource, validation, or write pipelines. |
+| Final verification pass. | Repeat per slice | Prefer targeted `py_compile`, source-contract tests, renderer/lightmap/camera/sequence tests tied to touched modules, and visible app testing only when UI/startup/viewport behavior changes. |
+
 ## Dependency Direction
 
 ```text
@@ -113,6 +128,7 @@ aliases or explicit lazy forwarding.
 | `src.systems` | Domain/system service package. | BAS attachment alignment and model-recipe logic are product-domain services shared by UI, renderers, and tests, not GUI presentation code. | Keep `src.systems.*` headless; GUI may consume it, but systems must not import GUI or Qt. | `py_compile`; `tests/test_core_contracts.py::test_integration_packages_are_headless_and_classified`; BAS contract tests. |
 | `src.gui.rendering.frame_core` | `src.core.rendering.frame_core` | The PIL/software `FrameRenderer`, rasterizer, texture cache, colors, diagnostics, and mixins are Tk-free software-render backend code used by validation, scripts, and viewport hosts. | Preserve old `src.gui.rendering.frame_core.*`, `src.gui.rendering.viewport_core`, and `src.gui.viewports.frame_renderer` paths as logic-free module aliases; runtime callers import the backend owner directly. | `py_compile`; `tests/test_core_contracts.py::test_software_frame_renderer_is_backend_owned`; focused frame-renderer contracts; Qt import facade check. |
 | `src.core.rendering.frame_core.math_helpers` | `src.math.frame_math` | Shared software frame-render math, UV, and sorting helpers belong in the project math package rather than a renderer backend shim. | Preserve the old frame-core math-helper path as a module alias over `src.math.frame_math`; frame-core runtime imports the canonical math owner directly. | `py_compile`; import smoke for old/new paths; `tests/test_core_contracts.py::test_software_frame_renderer_is_backend_owned`. |
+| `src.core.ports` | Headless port boundary package. | Stable workflow boundaries should be named once instead of rediscovered through concrete services, GUI facades, or adapter implementation classes. | Re-export the existing `GameResourceProvider` protocol and `IViewportRenderer` as `ViewportRendererPort`; define initial `TextureDecoder`, `ScriptCompilerPort`, and `FileWriterPort` protocols for new slices. Migrate concrete callers when touched rather than forcing a broad churn pass. | `py_compile`; `tests/test_core_contracts.py::test_core_ports_define_named_headless_boundaries`; source-contract headless scans. |
 | GPU/ModernGL/WGPU adapters | GUI or `src.adapters` where backend-specific | Qt/OpenGL/WGPU host integration remains adapter-owned until renderer ports are introduced. | Keep renderer adapters at explicit GUI/adapter boundaries and move reusable pieces to core when they become renderer-neutral. | Renderer backend/picking/stage tests tied to moved modules. |
 
 ## Slice Checklist
