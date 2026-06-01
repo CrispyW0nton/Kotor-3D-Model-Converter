@@ -267,6 +267,10 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.transport.speedChanged.connect(self.playback.set_speed)
         self.outliner.track_list.trackSelected.connect(self._on_track_selected)
         self.outliner.track_list.bindingSelected.connect(self._on_binding_selected)
+        self.outliner.track_list.addSelectedObjectRequested.connect(self._add_selected_object)
+        self.outliner.track_list.addTrackRequested.connect(self._add_track)
+        self.outliner.track_list.addCameraCutRequested.connect(self._add_camera_cut)
+        self.outliner.track_list.deleteSelectionRequested.connect(self._delete_selected_outliner_item)
         self.properties_panel.sequenceChanged.connect(self._sequence_changed)
         self.refresh_library_btn.clicked.connect(self._refresh_sequence_combo)
         self.sequence_combo.activated.connect(self._load_selected_combo_sequence)
@@ -426,16 +430,39 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if binding is None:
             obj = self._selected_scene_object()
             binding = self.manager.add_object_binding(self.sequence, obj) if obj is not None else None
-        if binding is None and track_type != "Camera Cut":
+        master_track_types = {"Camera Cut", "Sub Sequence", "Event"}
+        if binding is None and track_type not in master_track_types:
             QtWidgets.QMessageBox.information(self, "Add Track", "Select or bind an object first.")
             return
         track = self._make_track(track_type, binding)
-        if isinstance(track, CameraCutTrack):
+        if isinstance(track, CameraCutTrack) or (binding is None and isinstance(track, (SubSequenceTrack, EventTrack))):
             self.sequence.master_tracks.append(track)
         elif binding is not None:
             binding.add_track(track)
         self._sequence_changed()
         self._set_status(f"Added {track.track_type} track")
+
+    def _delete_selected_outliner_item(self) -> None:
+        if self.sequence is None:
+            return
+        track = self.outliner.track_list.selected_track()
+        binding = self.outliner.track_list.selected_binding()
+        if track is not None:
+            removed = False
+            if track in self.sequence.master_tracks:
+                self.sequence.master_tracks = [item for item in self.sequence.master_tracks if item.track_id != track.track_id]
+                removed = True
+            elif binding is not None:
+                before = len(binding.tracks)
+                binding.tracks = [item for item in binding.tracks if item.track_id != track.track_id]
+                removed = len(binding.tracks) != before
+            if removed:
+                self._sequence_changed()
+                self._set_status(f"Deleted {track.track_type} track")
+            return
+        if binding is not None and self.sequence.remove_binding(binding.binding_id):
+            self._sequence_changed()
+            self._set_status(f"Deleted binding {binding.display_name}")
 
     def _make_track(self, track_type: str, binding) -> Any:
         if track_type == "Transform":

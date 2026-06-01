@@ -11,6 +11,10 @@ from src.sequence.sequence_model import GhostRiggerLevelSequence
 class SequenceTrackListWidget(QtWidgets.QTreeWidget):
     trackSelected = QtCore.Signal(object)
     bindingSelected = QtCore.Signal(object)
+    addSelectedObjectRequested = QtCore.Signal()
+    addTrackRequested = QtCore.Signal(str)
+    addCameraCutRequested = QtCore.Signal()
+    deleteSelectionRequested = QtCore.Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -18,6 +22,7 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
         self.setHeaderLabels(["Sequence", "Type"])
         self.setAlternatingRowColors(True)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
         self.itemSelectionChanged.connect(self._on_selection_changed)
 
     def set_sequence(self, sequence: GhostRiggerLevelSequence | None) -> None:
@@ -83,3 +88,39 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
             self.trackSelected.emit(track)
         if binding is not None:
             self.bindingSelected.emit(binding)
+
+    def _show_context_menu(self, pos: QtCore.QPoint) -> None:
+        if self.sequence is None:
+            return
+        item = self.itemAt(pos)
+        if item is not None:
+            self.setCurrentItem(item)
+        kind_id = item.data(0, QtCore.Qt.UserRole) if item is not None else None
+        is_binding = bool(kind_id and kind_id[0] == "binding")
+        is_track = bool(kind_id and kind_id[0] == "track")
+        binding = self.selected_binding()
+        menu = QtWidgets.QMenu(self)
+        add_object = menu.addAction("Add Selected Scene Object")
+        add_cut = menu.addAction("Add Camera Cut")
+        track_menu = menu.addMenu("Add Track")
+        for track_type in ("Transform", "Camera Property", "Light Property", "Visibility", "Material", "Event", "Rig Control", "Character", "Sub Sequence"):
+            action = track_menu.addAction(track_type)
+            action.setData(track_type)
+        track_menu.setEnabled(binding is not None or item is None or not is_track)
+        if is_track or is_binding:
+            menu.addSeparator()
+        delete_action = menu.addAction("Delete Track" if is_track else "Delete Object Binding")
+        delete_action.setEnabled(is_track or is_binding)
+        chosen = menu.exec(self.viewport().mapToGlobal(pos))
+        if chosen is None:
+            return
+        if chosen is add_object:
+            self.addSelectedObjectRequested.emit()
+        elif chosen is add_cut:
+            self.addCameraCutRequested.emit()
+        elif chosen is delete_action:
+            self.deleteSelectionRequested.emit()
+        elif chosen in track_menu.actions():
+            track_type = str(chosen.data() or "")
+            if track_type:
+                self.addTrackRequested.emit(track_type)

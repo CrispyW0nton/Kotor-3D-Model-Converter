@@ -6872,6 +6872,61 @@ def test_sequence_frame_range_edit_keeps_playback_end_tracking_sequence_end() ->
     assert sequence.playback_end_frame == 24
 
 
+def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable() -> None:
+    from types import SimpleNamespace
+
+    from src.core.camera.camera_model import GhostRiggerCamera
+    from src.core.scene.kmax_scene_manager import KMaxSceneManager
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+    from PySide6 import QtWidgets
+
+    node = SimpleNamespace(name="CameraNode", position=(0.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0), children=[])
+    node.children.append(SimpleNamespace(parent=node))
+    camera = GhostRiggerCamera(original_ref=node)
+    payload = camera.to_dict()
+
+    assert "original_ref" not in payload
+    assert payload["id"] == camera.id
+
+    manager = KMaxSceneManager()
+    light = manager.add_light_object("point", name="MoveLight")
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    viewport.load_scene_instances(manager.active_scene.objects, scene_name="Light Move Smoke")
+    light_node = next(
+        node
+        for node in viewport.model.all_nodes()
+        if str(getattr(node, "_gr_scene_object_id", "") or "") == light.id
+    )
+
+    assert getattr(light_node, "is_light", False) is True
+    viewport.set_selected_node(light_node)
+    assert getattr(viewport._renderer, "selected_node", None) is light_node
+
+    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    workflow_source = inspect.getsource(QtGhostRiggerMainWindow._add_scene_object_to_sequence)
+    outliner_source = (ROOT / "src/gui/panels/qt_scene_outliner_panel.py").read_text(encoding="utf-8")
+    sequence_track_list_source = (ROOT / "src/gui/sequence_editor/sequence_track_list_widget.py").read_text(encoding="utf-8")
+    sequence_editor_source = (ROOT / "src/gui/sequence_editor/sequence_editor_window.py").read_text(encoding="utf-8")
+
+    assert "objectAddToSequenceRequested.connect(self._add_scene_object_to_sequence)" in layout_source
+    assert "editor.manager.add_object_binding(editor.sequence, obj)" in workflow_source
+    assert "objectAddToSequenceRequested = QtCore.Signal(str)" in outliner_source
+    assert "Add to Sequence" in outliner_source
+    assert "_expanded_item_keys" in outliner_source
+    assert "_restore_expanded_item_keys" in outliner_source
+    assert "addSelectedObjectRequested = QtCore.Signal()" in sequence_track_list_source
+    assert "addTrackRequested = QtCore.Signal(str)" in sequence_track_list_source
+    assert "deleteSelectionRequested = QtCore.Signal()" in sequence_track_list_source
+    assert "Add Selected Scene Object" in sequence_track_list_source
+    assert "Add Track" in sequence_track_list_source
+    assert "Delete Track" in sequence_track_list_source
+    assert "deleteSelectionRequested.connect(self._delete_selected_outliner_item)" in sequence_editor_source
+    assert "def _delete_selected_outliner_item" in sequence_editor_source
+    assert "master_track_types = {\"Camera Cut\", \"Sub Sequence\", \"Event\"}" in sequence_editor_source
+
+
 def test_scene_camera_light_authoring_uses_registered_svg_icons_and_delete_signal() -> None:
     required_icons = {
         "camera_free.svg",

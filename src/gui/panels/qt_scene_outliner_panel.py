@@ -30,6 +30,7 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
     objectVisibilityChanged = QtCore.Signal(str, bool)
     objectLockedChanged = QtCore.Signal(str, bool)
     objectRenamed = QtCore.Signal(str, str)
+    objectAddToSequenceRequested = QtCore.Signal(str)
 
     _COLUMNS = ("Object", "Kind", "State", "Children", "Source", "ID")
 
@@ -114,6 +115,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         root.addWidget(self.tree, 1)
 
     def set_scene(self, scene) -> None:
+        expanded_keys = self._expanded_item_keys()
+        current_key = self._current_item_key()
         self._suppress = True
         try:
             self._objects = {obj.id: obj for obj in scene.objects}
@@ -136,8 +139,9 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
                 str(getattr(scene, "game", "") or ""),
                 str(getattr(scene, "id", "") or "")[:8],
             ])
+            root_item.setData(0, QtCore.Qt.UserRole + 1, "scene")
             root_item.setIcon(0, self._icon_for_kind("scene"))
-            root_item.setExpanded(True)
+            root_item.setExpanded("scene" in expanded_keys or not expanded_keys)
             self.tree.addTopLevelItem(root_item)
 
             model_helpers = self._scene_model_helper_nodes(scene_objects)
@@ -162,8 +166,9 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
                     "",
                     "",
                 ])
+                bucket.setData(0, QtCore.Qt.UserRole + 1, f"bucket:{label}")
                 bucket.setIcon(0, self._icon_for_kind(bucket_kind))
-                bucket.setExpanded(True)
+                bucket.setExpanded(f"bucket:{label}" in expanded_keys or not expanded_keys)
                 root_item.addChild(bucket)
                 for obj in objects:
                     state = self._state_label(obj)
@@ -179,6 +184,7 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
                     item.setIcon(0, self._icon_for_kind(obj.object_type))
                     item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
                     item.setData(0, QtCore.Qt.UserRole, obj.id)
+                    item.setData(0, QtCore.Qt.UserRole + 1, f"object:{obj.id}")
                     item.setToolTip(0, self._object_tooltip(obj))
                     for column in (3,):
                         item.setTextAlignment(column, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -188,13 +194,14 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
                         item.setForeground(2, QtGui.QBrush(QtGui.QColor(C["warning"])))
                     bucket.addChild(item)
                     self._item_to_id[item] = obj.id
-                    if obj.selected:
+                    if obj.selected or current_key == f"object:{obj.id}":
                         self.tree.setCurrentItem(item)
                 if label == "Lights":
                     self._add_model_light_nodes(bucket, model_lights)
                 if label == "Helpers":
                     self._add_model_helper_nodes(bucket, model_helpers)
             self._filter(self.search_edit.text())
+            self._restore_expanded_item_keys(expanded_keys)
             self._resize_columns_to_content()
         finally:
             self._suppress = False
@@ -244,6 +251,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         visible_action = menu.addAction("Hide" if obj and obj.visible else "Show")
         lock_action = menu.addAction("Unlock" if obj and obj.locked else "Lock")
         menu.addSeparator()
+        add_sequence_action = menu.addAction("Add to Sequence")
+        menu.addSeparator()
         delete_action = menu.addAction("Delete")
         chosen = menu.exec(self.tree.mapToGlobal(pos))
         if chosen is focus_action:
@@ -254,6 +263,8 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
             self.objectVisibilityChanged.emit(object_id, not obj.visible)
         elif chosen is lock_action and obj is not None:
             self.objectLockedChanged.emit(object_id, not obj.locked)
+        elif chosen is add_sequence_action:
+            self.objectAddToSequenceRequested.emit(object_id)
         elif chosen is delete_action:
             self.objectDeleteRequested.emit(object_id)
 
@@ -270,6 +281,43 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
         self.tree.collapseAll()
         self.tree.expandToDepth(1)
         self._resize_columns_to_content()
+
+    def _item_key(self, item: QtWidgets.QTreeWidgetItem | None) -> str:
+        if item is None:
+            return ""
+        key = item.data(0, QtCore.Qt.UserRole + 1)
+        return str(key or "")
+
+    def _current_item_key(self) -> str:
+        return self._item_key(self.tree.currentItem())
+
+    def _expanded_item_keys(self) -> set[str]:
+        keys: set[str] = set()
+
+        def walk(item: QtWidgets.QTreeWidgetItem) -> None:
+            key = self._item_key(item)
+            if key and item.isExpanded():
+                keys.add(key)
+            for index in range(item.childCount()):
+                walk(item.child(index))
+
+        for index in range(self.tree.topLevelItemCount()):
+            walk(self.tree.topLevelItem(index))
+        return keys
+
+    def _restore_expanded_item_keys(self, keys: set[str]) -> None:
+        if not keys:
+            return
+
+        def walk(item: QtWidgets.QTreeWidgetItem) -> None:
+            key = self._item_key(item)
+            if key:
+                item.setExpanded(key in keys)
+            for index in range(item.childCount()):
+                walk(item.child(index))
+
+        for index in range(self.tree.topLevelItemCount()):
+            walk(self.tree.topLevelItem(index))
 
     def _filter(self, text: str) -> None:
         needle = text.lower().strip()
@@ -384,6 +432,7 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
             item.setIcon(0, self._icon_for_kind("helper"))
             item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
             item.setData(0, QtCore.Qt.UserRole, node)
+            item.setData(0, QtCore.Qt.UserRole + 1, f"helper:{obj.id}:{getattr(node, 'name', '')}:{id(node)}")
             item.setToolTip(0, self._helper_tooltip(node, obj))
             item.setTextAlignment(3, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
             helper_bucket.addChild(item)
@@ -406,6 +455,7 @@ class QtSceneOutlinerPanel(QtWidgets.QWidget):
             item.setIcon(0, self._icon_for_kind("light"))
             item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
             item.setData(0, QtCore.Qt.UserRole, node)
+            item.setData(0, QtCore.Qt.UserRole + 1, f"model-light:{obj.id}:{getattr(node, 'name', '')}:{id(node)}")
             item.setToolTip(0, self._light_tooltip(node, obj))
             light_bucket.addChild(item)
             self._light_item_to_node[item] = node

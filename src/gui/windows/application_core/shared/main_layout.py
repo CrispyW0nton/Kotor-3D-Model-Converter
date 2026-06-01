@@ -100,6 +100,7 @@ class MainWindowLayoutMixin:
         self.scene_outliner_panel.objectVisibilityChanged.connect(self._set_scene_object_visible)
         self.scene_outliner_panel.objectLockedChanged.connect(self._set_scene_object_locked)
         self.scene_outliner_panel.objectRenamed.connect(self._rename_scene_object)
+        self.scene_outliner_panel.objectAddToSequenceRequested.connect(self._add_scene_object_to_sequence)
         self.skeleton_panel = QtSkeletonPanel(self)
         self.lighting_panel = QtLightingPanel(self)
         self.camera_panel = QtCameraPanel(self)

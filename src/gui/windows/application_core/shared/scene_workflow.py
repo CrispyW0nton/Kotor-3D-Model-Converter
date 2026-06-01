@@ -631,6 +631,25 @@ class SceneWorkflowMixin:
         self._select_scene_object(object_id)
         self._call_viewport("frame_all")
 
+    def _add_scene_object_to_sequence(self, object_id: str) -> None:
+        obj = next((item for item in self.scene_manager.active_scene.objects if item.id == object_id), None)
+        if obj is None:
+            return
+        editor = getattr(self, "sequence_editor_docked_window", None)
+        if editor is None:
+            self._show_sequence_editor_dock()
+            editor = getattr(self, "sequence_editor_docked_window", None)
+        else:
+            self._show_sequence_editor_dock()
+        if editor is None or getattr(editor, "sequence", None) is None:
+            return
+        binding = editor.manager.add_object_binding(editor.sequence, obj)
+        editor._sequence_changed()
+        item = editor._find_binding_item(binding.binding_id)
+        if item is not None:
+            editor.outliner.track_list.setCurrentItem(item)
+        editor._set_status(f"Bound {binding.display_name}")
+
     def _set_scene_object_visible(self, object_id: str, visible: bool) -> None:
         if self.scene_manager.set_object_visibility(object_id, visible):
             self._refresh_scene_view()
@@ -709,12 +728,13 @@ class SceneWorkflowMixin:
             self.scene_manager.update_camera_properties(object_id, **payload)
         elif obj is not None and obj.object_type == "light":
             payload = dict((getattr(obj, "metadata", {}) or {}).get("light") or {})
+            light_position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
             payload.update(
                 {
                     "id": object_id,
                     "scene_object_id": object_id,
                     "name": str(getattr(node, "name", "") or obj.name),
-                    "position": tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3]),
+                    "position": light_position,
                     "rotation": tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4]),
                     "type": str(getattr(node, "light_kind", payload.get("type", "point")) or "point"),
                     "enabled": bool(getattr(node, "light_enabled", payload.get("enabled", True))),
@@ -724,6 +744,12 @@ class SceneWorkflowMixin:
                 }
             )
             self.scene_manager.update_light_properties(object_id, **payload)
+            panel = getattr(self, "lighting_panel", None)
+            light = panel.manager.get(object_id) if panel is not None else None
+            if light is not None:
+                light.position = light_position
+                light.rotation = tuple(float(v) for v in getattr(node, "rotation", light.rotation)[:4])
+                light.apply_to_original()
         try:
             pivot_local = self.viewport._pivot_local_from_node(node)
             pivot_rotation = self.viewport._quat_to_euler_degrees(getattr(node, "_gr_pivot_rotation", (0.0, 0.0, 0.0, 1.0)))

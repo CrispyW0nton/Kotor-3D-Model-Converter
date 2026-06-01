@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, fields, field
 from typing import Any
 from uuid import uuid4
 
@@ -96,9 +96,11 @@ class GhostRiggerCamera:
         return camera
 
     def to_dict(self) -> dict[str, Any]:
-        data = asdict(self)
-        data.pop("original_ref", None)
-        return data
+        return {
+            item.name: getattr(self, item.name)
+            for item in fields(self)
+            if item.name != "original_ref"
+        }
 
     def serialize(self) -> dict[str, Any]:
         return self.to_dict()

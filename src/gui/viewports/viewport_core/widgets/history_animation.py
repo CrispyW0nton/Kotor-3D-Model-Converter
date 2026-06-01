@@ -139,6 +139,13 @@ class ViewportHistoryAnimationMixin:
                 if self.camera_manager.active_camera_id == camera.id:
                     self.update_view_from_camera(camera)
                 self.cameraChanged.emit()
+        if bool(getattr(node, "is_light", False)):
+            light_manager = getattr(getattr(getattr(self, "window", lambda: None)(), "lighting_panel", None), "manager", None)
+            light = light_manager.find_by_original(node) if light_manager is not None else None
+            if light is not None and not bool(getattr(light, "locked", False)):
+                light.position = tuple(float(v) for v in getattr(node, "position", light.position)[:3])
+                light.rotation = tuple(float(v) for v in getattr(node, "rotation", light.rotation)[:4])
+                light.apply_to_original()
         if self.on_node_moved:
             self.on_node_moved(node)
         self.nodeMoved.emit(node)
