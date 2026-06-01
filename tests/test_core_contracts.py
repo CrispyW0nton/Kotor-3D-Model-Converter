@@ -6878,6 +6878,7 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     from src.sequence.tracks.camera_cut_track import CameraCutTrack
     from src.sequence.tracks.camera_property_track import CAMERA_PROPERTIES, CameraPropertyTrack
     from src.sequence.tracks.light_property_track import LIGHT_PROPERTIES, LightPropertyTrack
+    from src.sequence.tracks.transform_property_track import TransformPropertyTrack
 
     manager = KMaxSceneManager()
     scene_camera = manager.add_camera_object("Cinematic Camera", name="ShotCam")
@@ -6921,6 +6922,24 @@ def test_sequence_camera_light_bindings_use_stable_scene_ids() -> None:
     assert viewport.switched == [camera.id]
     assert light.original_ref.light_multiplier == 4.25
     assert light.original_ref.light_shadow is False
+
+    perspective_sequence = GhostRiggerLevelSequence()
+    perspective_binding = sequence_manager.add_object_binding(perspective_sequence, camera.original_ref)
+    position_x = TransformPropertyTrack(parent_binding_id=perspective_binding.binding_id, property_name="position_x")
+    position_x.add_keyframe(0, 1.0)
+    position_x.add_keyframe(10, 5.0)
+    fov = CameraPropertyTrack(parent_binding_id=perspective_binding.binding_id, property_name="field_of_view_degrees")
+    fov.add_keyframe(10, 60.0)
+    perspective_binding.add_track(position_x)
+    perspective_binding.add_track(fov)
+    camera.original_ref.position = (1.0, 2.0, 3.0)
+    viewport.switched.clear()
+
+    SequenceEvaluator(viewport).evaluate(perspective_sequence, 10)
+
+    assert camera.original_ref.position == (5.0, 2.0, 3.0)
+    assert camera.field_of_view_degrees == 60.0
+    assert viewport.switched == []
 
 
 def test_sequence_frame_range_edit_keeps_playback_end_tracking_sequence_end() -> None:
@@ -7016,7 +7035,9 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     viewport_tools_source = (ROOT / "src/gui/windows/application_core/shared/viewport_tools.py").read_text(encoding="utf-8")
     renderer_overlay_source = (ROOT / "src/core/rendering/frame_core/renderer_overlays.py").read_text(encoding="utf-8")
     sequence_track_list_source = (ROOT / "src/gui/sequence_editor/sequence_track_list_widget.py").read_text(encoding="utf-8")
+    sequence_timeline_source = (ROOT / "src/gui/sequence_editor/sequence_timeline_widget.py").read_text(encoding="utf-8")
     sequence_editor_source = (ROOT / "src/gui/sequence_editor/sequence_editor_window.py").read_text(encoding="utf-8")
+    sequence_evaluator_source = (ROOT / "src/sequence/sequence_evaluator.py").read_text(encoding="utf-8")
 
     assert "objectAddToSequenceRequested.connect(self._add_scene_object_to_sequence)" in layout_source
     assert "editor.manager.add_object_binding(editor.sequence, obj)" in workflow_source
@@ -7043,8 +7064,29 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert "deleteSelectionRequested = QtCore.Signal()" in sequence_track_list_source
     assert "Add Selected Scene Object" in sequence_track_list_source
     assert "Add Track" in sequence_track_list_source
+    assert "Add Transform Lane" in sequence_track_list_source
+    assert "Add Camera Lane" in sequence_track_list_source
+    assert "Add Light Lane" in sequence_track_list_source
+    assert 'rows.append(("master", None, None))' in sequence_timeline_source
+    assert 'rows.append(("binding", binding, None))' in sequence_timeline_source
+    assert "if track is None:" in sequence_timeline_source
+    assert "QTreeWidget::item {{ height:" in sequence_track_list_source
+    assert "_expanded_item_keys" in sequence_track_list_source
+    assert "_on_item_expanded_changed" in sequence_track_list_source
+    assert "header().setFixedHeight" in sequence_track_list_source
+    assert "def set_row_metrics" in sequence_timeline_source
+    assert "binding.metadata.get(\"expanded\"" in sequence_timeline_source
     assert "Delete Track" in sequence_track_list_source
     assert "deleteSelectionRequested.connect(self._delete_selected_outliner_item)" in sequence_editor_source
+    assert "def _request_preview_redraw" in sequence_editor_source
+    assert "reason=\"sequence playback\"" in sequence_editor_source
+    assert "reason=\"sequence evaluation\"" in sequence_evaluator_source
+    assert "camera=True" in sequence_evaluator_source
+    assert "TransformPropertyTrack" in sequence_editor_source
+    assert "def _auto_key_object" in sequence_editor_source
+    assert "_on_camera_panel_changed" in sequence_editor_source
+    assert "preferred=(TransformPropertyTrack, TransformTrack, CameraPropertyTrack)" in sequence_editor_source
+    assert "_on_lighting_panel_changed" in sequence_editor_source
     assert "def _delete_selected_outliner_item" in sequence_editor_source
     assert "master_track_types = {\"Camera Cut\", \"Sub Sequence\", \"Event\"}" in sequence_editor_source
 

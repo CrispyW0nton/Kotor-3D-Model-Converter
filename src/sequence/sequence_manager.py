@@ -21,7 +21,7 @@ def ensure_sequence_object_id(obj: object | None) -> str:
         value = str(getattr(obj, "id", "") or "")
         if value:
             return value
-    for attr in ("_gr_camera_id", "_gr_light_id", "_gr_sequence_id"):
+    for attr in ("_gr_scene_object_id", "_gr_camera_id", "_gr_light_id", "_gr_sequence_id"):
         value = str(getattr(obj, attr, "") or "")
         if value:
             return value

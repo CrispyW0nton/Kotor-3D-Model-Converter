@@ -17,3 +17,6 @@ class SequenceOutliner(QtWidgets.QWidget):
 
     def set_sequence(self, sequence) -> None:
         self.track_list.set_sequence(sequence)
+
+    def apply_ghost_layout(self, layout) -> None:
+        self.track_list.apply_ghost_layout(layout)

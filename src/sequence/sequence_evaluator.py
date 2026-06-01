@@ -15,6 +15,7 @@ from .tracks.event_track import EventTrack
 from .tracks.light_property_track import LightPropertyTrack
 from .tracks.material_track import MaterialTrack
 from .tracks.sub_sequence_track import SubSequenceTrack
+from .tracks.transform_property_track import TransformPropertyTrack
 from .tracks.transform_track import TransformTrack
 from .tracks.visibility_track import VisibilityTrack
 
@@ -185,7 +186,7 @@ class SequenceEvaluator:
                 cut = track.active_cut(frame)
                 if cut is not None:
                     return sequence.binding_by_id(cut.camera_binding_id)
-        return next((binding for binding in sequence.bindings if binding.target_type == SequenceTargetType.CAMERA), None)
+        return None
 
     def _apply_track(self, binding: SequenceBinding, obj: object, track, frame: int) -> None:
         value = track.evaluate(frame)
@@ -193,6 +194,8 @@ class SequenceEvaluator:
             return
         if isinstance(track, TransformTrack):
             self._apply_transform(obj, value)
+        elif isinstance(track, TransformPropertyTrack):
+            self._apply_transform_property(obj, track.property_name, value)
         elif isinstance(track, VisibilityTrack):
             self._apply_visibility(obj, bool(value), binding)
         elif isinstance(track, CameraPropertyTrack):
@@ -235,8 +238,64 @@ class SequenceEvaluator:
             setattr(obj, "position", _vec3(location))
             setattr(obj, "rotation", euler_degrees_to_quat(rotation))
             setattr(obj, "_gr_scale", _vec3(scale, (1.0, 1.0, 1.0)))
+            self._sync_object_transform_model(obj)
         except Exception:
             pass
+
+    def _apply_transform_property(self, obj: object, property_name: str, value: Any) -> None:
+        prop = str(property_name or "")
+        if prop == "position":
+            setattr(obj, "position", _vec3(value, getattr(obj, "position", (0.0, 0.0, 0.0))))
+            self._sync_object_transform_model(obj)
+            return
+        if prop == "rotation":
+            setattr(obj, "rotation", euler_degrees_to_quat(value))
+            self._sync_object_transform_model(obj)
+            return
+        if prop == "scale":
+            fallback = _vec3(getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))), (1.0, 1.0, 1.0))
+            setattr(obj, "_gr_scale", _vec3(value, fallback))
+            self._sync_object_transform_model(obj)
+            return
+        component_map = {
+            "position_x": ("position", 0, (0.0, 0.0, 0.0)),
+            "position_y": ("position", 1, (0.0, 0.0, 0.0)),
+            "position_z": ("position", 2, (0.0, 0.0, 0.0)),
+            "rotation_x": ("rotation", 0, (0.0, 0.0, 0.0)),
+            "rotation_y": ("rotation", 1, (0.0, 0.0, 0.0)),
+            "rotation_z": ("rotation", 2, (0.0, 0.0, 0.0)),
+            "scale_x": ("_gr_scale", 0, (1.0, 1.0, 1.0)),
+            "scale_y": ("_gr_scale", 1, (1.0, 1.0, 1.0)),
+            "scale_z": ("_gr_scale", 2, (1.0, 1.0, 1.0)),
+        }
+        target = component_map.get(prop)
+        if target is None:
+            return
+        attr, index, fallback = target
+        if attr == "rotation":
+            current = list(quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))))
+            current[index] = float(value)
+            setattr(obj, "rotation", euler_degrees_to_quat(current))
+            return
+        raw = getattr(obj, attr, getattr(obj, "scale", fallback) if attr == "_gr_scale" else fallback)
+        current = list(_vec3(raw, fallback))
+        current[index] = float(value)
+        setattr(obj, attr, tuple(current))
+        self._sync_object_transform_model(obj)
+
+    def _sync_object_transform_model(self, obj: object) -> None:
+        camera_manager = getattr(self.viewport, "camera_manager", None)
+        camera = camera_manager.find_by_original(obj) if camera_manager is not None else None
+        if camera is not None:
+            camera.position = _vec3(getattr(obj, "position", camera.position), camera.position)
+            camera.rotation = _quat(getattr(obj, "rotation", camera.rotation), camera.rotation)
+            camera.apply_to_original()
+        light_manager = getattr(getattr(getattr(self.viewport, "parent", lambda: None)(), "lighting_panel", None), "manager", None)
+        light = light_manager.find_by_original(obj) if light_manager is not None else None
+        if light is not None:
+            light.position = _vec3(getattr(obj, "position", light.position), light.position)
+            light.rotation = _quat(getattr(obj, "rotation", light.rotation), light.rotation)
+            light.apply_to_original()
 
     def _apply_visibility(self, obj: object, visible: bool, binding: SequenceBinding) -> None:
         target_type = binding.target_type.value if hasattr(binding.target_type, "value") else str(binding.target_type)
@@ -333,11 +392,29 @@ class SequenceEvaluator:
         viewport = self.viewport
         if viewport is None:
             return
+        refreshed = False
         for name in ("refresh_lighting", "refresh_cameras", "refresh_model_geometry", "refresh_view"):
             method = getattr(viewport, name, None)
             if callable(method):
                 try:
                     method()
-                    return
+                    refreshed = True
                 except Exception:
                     continue
+        request = getattr(viewport, "_request_render", None)
+        if callable(request):
+            try:
+                request(
+                    fast=True,
+                    reason="sequence evaluation",
+                    scene=True,
+                    camera=True,
+                    overlay=True,
+                    lighting=True,
+                    gizmo=True,
+                )
+                return
+            except Exception:
+                pass
+        if refreshed:
+            return

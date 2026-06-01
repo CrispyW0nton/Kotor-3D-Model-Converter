@@ -20,7 +20,7 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
         self.sequence: GhostRiggerLevelSequence | None = None
         self.pixels_per_frame = 8.0
         self.row_height = 26
-        self.ruler_height = 28
+        self.ruler_height = 24
         self.left_margin = 8
         self.snap_keys = True
         self._dragging_playhead = False
@@ -59,12 +59,24 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
         if self.sequence is None:
             return []
         rows = []
-        for track in self.sequence.master_tracks:
-            rows.append((None, track))
+        rows.append(("master", None, None))
+        if bool(self.sequence.metadata.get("master_tracks_expanded", True)):
+            for track in self.sequence.master_tracks:
+                rows.append(("track", None, track))
         for binding in self.sequence.bindings:
-            for track in binding.tracks:
-                rows.append((binding, track))
+            rows.append(("binding", binding, None))
+            if bool(binding.metadata.get("expanded", not binding.missing)):
+                for track in binding.tracks:
+                    rows.append(("track", binding, track))
         return rows
+
+    def set_row_metrics(self, *, row_height: int | None = None, ruler_height: int | None = None) -> None:
+        if row_height is not None:
+            self.row_height = max(18, int(row_height))
+        if ruler_height is not None:
+            self.ruler_height = max(20, int(ruler_height))
+        self.setMinimumHeight(max(180, self.row_height * 8 + self.ruler_height))
+        self.update()
 
     def frame_to_x(self, frame: int) -> int:
         if self.sequence is None:
@@ -149,12 +161,14 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
             painter.drawText(x + 3, 18, str(frame))
 
     def _draw_rows(self, painter: QtGui.QPainter) -> None:
-        for row, (_binding, track) in enumerate(self.tracks_with_rows()):
+        for row, (kind, _binding, track) in enumerate(self.tracks_with_rows()):
             y = self.ruler_height + row * self.row_height
-            bg = QtGui.QColor(C["panel2"] if row % 2 else C["bg2"])
+            bg = QtGui.QColor(C["panel"] if kind in {"master", "binding"} else (C["panel2"] if row % 2 else C["bg2"]))
             painter.fillRect(0, y, self.width(), self.row_height, bg)
             painter.setPen(QtGui.QColor(C["border"]))
             painter.drawLine(0, y + self.row_height - 1, self.width(), y + self.row_height - 1)
+            if track is None:
+                continue
             if isinstance(track, CameraCutTrack):
                 for cut in track.cuts:
                     x1 = self.frame_to_x(cut.start_frame)
@@ -206,8 +220,8 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
         row = self.row_at(int(event.position().y()))
         rows = self.tracks_with_rows()
         if 0 <= row < len(rows):
-            _binding, track = rows[row]
-            if self.select_key_at(frame, track, additive=bool(event.modifiers() & QtCore.Qt.ControlModifier)):
+            _kind, _binding, track = rows[row]
+            if track is not None and self.select_key_at(frame, track, additive=bool(event.modifiers() & QtCore.Qt.ControlModifier)):
                 self._dragging_keys = True
                 self._drag_start_frame = frame
                 self._drag_last_frame = frame
