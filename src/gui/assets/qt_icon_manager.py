@@ -44,6 +44,8 @@ class I:
     CAMERA_FREE = "camera_free"
     CAMERA_TARGET = "camera_target"
     CAMERA_CINEMATIC = "camera_cinematic"
+    VIEWPORT_SELECT_CAMERAS = "viewport_select_cameras"
+    VIEWPORT_LOCK_CAMERA = "viewport_lock_camera"
     LIGHT_POINT = "light_point"
     LIGHT_SPOT = "light_spot"
     LIGHT_DIRECTIONAL = "light_directional"

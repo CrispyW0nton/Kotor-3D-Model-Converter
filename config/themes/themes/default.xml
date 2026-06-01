@@ -73,6 +73,10 @@
         <color name="text.gold" value="#8A6A00"/>
         <color name="accent.primary" value="#1F6FEB"/>
         <color name="accent.secondary" value="#008C7E"/>
+        <color name="axis.x" value="#C93434"/>
+        <color name="axis.y" value="#1B8F45"/>
+        <color name="axis.z" value="#1F6FEB"/>
+        <color name="axis.text" value="#FFFFFF"/>
         <color name="transformBar.background" value="#F3F3F3"/>
         <color name="transformBar.border" value="#C4CBD5"/>
         <color name="splash.background" value="#F3F3F3"/>

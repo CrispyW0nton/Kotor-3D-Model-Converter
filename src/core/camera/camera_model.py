@@ -32,6 +32,7 @@ class GhostRiggerCamera:
     target_enabled: bool = False
     target_position: Vec3 = (0.0, 0.0, 1.0)
     target_object_id: str = ""
+    target_follow_enabled: bool = False
     focal_length_mm: float = 35.0
     field_of_view_degrees: float = field(default_factory=lambda: focal_length_to_fov(36.0, 35.0))
     sensor_width_mm: float = 36.0
@@ -155,6 +156,8 @@ class GhostRiggerCamera:
         self.position = vec3(self.position)
         self.rotation = quat(self.rotation)
         self.target_position = vec3(self.target_position)
+        self.target_object_id = str(self.target_object_id or "")
+        self.target_follow_enabled = bool(self.target_follow_enabled)
         self.focal_length_mm = max(0.001, float(self.focal_length_mm))
         self.field_of_view_degrees = clamp(float(self.field_of_view_degrees), 1.0, 179.0)
         self.sensor_width_mm = max(0.001, float(self.sensor_width_mm))

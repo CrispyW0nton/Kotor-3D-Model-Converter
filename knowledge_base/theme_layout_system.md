@@ -166,6 +166,7 @@ Core colour tokens include:
 - `input.background`, `input.text`, `input.border`, `input.focusBorder`
 - `spinbox.buttonBackground`, `spinbox.buttonHover`,
   `spinbox.buttonPressed`, `spinbox.buttonBorder`, `spinbox.arrow`
+- `axis.x`, `axis.y`, `axis.z`, `axis.text`
 - `tab.background`, `tab.selectedBackground`, `tab.text`,
   `tab.selectedText`
 - `table.background`, `table.text`, `table.headerBackground`,

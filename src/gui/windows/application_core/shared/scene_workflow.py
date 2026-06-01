@@ -730,6 +730,8 @@ class SceneWorkflowMixin:
             if camera is not None:
                 payload["target_position"] = tuple(float(v) for v in tuple(camera.target_position)[:3])
                 payload["target_enabled"] = bool(getattr(camera, "target_enabled", False))
+                payload["target_object_id"] = str(getattr(camera, "target_object_id", "") or "")
+                payload["target_follow_enabled"] = bool(getattr(camera, "target_follow_enabled", False))
             self.scene_manager.update_camera_properties(object_id, **payload)
         elif obj is not None and obj.object_type == "light":
             payload = dict((getattr(obj, "metadata", {}) or {}).get("light") or {})

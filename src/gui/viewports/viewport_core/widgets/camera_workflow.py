@@ -9,6 +9,7 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 class ViewportCameraWorkflowMixin:
     def refresh_cameras(self) -> None:
+        self.sync_camera_target_bindings()
         if self._camera_view_active:
             camera = self.camera_manager.get_active_camera()
             if camera is not None:
@@ -108,6 +109,116 @@ class ViewportCameraWorkflowMixin:
         self.camera_manager._store_on_model()
         self.cameraChanged.emit()
         self._request_render(fast=True, reason="active camera updated from viewport", camera=True, overlay=True, scene=True)
+
+    def _camera_for_target_handle(self, node):
+        if node is None or not bool(getattr(node, "_gr_camera_target_handle", False)):
+            return None
+        return self.camera_manager.get_camera(str(getattr(node, "_gr_camera_target_camera_id", "") or ""))
+
+    def _camera_target_handle(self, camera):
+        from types import SimpleNamespace
+
+        handles = getattr(self, "_camera_target_handles", None)
+        if handles is None:
+            handles = {}
+            setattr(self, "_camera_target_handles", handles)
+        position = tuple(float(v) for v in tuple(getattr(camera, "target_position", (0.0, 0.0, 0.0)))[:3])
+        handle = handles.get(camera.id)
+        if handle is None:
+            handle = SimpleNamespace(
+                name="",
+                position=position,
+                rotation=(0.0, 0.0, 0.0, 1.0),
+                children=[],
+                is_camera=True,
+                _gr_camera_target_handle=True,
+                _gr_camera_target_camera_id=camera.id,
+                _gr_scene_object_name="",
+            )
+            handles[camera.id] = handle
+        handle.name = f"{getattr(camera, 'name', 'Camera')} Target"
+        handle.position = position
+        handle._gr_gizmo_world_position = position
+        handle._gr_camera_target_camera_id = camera.id
+        handle._gr_scene_object_name = handle.name
+        return handle
+
+    def _scene_target_position(self, object_id: str):
+        target_id = str(object_id or "")
+        if not target_id or self.model is None:
+            return None
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        fallback = None
+        for node in nodes:
+            if str(getattr(node, "_gr_scene_object_id", "") or "") != target_id:
+                continue
+            if bool(getattr(node, "_gr_scene_object_root", False)):
+                fallback = node
+                break
+            if fallback is None:
+                fallback = node
+        if fallback is None:
+            return None
+        try:
+            return tuple(float(v) for v in getattr(fallback, "position", (0.0, 0.0, 0.0))[:3])
+        except Exception:
+            return None
+
+    def _apply_camera_target_position(self, camera, target_position, *, allow_follow: bool = True) -> bool:
+        from src.math.camera_math import look_at_quaternion
+
+        try:
+            new_target = tuple(float(v) for v in tuple(target_position)[:3])
+        except Exception:
+            return False
+        old_target = tuple(float(v) for v in tuple(getattr(camera, "target_position", (0.0, 0.0, 0.0)))[:3])
+        old_position = tuple(float(v) for v in tuple(getattr(camera, "position", (0.0, 0.0, 0.0)))[:3])
+        delta = tuple(new_target[i] - old_target[i] for i in range(3))
+        changed = any(abs(value) > 1e-9 for value in delta) or not bool(getattr(camera, "target_enabled", False))
+        camera.target_enabled = True
+        camera.target_position = new_target
+        if allow_follow and bool(getattr(camera, "target_follow_enabled", False)) and any(abs(value) > 1e-9 for value in delta):
+            new_position = tuple(old_position[i] + delta[i] for i in range(3))
+            camera.position = new_position
+            node = getattr(camera, "original_ref", None)
+            if node is not None:
+                try:
+                    node.position = new_position
+                except Exception:
+                    pass
+            changed = True
+        if changed:
+            try:
+                camera.rotation = look_at_quaternion(camera.position, camera.target_position)
+            except Exception:
+                pass
+            camera.apply_to_original()
+        return changed
+
+    def sync_camera_target_bindings(self, moved_node=None) -> bool:
+        object_id = str(getattr(moved_node, "_gr_scene_object_id", "") or "") if moved_node is not None else ""
+        changed = False
+        for camera in self.camera_manager.get_all_cameras():
+            target_object_id = str(getattr(camera, "target_object_id", "") or "")
+            if not target_object_id:
+                continue
+            if object_id and target_object_id != object_id:
+                continue
+            target_position = self._scene_target_position(target_object_id)
+            if target_position is None:
+                continue
+            changed = self._apply_camera_target_position(camera, target_position) or changed
+        if changed:
+            self.camera_manager._store_on_model()
+            active = self.camera_manager.get_active_camera()
+            if active is not None and self.is_camera_view_active():
+                self.update_view_from_camera(active)
+            self.cameraChanged.emit()
+            self._request_render(fast=True, reason="camera target binding updated", camera=True, overlay=True, scene=True)
+        return changed
 
     def align_active_camera_to_view(self):
         camera = self.camera_controller.align_active_camera_to_view()

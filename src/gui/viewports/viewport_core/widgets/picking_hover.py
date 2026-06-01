@@ -346,9 +346,9 @@ class ViewportPickingHoverMixin:
             return None
         camera, kind = hit
         if kind == "target":
-            node = getattr(camera, "original_ref", None)
-            if node is not None:
-                setattr(node, "_gr_camera_target_handle", True)
+            target_handle = getattr(self, "_camera_target_handle", None)
+            if callable(target_handle):
+                return target_handle(camera)
         return getattr(camera, "original_ref", None)
 
     def _helper_hit_test(self, sx: int, sy: int, radius: int = 12):
@@ -828,7 +828,12 @@ class ViewportPickingHoverMixin:
         self._hovered_camera_node = camera_node
         self._renderer._hovered_light = light_node
         try:
-            camera = self.camera_manager.find_by_original(camera_node) if camera_node is not None else None
+            camera = None
+            target_camera = getattr(self, "_camera_for_target_handle", None)
+            if callable(target_camera):
+                camera = target_camera(camera_node)
+            if camera is None:
+                camera = self.camera_manager.find_by_original(camera_node) if camera_node is not None else None
             self._camera_helper_renderer.hovered_camera_id = getattr(camera, "id", "") if camera is not None else ""
         except Exception:
             pass

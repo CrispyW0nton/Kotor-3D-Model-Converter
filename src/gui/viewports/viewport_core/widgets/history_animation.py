@@ -134,6 +134,25 @@ class ViewportHistoryAnimationMixin:
         if live:
             setattr(node, "_gr_transform_previewing", True)
         try:
+            target_camera = None
+            camera_for_target_handle = getattr(self, "_camera_for_target_handle", None)
+            if callable(camera_for_target_handle):
+                target_camera = camera_for_target_handle(node)
+            if target_camera is not None:
+                position = tuple(float(v) for v in getattr(node, "position", target_camera.target_position)[:3])
+                target_camera.target_object_id = ""
+                target_camera.target_enabled = True
+                apply_target = getattr(self, "_apply_camera_target_position", None)
+                if callable(apply_target):
+                    apply_target(target_camera, position, allow_follow=False)
+                else:
+                    target_camera.target_position = position
+                    target_camera.apply_to_original()
+                node._gr_gizmo_world_position = position
+                self.camera_manager._store_on_model()
+                if self.camera_manager.active_camera_id == target_camera.id and self.is_camera_view_active():
+                    self.update_view_from_camera(target_camera)
+                self.cameraChanged.emit()
             if bool(getattr(node, "is_camera", False)):
                 camera = self.camera_manager.find_by_original(node)
                 if camera is not None:
@@ -169,6 +188,9 @@ class ViewportHistoryAnimationMixin:
                     setattr(node, "_gr_gizmo_world_position", position)
                 except Exception:
                     pass
+            sync_targets = getattr(self, "sync_camera_target_bindings", None)
+            if callable(sync_targets):
+                sync_targets(node)
             if self.on_node_moved:
                 self.on_node_moved(node)
             self.nodeMoved.emit(node)

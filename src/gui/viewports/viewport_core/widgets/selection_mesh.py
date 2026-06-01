@@ -15,10 +15,15 @@ class ViewportSelectionMeshMixin:
         self._clear_auxiliary_selection_flags(clear_cameras=not (node is not None and bool(getattr(node, "is_camera", False))))
         self._selected_viewport_nodes = [node] if node is not None else []
         if node is not None and bool(getattr(node, "is_camera", False)):
-            camera = self.camera_manager.find_by_original(node)
+            camera = None
+            target_camera = getattr(self, "_camera_for_target_handle", None)
+            if callable(target_camera):
+                camera = target_camera(node)
+            if camera is None:
+                camera = self.camera_manager.find_by_original(node)
             if camera is not None:
                 self.camera_manager.select_camera(camera.id)
-                self.cameraSelectionChanged.emit(node)
+                self.cameraSelectionChanged.emit(camera.original_ref)
         elif hasattr(self, "camera_manager"):
             self.camera_manager.clear_camera_selection()
             self.cameraSelectionChanged.emit(None)
@@ -527,11 +532,22 @@ class ViewportSelectionMeshMixin:
         for node in clean_nodes:
             if not bool(getattr(node, "is_camera", False)):
                 continue
-            camera = self.camera_manager.find_by_original(node)
+            camera = None
+            target_camera = getattr(self, "_camera_for_target_handle", None)
+            if callable(target_camera):
+                camera = target_camera(node)
+            if camera is None:
+                camera = self.camera_manager.find_by_original(node)
             if camera is not None:
                 camera_models.append(camera)
         active = clean_nodes[0] if clean_nodes else None
-        active_camera = self.camera_manager.find_by_original(active) if active is not None else None
+        active_camera = None
+        if active is not None:
+            target_camera = getattr(self, "_camera_for_target_handle", None)
+            if callable(target_camera):
+                active_camera = target_camera(active)
+            if active_camera is None:
+                active_camera = self.camera_manager.find_by_original(active)
         if camera_models:
             self.camera_manager.select_many(camera_models, active=active_camera or camera_models[0])
             self.cameraSelectionChanged.emit(getattr(active_camera or camera_models[0], "original_ref", None))

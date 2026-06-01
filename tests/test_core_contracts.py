@@ -6743,7 +6743,10 @@ def test_camera_panel_edits_live_camera_transform_and_view_properties() -> None:
     node = SimpleNamespace(name="PanelCamera", position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0, 1.0), children=[])
     source_camera = GhostRiggerCamera(name="PanelCamera", original_ref=node)
     source_camera.apply_to_original()
-    model = SimpleNamespace(_base_nodes=[node])
+    second_node = SimpleNamespace(name="PanelCameraB", position=(2.0, 3.0, 4.0), rotation=(0.0, 0.0, 0.0, 1.0), children=[])
+    second_camera = GhostRiggerCamera(name="PanelCameraB", original_ref=second_node)
+    second_camera.apply_to_original()
+    model = SimpleNamespace(_base_nodes=[node, second_node])
     model.all_nodes = lambda: list(model._base_nodes)
     panel = QtCameraPanel()
     panel.set_model(model)
@@ -6752,6 +6755,34 @@ def test_camera_panel_edits_live_camera_transform_and_view_properties() -> None:
     panel._load_editor(camera)
     changed: list[bool] = []
     panel.cameraChanged.connect(lambda: changed.append(True))
+
+    assert [spin.property("axis") for spin in panel.pos_spins] == ["x", "y", "z"]
+    assert [spin.toolTip() for spin in panel.rot_spins] == ["Rotation X axis", "Rotation Y axis", "Rotation Z axis"]
+    assert panel.findChild(QtWidgets.QToolButton, "CameraPanelActionButton").icon().isNull() is False
+    assert panel.findChild(QtWidgets.QTreeWidget, "CameraPanelTree").alternatingRowColors()
+    theme_colors = {
+        "axis.x": "#AA0000",
+        "axis.y": "#00AA00",
+        "axis.z": "#0000AA",
+        "axis.text": "#FFFFFF",
+        "text.secondary": "#666666",
+        "text.disabled": "#777777",
+        "viewport.helper.cameraSelected": "#999900",
+    }
+    panel.apply_ghost_theme(SimpleNamespace(color=lambda token, default="#000000": theme_colors.get(token, default)))
+    axis_badges = [label for label in panel.findChildren(QtWidgets.QLabel) if label.property("axisBadge")]
+    assert "#AA0000" in axis_badges[0].styleSheet()
+    assert panel.styleSheet() == ""
+    assert panel.findChild(QtWidgets.QTreeWidget, "CameraPanelTree").styleSheet() == ""
+    camera_items = {
+        panel._camera_from_item(panel.tree.topLevelItem(index)).id: panel.tree.topLevelItem(index)
+        for index in range(panel.tree.topLevelItemCount())
+    }
+    panel.tree.clearSelection()
+    context_targets = panel._context_targets_for_item(camera_items[camera.id])
+    assert [target.id for target in context_targets] == [camera.id]
+    assert camera_items[camera.id].isSelected()
+    assert panel.tree.currentItem() is camera_items[camera.id]
 
     panel.rot_spins[2].setValue(45.0)
     panel.fov_spin.setValue(55.0)
@@ -7095,12 +7126,35 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert scene_camera.position == (3.0, 3.0, 4.0)
     assert scene_camera.rotation == (0.0, 0.0, 0.0, 1.0)
     assert tuple(camera_node.rotation) == (0.0, 0.0, 0.0, 1.0)
+    scene_camera.target_object_id = light.id
+    scene_camera.target_follow_enabled = True
+    scene_camera.target_position = tuple(light_node.position)
+    scene_camera.position = tuple(camera_node.position)
+    scene_camera.apply_to_original()
+    previous_camera_position = tuple(scene_camera.position)
+    previous_target = tuple(scene_camera.target_position)
+    light_node.position = (previous_target[0] + 1.0, previous_target[1] + 2.0, previous_target[2] + 3.0)
+    viewport._notify_node_moved(light_node, live=True)
+    assert scene_camera.target_position == tuple(light_node.position)
+    assert scene_camera.position == (
+        previous_camera_position[0] + 1.0,
+        previous_camera_position[1] + 2.0,
+        previous_camera_position[2] + 3.0,
+    )
+    target_handle = viewport._camera_target_handle(scene_camera)
+    viewport.set_selected_node(target_handle)
+    assert viewport._renderer.selected_node is target_handle
+    target_handle.position = (7.0, 8.0, 9.0)
+    viewport._notify_node_moved(target_handle, live=True)
+    assert scene_camera.target_object_id == ""
+    assert scene_camera.target_position == (7.0, 8.0, 9.0)
 
     layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
     workflow_source = inspect.getsource(QtGhostRiggerMainWindow._add_scene_object_to_sequence)
     outliner_source = (ROOT / "src/gui/panels/qt_scene_outliner_panel.py").read_text(encoding="utf-8")
     drag_source = (ROOT / "src/gui/viewports/viewport_core/widgets/drag_interactions.py").read_text(encoding="utf-8")
     history_source = (ROOT / "src/gui/viewports/viewport_core/widgets/history_animation.py").read_text(encoding="utf-8")
+    camera_workflow_source = (ROOT / "src/gui/viewports/viewport_core/widgets/camera_workflow.py").read_text(encoding="utf-8")
     scene_models_source = (ROOT / "src/gui/viewports/viewport_core/widgets/scene_models.py").read_text(encoding="utf-8")
     state_helpers_source = (ROOT / "src/gui/viewports/viewport_core/widgets/state_helpers.py").read_text(encoding="utf-8")
     transform_gizmo_source = (ROOT / "src/core/gizmo/transform_gizmo.py").read_text(encoding="utf-8")
@@ -7128,6 +7182,8 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     assert "self._notify_node_moved(node)" in drag_source
     assert "def _notify_node_moved(self, node, *, live: bool = False)" in history_source
     assert "camera.target_position" in history_source
+    assert "_gr_camera_target_handle" in camera_workflow_source
+    assert "target_follow_enabled" in camera_workflow_source
     assert "translate_preview = bool(live and gizmo_mode == GizmoMode.TRANSLATE)" in history_source
     assert "self.camera_manager.active_camera_id == camera.id and self.is_camera_view_active()" in history_source
     assert "_gr_transform_previewing" in scene_workflow_source
