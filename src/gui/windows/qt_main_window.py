@@ -89,7 +89,7 @@ from src.systems.bas.attachment_alignment import (
     normalize_bas_transform,
 )
 from src.gui.qt_lib.rendering.renderer_backend import RendererBackend, renderer_backend_label
-from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
+from src.adapters.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.integration.editor_services import (
     ActiveViewportService,

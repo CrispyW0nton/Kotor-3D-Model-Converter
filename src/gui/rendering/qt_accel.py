@@ -7,5 +7,5 @@ work can depend on a ``qt_`` module without duplicating the JIT/NumPy logic.
 
 from __future__ import annotations
 
-from src.gui.qt_lib.rendering.accel import *  # noqa: F401,F403
+from src.core.rendering.accel import *  # noqa: F401,F403
 

@@ -1,9 +1,4 @@
-"""Lazy compatibility facade for the WGPU viewport renderer.
-
-The implementation lives in :mod:`src.gui.rendering.wgpu_core` so the WGPU
-backend can be maintained by subsystem without keeping resource caches, renderer
-logic, shader text, and probe helpers in one large module.
-"""
+"""Lazy compatibility facade for the WGPU viewport renderer adapter."""
 
 from __future__ import annotations
 
@@ -11,33 +6,36 @@ from importlib import import_module
 from typing import Any
 
 _EXPORT_MODULES: tuple[str, ...] = (
-    "src.gui.rendering.wgpu_core.shared",
-    "src.gui.rendering.wgpu_core.shaders",
-    "src.gui.rendering.wgpu_core.resources",
-    "src.gui.rendering.wgpu_core.renderer",
+    "src.core.rendering.color_utils",
+    "src.core.rendering.wgpu_shared",
+    "src.adapters.rendering.wgpu_core.shared",
+    "src.core.rendering.wgpu_shaders",
+    "src.adapters.rendering.wgpu_core.resources",
+    "src.adapters.rendering.wgpu_core.renderer",
 )
 
 _EXPORTS: dict[str, str] = {
-    "WgpuRenderer": "src.gui.rendering.wgpu_core.renderer",
-    "WgpuResourceCache": "src.gui.rendering.wgpu_core.resources",
-    "WgpuMeshResource": "src.gui.rendering.wgpu_core.shared",
-    "WgpuTextureResource": "src.gui.rendering.wgpu_core.shared",
-    "WgpuMaterialResource": "src.gui.rendering.wgpu_core.shared",
-    "WgpuSkeletonResource": "src.gui.rendering.wgpu_core.shared",
-    "WgpuSkinResource": "src.gui.rendering.wgpu_core.shared",
-    "WgpuPickResources": "src.gui.rendering.wgpu_core.shared",
-    "WgpuLightResource": "src.gui.rendering.wgpu_core.shared",
-    "_WgpuBackendSpec": "src.gui.rendering.wgpu_core.shared",
-    "_load_mesh_shader": "src.gui.rendering.wgpu_core.shaders",
-    "_load_skinned_mesh_shader": "src.gui.rendering.wgpu_core.shaders",
-    "_GRID_WGSL": "src.gui.rendering.wgpu_core.shaders",
-    "_LINE_WGSL": "src.gui.rendering.wgpu_core.shaders",
-    "_SKINNED_LINE_WGSL": "src.gui.rendering.wgpu_core.shaders",
-    "_PICK_WGSL": "src.gui.rendering.wgpu_core.shaders",
-    "_MESH_TEXTURED_WGSL": "src.gui.rendering.wgpu_core.shaders",
-    "_MESH_BASIC_WGSL": "src.gui.rendering.wgpu_core.shaders",
-    "_srgb_to_linear": "src.gui.rendering.wgpu_core.shared",
-    "_format_is_srgb": "src.gui.rendering.wgpu_core.shared",
+    "WgpuRenderer": "src.adapters.rendering.wgpu_core.renderer",
+    "WgpuResourceCache": "src.adapters.rendering.wgpu_core.resources",
+    "WgpuMeshResource": "src.core.rendering.wgpu_shared",
+    "WgpuTextureResource": "src.core.rendering.wgpu_shared",
+    "WgpuMaterialResource": "src.core.rendering.wgpu_shared",
+    "WgpuSkeletonResource": "src.core.rendering.wgpu_shared",
+    "WgpuSkinResource": "src.core.rendering.wgpu_shared",
+    "WgpuPickResources": "src.core.rendering.wgpu_shared",
+    "WgpuLightResource": "src.core.rendering.wgpu_shared",
+    "_WgpuBackendSpec": "src.core.rendering.wgpu_shared",
+    "_load_mesh_shader": "src.core.rendering.wgpu_shaders",
+    "_load_skinned_mesh_shader": "src.core.rendering.wgpu_shaders",
+    "_GRID_WGSL": "src.core.rendering.wgpu_shaders",
+    "_LINE_WGSL": "src.core.rendering.wgpu_shaders",
+    "_SKINNED_LINE_WGSL": "src.core.rendering.wgpu_shaders",
+    "_PICK_WGSL": "src.core.rendering.wgpu_shaders",
+    "_MESH_TEXTURED_WGSL": "src.core.rendering.wgpu_shaders",
+    "_MESH_BASIC_WGSL": "src.core.rendering.wgpu_shaders",
+    "_hex_to_rgb_float": "src.core.rendering.color_utils",
+    "_srgb_to_linear": "src.core.rendering.wgpu_shared",
+    "_format_is_srgb": "src.core.rendering.wgpu_shared",
 }
 
 __all__ = tuple(_EXPORTS)

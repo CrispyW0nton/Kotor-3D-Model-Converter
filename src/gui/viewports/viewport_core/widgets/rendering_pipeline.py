@@ -240,7 +240,7 @@ class ViewportRenderingPipelineMixin:
         skeleton_render_data = None
         if bool(getattr(self._renderer, "show_bones", False)):
             try:
-                from src.gui.qt_lib.rendering.skeleton_render_data import build_skeleton_render_data
+                from src.core.rendering.skeleton_render_data import build_skeleton_render_data
 
                 skeleton_render_data = build_skeleton_render_data(
                     self.model,

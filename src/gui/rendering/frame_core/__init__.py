@@ -1,4 +1,4 @@
-"""Software frame-renderer backend modules."""
+"""Compatibility package for the backend software frame renderer."""
 
 from __future__ import annotations
 

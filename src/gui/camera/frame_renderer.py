@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from .camera_overlays import CameraOverlays
-from .camera_render_settings import RenderSettings
-from .render_manifest import RenderManifestEntry, append_render_manifest
-from .render_output import RenderOutput
+from src.core.camera.camera_render_settings import RenderSettings
+from src.core.camera.render_manifest import RenderManifestEntry, append_render_manifest
+from src.core.camera.render_output import RenderOutput
 
 
 class FrameRenderer:

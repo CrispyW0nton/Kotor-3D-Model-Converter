@@ -130,7 +130,7 @@ def _render_under_g5(*, rm, resref: str, game: str,
     """
     from src.core.qt_core.assets.resource_manager import resolve_model_textures
     from src.gui.qt_lib.rendering.gpu_renderer import GpuRenderer
-    from src.gui.camera.arcball_camera import ArcBallCamera
+    from src.core.camera.arcball_camera import ArcBallCamera
 
     prior_formula = os.environ.get("GHOSTRIGGER_SKIN_FORMULA")
     prior_dump = os.environ.get("GHOSTRIGGER_SKIN_DUMP")

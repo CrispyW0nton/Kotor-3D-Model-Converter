@@ -9,12 +9,16 @@
 - `animation/` - animation playback, animation libraries, supermodel helpers, and GPU skinning support.
 - `animation_retargeting/` - KotOR-to-KotOR retargeting and skeleton template selection.
 - `assets/` - asset preview, resource manager, and override layer services.
+- `camera/` - headless camera state, cinematic camera DTOs, workflow controller/manager state, presets, camera handle picking, arcball camera adapter, render settings, render manifests, and render-output helpers.
 - `characters/` - character builder, creature appearance, and body/head workflows.
 - `diagnostics/` - diagnostics, validation, and module reference safety checks.
 - `export/` - glTF and Unity import/export bridges.
 - `game/` - KotOR installation, game loading, and PyKotor integration helpers.
 - `geometry/` - model data structures, vertex-space helpers, and map snapping tools.
-- `lighting/` - particle and effect helpers.
+- `graphics/` - headless texture-format helpers such as TPC decoding, TXI metadata parsing, TPC render utilities, and texture-array caches.
+- `gizmo/` - renderer-neutral transform gizmo modes, draw data, picking, renderer command generation, and drag controllers.
+- `lighting/` - particle, effect, and headless lightmap settings/jobs, UV validation, bake orchestration, bake support, output, manifests, preview state/cache, material-map state, light-helper picking, and export helpers.
+- `rendering/` - headless renderer contracts, display-state DTOs, picking helpers, renderer settings, profiling, performance keys, shared color helpers, GPU diagnostic tables/config/record helpers, GPU VBO layout helpers, ModernGL/WGPU shader sources, GPU scene/model helpers, WGPU resource DTOs and pure helper functions, software-render acceleration, the software frame renderer, and hardware diagnostics.
 - `mdl/` - MDL readers, parsers, writers, wrappers, and porting helpers.
 - `modules/` - module loading, formats, hydration, inspection, packaging, and save pipelines.
 - `scene/` - scene graph, room graph, and VIS editing services.

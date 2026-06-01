@@ -1,6 +1,16 @@
 from __future__ import annotations
 
-from .scene_helpers import *  # noqa: F401,F403
+import time
+
+import numpy as np
+from PIL import Image
+
+from .renderer import GpuRenderer
+
+_NUMPY = True
+_PIL = True
+
+
 def _benchmark(W: int = 512, H: int = 512, n_tris: int = 10_000,
                repeats: int = 10) -> dict:
     """

@@ -1,23 +1,10 @@
-"""Transform gizmo mode declarations."""
+"""Compatibility facade for :mod:`src.core.gizmo.gizmo_mode`."""
 
 from __future__ import annotations
 
-from enum import Enum
+from importlib import import_module
+import sys
 
-
-class GizmoMode(Enum):
-    """Viewport transform modes."""
-
-    TRANSLATE = "translate"
-    ROTATE = "rotate"
-    SCALE = "scale"
-
-
-TransformGizmoMode = GizmoMode
-
-
-class TransformSpace(Enum):
-    """Coordinate space for gizmo axes."""
-
-    WORLD = "world"
-    LOCAL = "local"
+_module = import_module("src.core.gizmo.gizmo_mode")
+sys.modules[__name__] = _module
+globals().update(_module.__dict__)

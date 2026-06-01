@@ -159,9 +159,9 @@ def _foreground_metrics(path: Path, background: tuple[int, int, int]) -> dict[st
 
 
 def _render_png(model: Any, game: str, resref: str, out_dir: Path) -> dict[str, Any]:
-    import src.gui.rendering.frame_core.colors as viewport_colors
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    import src.core.rendering.frame_core.colors as viewport_colors
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     old_bg = getattr(viewport_colors, "_BG", (18, 18, 40, 255))
     viewport_colors._BG = (0, 0, 0, 255)
@@ -205,8 +205,8 @@ def _select_models(limit: int) -> list[str]:
 
 
 def audit_model(resref: str, out_dir: Path) -> dict[str, Any]:
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     result: dict[str, Any] = {"game": "k2", "resref": resref}
     try:

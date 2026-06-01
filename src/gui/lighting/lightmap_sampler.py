@@ -1,16 +1,8 @@
-"""Texel sampling helpers for UV-aware lightmap bakes."""
+"""Compatibility facade for backend lightmap sampler helpers.
+
+Canonical owner: :mod:`src.core.lighting.lightmap_sampler`.
+"""
 
 from __future__ import annotations
 
-from .lightmap_rasterizer import LightmapRasterizer, LightmapTexelBuffer
-
-
-class LightmapSampler:
-    def __init__(self, rasterizer: LightmapRasterizer | None = None) -> None:
-        self.rasterizer = rasterizer or LightmapRasterizer()
-
-    def sample_mesh(self, mesh: object, uv_channel: int, resolution: int) -> LightmapTexelBuffer:
-        return self.rasterizer.rasterize_mesh(mesh, uv_channel, resolution)
-
-
-__all__ = ["LightmapSampler"]
+from src.core.lighting.lightmap_sampler import *  # noqa: F401,F403

@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from src.gui.camera.camera_render_settings import RenderSettings
-from src.gui.camera.render_output import RenderOutput
+from src.core.camera.camera_render_settings import RenderSettings
+from src.core.camera.render_output import RenderOutput
 
 from .sequence_evaluator import SequenceEvaluator
 from .sequence_model import GhostRiggerLevelSequence
@@ -73,9 +73,9 @@ class SequenceRenderer:
         )
         frame_renderer = getattr(self.viewport, "_camera_frame_renderer", None)
         if frame_renderer is None:
-            from src.gui.camera.frame_renderer import FrameRenderer
+            from src.adapters.qt_viewport.frame_renderer import create_viewport_frame_renderer
 
-            frame_renderer = FrameRenderer(self.viewport)
+            frame_renderer = create_viewport_frame_renderer(self.viewport)
         written: list[str] = []
         self.evaluator.capture_original_state(sequence)
         try:

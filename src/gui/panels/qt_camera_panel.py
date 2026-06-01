@@ -6,9 +6,9 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.gui.camera.camera_manager import CameraManager
-from src.gui.camera.camera_model import CAMERA_TYPES, GhostRiggerCamera
-from src.gui.camera.camera_presets import FRAMING_PRESETS, LENS_PRESETS, LETTERBOX_PRESETS, RESOLUTION_PRESETS, SENSOR_PRESETS
+from src.core.camera.camera_manager import CameraManager
+from src.core.camera.camera_model import CAMERA_TYPES, GhostRiggerCamera
+from src.core.camera.camera_presets import FRAMING_PRESETS, LENS_PRESETS, LETTERBOX_PRESETS, RESOLUTION_PRESETS, SENSOR_PRESETS
 
 
 class QtCameraPanel(QtWidgets.QWidget):

@@ -1,15 +1,10 @@
-"""Shared imports for renderer mixin modules."""
+"""Compatibility facade for :mod:`src.core.rendering.frame_core.mixin_imports`."""
 
 from __future__ import annotations
 
-from .dependencies import *  # noqa: F401,F403
-from .diagnostics import *  # noqa: F401,F403
-from src.math.frame_math import *  # noqa: F401,F403
-from src.gui.textures.tpc import *  # noqa: F401,F403
-from src.gui.textures.txi import *  # noqa: F401,F403
-from src.gui.camera.arcball_camera import *  # noqa: F401,F403
-from .texture_cache import *  # noqa: F401,F403
-from .rasterizer import *  # noqa: F401,F403
-from .colors import *  # noqa: F401,F403
+from importlib import import_module
+import sys
 
-__all__ = tuple(name for name in globals() if not name.startswith('__'))
+_module = import_module("src.core.rendering.frame_core.mixin_imports")
+sys.modules[__name__] = _module
+globals().update(_module.__dict__)

@@ -1,1 +1,1 @@
-"""WGPU renderer implementation modules for the GhostRigger viewport."""
+"""Compatibility package for WGPU renderer adapter modules."""

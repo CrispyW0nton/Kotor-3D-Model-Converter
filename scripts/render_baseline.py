@@ -36,8 +36,8 @@ def _selected_angles(all_angles: bool) -> dict[str, tuple[float, float]]:
 
 
 def _render_model(game: str, resref: str, angle: str, out_dir: Path) -> dict[str, Any]:
-    from src.gui.camera.arcball_camera import ArcBallCamera
-    from src.gui.rendering.frame_core.renderer import FrameRenderer
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
 
     model = load_ghostrigger_model(game, resref)
     camera = ArcBallCamera()

@@ -1,6 +1,6 @@
 """Lazy facade for the viewport frame-rendering backend.
 
-The implementation lives in :mod:`src.gui.rendering.frame_core.renderer`.
+The implementation lives in :mod:`src.core.rendering.frame_core.renderer`.
 This keeps renderer, camera, and texture helpers in their owning backend
 packages while preserving the historic viewport ``frame_renderer`` import
 surface.
@@ -11,7 +11,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import Any
 
-_EXPORT_MODULE = "src.gui.rendering.frame_core.renderer"
+_EXPORT_MODULE = "src.core.rendering.frame_core.renderer"
 
 __all__ = (
     "_GR_VIEWPORT_PROBE",

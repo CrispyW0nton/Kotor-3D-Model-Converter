@@ -17,7 +17,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
 from src.gui.qt_lib.rendering.hardware_info import collect_hardware_diagnostics
-from src.gui.qt_lib.rendering.renderer_factory import renderer_capabilities_snapshot
+from src.adapters.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.gui.qt_lib.rendering.renderer_settings import RendererSettings
 from src.gui.windows.application_core.application_core_lib.functions.geometry import _prebuild_gpu_mesh_data_for_model
 from src.gui.windows.application_core.application_core_lib.functions.startup_library import (
@@ -296,7 +296,7 @@ class LibraryBatchExportWorker(QtCore.QObject):
                         MDLAsciiWriter().write(model, os.path.join(self.out_dir, f"{resref}.mdl"))
                         ok += 1
                     elif self.fmt == "tga":
-                        from src.gui.textures.tpc import _load_tpc_bytes
+                        from src.core.graphics.tpc import _load_tpc_bytes
 
                         tex_names = {
                             str(getattr(node, "texture", "") or "").strip()

@@ -446,7 +446,7 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
         for _mod_name in (
             "src.gui.rendering.gpu_core.renderer",
             "src.gui.rendering.gpu_core.scene_helpers",
-            "src.gui.rendering.frame_core.renderer",
+            "src.core.rendering.frame_core.renderer",
         ):
             _mod = sys.modules.get(_mod_name)
             _target = str(getattr(_mod, "_target", "") or "")
@@ -454,10 +454,10 @@ async def handle_render_model(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 _mod_name == "src.gui.rendering" and getattr(_mod, "__path__", None) == []
             ):
                 sys.modules.pop(_mod_name, None)
-        from src.gui.camera.arcball_camera import ArcBallCamera
+        from src.core.camera.arcball_camera import ArcBallCamera
         from src.gui.rendering.gpu_core.renderer import GpuRenderer
         from src.gui.rendering.gpu_core.scene_helpers import render_model_autoframe
-        from src.gui.textures.tpc import _is_tpc_data, _load_tpc_bytes
+        from src.core.graphics.tpc import _is_tpc_data, _load_tpc_bytes
 
         # ── Build texture dict from model nodes + game library ─────────────────
         # Collect all texture names referenced by the model

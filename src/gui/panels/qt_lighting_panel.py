@@ -7,17 +7,17 @@ from typing import Optional
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.libtheme.collapsible_group import CollapsibleGroupBox
-from src.gui.lighting.light_manager import LightManager
-from src.gui.lighting.light_model import GhostRiggerLight
-from src.gui.lighting.light_types import (
+from src.core.lighting.light_manager import LightManager
+from src.core.lighting.light_model import GhostRiggerLight
+from src.core.lighting.light_types import (
     LightType,
     LightingRigPreset,
     LightmapMode,
     SceneLightingMode,
     ShaderComplexityMode,
 )
-from src.gui.lighting.lighting_rig_presets import LightingRigPresets
-from src.gui.lighting.settings import LightingSettings, LightingSettingsStore
+from src.core.lighting.lighting_rig_presets import LightingRigPresets
+from src.core.lighting.settings import LightingSettings, LightingSettingsStore
 
 
 class QtLightingPanel(QtWidgets.QWidget):

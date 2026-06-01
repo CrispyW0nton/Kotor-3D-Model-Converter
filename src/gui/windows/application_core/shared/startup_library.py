@@ -226,7 +226,7 @@ class StartupLibraryMixin:
             QtWidgets.QMessageBox.critical(self, "Extract", str(exc))
 
     def _extract_model_resource(self, row: dict, out_dir: str) -> list[str]:
-        from src.gui.textures.tpc import _is_tpc_data
+        from src.core.graphics.tpc import _is_tpc_data
 
         mgr = self._get_resource_manager()
         if mgr is None:

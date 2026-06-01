@@ -1,12 +1,8 @@
-"""Raycast backend facade used by the lightmap baker."""
+"""Compatibility facade for backend lightmap raycast helpers.
+
+Canonical owner: :mod:`src.core.lighting.raycast_backend`.
+"""
 
 from __future__ import annotations
 
-from .lightmap_shadow_solver import LightmapShadowSolver
-
-
-class Open3DRaycastBackend(LightmapShadowSolver):
-    """Open3D-backed shadow raycaster with the legacy CPU path as fallback."""
-
-
-__all__ = ["Open3DRaycastBackend"]
+from src.core.lighting.raycast_backend import *  # noqa: F401,F403

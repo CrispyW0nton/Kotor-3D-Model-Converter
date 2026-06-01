@@ -5,7 +5,33 @@ from typing import Optional
 
 import numpy as np
 
-from src.gui.rendering.gpu_core.diagnostics import _matrix_from_pos_quat_np
+
+def _matrix_from_pos_quat_np(pos, quat):
+    """Build a row-major 4x4 transform matrix from position and XYZW quaternion."""
+    try:
+        tx, ty, tz = (float(v) for v in (pos or (0.0, 0.0, 0.0))[:3])
+        x, y, z, w = (float(v) for v in (quat or (0.0, 0.0, 0.0, 1.0))[:4])
+        qlen = math.sqrt(x * x + y * y + z * z + w * w)
+        if qlen > 1e-9:
+            x, y, z, w = x / qlen, y / qlen, z / qlen, w / qlen
+        else:
+            x, y, z, w = 0.0, 0.0, 0.0, 1.0
+        xx, yy, zz = 2 * x * x, 2 * y * y, 2 * z * z
+        xy, xz, yz = 2 * x * y, 2 * x * z, 2 * y * z
+        wx, wy, wz = 2 * w * x, 2 * w * y, 2 * w * z
+        return np.array(
+            [
+                [1 - yy - zz, xy - wz, xz + wy, tx],
+                [xy + wz, 1 - xx - zz, yz - wx, ty],
+                [xz - wy, yz + wx, 1 - xx - yy, tz],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+            dtype=np.float64,
+        )
+    except Exception:
+        return np.eye(4, dtype=np.float64)
+
+
 def _mat4_perspective(fov_y: float, aspect: float, near: float, far: float):
     """Build a right-handed perspective projection matrix (standard row-major).
 

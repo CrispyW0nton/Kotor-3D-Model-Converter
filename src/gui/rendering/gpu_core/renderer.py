@@ -1,10 +1,65 @@
 from __future__ import annotations
 
-from .debug_tables import *  # noqa: F401,F403
-from .diagnostics import *  # noqa: F401,F403
+import logging
+import math
+import os
+import time
+from typing import Dict, Optional
+
+from src.adapters.gpu.moderngl_context import _create_moderngl_standalone_context
+from src.adapters.gpu.moderngl_runtime import (
+    Image,
+    MatrixPaletteUploader,
+    _GPU_SKINNING,
+    _MODERNGL,
+    _NUMPY,
+    _PIL,
+    _SKIN_MAX_BONES,
+    moderngl,
+    np,
+)
+from src.core.lighting.light_gizmo_renderer import (
+    LIGHT_HELPER_AREA_SIZE,
+    LIGHT_HELPER_COLORS,
+    LIGHT_HELPER_DIRECTION_LENGTH,
+    LIGHT_HELPER_MARKER_RADIUS,
+    LIGHT_HELPER_POINT_RADIUS,
+    LIGHT_HELPER_SELECTED_BOOST,
+    LIGHT_HELPER_SPOT_CAP_MAX_RADIUS,
+    LIGHT_HELPER_SPOT_LENGTH,
+)
+from src.core.rendering.gpu_debug_tables import *  # noqa: F401,F403
+from src.core.rendering.color_utils import _hex_to_rgb_float
+from src.core.rendering.gpu_diagnostics_config import (
+    _GL_DEBUG_ERRORS_ENV,
+    _debug_visualize_mode,
+    _gl_state_trace_path,
+    _lm_composite_mode,
+    _lm_data_dump_path,
+    _skin_dump_path,
+)
+from src.core.rendering.gpu_diagnostics_records import (
+    _append_gl_state_trace,
+    _append_jsonl_record,
+    _build_gl_state_trace_record,
+    _build_lm_data_dump_record,
+    _build_skin_dump_record,
+    _should_auto_clamp_diffuse,
+)
+from src.core.rendering.gpu_vbo_layout import (
+    _VBO_BONE_IDS_ATTRS,
+    _VBO_BONE_IDS_FORMAT,
+    _VBO_MAIN_ATTRS,
+    _VBO_MAIN_FORMAT,
+)
+from src.core.special.render_constants import INNER_GEO_SUBSTRINGS as _INNER_GEO_SUBSTRINGS
 from src.math.gpu_math import *  # noqa: F401,F403
 from .resources import *  # noqa: F401,F403
-from .shaders import *  # noqa: F401,F403
+from src.core.rendering.gpu_shaders import *  # noqa: F401,F403
+
+log = logging.getLogger(__name__)
+
+
 class GpuRenderer:
     """
     GPU renderer for KotOR models.

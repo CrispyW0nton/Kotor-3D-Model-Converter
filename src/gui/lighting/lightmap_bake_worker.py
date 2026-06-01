@@ -7,7 +7,7 @@ try:
 except Exception:  # pragma: no cover
     QtCore = None
 
-from .lightmap_bake_job import LightmapBakeJob
+from src.core.lighting.lightmap_bake_job import LightmapBakeJob
 from .lightmap_baker import LightmapBaker
 
 

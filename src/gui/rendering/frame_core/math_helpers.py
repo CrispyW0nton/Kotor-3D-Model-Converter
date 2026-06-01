@@ -1,8 +1,10 @@
-"""Compatibility shim for frame-renderer math helpers.
-
-Canonical math helpers live under :mod:`src.math.frame_math`.
-"""
+"""Compatibility facade for :mod:`src.core.rendering.frame_core.math_helpers`."""
 
 from __future__ import annotations
 
-from src.math.frame_math import *  # noqa: F401,F403
+from importlib import import_module
+import sys
+
+_module = import_module("src.core.rendering.frame_core.math_helpers")
+sys.modules[__name__] = _module
+globals().update(_module.__dict__)

@@ -1,7 +1,16 @@
 from __future__ import annotations
 
-from .diagnostics import *  # noqa: F401,F403
+import logging
+from typing import Dict, List, Optional, Tuple
+
+from src.adapters.gpu.moderngl_runtime import Image, _NUMPY, _PIL, moderngl, np
+from src.adapters.gpu.viewport_probe import _gr_gpu_probe
+from src.core.rendering.gpu_vbo_layout import _split_vbo_attributes_for_gpu
 from src.math.gpu_math import *  # noqa: F401,F403
+
+log = logging.getLogger(__name__)
+
+
 class _GlTexCache:
     """Caches PIL Image → GL Texture2D upload to avoid re-uploading unchanged textures.
 
@@ -712,16 +721,6 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     return np.stack(expanded_rows).astype(np.float32), None
 
 
-def _split_vbo_attributes_for_gpu(vdata: 'np.ndarray') -> Tuple['np.ndarray', 'np.ndarray']:
-    """Split legacy 22-float rows into float attributes plus int32 bone IDs."""
-    main = np.empty((len(vdata), 18), dtype=np.float32)
-    main[:, 0:14] = vdata[:, 0:14]
-    main[:, 14:18] = vdata[:, 18:22]  # weights remain float
-    bone_ids = np.rint(vdata[:, 14:18]).astype(np.int32)
-    return main, bone_ids
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 #  GPU mesh buffer (one per node, cached)
 # ─────────────────────────────────────────────────────────────────────────────
 

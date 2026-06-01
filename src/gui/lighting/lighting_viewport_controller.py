@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from .lightmap_controller import LightmapController
-from .material_map_controller import MaterialMapController
+from src.core.lighting.lightmap_controller import LightmapController
+from src.core.lighting.material_map_controller import MaterialMapController
 
 
 class LightingViewportController:
