@@ -1070,8 +1070,8 @@ class AnimationEngine:
                         rot = [0.0, 0.0, 0.0, 1.0]  # fallback identity
             elif ctype == self.CTRL_SCALE and len(val) >= 1:
                 sv = val[0]
-                if math.isfinite(sv) and sv > 0:
-                    scale = sv
+                if math.isfinite(sv):
+                    scale = max(0.0, sv)
             elif ctype == self.CTRL_ALPHA and len(val) >= 1:
                 av = val[0]
                 if math.isfinite(av):

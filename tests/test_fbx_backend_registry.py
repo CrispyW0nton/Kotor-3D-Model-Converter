@@ -104,7 +104,7 @@ def test_autodesk_backend_probe_records_sdk_version() -> None:
         importer.import_animation(Path("source.fbx"))
 
 
-def test_factory_falls_back_to_blender_when_autodesk_unavailable(
+def test_factory_rejects_unavailable_autodesk_without_implicit_blender_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class MissingAutodesk:
@@ -121,6 +121,27 @@ def test_factory_falls_back_to_blender_when_autodesk_unavailable(
     monkeypatch.setattr(fbx_backend, "AutodeskSDKFBXImporter", MissingAutodesk)
     monkeypatch.setattr(fbx_backend, "BlenderFBXImporter", AvailableBlender)
 
-    importer = FBXBackendFactory.get_importer(FBXBackendType.AUTODESK_SDK)
+    with pytest.raises(OSError, match="missing sdk"):
+        FBXBackendFactory.get_importer(FBXBackendType.AUTODESK_SDK)
+
+
+def test_factory_can_use_blender_fallback_when_explicitly_requested(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class MissingAutodesk:
+        def is_available(self) -> bool:
+            return False
+
+        def get_backend_info(self):
+            return type("Info", (), {"error_message": "missing sdk"})()
+
+    class AvailableBlender:
+        def is_available(self) -> bool:
+            return True
+
+    monkeypatch.setattr(fbx_backend, "AutodeskSDKFBXImporter", MissingAutodesk)
+    monkeypatch.setattr(fbx_backend, "BlenderFBXImporter", AvailableBlender)
+
+    importer = FBXBackendFactory.get_importer(FBXBackendType.AUTODESK_SDK, allow_fallback=True)
 
     assert isinstance(importer, AvailableBlender)

@@ -53,6 +53,33 @@ EXACT_PM_BAM_SEGMENT_PAIRS = (
     ("calf", "foot"),
     ("foot", "toe"),
 )
+MIXAMO_PM_BAM_STABLE_HUMANOID_SEGMENT_PAIRS = (
+    ("spine", "chest"),
+    ("upperarm", "forearm"),
+    ("forearm", "hand"),
+    ("hand", "middle_base"),
+    ("index_base", "index_tip"),
+    ("middle_base", "middle_tip"),
+    ("ring_base", "ring_tip"),
+    ("pinky_base", "pinky_tip"),
+    ("thumb_base", "thumb_tip"),
+    ("thigh", "calf"),
+    ("calf", "foot"),
+    ("foot", "toe"),
+)
+MIXAMO_PM_BAM_LIMB_ONLY_SEGMENT_PAIRS = (
+    ("upperarm", "forearm"),
+    ("forearm", "hand"),
+    ("hand", "middle_base"),
+    ("middle_base", "middle_tip"),
+    ("thigh", "calf"),
+    ("calf", "foot"),
+    ("foot", "toe"),
+)
+TERMINAL_PM_BAM_TWIST_CHAINS = (
+    ("forearm", "hand", "middle_base"),
+    ("calf", "foot", "toe"),
+)
 
 
 @dataclass(frozen=True)
@@ -144,6 +171,12 @@ def build_r3b_ue5_to_aurora_retarget_result(
         hybrid_limb_source_rest_weight=hybrid_weight,
         warnings=warnings,
     )
+    amplitude_issues = writer._validate_export_motion_amplitude(payload_result.payload, animation)
+    if amplitude_issues:
+        raise RetargetSolveError(
+            "R3.B preview flattened source motion before viewport playback: "
+            + "; ".join(amplitude_issues[:8])
+        )
     if opts.root_translation_policy != "in_place":
         copied_root_motion = apply_r3b_source_root_motion_to_target_root(
             animation=animation,
@@ -165,14 +198,8 @@ def build_r3b_ue5_to_aurora_retarget_result(
     )
     if corrected_segments:
         warnings.append(
-            "R3.B exact PMBAM segment correction aligned "
-            f"{corrected_segments} spine/shoulder/limb/hand/foot segment tracks against the source clip."
-        )
-    amplitude_issues = writer._validate_export_motion_amplitude(payload_result.payload, animation)
-    if amplitude_issues:
-        raise RetargetSolveError(
-            "R3.B preview flattened source motion before viewport playback: "
-            + "; ".join(amplitude_issues[:8])
+            "R3.B exact KOTOR humanoid segment correction aligned "
+            f"{corrected_segments} configured target segment tracks against the source clip."
         )
 
     structural = validate_animation_block_against_model(target_model, animation, strict=True)
@@ -288,10 +315,20 @@ def apply_verified_pmbam_segment_pose_correction(
     if not animation_tracks:
         return 0
 
+    normalized_profile = normalize_retarget_profile(profile)
+    metadata = dict(getattr(normalized_profile, "metadata", {}) or {})
+    rotation_anchor = str(metadata.get("exact_segment_rotation_anchor") or "").strip().lower()
     target_nodes = list(target_model.all_nodes())
     target_by_key = {node.name.lower(): node.name for node in target_nodes}
+    terminal_chains = _mapped_terminal_twist_chains(profile)
+    rest_local_rotations = {
+        node.name: normalize_quat_xyzw(node.rotation)
+        for node in target_nodes
+    }
+    target_rest_positions, target_rest_rotations = _compose_target_fk(target_nodes, rest_local_rotations)
     corrected_count = 0
     source_poses = [_convert_pose_for_segment_correction(pose, basis_conversion) for pose in source_clip.sampled_poses]
+    previous_terminal_basis_by_chain: dict[tuple[str, str, str], np.ndarray] = {}
     for frame_index, source_pose in enumerate(source_poses):
         local_rotations = _local_rotations_for_frame(target_nodes, animation_tracks, frame_index)
         for source_parent, source_child, target_parent, target_child in segments:
@@ -312,9 +349,20 @@ def apply_verified_pmbam_segment_pose_correction(
             desired_dir = _segment_direction(source_parent_pos, source_child_pos)
             if actual_dir is None or desired_dir is None:
                 continue
-            swing = _shortest_arc_matrix(actual_dir, desired_dir)
-            current_world = quat_to_matrix_xyzw(world_rotations[actual_target_parent])[:3, :3]
-            corrected_world = _orthonormalized(swing @ current_world)
+            if rotation_anchor in {"target_rest", "rest", "bind", "bind_pose"}:
+                rest_dir = _segment_direction(
+                    target_rest_positions.get(actual_target_parent),
+                    target_rest_positions.get(actual_target_child),
+                )
+                rest_rotation = target_rest_rotations.get(actual_target_parent)
+                if rest_dir is None or rest_rotation is None:
+                    continue
+                swing = _shortest_arc_matrix(rest_dir, desired_dir)
+                anchor_world = quat_to_matrix_xyzw(rest_rotation)[:3, :3]
+            else:
+                swing = _shortest_arc_matrix(actual_dir, desired_dir)
+                anchor_world = quat_to_matrix_xyzw(world_rotations[actual_target_parent])[:3, :3]
+            corrected_world = _orthonormalized(swing @ anchor_world)
             corrected_world_quat = matrix_to_quat_xyzw(_matrix4(corrected_world))
             target_node = target_model.find_node(actual_target_parent)
             if target_node is None:
@@ -329,6 +377,60 @@ def apply_verified_pmbam_segment_pose_correction(
             local_rotations[actual_target_parent] = corrected_local
             _set_orientation_value(animation_tracks, actual_target_parent, frame_index, corrected_local)
             corrected_count += 1
+
+        if terminal_chains:
+            world_positions, world_rotations = _compose_target_fk(target_nodes, local_rotations)
+            for source_parent, source_joint, source_child, target_parent, target_joint, target_child in terminal_chains:
+                actual_target_parent = target_by_key.get(target_parent.lower(), target_parent)
+                actual_target_joint = target_by_key.get(target_joint.lower(), target_joint)
+                actual_target_child = target_by_key.get(target_child.lower(), target_child)
+                if (
+                    actual_target_parent not in world_positions
+                    or actual_target_joint not in world_positions
+                    or actual_target_child not in world_positions
+                    or actual_target_joint not in local_rotations
+                ):
+                    continue
+                try:
+                    source_basis = _terminal_chain_basis(
+                        source_pose.global_transforms[source_parent].position,
+                        source_pose.global_transforms[source_joint].position,
+                        source_pose.global_transforms[source_child].position,
+                    )
+                except KeyError:
+                    continue
+                current_basis = _terminal_chain_basis(
+                    world_positions.get(actual_target_parent),
+                    world_positions.get(actual_target_joint),
+                    world_positions.get(actual_target_child),
+                )
+                if source_basis is None or current_basis is None:
+                    continue
+                chain_key = (source_parent.lower(), source_joint.lower(), source_child.lower())
+                source_basis = _continuity_aligned_terminal_basis(
+                    source_basis,
+                    previous_terminal_basis_by_chain.get(chain_key),
+                )
+                previous_terminal_basis_by_chain[chain_key] = source_basis
+                roll = _terminal_roll_correction_matrix(current_basis, source_basis)
+                if roll is None:
+                    continue
+                current_world = quat_to_matrix_xyzw(world_rotations[actual_target_joint])[:3, :3]
+                corrected_world = _orthonormalized(roll @ current_world)
+                corrected_world_quat = matrix_to_quat_xyzw(_matrix4(corrected_world))
+                target_node = target_model.find_node(actual_target_joint)
+                if target_node is None:
+                    continue
+                if target_node.parent is not None and target_node.parent.name in world_rotations:
+                    corrected_local = _local_rotation_from_world(
+                        world_rotations[target_node.parent.name],
+                        corrected_world_quat,
+                    )
+                else:
+                    corrected_local = corrected_world_quat
+                local_rotations[actual_target_joint] = corrected_local
+                _set_orientation_value(animation_tracks, actual_target_joint, frame_index, corrected_local)
+                corrected_count += 1
 
     _restore_quaternion_continuity(animation_tracks)
     return corrected_count
@@ -421,6 +523,10 @@ def build_r3a_payload_from_source_clip(
             "generated_by": "SourceSkeletonClip R3.B preview bridge",
             "profile": normalized_profile.name,
             "profile_generated_by": normalized_profile.metadata.get("generated_by"),
+            "source_quaternion_conversion": normalized_profile.metadata.get(
+                "source_quaternion_conversion",
+                "ue5_to_aurora",
+            ),
         },
     }
     if not target_curves:
@@ -583,13 +689,31 @@ def _source_node_motion_distance(source_clip: SourceSkeletonClip, node_name: str
     return max_distance
 
 
+def _exact_segment_role_pairs_for_profile(profile: RetargetProfile) -> tuple[tuple[str, str], ...]:
+    normalized = normalize_retarget_profile(profile)
+    metadata = dict(getattr(normalized, "metadata", {}) or {})
+    policy = str(metadata.get("exact_segment_correction_policy") or "").strip().lower()
+    source_family = str(metadata.get("source_skeleton_family") or "").strip().lower()
+    generated_by = str(metadata.get("generated_by") or "").strip().lower()
+    if policy in {"mixamo_limb_only", "limb_only", "limbs_only"}:
+        return MIXAMO_PM_BAM_LIMB_ONLY_SEGMENT_PAIRS
+    if policy in {"mixamo_stable_humanoid", "pmbam_mixamo_stable", "stable_humanoid"}:
+        return MIXAMO_PM_BAM_STABLE_HUMANOID_SEGMENT_PAIRS
+    if policy in {"pmbam_full_humanoid", "full_humanoid", "full", "all"}:
+        return EXACT_PM_BAM_SEGMENT_PAIRS
+    if source_family == "mixamo" or generated_by == VERIFIED_MIXAMO_TO_AURORA_PROFILE_GENERATOR:
+        return MIXAMO_PM_BAM_STABLE_HUMANOID_SEGMENT_PAIRS
+    return EXACT_PM_BAM_SEGMENT_PAIRS
+
+
 def _mapped_exact_segments(profile: RetargetProfile) -> list[tuple[str, str, str, str]]:
+    role_pairs = _exact_segment_role_pairs_for_profile(profile)
     by_role_side = {
         (str(entry.role or "").lower(), str(entry.side or "center").lower()): entry
         for entry in profile.mappings
     }
     segments: list[tuple[str, str, str, str]] = []
-    for parent_role, child_role in EXACT_PM_BAM_SEGMENT_PAIRS:
+    for parent_role, child_role in role_pairs:
         sides = sorted({
             side
             for role, side in by_role_side
@@ -609,6 +733,45 @@ def _mapped_exact_segments(profile: RetargetProfile) -> list[tuple[str, str, str
                 )
             )
     return segments
+
+
+def _mapped_terminal_twist_chains(profile: RetargetProfile) -> list[tuple[str, str, str, str, str, str]]:
+    normalized = normalize_retarget_profile(profile)
+    metadata = dict(getattr(normalized, "metadata", {}) or {})
+    policy = str(metadata.get("terminal_twist_correction_policy") or "").strip().lower()
+    segment_policy = str(metadata.get("exact_segment_correction_policy") or "").strip().lower()
+    if policy in {"disabled", "off", "none"}:
+        return []
+    if not policy and segment_policy in {"mixamo_stable_humanoid", "pmbam_mixamo_stable", "stable_humanoid"}:
+        return []
+    by_role_side = {
+        (str(entry.role or "").lower(), str(entry.side or "center").lower()): entry
+        for entry in normalized.mappings
+    }
+    chains: list[tuple[str, str, str, str, str, str]] = []
+    for parent_role, joint_role, child_role in TERMINAL_PM_BAM_TWIST_CHAINS:
+        sides = sorted({
+            side
+            for role, side in by_role_side
+            if role in {parent_role, joint_role, child_role} and side
+        })
+        for side in sides:
+            parent = by_role_side.get((parent_role, side)) or by_role_side.get((parent_role, "center"))
+            joint = by_role_side.get((joint_role, side)) or by_role_side.get((joint_role, "center"))
+            child = by_role_side.get((child_role, side)) or by_role_side.get((child_role, "center"))
+            if parent is None or joint is None or child is None:
+                continue
+            chains.append(
+                (
+                    parent.source_node,
+                    joint.source_node,
+                    child.source_node,
+                    parent.target_node,
+                    joint.target_node,
+                    child.target_node,
+                )
+            )
+    return chains
 
 
 def _orientation_tracks(animation: Animation) -> dict[str, tuple[str, dict]]:
@@ -726,6 +889,67 @@ def _segment_direction(parent_position, child_position) -> np.ndarray | None:
         return None
     raw = np.asarray(child_position, dtype=np.float64) - np.asarray(parent_position, dtype=np.float64)
     return _normalize_vec(raw)
+
+
+def _terminal_chain_basis(parent_position, joint_position, child_position) -> np.ndarray | None:
+    incoming = _segment_direction(parent_position, joint_position)
+    outgoing = _segment_direction(joint_position, child_position)
+    if incoming is None or outgoing is None:
+        return None
+    normal = _normalize_vec(np.cross(incoming, outgoing))
+    if normal is None:
+        return None
+    side = _normalize_vec(np.cross(normal, outgoing))
+    if side is None:
+        return None
+    return _orthonormalized(np.column_stack((outgoing, side, normal)))
+
+
+def _continuity_aligned_terminal_basis(
+    basis: np.ndarray,
+    previous_basis: np.ndarray | None,
+) -> np.ndarray:
+    """Keep hand/foot roll-plane normals from flipping between adjacent frames."""
+
+    if previous_basis is None:
+        return basis
+    current = np.asarray(basis, dtype=np.float64)
+    previous = np.asarray(previous_basis, dtype=np.float64)
+    if current.shape != (3, 3) or previous.shape != (3, 3):
+        return basis
+    if float(np.dot(current[:, 2], previous[:, 2])) >= 0.0:
+        return basis
+    flipped = current.copy()
+    flipped[:, 1] *= -1.0
+    flipped[:, 2] *= -1.0
+    return _orthonormalized(flipped)
+
+
+def _terminal_roll_correction_matrix(current_basis: np.ndarray, desired_basis: np.ndarray) -> np.ndarray | None:
+    """Return a roll-only correction around the terminal segment axis."""
+
+    axis = _normalize_vec(np.asarray(current_basis, dtype=np.float64)[:, 0])
+    if axis is None:
+        return None
+    current_normal = _project_onto_plane(np.asarray(current_basis, dtype=np.float64)[:, 2], axis)
+    desired_normal = _project_onto_plane(np.asarray(desired_basis, dtype=np.float64)[:, 2], axis)
+    if current_normal is None or desired_normal is None:
+        return None
+    dot = max(-1.0, min(1.0, float(np.dot(current_normal, desired_normal))))
+    signed = float(np.dot(axis, np.cross(current_normal, desired_normal)))
+    angle = math.atan2(signed, dot)
+    if not math.isfinite(angle) or abs(angle) <= 1e-7:
+        return np.eye(3, dtype=np.float64)
+    return _axis_angle_matrix(axis, angle)
+
+
+def _project_onto_plane(value, normal) -> np.ndarray | None:
+    vec = np.asarray(value, dtype=np.float64)
+    axis = _normalize_vec(normal)
+    if axis is None:
+        return None
+    projected = vec - axis * float(np.dot(vec, axis))
+    return _normalize_vec(projected)
 
 
 def _normalize_vec(value) -> np.ndarray | None:

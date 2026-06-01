@@ -27,8 +27,29 @@ class ViewportStateMixin:
     def _active_gizmo_node(self):
         node = getattr(self._renderer, "selected_node", None)
         if node is not None:
-            return node
+            return self._promoted_model_root_for_mesh_transform(node) or node
         return None
+
+    def _promoted_model_root_for_mesh_transform(self, node):
+        """Return the model root when this viewport treats mesh drags as placement.
+
+        Character Builder users often load a custom mesh, then move it to line up
+        with the generated KOTOR skeleton. In that workflow, selecting the mesh
+        itself should place the whole character instead of leaving the guide
+        skeleton behind. The flag is disabled for normal viewports.
+        """
+
+        if not bool(getattr(self, "_mesh_transform_promotes_to_model_root", False)):
+            return None
+        if node is None or self.model is None or self._is_external_skeleton_node(node):
+            return None
+        root = getattr(self.model, "root_node", None)
+        if root is None or node is root or bool(getattr(node, "_gr_scene_object_root", False)):
+            return None
+        vertices = getattr(node, "vertices", None)
+        if not vertices:
+            return None
+        return root
 
     def _gizmo_world_position(self, node) -> tuple[float, float, float] | None:
         if node is None:
@@ -176,6 +197,141 @@ class ViewportStateMixin:
         except Exception:
             pass
         return local
+
+    def _current_transform_target_node(self):
+        node = getattr(self._renderer, "selected_node", None)
+        if node is not None:
+            return self._promoted_model_root_for_mesh_transform(node) or node
+        if self.model is not None:
+            return getattr(self.model, "root_node", None)
+        return None
+
+    def _set_node_pivot_world(self, node, pivot_world: tuple[float, float, float]) -> None:
+        position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+        rotation = tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+        rel = (
+            float(pivot_world[0]) - position[0],
+            float(pivot_world[1]) - position[1],
+            float(pivot_world[2]) - position[2],
+        )
+        local = rotate_vector(self._quat_conjugate(rotation), rel)
+        node._gr_pivot_world = tuple(float(v) for v in pivot_world[:3])
+        node._gr_pivot_local = tuple(float(v) for v in local[:3])
+        node._gr_pivot_world_dirty = False
+        node._gr_gizmo_world_position = tuple(float(v) for v in pivot_world[:3])
+        self._sync_transform_reference_for_node(node)
+        self._transform_gizmo.set_selected_object(node)
+
+    def center_pivot_to_selection(self) -> bool:
+        """Move the active pivot to the selected object/mesh bounds center."""
+        node = self._current_transform_target_node()
+        if node is None:
+            self.statusMessage.emit("Select an object or mesh before centering its pivot.")
+            return False
+        if self._is_external_skeleton_node(node):
+            self.statusMessage.emit("Center Pivot is not available for the reference-skeleton overlay.")
+            return False
+        bounds = self._selection_navigation_bounds()
+        if bounds is None:
+            try:
+                bounds = self._renderer._get_render_bounds()
+            except Exception:
+                bounds = None
+        if bounds is None:
+            self.statusMessage.emit("Center Pivot is unavailable: selected object has no bounds.")
+            return False
+        pivot = self._bounds_center(bounds)
+        before_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+        before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        before_pivot_world = self._optional_tuple_attr(node, "_gr_pivot_world")
+        before_pivot_rotation = self._optional_tuple_attr(node, "_gr_pivot_rotation")
+        self._set_node_pivot_world(node, pivot)
+        self._commit_node_transform(
+            node,
+            before_pos,
+            before_rot,
+            before_pos,
+            before_rot,
+            "Center Pivot",
+            before_pivot_world=before_pivot_world,
+            after_pivot_world=self._optional_tuple_attr(node, "_gr_pivot_world"),
+            before_pivot_rotation=before_pivot_rotation,
+            after_pivot_rotation=self._optional_tuple_attr(node, "_gr_pivot_rotation"),
+        )
+        self._sync_transform_typein_bar()
+        self._request_render(fast=True)
+        self.statusMessage.emit("Pivot centered on selected bounds.")
+        return True
+
+    def freeze_selected_transform(self) -> bool:
+        """Bake the selected mesh node's transform into geometry and reset it.
+
+        This deliberately targets a selected mesh node, not a whole KOTOR node
+        hierarchy. Freezing a hierarchy safely needs an export-aware rig pass.
+        """
+        node = getattr(self._renderer, "selected_node", None)
+        if node is None or self._is_external_skeleton_node(node):
+            self.statusMessage.emit("Select a mesh node before freezing transforms.")
+            return False
+        vertices = getattr(node, "vertices", None)
+        if not vertices:
+            self.statusMessage.emit("Freeze Transforms is available for selected mesh nodes with vertices.")
+            return False
+        before_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+        before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        before_vertices = self._snapshot_vertices(node)
+        before_scale = self._node_scale(node)
+        before_pivot_world = self._optional_tuple_attr(node, "_gr_pivot_world")
+        before_pivot_rotation = self._optional_tuple_attr(node, "_gr_pivot_rotation")
+        sx, sy, sz = before_scale
+        px, py, pz = (float(v) for v in before_pos[:3])
+        baked = []
+        for vertex in vertices:
+            try:
+                local = (
+                    float(vertex[0]) * sx,
+                    float(vertex[1]) * sy,
+                    float(vertex[2]) * sz,
+                )
+                rotated = rotate_vector(before_rot, local)
+                baked.append((rotated[0] + px, rotated[1] + py, rotated[2] + pz))
+            except Exception:
+                baked.append(tuple(vertex[:3]))
+        node.vertices = baked
+        node.position = (0.0, 0.0, 0.0)
+        node.rotation = (0.0, 0.0, 0.0, 1.0)
+        node._gr_scale = (1.0, 1.0, 1.0)
+        compute_bounds = getattr(node, "compute_bounds", None)
+        if callable(compute_bounds):
+            compute_bounds()
+        try:
+            bounds = self._bounds_from_points(baked, min_extent=0.05)
+            self._set_node_pivot_world(node, self._bounds_center(bounds))
+        except Exception:
+            pass
+        after_vertices = self._snapshot_vertices(node)
+        self._commit_node_transform(
+            node,
+            before_pos,
+            before_rot,
+            tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
+            tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            "Freeze Transforms",
+            before_vertices=before_vertices,
+            after_vertices=after_vertices,
+            before_scale=before_scale,
+            after_scale=self._node_scale(node),
+            before_pivot_world=before_pivot_world,
+            after_pivot_world=self._optional_tuple_attr(node, "_gr_pivot_world"),
+            before_pivot_rotation=before_pivot_rotation,
+            after_pivot_rotation=self._optional_tuple_attr(node, "_gr_pivot_rotation"),
+        )
+        self._evict_transform_cache(node)
+        self._notify_node_moved(node)
+        self._sync_transform_typein_bar()
+        self._request_render(fast=True)
+        self.statusMessage.emit("Transforms frozen into selected mesh geometry.")
+        return True
 
     @property
     def navigation_profile(self) -> str:

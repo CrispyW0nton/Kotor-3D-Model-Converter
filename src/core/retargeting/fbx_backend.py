@@ -199,7 +199,7 @@ class AutodeskSDKFBXImporter(AbstractFBXImporter):
 
 
 class FBXBackendFactory:
-    """Create FBX importers with explicit fallback behavior."""
+    """Create FBX importers with explicit backend behavior."""
 
     @staticmethod
     def backend_type_from_string(value: str | None) -> FBXBackendType:
@@ -212,9 +212,14 @@ class FBXBackendFactory:
     def get_importer(
         preferred: FBXBackendType = FBXBackendType.BLENDER_HEADLESS,
         *,
-        allow_fallback: bool = True,
+        allow_fallback: bool = False,
     ) -> AbstractFBXImporter:
-        """Return the requested backend, falling back to Blender when allowed."""
+        """Return the requested backend.
+
+        Blender and Autodesk SDK imports are separate options.  Autodesk SDK
+        requests fail clearly by default when the SDK is unavailable; callers
+        must opt in to Blender fallback for legacy compatibility.
+        """
 
         if preferred == FBXBackendType.AUTODESK_SDK:
             sdk_importer = AutodeskSDKFBXImporter()
@@ -237,7 +242,7 @@ class FBXBackendFactory:
         )
 
     @staticmethod
-    def get_importer_from_environment(*, allow_fallback: bool = True) -> AbstractFBXImporter:
+    def get_importer_from_environment(*, allow_fallback: bool = False) -> AbstractFBXImporter:
         import os
 
         return FBXBackendFactory.get_importer(

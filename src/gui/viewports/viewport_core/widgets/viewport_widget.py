@@ -161,6 +161,9 @@ class QtViewportWidget(
         self._active_camera_guard = False
         self._render_suppress_camera_overlays = False
         self._transform_gizmo_dragging = False
+        self._mesh_transform_promotes_to_model_root = False
+        self._transform_gizmo_mirror_nodes: list = []
+        self._transform_gizmo_mirror_start_positions: dict[int, tuple[float, float, float]] = {}
         self._undo_limit = 250
         self._undo_stack: list[dict] = []
         self._redo_stack: list[dict] = []

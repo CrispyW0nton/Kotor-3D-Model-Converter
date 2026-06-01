@@ -35,7 +35,7 @@ import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +84,8 @@ _FBX_EXTS  = (".fbx", ".obj", ".ply", ".stl")
 _UTC_EXTS  = (".utc",)
 _TEXTURE_EXTS = (".tga", ".tpc", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
 _DEFAULT_KOTOR_HUMANOID_HEIGHT = 2.01345
+
+Vec3 = Tuple[float, float, float]
 
 
 def supported_load_extensions() -> Tuple[str, ...]:
@@ -135,6 +137,19 @@ class LoadResult:
     resref:        str                         = ""
     message:       str                         = ""
     code:          str                         = "load_failed"
+
+
+@dataclass(frozen=True)
+class _HumanoidFitFrame:
+    """Bone-landmark frame used to snap an imported mesh to a KOTOR rig."""
+
+    origin: Vec3
+    right: Vec3
+    forward: Vec3
+    up: Vec3
+    height: float
+    confidence: float
+    landmarks: Dict[str, str] = field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -265,6 +280,293 @@ def reference_model_height(reference_model: Any) -> float:
     return 0.0
 
 
+def _reference_model_fit_bounds(reference_model: Any) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+    """Return the preferred KOTOR-space frame for fitting external imports.
+
+    Character Builder imports should snap to the selected base model's actual
+    authored frame, not merely to a generic origin/height.  Prefer renderable
+    mesh bounds because they match what the modder sees; fall back to bone
+    bounds for skeleton-only templates.
+    """
+    if reference_model is None:
+        return None
+    mesh_bounds = _vertex_bounds(reference_model)
+    if mesh_bounds is not None and _height_from_bounds(mesh_bounds) > 0.01:
+        return mesh_bounds
+    bone_bounds = _model_bone_bounds(reference_model)
+    if bone_bounds is not None and _height_from_bounds(bone_bounds) > 0.01:
+        return bone_bounds
+    return None
+
+
+_PELVIS_ALIASES = {
+    "hips", "hip", "pelvis", "bip001pelvis", "root", "rootdummy",
+    "pelvisg", "auroraroot", "mixamorighips",
+}
+_HEAD_ALIASES = {
+    "head", "headg", "headhook", "neck", "neckg", "hturng",
+    "mixamorighead", "bip001head",
+}
+_LEFT_SIDE_ALIASES = (
+    {"leftshoulder", "leftarm", "lshoulder", "larm", "lcollardum", "lcollarg", "lclavicle"},
+    {"lefthand", "lhand", "lhandg", "lwrist", "handl", "mixamoriglefthand"},
+    {"leftupleg", "leftleg", "lthigh", "lthighg", "thighl"},
+    {"leftfoot", "lfoot", "lfootg", "lefttoe", "lfoottg", "toel"},
+)
+_RIGHT_SIDE_ALIASES = (
+    {"rightshoulder", "rightarm", "rshoulder", "rarm", "rcollardum", "rcollarg", "rclavicle"},
+    {"righthand", "rhand", "rhandg", "rwrist", "handr", "mixamorigrighthand"},
+    {"rightupleg", "rightleg", "rthigh", "rthighg", "thighr"},
+    {"rightfoot", "rfoot", "rfootg", "righttoe", "rfoottg", "toer"},
+)
+_LEFT_FOOT_ALIASES = {"leftfoot", "lfoot", "lfootg", "lefttoe", "lfoottg"}
+_RIGHT_FOOT_ALIASES = {"rightfoot", "rfoot", "rfootg", "righttoe", "rfoottg"}
+
+
+def _clean_landmark_name(name: str) -> str:
+    raw = str(name or "").strip().lower()
+    if "|" in raw:
+        raw = raw.rsplit("|", 1)[-1]
+    if ":" in raw:
+        raw = raw.rsplit(":", 1)[-1]
+    for prefix in ("mixamorig", "mixamo", "bip001"):
+        if raw.startswith(prefix) and len(raw) > len(prefix):
+            raw = raw[len(prefix):]
+    return "".join(ch for ch in raw if ch.isalnum())
+
+
+def _node_fit_position(node: Any) -> Optional[Vec3]:
+    for attr in ("external_world_position",):
+        value = getattr(node, attr, None)
+        if value is not None and len(value) >= 3:
+            try:
+                return (float(value[0]), float(value[1]), float(value[2]))
+            except Exception:
+                pass
+    try:
+        value = node.bone_world_position()
+        return (float(value[0]), float(value[1]), float(value[2]))
+    except Exception:
+        pass
+    try:
+        value = node.world_transform()[0]
+        return (float(value[0]), float(value[1]), float(value[2]))
+    except Exception:
+        pass
+    value = getattr(node, "position", None)
+    if value is not None and len(value) >= 3:
+        try:
+            return (float(value[0]), float(value[1]), float(value[2]))
+        except Exception:
+            return None
+    return None
+
+
+def _named_positions(model: Any) -> Dict[str, Tuple[str, Vec3]]:
+    result: Dict[str, Tuple[str, Vec3]] = {}
+    if model is None:
+        return result
+    for node in _iter_model_nodes(model):
+        clean = _clean_landmark_name(getattr(node, "name", ""))
+        if not clean or clean in result:
+            continue
+        pos = _node_fit_position(node)
+        if pos is not None:
+            result[clean] = (str(getattr(node, "name", "") or ""), pos)
+    return result
+
+
+def _find_landmark(
+    positions: Dict[str, Tuple[str, Vec3]],
+    aliases: Sequence[str] | set[str],
+) -> Tuple[str, Vec3] | None:
+    clean_aliases = {_clean_landmark_name(alias) for alias in aliases}
+    for alias in clean_aliases:
+        hit = positions.get(alias)
+        if hit is not None:
+            return hit
+    for key, hit in positions.items():
+        if any(key.endswith(alias) for alias in clean_aliases if alias):
+            return hit
+    return None
+
+
+def _find_side_pair(
+    positions: Dict[str, Tuple[str, Vec3]],
+) -> Tuple[Tuple[str, Vec3], Tuple[str, Vec3], str] | None:
+    for index, (left_aliases, right_aliases) in enumerate(zip(_LEFT_SIDE_ALIASES, _RIGHT_SIDE_ALIASES)):
+        left = _find_landmark(positions, left_aliases)
+        right = _find_landmark(positions, right_aliases)
+        if left is not None and right is not None:
+            labels = ("shoulder", "hand", "hip", "foot")
+            return left, right, labels[index]
+    return None
+
+
+def _vec_sub(a: Vec3, b: Vec3) -> Vec3:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _vec_add(a: Vec3, b: Vec3) -> Vec3:
+    return (a[0] + b[0], a[1] + b[1], a[2] + b[2])
+
+
+def _vec_scale(v: Vec3, scale: float) -> Vec3:
+    return (v[0] * scale, v[1] * scale, v[2] * scale)
+
+
+def _vec_dot(a: Vec3, b: Vec3) -> float:
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _vec_cross(a: Vec3, b: Vec3) -> Vec3:
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def _vec_len(v: Vec3) -> float:
+    return math.sqrt(max(0.0, _vec_dot(v, v)))
+
+
+def _vec_normalize(v: Vec3) -> Optional[Vec3]:
+    length = _vec_len(v)
+    if length <= 1.0e-8:
+        return None
+    return (v[0] / length, v[1] / length, v[2] / length)
+
+
+def _average_points(points: Sequence[Vec3]) -> Optional[Vec3]:
+    if not points:
+        return None
+    inv = 1.0 / float(len(points))
+    return (
+        sum(p[0] for p in points) * inv,
+        sum(p[1] for p in points) * inv,
+        sum(p[2] for p in points) * inv,
+    )
+
+
+def _bounds_ground_center(bounds: Optional[Tuple[Vec3, Vec3]]) -> Vec3:
+    if bounds is None:
+        return (0.0, 0.0, 0.0)
+    bb_min, bb_max = bounds
+    return (
+        (float(bb_min[0]) + float(bb_max[0])) * 0.5,
+        (float(bb_min[1]) + float(bb_max[1])) * 0.5,
+        float(bb_min[2]),
+    )
+
+
+def _infer_humanoid_fit_frame(
+    model: Any,
+    *,
+    bounds: Optional[Tuple[Vec3, Vec3]] = None,
+) -> Optional[_HumanoidFitFrame]:
+    positions = _named_positions(model)
+    side_pair = _find_side_pair(positions)
+    pelvis = _find_landmark(positions, _PELVIS_ALIASES)
+    head = _find_landmark(positions, _HEAD_ALIASES)
+    left_foot = _find_landmark(positions, _LEFT_FOOT_ALIASES)
+    right_foot = _find_landmark(positions, _RIGHT_FOOT_ALIASES)
+
+    if side_pair is None or head is None:
+        return None
+
+    left, right, side_kind = side_pair
+    lower_points = [p for hit in (left_foot, right_foot) if hit is not None for p in (hit[1],)]
+    foot_center = _average_points(lower_points)
+    pelvis_pos = pelvis[1] if pelvis is not None else None
+    lower_anchor = foot_center or pelvis_pos or _bounds_ground_center(bounds)
+    upper_anchor = head[1]
+
+    up_raw = _vec_sub(upper_anchor, pelvis_pos or lower_anchor)
+    up = _vec_normalize(up_raw)
+    if up is None:
+        up = _vec_normalize(_vec_sub(upper_anchor, lower_anchor))
+    if up is None:
+        return None
+
+    right_raw = _vec_sub(right[1], left[1])
+    right_projected = _vec_sub(right_raw, _vec_scale(up, _vec_dot(right_raw, up)))
+    right_vec = _vec_normalize(right_projected)
+    if right_vec is None:
+        return None
+
+    # KOTOR native humanoids face +Y: forward = up x right for X-right/Z-up.
+    forward = _vec_normalize(_vec_cross(up, right_vec))
+    if forward is None:
+        return None
+    right_vec = _vec_normalize(_vec_cross(forward, up))
+    if right_vec is None:
+        return None
+
+    height = abs(_vec_dot(_vec_sub(upper_anchor, lower_anchor), up))
+    if height <= 1.0e-5 and bounds is not None:
+        bb_min, bb_max = bounds
+        height = max(0.0, float(bb_max[2]) - float(bb_min[2]))
+    if height <= 1.0e-5:
+        return None
+
+    origin = lower_anchor
+    landmarks = {
+        "left": left[0],
+        "right": right[0],
+        "side_pair": side_kind,
+        "head": head[0],
+    }
+    if pelvis is not None:
+        landmarks["pelvis"] = pelvis[0]
+    if left_foot is not None:
+        landmarks["left_foot"] = left_foot[0]
+    if right_foot is not None:
+        landmarks["right_foot"] = right_foot[0]
+    confidence = 0.65
+    confidence += 0.1 if pelvis is not None else 0.0
+    confidence += 0.1 if foot_center is not None else 0.0
+    confidence += 0.1 if side_kind == "shoulder" else 0.0
+
+    return _HumanoidFitFrame(
+        origin=origin,
+        right=right_vec,
+        forward=forward,
+        up=up,
+        height=height,
+        confidence=min(0.95, confidence),
+        landmarks=landmarks,
+    )
+
+
+def _basis_matrix(frame: _HumanoidFitFrame) -> Tuple[Vec3, Vec3, Vec3]:
+    return (frame.right, frame.forward, frame.up)
+
+
+def _basis_rotation(
+    source: _HumanoidFitFrame,
+    target: _HumanoidFitFrame,
+) -> Tuple[Vec3, Vec3, Vec3]:
+    s = _basis_matrix(source)
+    t = _basis_matrix(target)
+    rows: list[Vec3] = []
+    for row in range(3):
+        rows.append((
+            t[0][row] * s[0][0] + t[1][row] * s[1][0] + t[2][row] * s[2][0],
+            t[0][row] * s[0][1] + t[1][row] * s[1][1] + t[2][row] * s[2][1],
+            t[0][row] * s[0][2] + t[1][row] * s[1][2] + t[2][row] * s[2][2],
+        ))
+    return tuple(rows)  # type: ignore[return-value]
+
+
+def _mat_vec(matrix: Tuple[Vec3, Vec3, Vec3], vector: Vec3) -> Vec3:
+    return (
+        matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
+        matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
+        matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2],
+    )
+
+
 def _kotor_template_humanoid_height(game_version: str) -> float:
     """Fallback KOTOR humanoid height when no selected base model is loaded."""
     try:
@@ -358,6 +660,79 @@ def _transform_point_for_kotor(
         mapped[1] * scale + offset[1],
         mapped[2] * scale + offset[2],
     )
+
+
+def _apply_point_transform_to_model(
+    model: Any,
+    *,
+    transform_point,
+    transform_direction,
+    transform_node_position=None,
+    mark_vertices_world: bool = False,
+) -> None:
+    node_transform = transform_node_position or transform_point
+    for node in _iter_model_nodes(model):
+        original_external_wp = getattr(node, "external_world_position", None)
+        pos = getattr(node, "position", None)
+        if pos is not None and len(pos) >= 3:
+            try:
+                source_pos = (float(pos[0]), float(pos[1]), float(pos[2]))
+                node.position = node_transform(source_pos)
+                if original_external_wp is None:
+                    node.external_world_position = transform_point(source_pos)
+            except Exception:
+                pass
+
+        if original_external_wp is not None and len(original_external_wp) >= 3:
+            try:
+                node.external_world_position = transform_point((
+                    float(original_external_wp[0]),
+                    float(original_external_wp[1]),
+                    float(original_external_wp[2]),
+                ))
+            except Exception:
+                pass
+
+        verts = list(getattr(node, "vertices", []) or [])
+        if verts:
+            new_verts = []
+            for vert in verts:
+                try:
+                    new_verts.append(transform_point((
+                        float(vert[0]),
+                        float(vert[1]),
+                        float(vert[2]),
+                    )))
+                except Exception:
+                    new_verts.append(vert)
+            node.vertices = new_verts
+            if mark_vertices_world:
+                setattr(node, "_gr_vertices_in_kotor_world", True)
+            try:
+                node.compute_bounds()
+            except Exception:
+                pass
+
+        normals = list(getattr(node, "normals", []) or [])
+        if normals:
+            new_normals = []
+            for normal in normals:
+                try:
+                    new_normals.append(transform_direction((
+                        float(normal[0]),
+                        float(normal[1]),
+                        float(normal[2]),
+                    )))
+                except Exception:
+                    new_normals.append(normal)
+            node.normals = new_normals
+
+    try:
+        model.compute_bounds()
+    except Exception:
+        b = _vertex_bounds(model)
+        if b is not None:
+            model.bb_min, model.bb_max = b
 
 
 def apply_external_model_fit_adjustment(
@@ -509,10 +884,69 @@ def normalize_external_model_for_kotor(
         return {"ok": False, "code": "no_vertices", "message": "No vertex bounds."}
 
     bb_min, bb_max = bounds
+    reference_bounds = _reference_model_fit_bounds(reference_model)
+    source_frame = _infer_humanoid_fit_frame(model, bounds=bounds)
+    target_frame = (
+        _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
+        if reference_model is not None else None
+    )
+
+    if source_frame is not None and target_frame is not None:
+        reference_height = _height_from_bounds(reference_bounds)
+        target = float(target_height or reference_height or target_frame.height)
+        scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
+        rotation = _basis_rotation(source_frame, target_frame)
+
+        def transform_point(point: Vec3) -> Vec3:
+            rel = _vec_scale(_vec_sub(point, source_frame.origin), scale)
+            return _vec_add(target_frame.origin, _mat_vec(rotation, rel))
+
+        def transform_direction(direction: Vec3) -> Vec3:
+            rotated = _mat_vec(rotation, direction)
+            return _vec_normalize(rotated) or rotated
+
+        def transform_node_position(point: Vec3) -> Vec3:
+            rel = _vec_scale(point, scale)
+            return _mat_vec(rotation, rel)
+
+        _apply_point_transform_to_model(
+            model,
+            transform_point=transform_point,
+            transform_direction=transform_direction,
+            transform_node_position=transform_node_position,
+            mark_vertices_world=True,
+        )
+
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        result = {
+            "ok": True,
+            "code": "normalized",
+            "scale": scale,
+            "source_height": source_frame.height,
+            "target_height": target,
+            "reference": reference_label or getattr(reference_model, "name", "") or "",
+            "vertical_axis": "bone_landmarks",
+            "offset": _vec_sub(target_frame.origin, _mat_vec(rotation, _vec_scale(source_frame.origin, scale))),
+            "target_center_xy": (target_frame.origin[0], target_frame.origin[1]),
+            "target_ground_z": target_frame.origin[2],
+            "external_world_positions_fit": True,
+            "fit_policy": "bone_landmark_basis",
+            "scale_basis": "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height",
+            "source_fit_landmarks": dict(source_frame.landmarks),
+            "target_fit_landmarks": dict(target_frame.landmarks),
+            "source_fit_confidence": source_frame.confidence,
+            "target_fit_confidence": target_frame.confidence,
+        }
+        metadata["kotor_normalization"] = result
+        return result
+
     extents = tuple(max(0.0, bb_max[i] - bb_min[i]) for i in range(3))
     vertical_axis = max(range(3), key=lambda i: extents[i])
     source_height = max(extents[vertical_axis], 1e-6)
-    reference_height = reference_model_height(reference_model) if reference_model is not None else 0.0
+    reference_height = _height_from_bounds(reference_bounds) if reference_bounds is not None else 0.0
     target = float(target_height or reference_height or _kotor_template_humanoid_height(game_version))
     scale = target / source_height if source_height > 1e-6 else 1.0
 
@@ -522,71 +956,50 @@ def normalize_external_model_for_kotor(
     norm_max = tuple(max(mapped_min[i], mapped_max[i]) for i in range(3))
     center_x = (norm_min[0] + norm_max[0]) * 0.5
     center_y = (norm_min[1] + norm_max[1]) * 0.5
-    offset = (-center_x * scale, -center_y * scale, -norm_min[2] * scale)
+    if reference_bounds is not None:
+        ref_min, ref_max = reference_bounds
+        target_center_x = (float(ref_min[0]) + float(ref_max[0])) * 0.5
+        target_center_y = (float(ref_min[1]) + float(ref_max[1])) * 0.5
+        target_ground_z = float(ref_min[2])
+    else:
+        target_center_x = 0.0
+        target_center_y = 0.0
+        target_ground_z = 0.0
+    offset = (
+        target_center_x - center_x * scale,
+        target_center_y - center_y * scale,
+        target_ground_z - norm_min[2] * scale,
+    )
 
-    for node in _iter_model_nodes(model):
-        pos = getattr(node, "position", None)
-        if pos is not None and len(pos) >= 3:
-            try:
-                node.position = _transform_point_for_kotor(
-                    (float(pos[0]), float(pos[1]), float(pos[2])),
-                    vertical_axis=vertical_axis,
-                    scale=scale,
-                    offset=(0.0, 0.0, 0.0),
-                )
-            except Exception:
-                pass
+    def transform_point(point: Vec3) -> Vec3:
+        return _transform_point_for_kotor(
+            point,
+            vertical_axis=vertical_axis,
+            scale=scale,
+            offset=offset,
+        )
 
-        external_wp = getattr(node, "external_world_position", None)
-        if external_wp is not None and len(external_wp) >= 3:
-            try:
-                node.external_world_position = _transform_point_for_kotor(
-                    (float(external_wp[0]), float(external_wp[1]), float(external_wp[2])),
-                    vertical_axis=vertical_axis,
-                    scale=scale,
-                    offset=offset,
-                )
-            except Exception:
-                pass
+    def transform_direction(direction: Vec3) -> Vec3:
+        if vertical_axis == 2:
+            return direction
+        mapped = _axis_map_to_kotor_z(direction, vertical_axis)
+        return _vec_normalize(mapped) or mapped
 
-        verts = list(getattr(node, "vertices", []) or [])
-        if verts:
-            new_verts = []
-            for vert in verts:
-                try:
-                    new_verts.append(_transform_point_for_kotor(
-                        (float(vert[0]), float(vert[1]), float(vert[2])),
-                        vertical_axis=vertical_axis,
-                        scale=scale,
-                        offset=offset,
-                    ))
-                except Exception:
-                    new_verts.append(vert)
-            node.vertices = new_verts
-            try:
-                node.compute_bounds()
-            except Exception:
-                pass
+    def transform_node_position(point: Vec3) -> Vec3:
+        return _transform_point_for_kotor(
+            point,
+            vertical_axis=vertical_axis,
+            scale=scale,
+            offset=(0.0, 0.0, 0.0),
+        )
 
-        normals = list(getattr(node, "normals", []) or [])
-        if normals and vertical_axis != 2:
-            new_normals = []
-            for normal in normals:
-                try:
-                    new_normals.append(_axis_map_to_kotor_z(
-                        (float(normal[0]), float(normal[1]), float(normal[2])),
-                        vertical_axis,
-                    ))
-                except Exception:
-                    new_normals.append(normal)
-            node.normals = new_normals
-
-    try:
-        model.compute_bounds()
-    except Exception:
-        b = _vertex_bounds(model)
-        if b is not None:
-            model.bb_min, model.bb_max = b
+    _apply_point_transform_to_model(
+        model,
+        transform_point=transform_point,
+        transform_direction=transform_direction,
+        transform_node_position=transform_node_position,
+        mark_vertices_world=True,
+    )
 
     metadata = getattr(model, "metadata", None)
     if not isinstance(metadata, dict):
@@ -601,6 +1014,10 @@ def normalize_external_model_for_kotor(
         "reference": reference_label or getattr(reference_model, "name", "") or "",
         "vertical_axis": ("x", "y", "z")[vertical_axis],
         "offset": offset,
+        "target_center_xy": (target_center_x, target_center_y),
+        "target_ground_z": target_ground_z,
+        "external_world_positions_fit": True,
+        "fit_policy": "selected_reference_bounds" if reference_bounds is not None else "origin_height",
     }
     metadata["kotor_normalization"] = result
     return result
@@ -1981,9 +2398,10 @@ def assign_motion_source(
 
     clips = _normalise_imported_clips(imported_clips)
     state: Dict[str, Any] = {"source": source}
+    selected_supermodel = (supermodel or _body_supermodel(body) or "").strip()
 
     if source == MOTION_SOURCE_INHERITED:
-        selected = (supermodel or _body_supermodel(body) or "S_Female02").strip()
+        selected = (selected_supermodel or "S_Female02").strip()
         if _is_null_supermodel(selected):
             selected = "S_Female02"
         setattr(body, "supermodel", selected)
@@ -1994,12 +2412,12 @@ def assign_motion_source(
         )
         code = "inherited"
     elif source == MOTION_SOURCE_MODEL:
-        state["supermodel"] = _body_supermodel(body)
+        state["supermodel"] = selected_supermodel or _body_supermodel(body)
         message = "Motions will use animation clips stored on this model."
         code = "model_clips"
     elif source == MOTION_SOURCE_IMPORTED:
         state["imported_clips"] = clips
-        state["supermodel"] = _body_supermodel(body)
+        state["supermodel"] = selected_supermodel or _body_supermodel(body)
         message = (
             f"{len(clips)} imported clip(s) assigned."
             if clips else
@@ -2007,7 +2425,9 @@ def assign_motion_source(
         )
         code = "imported_clips" if clips else "imported_empty"
     else:
-        state["supermodel"] = _body_supermodel(body)
+        if selected_supermodel and not _is_null_supermodel(selected_supermodel):
+            setattr(body, "supermodel", selected_supermodel)
+        state["supermodel"] = selected_supermodel or _body_supermodel(body)
         state["generated"] = True
         message = "Generated ROM clip assigned for range-of-motion preview."
         code = "generated_rom"
@@ -2196,9 +2616,23 @@ def available_animation_library(scene: Any) -> CheckActorResult:
     except ImportError:                                     # pragma: no cover
         from core.animation.animation_engine import SuperModelResolver  # type: ignore
 
+    motion_state = _motion_assignment_state(scene)
+    selected_supermodel = str(motion_state.get("supermodel") or "").strip()
+    list_model = body
+    if selected_supermodel and not _is_null_supermodel(selected_supermodel):
+        class _AnimationLibraryProxy:
+            pass
+
+        proxy = _AnimationLibraryProxy()
+        proxy.name = getattr(body, "name", "character")
+        proxy.animations = list(_iter_model_animations(body))
+        proxy.anim_scale = float(getattr(body, "anim_scale", 1.0) or 1.0)
+        proxy.supermodel = selected_supermodel
+        list_model = proxy
+
     entries: List[Tuple[str, str]] = []
     try:
-        for name, source_model, _scale in SuperModelResolver.list_all_animations(body, game_tag):
+        for name, source_model, _scale in SuperModelResolver.list_all_animations(list_model, game_tag):
             label = f"{name} [{source_model}]"
             entries.append((label, name))
     except Exception:

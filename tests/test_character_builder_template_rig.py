@@ -13,6 +13,7 @@ from src.core.geometry.model_data import (
     VertexSkinData,
 )
 from src.core.diagnostics.validation_service import ValidationService
+from src.systems.bas.preview_composer import build_bas_preview_model
 
 
 def _node(name: str, flags: int = int(NodeFlags.HEADER), parent: ModelNode | None = None) -> ModelNode:
@@ -21,6 +22,50 @@ def _node(name: str, flags: int = int(NodeFlags.HEADER), parent: ModelNode | Non
         node.parent = parent
         parent.children.append(node)
     return node
+
+
+def test_character_builder_preview_uses_bas_socket_layers_for_attachments() -> None:
+    body_root = _node("BodyRoot")
+    headhook = _node("headhook", parent=body_root)
+    rhand = _node("rhand", parent=body_root)
+    body_skin = _node(
+        "body_skin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=body_root,
+    )
+    body_skin.bone_map = ["BodyRoot", "headhook", "rhand"]
+    body = KotorModel(name="Body", root_node=body_root)
+
+    head_root = _node("HeadRoot")
+    head_skin = _node(
+        "head_skin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=head_root,
+    )
+    head_skin.bone_map = ["head_g"]
+    head = KotorModel(name="PMHA01", root_node=head_root)
+
+    weapon_root = _node("WeaponRoot")
+    weapon = KotorModel(name="w_lghtsbr_001", root_node=weapon_root)
+
+    preview = build_bas_preview_model(
+        body_model=body,
+        attachment_models={"head": head, "right_weapon": weapon},
+        attachment_transforms={"right_weapon": {"position": [0.0, 0.0, 0.0]}},
+        name="Body BAS Preview",
+    )
+
+    preview_headhook = preview.find_node("headhook")
+    preview_rhand = preview.find_node("rhand")
+    assert preview_headhook is not None
+    assert preview_rhand is not None
+    assert preview_headhook.children[-1].name == "HeadRoot"
+    assert preview_rhand.children[-1].name == "WeaponRoot"
+    assert preview_headhook.children[-1]._gr_bas_attachment_root is True
+    assert preview_headhook.children[-1]._gr_bas_socket_name == "headhook"
+    assert preview_rhand.children[-1]._gr_bas_socket_name == "rhand"
+    assert preview_headhook.children[-1].children[0]._gr_bas_attachment_layer is True
+    assert preview.find_node("body_skin").bone_map == ["BodyRoot", "headhook", "rhand"]
 
 
 def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> None:
@@ -79,13 +124,45 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
     assert len(rigged_mesh.qbone_list) == len(rigged_mesh.bone_map)
     assert len(rigged_mesh.tbone_list) == len(rigged_mesh.bone_map)
+    assert rigged_mesh._gr_bound_to_kotor_skeleton is True
+    assert rigged_mesh._gr_kotor_skeleton_root == "N_Mandalorian"
     assert rigged_mesh.position == (0.0, 0.0, 0.0)
     assert rigged_mesh.rotation == (0.0, 0.0, 0.0, 1.0)
     assert rigged_mesh.vertices[0] == (11.0, 2.0, 3.0)
+    assert rigged.metadata["character_builder_bind"]["status"] == "bound_to_native_kotor_skeleton"
+    assert rigged._gr_character_builder_bind_complete is True
     assert "KOTOR skeleton built" in result["message"]
     assert result["skinned_meshes"] == 1
     assert result["weighted_vertices"] == 1
     assert result["removed_import_nodes"] >= 3
+
+
+def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -> None:
+    src_root = _node("Bendak_UE")
+    src_root.position = (10.0, 0.0, 0.0)
+    armature_node = _node("Armature", parent=src_root)
+    armature_node.position = (0.0, 4.0, 0.0)
+    mesh = _node("BendakFit", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=armature_node)
+    mesh.position = (0.0, 0.0, 7.0)
+    mesh.vertices = [(5.0, 0.25, 1.5)]
+    mesh.normals = [(0.0, 0.0, 1.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh._gr_vertices_in_kotor_world = True
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    rootdummy.position = (0.0, 0.0, 0.9)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("BendakFit")
+    assert rigged_mesh is not None
+    assert rigged_mesh.vertices == [(5.0, 0.25, 1.5)]
+    assert rigged_mesh.position == (0.0, 0.0, 0.0)
+    assert rigged_mesh._gr_vertices_in_kotor_world is True
 
 
 def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -> None:
@@ -144,6 +221,13 @@ def test_apply_template_rig_preserves_kotor_helper_mesh_skeleton_hooks() -> None
     assert rigged.find_node("Torso") is None
     assert rigged.find_node("torsoUpr_g").is_mesh is False
     assert rigged.find_node("Rhand_g").is_mesh is False
+    native_snapshot = result["native_skeleton_snapshot"]
+    assert native_snapshot is not None
+    assert native_snapshot.node_count == 7
+    assert native_snapshot.supermodel == "NULL"
+    assert "headhook" in native_snapshot.hook_names
+    assert native_snapshot.nodes[2].name == "torsoUpr_g"
+    assert native_snapshot.nodes[2].is_mesh is True
 
     rigged_mesh = rigged.find_node("body_mesh")
     assert rigged_mesh is not None

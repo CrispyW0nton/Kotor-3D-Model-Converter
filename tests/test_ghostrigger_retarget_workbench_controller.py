@@ -437,6 +437,7 @@ def test_unreal_to_kotor_auto_generates_verified_ue5_profile_and_solver_options(
     assert controller.state.solver_options is not None
     assert controller.state.solver_options.rotation_transfer_mode == "exact_segment_correction"
     assert controller.state.solver_options.key_unmapped_reference_nodes is True
+    assert controller.state.solver_options.basis_conversion is not None
     assert ue.state.retarget_profile is profile
     assert ue.state.solver_options is controller.state.solver_options
 
@@ -467,6 +468,8 @@ def test_unreal_to_kotor_auto_generates_verified_mixamo_profile_and_solver_optio
     assert "handconjure" not in {entry.target_node.lower() for entry in profile.mappings}
     assert controller.state.solver_options is not None
     assert controller.state.solver_options.rotation_transfer_mode == "exact_segment_correction"
+    assert controller.state.solver_options.source_reference_mode == "source_rest"
+    assert controller.state.solver_options.basis_conversion is not None
     assert ue.state.retarget_profile is profile
     assert ue.state.solver_options is controller.state.solver_options
 

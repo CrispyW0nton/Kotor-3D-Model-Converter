@@ -1515,6 +1515,47 @@ def test_t1204_generated_rom_assignment_adds_rom_preview_entry():
     assert play.code == "generated_rom"
 
 
+def test_t1204_generated_rom_library_uses_selected_supermodel(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [
+        _FakeAnimation("pause1", 1.0),
+        _FakeAnimation("walk", 1.2),
+        _FakeAnimation("run", 0.8),
+    ]
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            return super_model if str(resref).lower() == "s_male02" else None
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(_RM())
+    try:
+        result = wf.assign_motion_source(
+            scene,
+            wf.MOTION_SOURCE_ROM,
+            supermodel="S_Male02",
+        )
+        preview = wf.available_preview_animations(scene)
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    assert result.ok is True
+    assert result.code == "generated_rom"
+    assert body.supermodel == "S_Male02"
+    assert scene.motion_assignment["supermodel"] == "S_Male02"
+    assert preview.available == [("ROM Test", "generated_rom")]
+    assert {name for _label, name in library.available} >= {"pause1", "walk", "run"}
+
+
 def test_t903_run_rom_test_assigns_generated_rom_and_dispatches_viewport():
     scene, _body = _scene_with_animated_body()
 
@@ -2205,6 +2246,113 @@ def test_external_model_normalization_fits_selected_reference_height():
     assert result["reference"] == "pmbam"
     assert result["target_height"] == pytest.approx(1.75)
     assert model.bb_max[2] == pytest.approx(1.75)
+
+
+def test_external_model_normalization_snaps_to_selected_reference_frame():
+    model = _FakeExternalMeshModel([
+        (-1.0, -2.0, 0.0),
+        (1.0, 2.0, 10.0),
+    ])
+    reference = _FakeExternalMeshModel([
+        (4.5, -2.25, 0.25),
+        (5.5, -1.75, 2.25),
+    ])
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "selected_reference_bounds"
+    assert result["target_center_xy"] == pytest.approx((5.0, -2.0))
+    assert result["target_ground_z"] == pytest.approx(0.25)
+    assert model.bb_min[2] == pytest.approx(0.25)
+    assert model.bb_max[2] == pytest.approx(2.25)
+    assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
+    assert (model.bb_min[1] + model.bb_max[1]) * 0.5 == pytest.approx(-2.0)
+
+
+def test_external_model_normalization_uses_bone_landmarks_for_front_axis():
+    model = _FakeExternalMeshModel([
+        (-1.0, 0.0, -1.0),
+        (1.0, 10.0, 1.0),
+    ])
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 0.0)),
+        ("Head", (0.0, 10.0, 0.0)),
+        ("LeftShoulder", (-1.0, 8.0, 0.0)),
+        ("RightShoulder", (1.0, 8.0, 0.0)),
+        ("LeftFoot", (-0.4, 0.0, -0.1)),
+        ("RightFoot", (0.4, 0.0, -0.1)),
+    ]:
+        node = _FakeNode(name)
+        node.position = pos
+        model._nodes.append(node)
+
+    reference = _FakeExternalMeshModel([
+        (4.5, -2.25, 0.0),
+        (5.5, -1.75, 2.0),
+    ])
+    for name, pos in [
+        ("pelvis_g", (5.0, -2.0, 0.9)),
+        ("headhook", (5.0, -2.0, 2.0)),
+        ("lcollar_dum", (4.5, -2.0, 1.55)),
+        ("rcollar_dum", (5.5, -2.0, 1.55)),
+        ("lfoot_g", (4.8, -2.0, 0.0)),
+        ("rfoot_g", (5.2, -2.0, 0.0)),
+    ]:
+        node = _FakeNode(name)
+        node.position = pos
+        reference._nodes.append(node)
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "bone_landmark_basis"
+    assert result["scale_basis"] == "reference_bounds_height"
+    assert result["vertical_axis"] == "bone_landmarks"
+    assert result["source_fit_landmarks"]["side_pair"] == "shoulder"
+    assert result["target_fit_landmarks"]["side_pair"] == "shoulder"
+    assert result["scale"] == pytest.approx(0.2)
+    assert model.bb_min[2] == pytest.approx(0.0)
+    assert model.bb_max[2] == pytest.approx(2.0)
+    assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
+    assert model.bb_max[1] > -2.0
+    assert model.bb_min[1] < -2.0
+    assert getattr(model._nodes[0], "_gr_vertices_in_kotor_world", False) is True
+
+
+def test_external_model_normalization_fits_imported_joint_display_positions():
+    model = _FakeExternalMeshModel([
+        (-1.0, -1.0, 0.0),
+        (1.0, 1.0, 10.0),
+    ])
+    joint = model._nodes[0]
+    joint.position = (0.0, 0.0, 5.0)
+    reference = _FakeExternalMeshModel([
+        (9.5, 1.5, 0.25),
+        (10.5, 2.5, 2.25),
+    ])
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert result["ok"] is True
+    assert result["external_world_positions_fit"] is True
+    assert joint.position == pytest.approx((0.0, 0.0, 1.0))
+    assert joint.external_world_position == pytest.approx((10.0, 2.0, 1.25))
 
 
 def test_manual_fit_adjustment_scales_about_ground_center():

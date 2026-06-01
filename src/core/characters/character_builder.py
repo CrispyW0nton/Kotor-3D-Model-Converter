@@ -259,6 +259,9 @@ def load_game_skeleton_source(
         model = load_model_from_bytes(mdl_bytes, mdx_bytes, game_version=gv)
         if model is not None:
             model.name = getattr(model, "name", None) or name
+            setattr(model, "_gr_source_resref", name)
+            setattr(model, "_gr_source_game", "K2" if gv == GameVersion.K2 else "K1")
+            setattr(model, "_gr_source_layer", "game_library")
         return model
     except Exception as exc:
         log.error("load_game_skeleton_source: failed for %s/%s: %s", game, name, exc)
@@ -868,6 +871,20 @@ def apply_template_rig(
                     "message": "Template has no root node",
                     "warnings": warnings, "scale": applied_scale}
 
+        native_skeleton_snapshot = None
+        try:
+            try:
+                from .native_skeleton import capture_native_skeleton_snapshot
+            except ImportError:  # pragma: no cover
+                from src.core.characters.native_skeleton import capture_native_skeleton_snapshot  # type: ignore
+            native_skeleton_snapshot = capture_native_skeleton_snapshot(
+                template_model,
+                game=game,
+            )
+        except Exception as exc:
+            log.debug("apply_template_rig native snapshot failed: %s", exc, exc_info=True)
+            warnings.append(f"Native skeleton snapshot failed: {exc}")
+
         import copy
         skel_root = copy.deepcopy(tmpl_root)
 
@@ -883,9 +900,12 @@ def apply_template_rig(
                     "message": "Imported model has no renderable mesh payload to rig.",
                     "warnings": warnings, "scale": applied_scale}
 
-        # Set supermodel to match game
-        sm = "S_Female02" if game.upper() in ("K1", "K2") else "NULL"
-        result_model.supermodel = sm
+        # Preserve the selected native base model's animation inheritance.  A
+        # generated character should not silently switch to a generic humanoid
+        # supermodel because PMBAM/PFBAM-style bodies inherit from specific
+        # game supermodels such as S_KPMF0200.
+        sm = str(getattr(template_model, "supermodel", "") or "").strip()
+        result_model.supermodel = sm or "NULL"
 
         # Attach cleaned mesh payloads under the template skeleton root.
         for mesh_node in mesh_payloads:
@@ -905,6 +925,8 @@ def apply_template_rig(
 
         result_model.root_node = skel_root
         result_model.animations = list(template_model.animations)
+        if native_skeleton_snapshot is not None:
+            setattr(result_model, "_gr_native_skeleton_snapshot", native_skeleton_snapshot)
 
         try:
             try:
@@ -921,6 +943,24 @@ def apply_template_rig(
                         "warnings": warnings + list(bind_report.warnings or []),
                         "scale": applied_scale}
             warnings.extend(bind_report.warnings or [])
+            for mesh_node in mesh_payloads:
+                setattr(mesh_node, "_gr_bound_to_kotor_skeleton", True)
+                setattr(mesh_node, "_gr_kotor_skeleton_root", str(getattr(skel_root, "name", "") or ""))
+                setattr(mesh_node, "_gr_kotor_bone_map_source", "character_builder_template_rig")
+            metadata = getattr(result_model, "metadata", None)
+            if not isinstance(metadata, dict):
+                metadata = {}
+                setattr(result_model, "metadata", metadata)
+            metadata["character_builder_bind"] = {
+                "status": "bound_to_native_kotor_skeleton",
+                "skeleton_root": str(getattr(skel_root, "name", "") or ""),
+                "mesh_count": len(mesh_payloads),
+                "skinned_meshes": bind_report.skinned_meshes,
+                "weighted_vertices": bind_report.weighted_vertices,
+                "bone_slots": bind_report.bone_count,
+                "source": "apply_template_rig",
+            }
+            setattr(result_model, "_gr_character_builder_bind_complete", True)
         except Exception as exc:
             log.error("apply_template_rig skin bind failed: %s", exc, exc_info=True)
             return {"ok": False, "model": None,
@@ -954,6 +994,7 @@ def apply_template_rig(
             "weighted_vertices": bind_report.weighted_vertices,
             "bone_slots": bind_report.bone_count,
             "removed_import_nodes": removed_import_nodes,
+            "native_skeleton_snapshot": native_skeleton_snapshot,
         }
     except Exception as exc:
         log.error("apply_template_rig: %s", exc, exc_info=True)
@@ -1082,21 +1123,29 @@ def _clean_mesh_payload_node(node: Any) -> Any:
         from src.core.geometry.model_data import NodeFlags  # type: ignore
 
     cleaned = copy.deepcopy(node)
-    try:
-        world_pos, world_rot = node.world_transform()
-    except Exception:
-        world_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
-        world_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))
+    vertices_are_world = bool(getattr(node, "_gr_vertices_in_kotor_world", False))
+    if vertices_are_world:
+        world_pos = (0.0, 0.0, 0.0)
+        world_rot = (0.0, 0.0, 0.0, 1.0)
+    else:
+        try:
+            world_pos, world_rot = node.world_transform()
+        except Exception:
+            world_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+            world_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))
 
     baked_vertices = []
     for vert in list(getattr(node, "vertices", []) or []):
         try:
-            rx, ry, rz = _quat_rotate_vec(world_rot, (float(vert[0]), float(vert[1]), float(vert[2])))
-            baked_vertices.append((
-                rx + float(world_pos[0]),
-                ry + float(world_pos[1]),
-                rz + float(world_pos[2]),
-            ))
+            if vertices_are_world:
+                baked_vertices.append((float(vert[0]), float(vert[1]), float(vert[2])))
+            else:
+                rx, ry, rz = _quat_rotate_vec(world_rot, (float(vert[0]), float(vert[1]), float(vert[2])))
+                baked_vertices.append((
+                    rx + float(world_pos[0]),
+                    ry + float(world_pos[1]),
+                    rz + float(world_pos[2]),
+                ))
         except Exception:
             baked_vertices.append(vert)
     if baked_vertices:
@@ -1105,7 +1154,10 @@ def _clean_mesh_payload_node(node: Any) -> Any:
     baked_normals = []
     for normal in list(getattr(node, "normals", []) or []):
         try:
-            baked_normals.append(_normalize_vec(_quat_rotate_vec(world_rot, normal)))
+            if vertices_are_world:
+                baked_normals.append(_normalize_vec(normal))
+            else:
+                baked_normals.append(_normalize_vec(_quat_rotate_vec(world_rot, normal)))
         except Exception:
             baked_normals.append(normal)
     if baked_normals:
@@ -1123,6 +1175,8 @@ def _clean_mesh_payload_node(node: Any) -> Any:
     cleaned.qbone_list = []
     cleaned.tbone_list = []
     setattr(cleaned, "_external_imported", True)
+    if vertices_are_world:
+        setattr(cleaned, "_gr_vertices_in_kotor_world", True)
     try:
         cleaned.compute_bounds()
     except Exception:

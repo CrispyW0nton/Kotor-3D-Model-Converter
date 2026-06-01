@@ -245,14 +245,30 @@ def test_verified_mixamo_to_aurora_mapping_uses_family_specific_policy() -> None
         "mixamorig:RightArm",
         "mixamorig:RightForeArm",
         "mixamorig:RightHand",
+        "mixamorig:RightHandIndex1",
+        "mixamorig:RightHandIndex3",
         "mixamorig:RightHandMiddle1",
         "mixamorig:RightHandMiddle3",
+        "mixamorig:RightHandRing1",
+        "mixamorig:RightHandRing3",
+        "mixamorig:RightHandPinky1",
+        "mixamorig:RightHandPinky3",
+        "mixamorig:RightHandThumb1",
+        "mixamorig:RightHandThumb3",
         "mixamorig:LeftShoulder",
         "mixamorig:LeftArm",
         "mixamorig:LeftForeArm",
         "mixamorig:LeftHand",
+        "mixamorig:LeftHandIndex1",
+        "mixamorig:LeftHandIndex3",
         "mixamorig:LeftHandMiddle1",
         "mixamorig:LeftHandMiddle3",
+        "mixamorig:LeftHandRing1",
+        "mixamorig:LeftHandRing3",
+        "mixamorig:LeftHandPinky1",
+        "mixamorig:LeftHandPinky3",
+        "mixamorig:LeftHandThumb1",
+        "mixamorig:LeftHandThumb3",
         "mixamorig:RightUpLeg",
         "mixamorig:RightLeg",
         "mixamorig:RightFoot",
@@ -275,13 +291,40 @@ def test_verified_mixamo_to_aurora_mapping_uses_family_specific_policy() -> None
     assert profile.metadata["source_skeleton_family"] == "mixamo"
     assert pairs["mixamorig:RightHand"] == "Rhand_g"
     assert pairs["mixamorig:LeftHand"] == "Lhand_g"
+    assert pairs["mixamorig:RightHandIndex1"] == "RaFngrB_g"
+    assert pairs["mixamorig:RightHandIndex3"] == "RaFngrT_g"
+    assert pairs["mixamorig:RightHandMiddle1"] == "RbFngrB_g"
+    assert pairs["mixamorig:RightHandMiddle3"] == "RbFngrT_g"
+    assert pairs["mixamorig:RightHandRing1"] == "RcFngrB_g"
+    assert pairs["mixamorig:RightHandRing3"] == "RcFngrT_g"
+    assert pairs["mixamorig:RightHandPinky1"] == "RdFngrB_g"
+    assert pairs["mixamorig:RightHandPinky3"] == "RdFngrT_g"
+    assert pairs["mixamorig:RightHandThumb1"] == "RThumbB_g"
+    assert pairs["mixamorig:RightHandThumb3"] == "RThumbT_g"
+    assert pairs["mixamorig:LeftHandIndex1"] == "LaFngrB_g"
+    assert pairs["mixamorig:LeftHandIndex3"] == "LaFngrT_g"
+    assert pairs["mixamorig:LeftHandMiddle1"] == "LbFngrB_g"
+    assert pairs["mixamorig:LeftHandMiddle3"] == "LbFngrT_g"
+    assert pairs["mixamorig:LeftHandRing1"] == "LcFngrB_g"
+    assert pairs["mixamorig:LeftHandRing3"] == "LcFngrT_g"
+    assert pairs["mixamorig:LeftHandPinky1"] == "LdFngrB_g"
+    assert pairs["mixamorig:LeftHandPinky3"] == "LdFngrT_g"
+    assert pairs["mixamorig:LeftHandThumb1"] == "LThumbB_g"
+    assert pairs["mixamorig:LeftHandThumb3"] == "LThumbT_g"
     assert pairs["mixamorig:RightFoot"] == "rfoot_g"
     assert pairs["mixamorig:LeftFoot"] == "lfoot_g"
     assert "handconjure" not in {entry.target_node.lower() for entry in profile.mappings}
     assert "headhook" not in {entry.target_node.lower() for entry in profile.mappings}
     assert profile.metadata["recommended_rotation_transfer_mode"] == "exact_segment_correction"
     assert profile.metadata["key_unmapped_reference_nodes"] is True
+    assert profile.metadata["basis_conversion"] == "blender_fbx_to_aurora_negate_xy"
     assert profile.metadata["source_reference_mode"] == "source_rest"
+    assert profile.metadata["hybrid_limb_source_rest_weight"] == pytest.approx(1.0)
+    assert profile.metadata["source_quaternion_conversion"] == "blender_identity"
+    assert profile.metadata["exact_segment_correction_policy"] == "mixamo_stable_humanoid"
+    assert profile.metadata["exact_segment_rotation_anchor"] == "target_rest"
+    assert profile.metadata["terminal_twist_correction_policy"] == "disabled"
+    assert "exact_segment_correction_excluded_pairs" not in profile.metadata
 
     report = validate_retarget_profile(profile, clip, target)
     assert report.success is True
