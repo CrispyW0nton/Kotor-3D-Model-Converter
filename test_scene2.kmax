@@ -56,7 +56,7 @@
           0.0
         ]
       },
-      "selected": false,
+      "selected": true,
       "source_ref": {
         "game": "K1",
         "metadata": {},
@@ -217,6 +217,371 @@
         "position": [
           15.781500000000001,
           12.522599999999997,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "c72741c3-d8a6-4cb5-9cde-879b4314eddc",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 54,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            45.16,
+            58.9807,
+            0.0
+          ],
+          "resref": "m01aa_04a",
+          "room_index": 5
+        }
+      },
+      "name": "M01aa_04a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          0.05647872015833855,
+          0.27165355160832405,
+          0.6196553343906999
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_04a",
+        "resource_type": "model",
+        "resref": "m01aa_04a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          14.382999999999996,
+          38.2737,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "1a91b01d-6bca-4951-b525-95bf95187115",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 60,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            28.8011,
+            81.5966,
+            0.0
+          ],
+          "resref": "m01aa_05a",
+          "room_index": 11
+        }
+      },
+      "name": "M01aa_05a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          1.7373982506504735,
+          -4.731279730796814,
+          3.708889961242676
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_05a",
+        "resource_type": "model",
+        "resref": "m01aa_05a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -1.9758999999999993,
+          60.889599999999994,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "fd13cea4-5e81-4356-acf3-5afc8f700820",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 61,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            22.4143,
+            120.742,
+            0.0
+          ],
+          "resref": "m01aa_06a",
+          "room_index": 2
+        }
+      },
+      "name": "M01aa_06a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          1.1530399322509766,
+          0.08495054394006729,
+          4.962200164794922
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_06a",
+        "resource_type": "model",
+        "resref": "m01aa_06a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -8.3627,
+          100.035,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "7d3fcf6c-73ae-4e16-9788-1730c8d09ca4",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 23,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            29.2351,
+            95.7401,
+            0.0
+          ],
+          "resref": "m01aa_06b",
+          "room_index": 4
+        }
+      },
+      "name": "M01aa_06b",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          -0.0928143560886383,
+          0.604127049446106,
+          4.335545063018799
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_06b",
+        "resource_type": "model",
+        "resref": "m01aa_06b",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -1.5419000000000018,
+          75.03309999999999,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "d125a869-b95d-461c-8949-341c8e60dad0",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 83,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            34.1285,
+            146.727,
+            0.0
+          ],
+          "resref": "m01aa_07a",
+          "room_index": 1
+        }
+      },
+      "name": "M01aa_07a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          0.35568639636039734,
+          3.733109951019287,
+          1.7639100551605225
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_07a",
+        "resource_type": "model",
+        "resref": "m01aa_07a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          3.3515000000000015,
+          126.02000000000001,
           0.0
         ],
         "rotation": [
@@ -283,7 +648,7 @@
           0.0
         ]
       },
-      "selected": false,
+      "selected": true,
       "source_ref": {
         "game": "K1",
         "metadata": {},
@@ -458,6 +823,371 @@
         ]
       },
       "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "c72741c3-d8a6-4cb5-9cde-879b4314eddc",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 54,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            45.16,
+            58.9807,
+            0.0
+          ],
+          "resref": "m01aa_04a",
+          "room_index": 5
+        }
+      },
+      "name": "M01aa_04a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          0.05647872015833855,
+          0.27165355160832405,
+          0.6196553343906999
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_04a",
+        "resource_type": "model",
+        "resref": "m01aa_04a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          14.382999999999996,
+          38.2737,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "1a91b01d-6bca-4951-b525-95bf95187115",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 60,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            28.8011,
+            81.5966,
+            0.0
+          ],
+          "resref": "m01aa_05a",
+          "room_index": 11
+        }
+      },
+      "name": "M01aa_05a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          1.7373982506504735,
+          -4.731279730796814,
+          3.708889961242676
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_05a",
+        "resource_type": "model",
+        "resref": "m01aa_05a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -1.9758999999999993,
+          60.889599999999994,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "fd13cea4-5e81-4356-acf3-5afc8f700820",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 61,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            22.4143,
+            120.742,
+            0.0
+          ],
+          "resref": "m01aa_06a",
+          "room_index": 2
+        }
+      },
+      "name": "M01aa_06a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          1.1530399322509766,
+          0.08495054394006729,
+          4.962200164794922
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_06a",
+        "resource_type": "model",
+        "resref": "m01aa_06a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -8.3627,
+          100.035,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "7d3fcf6c-73ae-4e16-9788-1730c8d09ca4",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 23,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            29.2351,
+            95.7401,
+            0.0
+          ],
+          "resref": "m01aa_06b",
+          "room_index": 4
+        }
+      },
+      "name": "M01aa_06b",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          -0.0928143560886383,
+          0.604127049446106,
+          4.335545063018799
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_06b",
+        "resource_type": "model",
+        "resref": "m01aa_06b",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          -1.5419000000000018,
+          75.03309999999999,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
+    },
+    {
+      "group_id": "K1:M01AA",
+      "id": "d125a869-b95d-461c-8949-341c8e60dad0",
+      "locked": false,
+      "material_overrides": {},
+      "metadata": {
+        "child_count": 83,
+        "module_anchor": false,
+        "module_group": {
+          "area_label": "Endar Spire - Command Module",
+          "game": "K1",
+          "group_id": "K1:M01AA",
+          "layout_resref": "m01aa",
+          "module_code": "end_m01aa",
+          "module_root": "m01aa",
+          "position": [
+            34.1285,
+            146.727,
+            0.0
+          ],
+          "resref": "m01aa_07a",
+          "room_index": 1
+        }
+      },
+      "name": "M01aa_07a",
+      "object_type": "model",
+      "pivot": {
+        "enabled": true,
+        "metadata": {
+          "scope": "module_group",
+          "source": "model_bounds_center"
+        },
+        "position_local": [
+          0.35568639636039734,
+          3.733109951019287,
+          1.7639100551605225
+        ],
+        "rotation_local": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "selected": false,
+      "source_ref": {
+        "game": "K1",
+        "metadata": {},
+        "original_name": "M01aa_07a",
+        "resource_type": "model",
+        "resref": "m01aa_07a",
+        "source_archive": "",
+        "source_module": "",
+        "source_path": ""
+      },
+      "transform": {
+        "position": [
+          3.3515000000000015,
+          126.02000000000001,
+          0.0
+        ],
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "scale": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "visible": true
     }
   ],
   "scene": {
@@ -465,7 +1195,7 @@
     "description": "",
     "game": "K1",
     "id": "c321a18d-46e2-403f-8add-70db7d0b0101",
-    "modified_at": "2026-06-02T01:32:11Z",
+    "modified_at": "2026-06-02T01:37:07Z",
     "name": "Untitled Scene",
     "units": {
       "display_unit": "cm",

@@ -129,6 +129,7 @@ _WGPU_BACKEND_TYPES = {
     RendererBackend.WGPU_D3D12.value: "D3D12",
     RendererBackend.WGPU_VULKAN.value: "Vulkan",
     RendererBackend.WGPU_OPENGL.value: "OpenGL",
+    RendererBackend.PYGFX_WGPU.value: "D3D12",
 }
 
 from src.gui.windows.application_core.application_core_lib.shared.dock_hosts import QtDetachableDockWidget, QtFloatingDockHost

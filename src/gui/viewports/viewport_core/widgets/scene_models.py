@@ -539,7 +539,7 @@ class ViewportSceneModelMixin:
                     invalidate(reason)
                 except Exception:
                     pass
-        self._request_render(fast=True, reason=reason, scene=True, overlay=True, gizmo=True)
+        self._request_render(fast=True, reason=reason, transform=True, overlay=True, gizmo=True)
 
     def set_external_skeleton(
         self,

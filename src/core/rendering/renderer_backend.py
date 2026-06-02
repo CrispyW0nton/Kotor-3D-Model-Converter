@@ -12,6 +12,7 @@ class RendererBackend(str, Enum):
     WGPU_D3D12 = "wgpu_d3d12"
     WGPU_VULKAN = "wgpu_vulkan"
     WGPU_OPENGL = "wgpu_opengl"
+    PYGFX_WGPU = "pygfx_wgpu"
     DIRECT3D_HARDWARE = "direct3d_hardware"
     DIRECT3D_WARP = "direct3d_warp"
     NULL_DIAGNOSTIC = "null_diagnostic"
@@ -32,6 +33,9 @@ _ALIASES = {
     "wgpu_vulkan": RendererBackend.WGPU_VULKAN,
     "vulkan": RendererBackend.WGPU_VULKAN,
     "wgpu_opengl": RendererBackend.WGPU_OPENGL,
+    "pygfx": RendererBackend.PYGFX_WGPU,
+    "pygfx_wgpu": RendererBackend.PYGFX_WGPU,
+    "pygfx/wgpu": RendererBackend.PYGFX_WGPU,
     "direct3d": RendererBackend.DIRECT3D_HARDWARE,
     "direct3d_hardware": RendererBackend.DIRECT3D_HARDWARE,
     "d3d_hardware": RendererBackend.DIRECT3D_HARDWARE,
@@ -55,6 +59,7 @@ def renderer_backend_label(backend: RendererBackend) -> str:
         RendererBackend.WGPU_D3D12: "WGPU Direct3D 12",
         RendererBackend.WGPU_VULKAN: "WGPU Vulkan",
         RendererBackend.WGPU_OPENGL: "WGPU OpenGL",
+        RendererBackend.PYGFX_WGPU: "pygfx / WGPU",
         RendererBackend.DIRECT3D_HARDWARE: "Direct3D Hardware Experimental",
         RendererBackend.DIRECT3D_WARP: "Direct3D WARP Experimental",
         RendererBackend.NULL_DIAGNOSTIC: "Null Diagnostic",

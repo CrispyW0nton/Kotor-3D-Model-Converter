@@ -141,6 +141,10 @@ class ViewportRenderingPipelineMixin:
             self._set_renderer_badge(False)
             return None
         self._set_renderer_badge(True)
+        if self.canvas.is_live_surface() and self._gpu_renderer_requires_native_surface_passthrough():
+            self.canvas.clear_overlay()
+            self._skip_overlay_pixmap_update = True
+            return img
         if self._can_skip_live_overlay_rebuild():
             self._skip_overlay_pixmap_update = True
             return img
@@ -179,6 +183,19 @@ class ViewportRenderingPipelineMixin:
         if getattr(self._renderer, "_ext_skeleton", None) is not None:
             return False
         return bool(dirty_flags.get("scene", False))
+
+    def _gpu_renderer_requires_native_surface_passthrough(self) -> bool:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return False
+        backend_id = str(getattr(renderer, "backend_id", "") or "").lower()
+        if backend_id == "pygfx_wgpu":
+            return True
+        try:
+            diagnostics = renderer.get_diagnostics() if hasattr(renderer, "get_diagnostics") else {}
+            return bool((diagnostics or {}).get("native_surface_passthrough", False))
+        except Exception:
+            return False
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
         if img is None:
@@ -288,6 +305,11 @@ class ViewportRenderingPipelineMixin:
             self._gpu_renderer.viewport_overlay_diagnostics = self._overlay_diagnostics()
         except Exception:
             pass
+        dirty_flags = {}
+        try:
+            dirty_flags = dict(getattr(self._frame_governor, "dirty_flags", {}) or {})
+        except Exception:
+            dirty_flags = {}
         img = self._gpu_renderer.render(
             self.model,
             self.camera,
@@ -304,6 +326,7 @@ class ViewportRenderingPipelineMixin:
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
+            dirty_flags=dirty_flags,
         )
         diagnostics = {}
         get_diagnostics = getattr(self._gpu_renderer, "get_diagnostics", None)
@@ -583,7 +606,7 @@ class ViewportRenderingPipelineMixin:
         if renderer is None:
             return False
         backend_id = str(getattr(renderer, "backend_id", "") or "").lower()
-        if not backend_id.startswith("wgpu_"):
+        if not (backend_id.startswith("wgpu_") or backend_id == "pygfx_wgpu"):
             return False
         try:
             caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None

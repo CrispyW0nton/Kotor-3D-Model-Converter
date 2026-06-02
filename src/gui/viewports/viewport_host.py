@@ -73,7 +73,8 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         self._layout.insertWidget(0, surface_widget)
         self._layout.setCurrentWidget(surface_widget)
         surface_widget.show()
-        surface_widget.lower()
+        surface_widget.raise_()
+        self.clear_overlay()
         self._raise_overlay()
         self.install_input_bridge(self._input_bridge)
 
@@ -191,7 +192,13 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         return surface if isinstance(surface, QtWidgets.QLabel) else None
 
     def _raise_overlay(self) -> None:
+        if not self._overlay_has_content():
+            self._overlay_label.hide()
         self._overlay_label.raise_()
         for child in self.findChildren(QtWidgets.QWidget, options=QtCore.Qt.FindDirectChildrenOnly):
             if child is not self._surface_widget and child is not self._overlay_label:
                 child.raise_()
+
+    def _overlay_has_content(self) -> bool:
+        pixmap = self._overlay_label.pixmap()
+        return bool((pixmap is not None and not pixmap.isNull()) or self._overlay_label.text())

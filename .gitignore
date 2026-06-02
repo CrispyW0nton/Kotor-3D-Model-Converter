@@ -54,6 +54,7 @@ game_data/
 !/tests/test_mcp_skinning.py
 !/tests/test_qt_only_imports.py
 !/tests/test_theme_layout_loading.py
+!/tests/test_pygfx_renderer_backend.py
 !/tests/test_pivot_data.py
 !/tests/test_axis_mode.py
 !/tests/test_gizmo_mode_state.py

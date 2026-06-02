@@ -10,6 +10,7 @@ from typing import Iterable
 from src.adapters.rendering.direct3d_renderer import Direct3DRenderer
 from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
 from src.adapters.rendering.null_renderer import NullDiagnosticRenderer
+from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer
 from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label
 from src.core.rendering.renderer_capabilities import RendererCapabilities
 from src.core.rendering.renderer_settings import RendererSettings
@@ -24,6 +25,8 @@ def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings |
         return ModernGLRenderer()
     if backend in {RendererBackend.WGPU_AUTO, RendererBackend.WGPU_D3D12, RendererBackend.WGPU_VULKAN, RendererBackend.WGPU_OPENGL}:
         return WgpuRenderer(backend, settings=settings)
+    if backend == RendererBackend.PYGFX_WGPU:
+        return PygfxViewportRenderer(settings=settings)
     if backend in {RendererBackend.DIRECT3D_HARDWARE, RendererBackend.DIRECT3D_WARP}:
         return Direct3DRenderer(backend)
     if backend == RendererBackend.NULL_DIAGNOSTIC:
@@ -70,6 +73,16 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
         return [requested, RendererBackend.NULL_DIAGNOSTIC]
 
     if platform.system().lower() == "windows":
+        if requested == RendererBackend.PYGFX_WGPU:
+            return _dedupe(
+                [
+                    RendererBackend.PYGFX_WGPU,
+                    RendererBackend.WGPU_D3D12,
+                    RendererBackend.WGPU_VULKAN,
+                    RendererBackend.MODERNGL_GL330,
+                    RendererBackend.NULL_DIAGNOSTIC,
+                ]
+            )
         return _dedupe(
             [
                 requested,
@@ -97,6 +110,7 @@ def renderer_capabilities_snapshot() -> list[RendererCapabilities]:
         RendererBackend.WGPU_D3D12,
         RendererBackend.WGPU_VULKAN,
         RendererBackend.WGPU_OPENGL,
+        RendererBackend.PYGFX_WGPU,
         RendererBackend.DIRECT3D_HARDWARE,
         RendererBackend.NULL_DIAGNOSTIC,
     ]

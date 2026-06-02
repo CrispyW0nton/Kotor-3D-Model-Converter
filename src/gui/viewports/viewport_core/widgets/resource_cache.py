@@ -34,7 +34,10 @@ class ViewportResourceCacheMixin:
             if self._gpu_renderer is not None:
                 invalidate = getattr(self._gpu_renderer, "invalidate_transform_cache", None)
                 if callable(invalidate):
-                    invalidate("scene object transform changed")
+                    try:
+                        invalidate("scene object transform changed", node=node)
+                    except TypeError:
+                        invalidate("scene object transform changed")
                 else:
                     self._gpu_renderer.invalidate_node(node)
             return

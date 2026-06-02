@@ -345,6 +345,9 @@ class ViewportTransformCameraMixin:
             img = None
             if self.model is not None:
                 try:
+                    renderer_backend = normalize_renderer_backend(getattr(self._renderer_settings, "backend", ""))
+                    if getattr(renderer_backend, "value", "") == "pygfx_wgpu":
+                        return None
                     if self._gpu_renderer is None:
                         self._gpu_renderer = create_viewport_renderer(self._renderer_settings)
                     self._preload_gpu_textures()

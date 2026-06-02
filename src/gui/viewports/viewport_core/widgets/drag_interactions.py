@@ -204,7 +204,7 @@ class ViewportDragInteractionsMixin:
             self._apply_transform_gizmo_symmetry()
             if node is not None:
                 self._notify_node_moved(node, live=True)
-            dirty = {"scene": True, "gizmo": True}
+            dirty = {"transform": True, "gizmo": True}
             if node is not None and bool(getattr(node, "is_camera", False)):
                 dirty.update({"camera": True, "overlay": True})
             self._request_render(fast=True, reason="gizmo drag", **dirty)

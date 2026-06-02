@@ -99,6 +99,10 @@ class ViewportFrameGovernor:
     DIRTY_FLAGS = (
         "scene",
         "camera",
+        "transform",
+        "geometry",
+        "material",
+        "visibility",
         "overlay",
         "resources",
         "selection",

@@ -413,7 +413,8 @@ class ViewportConstructionMixin:
         self.refresh_view()
 
     def _renderer_uses_live_surface(self, backend_id: str) -> bool:
-        return str(backend_id or "").startswith("wgpu_")
+        backend = str(backend_id or "").lower()
+        return backend.startswith("wgpu_") or backend == "pygfx_wgpu"
 
     def _sync_renderer_surface(self, *, force: bool = False) -> None:
         if self._gpu_renderer is None:
@@ -449,7 +450,7 @@ class ViewportConstructionMixin:
                     self._apply_canvas_theme()
                     return
                 except Exception as exc:
-                    log.info("WGPU surface creation failed, falling back through renderer factory: %s", exc)
+                    log.info("Live renderer surface creation failed, falling back through renderer factory: %s", exc)
         self._install_label_renderer_surface(backend_id or "modern_gl")
         self._apply_canvas_theme()
 

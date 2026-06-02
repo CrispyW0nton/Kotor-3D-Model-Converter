@@ -31,6 +31,7 @@ _WGPU_BACKEND_TYPES = {
     RendererBackend.WGPU_D3D12.value: "D3D12",
     RendererBackend.WGPU_VULKAN.value: "Vulkan",
     RendererBackend.WGPU_OPENGL.value: "OpenGL",
+    RendererBackend.PYGFX_WGPU.value: "D3D12",
 }
 
 
@@ -449,6 +450,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 RendererBackend.WGPU_D3D12,
                 RendererBackend.WGPU_VULKAN,
                 RendererBackend.WGPU_OPENGL,
+                RendererBackend.PYGFX_WGPU,
                 RendererBackend.DIRECT3D_HARDWARE,
                 RendererBackend.NULL_DIAGNOSTIC,
             )
