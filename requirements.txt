@@ -30,6 +30,7 @@ moderngl>=5.8.0
 #   WGPU OpenGL
 wgpu>=0.31
 rendercanvas>=2.6
+pygfx>=0.16.0
 glfw>=2.7
 
 # Keep headless OpenCV because the GUI is handled by Qt/PySide6.

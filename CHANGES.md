@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-02
 
+- Pygfx dependency update: added the newly installed `pygfx>=0.16.0` package to the WGPU renderer dependency set and mirrored the WGPU/pygfx stack in the package GUI extra. No roadmap task ID applies.
+  Affected areas: `requirements.txt`, `pyproject.toml`.
+  Verification: `python -m pip show pygfx` confirmed installed version `0.16.0`; `python -m py_compile` is not applicable for dependency metadata-only changes.
+
 - Module-room LYT anchor placement fix: the first imported room in a module group is now treated as the scene anchor at viewport origin, and later rooms use math-system LYT deltas relative to the current anchor transform so moved anchors keep subsequent room imports aligned. No roadmap task ID applies.
   Affected areas: `src/math/module_layout_math.py`, `src/gui/windows/application_core/shared/resource_loading.py`, `tests/test_module_scene_import.py`.
   Verification: local MCP-backed resource query through the configured K1 install confirmed `m01aa.lyt` room positions, including `m01aa_01a` at `(15.7058, 22.2345, 0.0)` and `m01aa_02a` at `(30.777, 20.707, 0.0)`; `python -m py_compile src\math\module_layout_math.py src\gui\windows\application_core\shared\resource_loading.py tests\test_module_scene_import.py`; `python -m pytest tests/test_module_scene_import.py::test_module_room_placement_uses_lyt_coordinates tests/test_module_scene_import.py::test_module_layout_math_places_rooms_relative_to_scene_anchor tests/test_module_scene_import.py::test_module_room_scene_placement_uses_first_room_as_group_anchor -q` passed with 3 tests; combined focused regression run passed with 7 tests; visible Qt startup smoke launched `python main.py`, confirmed the app stayed running for 8 seconds, then closed the launched process cleanly.
