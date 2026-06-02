@@ -3578,11 +3578,15 @@ def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
 
     load_model_source = inspect.getsource(QtViewportWidget.load_model)
     load_scene_source = inspect.getsource(QtViewportWidget.load_scene_instances)
+    append_scene_source = inspect.getsource(QtViewportWidget.append_scene_instance)
 
     assert 'getattr(root_node, "_gr_scene_composite_root", False)' in load_model_source
     assert "selected_id =" in load_scene_source
     assert "self.load_model(composite" in load_scene_source
     assert "self.select_scene_object(selected_id)" in load_scene_source
+    assert "clear_caches" not in append_scene_source
+    assert "root.children.append(node)" in append_scene_source
+    assert 'reason="scene object appended"' in append_scene_source
 
 
 def test_transform_cache_evict_clears_frame_and_gpu_child_caches() -> None:
@@ -4119,14 +4123,23 @@ def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> No
         position=(0.0, 0.0, 0.0),
         rotation=(0.0, 0.0, 0.0, 1.0),
     )
+    wall_mesh = SimpleNamespace(
+        name="blocking_wall",
+        is_mesh=True,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+        texture="lhr_wall07",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
     model = SimpleNamespace(
         name="m01aa_01a",
         game_version="K1",
         supermodel="NULL",
         classification="tile",
         animations=[],
-        mesh_nodes=lambda: [regular_mesh, null_mesh],
-        all_nodes=lambda: [regular_mesh, null_mesh, grey_geometry],
+        mesh_nodes=lambda: [regular_mesh, wall_mesh, null_mesh],
+        all_nodes=lambda: [regular_mesh, wall_mesh, null_mesh, grey_geometry],
         bone_nodes=lambda: [],
         texture_list=lambda: ["wall"],
     )
@@ -4141,15 +4154,23 @@ def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> No
         panel.module_walkmesh_tree.topLevelItem(index).text(0)
         for index in range(panel.module_walkmesh_tree.topLevelItemCount())
     ]
+    wall_names = [
+        panel.module_wall_mesh_tree.topLevelItem(index).text(0)
+        for index in range(panel.module_wall_mesh_tree.topLevelItemCount())
+    ]
     null_names = [
         panel.module_null_mesh_tree.topLevelItem(index).text(0)
         for index in range(panel.module_null_mesh_tree.topLevelItemCount())
     ]
     assert mesh_names == ["regular_mesh"]
+    assert wall_names == ["blocking_wall"]
+    assert wall_mesh._gr_hidden is True
+    assert panel.module_wall_mesh_tree.topLevelItem(0).text(4) == "no"
     assert null_names == ["external_null"]
     assert walkmesh_names == ["walkmesh_12"]
-    assert panel.module_browser_tabs.tabText(1) == "NULL Meshes"
-    assert panel.module_browser_tabs.tabText(2) == "Walkmeshes"
+    assert panel.module_browser_tabs.tabText(1) == "Walls"
+    assert panel.module_browser_tabs.tabText(2) == "NULL Meshes"
+    assert panel.module_browser_tabs.tabText(3) == "Walkmeshes"
 
 
 def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() -> None:
@@ -7145,6 +7166,22 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     viewport.set_selected_node(light_node)
     assert getattr(viewport._renderer, "selected_node", None) is light_node
     assert tuple(viewport._gizmo_world_position(light_node)) == tuple(light_node.position)
+    module_root = SimpleNamespace(name="module_root")
+    imported_light = SimpleNamespace(
+        name="AuroraLightLocal",
+        is_light=True,
+        parent=module_root,
+        position=(1.0, 2.0, 3.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    original_world_transform = viewport._renderer._node_world_transform
+    viewport._renderer._node_world_transform = lambda node: ((9.0, 8.0, 7.0), (0.0, 0.0, 0.0, 1.0), None)
+    try:
+        assert tuple(viewport._gizmo_world_position(imported_light)) == (9.0, 8.0, 7.0)
+        viewport._transform_gizmo.set_selected_object(imported_light)
+        assert viewport._transform_gizmo.get_gizmo_origin_world() == pytest.approx((9.0, 8.0, 7.0))
+    finally:
+        viewport._renderer._node_world_transform = original_world_transform
     light_node._gr_pivot_edit_mode = "affect_pivot_only"
     light_node._gr_pivot_world = (3.0, 2.0, 1.0)
     assert tuple(viewport._gizmo_world_position(light_node)) == (3.0, 2.0, 1.0)

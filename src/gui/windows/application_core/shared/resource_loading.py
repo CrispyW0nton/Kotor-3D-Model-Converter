@@ -549,10 +549,33 @@ class ResourceLoadingMixin:
         node_count = model.node_count() if hasattr(model, "node_count") else 0
         anim_count = len(getattr(model, "animations", []) or [])
         name = getattr(model, "name", Path(path).stem)
+        scene_before_count = len(getattr(self.scene_manager.active_scene, "objects", []) or [])
+        import_action = str(self._pending_scene_import_action or "add")
         scene_instance = self._add_loaded_model_to_scene(model, path)
         if hasattr(self, "viewport"):
             self._configure_viewport_resources()
-            self._refresh_scene_view()
+            appended_scene_instance = False
+            append_scene_instance = getattr(self.viewport, "append_scene_instance", None)
+            if (
+                callable(append_scene_instance)
+                and scene_instance is not None
+                and import_action == "add"
+                and scene_before_count > 0
+            ):
+                appended_scene_instance = bool(
+                    append_scene_instance(
+                        scene_instance,
+                        scene_name=self.scene_manager.active_scene.display_name,
+                        texture_dirs=self._scene_texture_dirs,
+                    )
+                )
+            if appended_scene_instance:
+                if hasattr(self, "scene_outliner_panel"):
+                    self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
+                self._refresh_scene_animation_entries()
+                self._refresh_adjust_pivot_panel()
+            else:
+                self._refresh_scene_view()
             self._try_coload_walkmesh()
         else:
             self.viewport_label.setText(f"{name}\n\nQt viewport host\n{mesh_count} mesh | {node_count} nodes")
@@ -641,7 +664,8 @@ class ResourceLoadingMixin:
         if bus is not None:
             bus.record_scene_update("model_imported", model)
             bus.animationChanged.emit(model)
-        self._invalidate_renderer_resources(f"model loaded: {name}")
+        if not bool(locals().get("appended_scene_instance", False)):
+            self._invalidate_renderer_resources(f"model loaded: {name}")
         if scene_instance is not None:
             self._log(f"Scene object added: {scene_instance.name}", "success")
     def _infer_game_from_model(self, model) -> str:

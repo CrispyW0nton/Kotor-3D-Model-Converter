@@ -66,7 +66,14 @@ class ViewportStateMixin:
                         pass
             else:
                 try:
-                    position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                    if getattr(node, "parent", None) is not None and not bool(getattr(node, "_gr_scene_object_root", False)):
+                        transform = getattr(self._renderer, "_node_world_transform", None)
+                        if callable(transform):
+                            position = tuple(float(v) for v in transform(node)[0][:3])
+                        else:
+                            position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                    else:
+                        position = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
                     setattr(node, "_gr_gizmo_world_position", position)
                     return position
                 except Exception:

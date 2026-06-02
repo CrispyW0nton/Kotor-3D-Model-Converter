@@ -139,6 +139,63 @@ class ViewportSceneModelMixin:
         else:
             self.set_selected_node(None)
 
+    def append_scene_instance(
+        self,
+        instance,
+        *,
+        scene_name: str = "Untitled Scene",
+        texture_dirs: Optional[list[str]] = None,
+    ) -> bool:
+        """Append one KMAX scene object without clearing resident mesh resources."""
+
+        if instance is None or not getattr(instance, "visible", True):
+            return False
+        composite = getattr(self, "_scene_model", None)
+        root = getattr(composite, "root_node", None)
+        if composite is None or root is None or not bool(getattr(root, "_gr_scene_composite_root", False)):
+            return False
+        single = self._build_scene_composite_model([instance], scene_name or getattr(self, "_scene_name", "Untitled Scene"))
+        single_root = getattr(single, "root_node", None) if single is not None else None
+        children = list(getattr(single_root, "children", []) or [])
+        if not children:
+            return False
+        node = children[0]
+        node.parent = root
+        root.children.append(node)
+        self._scene_instances = list(getattr(self, "_scene_instances", []) or []) + [instance]
+        self._scene_name = scene_name or getattr(self, "_scene_name", "Untitled Scene")
+        composite.name = self._scene_name
+        if single is not None:
+            composite.game_version = getattr(single, "game_version", getattr(composite, "game_version", None))
+            composite.classification = getattr(single, "classification", getattr(composite, "classification", "scene"))
+            composite.model_type = getattr(single, "model_type", getattr(composite, "model_type", None))
+        dirs = [directory for directory in (texture_dirs or []) if directory]
+        if dirs:
+            seen_dirs: set[str] = set()
+            search_dirs = []
+            for directory in dirs:
+                if not os.path.isdir(directory):
+                    continue
+                key = os.path.normcase(os.path.abspath(directory))
+                if key in seen_dirs:
+                    continue
+                seen_dirs.add(key)
+                search_dirs.append(directory)
+            if search_dirs:
+                self._renderer.tex_cache.set_search_dirs(search_dirs)
+        try:
+            composite.compute_bounds()
+            setattr(composite, "_gr_bounds_prepared", True)
+            setattr(composite, "_gr_render_bounds", (composite.bb_min, composite.bb_max))
+        except Exception:
+            pass
+        self._renderer.set_model(composite)
+        self.camera_manager.set_model(composite)
+        self.modelChanged.emit(composite)
+        self.select_scene_object(str(getattr(instance, "id", "") or ""))
+        self._request_render(fast=True, reason="scene object appended", scene=True, overlay=True, resources=True)
+        return True
+
     def _build_scene_composite_model(self, instances: list, scene_name: str):
         visible = [obj for obj in instances if getattr(obj, "visible", True)]
         if not visible:

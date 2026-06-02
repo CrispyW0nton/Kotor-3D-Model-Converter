@@ -57,6 +57,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         QtWidgets.QWidget.__init__(self, parent)
         self._current_model = None
         self._mesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
+        self._wall_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._walkmesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._null_mesh_items: dict[QtWidgets.QTreeWidgetItem, object] = {}
         self._suppress_mesh_signal = False
@@ -171,6 +172,34 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         select_all_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
         select_all_shortcut.activated.connect(self.select_all_module_meshes)
 
+        wall_page = QtWidgets.QWidget()
+        wall_layout = QtWidgets.QVBoxLayout(wall_page)
+        wall_layout.setContentsMargins(2, 2, 2, 2)
+        wall_layout.setSpacing(4)
+        self.module_wall_mesh_count = QtWidgets.QLabel("No walls.")
+        self.module_wall_mesh_count.setStyleSheet(f"color:{C['text2']};")
+        wall_layout.addWidget(self.module_wall_mesh_count)
+
+        self.module_wall_mesh_filter = QtWidgets.QLineEdit()
+        self.module_wall_mesh_filter.setPlaceholderText("Filter walls")
+        self.module_wall_mesh_filter.textChanged.connect(self._filter_module_meshes)
+        wall_layout.addWidget(self.module_wall_mesh_filter)
+
+        self.module_wall_mesh_tree = QtWidgets.QTreeWidget()
+        self.module_wall_mesh_tree.setColumnCount(6)
+        self.module_wall_mesh_tree.setHeaderLabels(["Wall", "Verts", "Faces", "Texture", "Visible", "Group"])
+        self.module_wall_mesh_tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.module_wall_mesh_tree.itemSelectionChanged.connect(self._on_module_mesh_selection_changed)
+        self.module_wall_mesh_tree.itemClicked.connect(self._on_module_mesh_item_clicked)
+        self.module_wall_mesh_tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.module_wall_mesh_tree.customContextMenuRequested.connect(self._show_module_browser_context_menu)
+        self.module_wall_mesh_tree.setRootIsDecorated(False)
+        self.module_wall_mesh_tree.setAlternatingRowColors(True)
+        wall_layout.addWidget(self.module_wall_mesh_tree, 1)
+        select_all_wall_shortcut = QtGui.QShortcut(QtGui.QKeySequence.SelectAll, self.module_wall_mesh_tree)
+        select_all_wall_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        select_all_wall_shortcut.activated.connect(self.select_all_module_meshes)
+
         null_page = QtWidgets.QWidget()
         null_layout = QtWidgets.QVBoxLayout(null_page)
         null_layout.setContentsMargins(2, 2, 2, 2)
@@ -228,6 +257,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         select_all_walk_shortcut.activated.connect(self.select_all_module_meshes)
 
         self.module_browser_tabs.addTab(mesh_page, "Meshes")
+        self.module_browser_tabs.addTab(wall_page, "Walls")
         self.module_browser_tabs.addTab(null_page, "NULL Meshes")
         self.module_browser_tabs.addTab(walk_page, "Walkmeshes")
         layout.addWidget(self.module_browser_tabs, 1)
@@ -271,8 +301,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         has_selection = bool(self._selected_module_meshes())
         hide_action.setEnabled(has_selection)
         unhide_action.setEnabled(has_selection)
-        hide_unselected_action.setEnabled(bool(self._mesh_items or self._null_mesh_items or self._walkmesh_items))
-        unhide_all_action.setEnabled(bool(self._mesh_items or self._null_mesh_items or self._walkmesh_items))
+        has_any_module_mesh = bool(self._mesh_items or self._wall_items or self._null_mesh_items or self._walkmesh_items)
+        hide_unselected_action.setEnabled(has_any_module_mesh)
+        unhide_all_action.setEnabled(has_any_module_mesh)
         chosen = menu.exec(tree.viewport().mapToGlobal(pos))
         if chosen is hide_action:
             self._set_selected_meshes_hidden(True)
@@ -682,6 +713,11 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         texture = str(getattr(node, "texture", "") or "").strip().lower()
         return texture in {"", "null", "none", "****"}
 
+    def _is_wall_mesh_candidate(self, node) -> bool:
+        texture = str(getattr(node, "texture", "") or "").strip().lower()
+        texture = texture.rsplit(".", 1)[0] if "." in texture else texture
+        return texture == "lhr_wall07"
+
     def _module_mesh_candidates(self, model, mesh_nodes=None, all_nodes=None) -> list:
         candidates = []
         seen = set()
@@ -705,11 +741,14 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         if not self._module_browser_enabled:
             return
         self._suppress_mesh_signal = True
+        auto_hidden_changed = False
         try:
             self.module_mesh_tree.clear()
+            self.module_wall_mesh_tree.clear()
             self.module_walkmesh_tree.clear()
             self.module_null_mesh_tree.clear()
             self._mesh_items.clear()
+            self._wall_items.clear()
             self._walkmesh_items.clear()
             self._null_mesh_items.clear()
             for node in mesh_nodes or []:
@@ -718,6 +757,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 verts = len(getattr(node, "vertices", []) or [])
                 faces = len(getattr(node, "faces", []) or [])
                 texture = str(getattr(node, "texture", "") or "")
+                if self._is_wall_mesh_candidate(node) and not bool(getattr(node, "_gr_hidden", False)):
+                    setattr(node, "_gr_hidden", True)
+                    auto_hidden_changed = True
                 visible = "no" if getattr(node, "_gr_hidden", False) else "yes"
                 group = str(getattr(node, "_gr_mesh_group", "") or "")
                 item = QtWidgets.QTreeWidgetItem([
@@ -732,7 +774,10 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 if visible == "no":
                     for column in range(self.module_mesh_tree.columnCount()):
                         item.setForeground(column, QtGui.QBrush(QtGui.QColor(C["text2"])))
-                if self._is_walkmesh_candidate(node):
+                if self._is_wall_mesh_candidate(node):
+                    tree = self.module_wall_mesh_tree
+                    items = self._wall_items
+                elif self._is_walkmesh_candidate(node):
                     tree = self.module_walkmesh_tree
                     items = self._walkmesh_items
                 elif self._is_null_mesh_candidate(node):
@@ -743,23 +788,28 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                     items = self._mesh_items
                 tree.addTopLevelItem(item)
                 items[item] = node
-            for tree in (self.module_mesh_tree, self.module_null_mesh_tree, self.module_walkmesh_tree):
+            for tree in (self.module_mesh_tree, self.module_wall_mesh_tree, self.module_null_mesh_tree, self.module_walkmesh_tree):
                 for column in range(tree.columnCount()):
                     tree.resizeColumnToContents(column)
             count = self.module_mesh_tree.topLevelItemCount()
             self.module_mesh_count.setText(f"{count:,} module mesh(es)" if count else "No module meshes.")
+            wall_count = self.module_wall_mesh_tree.topLevelItemCount()
+            self.module_wall_mesh_count.setText(f"{wall_count:,} wall(s)" if wall_count else "No walls.")
             null_count = self.module_null_mesh_tree.topLevelItemCount()
             self.module_null_mesh_count.setText(f"{null_count:,} NULL mesh(es)" if null_count else "No NULL meshes.")
             walk_count = self.module_walkmesh_tree.topLevelItemCount()
             self.module_walkmesh_count.setText(f"{walk_count:,} walkmesh(es)" if walk_count else "No walkmeshes.")
         finally:
             self._suppress_mesh_signal = False
+        if auto_hidden_changed:
+            self.moduleMeshVisibilityChanged.emit()
 
     def _filter_module_meshes(self, text: str) -> None:
         if not self._module_browser_enabled:
             return
         for edit, items in (
             (self.module_mesh_filter, self._mesh_items),
+            (self.module_wall_mesh_filter, self._wall_items),
             (self.module_null_mesh_filter, self._null_mesh_items),
             (self.module_walkmesh_filter, self._walkmesh_items),
         ):
@@ -778,6 +828,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         selected = []
         for tree, items in (
             (self.module_mesh_tree, self._mesh_items),
+            (self.module_wall_mesh_tree, self._wall_items),
             (self.module_null_mesh_tree, self._null_mesh_items),
             (self.module_walkmesh_tree, self._walkmesh_items),
         ):
@@ -798,7 +849,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             return
         nodes = self._selected_module_meshes()
         if not nodes:
-            for items in (self._mesh_items, self._null_mesh_items, self._walkmesh_items):
+            for items in (self._mesh_items, self._wall_items, self._null_mesh_items, self._walkmesh_items):
                 node = items.get(item)
                 if node is not None:
                     nodes = [node]
@@ -819,7 +870,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         node_id = id(node)
         return any(
             id(candidate) == node_id
-            for items in (self._mesh_items, self._null_mesh_items, self._walkmesh_items)
+            for items in (self._mesh_items, self._wall_items, self._null_mesh_items, self._walkmesh_items)
             for candidate in items.values()
         )
 
@@ -831,14 +882,16 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self._suppress_mesh_signal = True
         try:
             self.module_mesh_tree.clearSelection()
+            self.module_wall_mesh_tree.clearSelection()
             self.module_null_mesh_tree.clearSelection()
             self.module_walkmesh_tree.clearSelection()
             if not node_ids:
                 return False
             for tree, items, tab in (
                 (self.module_mesh_tree, self._mesh_items, 0),
-                (self.module_null_mesh_tree, self._null_mesh_items, 1),
-                (self.module_walkmesh_tree, self._walkmesh_items, 2),
+                (self.module_wall_mesh_tree, self._wall_items, 1),
+                (self.module_null_mesh_tree, self._null_mesh_items, 2),
+                (self.module_walkmesh_tree, self._walkmesh_items, 3),
             ):
                 for item, candidate in items.items():
                     if id(candidate) in node_ids:
@@ -855,8 +908,10 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         if not self._module_browser_enabled:
             return
         if self.module_browser_tabs.currentWidget() is self.module_browser_tabs.widget(1):
-            self.module_null_mesh_tree.selectAll()
+            self.module_wall_mesh_tree.selectAll()
         elif self.module_browser_tabs.currentWidget() is self.module_browser_tabs.widget(2):
+            self.module_null_mesh_tree.selectAll()
+        elif self.module_browser_tabs.currentWidget() is self.module_browser_tabs.widget(3):
             self.module_walkmesh_tree.selectAll()
         else:
             self.module_mesh_tree.selectAll()
@@ -866,6 +921,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             return
         for tree, items in (
             (self.module_mesh_tree, self._mesh_items),
+            (self.module_wall_mesh_tree, self._wall_items),
             (self.module_null_mesh_tree, self._null_mesh_items),
             (self.module_walkmesh_tree, self._walkmesh_items),
         ):
@@ -901,6 +957,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             node
             for node in (
                 list(self._mesh_items.values())
+                + list(self._wall_items.values())
                 + list(self._null_mesh_items.values())
                 + list(self._walkmesh_items.values())
             )
@@ -911,6 +968,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
     def _unhide_all_module_meshes(self) -> None:
         self._set_meshes_hidden(
             list(self._mesh_items.values())
+            + list(self._wall_items.values())
             + list(self._null_mesh_items.values())
             + list(self._walkmesh_items.values()),
             False,
