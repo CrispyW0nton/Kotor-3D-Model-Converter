@@ -19,6 +19,7 @@ class PygfxSceneBridge:
         self.scene = scene
         self.mesh_cache = mesh_cache or PygfxMeshCache()
         self._ambient_light = None
+        self._default_directional_light = None
         self._lights: dict[str, Any] = {}
         self._overlay_objects: list[Any] = []
         self.object_count = 0
@@ -48,6 +49,12 @@ class PygfxSceneBridge:
             except Exception:
                 pass
         self._ambient_light = None
+        if self._default_directional_light is not None:
+            try:
+                self.scene.remove(self._default_directional_light)
+            except Exception:
+                pass
+        self._default_directional_light = None
         self.clear_overlays()
 
     def update_scene(
@@ -60,6 +67,7 @@ class PygfxSceneBridge:
         anim_pose=None,
         anim_base_pose=None,
         lighting_render_data=None,
+        force_geometry_update: bool = False,
     ) -> None:
         self.mesh_cache.begin_frame()
         selected_ids = {id(node) for node in (selected_nodes or ()) if node is not None}
@@ -76,8 +84,16 @@ class PygfxSceneBridge:
         ):
             live_mesh_ids.add(int(mesh_data.mesh_id))
             selected = id(getattr(mesh_data, "source", None)) in selected_ids
-            record = self.mesh_cache.get_or_create(mesh_data, self.gfx, self.scene, selected=selected)
+            record = self.mesh_cache.get_or_create(
+                mesh_data,
+                self.gfx,
+                self.scene,
+                selected=selected,
+                force_geometry_update=force_geometry_update,
+            )
             self._apply_world_matrix(record.mesh, mesh_data.world_matrix, record)
+            if getattr(record, "edge_mesh", None) is not None:
+                self._apply_world_matrix(record.edge_mesh, mesh_data.world_matrix, record)
             object_count += 1
             if mesh_data.indices is not None:
                 triangle_count += int(np.asarray(mesh_data.indices).reshape(-1).shape[0] // 3)
@@ -100,6 +116,8 @@ class PygfxSceneBridge:
                 record.transform_dirty = False
                 continue
             self._apply_world_matrix(record.mesh, matrix, record)
+            if getattr(record, "edge_mesh", None) is not None:
+                self._apply_world_matrix(record.edge_mesh, matrix, record)
             record.transform_dirty = False
 
     def update_selection(self, selected_nodes: list | tuple | None, hovered_node=None) -> None:
@@ -153,6 +171,7 @@ class PygfxSceneBridge:
 
     def update_lighting(self, lighting_render_data) -> None:
         if lighting_render_data is None:
+            self._ensure_default_lighting()
             return
         revision = getattr(lighting_render_data, "revision", None)
         if revision == self.lighting_revision:
@@ -163,11 +182,11 @@ class PygfxSceneBridge:
         ambient = tuple(float(c) for c in getattr(lighting_render_data, "ambient_color_rgb", (0.06, 0.06, 0.06))[:3])
         intensity = float(getattr(lighting_render_data, "global_intensity", 1.0) or 1.0)
         if self._ambient_light is None:
-            self._ambient_light = gfx.AmbientLight(ambient, intensity=max(0.02, intensity))
+            self._ambient_light = gfx.AmbientLight(ambient, intensity=max(0.22, intensity))
             self.scene.add(self._ambient_light)
         else:
             self._ambient_light.color = ambient
-            self._ambient_light.intensity = max(0.02, intensity)
+            self._ambient_light.intensity = max(0.22, intensity)
 
         live_ids: set[str] = set()
         for light_data in getattr(lighting_render_data, "enabled_lights", ()):
@@ -213,6 +232,37 @@ class PygfxSceneBridge:
                 self.scene.remove(light)
             except Exception:
                 pass
+        if not live_ids:
+            self._ensure_default_directional_light()
+        elif self._default_directional_light is not None:
+            try:
+                self.scene.remove(self._default_directional_light)
+            except Exception:
+                pass
+            self._default_directional_light = None
+
+    def _ensure_default_lighting(self) -> None:
+        gfx = self.gfx
+        if self._ambient_light is None:
+            self._ambient_light = gfx.AmbientLight((0.72, 0.76, 0.82), intensity=0.55)
+            self.scene.add(self._ambient_light)
+        else:
+            self._ambient_light.color = (0.72, 0.76, 0.82)
+            self._ambient_light.intensity = max(float(getattr(self._ambient_light, "intensity", 0.0) or 0.0), 0.55)
+        self._ensure_default_directional_light()
+
+    def _ensure_default_directional_light(self) -> None:
+        gfx = self.gfx
+        if self._default_directional_light is None:
+            self._default_directional_light = gfx.DirectionalLight((1.0, 0.96, 0.88), intensity=1.35)
+            self.scene.add(self._default_directional_light)
+        light = self._default_directional_light
+        try:
+            light.local.position = (12.0, -18.0, 18.0)
+            light.local.reference_up = (0.0, 0.0, 1.0)
+            light.look_at((0.0, 0.0, 0.0))
+        except Exception:
+            pass
 
     def _add_gizmo_overlay(self, gizmo_render_data) -> None:
         if gizmo_render_data is None:
@@ -339,9 +389,11 @@ class PygfxSceneBridge:
         except Exception:
             return
         key = tuple(round(float(v), 6) for v in arr.reshape(-1))
-        if key == record.world_matrix_key:
+        is_primary_mesh = mesh is getattr(record, "mesh", None)
+        if is_primary_mesh and key == record.world_matrix_key:
             return
-        record.world_matrix_key = key
+        if is_primary_mesh:
+            record.world_matrix_key = key
         try:
             mesh.local.matrix = arr
         except Exception:

@@ -65,6 +65,8 @@ class PygfxViewportRenderer(ViewportRendererPort):
         self.render_mode = "realistic"
         self.display_options = None
         self.use_native_gizmo_overlay = False
+        self.use_native_skeleton_overlay = False
+        self.use_native_light_helper_overlay = False
 
     @staticmethod
     def _optional_module(name: str):
@@ -248,6 +250,17 @@ class PygfxViewportRenderer(ViewportRendererPort):
                 self.scene_bridge.update_visibility()
             if dirty_flags.get("lighting"):
                 self.scene_bridge.update_lighting(kwargs.get("lighting_render_data"))
+            if dirty_flags.get("animation"):
+                self.scene_bridge.update_scene(
+                    scene,
+                    textures=kwargs.get("textures") or {},
+                    selected_nodes=selected_nodes,
+                    hovered_node=kwargs.get("hovered_node"),
+                    anim_pose=kwargs.get("anim_pose"),
+                    anim_base_pose=kwargs.get("anim_base_pose"),
+                    lighting_render_data=kwargs.get("lighting_render_data"),
+                    force_geometry_update=True,
+                )
         self.scene_bridge.apply_view_style(
             show_solid=bool(getattr(self, "show_solid", True)),
             show_wireframe=bool(getattr(self, "show_wireframe", False)),
@@ -257,8 +270,8 @@ class PygfxViewportRenderer(ViewportRendererPort):
         )
         self.scene_bridge.update_overlays(
             gizmo_render_data=kwargs.get("gizmo_render_data") if bool(getattr(self, "use_native_gizmo_overlay", False)) else None,
-            skeleton_render_data=kwargs.get("skeleton_render_data"),
-            lighting_render_data=kwargs.get("lighting_render_data"),
+            skeleton_render_data=kwargs.get("skeleton_render_data") if bool(getattr(self, "use_native_skeleton_overlay", False)) else None,
+            lighting_render_data=kwargs.get("lighting_render_data") if bool(getattr(self, "use_native_light_helper_overlay", False)) else None,
         )
         request_draw = getattr(self.canvas, "request_draw", None)
         if callable(request_draw):

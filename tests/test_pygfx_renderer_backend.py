@@ -14,6 +14,7 @@ from src.adapters.rendering.pygfx_core.mesh_cache import PygfxMeshCache
 from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer
 from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 from src.adapters.rendering.renderer_factory import fallback_order, renderer_capabilities_snapshot
+from src.core.rendering.renderer_performance import ViewportFrameGovernor
 from src.core.rendering.renderer_backend import RendererBackend, normalize_renderer_backend, renderer_backend_label
 from src.core.rendering.renderer_settings import RendererSettings
 
@@ -21,6 +22,23 @@ from src.core.rendering.renderer_settings import RendererSettings
 class _FakeGeometry:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
+        if "positions" in kwargs:
+            self.positions = _FakeBuffer(kwargs["positions"])
+        if "normals" in kwargs:
+            self.normals = _FakeBuffer(kwargs["normals"])
+        if "texcoords" in kwargs:
+            self.texcoords = _FakeBuffer(kwargs["texcoords"])
+        if "indices" in kwargs:
+            self.indices = _FakeBuffer(kwargs["indices"])
+
+
+class _FakeBuffer:
+    def __init__(self, data):
+        self.data = np.asarray(data).copy()
+        self.update_calls = []
+
+    def update_range(self, offset=0, size=None):
+        self.update_calls.append((offset, size))
 
 
 class _FakeMaterial:
@@ -32,6 +50,14 @@ class _FakeMaterial:
         self.wireframe = False
         self.flat_shading = False
         self.map = None
+
+
+class MeshPhongMaterial(_FakeMaterial):
+    pass
+
+
+class MeshBasicMaterial(_FakeMaterial):
+    pass
 
 
 class _FakeLocal:
@@ -51,7 +77,8 @@ class _FakeMesh:
 
 class _FakeGfx:
     Geometry = _FakeGeometry
-    MeshPhongMaterial = _FakeMaterial
+    MeshPhongMaterial = MeshPhongMaterial
+    MeshBasicMaterial = MeshBasicMaterial
     Mesh = _FakeMesh
     LineSegmentMaterial = _FakeMaterial
     PointsMaterial = _FakeMaterial
@@ -78,6 +105,9 @@ class _FakeGfx:
             self.color = color
             self.intensity = intensity
             self.local = _FakeLocal()
+
+        def look_at(self, target):
+            self.target = target
 
     class PointLight(DirectionalLight):
         pass
@@ -188,7 +218,7 @@ def test_pygfx_availability_probe_does_not_import_gpu_runtime(monkeypatch) -> No
     PygfxViewportRenderer._probe_cache = None
 
 
-def test_pygfx_mesh_cache_retains_mesh_until_revision_changes() -> None:
+def test_pygfx_mesh_cache_retains_mesh_and_updates_same_shape_revision_in_place() -> None:
     cache = PygfxMeshCache()
     scene = _FakeScene()
     data = _mesh_data()
@@ -206,8 +236,72 @@ def test_pygfx_mesh_cache_retains_mesh_until_revision_changes() -> None:
     third = cache.get_or_create(_mesh_data(source_revision=(3, 1, 1)), _FakeGfx, scene)
 
     assert third is first
-    assert cache.geometry_updates_this_frame == 1
+    assert cache.geometry_updates_this_frame == 0
+    assert cache.dynamic_geometry_updates_this_frame == 1
     assert cache.material_updates_this_frame == 0
+
+
+def test_pygfx_mesh_cache_rebuilds_geometry_when_topology_shape_changes() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    first = cache.get_or_create(_mesh_data(), _FakeGfx, scene)
+    changed = _mesh_data(source_revision=(4, 2, 0))
+    changed.positions = np.asarray([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], dtype=np.float32)
+    changed.indices = np.asarray([0, 1, 2, 0, 2, 3], dtype=np.uint32)
+    cache.begin_frame()
+
+    updated = cache.get_or_create(changed, _FakeGfx, scene)
+
+    assert updated is first
+    assert cache.geometry_updates_this_frame == 1
+    assert cache.dynamic_geometry_updates_this_frame == 0
+
+
+def test_pygfx_mesh_cache_updates_same_shape_animation_buffers_in_place() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    first = _mesh_data(source_revision=(3, 1, 0))
+    record = cache.get_or_create(first, _FakeGfx, scene)
+    cache.begin_frame()
+    moved = _mesh_data(source_revision=(3, 1, 99))
+    moved.positions = np.asarray([(0, 0, 1), (1, 0, 1), (0, 1, 1)], dtype=np.float32)
+
+    updated = cache.get_or_create(moved, _FakeGfx, scene)
+
+    assert updated is record
+    assert updated.geometry is record.geometry
+    assert cache.geometry_updates_this_frame == 0
+    assert cache.dynamic_geometry_updates_this_frame == 1
+    assert np.allclose(record.geometry.positions.data, moved.positions)
+    assert record.geometry.positions.update_calls
+
+
+def test_pygfx_mesh_cache_force_updates_animation_buffers_even_when_revision_key_is_stable() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    record = cache.get_or_create(_mesh_data(source_revision=(3, 1, 0)), _FakeGfx, scene)
+    cache.begin_frame()
+    moved = _mesh_data(source_revision=(3, 1, 0))
+    moved.positions = np.asarray([(0, 0, 2), (1, 0, 2), (0, 1, 2)], dtype=np.float32)
+
+    cache.get_or_create(moved, _FakeGfx, scene, force_geometry_update=True)
+
+    assert cache.geometry_updates_this_frame == 0
+    assert cache.dynamic_geometry_updates_this_frame == 1
+    assert np.allclose(record.geometry.positions.data, moved.positions)
+
+
+def test_viewport_frame_governor_tracks_pygfx_style_and_animation_dirty_flags() -> None:
+    governor = ViewportFrameGovernor()
+
+    governor.request_redraw("style switch", style=True)
+    assert governor.dirty_flags["style"] is True
+    assert governor.dirty_flags["scene"] is False
+    governor.mark_clean_after_render("style switch")
+
+    governor.request_redraw("animation pose", animation=True)
+    assert governor.dirty_flags["animation"] is True
+    assert governor.dirty_flags["scene"] is False
 
 
 def test_pygfx_mesh_cache_updates_material_for_selection_without_geometry_rebuild() -> None:
@@ -289,6 +383,8 @@ def test_pygfx_keeps_legacy_overlay_gizmo_and_cpu_picking_contract() -> None:
     assert caps.supports_cpu_ray_picking is True
     assert caps.supports_gpu_id_picking is False
     assert renderer.use_native_gizmo_overlay is False
+    assert renderer.use_native_skeleton_overlay is False
+    assert renderer.use_native_light_helper_overlay is False
 
 
 def test_pygfx_camera_uses_z_up_reference() -> None:
@@ -363,6 +459,18 @@ def test_pygfx_scene_bridge_builds_native_overlay_lines() -> None:
     assert len(bridge._overlay_objects) >= 2
 
 
+def test_pygfx_scene_bridge_installs_default_lighting_when_scene_lights_missing() -> None:
+    scene = _FakeScene()
+    bridge = PygfxSceneBridge(_FakeGfx, scene, PygfxMeshCache())
+
+    bridge.update_lighting(None)
+
+    assert bridge._ambient_light is not None
+    assert bridge._ambient_light.intensity >= 0.55
+    assert bridge._default_directional_light is not None
+    assert bridge._default_directional_light in scene.children
+
+
 def test_pygfx_mesh_cache_applies_toolbar_view_style_without_geometry_rebuild() -> None:
     cache = PygfxMeshCache()
     scene = _FakeScene()
@@ -379,10 +487,42 @@ def test_pygfx_mesh_cache_applies_toolbar_view_style_without_geometry_rebuild() 
     )
 
     assert cache.geometry_updates_this_frame == 0
-    assert cache.material_updates_this_frame == 1
-    assert record.material.wireframe is True
-    assert record.material.flat_shading is True
+    assert type(record.material).__name__ == "MeshBasicMaterial"
+    assert record.mesh.visible is True
+    assert record.edge_mesh.visible is True
+    assert record.material.wireframe is False
     assert record.material.opacity == pytest.approx(0.38)
+
+
+def test_pygfx_mesh_cache_maps_realistic_shaded_flat_and_mesh_modes() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    record = cache.get_or_create(_mesh_data(material_revision=("texture",)), _FakeGfx, scene, selected=False)
+
+    cache.begin_frame()
+    cache.apply_view_style(show_solid=True, show_wireframe=False, show_texture=True, render_mode="realistic")
+    assert type(record.material).__name__ == "MeshPhongMaterial"
+    assert record.material.map is record.diffuse_map
+    assert record.mesh.visible is True
+    assert record.edge_mesh is None or record.edge_mesh.visible is False
+
+    cache.apply_view_style(show_solid=True, show_wireframe=False, show_texture=True, render_mode="shaded")
+    assert type(record.material).__name__ == "MeshPhongMaterial"
+    assert record.material.map is None
+    assert record.material.flat_shading is True
+
+    cache.apply_view_style(show_solid=True, show_wireframe=False, show_texture=True, render_mode="flat")
+    assert type(record.material).__name__ == "MeshBasicMaterial"
+    assert record.material.map is None
+
+    cache.apply_view_style(show_solid=False, show_wireframe=True, show_texture=True, render_mode="realistic")
+    assert record.mesh.visible is False
+    assert record.edge_mesh is not None
+    assert record.edge_mesh.visible is True
+
+    cache.apply_view_style(show_solid=True, show_wireframe=True, show_texture=True, render_mode="realistic")
+    assert record.mesh.visible is True
+    assert record.edge_mesh.visible is True
 
 
 def test_pygfx_mesh_cache_uses_retained_texture_map_without_geometry_rebuild() -> None:

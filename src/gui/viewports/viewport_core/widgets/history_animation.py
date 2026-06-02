@@ -220,13 +220,13 @@ class ViewportHistoryAnimationMixin:
         if pose is not None:
             self._clear_mesh_hover(request=False, reason="animation pose active")
         self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
-        self._request_render(fast=True, reason="animation pose changed", scene=True, overlay=True, hud=True)
+        self._request_render(fast=True, reason="animation pose changed", animation=True, overlay=True, hud=True)
 
     def set_animation_playback_active(self, active: bool, reason: str = "animation playback") -> None:
         self._frame_governor.set_animation_playing(bool(active), reason)
         if active:
             self._clear_mesh_hover(request=False, reason=reason)
-            self._request_render(fast=True, reason=reason, scene=True, overlay=True, hud=True)
+            self._request_render(fast=True, reason=reason, animation=True, overlay=True, hud=True)
 
     def clear_animation_pose(self) -> None:
         self._renderer.set_animation_pose(None)

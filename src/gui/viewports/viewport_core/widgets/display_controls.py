@@ -179,7 +179,7 @@ class ViewportDisplayControlsMixin:
             self._renderer.show_solid = True
             self._renderer.show_wireframe = False
         self._set_display_options(self._rebuild_display_options_from_renderer())
-        self._request_render(fast=True, reason="shade mode changed", scene=True, overlay=True, hud=True)
+        self._request_render(fast=True, reason="shade mode changed", style=True, overlay=True, hud=True)
 
     def _sync_shade_buttons(self) -> None:
         state = {
@@ -202,7 +202,7 @@ class ViewportDisplayControlsMixin:
         self._renderer.render_mode = mode_key
         self.toggle_gpu_renderer(True)
         self._set_display_options(self._rebuild_display_options_from_renderer())
-        self._request_render(fast=True, reason="render mode changed", scene=True, overlay=True, hud=True)
+        self._request_render(fast=True, reason="render mode changed", style=True, overlay=True, hud=True)
 
     def _sync_render_mode_buttons(self) -> None:
         active = getattr(self._renderer, "render_mode", "realistic") or "realistic"
@@ -225,7 +225,7 @@ class ViewportDisplayControlsMixin:
     def toggle_texture(self, checked: Optional[bool] = None) -> None:
         self._renderer.show_texture = bool(checked) if checked is not None else not self._renderer.show_texture
         self._set_display_options(self._rebuild_display_options_from_renderer())
-        self._request_render(fast=True, reason="texture mode changed", scene=True, overlay=True, hud=True)
+        self._request_render(fast=True, reason="texture mode changed", style=True, overlay=True, hud=True)
 
     def toggle_grid(self, checked: Optional[bool] = None) -> None:
         enabled = bool(checked) if checked is not None else not bool(getattr(self._renderer, "show_grid", True))

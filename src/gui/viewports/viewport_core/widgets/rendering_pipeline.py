@@ -252,7 +252,7 @@ class ViewportRenderingPipelineMixin:
         lines = [
             f"{str(bridge.get('name') or backend)}  {bridge.get('backend', 'unknown')}  D3D12 {bool(bridge.get('d3d12_requested', False))}",
             f"{adapter_name or 'adapter unknown'}",
-            f"Cache {int(bridge.get('mesh_cache_size', 0) or 0)}  Tris {int(bridge.get('triangle_count', 0) or 0)}  Geo {int(bridge.get('geometry_updates_this_frame', 0) or 0)}  Mat {int(bridge.get('material_updates_this_frame', 0) or 0)}",
+            f"Cache {int(bridge.get('mesh_cache_size', 0) or 0)}  Tris {int(bridge.get('triangle_count', 0) or 0)}  Geo {int(bridge.get('geometry_updates_this_frame', 0) or 0)}  Dyn {int(bridge.get('dynamic_geometry_updates_this_frame', 0) or 0)}  Mat {int(bridge.get('material_updates_this_frame', 0) or 0)}",
             f"Pick CPU  Lights {int(bridge.get('light_overlay_segments', 0) or 0)}  Bones {int(bridge.get('skeleton_overlay_segments', 0) or 0)}",
         ]
         reason = str(bridge.get("reason") or "")
