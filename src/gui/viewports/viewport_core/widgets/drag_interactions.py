@@ -983,6 +983,11 @@ class ViewportDragInteractionsMixin:
             return False
 
     def _draw_hovered_mesh_outline(self, draw, w: int, h: int) -> None:
+        try:
+            if self.canvas.is_live_surface() and str(getattr(getattr(self, "_gpu_renderer", None), "backend_id", "") or "") == "pygfx_wgpu":
+                return
+        except Exception:
+            pass
         if not self.mesh_hover_enabled:
             return
         if self._mesh_hover_suppressed_for_animation():

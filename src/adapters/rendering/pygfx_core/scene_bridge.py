@@ -36,6 +36,11 @@ class PygfxSceneBridge:
                 self.scene.remove(record.mesh)
             except Exception:
                 pass
+            if getattr(record, "edge_mesh", None) is not None:
+                try:
+                    self.scene.remove(record.edge_mesh)
+                except Exception:
+                    pass
         self.mesh_cache.clear()
         for light in list(self._lights.values()):
             try:
@@ -71,29 +76,38 @@ class PygfxSceneBridge:
     ) -> None:
         self.mesh_cache.begin_frame()
         selected_ids = {id(node) for node in (selected_nodes or ()) if node is not None}
-        if hovered_node is not None:
-            selected_ids.add(id(hovered_node))
+        hovered_id = id(hovered_node) if hovered_node is not None else None
         live_mesh_ids: set[int] = set()
         object_count = 0
         triangle_count = 0
+        vbo_builder = None
+        try:
+            from src.adapters.rendering.moderngl_resources import _build_vbo_data
+
+            vbo_builder = _build_vbo_data
+        except Exception:
+            vbo_builder = None
         for mesh_data in iter_mesh_render_data(
             model,
             textures=textures or {},
             anim_pose=anim_pose,
             anim_base_pose=anim_base_pose,
+            vbo_builder=vbo_builder,
         ):
             live_mesh_ids.add(int(mesh_data.mesh_id))
             selected = id(getattr(mesh_data, "source", None)) in selected_ids
+            hovered = hovered_id is not None and id(getattr(mesh_data, "source", None)) == hovered_id
             record = self.mesh_cache.get_or_create(
                 mesh_data,
                 self.gfx,
                 self.scene,
                 selected=selected,
+                hovered=hovered,
                 force_geometry_update=force_geometry_update,
             )
-            self._apply_world_matrix(record.mesh, mesh_data.world_matrix, record)
+            self._apply_world_matrix(record.mesh, self._mesh_model_matrix(mesh_data), record)
             if getattr(record, "edge_mesh", None) is not None:
-                self._apply_world_matrix(record.edge_mesh, mesh_data.world_matrix, record)
+                self._apply_world_matrix(record.edge_mesh, self._mesh_model_matrix(mesh_data), record)
             object_count += 1
             if mesh_data.indices is not None:
                 triangle_count += int(np.asarray(mesh_data.indices).reshape(-1).shape[0] // 3)
@@ -115,6 +129,8 @@ class PygfxSceneBridge:
             except Exception:
                 record.transform_dirty = False
                 continue
+            if bool(getattr(record, "is_skinned", False)) and not bool(getattr(record.source, "_gr_bas_attachment_layer", False)):
+                matrix = np.eye(4, dtype=np.float32)
             self._apply_world_matrix(record.mesh, matrix, record)
             if getattr(record, "edge_mesh", None) is not None:
                 self._apply_world_matrix(record.edge_mesh, matrix, record)
@@ -122,9 +138,8 @@ class PygfxSceneBridge:
 
     def update_selection(self, selected_nodes: list | tuple | None, hovered_node=None) -> None:
         selected_ids = {id(node) for node in (selected_nodes or ()) if node is not None}
-        if hovered_node is not None:
-            selected_ids.add(id(hovered_node))
-        self.mesh_cache.update_selection(self.gfx, selected_ids)
+        hovered_id = id(hovered_node) if hovered_node is not None else None
+        self.mesh_cache.update_selection(self.gfx, selected_ids, hovered_id)
 
     def update_visibility(self) -> None:
         self.mesh_cache.update_visibility()
@@ -135,15 +150,29 @@ class PygfxSceneBridge:
         show_solid: bool = True,
         show_wireframe: bool = False,
         show_texture: bool = True,
+        show_diffuse: bool = True,
+        show_lightmap: bool = True,
         render_mode: str = "realistic",
+        cull_faces: bool = False,
         xray: bool = False,
+        show_mesh_hover: bool = True,
+        wire_color: tuple[float, float, float, float] = (0.18, 0.62, 0.95, 1.0),
+        hover_color: tuple[float, float, float, float] = (0.0, 215 / 255.0, 181 / 255.0, 0.45),
+        selection_color: tuple[float, float, float, float] = (1.0, 210 / 255.0, 63 / 255.0, 1.0),
     ) -> None:
         self.mesh_cache.apply_view_style(
             show_solid=show_solid,
             show_wireframe=show_wireframe,
             show_texture=show_texture,
+            show_diffuse=show_diffuse,
+            show_lightmap=show_lightmap,
             render_mode=render_mode,
+            cull_faces=cull_faces,
             xray=xray,
+            show_mesh_hover=show_mesh_hover,
+            wire_color=wire_color,
+            hover_color=hover_color,
+            selection_color=selection_color,
         )
 
     def update_overlays(
@@ -152,11 +181,13 @@ class PygfxSceneBridge:
         gizmo_render_data=None,
         skeleton_render_data=None,
         lighting_render_data=None,
+        helper_render_data=None,
     ) -> None:
         self.clear_overlays()
         self._add_gizmo_overlay(gizmo_render_data)
         self._add_skeleton_overlay(skeleton_render_data)
         self._add_lighting_overlay(lighting_render_data)
+        self._add_helper_overlay(helper_render_data)
 
     def clear_overlays(self) -> None:
         for obj in self._overlay_objects:
@@ -321,6 +352,26 @@ class PygfxSceneBridge:
             rgba = tuple(float(c) for c in (*color[:3], 0.45))
             self.light_overlay_segments += self._add_line_segments(vertices, rgba, thickness=1.0, name="pygfx-light-volume")
 
+    def _add_helper_overlay(self, helper_render_data) -> None:
+        if helper_render_data is None:
+            return
+        base_points: list[tuple[float, float, float]] = []
+        hovered_points: list[tuple[float, float, float]] = []
+        selected_points: list[tuple[float, float, float]] = []
+        for helper in getattr(helper_render_data, "helpers", ()) or ():
+            if not bool(getattr(helper, "visible", True)):
+                continue
+            point = self._vec3(getattr(helper, "position", (0.0, 0.0, 0.0)))
+            if bool(getattr(helper, "selected", False)):
+                selected_points.append(point)
+            elif bool(getattr(helper, "hovered", False)):
+                hovered_points.append(point)
+            else:
+                base_points.append(point)
+        self._add_points(base_points, (0.70, 0.82, 0.88, 0.88), size=6.0, name="pygfx-helper")
+        self._add_points(hovered_points, (0.0, 215 / 255.0, 181 / 255.0, 1.0), size=9.0, name="pygfx-helper-hover")
+        self._add_points(selected_points, (1.0, 210 / 255.0, 63 / 255.0, 1.0), size=10.0, name="pygfx-helper-selected")
+
     def _add_line_segments(
         self,
         points,
@@ -401,6 +452,16 @@ class PygfxSceneBridge:
                 mesh.local.position = (float(arr[0, 3]), float(arr[1, 3]), float(arr[2, 3]))
             except Exception:
                 pass
+
+    @staticmethod
+    def _mesh_model_matrix(mesh_data):
+        source = getattr(mesh_data, "source", None)
+        if bool(getattr(mesh_data, "is_skinned", False)) and not bool(getattr(source, "_gr_bas_attachment_layer", False)):
+            return np.eye(4, dtype=np.float32)
+        try:
+            return np.asarray(getattr(mesh_data, "world_matrix", None), dtype=np.float32).reshape((4, 4))
+        except Exception:
+            return np.eye(4, dtype=np.float32)
 
     def diagnostics(self) -> dict[str, object]:
         return {

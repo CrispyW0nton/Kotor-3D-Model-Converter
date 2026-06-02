@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from ..shared import *  # noqa: F401,F403
 from .mini_thumbnail import *  # noqa: F401,F403
 from .snap_view_bar import *  # noqa: F401,F403
@@ -359,6 +361,9 @@ class ViewportRenderingPipelineMixin:
             )
         except Exception as exc:
             log.debug("WGPU lighting render data build failed: %s", exc)
+        helper_render_data = None
+        if str(getattr(self._gpu_renderer, "backend_id", "") or "") == "pygfx_wgpu":
+            helper_render_data = self._build_pygfx_helper_render_data()
         try:
             self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
         except Exception:
@@ -383,6 +388,7 @@ class ViewportRenderingPipelineMixin:
             gizmo_render_data=gizmo_render_data,
             skeleton_render_data=skeleton_render_data,
             lighting_render_data=lighting_render_data,
+            helper_render_data=helper_render_data,
             picking_diagnostics=self._viewport_picking_diagnostics(),
             hovered_node=getattr(self, "_hovered_mesh_node", None),
             show_mesh_hover=bool(getattr(self, "mesh_hover_enabled", True)),
@@ -433,6 +439,40 @@ class ViewportRenderingPipelineMixin:
                 self._gpu_upload_total = 0
                 self._gpu_upload_model_id = 0
         return img
+
+    def _build_pygfx_helper_render_data(self):
+        if self.model is None:
+            return None
+        if not bool(getattr(self._renderer, "show_dummy_helpers", getattr(self, "_dummy_helpers_visible", True))):
+            return None
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            return None
+        selected = getattr(self._renderer, "selected_node", None)
+        selected_ids = {id(node) for node in getattr(self, "_selected_viewport_nodes", []) or []}
+        hovered = getattr(self, "_hovered_helper_node", None)
+        helpers = []
+        for node in nodes:
+            if not self._is_general_helper_node(node):
+                continue
+            if bool(getattr(node, "_gr_hidden", False)):
+                continue
+            try:
+                position = self._helper_world_position(node)
+            except Exception:
+                continue
+            helpers.append(
+                SimpleNamespace(
+                    position=position,
+                    selected=node is selected or id(node) in selected_ids or bool(getattr(node, "_gr_selected", False)),
+                    hovered=node is hovered,
+                    visible=True,
+                )
+            )
+        if not helpers:
+            return None
+        return SimpleNamespace(helpers=tuple(helpers))
 
     def _draw_gpu_viewport_overlays(self, img, w: int, h: int):
         """Draw screen-space viewport tools over an already-rendered GPU frame.

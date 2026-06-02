@@ -17,20 +17,29 @@ class PygfxMeshRecord:
     mesh: Any
     geometry: Any
     material: Any
+    edge_positions: Any
     gfx: Any
     scene: Any
     base_color: tuple[float, float, float, float]
     source_revision: tuple[Any, ...]
     material_revision: tuple[Any, ...]
     diffuse_map: Any = None
+    lightmap_map: Any = None
+    double_sided: bool = False
+    alpha_mode: str = "OPAQUE"
+    alpha_cutoff: float = 0.5
+    unlit: bool = False
+    is_skinned: bool = False
     edge_mesh: Any = None
     edge_material: Any = None
     world_matrix_key: tuple[float, ...] = ()
     view_style_key: tuple[Any, ...] = ()
     selected: bool = False
+    hovered: bool = False
     transform_dirty: bool = False
     geometry_dirty: bool = False
     material_dirty: bool = False
+    edge_geometry_dirty: bool = False
 
 
 class PygfxMeshCache:
@@ -59,15 +68,29 @@ class PygfxMeshCache:
         show_solid: bool = True,
         show_wireframe: bool = False,
         show_texture: bool = True,
+        show_diffuse: bool = True,
+        show_lightmap: bool = True,
         render_mode: str = "realistic",
+        cull_faces: bool = False,
         xray: bool = False,
+        show_mesh_hover: bool = True,
+        wire_color: tuple[float, float, float, float] = (0.18, 0.62, 0.95, 1.0),
+        hover_color: tuple[float, float, float, float] = (0.0, 215 / 255.0, 181 / 255.0, 0.45),
+        selection_color: tuple[float, float, float, float] = (1.0, 210 / 255.0, 63 / 255.0, 1.0),
     ) -> tuple[Any, ...]:
         return (
             bool(show_solid),
             bool(show_wireframe),
             bool(show_texture),
+            bool(show_diffuse),
+            bool(show_lightmap),
             str(render_mode or "realistic").strip().lower(),
+            bool(cull_faces),
             bool(xray),
+            bool(show_mesh_hover),
+            tuple(round(float(c), 6) for c in wire_color[:4]),
+            tuple(round(float(c), 6) for c in hover_color[:4]),
+            tuple(round(float(c), 6) for c in selection_color[:4]),
         )
 
     def apply_view_style(
@@ -76,15 +99,29 @@ class PygfxMeshCache:
         show_solid: bool = True,
         show_wireframe: bool = False,
         show_texture: bool = True,
+        show_diffuse: bool = True,
+        show_lightmap: bool = True,
         render_mode: str = "realistic",
+        cull_faces: bool = False,
         xray: bool = False,
+        show_mesh_hover: bool = True,
+        wire_color: tuple[float, float, float, float] = (0.18, 0.62, 0.95, 1.0),
+        hover_color: tuple[float, float, float, float] = (0.0, 215 / 255.0, 181 / 255.0, 0.45),
+        selection_color: tuple[float, float, float, float] = (1.0, 210 / 255.0, 63 / 255.0, 1.0),
     ) -> None:
         style_key = self._view_style_key(
             show_solid=show_solid,
             show_wireframe=show_wireframe,
             show_texture=show_texture,
+            show_diffuse=show_diffuse,
+            show_lightmap=show_lightmap,
             render_mode=render_mode,
+            cull_faces=cull_faces,
             xray=xray,
+            show_mesh_hover=show_mesh_hover,
+            wire_color=wire_color,
+            hover_color=hover_color,
+            selection_color=selection_color,
         )
         for record in self.records.values():
             if record.view_style_key == style_key:
@@ -108,7 +145,16 @@ class PygfxMeshCache:
                 except Exception:
                     pass
 
-    def get_or_create(self, mesh_data, gfx, scene, *, selected: bool = False, force_geometry_update: bool = False) -> PygfxMeshRecord:
+    def get_or_create(
+        self,
+        mesh_data,
+        gfx,
+        scene,
+        *,
+        selected: bool = False,
+        hovered: bool = False,
+        force_geometry_update: bool = False,
+    ) -> PygfxMeshRecord:
         mesh_id = int(mesh_data.mesh_id)
         source_revision = tuple(mesh_data.source_revision or ())
         material_revision = tuple(getattr(mesh_data.material, "source_revision", ()) or ())
@@ -121,8 +167,15 @@ class PygfxMeshCache:
         record = self.records.get(mesh_id)
         if record is None:
             geometry = self._build_geometry(mesh_data, gfx)
-            diffuse_map = self._texture_map(mesh_data, gfx)
-            material = self._build_material(mesh_data, gfx, selected=selected, diffuse_map=diffuse_map)
+            diffuse_map = self._texture_map(mesh_data, gfx, channel=0, lightmap=False)
+            lightmap_map = self._texture_map(mesh_data, gfx, channel=1, lightmap=True)
+            material = self._build_material(
+                mesh_data,
+                gfx,
+                selected=selected,
+                diffuse_map=diffuse_map,
+                lightmap_map=lightmap_map,
+            )
             mesh = gfx.Mesh(geometry, material)
             try:
                 mesh.name = str(getattr(mesh_data.source, "name", "") or mesh_id)
@@ -139,13 +192,22 @@ class PygfxMeshCache:
                 mesh=mesh,
                 geometry=geometry,
                 material=material,
+                edge_positions=None,
                 gfx=gfx,
                 scene=scene,
                 base_color=self._base_color(mesh_data),
                 source_revision=source_revision,
                 material_revision=material_revision,
                 diffuse_map=diffuse_map,
+                lightmap_map=lightmap_map,
+                double_sided=bool(getattr(mesh_data.material, "double_sided", False)),
+                alpha_mode=str(getattr(mesh_data.material, "alpha_mode", "OPAQUE") or "OPAQUE").upper(),
+                alpha_cutoff=float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5),
+                unlit=bool(getattr(mesh_data.material, "unlit", False)),
+                is_skinned=bool(getattr(mesh_data, "is_skinned", False)),
                 selected=bool(selected),
+                hovered=bool(hovered),
+                edge_geometry_dirty=True,
             )
             self.records[mesh_id] = record
             return record
@@ -160,24 +222,46 @@ class PygfxMeshCache:
                 record.geometry = self._build_geometry(mesh_data, gfx)
                 record.mesh.geometry = record.geometry
                 if record.edge_mesh is not None:
-                    record.edge_mesh.geometry = record.geometry
+                    record.edge_positions = self._build_edge_positions(mesh_data)
+                    record.edge_mesh.geometry = self._build_edge_geometry(record, gfx)
                 self.geometry_updates_this_frame += 1
+            else:
+                if record.edge_mesh is not None:
+                    record.edge_positions = self._build_edge_positions(mesh_data)
+                    self._update_edge_geometry(record, gfx)
             record.geometry_key = geometry_key
             record.source_revision = source_revision
+            record.is_skinned = bool(getattr(mesh_data, "is_skinned", False))
+            record.edge_geometry_dirty = record.edge_mesh is not None
             record.geometry_dirty = False
         if record.material_dirty or record.material_key != material_key:
-            record.diffuse_map = self._texture_map(mesh_data, gfx)
-            record.material = self._build_material(mesh_data, gfx, selected=selected, diffuse_map=record.diffuse_map)
+            record.diffuse_map = self._texture_map(mesh_data, gfx, channel=0, lightmap=False)
+            record.lightmap_map = self._texture_map(mesh_data, gfx, channel=1, lightmap=True)
+            record.material = self._build_material(
+                mesh_data,
+                gfx,
+                selected=selected,
+                diffuse_map=record.diffuse_map,
+                lightmap_map=record.lightmap_map,
+            )
             record.mesh.material = record.material
             record.material_key = material_key
             record.material_revision = material_revision
             record.base_color = self._base_color(mesh_data)
+            record.double_sided = bool(getattr(mesh_data.material, "double_sided", False))
+            record.alpha_mode = str(getattr(mesh_data.material, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
+            record.alpha_cutoff = float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5)
+            record.unlit = bool(getattr(mesh_data.material, "unlit", False))
+            record.is_skinned = bool(getattr(mesh_data, "is_skinned", False))
             record.selected = bool(selected)
             record.view_style_key = ()
             record.material_dirty = False
             self.material_updates_this_frame += 1
         elif record.selected != bool(selected):
-            self._apply_selection_state(record, bool(selected))
+            self._apply_selection_state(record, bool(selected), bool(hovered))
+        elif record.hovered != bool(hovered):
+            record.hovered = bool(hovered)
+            record.view_style_key = ()
         return record
 
     def mark_transform_dirty(self, node=None) -> None:
@@ -193,11 +277,12 @@ class PygfxMeshCache:
             record.geometry_dirty = True
             record.transform_dirty = True
 
-    def update_selection(self, gfx, selected_source_ids: set[int]) -> None:
+    def update_selection(self, gfx, selected_source_ids: set[int], hovered_source_id: int | None = None) -> None:
         for record in self.records.values():
             selected = id(record.source) in selected_source_ids
-            if record.selected != selected:
-                self._apply_selection_state(record, selected)
+            hovered = hovered_source_id is not None and id(record.source) == hovered_source_id
+            if record.selected != selected or record.hovered != hovered:
+                self._apply_selection_state(record, selected, hovered)
 
     def update_visibility(self) -> None:
         for record in self.records.values():
@@ -219,15 +304,32 @@ class PygfxMeshCache:
         if mesh_data.normals is not None:
             kwargs["normals"] = mesh_data.normals
         if mesh_data.uvs0 is not None:
-            kwargs["texcoords"] = mesh_data.uvs0
+            kwargs["texcoords"] = self._pygfx_uvs(mesh_data.uvs0)
+        if mesh_data.uvs1 is not None:
+            kwargs["texcoords1"] = self._pygfx_uvs(mesh_data.uvs1)
         return gfx.Geometry(**kwargs)
+
+    def _build_edge_positions(self, mesh_data):
+        positions = np.asarray(getattr(mesh_data, "positions", None), dtype=np.float32)
+        if positions.ndim != 2 or positions.shape[1] < 3 or len(positions) < 2:
+            return None
+        indices = getattr(mesh_data, "indices", None)
+        geometric = self._uses_sprite_wire_hull(getattr(mesh_data, "material", None))
+        edge_indices = self._build_edge_indices(indices, len(positions), positions=positions, geometric=geometric)
+        if edge_indices is None or len(edge_indices) < 2:
+            return None
+        try:
+            return np.ascontiguousarray(positions[np.asarray(edge_indices, dtype=np.uint32), :3], dtype=np.float32)
+        except Exception:
+            return None
 
     def _update_geometry_buffers(self, record: PygfxMeshRecord, mesh_data) -> bool:
         geometry = record.geometry
         checks = (
             ("positions", getattr(mesh_data, "positions", None)),
             ("normals", getattr(mesh_data, "normals", None)),
-            ("texcoords", getattr(mesh_data, "uvs0", None)),
+            ("texcoords", self._pygfx_uvs(getattr(mesh_data, "uvs0", None))),
+            ("texcoords1", self._pygfx_uvs(getattr(mesh_data, "uvs1", None))),
         )
         for attr, values in checks:
             if values is None:
@@ -276,26 +378,54 @@ class PygfxMeshCache:
             base = (*base[:3], 1.0)
         return base
 
-    def _build_material(self, mesh_data, gfx, *, selected: bool = False, diffuse_map=None):
+    @staticmethod
+    def _pygfx_uvs(values):
+        if values is None:
+            return None
+        try:
+            arr = np.asarray(values, dtype=np.float32)
+        except Exception:
+            return None
+        if arr.ndim != 2 or arr.shape[1] < 2:
+            return None
+        out = np.array(arr[:, :2], dtype=np.float32, copy=True)
+        # WGPU/D3D parity: renderer-neutral mesh data preserves KotOR's D3D
+        # convention where V=0 is the texture top. pygfx samples its texture
+        # arrays directly, so flip V here just like the WGPU shader does.
+        out[:, 1] = 1.0 - out[:, 1]
+        return out
+
+    def _build_material(self, mesh_data, gfx, *, selected: bool = False, diffuse_map=None, lightmap_map=None):
         base = self._base_color(mesh_data)
         color = self._selection_color(base) if selected else base
         material = gfx.MeshPhongMaterial(color=color)
         if diffuse_map is not None:
             self._set_material_attr(material, "map", diffuse_map)
+        if lightmap_map is not None:
+            self._set_material_attr(material, "light_map", lightmap_map)
+            self._set_material_attr(material, "light_map_intensity", 0.55)
+        self._apply_material_flags(
+            material,
+            alpha_mode=str(getattr(mesh_data.material, "alpha_mode", "OPAQUE") or "OPAQUE").upper(),
+            alpha_cutoff=float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5),
+            unlit=bool(getattr(mesh_data.material, "unlit", False)),
+            color=color,
+        )
         try:
-            material.side = "FRONT_AND_BACK" if bool(getattr(mesh_data.material, "double_sided", False)) else "FRONT"
+            material.side = "both"
         except Exception:
             pass
         return material
 
-    def _texture_map(self, mesh_data, gfx):
-        texture_data = getattr(getattr(mesh_data, "material", None), "diffuse_texture_data", None)
+    def _texture_map(self, mesh_data, gfx, *, channel: int, lightmap: bool = False):
+        texture_attr = "lightmap_texture_data" if lightmap else "diffuse_texture_data"
+        texture_data = getattr(getattr(mesh_data, "material", None), texture_attr, None)
         source = getattr(texture_data, "source", None)
         if source is None:
             return None
         texture_id = str(getattr(texture_data, "texture_id", "") or getattr(texture_data, "name", "") or id(source))
         revision = tuple(getattr(texture_data, "source_revision", ()) or ())
-        key = (texture_id, revision)
+        key = (texture_id, revision, int(channel), bool(lightmap))
         cached = self.texture_maps.get(key)
         if cached is not None:
             return cached
@@ -305,8 +435,19 @@ class PygfxMeshCache:
             if pixels.ndim != 3 or pixels.shape[2] < 4:
                 return None
             pixels = np.ascontiguousarray(pixels[:, :, :4])
-            texture = gfx.Texture(pixels, dim=2, colorspace="srgb", generate_mipmaps=True)
-            texture_map = gfx.TextureMap(texture, uv_channel=0, wrap="repeat", filter="linear")
+            texture = gfx.Texture(
+                pixels,
+                dim=2,
+                colorspace="physical" if lightmap else "srgb",
+                generate_mipmaps=not lightmap,
+            )
+            texture_map = gfx.TextureMap(
+                texture,
+                uv_channel=int(channel),
+                wrap="clamp" if lightmap else "repeat",
+                filter="linear",
+                mipmap_filter="nearest" if lightmap else "linear",
+            )
             self.texture_maps[key] = texture_map
             return texture_map
         except Exception:
@@ -321,8 +462,10 @@ class PygfxMeshCache:
             base[3],
         )
 
-    def _apply_selection_state(self, record: PygfxMeshRecord, selected: bool) -> None:
+    def _apply_selection_state(self, record: PygfxMeshRecord, selected: bool, hovered: bool | None = None) -> None:
         record.selected = bool(selected)
+        if hovered is not None:
+            record.hovered = bool(hovered)
         color = self._selection_color(record.base_color) if selected else record.base_color
         record.view_style_key = record.view_style_key or self._view_style_key()
         self._set_material_color(record.material, color)
@@ -330,11 +473,24 @@ class PygfxMeshCache:
         self.material_updates_this_frame += 1
 
     def _apply_material_style(self, record: PygfxMeshRecord, style_key: tuple[Any, ...]) -> None:
-        show_solid, show_wireframe, show_texture, render_mode, xray = style_key
+        (
+            show_solid,
+            show_wireframe,
+            show_texture,
+            show_diffuse,
+            show_lightmap,
+            render_mode,
+            cull_faces,
+            xray,
+            show_mesh_hover,
+            wire_color,
+            hover_color,
+            selection_color,
+        ) = style_key
         render_mode = str(render_mode or "realistic").strip().lower()
         self._ensure_material_class(record, render_mode)
         color = self._selection_color(record.base_color) if record.selected else record.base_color
-        map_enabled = bool(show_texture) and render_mode == "realistic"
+        map_enabled = bool(show_texture) and bool(show_diffuse)
         if not map_enabled:
             luminance = max(0.18, min(0.82, color[0] * 0.3 + color[1] * 0.45 + color[2] * 0.25))
             color = (luminance, luminance, luminance, color[3])
@@ -346,7 +502,21 @@ class PygfxMeshCache:
             color = (color[0], color[1], color[2], min(color[3], 0.38))
         self._set_material_color(record.material, color)
         self._set_material_attr(record.material, "opacity", color[3])
+        self._apply_material_flags(
+            record.material,
+            alpha_mode=record.alpha_mode,
+            alpha_cutoff=record.alpha_cutoff,
+            unlit=record.unlit,
+            color=color,
+        )
         self._set_material_attr(record.material, "map", record.diffuse_map if map_enabled else None)
+        lightmap_enabled = bool(show_texture) and bool(show_lightmap)
+        self._set_material_attr(record.material, "light_map", record.lightmap_map if lightmap_enabled else None)
+        self._set_material_attr(record.material, "light_map_intensity", 0.55 if lightmap_enabled else 0.0)
+        try:
+            record.material.side = "front" if bool(cull_faces) and not bool(record.double_sided) else "both"
+        except Exception:
+            pass
         self._set_material_attr(record.material, "wireframe", bool(show_wireframe) and not bool(show_solid))
         self._set_material_attr(record.material, "flat_shading", render_mode in {"flat", "shaded"})
         self._set_material_attr(record.mesh, "visible", self._source_visible(record.source) and (bool(show_solid) or bool(show_wireframe)))
@@ -354,7 +524,13 @@ class PygfxMeshCache:
             self._set_material_attr(record.mesh, "visible", self._source_visible(record.source))
         else:
             self._set_material_attr(record.mesh, "visible", False)
-        self._set_edge_overlay_visible(record, bool(show_wireframe), color)
+        edge_visible = bool(show_wireframe) or bool(record.selected) or (bool(show_mesh_hover) and bool(record.hovered))
+        edge_color = wire_color
+        if record.selected:
+            edge_color = selection_color
+        elif record.hovered and bool(show_mesh_hover):
+            edge_color = hover_color
+        self._set_edge_overlay_visible(record, edge_visible, edge_color)
 
     def _ensure_material_class(self, record: PygfxMeshRecord, render_mode: str) -> None:
         target_name = "MeshBasicMaterial" if render_mode == "flat" else "MeshPhongMaterial"
@@ -366,28 +542,184 @@ class PygfxMeshCache:
         try:
             record.material = cls(color=record.base_color)
             record.mesh.material = record.material
+            self._set_material_attr(record.material, "map", record.diffuse_map)
+            self._set_material_attr(record.material, "light_map", record.lightmap_map)
             self.material_updates_this_frame += 1
         except Exception:
             pass
+
+    def _apply_material_flags(
+        self,
+        material,
+        *,
+        alpha_mode: str,
+        alpha_cutoff: float,
+        unlit: bool,
+        color: tuple[float, float, float, float],
+    ) -> None:
+        mode = str(alpha_mode or "OPAQUE").upper()
+        if mode in {"MASK", "CUTOUT"}:
+            self._set_material_attr(material, "alpha_mode", "auto")
+            self._set_material_attr(material, "alpha_test", float(alpha_cutoff or 0.5))
+        elif mode == "BLEND" or color[3] < 0.999:
+            self._set_material_attr(material, "alpha_mode", "blend")
+        else:
+            self._set_material_attr(material, "alpha_mode", "solid")
+        if bool(unlit):
+            self._set_material_attr(material, "emissive", color[:3])
 
     def _set_edge_overlay_visible(self, record: PygfxMeshRecord, visible: bool, color) -> None:
         if not visible:
             if record.edge_mesh is not None:
                 self._set_material_attr(record.edge_mesh, "visible", False)
             return
+        if record.edge_positions is None or len(record.edge_positions) < 2:
+            record.edge_positions = self._edge_positions_from_geometry(record)
+            if record.edge_positions is None or len(record.edge_positions) < 2:
+                if record.edge_mesh is not None:
+                    self._set_material_attr(record.edge_mesh, "visible", False)
+                return
         if record.edge_mesh is None:
             try:
-                material = record.gfx.MeshBasicMaterial(color=(0.0, 0.84, 0.72, 1.0), wireframe=True)
-                edge_mesh = record.gfx.Mesh(record.geometry, material)
+                material = record.gfx.LineSegmentMaterial(color=color, thickness=1.25, thickness_space="screen")
+                edge_mesh = record.gfx.Line(self._build_edge_geometry(record, record.gfx), material, render_order=2500, name=f"{getattr(record.mesh, 'name', record.mesh_id)}-wire")
                 edge_mesh.name = f"{getattr(record.mesh, 'name', record.mesh_id)}-wire"
+                self._copy_local_transform(record.mesh, edge_mesh)
                 record.scene.add(edge_mesh)
                 record.edge_mesh = edge_mesh
                 record.edge_material = material
+                record.edge_geometry_dirty = False
             except Exception:
                 return
-        self._set_material_color(record.edge_material, (0.0, 0.84, 0.72, 1.0))
-        self._set_material_attr(record.edge_material, "wireframe", True)
+        elif record.edge_geometry_dirty:
+            self._update_edge_geometry(record, record.gfx)
+            record.edge_geometry_dirty = False
+        self._copy_local_transform(record.mesh, record.edge_mesh)
+        self._set_material_color(record.edge_material, color)
+        self._set_material_attr(record.edge_material, "thickness", 1.6 if record.selected or record.hovered else 1.15)
         self._set_material_attr(record.edge_mesh, "visible", self._source_visible(record.source))
+
+    def _build_edge_geometry(self, record: PygfxMeshRecord, gfx):
+        return gfx.Geometry(positions=np.asarray(record.edge_positions, dtype=np.float32))
+
+    def _edge_positions_from_geometry(self, record: PygfxMeshRecord):
+        try:
+            positions = np.asarray(getattr(getattr(record.geometry, "positions", None), "data", None), dtype=np.float32)
+            indices_buffer = getattr(record.geometry, "indices", None)
+            indices = getattr(indices_buffer, "data", None)
+            if indices is not None:
+                indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
+            edge_indices = self._build_edge_indices(indices, len(positions), positions=positions)
+            if edge_indices is None or len(edge_indices) < 2:
+                return None
+            return np.ascontiguousarray(positions[np.asarray(edge_indices, dtype=np.uint32), :3], dtype=np.float32)
+        except Exception:
+            return None
+
+    def _update_edge_geometry(self, record: PygfxMeshRecord, gfx) -> None:
+        if record.edge_mesh is None or record.edge_positions is None:
+            return
+        geometry = getattr(record.edge_mesh, "geometry", None)
+        buffer = getattr(geometry, "positions", None)
+        data = getattr(buffer, "data", None)
+        if data is None or tuple(np.asarray(data).shape) != tuple(np.asarray(record.edge_positions).shape):
+            try:
+                record.edge_mesh.geometry = self._build_edge_geometry(record, gfx)
+            except Exception:
+                pass
+            return
+        try:
+            data[...] = np.asarray(record.edge_positions, dtype=np.asarray(data).dtype).reshape(np.asarray(data).shape)
+            update_range = getattr(buffer, "update_range", None)
+            if callable(update_range):
+                update_range(0, len(data))
+        except Exception:
+            pass
+
+    @staticmethod
+    def _copy_local_transform(source, target) -> None:
+        try:
+            target.local.matrix = getattr(source.local, "matrix", None)
+        except Exception:
+            pass
+        try:
+            target.local.position = getattr(source.local, "position", None)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _uses_sprite_wire_hull(material) -> bool:
+        if material is None:
+            return False
+        blend_mode = str(getattr(material, "blend_mode", "") or "").upper()
+        sprite_alpha = int(getattr(material, "sprite_alpha_source", 0) or 0)
+        return blend_mode in {"ADDITIVE", "LIGHTEN"} and sprite_alpha > 0
+
+    def _build_edge_indices(self, indices, vertex_count: int, *, positions=None, geometric: bool = False):
+        if vertex_count <= 1:
+            return None
+        if indices is None:
+            tri_indices = np.arange(vertex_count, dtype=np.uint32)
+        else:
+            tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
+        if len(tri_indices) < 3:
+            return None
+        usable = len(tri_indices) - (len(tri_indices) % 3)
+        if geometric and positions is not None:
+            hull = self._build_geometric_boundary_edges(tri_indices[:usable], positions, vertex_count)
+            if hull is not None and len(hull):
+                return hull
+        edge_set: set[tuple[int, int]] = set()
+        out: list[int] = []
+        for i in range(0, usable, 3):
+            tri = [int(tri_indices[i]), int(tri_indices[i + 1]), int(tri_indices[i + 2])]
+            if any(v < 0 or v >= vertex_count for v in tri):
+                continue
+            for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+                key = (a, b) if a <= b else (b, a)
+                if key in edge_set:
+                    continue
+                edge_set.add(key)
+                out.extend((a, b))
+        if not out:
+            return None
+        return np.ascontiguousarray(out, dtype=np.uint32)
+
+    @staticmethod
+    def _build_geometric_boundary_edges(tri_indices, positions, vertex_count: int):
+        pos = np.asarray(positions, dtype=np.float32)
+        tri = np.asarray(tri_indices, dtype=np.uint32).reshape(-1)
+        if pos.ndim != 2 or pos.shape[1] < 3 or len(tri) < 3:
+            return None
+
+        def key(vertex_index: int) -> tuple[int, int, int]:
+            vertex = pos[int(vertex_index), :3]
+            return tuple(int(round(float(component) * 100000.0)) for component in vertex)
+
+        edge_counts: dict[tuple[tuple[int, int, int], tuple[int, int, int]], int] = {}
+        edge_representatives: dict[tuple[tuple[int, int, int], tuple[int, int, int]], tuple[int, int]] = {}
+        for i in range(0, (len(tri) // 3) * 3, 3):
+            face = [int(tri[i]), int(tri[i + 1]), int(tri[i + 2])]
+            if any(v < 0 or v >= vertex_count for v in face):
+                continue
+            for left, right in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                a = key(left)
+                b = key(right)
+                if a == b:
+                    continue
+                edge_key = (a, b) if a <= b else (b, a)
+                edge_counts[edge_key] = edge_counts.get(edge_key, 0) + 1
+                edge_representatives.setdefault(edge_key, (left, right))
+
+        out: list[int] = []
+        for edge_key, count in edge_counts.items():
+            if count != 1:
+                continue
+            left, right = edge_representatives[edge_key]
+            out.extend((left, right))
+        if not out:
+            return None
+        return np.ascontiguousarray(out, dtype=np.uint32)
 
     @staticmethod
     def _source_visible(source) -> bool:

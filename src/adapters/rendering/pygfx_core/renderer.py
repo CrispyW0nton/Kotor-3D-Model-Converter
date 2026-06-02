@@ -12,9 +12,11 @@ import numpy as np
 from PIL import Image
 
 from src.core.ports import ViewportRendererPort
+from src.core.rendering.color_utils import _hex_to_rgb_float
 from src.core.rendering.renderer_backend import RendererBackend
 from src.core.rendering.renderer_capabilities import RendererCapabilities, WGPU_DISPLAY_MODES, WGPU_FALLBACK_DISPLAY_MODES
 from src.core.rendering.renderer_settings import RendererSettings
+from src.core.rendering.wgpu_shared import _blend_rgb, _relative_luma, _rgb_float
 
 from .backend_env import PygfxBackendEnvStatus, gpu_runtime_imported, prepare_pygfx_wgpu_environment
 from .mesh_cache import PygfxMeshCache
@@ -61,12 +63,21 @@ class PygfxViewportRenderer(ViewportRendererPort):
         self.show_solid = True
         self.show_wireframe = False
         self.show_texture = True
+        self.show_diffuse_map = True
         self.show_lightmap_map = True
+        self.cull_faces = False
         self.render_mode = "realistic"
+        self.viewport_background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+        self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
+        self.wire_color = (0.18, 0.62, 0.95)
+        self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
+        self.hovered_edge_alpha = 0.45
+        self.selected_edge_color = (1.0, 210 / 255.0, 63 / 255.0)
         self.display_options = None
         self.use_native_gizmo_overlay = False
         self.use_native_skeleton_overlay = False
         self.use_native_light_helper_overlay = False
+        self.use_native_helper_overlay = True
 
     @staticmethod
     def _optional_module(name: str):
@@ -94,7 +105,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
             supports_hot_switch=True,
             requires_restart=False,
             supported_display_modes=WGPU_DISPLAY_MODES,
-            supported_display_options=("show_grid", "show_wire_overlay", "show_textures", "show_lightmaps"),
+            supported_display_options=("show_grid", "show_wire_overlay", "show_textures", "show_diffuse_map", "show_lightmaps"),
             fallback_display_modes=dict(WGPU_FALLBACK_DISPLAY_MODES),
             supports_object_picking=True,
             supports_cpu_ray_picking=True,
@@ -261,17 +272,29 @@ class PygfxViewportRenderer(ViewportRendererPort):
                     lighting_render_data=kwargs.get("lighting_render_data"),
                     force_geometry_update=True,
                 )
+        self.scene_bridge.update_selection(selected_nodes, kwargs.get("hovered_node"))
         self.scene_bridge.apply_view_style(
             show_solid=bool(getattr(self, "show_solid", True)),
             show_wireframe=bool(getattr(self, "show_wireframe", False)),
             show_texture=bool(getattr(self, "show_texture", True)),
+            show_diffuse=bool(getattr(self, "show_diffuse_map", True)),
+            show_lightmap=bool(getattr(self, "show_lightmap_map", True)),
             render_mode=str(getattr(self, "render_mode", "realistic") or "realistic"),
+            cull_faces=bool(getattr(self, "cull_faces", False)),
             xray=bool(getattr(getattr(self, "display_options", None), "xray", False)),
+            show_mesh_hover=bool(kwargs.get("show_mesh_hover", True)),
+            wire_color=(*tuple(getattr(self, "wire_color", (0.18, 0.62, 0.95))[:3]), 1.0),
+            hover_color=(
+                *tuple(getattr(self, "hovered_edge_color", (0.0, 215 / 255.0, 181 / 255.0))[:3]),
+                float(getattr(self, "hovered_edge_alpha", 0.45)),
+            ),
+            selection_color=(*tuple(getattr(self, "selected_edge_color", (1.0, 210 / 255.0, 63 / 255.0))[:3]), 1.0),
         )
         self.scene_bridge.update_overlays(
             gizmo_render_data=kwargs.get("gizmo_render_data") if bool(getattr(self, "use_native_gizmo_overlay", False)) else None,
             skeleton_render_data=kwargs.get("skeleton_render_data") if bool(getattr(self, "use_native_skeleton_overlay", False)) else None,
             lighting_render_data=kwargs.get("lighting_render_data") if bool(getattr(self, "use_native_light_helper_overlay", False)) else None,
+            helper_render_data=kwargs.get("helper_render_data") if bool(getattr(self, "use_native_helper_overlay", True)) else None,
         )
         request_draw = getattr(self.canvas, "request_draw", None)
         if callable(request_draw):
@@ -290,7 +313,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
         if self.scene is None:
             return
         try:
-            self._background = gfx.Background.from_color((0.035, 0.04, 0.045, 1.0))
+            self._background = gfx.Background.from_color((*self.viewport_background, 1.0))
             self.scene.add(self._background)
         except Exception:
             self._background = None
@@ -318,7 +341,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
             points.extend(((coord, -half, 0.0), (coord, half, 0.0)))
         geometry = gfx.Geometry(positions=np.asarray(points, dtype=np.float32))
         material = gfx.LineSegmentMaterial(
-            color=(0.16, 0.20, 0.24, 1.0),
+            color=(*self.grid_minor_color, 1.0),
             thickness=1.0,
             thickness_space="screen",
         )
@@ -343,7 +366,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
             self.renderer.render(self.scene, self.camera, flush=True, clear=True)
         except Exception as exc:
             self.last_error = str(exc)
-            log.info("PygfxViewportRenderer: rendercanvas draw failed: %s", exc)
+            log.info("PygfxViewportRenderer: rendercanvas draw failed: %s %r", type(exc).__name__, exc)
 
     def pick(self, request, scene=None, camera=None):
         return None
@@ -408,10 +431,22 @@ class PygfxViewportRenderer(ViewportRendererPort):
             "supports_textures": True,
             "supports_texture_streaming": True,
             "supports_light_helpers": True,
+            "supports_helper_markers": True,
             "supports_light_volumes": True,
             "supports_gizmo_drawing": False,
             "supports_selection_highlight": True,
             "supports_gpu_id_picking": False,
+            "uses_native_helper_overlay": bool(getattr(self, "use_native_helper_overlay", True)),
+            "show_diffuse_map": bool(getattr(self, "show_diffuse_map", True)),
+            "show_lightmap_map": bool(getattr(self, "show_lightmap_map", True)),
+            "cull_faces": bool(getattr(self, "cull_faces", False)),
+            "viewport_background": tuple(getattr(self, "viewport_background", ())),
+            "grid_minor_color": tuple(getattr(self, "grid_minor_color", ())),
+            "viewport_theme_colors": {
+                "wire": tuple(getattr(self, "wire_color", ())),
+                "hover": tuple(getattr(self, "hovered_edge_color", ())),
+                "selection": tuple(getattr(self, "selected_edge_color", ())),
+            },
             "last_display_mode_warning": self.last_display_mode_warning,
             "surface_host": dict(self.surface_host_diagnostics),
             "frame_governor": dict(self.viewport_frame_governor_diagnostics),
@@ -421,18 +456,91 @@ class PygfxViewportRenderer(ViewportRendererPort):
         }
 
     def set_theme_colors(self, theme) -> None:
-        try:
-            bg = getattr(theme, "viewport_background", None) or getattr(theme, "background", None)
-            if bg is not None:
-                self.viewport_background = tuple(float(c) for c in bg[:3])
-        except Exception:
-            pass
+        self.viewport_background = _hex_to_rgb_float(
+            self._theme_color(theme, "viewport.background", ""),
+            self.viewport_background,
+        )
+        self.grid_minor_color = _hex_to_rgb_float(
+            self._theme_color(theme, "viewport.gridMinor", ""),
+            self.grid_minor_color,
+        )
+        self.wire_color = _hex_to_rgb_float(self._theme_color(theme, "accent.primary", ""), self.wire_color)
+        self.hovered_edge_color = _hex_to_rgb_float(
+            self._theme_color(theme, "viewport.helper.meshHover", self._theme_color(theme, "accent.secondary", "#00D7B5")),
+            self.hovered_edge_color,
+        )
+        self.selected_edge_color = _hex_to_rgb_float(
+            self._theme_color(theme, "viewport.selection", "#FFD23F"),
+            self.selected_edge_color,
+        )
+        self._apply_theme_to_scene_helpers()
+
+    def reset_theme_colors(self) -> None:
+        self.viewport_background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
+        self.grid_minor_color = (58 / 255.0, 64 / 255.0, 72 / 255.0)
+        self.wire_color = (0.18, 0.62, 0.95)
+        self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
+        self.hovered_edge_alpha = 0.45
+        self.selected_edge_color = (1.0, 210 / 255.0, 63 / 255.0)
+        self._apply_theme_to_scene_helpers()
 
     def set_native_palette_colors(self, *, base, text, highlight) -> None:
         try:
-            self.viewport_background = tuple(float(c) / 255.0 for c in base[:3])
+            bg = tuple(int(v) for v in base[:3])
+            fg = tuple(int(v) for v in text[:3])
+            is_dark = _relative_luma(bg) < 0.45
+            self.viewport_background = _rgb_float(bg)
+            self.grid_minor_color = _rgb_float(_blend_rgb(bg, fg, 0.12 if is_dark else 0.18))
+            self.wire_color = _rgb_float(tuple(int(v) for v in highlight[:3]))
+            self.hovered_edge_color = (0.0, 215 / 255.0, 181 / 255.0)
+            self.hovered_edge_alpha = 0.45
+            self.selected_edge_color = (1.0, 210 / 255.0, 63 / 255.0)
+            self._apply_theme_to_scene_helpers()
         except Exception:
             pass
+
+    @staticmethod
+    def _theme_color(theme, key: str, fallback: str = "") -> str:
+        color = getattr(theme, "color", None)
+        if callable(color):
+            try:
+                return str(color(key, fallback))
+            except TypeError:
+                try:
+                    return str(color(key))
+                except Exception:
+                    return fallback
+            except Exception:
+                return fallback
+        attr_name = key.replace(".", "_")
+        return str(getattr(theme, attr_name, fallback) or fallback)
+
+    def _apply_theme_to_scene_helpers(self) -> None:
+        rgba_background = (*self.viewport_background, 1.0)
+        rgba_grid = (*self.grid_minor_color, 1.0)
+        if self._background is not None:
+            self._set_object_color(self._background, rgba_background)
+        if self._grid_helper is not None:
+            self._set_object_color(getattr(self._grid_helper, "material", None), rgba_grid)
+
+    @staticmethod
+    def _set_object_color(target, color) -> None:
+        if target is None:
+            return
+        for attr in ("color",):
+            try:
+                if hasattr(target, attr):
+                    setattr(target, attr, color)
+                    return
+            except Exception:
+                pass
+        material = getattr(target, "material", None)
+        if material is not None:
+            try:
+                if hasattr(material, "color"):
+                    material.color = color
+            except Exception:
+                pass
 
     def _update_camera(self, source_camera, width: int, height: int) -> None:
         if self.camera is None or source_camera is None:

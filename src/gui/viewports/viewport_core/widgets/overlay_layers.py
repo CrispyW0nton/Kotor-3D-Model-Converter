@@ -11,6 +11,11 @@ class ViewportOverlayLayersMixin:
     def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
         if not self._renderer_is_wgpu_like() or self.model is None:
             return
+        try:
+            if self.canvas.is_live_surface() and str(getattr(getattr(self, "_gpu_renderer", None), "backend_id", "") or "") == "pygfx_wgpu":
+                return
+        except Exception:
+            pass
         if not bool(getattr(self._renderer, "show_dummy_helpers", getattr(self, "_dummy_helpers_visible", True))):
             return
         try:
