@@ -8,6 +8,7 @@ import time
 from importlib import util as importlib_util
 from typing import Any, ClassVar
 
+import numpy as np
 from PIL import Image
 
 from src.core.ports import ViewportRendererPort
@@ -56,6 +57,14 @@ class PygfxViewportRenderer(ViewportRendererPort):
         self._last_dirty_flags: dict[str, bool] = {}
         self._background = None
         self._grid_helper = None
+        self.show_grid = True
+        self.show_solid = True
+        self.show_wireframe = False
+        self.show_texture = True
+        self.show_lightmap_map = True
+        self.render_mode = "realistic"
+        self.display_options = None
+        self.use_native_gizmo_overlay = False
 
     @staticmethod
     def _optional_module(name: str):
@@ -77,8 +86,8 @@ class PygfxViewportRenderer(ViewportRendererPort):
             reason="" if available else f"Missing optional dependency: {', '.join(missing)}",
             api="pygfx/WGPU",
             supports_scene_meshes=available,
-            supports_textures=False,
-            supports_grid=False,
+            supports_textures=available,
+            supports_grid=True,
             supports_overlays=True,
             supports_hot_switch=True,
             requires_restart=False,
@@ -91,9 +100,13 @@ class PygfxViewportRenderer(ViewportRendererPort):
             supports_selection_highlight=True,
             supports_gizmo_drawing=False,
             supports_gizmo_interaction=True,
+            skeleton_overlay_supported=True,
+            joint_dot_overlay_supported=True,
+            bone_selection_supported=True,
             skinned_mesh_supported=True,
             cpu_skinning_fallback_supported=True,
             animation_preview_supported=True,
+            supports_texture_streaming=True,
             details={"retained_scene": True, "optional_dependencies": ("pygfx", "wgpu", "rendercanvas", "pylinalg")},
         )
         return cls._probe_cache
@@ -147,6 +160,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
             self._gfx = gfx
             self.scene = gfx.Scene()
             self.camera = gfx.PerspectiveCamera(45.0, 1.0, depth_range=(0.01, 1000.0))
+            self._configure_camera_up()
             self._install_empty_scene_helpers(gfx)
             self.renderer = gfx.WgpuRenderer(
                 self.canvas,
@@ -186,6 +200,11 @@ class PygfxViewportRenderer(ViewportRendererPort):
                 self.camera.aspect = max(1.0e-6, float(width) / max(1.0, float(height)))
             except Exception:
                 pass
+            try:
+                self.camera.width = float(max(1, int(width)))
+                self.camera.height = float(max(1, int(height)))
+            except Exception:
+                pass
 
     def render(self, scene, camera, W: int, H: int, *args, **kwargs):
         if not self.initialized:
@@ -193,6 +212,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
         start = time.perf_counter()
         self.resize(W, H)
         self._update_camera(camera, W, H)
+        self._apply_view_state()
         assert self.scene_bridge is not None
         selected_nodes = kwargs.get("selected_nodes") or [
             getattr(self, "selected_node", None),
@@ -228,6 +248,18 @@ class PygfxViewportRenderer(ViewportRendererPort):
                 self.scene_bridge.update_visibility()
             if dirty_flags.get("lighting"):
                 self.scene_bridge.update_lighting(kwargs.get("lighting_render_data"))
+        self.scene_bridge.apply_view_style(
+            show_solid=bool(getattr(self, "show_solid", True)),
+            show_wireframe=bool(getattr(self, "show_wireframe", False)),
+            show_texture=bool(getattr(self, "show_texture", True)),
+            render_mode=str(getattr(self, "render_mode", "realistic") or "realistic"),
+            xray=bool(getattr(getattr(self, "display_options", None), "xray", False)),
+        )
+        self.scene_bridge.update_overlays(
+            gizmo_render_data=kwargs.get("gizmo_render_data") if bool(getattr(self, "use_native_gizmo_overlay", False)) else None,
+            skeleton_render_data=kwargs.get("skeleton_render_data"),
+            lighting_render_data=kwargs.get("lighting_render_data"),
+        )
         request_draw = getattr(self.canvas, "request_draw", None)
         if callable(request_draw):
             if self._draw_callback_installed:
@@ -250,16 +282,34 @@ class PygfxViewportRenderer(ViewportRendererPort):
         except Exception:
             self._background = None
         try:
-            self._grid_helper = gfx.GridHelper(
-                size=100.0,
-                divisions=100,
-                color1=(0.30, 0.34, 0.38, 1.0),
-                color2=(0.12, 0.14, 0.16, 1.0),
-                thickness=1,
-            )
+            self._grid_helper = self._create_z_up_grid(gfx, size=100.0, divisions=40)
             self.scene.add(self._grid_helper)
         except Exception:
             self._grid_helper = None
+
+    def _apply_view_state(self) -> None:
+        if self._grid_helper is not None:
+            try:
+                self._grid_helper.visible = bool(getattr(self, "show_grid", True))
+            except Exception:
+                pass
+
+    def _create_z_up_grid(self, gfx, *, size: float, divisions: int):
+        half = float(size) * 0.5
+        divisions = max(2, min(80, int(divisions)))
+        step = float(size) / float(divisions)
+        points: list[tuple[float, float, float]] = []
+        for index in range(divisions + 1):
+            coord = -half + index * step
+            points.extend(((-half, coord, 0.0), (half, coord, 0.0)))
+            points.extend(((coord, -half, 0.0), (coord, half, 0.0)))
+        geometry = gfx.Geometry(positions=np.asarray(points, dtype=np.float32))
+        material = gfx.LineSegmentMaterial(
+            color=(0.16, 0.20, 0.24, 1.0),
+            thickness=1.0,
+            thickness_space="screen",
+        )
+        return gfx.Line(geometry, material, render_order=-50, name="pygfx-z-up-grid")
 
     def _needs_full_scene_sync(self, model_id: int, dirty_flags: dict[str, bool]) -> bool:
         if model_id != self._active_model_id:
@@ -342,8 +392,10 @@ class PygfxViewportRenderer(ViewportRendererPort):
             "frame_time_ms": round(float(self._last_frame_ms), 3),
             "frame_count": int(self._frame_count),
             "supports_scene_lighting": True,
-            "supports_light_helpers": False,
-            "supports_light_volumes": False,
+            "supports_textures": True,
+            "supports_texture_streaming": True,
+            "supports_light_helpers": True,
+            "supports_light_volumes": True,
             "supports_gizmo_drawing": False,
             "supports_selection_highlight": True,
             "supports_gpu_id_picking": False,
@@ -373,6 +425,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
         if self.camera is None or source_camera is None:
             return
         try:
+            self._configure_camera_up()
             eye = tuple(float(v) for v in source_camera.eye()[:3])
             target = tuple(float(v) for v in getattr(source_camera, "target", (0.0, 0.0, 0.0))[:3])
             self.camera.fov = float(getattr(source_camera, "fov", 45.0) or 45.0)
@@ -383,6 +436,14 @@ class PygfxViewportRenderer(ViewportRendererPort):
             )
             self.camera.local.position = eye
             self.camera.look_at(target)
+        except Exception:
+            pass
+
+    def _configure_camera_up(self) -> None:
+        if self.camera is None:
+            return
+        try:
+            self.camera.local.reference_up = (0.0, 0.0, 1.0)
         except Exception:
             pass
 

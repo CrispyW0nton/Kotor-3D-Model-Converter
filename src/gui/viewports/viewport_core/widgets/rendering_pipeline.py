@@ -142,8 +142,9 @@ class ViewportRenderingPipelineMixin:
             return None
         self._set_renderer_badge(True)
         if self.canvas.is_live_surface() and self._gpu_renderer_requires_native_surface_passthrough():
-            self.canvas.clear_overlay()
-            self._skip_overlay_pixmap_update = True
+            self._update_live_surface_diagnostics()
+            img = self._draw_live_surface_tool_overlay(img, w, h)
+            img = self._draw_performance_overlay(img, w, h)
             return img
         if self._can_skip_live_overlay_rebuild():
             self._skip_overlay_pixmap_update = True
@@ -151,6 +152,20 @@ class ViewportRenderingPipelineMixin:
         img = self._draw_gpu_viewport_overlays(img, w, h)
         img = self._draw_performance_overlay(img, w, h)
         return img
+
+    def _draw_live_surface_tool_overlay(self, img, w: int, h: int):
+        """Draw editor tools over a renderer-owned live surface.
+
+        pygfx owns the retained 3D scene; this transparent image is only for
+        legacy screen-space tools that are still Qt/PIL overlay based.
+        """
+        try:
+            from PIL import Image
+
+            overlay = Image.new("RGBA", (max(1, int(w)), max(1, int(h))), (0, 0, 0, 0))
+        except Exception:
+            overlay = img
+        return self._draw_gpu_viewport_overlays(overlay, w, h)
 
     def _can_skip_live_overlay_rebuild(self) -> bool:
         if not self.canvas.is_live_surface():
@@ -196,6 +211,54 @@ class ViewportRenderingPipelineMixin:
             return bool((diagnostics or {}).get("native_surface_passthrough", False))
         except Exception:
             return False
+
+    def _update_live_surface_diagnostics(self) -> None:
+        set_text = getattr(self.canvas, "set_diagnostics_text", None)
+        clear_text = getattr(self.canvas, "clear_diagnostics_text", None)
+        if not callable(set_text):
+            return
+        if not bool(getattr(self._renderer_settings, "show_renderer_diagnostics", True)):
+            if callable(clear_text):
+                clear_text()
+            return
+        text = self._live_surface_diagnostics_text()
+        if text:
+            set_text(text)
+        elif callable(clear_text):
+            clear_text()
+
+    def _live_surface_diagnostics_text(self) -> str:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return ""
+        try:
+            diagnostics = renderer.get_diagnostics() if hasattr(renderer, "get_diagnostics") else {}
+        except Exception:
+            diagnostics = {}
+        adapter = dict((diagnostics or {}).get("adapter") or {})
+        bridge = diagnostics or {}
+        fps = self._fps_display
+        if fps <= 0.0 and self._last_render_ms > 0.0:
+            fps = 1000.0 / max(self._last_render_ms, 1.0)
+        backend = str(bridge.get("backend_id") or getattr(renderer, "backend_id", "") or "")
+        adapter_name = str(
+            adapter.get("description")
+            or adapter.get("device")
+            or adapter.get("name")
+            or ""
+        )
+        if len(adapter_name) > 48:
+            adapter_name = adapter_name[:45] + "..."
+        lines = [
+            f"{str(bridge.get('name') or backend)}  {bridge.get('backend', 'unknown')}  D3D12 {bool(bridge.get('d3d12_requested', False))}",
+            f"{adapter_name or 'adapter unknown'}",
+            f"Cache {int(bridge.get('mesh_cache_size', 0) or 0)}  Tris {int(bridge.get('triangle_count', 0) or 0)}  Geo {int(bridge.get('geometry_updates_this_frame', 0) or 0)}  Mat {int(bridge.get('material_updates_this_frame', 0) or 0)}",
+            f"Pick CPU  Lights {int(bridge.get('light_overlay_segments', 0) or 0)}  Bones {int(bridge.get('skeleton_overlay_segments', 0) or 0)}",
+        ]
+        reason = str(bridge.get("reason") or "")
+        if reason:
+            lines.append(f"Last: {reason[:72]}")
+        return "\n".join(lines)
 
     def _draw_xray_grid_overlay(self, img, w: int, h: int):
         if img is None:

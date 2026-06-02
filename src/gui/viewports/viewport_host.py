@@ -37,6 +37,22 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         self._overlay_label.hide()
         self._layout.addWidget(self._overlay_label)
 
+        self._diagnostics_label = QtWidgets.QLabel(self)
+        self._diagnostics_label.setObjectName("ViewportDiagnosticsOverlay")
+        self._diagnostics_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self._diagnostics_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignTop)
+        self._diagnostics_label.setStyleSheet(
+            "QLabel#ViewportDiagnosticsOverlay {"
+            "background: rgba(5, 12, 18, 168);"
+            "color: #bde8ff;"
+            "border: 1px solid rgba(70, 150, 190, 150);"
+            "padding: 5px 7px;"
+            "font-family: Consolas, monospace;"
+            "font-size: 10px;"
+            "}"
+        )
+        self._diagnostics_label.hide()
+
     def set_renderer_surface(
         self,
         surface_widget: QtWidgets.QWidget,
@@ -95,6 +111,21 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         self._surface_live = False
         self._bridge_installed = False
         self.clear_overlay()
+
+    def set_diagnostics_text(self, text: str) -> None:
+        text = str(text or "").strip()
+        if not text:
+            self.clear_diagnostics_text()
+            return
+        self._diagnostics_label.setText(text)
+        self._diagnostics_label.adjustSize()
+        self._diagnostics_label.show()
+        self._position_diagnostics_label()
+        self._diagnostics_label.raise_()
+
+    def clear_diagnostics_text(self) -> None:
+        self._diagnostics_label.clear()
+        self._diagnostics_label.hide()
 
     def current_surface(self) -> Optional[QtWidgets.QWidget]:
         return self._surface_widget
@@ -179,6 +210,7 @@ class RendererSurfaceHost(QtWidgets.QWidget):
             "device_pixel_ratio": float(self.devicePixelRatioF()),
             "input_bridge_installed": self._bridge_installed,
             "overlay_layer_active": self.overlay_layer_active(),
+            "diagnostics_overlay_active": self._diagnostics_label.isVisible(),
             "live_surface": self._surface_live,
             "backend_id": self._surface_backend_id,
         }
@@ -186,6 +218,7 @@ class RendererSurfaceHost(QtWidgets.QWidget):
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._raise_overlay()
+        self._position_diagnostics_label()
 
     def _surface_label(self) -> Optional[QtWidgets.QLabel]:
         surface = self._surface_widget
@@ -196,9 +229,22 @@ class RendererSurfaceHost(QtWidgets.QWidget):
             self._overlay_label.hide()
         self._overlay_label.raise_()
         for child in self.findChildren(QtWidgets.QWidget, options=QtCore.Qt.FindDirectChildrenOnly):
-            if child is not self._surface_widget and child is not self._overlay_label:
+            if child is not self._surface_widget and child is not self._overlay_label and child is not self._diagnostics_label:
                 child.raise_()
+        if self._diagnostics_label.isVisible():
+            self._diagnostics_label.raise_()
 
     def _overlay_has_content(self) -> bool:
         pixmap = self._overlay_label.pixmap()
         return bool((pixmap is not None and not pixmap.isNull()) or self._overlay_label.text())
+
+    def _position_diagnostics_label(self) -> None:
+        if not self._diagnostics_label.isVisible():
+            return
+        margin = 10
+        size = self._diagnostics_label.sizeHint()
+        width = min(max(180, size.width()), max(180, min(460, self.width() - margin * 2)))
+        height = min(max(22, size.height()), max(22, self.height() - margin * 2))
+        self._diagnostics_label.setFixedSize(width, height)
+        y = 64 if self._surface_live and self._overlay_label.isVisible() else margin
+        self._diagnostics_label.move(margin, min(y, max(margin, self.height() - height - margin)))

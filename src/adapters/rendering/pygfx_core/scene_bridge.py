@@ -20,10 +20,14 @@ class PygfxSceneBridge:
         self.mesh_cache = mesh_cache or PygfxMeshCache()
         self._ambient_light = None
         self._lights: dict[str, Any] = {}
+        self._overlay_objects: list[Any] = []
         self.object_count = 0
         self.triangle_count = 0
         self.lighting_revision = None
         self.unsupported_lighting_features: list[str] = []
+        self.gizmo_overlay_segments = 0
+        self.skeleton_overlay_segments = 0
+        self.light_overlay_segments = 0
 
     def clear(self) -> None:
         for record in list(self.mesh_cache.records.values()):
@@ -44,6 +48,7 @@ class PygfxSceneBridge:
             except Exception:
                 pass
         self._ambient_light = None
+        self.clear_overlays()
 
     def update_scene(
         self,
@@ -106,6 +111,46 @@ class PygfxSceneBridge:
     def update_visibility(self) -> None:
         self.mesh_cache.update_visibility()
 
+    def apply_view_style(
+        self,
+        *,
+        show_solid: bool = True,
+        show_wireframe: bool = False,
+        show_texture: bool = True,
+        render_mode: str = "realistic",
+        xray: bool = False,
+    ) -> None:
+        self.mesh_cache.apply_view_style(
+            show_solid=show_solid,
+            show_wireframe=show_wireframe,
+            show_texture=show_texture,
+            render_mode=render_mode,
+            xray=xray,
+        )
+
+    def update_overlays(
+        self,
+        *,
+        gizmo_render_data=None,
+        skeleton_render_data=None,
+        lighting_render_data=None,
+    ) -> None:
+        self.clear_overlays()
+        self._add_gizmo_overlay(gizmo_render_data)
+        self._add_skeleton_overlay(skeleton_render_data)
+        self._add_lighting_overlay(lighting_render_data)
+
+    def clear_overlays(self) -> None:
+        for obj in self._overlay_objects:
+            try:
+                self.scene.remove(obj)
+            except Exception:
+                pass
+        self._overlay_objects.clear()
+        self.gizmo_overlay_segments = 0
+        self.skeleton_overlay_segments = 0
+        self.light_overlay_segments = 0
+
     def update_lighting(self, lighting_render_data) -> None:
         if lighting_render_data is None:
             return
@@ -146,6 +191,18 @@ class PygfxSceneBridge:
             light.intensity = float(getattr(light_data, "intensity", 1.0) or 1.0) * intensity
             try:
                 light.local.position = tuple(getattr(light_data, "position", (0.0, 0.0, 0.0)))
+                if kind == "directional":
+                    direction = self._vec3(getattr(light_data, "direction", (0.0, 0.0, -1.0)))
+                    target = (
+                        float(light.local.position[0]) + direction[0],
+                        float(light.local.position[1]) + direction[1],
+                        float(light.local.position[2]) + direction[2],
+                    )
+                    try:
+                        light.local.reference_up = (0.0, 0.0, 1.0)
+                    except Exception:
+                        pass
+                    light.look_at(target)
             except Exception:
                 pass
         for light_id in list(self._lights):
@@ -156,6 +213,125 @@ class PygfxSceneBridge:
                 self.scene.remove(light)
             except Exception:
                 pass
+
+    def _add_gizmo_overlay(self, gizmo_render_data) -> None:
+        if gizmo_render_data is None:
+            return
+        for command in getattr(gizmo_render_data, "commands", ()) or ():
+            if not bool(getattr(command, "world_space", True)):
+                continue
+            points = tuple(getattr(command, "points", ()) or ())
+            if len(points) < 2:
+                continue
+            colour = tuple(float(c) for c in getattr(command, "colour", (1.0, 1.0, 1.0, 1.0))[:4])
+            thickness = max(1.0, float(getattr(command, "thickness", 2.0) or 2.0))
+            kind = str(getattr(command, "kind", "line") or "line").lower()
+            segment_points = self._polyline_to_segments(points) if kind == "polyline" else points
+            self.gizmo_overlay_segments += self._add_line_segments(
+                segment_points,
+                colour,
+                thickness=thickness,
+                name="pygfx-gizmo",
+            )
+
+    def _add_skeleton_overlay(self, skeleton_render_data) -> None:
+        if skeleton_render_data is None:
+            return
+        line_points: list[tuple[float, float, float]] = []
+        selected_points: list[tuple[float, float, float]] = []
+        joint_points: list[tuple[float, float, float]] = []
+        for bone in getattr(skeleton_render_data, "bones", ()) or ():
+            if not bool(getattr(bone, "visible", True)):
+                continue
+            head = self._vec3(getattr(bone, "head_position", (0.0, 0.0, 0.0)))
+            tail = self._vec3(getattr(bone, "tail_position", head))
+            if bool(getattr(skeleton_render_data, "show_links", True)) and head != tail:
+                target = selected_points if bool(getattr(bone, "selected", False)) else line_points
+                target.extend((head, tail))
+            if bool(getattr(skeleton_render_data, "show_dots", True)):
+                joint_points.append(head)
+        self.skeleton_overlay_segments += self._add_line_segments(line_points, (0.38, 0.68, 1.0, 1.0), thickness=2.0, name="pygfx-skeleton")
+        self.skeleton_overlay_segments += self._add_line_segments(selected_points, (1.0, 0.82, 0.20, 1.0), thickness=3.0, name="pygfx-skeleton-selected")
+        self._add_points(joint_points, (0.95, 0.95, 1.0, 1.0), size=5.0, name="pygfx-joints")
+
+    def _add_lighting_overlay(self, lighting_render_data) -> None:
+        if lighting_render_data is None:
+            return
+        try:
+            from src.core.lighting.render_data import (
+                build_light_helper_line_batches,
+                build_light_volume_line_batches,
+            )
+        except Exception:
+            return
+        for color, vertices in build_light_helper_line_batches(lighting_render_data):
+            rgba = tuple(float(c) for c in (*color[:3], 1.0))
+            self.light_overlay_segments += self._add_line_segments(vertices, rgba, thickness=2.0, name="pygfx-light-helper")
+        for color, vertices in build_light_volume_line_batches(lighting_render_data):
+            rgba = tuple(float(c) for c in (*color[:3], 0.45))
+            self.light_overlay_segments += self._add_line_segments(vertices, rgba, thickness=1.0, name="pygfx-light-volume")
+
+    def _add_line_segments(
+        self,
+        points,
+        color: tuple[float, float, float, float],
+        *,
+        thickness: float,
+        name: str,
+    ) -> int:
+        if len(points) < 2:
+            return 0
+        usable = (len(points) // 2) * 2
+        if usable < 2:
+            return 0
+        positions = np.asarray([self._vec3(point) for point in points[:usable]], dtype=np.float32)
+        try:
+            geometry = self.gfx.Geometry(positions=positions)
+            material = self.gfx.LineSegmentMaterial(color=color, thickness=thickness, thickness_space="screen")
+            line = self.gfx.Line(geometry, material, render_order=9000, name=name)
+            self.scene.add(line)
+            self._overlay_objects.append(line)
+            return usable // 2
+        except Exception:
+            return 0
+
+    def _add_points(
+        self,
+        points,
+        color: tuple[float, float, float, float],
+        *,
+        size: float,
+        name: str,
+    ) -> None:
+        if not points:
+            return
+        positions = np.asarray([self._vec3(point) for point in points], dtype=np.float32)
+        try:
+            geometry = self.gfx.Geometry(positions=positions)
+            material = self.gfx.PointsMaterial(color=color, size=size, size_space="screen")
+            obj = self.gfx.Points(geometry, material, render_order=9001, name=name)
+            self.scene.add(obj)
+            self._overlay_objects.append(obj)
+        except Exception:
+            pass
+
+    @classmethod
+    def _polyline_to_segments(cls, points) -> tuple[tuple[float, float, float], ...]:
+        segment_points: list[tuple[float, float, float]] = []
+        previous = cls._vec3(points[0])
+        for point in points[1:]:
+            current = cls._vec3(point)
+            segment_points.extend((previous, current))
+            previous = current
+        return tuple(segment_points)
+
+    @staticmethod
+    def _vec3(value) -> tuple[float, float, float]:
+        try:
+            x, y, z = tuple(value)[:3]
+            return (float(x), float(y), float(z))
+        except Exception:
+            return (0.0, 0.0, 0.0)
 
     def _apply_world_matrix(self, mesh, matrix, record) -> None:
         try:
@@ -179,5 +355,8 @@ class PygfxSceneBridge:
             "object_count": int(self.object_count),
             "triangle_count": int(self.triangle_count),
             "unsupported_lighting_features": tuple(sorted(set(self.unsupported_lighting_features))),
+            "gizmo_overlay_segments": int(self.gizmo_overlay_segments),
+            "skeleton_overlay_segments": int(self.skeleton_overlay_segments),
+            "light_overlay_segments": int(self.light_overlay_segments),
             **self.mesh_cache.diagnostics(),
         }

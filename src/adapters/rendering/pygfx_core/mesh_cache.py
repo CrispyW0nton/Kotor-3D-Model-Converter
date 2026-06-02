@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import numpy as np
+
 
 @dataclass
 class PygfxMeshRecord:
@@ -18,7 +20,9 @@ class PygfxMeshRecord:
     base_color: tuple[float, float, float, float]
     source_revision: tuple[Any, ...]
     material_revision: tuple[Any, ...]
+    diffuse_map: Any = None
     world_matrix_key: tuple[float, ...] = ()
+    view_style_key: tuple[Any, ...] = ()
     selected: bool = False
     transform_dirty: bool = False
     geometry_dirty: bool = False
@@ -30,6 +34,7 @@ class PygfxMeshCache:
 
     def __init__(self) -> None:
         self.records: dict[int, PygfxMeshRecord] = {}
+        self.texture_maps: dict[tuple[Any, ...], Any] = {}
         self.geometry_updates_this_frame = 0
         self.material_updates_this_frame = 0
 
@@ -39,7 +44,48 @@ class PygfxMeshCache:
 
     def clear(self) -> None:
         self.records.clear()
+        self.texture_maps.clear()
         self.begin_frame()
+
+    @staticmethod
+    def _view_style_key(
+        *,
+        show_solid: bool = True,
+        show_wireframe: bool = False,
+        show_texture: bool = True,
+        render_mode: str = "realistic",
+        xray: bool = False,
+    ) -> tuple[Any, ...]:
+        return (
+            bool(show_solid),
+            bool(show_wireframe),
+            bool(show_texture),
+            str(render_mode or "realistic").strip().lower(),
+            bool(xray),
+        )
+
+    def apply_view_style(
+        self,
+        *,
+        show_solid: bool = True,
+        show_wireframe: bool = False,
+        show_texture: bool = True,
+        render_mode: str = "realistic",
+        xray: bool = False,
+    ) -> None:
+        style_key = self._view_style_key(
+            show_solid=show_solid,
+            show_wireframe=show_wireframe,
+            show_texture=show_texture,
+            render_mode=render_mode,
+            xray=xray,
+        )
+        for record in self.records.values():
+            if record.view_style_key == style_key:
+                continue
+            record.view_style_key = style_key
+            self._apply_material_style(record, style_key)
+            self.material_updates_this_frame += 1
 
     def remove_missing(self, live_mesh_ids: set[int], scene) -> None:
         for mesh_id in list(self.records):
@@ -64,7 +110,8 @@ class PygfxMeshCache:
         record = self.records.get(mesh_id)
         if record is None:
             geometry = self._build_geometry(mesh_data, gfx)
-            material = self._build_material(mesh_data, gfx, selected=selected)
+            diffuse_map = self._texture_map(mesh_data, gfx)
+            material = self._build_material(mesh_data, gfx, selected=selected, diffuse_map=diffuse_map)
             mesh = gfx.Mesh(geometry, material)
             try:
                 mesh.name = str(getattr(mesh_data.source, "name", "") or mesh_id)
@@ -84,6 +131,7 @@ class PygfxMeshCache:
                 base_color=self._base_color(mesh_data),
                 source_revision=source_revision,
                 material_revision=material_revision,
+                diffuse_map=diffuse_map,
                 selected=bool(selected),
             )
             self.records[mesh_id] = record
@@ -98,12 +146,14 @@ class PygfxMeshCache:
             record.geometry_dirty = False
             self.geometry_updates_this_frame += 1
         if record.material_dirty or record.material_key != material_key:
-            record.material = self._build_material(mesh_data, gfx, selected=selected)
+            record.diffuse_map = self._texture_map(mesh_data, gfx)
+            record.material = self._build_material(mesh_data, gfx, selected=selected, diffuse_map=record.diffuse_map)
             record.mesh.material = record.material
             record.material_key = material_key
             record.material_revision = material_revision
             record.base_color = self._base_color(mesh_data)
             record.selected = bool(selected)
+            record.view_style_key = ()
             record.material_dirty = False
             self.material_updates_this_frame += 1
         elif record.selected != bool(selected):
@@ -131,8 +181,7 @@ class PygfxMeshCache:
 
     def update_visibility(self) -> None:
         for record in self.records.values():
-            source = record.source
-            visible = not bool(getattr(source, "_gr_hidden", False)) and getattr(source, "render", True) is not False
+            visible = self._source_visible(record.source)
             try:
                 record.mesh.visible = bool(visible)
             except Exception:
@@ -154,15 +203,41 @@ class PygfxMeshCache:
             base = (*base[:3], 1.0)
         return base
 
-    def _build_material(self, mesh_data, gfx, *, selected: bool = False):
+    def _build_material(self, mesh_data, gfx, *, selected: bool = False, diffuse_map=None):
         base = self._base_color(mesh_data)
         color = self._selection_color(base) if selected else base
         material = gfx.MeshPhongMaterial(color=color)
+        if diffuse_map is not None:
+            self._set_material_attr(material, "map", diffuse_map)
         try:
             material.side = "FRONT_AND_BACK" if bool(getattr(mesh_data.material, "double_sided", False)) else "FRONT"
         except Exception:
             pass
         return material
+
+    def _texture_map(self, mesh_data, gfx):
+        texture_data = getattr(getattr(mesh_data, "material", None), "diffuse_texture_data", None)
+        source = getattr(texture_data, "source", None)
+        if source is None:
+            return None
+        texture_id = str(getattr(texture_data, "texture_id", "") or getattr(texture_data, "name", "") or id(source))
+        revision = tuple(getattr(texture_data, "source_revision", ()) or ())
+        key = (texture_id, revision)
+        cached = self.texture_maps.get(key)
+        if cached is not None:
+            return cached
+        try:
+            image = source.convert("RGBA") if hasattr(source, "convert") else source
+            pixels = np.asarray(image, dtype=np.uint8)
+            if pixels.ndim != 3 or pixels.shape[2] < 4:
+                return None
+            pixels = np.ascontiguousarray(pixels[:, :, :4])
+            texture = gfx.Texture(pixels, dim=2, colorspace="srgb", generate_mipmaps=True)
+            texture_map = gfx.TextureMap(texture, uv_channel=0, wrap="repeat", filter="linear")
+            self.texture_maps[key] = texture_map
+            return texture_map
+        except Exception:
+            return None
 
     @staticmethod
     def _selection_color(base: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
@@ -176,16 +251,53 @@ class PygfxMeshCache:
     def _apply_selection_state(self, record: PygfxMeshRecord, selected: bool) -> None:
         record.selected = bool(selected)
         color = self._selection_color(record.base_color) if selected else record.base_color
-        try:
-            record.material.color = color
-        except Exception:
-            record.material = record.material.__class__(color=color)
-            record.mesh.material = record.material
+        record.view_style_key = record.view_style_key or self._view_style_key()
+        self._set_material_color(record.material, color)
+        self._apply_material_style(record, record.view_style_key)
         self.material_updates_this_frame += 1
+
+    def _apply_material_style(self, record: PygfxMeshRecord, style_key: tuple[Any, ...]) -> None:
+        show_solid, show_wireframe, show_texture, render_mode, xray = style_key
+        color = self._selection_color(record.base_color) if record.selected else record.base_color
+        if not bool(show_texture):
+            luminance = max(0.18, min(0.82, color[0] * 0.3 + color[1] * 0.45 + color[2] * 0.25))
+            color = (luminance, luminance, luminance, color[3])
+        if render_mode == "flat":
+            color = (min(1.0, color[0] * 1.08), min(1.0, color[1] * 1.08), min(1.0, color[2] * 1.08), color[3])
+        elif render_mode == "shaded":
+            color = (color[0] * 0.78, color[1] * 0.78, color[2] * 0.78, color[3])
+        if bool(xray):
+            color = (color[0], color[1], color[2], min(color[3], 0.38))
+        self._set_material_color(record.material, color)
+        self._set_material_attr(record.material, "opacity", color[3])
+        self._set_material_attr(record.material, "map", record.diffuse_map if bool(show_texture) else None)
+        self._set_material_attr(record.material, "wireframe", bool(show_wireframe))
+        self._set_material_attr(record.material, "flat_shading", render_mode in {"flat", "shaded"})
+        self._set_material_attr(record.mesh, "visible", self._source_visible(record.source) and (bool(show_solid) or bool(show_wireframe)))
+
+    @staticmethod
+    def _source_visible(source) -> bool:
+        return not bool(getattr(source, "_gr_hidden", False)) and getattr(source, "render", True) is not False
+
+    @staticmethod
+    def _set_material_color(material, color: tuple[float, float, float, float]) -> None:
+        try:
+            material.color = color
+        except Exception:
+            pass
+
+    @staticmethod
+    def _set_material_attr(target, name: str, value) -> None:
+        try:
+            if hasattr(target, name):
+                setattr(target, name, value)
+        except Exception:
+            pass
 
     def diagnostics(self) -> dict[str, int]:
         return {
             "mesh_cache_size": len(self.records),
+            "texture_cache_size": len(self.texture_maps),
             "geometry_updates_this_frame": int(self.geometry_updates_this_frame),
             "material_updates_this_frame": int(self.material_updates_this_frame),
             "transform_dirty_count": sum(1 for record in self.records.values() if record.transform_dirty),

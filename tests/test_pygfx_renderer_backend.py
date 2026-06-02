@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from PIL import Image
 
 import src.adapters.rendering.pygfx_core.renderer as pygfx_renderer_module
 from src.adapters.rendering.pygfx_core.scene_bridge import PygfxSceneBridge
@@ -26,6 +27,11 @@ class _FakeMaterial:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
         self.side = ""
+        self.color = kwargs.get("color")
+        self.opacity = 1.0
+        self.wireframe = False
+        self.flat_shading = False
+        self.map = None
 
 
 class _FakeLocal:
@@ -35,17 +41,32 @@ class _FakeLocal:
 
 
 class _FakeMesh:
-    def __init__(self, geometry, material):
+    def __init__(self, geometry, material, **kwargs):
         self.geometry = geometry
         self.material = material
         self.local = _FakeLocal()
-        self.name = ""
+        self.name = str(kwargs.get("name", ""))
+        self.visible = True
 
 
 class _FakeGfx:
     Geometry = _FakeGeometry
     MeshPhongMaterial = _FakeMaterial
     Mesh = _FakeMesh
+    LineSegmentMaterial = _FakeMaterial
+    PointsMaterial = _FakeMaterial
+    Line = _FakeMesh
+    Points = _FakeMesh
+
+    class Texture:
+        def __init__(self, data, **kwargs):
+            self.data = data
+            self.kwargs = kwargs
+
+    class TextureMap:
+        def __init__(self, texture, **kwargs):
+            self.texture = texture
+            self.kwargs = kwargs
 
     class AmbientLight:
         def __init__(self, color, intensity=1.0):
@@ -74,10 +95,20 @@ class _FakeScene:
 
 
 def _mesh_data(*, mesh_id=7, source_revision=(3, 1, 0), material_revision=(1, 0, 0, 0)):
+    diffuse_texture_data = None
+    if material_revision == ("texture",):
+        diffuse = Image.new("RGBA", (2, 2), (180, 90, 40, 255))
+        diffuse_texture_data = SimpleNamespace(
+            texture_id="unit_diffuse",
+            name="unit_diffuse",
+            source=diffuse,
+            source_revision=(id(diffuse), 2, 2),
+        )
     material = SimpleNamespace(
         material_id="mat-a",
         source_revision=material_revision,
         double_sided=False,
+        diffuse_texture_data=diffuse_texture_data,
     )
     return SimpleNamespace(
         mesh_id=mesh_id,
@@ -245,15 +276,143 @@ def test_pygfx_diagnostics_request_native_surface_passthrough() -> None:
     renderer = PygfxViewportRenderer(settings=RendererSettings())
 
     assert renderer.get_diagnostics()["native_surface_passthrough"] is True
+    assert renderer.get_diagnostics()["supports_gizmo_drawing"] is False
 
 
-def test_viewport_pipeline_skips_pil_overlay_for_pygfx_live_surface() -> None:
+def test_pygfx_keeps_legacy_overlay_gizmo_and_cpu_picking_contract() -> None:
+    caps = PygfxViewportRenderer.probe_availability()
+    renderer = PygfxViewportRenderer(settings=RendererSettings())
+
+    assert caps.supports_textures is True
+    assert caps.supports_gizmo_drawing is False
+    assert caps.supports_gizmo_interaction is True
+    assert caps.supports_cpu_ray_picking is True
+    assert caps.supports_gpu_id_picking is False
+    assert renderer.use_native_gizmo_overlay is False
+
+
+def test_pygfx_camera_uses_z_up_reference() -> None:
+    renderer = PygfxViewportRenderer(settings=RendererSettings())
+    gfx = pytest.importorskip("pygfx")
+    renderer.camera = gfx.PerspectiveCamera(45.0, 1.0)
+
+    renderer._configure_camera_up()
+
+    assert tuple(float(v) for v in renderer.camera.local.reference_up[:3]) == pytest.approx((0.0, 0.0, 1.0))
+
+
+def test_pygfx_grid_is_lightweight_z_up_line_grid() -> None:
+    renderer = PygfxViewportRenderer(settings=RendererSettings())
+    gfx = pytest.importorskip("pygfx")
+
+    grid = renderer._create_z_up_grid(gfx, size=100.0, divisions=40)
+
+    positions = np.asarray(grid.geometry.positions.data)
+    assert positions.shape[0] == (40 + 1) * 4
+    assert np.allclose(positions[:, 2], 0.0)
+    assert type(grid.material).__name__ == "LineSegmentMaterial"
+
+
+def test_viewport_pipeline_keeps_tool_overlay_for_pygfx_live_surface() -> None:
     from src.gui.viewports.viewport_core.widgets.rendering_pipeline import ViewportRenderingPipelineMixin
 
     source = inspect.getsource(ViewportRenderingPipelineMixin._render_frame)
 
     assert "_gpu_renderer_requires_native_surface_passthrough" in source
-    assert "clear_overlay()" in source
+    assert "_draw_live_surface_tool_overlay" in source
+    assert "_update_live_surface_diagnostics()" in source
+
+
+def test_pygfx_scene_bridge_builds_native_overlay_lines() -> None:
+    from src.core.gizmo.gizmo_draw_data import GizmoDrawCommand, GizmoRenderData
+
+    bridge = PygfxSceneBridge(_FakeGfx, _FakeScene(), PygfxMeshCache())
+    gizmo = GizmoRenderData(
+        commands=(
+            GizmoDrawCommand(
+                kind="line",
+                points=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0)),
+                colour=(1.0, 0.0, 0.0, 1.0),
+                thickness=3.0,
+            ),
+            GizmoDrawCommand(
+                kind="polyline",
+                points=((0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 1.0)),
+                colour=(0.0, 1.0, 0.0, 1.0),
+                thickness=2.0,
+            ),
+        )
+    )
+    skeleton = SimpleNamespace(
+        show_links=True,
+        show_dots=True,
+        bones=(
+            SimpleNamespace(
+                visible=True,
+                selected=True,
+                head_position=(0.0, 0.0, 0.0),
+                tail_position=(0.0, 0.0, 1.0),
+            ),
+        ),
+    )
+
+    bridge.update_overlays(gizmo_render_data=gizmo, skeleton_render_data=skeleton)
+
+    assert bridge.gizmo_overlay_segments == 3
+    assert bridge.skeleton_overlay_segments == 1
+    assert len(bridge._overlay_objects) >= 2
+
+
+def test_pygfx_mesh_cache_applies_toolbar_view_style_without_geometry_rebuild() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _mesh_data()
+    record = cache.get_or_create(data, _FakeGfx, scene, selected=False)
+    cache.begin_frame()
+
+    cache.apply_view_style(
+        show_solid=True,
+        show_wireframe=True,
+        show_texture=False,
+        render_mode="flat",
+        xray=True,
+    )
+
+    assert cache.geometry_updates_this_frame == 0
+    assert cache.material_updates_this_frame == 1
+    assert record.material.wireframe is True
+    assert record.material.flat_shading is True
+    assert record.material.opacity == pytest.approx(0.38)
+
+
+def test_pygfx_mesh_cache_uses_retained_texture_map_without_geometry_rebuild() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _mesh_data(material_revision=("texture",))
+    record = cache.get_or_create(data, _FakeGfx, scene, selected=False)
+
+    assert record.diffuse_map is not None
+    assert record.material.map is record.diffuse_map
+    assert cache.diagnostics()["texture_cache_size"] == 1
+
+    cache.begin_frame()
+    cache.apply_view_style(show_texture=False)
+    assert cache.geometry_updates_this_frame == 0
+    assert record.material.map is None
+
+    cache.apply_view_style(show_texture=True)
+    assert cache.geometry_updates_this_frame == 0
+    assert record.material.map is record.diffuse_map
+
+
+def test_pygfx_grid_toggle_updates_native_helper_visibility() -> None:
+    renderer = PygfxViewportRenderer(settings=RendererSettings())
+    renderer._grid_helper = SimpleNamespace(visible=True)
+    renderer.show_grid = False
+
+    renderer._apply_view_state()
+
+    assert renderer._grid_helper.visible is False
 
 
 def test_renderer_surface_host_keeps_live_surface_visible() -> None:
