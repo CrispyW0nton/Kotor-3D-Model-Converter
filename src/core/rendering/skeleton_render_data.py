@@ -387,11 +387,48 @@ def bas_attachment_root_local_skin_palette(node, palette, anim_pose):
         arr = np.asarray(palette, dtype=np.float32)
         if arr.ndim != 3 or arr.shape[1:] != (4, 4):
             return palette
-        root_world = np.asarray(node_world_matrix(root, anim_pose=anim_pose), dtype=np.float32).reshape(4, 4)
+        if getattr(anim_pose, "_gr_bas_socket_pose", None) is not None:
+            root_world = _bas_attachment_source_local_root_matrix(root, anim_pose)
+        else:
+            root_world = np.asarray(node_world_matrix(root, anim_pose=anim_pose), dtype=np.float32).reshape(4, 4)
         root_inv = np.linalg.inv(root_world).astype(np.float32)
         return np.einsum("ij,njk->nik", root_inv, arr, optimize=True).astype(np.float32)
     except Exception:
         return palette
+
+
+def _bas_attachment_source_local_root_matrix(root, anim_pose):
+    import math
+    import numpy as np
+
+    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
+    pose = pose_nodes.get(str(getattr(root, "name", "") or "").lower())
+    if pose is not None:
+        pos = getattr(pose, "position", getattr(root, "position", (0.0, 0.0, 0.0)))
+        quat = getattr(pose, "rotation", getattr(root, "rotation", (0.0, 0.0, 0.0, 1.0)))
+    else:
+        pos = getattr(root, "position", (0.0, 0.0, 0.0))
+        quat = getattr(root, "rotation", (0.0, 0.0, 0.0, 1.0))
+    x, y, z = (float(pos[0]), float(pos[1]), float(pos[2]))
+    qx, qy, qz, qw = (float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3]))
+    length_sq = qx * qx + qy * qy + qz * qz + qw * qw
+    if length_sq > 1.0e-9:
+        inv_len = 1.0 / math.sqrt(length_sq)
+        qx, qy, qz, qw = qx * inv_len, qy * inv_len, qz * inv_len, qw * inv_len
+    else:
+        qx, qy, qz, qw = 0.0, 0.0, 0.0, 1.0
+    xx, yy, zz = qx * qx, qy * qy, qz * qz
+    xy, xz, yz = qx * qy, qx * qz, qy * qz
+    wx, wy, wz = qw * qx, qw * qy, qw * qz
+    return np.asarray(
+        [
+            [1.0 - 2.0 * (yy + zz), 2.0 * (xy - wz), 2.0 * (xz + wy), x],
+            [2.0 * (xy + wz), 1.0 - 2.0 * (xx + zz), 2.0 * (yz - wx), y],
+            [2.0 * (xz - wy), 2.0 * (yz + wx), 1.0 - 2.0 * (xx + yy), z],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float32,
+    )
 
 
 def skin_palette_flat_bytes(palette, max_bones: int) -> bytes:

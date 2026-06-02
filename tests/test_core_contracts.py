@@ -7937,6 +7937,37 @@ def test_bas_weapon_alignment_defaults_keep_sabers_identity() -> None:
     assert default_bas_attachment_transform("left_weapon", "w_vbroswrd_001")["position"] == [0.0, 0.0, 0.055]
 
 
+def test_bas_head_resolution_normalizes_ui_labels_and_body_candidates() -> None:
+    from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
+
+    class FakeManager:
+        def __init__(self, available):
+            self.available = {str(value).lower() for value in available}
+
+        def get_mdl(self, resref, game="K1"):
+            return b"mdl" if str(resref).lower() in self.available else None
+
+    assert normalize_bas_model_resref("Player Male Head A 01 - pmha01") == "pmha01"
+    assert normalize_bas_model_resref("K1:PMHA01.mdl") == "pmha01"
+
+    explicit = resolve_bas_head_resref(
+        requested="Player Male Head A 01 - pmha01",
+        body_resref="p_carthbb",
+        manager=FakeManager({"pmha01", "p_carthbbh"}),
+        game="K1",
+    )
+    assert explicit.resolved_resref == "pmha01"
+    assert explicit.source == "requested"
+
+    derived = resolve_bas_head_resref(
+        body_resref="p_carthbb",
+        manager=FakeManager({"p_carthbbh"}),
+        game="K1",
+    )
+    assert derived.resolved_resref == "p_carthbbh"
+    assert derived.source == "body_resref"
+
+
 def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjustment() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -7967,6 +7998,45 @@ def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjust
 
     QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_lghtsbr_001")
     assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.0, 0.0]
+
+
+def test_bas_attach_head_loads_normalized_resolved_head_resref() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    class FakeManager:
+        def get_mdl(self, resref, game="K1"):
+            return b"mdl" if str(resref).lower() == "pmha01" else None
+
+    calls = []
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1")
+    head = SimpleNamespace(name="pmha01")
+    panel = SimpleNamespace(
+        set_status=lambda text: calls.append(("status", text)),
+        set_slot_model=lambda slot, model, resref="": calls.append(("slot", slot, resref)),
+    )
+    loaded = []
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        _current_game="K1",
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+        _bas_attachment_transforms={},
+        body_attachment_panel=panel,
+        _get_resource_manager=lambda: FakeManager(),
+        _infer_game_from_model=lambda model: "K1",
+        _load_bas_attachment_model=lambda resref: loaded.append(resref) or head,
+        _rebuild_bas_preview=lambda: "BAS preview updated.",
+        _refresh_bas_animation_panel_after_layer_change=lambda slot: calls.append(("anim", slot)),
+    )
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "head", "Player Male Head A 01 - pmha01")
+
+    assert loaded == ["pmha01"]
+    assert window._current_head_model is head
+    assert window._bas_attachments == {"head": head}
+    assert window._bas_attachment_resrefs == {"head": "pmha01"}
+    assert ("slot", "head", "pmha01") in calls
 
 
 def test_bas_mask_goggles_and_belt_slots_use_socket_layers() -> None:
@@ -8088,6 +8158,7 @@ def test_bas_attachment_preview_parents_item_to_body_socket() -> None:
     assert rhand.children[0]._gr_bas_attachment_root is True
     assert rhand.children[0]._gr_bas_socket_name == "rhand"
     assert rhand.children[0]._gr_bas_attachment_layer is True
+    assert rhand.children[0]._gr_bas_attachment_source_model_ref is item
 
 
 def test_bas_attachment_socket_layer_follows_body_dummy_without_skinning() -> None:

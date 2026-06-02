@@ -131,6 +131,7 @@ def attach_bas_item_to_preview(
     try:
         setattr(item_root, "_gr_bas_attachment_source_model_id", id(item_model))
         setattr(item_root, "_gr_bas_attachment_source_model_name", str(getattr(item_model, "name", "") or ""))
+        setattr(item_root, "_gr_bas_attachment_source_model_ref", item_model)
     except Exception:
         pass
     prepare_bas_layer_root(item_root, socket, slot or socket_name)

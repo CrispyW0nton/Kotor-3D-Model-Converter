@@ -89,15 +89,36 @@ class _FakeMesh:
         self.visible = True
 
 
+class _FakeSkinnedMesh(_FakeMesh):
+    def bind(self, skeleton, bind_matrix=None):
+        self.skeleton = skeleton
+        self.bind_matrix = bind_matrix
+
+
 class _FakeGfx:
     Geometry = _FakeGeometry
     MeshPhongMaterial = MeshPhongMaterial
     MeshBasicMaterial = MeshBasicMaterial
     Mesh = _FakeMesh
+    SkinnedMesh = _FakeSkinnedMesh
     LineSegmentMaterial = _FakeMaterial
     PointsMaterial = _FakeMaterial
     Line = _FakeMesh
     Points = _FakeMesh
+
+    class Bone:
+        def __init__(self, name=""):
+            self.name = name
+
+    class Skeleton:
+        def __init__(self, bones, bone_inverses=None):
+            self.bones = bones
+            self.bone_inverses = bone_inverses
+            dtype = [("bone_matrices", np.float32, (4, 4))]
+            self.bone_matrices_buffer = _FakeBuffer(np.zeros((max(1, len(bones)),), dtype=dtype))
+
+        def update(self):
+            return None
 
     class Background:
         def __init__(self, color):
@@ -200,6 +221,16 @@ def _mesh_data(*, mesh_id=7, source_revision=(3, 1, 0), material_revision=(1, 0,
         world_matrix=np.eye(4, dtype=np.float32),
         source_revision=source_revision,
     )
+
+
+def _skinned_mesh_data(*, mesh_id=17, source_revision=(4, 2, 1, 1)):
+    data = _mesh_data(mesh_id=mesh_id, source_revision=source_revision)
+    data.is_skinned = True
+    data.bone_indices = np.zeros((3, 4), dtype=np.uint32)
+    data.bone_weights = np.zeros((3, 4), dtype=np.float32)
+    data.bone_weights[:, 0] = 1.0
+    data.skinning_cpu_fallback = False
+    return data
 
 
 def test_pygfx_backend_id_alias_and_label() -> None:
@@ -925,6 +956,75 @@ def test_bas_head_attachment_face_parts_accept_inherited_body_pose_as_local_tran
     assert tuple(np.round(matrix[:3, 3], 4)) == (11.0, 0.0, 3.0)
 
 
+def test_bas_head_attachment_inherited_pose_includes_head_parent_chain() -> None:
+    socket = SimpleNamespace(
+        name="headhook",
+        parent=None,
+        children=[],
+        position=(10.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    root = SimpleNamespace(
+        name="pmha01",
+        parent=socket,
+        children=[],
+        position=(0.0, 0.0, 1.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+        _gr_bas_attachment_slot="head",
+        _gr_bas_socket_name="headhook",
+        _gr_bas_attachment_source_model_id=123,
+    )
+    hturn = SimpleNamespace(
+        name="Hturn_g",
+        parent=root,
+        children=[],
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+        _gr_bas_attachment_source_model_id=123,
+    )
+    head = SimpleNamespace(
+        name="head_g",
+        parent=hturn,
+        children=[],
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+        _gr_bas_attachment_source_model_id=123,
+    )
+    eye = SimpleNamespace(
+        name="eyera",
+        parent=head,
+        children=[],
+        position=(0.0, 0.0, 2.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+        _gr_bas_attachment_source_model_id=123,
+    )
+    socket.children = [root]
+    root.children = [hturn]
+    hturn.children = [head]
+    head.children = [eye]
+    inherited_body_pose = SimpleNamespace(
+        time=0.0,
+        nodes={
+            "hturn_g": SimpleNamespace(name="Hturn_g", position=(0.0, 1.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "head_g": SimpleNamespace(name="head_g", position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "eyera": SimpleNamespace(name="eyera", position=(0.0, 0.0, 3.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        _gr_animation_source_model_id=999,
+    )
+
+    matrix = mesh_render_data_module.mesh_model_matrix_for_node(eye, anim_pose=inherited_body_pose)
+
+    assert tuple(np.round(matrix[:3, 3], 4)) == (10.0, 3.0, 4.0)
+
+
 def test_carth_pmha01_bas_head_stays_socket_local_for_pause2() -> None:
     k1_path = os.environ.get("K1_PATH", "")
     if not k1_path or not os.path.isdir(k1_path):
@@ -953,6 +1053,7 @@ def test_carth_pmha01_bas_head_stays_socket_local_for_pause2() -> None:
     pose = engine.evaluate(9.82)
     pose._gr_animation_source_model_id = id(body)
     pose._gr_animation_source_model_name = body.name
+    pose._gr_animation_name = "pause2"
 
     def head_bounds(anim_pose):
         for mesh_data in mesh_render_data_module.iter_mesh_render_data(
@@ -981,6 +1082,96 @@ def test_carth_pmha01_bas_head_stays_socket_local_for_pause2() -> None:
     assert anim_mesh.skinning_cpu_fallback is True
     assert float(anim_vbo[:, 2].max()) < 0.35
     assert float(np.linalg.norm(anim_world.max(axis=0) - anim_world.min(axis=0))) < 0.85
+
+
+def test_carth_pmha01_bas_head_uses_standalone_head_local_tracks_for_pause2() -> None:
+    k1_path = os.environ.get("K1_PATH", "")
+    if not k1_path or not os.path.isdir(k1_path):
+        pytest.skip("K1 install not available")
+
+    from src.adapters.rendering.moderngl_resources import _build_vbo_data
+    from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+    from src.core.assets.resource_manager import ResourceManager
+    from src.systems.bas.preview_composer import build_bas_preview_model
+
+    manager = ResourceManager()
+    assert manager.set_k1_dir(k1_path)
+    SuperModelResolver.configure(manager)
+    body = manager.load_model("P_CarthBB", "K1")
+    head = manager.load_model("pmha01", "K1")
+    assert body is not None
+    assert head is not None
+    preview = build_bas_preview_model(body_model=body, attachment_models={"head": head})
+
+    body_engine = AnimationEngine(body)
+    head_engine = AnimationEngine(head)
+    assert body_engine.play("pause2", loop=True, blend=False)
+    assert head_engine.play("pause2", loop=True, blend=False)
+    body_pose = body_engine.evaluate(9.82)
+    body_pose._gr_animation_source_model_id = id(body)
+    body_pose._gr_animation_source_model_name = body.name
+    body_pose._gr_animation_name = "pause2"
+    head_pose = head_engine.evaluate(9.82)
+    head_pose._gr_animation_source_model_id = id(head)
+    head_pose._gr_animation_source_model_name = head.name
+    head_pose._gr_animation_name = "pause2"
+
+    head_nodes = {str(n.name).lower(): n for n in head.all_nodes()}
+    bas_nodes = {
+        str(n.name).lower(): n
+        for n in preview.all_nodes()
+        if getattr(n, "_gr_bas_attachment_layer", False)
+    }
+    standalone_root = head_nodes["pmha01"]
+    bas_root = bas_nodes["pmha01"]
+    standalone_anchor = head_nodes["necklwr_g"]
+    bas_anchor = bas_nodes["necklwr_g"]
+    standalone_root_inv = np.linalg.inv(mesh_render_data_module.mesh_model_matrix_for_node(standalone_root, anim_pose=head_pose))
+    bas_root_inv = np.linalg.inv(mesh_render_data_module.mesh_model_matrix_for_node(bas_root, anim_pose=body_pose))
+    standalone_anchor_inv = np.linalg.inv(
+        mesh_render_data_module.mesh_model_matrix_for_node(standalone_anchor, anim_pose=head_pose)
+    )
+    bas_anchor_inv = np.linalg.inv(mesh_render_data_module.mesh_model_matrix_for_node(bas_anchor, anim_pose=body_pose))
+
+    for name in ("rootdummy", "torso_g", "torsoupr_g"):
+        standalone_local = standalone_root_inv @ mesh_render_data_module.mesh_model_matrix_for_node(
+            head_nodes[name], anim_pose=head_pose
+        )
+        bas_local = bas_root_inv @ mesh_render_data_module.mesh_model_matrix_for_node(bas_nodes[name], anim_pose=body_pose)
+        assert not np.allclose(bas_local[:3, 3], standalone_local[:3, 3], atol=1.0e-4), name
+
+    for name in ("hturn_g", "head_g", "talkdummy", "eyera", "eyela", "f_jaw_g"):
+        standalone_local = standalone_anchor_inv @ mesh_render_data_module.mesh_model_matrix_for_node(
+            head_nodes[name], anim_pose=head_pose
+        )
+        bas_local = bas_anchor_inv @ mesh_render_data_module.mesh_model_matrix_for_node(bas_nodes[name], anim_pose=body_pose)
+        assert np.allclose(bas_local[:3, 3], standalone_local[:3, 3], atol=1.0e-4), name
+
+    def head_skin_root_local(model, pose, *, bas_layer: bool):
+        for mesh_data in mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=pose,
+            allow_cpu_skinning=True,
+            vbo_builder=_build_vbo_data,
+        ):
+            if getattr(mesh_data.source, "name", "") != "head":
+                continue
+            if bool(getattr(mesh_data.source, "_gr_bas_attachment_layer", False)) != bool(bas_layer):
+                continue
+            positions = np.asarray(mesh_data.positions, dtype=np.float32)
+            world_matrix = np.asarray(mesh_data.world_matrix, dtype=np.float32).reshape(4, 4)
+            world = (world_matrix @ np.column_stack([positions, np.ones(len(positions), dtype=np.float32)]).T).T[:, :3]
+            root_inv = bas_anchor_inv if bas_layer else standalone_anchor_inv
+            return (root_inv @ np.column_stack([world, np.ones(len(world), dtype=np.float32)]).T).T[:, :3]
+        raise AssertionError("head skin mesh not found")
+
+    standalone_head = head_skin_root_local(head, head_pose, bas_layer=False)
+    attached_head = head_skin_root_local(preview, body_pose, bas_layer=True)
+
+    assert standalone_head.shape == attached_head.shape
+    placement_delta = attached_head - standalone_head
+    deformation_residual = placement_delta - placement_delta.mean(axis=0, keepdims=True)
+    assert float(np.max(np.abs(deformation_residual))) < 1.0e-4
 
 
 def test_pygfx_optional_scene_camera_light_cube_smoke() -> None:
@@ -1223,6 +1414,31 @@ def test_pygfx_mesh_cache_uses_deduped_line_edges_not_material_wireframe() -> No
     assert record.edge_mesh.geometry is not record.geometry
     assert record.edge_mesh.geometry.positions.data.shape == (10, 3)
     assert record.edge_material.color == pytest.approx((0.18, 0.62, 0.95, 1.0))
+
+
+def test_pygfx_skinned_wire_overlay_uses_skinned_mesh_to_follow_palette() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _skinned_mesh_data()
+    record = cache.get_or_create(data, _FakeGfx, scene, selected=False)
+
+    cache.apply_view_style(show_solid=True, show_wireframe=True, wire_color=(0.18, 0.62, 0.95, 1.0))
+
+    assert record.edge_mesh is not None
+    assert isinstance(record.edge_mesh, _FakeSkinnedMesh)
+    assert record.edge_mesh.geometry is record.geometry
+    assert record.edge_mesh.skeleton is record.skeleton
+    assert record.edge_material.wireframe is True
+    assert record.edge_material.color == pytest.approx((0.18, 0.62, 0.95, 1.0))
+
+
+def test_pygfx_animation_only_path_rebuilds_cpu_fallback_attachment_geometry() -> None:
+    bridge = PygfxSceneBridge(_FakeGfx, _FakeScene(), PygfxMeshCache())
+    data = _mesh_data(source_revision=(8, 1, 0, 250))
+    data.skinning_cpu_fallback = True
+    bridge.mesh_cache.get_or_create(data, _FakeGfx, bridge.scene, selected=False)
+
+    assert bridge.can_update_animation_only() is False
 
 
 def test_pygfx_edge_overlay_copies_primary_mesh_transform_when_created_after_sync() -> None:

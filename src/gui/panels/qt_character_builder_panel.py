@@ -36,6 +36,7 @@ from src.gui.qt_lib.assets.qt_theme import (
 )
 from src.gui.qt_lib.panels.qt_workflow_rail import QtWorkflowRail
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
 from src.systems.bas.preview_composer import (
     bas_slot_for_preview_socket,
     bas_socket_for_slot,
@@ -3018,15 +3019,31 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         manager = self._ensure_game_resource_manager(game)
         item_model = None
         item_path = str(path or self._preview_attachment_path or "")
-        clean_resref = str(resref or "").strip()
+        clean_resref = normalize_bas_model_resref(resref)
         if item_path and os.path.isfile(item_path):
             try:
                 from core.game.kotor_loader import load_model_from_file
             except ImportError:                              # pragma: no cover
                 from src.core.game.kotor_loader import load_model_from_file  # type: ignore
             item_model = load_model_from_file(item_path)
-            clean_resref = clean_resref or Path(item_path).stem
+            clean_resref = clean_resref or normalize_bas_model_resref(Path(item_path).stem)
         elif manager is not None and clean_resref:
+            if bas_slot_for_preview_socket(socket, clean_resref) == "head":
+                try:
+                    try:
+                        from core.geometry import model_data as _md
+                    except ImportError:                  # pragma: no cover
+                        from src.core.geometry import model_data as _md  # type: ignore
+                    body_model = self.scene.get_model(_md.PartSlot.HEADLESS_BODY)
+                except Exception:
+                    body_model = None
+                resolution = resolve_bas_head_resref(
+                    requested=clean_resref,
+                    body_model=body_model,
+                    manager=manager,
+                    game=str(game or "K1").upper(),
+                )
+                clean_resref = resolution.resolved_resref or clean_resref
             item_model = manager.load_model(clean_resref, str(game or "K1").upper())
 
         bas_slot = bas_slot_for_preview_socket(socket, clean_resref)

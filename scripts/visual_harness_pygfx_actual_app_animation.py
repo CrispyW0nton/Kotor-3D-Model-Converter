@@ -81,12 +81,14 @@ def _image_delta(before: Path, after: Path) -> dict[str, Any]:
         return {"checked": False, "reason": str(exc)}
 
 
-def _tag_pose_source(pose, model):
+def _tag_pose_source(pose, model, animation: str = ""):
     if pose is None:
         return pose
     try:
         setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
         setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
+        if animation:
+            setattr(pose, "_gr_animation_name", str(animation))
     except Exception:
         pass
     return pose
@@ -125,6 +127,20 @@ def _orbit_delta_summary(item: dict[str, Any]) -> dict[str, Any]:
     orbit = (((item.get("screenshots") or {}).get("orbit")) or {})
     summary = {}
     for name, shots in orbit.items():
+        delta = (shots or {}).get("delta") or {}
+        summary[name] = {
+            "visible_delta": delta.get("visible_delta"),
+            "changed_pixels": delta.get("changed_pixels"),
+            "mean_abs_delta": delta.get("mean_abs_delta"),
+            "max_delta": delta.get("max_delta"),
+        }
+    return summary
+
+
+def _wire_delta_summary(item: dict[str, Any]) -> dict[str, Any]:
+    wire = (((item.get("screenshots") or {}).get("wire")) or {})
+    summary = {}
+    for name, shots in wire.items():
         delta = (shots or {}).get("delta") or {}
         summary[name] = {
             "visible_delta": delta.get("visible_delta"),
@@ -185,10 +201,10 @@ def _drive_window_animation(
     engine = AnimationEngine(animation_model)
     if not engine.play(animation, loop=True, blend=False):
         return {"label": label, "status": "failed_to_play", "animation": animation}
-    pose0 = _tag_pose_source(engine.evaluate(0.0), animation_model)
+    pose0 = _tag_pose_source(engine.evaluate(0.0), animation_model, animation)
     length = float(getattr(engine.current_animation, "length", 0.0) or 0.0)
     sample_t, best_delta = _best_sample_time(engine, pose0, length)
-    pose1 = _tag_pose_source(engine.evaluate(sample_t), animation_model)
+    pose1 = _tag_pose_source(engine.evaluate(sample_t), animation_model, animation)
     if focus_node is not None:
         _set_camera_orbit(viewport, focus_node, model=viewport_model, anim_pose=pose0, fov=46.0, azimuth=90.0, elevation=8.0)
     viewport.set_render_mode("realistic")
@@ -236,6 +252,19 @@ def _drive_window_animation(
         viewport.toggle_texture(True)
         _force_app_render(window, app, f"{label} app {shader}", style=True, animation=True, overlay=True, hud=True)
         shader_shots[shader] = _screen_grab(app, window, output_dir / f"{label}_app_{shader}_textured.png")
+    wire_shots = {}
+    for mode in ("solid_wire", "wire"):
+        viewport.set_shade_mode(mode)
+        viewport.set_animation_pose(pose0, name=animation, time=0.0, length=length)
+        _force_app_render(window, app, f"{label} app {mode} pose0", style=True, animation=True, overlay=True, hud=True)
+        wire0_path = output_dir / f"{label}_app_{mode}_pose0.png"
+        wire0 = _screen_grab(app, window, wire0_path)
+        viewport.set_animation_pose(pose1, name=animation, time=sample_t, length=length)
+        _force_app_render(window, app, f"{label} app {mode} pose1", style=True, animation=True, overlay=True, hud=True)
+        wire1_path = output_dir / f"{label}_app_{mode}_pose1.png"
+        wire1 = _screen_grab(app, window, wire1_path)
+        wire_shots[mode] = {"pose0": wire0, "pose1": wire1, "delta": _image_delta(wire0_path, wire1_path)}
+    viewport.set_shade_mode("solid")
     viewport.set_animation_playback_active(False)
     avg = float(sum(render_times) / len(render_times)) if render_times else 0.0
     return {
@@ -247,7 +276,7 @@ def _drive_window_animation(
         "sample_time": sample_t,
         "pose_delta": _pose_delta(pose0, pose1),
         "best_pose_delta": best_delta,
-        "screenshots": {"pose0": pose0_shot, "pose1": pose1_shot, "shader_cycle": shader_shots, "orbit": orbit_shots},
+        "screenshots": {"pose0": pose0_shot, "pose1": pose1_shot, "shader_cycle": shader_shots, "orbit": orbit_shots, "wire": wire_shots},
         "image_delta": _image_delta(pose0_path, pose1_path),
         "shader_cycle": ["realistic", "shaded", "flat"],
         "texture_button": True,
@@ -460,6 +489,7 @@ def run(
                         if float(row.get("matrix_max_delta", 0.0) or 0.0) > 1.0e-5
                     ),
                     "orbit_deltas": _orbit_delta_summary(item),
+                    "wire_deltas": _wire_delta_summary(item),
                     "render_state": item.get("render_state"),
                 }
             )
@@ -578,6 +608,7 @@ def run(
                         if float(row.get("matrix_max_delta", 0.0) or 0.0) > 1.0e-5
                     ),
                     "orbit_deltas": _orbit_delta_summary(item),
+                    "wire_deltas": _wire_delta_summary(item),
                     "render_state": item.get("render_state"),
                 }
             )
@@ -678,6 +709,7 @@ def run(
                     if float(row.get("matrix_max_delta", 0.0) or 0.0) > 1.0e-5
                 ),
                 "orbit_deltas": _orbit_delta_summary(item),
+                "wire_deltas": _wire_delta_summary(item),
                 "render_state": item.get("render_state"),
             }
         )

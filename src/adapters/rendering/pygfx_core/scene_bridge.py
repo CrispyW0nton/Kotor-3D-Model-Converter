@@ -145,6 +145,11 @@ class PygfxSceneBridge:
         if not self.mesh_cache.records:
             return False
         for record in self.mesh_cache.records.values():
+            source = getattr(record, "source", None)
+            if bool(getattr(source, "_gr_bas_attachment_layer", False)) and bool(getattr(source, "is_skin", False)):
+                return False
+            if bool(getattr(record, "skinning_cpu_fallback", False)):
+                return False
             if not bool(getattr(record, "is_skinned", False)):
                 continue
             revision = tuple(getattr(record, "source_revision", ()) or ())

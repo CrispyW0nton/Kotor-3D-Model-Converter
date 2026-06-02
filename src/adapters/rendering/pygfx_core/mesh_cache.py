@@ -30,6 +30,7 @@ class PygfxMeshRecord:
     alpha_cutoff: float = 0.5
     unlit: bool = False
     is_skinned: bool = False
+    skinning_cpu_fallback: bool = False
     skeleton: Any = None
     edge_mesh: Any = None
     edge_material: Any = None
@@ -215,6 +216,7 @@ class PygfxMeshCache:
                 alpha_cutoff=float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5),
                 unlit=bool(getattr(mesh_data.material, "unlit", False)),
                 is_skinned=bool(getattr(mesh_data, "is_skinned", False)),
+                skinning_cpu_fallback=bool(getattr(mesh_data, "skinning_cpu_fallback", False)),
                 skeleton=skeleton,
                 selected=bool(selected),
                 hovered=bool(hovered),
@@ -244,6 +246,7 @@ class PygfxMeshCache:
             record.geometry_key = geometry_key
             record.source_revision = source_revision
             record.is_skinned = bool(getattr(mesh_data, "is_skinned", False))
+            record.skinning_cpu_fallback = bool(getattr(mesh_data, "skinning_cpu_fallback", False))
             record.edge_geometry_dirty = record.edge_mesh is not None
             record.geometry_dirty = False
         if record.material_dirty or record.material_key != material_key:
@@ -265,6 +268,7 @@ class PygfxMeshCache:
             record.alpha_cutoff = float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5)
             record.unlit = bool(getattr(mesh_data.material, "unlit", False))
             record.is_skinned = bool(getattr(mesh_data, "is_skinned", False))
+            record.skinning_cpu_fallback = bool(getattr(mesh_data, "skinning_cpu_fallback", False))
             record.selected = bool(selected)
             record.view_style_key = ()
             record.material_dirty = False
@@ -695,6 +699,9 @@ class PygfxMeshCache:
             if record.edge_mesh is not None:
                 self._set_material_attr(record.edge_mesh, "visible", False)
             return
+        if self._use_skinned_wire_overlay(record):
+            self._set_skinned_edge_overlay_visible(record, color)
+            return
         if record.edge_positions is None or len(record.edge_positions) < 2:
             record.edge_positions = self._edge_positions_from_geometry(record)
             if record.edge_positions is None or len(record.edge_positions) < 2:
@@ -719,6 +726,48 @@ class PygfxMeshCache:
         self._copy_local_transform(record.mesh, record.edge_mesh)
         self._set_material_color(record.edge_material, color)
         self._set_material_attr(record.edge_material, "thickness", 1.6 if record.selected or record.hovered else 1.15)
+        self._set_material_attr(record.edge_mesh, "visible", self._source_visible(record.source))
+
+    @staticmethod
+    def _use_skinned_wire_overlay(record: PygfxMeshRecord) -> bool:
+        return bool(
+            getattr(record, "is_skinned", False)
+            and getattr(record, "skeleton", None) is not None
+            and hasattr(getattr(record, "gfx", None), "SkinnedMesh")
+        )
+
+    def _set_skinned_edge_overlay_visible(self, record: PygfxMeshRecord, color) -> None:
+        if record.edge_mesh is not None and not bool(getattr(record.edge_mesh, "_gr_pygfx_skinned_wire_overlay", False)):
+            try:
+                record.scene.remove(record.edge_mesh)
+            except Exception:
+                pass
+            record.edge_mesh = None
+            record.edge_material = None
+            record.edge_positions = None
+        if record.edge_mesh is None:
+            try:
+                material = record.gfx.MeshBasicMaterial(color=color)
+                self._set_material_attr(material, "wireframe", True)
+                self._set_material_attr(material, "opacity", float(color[3]) if len(color) > 3 else 1.0)
+                self._set_material_attr(material, "alpha_mode", "blend" if len(color) > 3 and float(color[3]) < 0.999 else "solid")
+                edge_mesh = record.gfx.SkinnedMesh(record.geometry, material)
+                edge_mesh.name = f"{getattr(record.mesh, 'name', record.mesh_id)}-wire"
+                edge_mesh._gr_pygfx_skinned_wire_overlay = True
+                try:
+                    edge_mesh.bind(record.skeleton, bind_matrix=np.eye(4, dtype=np.float32))
+                except Exception:
+                    pass
+                self._copy_local_transform(record.mesh, edge_mesh)
+                record.scene.add(edge_mesh)
+                record.edge_mesh = edge_mesh
+                record.edge_material = material
+                record.edge_geometry_dirty = False
+            except Exception:
+                return
+        self._copy_local_transform(record.mesh, record.edge_mesh)
+        self._set_material_color(record.edge_material, color)
+        self._set_material_attr(record.edge_material, "wireframe", True)
         self._set_material_attr(record.edge_mesh, "visible", self._source_visible(record.source))
 
     def _build_edge_geometry(self, record: PygfxMeshRecord, gfx):

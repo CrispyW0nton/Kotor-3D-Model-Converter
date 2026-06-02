@@ -13,6 +13,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
 from src.systems.bas.model_recipe import (
     BAS_SLOT_ORDER,
     BAS_SOCKET_BY_SLOT,
@@ -66,27 +67,48 @@ class BasWorkflowMixin:
         if body is None:
             self.body_attachment_panel.set_status("No body model loaded.")
             return
-        if not resref:
+        if not resref and slot != "head":
             self.body_attachment_panel.set_status("No attachment model selected.")
             return
-        model = self._load_bas_attachment_model(resref)
+        load_resref = normalize_bas_model_resref(resref)
+        resolution = None
+        if slot == "head":
+            manager = self._get_resource_manager()
+            game = (getattr(self, "_current_game", "") or self._infer_game_from_model(body) or "K1").upper()
+            resolution = resolve_bas_head_resref(
+                requested=resref,
+                body_model=body,
+                manager=manager,
+                game=game,
+            )
+            load_resref = resolution.resolved_resref or load_resref
+        if not load_resref:
+            self.body_attachment_panel.set_status("No attachment model selected.")
+            return
+        model = self._load_bas_attachment_model(load_resref)
         if model is None:
-            self.body_attachment_panel.set_status(f"Could not load {resref}.")
+            details = ""
+            if resolution is not None and resolution.candidates:
+                details = f" Tried: {', '.join(resolution.candidates)}."
+            self.body_attachment_panel.set_status(f"Could not load {load_resref}.{details}")
             return
         previous_resref = str(self._bas_attachment_resrefs.get(slot, "") or "").strip().lower()
         self._bas_body_model = body
         self._bas_attachments[slot] = model
-        self._bas_attachment_resrefs[slot] = resref
-        if slot not in self._bas_attachment_transforms or previous_resref != resref.lower():
-            self._bas_attachment_transforms[slot] = default_bas_attachment_transform(slot, resref)
+        self._bas_attachment_resrefs[slot] = load_resref
+        if slot not in self._bas_attachment_transforms or previous_resref != load_resref.lower():
+            self._bas_attachment_transforms[slot] = default_bas_attachment_transform(slot, load_resref)
         if slot == "head":
             self._current_head_model = model
         else:
             self._current_attachment_model = model
         result = self._rebuild_bas_preview()
         if result:
-            self.body_attachment_panel.set_slot_model(slot, model, resref=resref)
-            self.body_attachment_panel.set_status(result)
+            self.body_attachment_panel.set_slot_model(slot, model, resref=load_resref)
+            suffix = ""
+            if resolution is not None and resolution.source and resolution.source != "requested":
+                suffix = f" Head resolved from {resolution.source}: {load_resref}."
+            self.body_attachment_panel.set_status(f"{result}{suffix}")
             self._refresh_bas_animation_panel_after_layer_change(slot)
     def _handle_bas_clear_requested(self, slot: str) -> None:
         slot = str(slot or "").strip().lower()
@@ -119,6 +141,9 @@ class BasWorkflowMixin:
             model = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
             self._load_animation_panel_model(model, select_name=selected)
     def _load_bas_attachment_model(self, resref: str):
+        resref = normalize_bas_model_resref(resref)
+        if not resref:
+            return None
         game = (getattr(self, "_current_game", "") or self._infer_game_from_model(self._bas_body_model or self._current_model) or "K1").upper()
         manager = self._get_resource_manager()
         if manager is None:
@@ -233,6 +258,7 @@ class BasWorkflowMixin:
         try:
             setattr(item_root, "_gr_bas_attachment_source_model_id", id(item))
             setattr(item_root, "_gr_bas_attachment_source_model_name", str(getattr(item, "name", "") or ""))
+            setattr(item_root, "_gr_bas_attachment_source_model_ref", item)
         except Exception:
             pass
         self._prepare_bas_layer_root(item_root, socket, slot or socket_name)

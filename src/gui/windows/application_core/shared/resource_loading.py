@@ -30,6 +30,7 @@ from src.gui.windows.application_core.application_core_lib.shared.workers import
     load_resource_model_from_game_resources,
 )
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform, normalize_bas_transform
+from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
 from src.systems.bas.model_recipe import BAS_SLOT_ORDER, load_bas_model_recipe
 
 log = logging.getLogger(__name__)
@@ -266,13 +267,22 @@ class ResourceLoadingMixin:
             if not resref or str((layer or {}).get("state") or "").lower() != "attached":
                 continue
             layer_game = str((layer or {}).get("game") or game).upper()
-            model = manager.load_model(resref, layer_game)
+            load_resref = normalize_bas_model_resref(resref)
+            if slot == "head":
+                resolution = resolve_bas_head_resref(
+                    requested=resref,
+                    body_model=body,
+                    manager=manager,
+                    game=layer_game,
+                )
+                load_resref = resolution.resolved_resref or load_resref
+            model = manager.load_model(load_resref, layer_game)
             if model is None:
-                raise FileNotFoundError(f"{layer_game}:{resref}.mdl")
+                raise FileNotFoundError(f"{layer_game}:{load_resref}.mdl")
             self._bas_attachments[slot] = model
-            self._bas_attachment_resrefs[slot] = resref
+            self._bas_attachment_resrefs[slot] = load_resref
             self._bas_attachment_transforms[slot] = normalize_bas_transform(
-                (layer or {}).get("transform") or default_bas_attachment_transform(slot, resref)
+                (layer or {}).get("transform") or default_bas_attachment_transform(slot, load_resref)
             )
             if slot == "head":
                 self._current_head_model = model

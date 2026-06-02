@@ -84,6 +84,7 @@ def iter_mesh_render_data(
     for node in nodes:
         if not _node_is_renderable_mesh(node):
             continue
+        node_anim_pose = _bas_attachment_effective_pose_for_node(node, anim_pose)
         try:
             (
                 positions,
@@ -94,7 +95,7 @@ def iter_mesh_render_data(
                 vbo_bone_indices,
                 vbo_bone_weights,
                 world_matrix,
-            ) = _extract_node_arrays(node, anim_pose=anim_pose, vbo_builder=vbo_builder)
+            ) = _extract_node_arrays(node, anim_pose=node_anim_pose, vbo_builder=vbo_builder)
         except Exception:
             continue
         if positions is None or len(positions) == 0:
@@ -132,7 +133,7 @@ def iter_mesh_render_data(
                     positions,
                     normals,
                     skinning,
-                    anim_pose,
+                    node_anim_pose,
                     model=model,
                 )
                 if skinned_positions is not positions:
@@ -160,7 +161,7 @@ def iter_mesh_render_data(
                     positions,
                     normals,
                     skinning,
-                    anim_pose,
+                    node_anim_pose,
                     model=model,
                 )
                 if skinned_positions is not positions:
@@ -179,7 +180,7 @@ def iter_mesh_render_data(
                 skin_lbs_input_mode,
             )
         if skinning_cpu_fallback:
-            source_revision = (*source_revision, int(round(float(getattr(anim_pose, "time", 0.0) or 0.0) * 1000.0)))
+            source_revision = (*source_revision, int(round(float(getattr(node_anim_pose, "time", 0.0) or 0.0) * 1000.0)))
         rows.append(
             MeshRenderData(
                 mesh_id=id(node),
@@ -578,6 +579,7 @@ def bas_attachment_palette_model_for_node(node):
 def mesh_model_matrix_for_node(node, *, anim_pose=None):
     """Return the world/model matrix a renderer should apply to one mesh node."""
 
+    anim_pose = _bas_attachment_effective_pose_for_node(node, anim_pose)
     if bool(getattr(node, "_gr_bas_attachment_layer", False)):
         root = _bas_attachment_root_for_node(node)
         if root is not None and bool(getattr(node, "is_skin", False)):
@@ -864,6 +866,66 @@ def _bas_attachment_root_for_node(node):
     return None
 
 
+def _bas_attachment_effective_pose_for_node(node, anim_pose):
+    if node is None or anim_pose is None or not bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        return anim_pose
+    root = _bas_attachment_root_for_node(node)
+    if root is None:
+        return anim_pose
+    try:
+        pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
+        attachment_source_id = int(getattr(root, "_gr_bas_attachment_source_model_id", 0) or 0)
+        if pose_source_id and attachment_source_id and pose_source_id == attachment_source_id:
+            return anim_pose
+    except Exception:
+        pass
+    slot = str(getattr(root, "_gr_bas_attachment_slot", "") or "").strip().lower()
+    if slot != "head":
+        return anim_pose
+    source_model = getattr(root, "_gr_bas_attachment_source_model_ref", None)
+    anim_name = str(getattr(anim_pose, "_gr_animation_name", "") or "").strip()
+    if source_model is None or not anim_name:
+        return anim_pose
+    time_value = float(getattr(anim_pose, "time", 0.0) or 0.0)
+    cache_key = (id(anim_pose), id(source_model), anim_name.lower(), round(time_value, 6))
+    cached = getattr(root, "_gr_bas_attachment_effective_pose_cache", None)
+    if isinstance(cached, dict) and cached.get("key") == cache_key:
+        pose = cached.get("pose")
+        if pose is not None:
+            return pose
+    try:
+        from src.core.animation.animation_engine import AnimationEngine
+
+        engine = AnimationEngine(source_model)
+        if not engine.play(anim_name, loop=True, blend=False):
+            return anim_pose
+        current = getattr(engine, "current_animation", None)
+        length = float(getattr(current, "length", 0.0) or 0.0)
+        sample_time = time_value
+        if length > 0.0:
+            sample_time = sample_time % length
+        pose = engine.evaluate(sample_time)
+        try:
+            pose.nodes = {
+                str(name).lower(): pose_node
+                for name, pose_node in (getattr(pose, "nodes", {}) or {}).items()
+                if _bas_head_attachment_local_pose_node_allowed_name(str(name))
+            }
+        except Exception:
+            pass
+        setattr(pose, "_gr_animation_source_model_id", id(source_model))
+        setattr(pose, "_gr_animation_source_model_name", str(getattr(source_model, "name", "") or ""))
+        setattr(pose, "_gr_animation_name", anim_name)
+        setattr(pose, "_gr_bas_socket_pose", anim_pose)
+        try:
+            setattr(root, "_gr_bas_attachment_effective_pose_cache", {"key": cache_key, "pose": pose})
+        except Exception:
+            pass
+        return pose
+    except Exception:
+        return anim_pose
+
+
 def _bas_attachment_socket_node(bas_root):
     socket_name = str(getattr(bas_root, "_gr_bas_socket_name", "") or "").lower()
     body_root = getattr(bas_root, "parent", None)
@@ -896,8 +958,9 @@ def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
     )
 
     socket = _bas_attachment_socket_node(bas_root)
+    socket_pose = getattr(anim_pose, "_gr_bas_socket_pose", anim_pose)
     if socket is not None:
-        socket_wp, socket_wo = _node_world_transform(socket, anim_pose=anim_pose)
+        socket_wp, socket_wo = _node_world_transform(socket, anim_pose=socket_pose)
         wx, wy, wz = socket_wp
         parent_orientation = list(socket_wo)
     else:
@@ -999,8 +1062,15 @@ def _bas_head_attachment_has_inherited_pose_tracks(bas_root, anim_pose) -> bool:
 
 def _bas_inherited_head_pose_node_allowed(node) -> bool:
     name = str(getattr(node, "name", "") or "").strip().lower()
+    return _bas_head_attachment_local_pose_node_allowed_name(name)
+
+
+def _bas_head_attachment_local_pose_node_allowed_name(name: str) -> bool:
+    name = str(name or "").strip().lower()
     if not name:
         return False
+    if name in {"necklwr_g", "neck_g", "hturn_g", "head_g", "talkdummy"}:
+        return True
     if name.startswith("f_"):
         return True
     if name.startswith("eye"):

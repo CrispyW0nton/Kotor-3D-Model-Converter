@@ -7,6 +7,7 @@ from typing import Any
 from PySide6 import QtCore, QtWidgets
 
 from src.gui.qt_lib.assets.qt_theme import heading
+from src.systems.bas.head_resolution import normalize_bas_model_resref
 
 
 BAS_SLOT_LABELS: dict[str, str] = {
@@ -184,8 +185,8 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
     def selected_model_resref(self) -> str:
         text = str(self.model_combo.currentText() or "").strip()
         if text and text != str(self.model_combo.itemText(self.model_combo.currentIndex()) or "").strip():
-            return text
-        return str(self.model_combo.currentData() or text or "").strip()
+            return normalize_bas_model_resref(text)
+        return normalize_bas_model_resref(self.model_combo.currentData() or text or "")
 
     def set_selected_slot(self, slot: str) -> None:
         slot = slot if slot in BAS_SLOT_LABELS else "head"
