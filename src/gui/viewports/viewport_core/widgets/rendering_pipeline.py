@@ -146,6 +146,8 @@ class ViewportRenderingPipelineMixin:
         if self.canvas.is_live_surface() and self._gpu_renderer_requires_native_surface_passthrough():
             self._update_live_surface_diagnostics()
             img = self._draw_live_surface_tool_overlay(img, w, h)
+            if bool(getattr(self, "_skip_overlay_pixmap_update", False)):
+                return img
             img = self._draw_performance_overlay(img, w, h)
             return img
         if self._can_skip_live_overlay_rebuild():
@@ -161,6 +163,10 @@ class ViewportRenderingPipelineMixin:
         pygfx owns the retained 3D scene; this transparent image is only for
         legacy screen-space tools that are still Qt/PIL overlay based.
         """
+        if self._can_skip_animation_cpu_overlay():
+            self._record_overlay_rebuild(0.0)
+            self._skip_overlay_pixmap_update = True
+            return img
         try:
             from PIL import Image
 
@@ -194,6 +200,8 @@ class ViewportRenderingPipelineMixin:
         if bool(getattr(self, "_xray_mode", False) or getattr(self, "_weight_heatmap_enabled", False)):
             return False
         if governor is not None and governor.animation_playing:
+            if self._can_skip_animation_cpu_overlay():
+                return True
             return bool(dirty_flags.get("scene", False))
         if bool(getattr(self._renderer, "show_bones", False) or getattr(self._renderer, "show_walkmesh", False)):
             return False
@@ -213,6 +221,22 @@ class ViewportRenderingPipelineMixin:
             return bool((diagnostics or {}).get("native_surface_passthrough", False))
         except Exception:
             return False
+
+    def _can_skip_animation_cpu_overlay(self) -> bool:
+        governor = getattr(self, "_frame_governor", None)
+        if governor is None or not bool(getattr(governor, "animation_playing", False)):
+            return False
+        if not self._gpu_renderer_supports_native_skeleton_overlay():
+            return False
+        if bool(getattr(self, "_xray_mode", False) or getattr(self, "_weight_heatmap_enabled", False)):
+            return False
+        if bool(getattr(getattr(self, "_renderer", None), "show_walkmesh", False)):
+            return False
+        if getattr(getattr(self, "_renderer", None), "_ext_skeleton", None) is not None:
+            return False
+        if bool(getattr(self, "_joint_marquee_selecting", False)):
+            return False
+        return True
 
     def _update_live_surface_diagnostics(self) -> None:
         set_text = getattr(self.canvas, "set_diagnostics_text", None)
@@ -505,7 +529,8 @@ class ViewportRenderingPipelineMixin:
             # stay clearly visible on top of the colored vertex cloud.
             if self._weight_heatmap_enabled:
                 self._draw_weight_heatmap(draw, w, h)
-            if self._renderer.show_bones:
+            native_skeleton = self._gpu_renderer_supports_native_skeleton_overlay()
+            if self._renderer.show_bones and not native_skeleton:
                 self._renderer._draw_bones(draw, w, h)
                 # T401: paint AccuRig-style color-coded joint dots on top.
                 # Runs only when the skeleton is visible — the dots are
@@ -714,6 +739,19 @@ class ViewportRenderingPipelineMixin:
         try:
             caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None
             return bool(getattr(caps, "supports_gizmo_drawing", False))
+        except Exception:
+            return False
+
+    def _gpu_renderer_supports_native_skeleton_overlay(self) -> bool:
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return False
+        backend_id = str(getattr(renderer, "backend_id", "") or "").lower()
+        if not (backend_id.startswith("wgpu_") or backend_id == "pygfx_wgpu"):
+            return False
+        try:
+            caps = renderer.get_capabilities() if hasattr(renderer, "get_capabilities") else None
+            return bool(getattr(caps, "skeleton_overlay_supported", False))
         except Exception:
             return False
 

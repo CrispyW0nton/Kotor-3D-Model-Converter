@@ -221,6 +221,10 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
         elif is_bas_attachment and not is_skin:
             vbo_world_pos = (0.0, 0.0, 0.0)
             vbo_world_orient = (0.0, 0.0, 0.0, 1.0)
+        cache_key = _skinned_lbs_vbo_cache_key(node, vbo_builder) if skin_can_lbs else _static_vbo_cache_key(node, vbo_builder)
+        cached_vbo = _get_skinned_lbs_vbo_cache(node, cache_key)
+        if cached_vbo is not None:
+            return (*cached_vbo, world_matrix)
         vdata, idx_arr = vbo_builder(
             node,
             vbo_world_pos,
@@ -240,6 +244,12 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
             if getattr(node, "is_skin", False) and vdata.shape[1] >= 22:
                 bone_indices = np.rint(vdata[:, 14:18]).astype(np.uint16)
                 bone_weights = np.asarray(vdata[:, 18:22], dtype=np.float32)
+            if cache_key is not None:
+                _set_skinned_lbs_vbo_cache(
+                    node,
+                    cache_key,
+                    (positions, normals, uvs0, uvs1, indices, bone_indices, bone_weights),
+                )
             return positions, normals, uvs0, uvs1, indices, bone_indices, bone_weights, world_matrix
 
     verts = np.asarray(getattr(node, "vertices", getattr(node, "verts", [])) or [], dtype=np.float32)
@@ -254,6 +264,61 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
     indices = np.asarray([int(i) for face in faces for i in tuple(face)[:3]], dtype=np.uint32)
     normals = smooth_render_normals(verts, normals, indices)
     return verts, normals, uvs0, uvs1, indices, None, None, world_matrix
+
+
+def _skinned_lbs_vbo_cache_key(node, vbo_builder):
+    skin_data = getattr(node, "skin_data", None)
+    composite_offset = getattr(node, "_composite_nonskin_offset", None)
+    if composite_offset is not None:
+        try:
+            composite_offset = tuple(round(float(v), 6) for v in tuple(composite_offset)[:3])
+        except Exception:
+            composite_offset = None
+    return (
+        id(vbo_builder),
+        _node_revision(node),
+        len(skin_data or []),
+        id(skin_data),
+        tuple(getattr(node, "bone_map", []) or ()),
+        composite_offset,
+    )
+
+
+def _static_vbo_cache_key(node, vbo_builder):
+    if bool(getattr(node, "is_skin", False)):
+        return None
+    return (
+        id(vbo_builder),
+        "static",
+        _node_revision(node),
+        len(getattr(node, "vertices", getattr(node, "verts", [])) or []),
+        len(getattr(node, "faces", []) or []),
+        id(getattr(node, "vertices", getattr(node, "verts", [])) or None),
+        id(getattr(node, "faces", []) or None),
+        tuple(getattr(node, "bone_map", []) or ()),
+        bool(getattr(node, "_gr_bas_attachment_layer", False)),
+    )
+
+
+def _get_skinned_lbs_vbo_cache(node, cache_key):
+    if cache_key is None:
+        return None
+    try:
+        cached = getattr(node, "_gr_render_lbs_vbo_cache", None)
+    except Exception:
+        return None
+    if not isinstance(cached, dict) or cached.get("key") != cache_key:
+        return None
+    return cached.get("arrays")
+
+
+def _set_skinned_lbs_vbo_cache(node, cache_key, arrays) -> None:
+    if cache_key is None:
+        return
+    try:
+        setattr(node, "_gr_render_lbs_vbo_cache", {"key": cache_key, "arrays": arrays})
+    except Exception:
+        pass
 
 
 def smooth_render_normals(

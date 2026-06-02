@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import numpy as np
+
+from src.core.rendering.picking import PickHit, ray_intersects_aabb, triangle_normal
+
 from ..shared import *  # noqa: F401,F403
 from .mini_thumbnail import *  # noqa: F401,F403
 from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportPickingHoverMixin:
+    @staticmethod
     def _point_in_triangle(px: float, py: float, a, b, c) -> bool:
         denom = ((b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]))
         if abs(denom) < 1e-6:
@@ -43,6 +48,9 @@ class ViewportPickingHoverMixin:
         return getattr(getattr(self, "_renderer", None), "_anim_pose", None) is not None
 
     def _projected_mesh_bounds(self, node, width: int, height: int):
+        pygfx_bounds = self._pygfx_projected_mesh_bounds(node, width, height)
+        if pygfx_bounds is not None:
+            return pygfx_bounds
         world_verts = self._renderer._get_world_verts_for_node(node)
         if not world_verts:
             return None
@@ -53,6 +61,194 @@ class ViewportPickingHoverMixin:
         xs = [p[0] for p in visible]
         ys = [p[1] for p in visible]
         return (min(xs) - 4, min(ys) - 4, max(xs) + 4, max(ys) + 4, world_verts, projected)
+
+    def _pygfx_mesh_records(self):
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None or str(getattr(renderer, "backend_id", "")) != "pygfx_wgpu":
+            return []
+        bridge = getattr(renderer, "scene_bridge", None)
+        mesh_cache = getattr(bridge, "mesh_cache", None)
+        records = getattr(mesh_cache, "records", None)
+        if not records:
+            return []
+        try:
+            return list(records.values())
+        except Exception:
+            return []
+
+    def _pygfx_mesh_records_for_node(self, node):
+        if node is None:
+            return []
+        node_id = id(node)
+        out = []
+        for record in self._pygfx_mesh_records():
+            source = getattr(record, "source", None)
+            if id(source) != node_id:
+                continue
+            if bool(getattr(source, "_gr_hidden", False)) or bool(getattr(source, "_gr_scene_object_locked", False)):
+                continue
+            mesh = getattr(record, "mesh", None)
+            if mesh is not None and getattr(mesh, "visible", True) is False:
+                continue
+            out.append(record)
+        return out
+
+    def _pygfx_record_world_vertices(self, record):
+        try:
+            positions = np.asarray(getattr(getattr(record.geometry, "positions", None), "data", None), dtype=np.float64)
+        except Exception:
+            return []
+        if positions.ndim != 2 or positions.shape[1] < 3 or len(positions) == 0:
+            return []
+        matrix = getattr(getattr(getattr(record, "mesh", None), "local", None), "matrix", None)
+        try:
+            mat = np.asarray(matrix, dtype=np.float64).reshape((4, 4)) if matrix is not None else np.eye(4, dtype=np.float64)
+        except Exception:
+            mat = np.eye(4, dtype=np.float64)
+        verts = np.ones((len(positions), 4), dtype=np.float64)
+        verts[:, :3] = positions[:, :3]
+        world = verts @ mat.T
+        return [tuple(float(v) for v in row[:3]) for row in world]
+
+    def _pygfx_world_verts_for_node(self, node):
+        verts = []
+        for record in self._pygfx_mesh_records_for_node(node):
+            verts.extend(self._pygfx_record_world_vertices(record))
+        return verts
+
+    def _pygfx_projected_mesh_bounds(self, node, width: int, height: int):
+        world_verts = self._pygfx_world_verts_for_node(node)
+        if not world_verts:
+            return None
+        projected = self._renderer._proj_batch(world_verts, width, height)
+        visible = [p for p in projected if p is not None]
+        if not visible:
+            return None
+        xs = [p[0] for p in visible]
+        ys = [p[1] for p in visible]
+        return (min(xs) - 4, min(ys) - 4, max(xs) + 4, max(ys) + 4, world_verts, projected)
+
+    def _pygfx_record_triangles(self, record, vertex_count: int):
+        try:
+            indices = getattr(getattr(record.geometry, "indices", None), "data", None)
+            if indices is None:
+                tri_indices = np.arange(vertex_count, dtype=np.uint32)
+            else:
+                tri_indices = np.asarray(indices, dtype=np.uint32).reshape(-1)
+        except Exception:
+            tri_indices = np.arange(vertex_count, dtype=np.uint32)
+        usable = int(len(tri_indices) - (len(tri_indices) % 3))
+        for offset in range(0, usable, 3):
+            i0, i1, i2 = int(tri_indices[offset]), int(tri_indices[offset + 1]), int(tri_indices[offset + 2])
+            if i0 < 0 or i1 < 0 or i2 < 0 or max(i0, i1, i2) >= vertex_count:
+                continue
+            yield offset // 3, (i0, i1, i2)
+
+    def _pygfx_mesh_hit_test_detail(self, request: PickRequest):
+        records = self._pygfx_mesh_records()
+        if not records:
+            return None
+        try:
+            ray_origin, ray_direction = ray_from_mouse(
+                (int(request.x), int(request.y)),
+                self.camera,
+                int(request.viewport_width),
+                int(request.viewport_height),
+            )
+        except Exception:
+            ray_origin = ray_direction = None
+        diagnostic = {
+            "method": "pygfx rendered mesh raycast",
+            "candidate_count": len(records),
+            "x": int(request.x),
+            "y": int(request.y),
+            "device_pixel_ratio": float(request.device_pixel_ratio),
+        }
+        best = PickHit(renderer_backend="pygfx_wgpu", diagnostic=diagnostic)
+        best_face_bounds = None
+        broadphase_hits = 0
+        tested_triangles = 0
+        for record in records:
+            source = getattr(record, "source", None)
+            if source is None:
+                continue
+            if not request.include_hidden and bool(getattr(source, "_gr_hidden", False)):
+                continue
+            if not request.include_locked and bool(getattr(source, "_gr_scene_object_locked", False)):
+                continue
+            mesh = getattr(record, "mesh", None)
+            if mesh is not None and getattr(mesh, "visible", True) is False:
+                continue
+            world_verts = self._pygfx_record_world_vertices(record)
+            if not world_verts:
+                continue
+            projected = self._renderer._proj_batch(world_verts, int(request.viewport_width), int(request.viewport_height))
+            visible = [point for point in projected if point is not None]
+            if not visible:
+                continue
+            min_x = min(point[0] for point in visible) - 4
+            min_y = min(point[1] for point in visible) - 4
+            max_x = max(point[0] for point in visible) + 4
+            max_y = max(point[1] for point in visible) + 4
+            if request.x < min_x or request.x > max_x or request.y < min_y or request.y > max_y:
+                continue
+            bb = self._bounds_from_points(world_verts)
+            if bb is None:
+                continue
+            if ray_origin is not None and ray_direction is not None and not ray_intersects_aabb(ray_origin, ray_direction, bb[0], bb[1]):
+                continue
+            broadphase_hits += 1
+            for face_index, face in self._pygfx_record_triangles(record, len(world_verts)):
+                i0, i1, i2 = face
+                v0, v1, v2 = world_verts[i0], world_verts[i1], world_verts[i2]
+                tested_triangles += 1
+                hit_t = (
+                    ray_triangle_intersection(ray_origin, ray_direction, v0, v1, v2)
+                    if ray_origin is not None and ray_direction is not None
+                    else None
+                )
+                if hit_t is None:
+                    p0, p1, p2 = projected[i0], projected[i1], projected[i2]
+                    if p0 is None or p1 is None or p2 is None:
+                        continue
+                    if not self._point_in_triangle(float(request.x), float(request.y), p0, p1, p2):
+                        continue
+                    hit_t = max(1.0e-6, (float(p0[2]) + float(p1[2]) + float(p2[2])) / 3.0)
+                if hit_t is None or hit_t >= best.distance:
+                    continue
+                world_position = None
+                if ray_origin is not None and ray_direction is not None:
+                    world_position = tuple(float(v) for v in (ray_origin + ray_direction * float(hit_t))[:3])
+                best_face_bounds = self._bounds_from_points([v0, v1, v2], min_extent=0.05)
+                best = PickHit(
+                    hit=True,
+                    kind="mesh",
+                    object_id=id(source),
+                    object_ref=source,
+                    mesh_id=getattr(record, "mesh_id", id(source)),
+                    node_id=getattr(source, "name", id(source)),
+                    face_index=int(face_index),
+                    distance=float(hit_t),
+                    world_position=world_position,
+                    normal=triangle_normal(v0, v1, v2),
+                    screen_position=(int(request.x), int(request.y)),
+                    hit_kind="mesh",
+                    source_backend="pygfx_wgpu",
+                    renderer_backend="pygfx_wgpu",
+                    diagnostic=diagnostic,
+                )
+        diagnostic["broadphase_hits"] = broadphase_hits
+        diagnostic["tested_triangles"] = tested_triangles
+        if best.hit:
+            diagnostic["face_bounds"] = best_face_bounds
+            diagnostic["result"] = str(getattr(best.object_ref, "name", best.object_id))
+            self._last_pick_hit = best
+            self._last_pick_diagnostics = dict(diagnostic)
+            return best.object_ref, best_face_bounds
+        diagnostic["result"] = "miss"
+        self._last_pick_hit = best
+        self._last_pick_diagnostics = dict(diagnostic)
+        return None
 
     def _mesh_hit_test(self, sx: int, sy: int):
         detail = self._mesh_hit_test_detail(sx, sy)
@@ -227,6 +423,9 @@ class ViewportPickingHoverMixin:
             gpu_result = self._mesh_gpu_pick_hit(request)
             if gpu_result is not None:
                 return gpu_result
+        pygfx_result = self._pygfx_mesh_hit_test_detail(request)
+        if pygfx_result is not None:
+            return pygfx_result
         try:
             hit = self._picking_provider.pick(request, self.model, self.camera)
         except Exception as exc:

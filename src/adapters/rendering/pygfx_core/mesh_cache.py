@@ -30,6 +30,7 @@ class PygfxMeshRecord:
     alpha_cutoff: float = 0.5
     unlit: bool = False
     is_skinned: bool = False
+    skeleton: Any = None
     edge_mesh: Any = None
     edge_material: Any = None
     world_matrix_key: tuple[float, ...] = ()
@@ -176,7 +177,16 @@ class PygfxMeshCache:
                 diffuse_map=diffuse_map,
                 lightmap_map=lightmap_map,
             )
-            mesh = gfx.Mesh(geometry, material)
+            skeleton = self._build_skeleton(mesh_data, gfx)
+            if skeleton is not None and hasattr(gfx, "SkinnedMesh"):
+                mesh = gfx.SkinnedMesh(geometry, material)
+                try:
+                    mesh.bind(skeleton, bind_matrix=np.eye(4, dtype=np.float32))
+                except Exception:
+                    skeleton = None
+                    mesh = gfx.Mesh(geometry, material)
+            else:
+                mesh = gfx.Mesh(geometry, material)
             try:
                 mesh.name = str(getattr(mesh_data.source, "name", "") or mesh_id)
             except Exception:
@@ -205,6 +215,7 @@ class PygfxMeshCache:
                 alpha_cutoff=float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5),
                 unlit=bool(getattr(mesh_data.material, "unlit", False)),
                 is_skinned=bool(getattr(mesh_data, "is_skinned", False)),
+                skeleton=skeleton,
                 selected=bool(selected),
                 hovered=bool(hovered),
                 edge_geometry_dirty=True,
@@ -213,11 +224,12 @@ class PygfxMeshCache:
             return record
 
         record.source = getattr(mesh_data, "source", record.source)
+        dynamic_only = self._can_update_dynamic_skin_buffers(record, source_revision, mesh_data)
         if force_geometry_update and record.geometry_key == geometry_key:
-            if not self._update_geometry_buffers(record, mesh_data):
+            if not self._update_geometry_buffers(record, mesh_data, dynamic_only=dynamic_only):
                 record.geometry_dirty = True
         if record.geometry_dirty or record.geometry_key != geometry_key:
-            updated_in_place = self._update_geometry_buffers(record, mesh_data)
+            updated_in_place = self._update_geometry_buffers(record, mesh_data, dynamic_only=dynamic_only)
             if not updated_in_place:
                 record.geometry = self._build_geometry(mesh_data, gfx)
                 record.mesh.geometry = record.geometry
@@ -264,6 +276,16 @@ class PygfxMeshCache:
             record.view_style_key = ()
         return record
 
+    @staticmethod
+    def _can_update_dynamic_skin_buffers(record: PygfxMeshRecord, source_revision: tuple[Any, ...], mesh_data) -> bool:
+        if not bool(getattr(mesh_data, "skinning_cpu_fallback", False)):
+            return False
+        previous = tuple(getattr(record, "source_revision", ()) or ())
+        current = tuple(source_revision or ())
+        if len(previous) < 2 or len(current) < 2:
+            return False
+        return previous[:-1] == current[:-1]
+
     def mark_transform_dirty(self, node=None) -> None:
         source_id = id(node) if node is not None else None
         for record in self.records.values():
@@ -299,15 +321,68 @@ class PygfxMeshCache:
 
     def _build_geometry(self, mesh_data, gfx):
         kwargs = {"positions": mesh_data.positions}
-        if mesh_data.indices is not None:
-            kwargs["indices"] = mesh_data.indices.reshape((-1, 3))
+        indices = self._mesh_indices(mesh_data)
+        if indices is not None:
+            kwargs["indices"] = indices.reshape((-1, 3))
         if mesh_data.normals is not None:
             kwargs["normals"] = mesh_data.normals
         if mesh_data.uvs0 is not None:
             kwargs["texcoords"] = self._pygfx_uvs(mesh_data.uvs0)
         if mesh_data.uvs1 is not None:
             kwargs["texcoords1"] = self._pygfx_uvs(mesh_data.uvs1)
+        if bool(getattr(mesh_data, "is_skinned", False)):
+            bone_indices = getattr(mesh_data, "bone_indices", None)
+            bone_weights = getattr(mesh_data, "bone_weights", None)
+            if bone_indices is not None and bone_weights is not None:
+                try:
+                    kwargs["skin_indices"] = np.asarray(bone_indices, dtype=np.uint32)[:, :4]
+                    kwargs["skin_weights"] = np.asarray(bone_weights, dtype=np.float32)[:, :4]
+                except Exception:
+                    pass
         return gfx.Geometry(**kwargs)
+
+    def _build_skeleton(self, mesh_data, gfx):
+        if not bool(getattr(mesh_data, "is_skinned", False)):
+            return None
+        bone_indices = getattr(mesh_data, "bone_indices", None)
+        if bone_indices is None or not hasattr(gfx, "Skeleton") or not hasattr(gfx, "Bone"):
+            return None
+        try:
+            arr = np.asarray(bone_indices, dtype=np.uint32)
+            if arr.size == 0:
+                return None
+            count = max(1, min(128, int(arr.max()) + 1))
+            bones = [gfx.Bone(f"bone_{index}") for index in range(count)]
+            inverses = [np.eye(4, dtype=np.float32) for _ in range(count)]
+            return gfx.Skeleton(bones, bone_inverses=inverses)
+        except Exception:
+            return None
+
+    def update_skin_palette(self, record: PygfxMeshRecord, anim_pose, model=None) -> None:
+        if record is None or record.skeleton is None or anim_pose is None:
+            return
+        try:
+            from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
+            from src.core.rendering.skeleton_render_data import _cached_matrix_palette_uploader
+
+            uploader = _cached_matrix_palette_uploader(model, MAX_BONES, MatrixPaletteUploader)
+            uploader.compute_skin_node_palette(record.source, anim_pose)
+            palette = uploader.as_numpy_array()
+            buffer = getattr(record.skeleton, "bone_matrices_buffer", None)
+            data = getattr(buffer, "data", None)
+            if palette is None or data is None or len(data) == 0:
+                return
+            count = min(len(data), len(palette))
+            data[:count]["bone_matrices"] = np.asarray(palette[:count], dtype=np.float32).transpose((0, 2, 1))
+            update_range = getattr(buffer, "update_range", None)
+            if callable(update_range):
+                update_range(0, count)
+            else:
+                update_full = getattr(buffer, "update_full", None)
+                if callable(update_full):
+                    update_full()
+        except Exception:
+            return
 
     def _build_edge_positions(self, mesh_data):
         positions = np.asarray(getattr(mesh_data, "positions", None), dtype=np.float32)
@@ -323,14 +398,19 @@ class PygfxMeshCache:
         except Exception:
             return None
 
-    def _update_geometry_buffers(self, record: PygfxMeshRecord, mesh_data) -> bool:
+    def _update_geometry_buffers(self, record: PygfxMeshRecord, mesh_data, *, dynamic_only: bool = False) -> bool:
         geometry = record.geometry
-        checks = (
+        checks = [
             ("positions", getattr(mesh_data, "positions", None)),
             ("normals", getattr(mesh_data, "normals", None)),
-            ("texcoords", self._pygfx_uvs(getattr(mesh_data, "uvs0", None))),
-            ("texcoords1", self._pygfx_uvs(getattr(mesh_data, "uvs1", None))),
-        )
+        ]
+        if not dynamic_only:
+            checks.extend(
+                (
+                    ("texcoords", self._pygfx_uvs(getattr(mesh_data, "uvs0", None))),
+                    ("texcoords1", self._pygfx_uvs(getattr(mesh_data, "uvs1", None))),
+                )
+            )
         for attr, values in checks:
             if values is None:
                 continue
@@ -341,7 +421,7 @@ class PygfxMeshCache:
             arr = np.asarray(values, dtype=np.asarray(data).dtype)
             if tuple(arr.shape) != tuple(np.asarray(data).shape):
                 return False
-        index_values = getattr(mesh_data, "indices", None)
+        index_values = None if dynamic_only else self._mesh_indices(mesh_data)
         index_buffer = getattr(geometry, "indices", None)
         if index_values is not None and index_buffer is not None and getattr(index_buffer, "data", None) is not None:
             arr = np.asarray(index_values, dtype=np.asarray(index_buffer.data).dtype).reshape(np.asarray(index_buffer.data).shape)
@@ -371,6 +451,25 @@ class PygfxMeshCache:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def _mesh_indices(mesh_data):
+        indices = getattr(mesh_data, "indices", None)
+        if indices is not None:
+            try:
+                return np.asarray(indices, dtype=np.uint32).reshape((-1, 3))
+            except Exception:
+                return None
+        try:
+            positions = np.asarray(getattr(mesh_data, "positions", None), dtype=np.float32)
+        except Exception:
+            return None
+        if positions.ndim != 2 or positions.shape[1] < 3:
+            return None
+        vertex_count = int(len(positions))
+        if vertex_count < 3 or vertex_count % 3 != 0:
+            return None
+        return np.arange(vertex_count, dtype=np.uint32).reshape((-1, 3))
 
     def _base_color(self, mesh_data) -> tuple[float, float, float, float]:
         base = tuple(float(c) for c in (mesh_data.material_color or (0.72, 0.74, 0.76, 1.0))[:4])

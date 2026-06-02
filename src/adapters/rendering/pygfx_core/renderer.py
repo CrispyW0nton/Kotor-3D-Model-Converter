@@ -75,7 +75,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
         self.selected_edge_color = (1.0, 210 / 255.0, 63 / 255.0)
         self.display_options = None
         self.use_native_gizmo_overlay = False
-        self.use_native_skeleton_overlay = False
+        self.use_native_skeleton_overlay = True
         self.use_native_light_helper_overlay = False
         self.use_native_helper_overlay = True
 
@@ -262,16 +262,19 @@ class PygfxViewportRenderer(ViewportRendererPort):
             if dirty_flags.get("lighting"):
                 self.scene_bridge.update_lighting(kwargs.get("lighting_render_data"))
             if dirty_flags.get("animation"):
-                self.scene_bridge.update_scene(
-                    scene,
-                    textures=kwargs.get("textures") or {},
-                    selected_nodes=selected_nodes,
-                    hovered_node=kwargs.get("hovered_node"),
-                    anim_pose=kwargs.get("anim_pose"),
-                    anim_base_pose=kwargs.get("anim_base_pose"),
-                    lighting_render_data=kwargs.get("lighting_render_data"),
-                    force_geometry_update=True,
-                )
+                if self.scene_bridge.can_update_animation_only():
+                    self.scene_bridge.update_animation(scene, anim_pose=kwargs.get("anim_pose"))
+                else:
+                    self.scene_bridge.update_scene(
+                        scene,
+                        textures=kwargs.get("textures") or {},
+                        selected_nodes=selected_nodes,
+                        hovered_node=kwargs.get("hovered_node"),
+                        anim_pose=kwargs.get("anim_pose"),
+                        anim_base_pose=kwargs.get("anim_base_pose"),
+                        lighting_render_data=kwargs.get("lighting_render_data"),
+                        force_geometry_update=True,
+                    )
         self.scene_bridge.update_selection(selected_nodes, kwargs.get("hovered_node"))
         self.scene_bridge.apply_view_style(
             show_solid=bool(getattr(self, "show_solid", True)),
@@ -290,12 +293,16 @@ class PygfxViewportRenderer(ViewportRendererPort):
             ),
             selection_color=(*tuple(getattr(self, "selected_edge_color", (1.0, 210 / 255.0, 63 / 255.0))[:3]), 1.0),
         )
-        self.scene_bridge.update_overlays(
-            gizmo_render_data=kwargs.get("gizmo_render_data") if bool(getattr(self, "use_native_gizmo_overlay", False)) else None,
-            skeleton_render_data=kwargs.get("skeleton_render_data") if bool(getattr(self, "use_native_skeleton_overlay", False)) else None,
-            lighting_render_data=kwargs.get("lighting_render_data") if bool(getattr(self, "use_native_light_helper_overlay", False)) else None,
-            helper_render_data=kwargs.get("helper_render_data") if bool(getattr(self, "use_native_helper_overlay", True)) else None,
-        )
+        skeleton_render_data = kwargs.get("skeleton_render_data") if bool(getattr(self, "use_native_skeleton_overlay", False)) else None
+        if dirty_flags.get("animation") and self.scene_bridge.can_update_animation_only():
+            self.scene_bridge.update_skeleton_overlay(skeleton_render_data)
+        else:
+            self.scene_bridge.update_overlays(
+                gizmo_render_data=kwargs.get("gizmo_render_data") if bool(getattr(self, "use_native_gizmo_overlay", False)) else None,
+                skeleton_render_data=skeleton_render_data,
+                lighting_render_data=kwargs.get("lighting_render_data") if bool(getattr(self, "use_native_light_helper_overlay", False)) else None,
+                helper_render_data=kwargs.get("helper_render_data") if bool(getattr(self, "use_native_helper_overlay", True)) else None,
+            )
         request_draw = getattr(self.canvas, "request_draw", None)
         if callable(request_draw):
             if self._draw_callback_installed:

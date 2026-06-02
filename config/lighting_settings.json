@@ -13,11 +13,11 @@
   "lightmap_intensity": 0.85,
   "lightmap_map": true,
   "lightmap_mode": "disabled",
-  "normal_map": true,
+  "normal_map": false,
   "scene_lighting_mode": "scene",
-  "selected_lighting_rig_preset": "none",
+  "selected_lighting_rig_preset": "neutral_studio",
   "shader_complexity_mode": "full_complexity",
   "show_light_helpers": false,
   "show_light_radius_volumes": false,
-  "specular_map": true
+  "specular_map": false
 }

@@ -106,6 +106,15 @@ class ViewportStateMixin:
                 )
             except Exception:
                 pass
+        if self._is_selectable_mesh_node(node):
+            pygfx_verts_for_node = getattr(self, "_pygfx_world_verts_for_node", None)
+            if callable(pygfx_verts_for_node):
+                try:
+                    bounds = self._bounds_from_points(pygfx_verts_for_node(node), min_extent=0.05)
+                    if bounds is not None:
+                        return self._bounds_center(bounds)
+                except Exception:
+                    pass
         try:
             wp, _wo, _is_id = self._renderer._node_world_transform(node)
             return (float(wp[0]), float(wp[1]), float(wp[2]))

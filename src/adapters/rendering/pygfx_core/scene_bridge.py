@@ -22,6 +22,7 @@ class PygfxSceneBridge:
         self._default_directional_light = None
         self._lights: dict[str, Any] = {}
         self._overlay_objects: list[Any] = []
+        self._overlay_by_name: dict[str, Any] = {}
         self.object_count = 0
         self.triangle_count = 0
         self.lighting_revision = None
@@ -92,6 +93,7 @@ class PygfxSceneBridge:
             textures=textures or {},
             anim_pose=anim_pose,
             anim_base_pose=anim_base_pose,
+            allow_cpu_skinning=False,
             vbo_builder=vbo_builder,
         ):
             live_mesh_ids.add(int(mesh_data.mesh_id))
@@ -105,6 +107,8 @@ class PygfxSceneBridge:
                 hovered=hovered,
                 force_geometry_update=force_geometry_update,
             )
+            if bool(getattr(mesh_data, "is_skinned", False)) and anim_pose is not None:
+                self.mesh_cache.update_skin_palette(record, anim_pose, model=model)
             self._apply_world_matrix(record.mesh, self._mesh_model_matrix(mesh_data), record)
             if getattr(record, "edge_mesh", None) is not None:
                 self._apply_world_matrix(record.edge_mesh, self._mesh_model_matrix(mesh_data), record)
@@ -135,6 +139,40 @@ class PygfxSceneBridge:
             if getattr(record, "edge_mesh", None) is not None:
                 self._apply_world_matrix(record.edge_mesh, matrix, record)
             record.transform_dirty = False
+
+    def can_update_animation_only(self) -> bool:
+        if not self.mesh_cache.records:
+            return False
+        for record in self.mesh_cache.records.values():
+            if not bool(getattr(record, "is_skinned", False)):
+                continue
+            revision = tuple(getattr(record, "source_revision", ()) or ())
+            if len(revision) < 1 or int(revision[-1] or 0) != 1:
+                return False
+            if getattr(record, "skeleton", None) is None:
+                return False
+        return True
+
+    def update_animation(self, model, *, anim_pose=None) -> None:
+        """Update retained animation state without rebuilding mesh DTOs."""
+
+        for record in self.mesh_cache.records.values():
+            source = getattr(record, "source", None)
+            if bool(getattr(record, "is_skinned", False)) and not bool(getattr(source, "_gr_bas_attachment_layer", False)):
+                self.mesh_cache.update_skin_palette(record, anim_pose, model=model)
+                matrix = np.eye(4, dtype=np.float32)
+            else:
+                try:
+                    matrix = node_world_matrix(source, anim_pose=anim_pose)
+                except Exception:
+                    matrix = np.eye(4, dtype=np.float32)
+            self._apply_world_matrix(record.mesh, matrix, record)
+            if getattr(record, "edge_mesh", None) is not None:
+                self._apply_world_matrix(record.edge_mesh, matrix, record)
+
+    def update_skeleton_overlay(self, skeleton_render_data=None) -> None:
+        self.skeleton_overlay_segments = 0
+        self._add_skeleton_overlay(skeleton_render_data, retained=True)
 
     def update_selection(self, selected_nodes: list | tuple | None, hovered_node=None) -> None:
         selected_ids = {id(node) for node in (selected_nodes or ()) if node is not None}
@@ -196,6 +234,7 @@ class PygfxSceneBridge:
             except Exception:
                 pass
         self._overlay_objects.clear()
+        self._overlay_by_name.clear()
         self.gizmo_overlay_segments = 0
         self.skeleton_overlay_segments = 0
         self.light_overlay_segments = 0
@@ -315,7 +354,7 @@ class PygfxSceneBridge:
                 name="pygfx-gizmo",
             )
 
-    def _add_skeleton_overlay(self, skeleton_render_data) -> None:
+    def _add_skeleton_overlay(self, skeleton_render_data, *, retained: bool = False) -> None:
         if skeleton_render_data is None:
             return
         line_points: list[tuple[float, float, float]] = []
@@ -331,9 +370,21 @@ class PygfxSceneBridge:
                 target.extend((head, tail))
             if bool(getattr(skeleton_render_data, "show_dots", True)):
                 joint_points.append(head)
-        self.skeleton_overlay_segments += self._add_line_segments(line_points, (0.38, 0.68, 1.0, 1.0), thickness=2.0, name="pygfx-skeleton")
-        self.skeleton_overlay_segments += self._add_line_segments(selected_points, (1.0, 0.82, 0.20, 1.0), thickness=3.0, name="pygfx-skeleton-selected")
-        self._add_points(joint_points, (0.95, 0.95, 1.0, 1.0), size=5.0, name="pygfx-joints")
+        self.skeleton_overlay_segments += self._add_line_segments(
+            line_points,
+            (0.38, 0.68, 1.0, 1.0),
+            thickness=2.0,
+            name="pygfx-skeleton",
+            retained=retained,
+        )
+        self.skeleton_overlay_segments += self._add_line_segments(
+            selected_points,
+            (1.0, 0.82, 0.20, 1.0),
+            thickness=3.0,
+            name="pygfx-skeleton-selected",
+            retained=retained,
+        )
+        self._add_points(joint_points, (0.95, 0.95, 1.0, 1.0), size=5.0, name="pygfx-joints", retained=retained)
 
     def _add_lighting_overlay(self, lighting_render_data) -> None:
         if lighting_render_data is None:
@@ -379,6 +430,7 @@ class PygfxSceneBridge:
         *,
         thickness: float,
         name: str,
+        retained: bool = False,
     ) -> int:
         if len(points) < 2:
             return 0
@@ -387,11 +439,33 @@ class PygfxSceneBridge:
             return 0
         positions = np.asarray([self._vec3(point) for point in points[:usable]], dtype=np.float32)
         try:
+            if retained:
+                existing = self._overlay_by_name.get(name)
+                geometry = getattr(existing, "geometry", None)
+                buffer = getattr(geometry, "positions", None)
+                data = getattr(buffer, "data", None)
+                if data is not None and tuple(np.asarray(data).shape) == tuple(positions.shape):
+                    data[...] = positions
+                    update_range = getattr(buffer, "update_range", None)
+                    if callable(update_range):
+                        update_range(0, len(data))
+                    return usable // 2
+                if existing is not None:
+                    try:
+                        self.scene.remove(existing)
+                    except Exception:
+                        pass
+                    try:
+                        self._overlay_objects.remove(existing)
+                    except ValueError:
+                        pass
             geometry = self.gfx.Geometry(positions=positions)
             material = self.gfx.LineSegmentMaterial(color=color, thickness=thickness, thickness_space="screen")
             line = self.gfx.Line(geometry, material, render_order=9000, name=name)
             self.scene.add(line)
             self._overlay_objects.append(line)
+            if retained or name in {"pygfx-skeleton", "pygfx-skeleton-selected"}:
+                self._overlay_by_name[name] = line
             return usable // 2
         except Exception:
             return 0
@@ -403,16 +477,39 @@ class PygfxSceneBridge:
         *,
         size: float,
         name: str,
+        retained: bool = False,
     ) -> None:
         if not points:
             return
         positions = np.asarray([self._vec3(point) for point in points], dtype=np.float32)
         try:
+            if retained:
+                existing = self._overlay_by_name.get(name)
+                geometry = getattr(existing, "geometry", None)
+                buffer = getattr(geometry, "positions", None)
+                data = getattr(buffer, "data", None)
+                if data is not None and tuple(np.asarray(data).shape) == tuple(positions.shape):
+                    data[...] = positions
+                    update_range = getattr(buffer, "update_range", None)
+                    if callable(update_range):
+                        update_range(0, len(data))
+                    return
+                if existing is not None:
+                    try:
+                        self.scene.remove(existing)
+                    except Exception:
+                        pass
+                    try:
+                        self._overlay_objects.remove(existing)
+                    except ValueError:
+                        pass
             geometry = self.gfx.Geometry(positions=positions)
             material = self.gfx.PointsMaterial(color=color, size=size, size_space="screen")
             obj = self.gfx.Points(geometry, material, render_order=9001, name=name)
             self.scene.add(obj)
             self._overlay_objects.append(obj)
+            if retained or name == "pygfx-joints":
+                self._overlay_by_name[name] = obj
         except Exception:
             pass
 

@@ -109,16 +109,17 @@ def build_skeleton_render_data(
     selected_bone_ids: list[int] = []
     hovered_bone_id: int | None = None
     world_positions: dict[int, tuple[float, float, float]] = {}
+    world_position = _cached_world_position_resolver(anim_pose)
 
     for bone_id, node in enumerate(bone_nodes):
         parent = _nearest_bone_ancestor(node)
         parent_id = node_to_bone_id.get(id(parent)) if parent is not None else None
         if parent_id is None:
             root_ids.append(bone_id)
-        head = _node_world_position(node, anim_pose)
+        head = world_position(node)
         tail = head
         if parent is not None:
-            tail = _node_world_position(parent, anim_pose)
+            tail = world_position(parent)
         world_positions[id(node)] = head
         selected = id(node) in selected_ids
         hovered = id(node) == hovered_id
@@ -171,6 +172,52 @@ def build_skeleton_render_data(
         show_dots=bool(show_dots),
         show_links=bool(show_links),
     )
+
+
+def _cached_world_position_resolver(anim_pose=None):
+    if anim_pose is None:
+        return lambda node: _node_world_position(node, None)
+    try:
+        from src.core.geometry.model_data import _quat_mul, _quat_normalize_bind, _quat_rotate
+    except Exception:
+        return lambda node: _node_world_position(node, anim_pose)
+
+    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
+    cache: dict[int, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = {}
+    visiting: set[int] = set()
+
+    def world_transform(node):
+        if node is None:
+            return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+        node_id = id(node)
+        cached = cache.get(node_id)
+        if cached is not None:
+            return cached
+        if node_id in visiting:
+            return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+        visiting.add(node_id)
+        parent = getattr(node, "parent", None)
+        parent_pos, parent_rot = world_transform(parent)
+        pose = pose_nodes.get(str(getattr(node, "name", "") or "").lower())
+        if pose is not None:
+            pos = getattr(pose, "position", getattr(node, "position", (0.0, 0.0, 0.0)))
+            rot = getattr(pose, "rotation", getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        else:
+            pos = getattr(node, "position", (0.0, 0.0, 0.0))
+            rot = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
+        rx, ry, rz = _quat_rotate(parent_rot, tuple(float(v) for v in tuple(pos)[:3]))
+        result = (
+            (float(parent_pos[0]) + rx, float(parent_pos[1]) + ry, float(parent_pos[2]) + rz),
+            tuple(_quat_mul(parent_rot, _quat_normalize_bind(rot))),
+        )
+        cache[node_id] = result
+        visiting.discard(node_id)
+        return result
+
+    def world_position(node):
+        return world_transform(node)[0]
+
+    return world_position
 
 
 def extract_skinning_arrays(
@@ -273,8 +320,7 @@ def cpu_skin_vbo_arrays(
     if source_model is None:
         return positions, normals
     try:
-        uploader = MatrixPaletteUploader(max_bones=MAX_BONES)
-        uploader.build_inverse_bind_pose(source_model)
+        uploader = _cached_matrix_palette_uploader(source_model, MAX_BONES, MatrixPaletteUploader)
         uploader.compute_skin_node_palette(node, anim_pose)
         palette = uploader.as_numpy_array()
         if palette is None or len(palette) == 0:
@@ -322,6 +368,60 @@ def cpu_skin_vbo_arrays(
         return out_pos, out_norm
     except Exception:
         return positions, normals
+
+
+def _cached_matrix_palette_uploader(model, max_bones: int, uploader_cls):
+    if model is None:
+        uploader = uploader_cls(max_bones=max_bones)
+        uploader.build_inverse_bind_pose(model)
+        return uploader
+    key = _matrix_palette_uploader_cache_key(model, max_bones)
+    try:
+        cached = getattr(model, "_gr_cpu_skin_palette_uploader_cache", None)
+    except Exception:
+        cached = None
+    if isinstance(cached, dict) and cached.get("key") == key and cached.get("uploader") is not None:
+        return cached["uploader"]
+    uploader = uploader_cls(max_bones=max_bones)
+    uploader.build_inverse_bind_pose(model)
+    try:
+        setattr(model, "_gr_cpu_skin_palette_uploader_cache", {"key": key, "uploader": uploader})
+    except Exception:
+        pass
+    return uploader
+
+
+def _matrix_palette_uploader_cache_key(model, max_bones: int):
+    try:
+        nodes = list(model.all_nodes()) if hasattr(model, "all_nodes") else []
+    except Exception:
+        nodes = []
+    node_key = []
+    for node in nodes:
+        try:
+            parent = getattr(node, "parent", None)
+            pos = tuple(round(float(v), 6) for v in tuple(getattr(node, "position", (0.0, 0.0, 0.0)) or ())[:3])
+            rot = tuple(round(float(v), 6) for v in tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or ())[:4])
+            node_key.append(
+                (
+                    id(node),
+                    str(getattr(node, "name", "") or "").lower(),
+                    id(parent) if parent is not None else 0,
+                    int(getattr(node, "_gr_revision", 0) or 0),
+                    int(getattr(node, "_gr_source_dfs_index", -1) or -1),
+                    bool(getattr(node, "_gr_bas_attachment_layer", False)),
+                    pos,
+                    rot,
+                )
+            )
+        except Exception:
+            node_key.append((id(node),))
+    return (
+        int(max_bones),
+        str(getattr(model, "name", "") or "").lower(),
+        str(getattr(model, "supermodel", "") or "").lower(),
+        tuple(node_key),
+    )
 
 
 def cpu_skin_positions(node, positions, skinning: SkinningArrays, anim_pose, model=None, anim_base_pose=None):

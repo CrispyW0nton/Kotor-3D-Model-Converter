@@ -645,8 +645,14 @@ class ViewportSelectionMeshMixin:
             return self._selection_orbit_bounds
         if selected_meshes:
             points = []
+            pygfx_verts_for_node = getattr(self, "_pygfx_world_verts_for_node", None)
             for node in selected_meshes:
                 try:
+                    if callable(pygfx_verts_for_node):
+                        pygfx_points = pygfx_verts_for_node(node)
+                        if pygfx_points:
+                            points.extend(pygfx_points)
+                            continue
                     points.extend(self._renderer._get_world_verts_for_node(node))
                 except Exception:
                     continue
@@ -654,6 +660,14 @@ class ViewportSelectionMeshMixin:
         if active is not None:
             if self._is_selectable_mesh_node(active):
                 try:
+                    pygfx_verts_for_node = getattr(self, "_pygfx_world_verts_for_node", None)
+                    if callable(pygfx_verts_for_node):
+                        bounds = self._bounds_from_points(
+                            pygfx_verts_for_node(active),
+                            min_extent=0.05,
+                        )
+                        if bounds is not None:
+                            return bounds
                     return self._bounds_from_points(
                         self._renderer._get_world_verts_for_node(active),
                         min_extent=0.05,

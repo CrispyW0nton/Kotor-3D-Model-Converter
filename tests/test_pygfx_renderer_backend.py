@@ -10,6 +10,9 @@ from PIL import Image
 
 import src.adapters.rendering.pygfx_core.renderer as pygfx_renderer_module
 import src.adapters.rendering.pygfx_core.scene_bridge as pygfx_scene_bridge_module
+import src.core.animation.gpu_skinning as gpu_skinning_module
+import src.core.rendering.mesh_render_data as mesh_render_data_module
+import src.core.rendering.skeleton_render_data as skeleton_render_data_module
 from src.adapters.rendering.pygfx_core.scene_bridge import PygfxSceneBridge
 from src.adapters.rendering.pygfx_core.mesh_cache import PygfxMeshCache
 from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer
@@ -18,6 +21,9 @@ from src.adapters.rendering.renderer_factory import fallback_order, renderer_cap
 from src.core.rendering.renderer_performance import ViewportFrameGovernor
 from src.core.rendering.renderer_backend import RendererBackend, normalize_renderer_backend, renderer_backend_label
 from src.core.rendering.renderer_settings import RendererSettings
+from src.gui.viewports.viewport_core.widgets.picking_hover import ViewportPickingHoverMixin
+from src.gui.viewports.viewport_core.widgets.selection_mesh import ViewportSelectionMeshMixin
+from src.gui.viewports.viewport_core.widgets.state_helpers import ViewportStateMixin
 
 
 class _FakeGeometry:
@@ -138,6 +144,11 @@ class _FakeScene:
 
     def remove(self, obj):
         self.children.remove(obj)
+
+
+class _ViewportPygfxPickProbe(ViewportPickingHoverMixin, ViewportStateMixin, ViewportSelectionMeshMixin):
+    def _is_selected_model_root(self, node) -> bool:
+        return False
 
 
 def _mesh_data(*, mesh_id=7, source_revision=(3, 1, 0), material_revision=(1, 0, 0, 0)):
@@ -278,6 +289,45 @@ def test_pygfx_mesh_cache_retains_mesh_and_updates_same_shape_revision_in_place(
     assert cache.material_updates_this_frame == 0
 
 
+def test_pygfx_viewport_bounds_and_gizmo_use_rendered_mesh_cache_records() -> None:
+    source = SimpleNamespace(
+        name="translated-render-mesh",
+        vertices=[(-100.0, -100.0, 0.0), (-99.0, -100.0, 0.0), (-100.0, -99.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    data = _mesh_data(mesh_id=44)
+    data.source = source
+    data.positions = np.asarray([(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0)], dtype=np.float32)
+    data.indices = np.asarray([0, 1, 2], dtype=np.uint32)
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    record = cache.get_or_create(data, _FakeGfx, scene, selected=False)
+    matrix = np.eye(4, dtype=np.float32)
+    matrix[:3, 3] = (5.0, 7.0, 0.0)
+    record.mesh.local.matrix = matrix
+
+    probe = _ViewportPygfxPickProbe()
+    probe._gpu_renderer = SimpleNamespace(
+        backend_id="pygfx_wgpu",
+        scene_bridge=SimpleNamespace(mesh_cache=cache),
+    )
+    probe._renderer = SimpleNamespace(
+        _proj_batch=lambda points, _w, _h: [tuple(point) for point in points],
+        _get_world_verts_for_node=lambda _node: [
+            (-100.0, -100.0, 0.0),
+            (-99.0, -100.0, 0.0),
+            (-100.0, -99.0, 0.0),
+        ],
+    )
+    probe.model = SimpleNamespace(root_node=None)
+
+    bounds = probe._projected_mesh_bounds(source, 100, 100)
+
+    assert bounds is not None
+    assert bounds[:4] == pytest.approx((1.0, 3.0, 11.0, 13.0))
+    assert probe._gizmo_world_position(source) == pytest.approx((6.0, 8.0, 0.0))
+
+
 def test_pygfx_mesh_cache_flips_d3d_uvs_like_wgpu_shader() -> None:
     cache = PygfxMeshCache()
     scene = _FakeScene()
@@ -291,6 +341,53 @@ def test_pygfx_mesh_cache_flips_d3d_uvs_like_wgpu_shader() -> None:
     assert np.allclose(record.geometry.texcoords.data[:, 1], 1.0 - data.uvs0[:, 1])
     assert np.allclose(record.geometry.texcoords1.data[:, 0], data.uvs1[:, 0])
     assert np.allclose(record.geometry.texcoords1.data[:, 1], 1.0 - data.uvs1[:, 1])
+
+
+def test_pygfx_mesh_cache_adds_indices_for_expanded_vbo_triangle_lists() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _mesh_data()
+    data.indices = None
+    data.positions = np.asarray(
+        [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        dtype=np.float32,
+    )
+
+    record = cache.get_or_create(data, _FakeGfx, scene)
+
+    assert record.geometry.indices.data.tolist() == [[0, 1, 2], [3, 4, 5]]
+
+
+def test_pygfx_mesh_cache_updates_only_dynamic_skin_buffers_for_animation_frames() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _mesh_data(source_revision=(3, 1, 0, 22, 1, 0))
+    data.normals = np.asarray([(0.0, 0.0, 1.0)] * 3, dtype=np.float32)
+    data.uvs0 = np.asarray([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)], dtype=np.float32)
+    data.skinning_cpu_fallback = True
+    record = cache.get_or_create(data, _FakeGfx, scene)
+
+    for buffer_name in ("positions", "normals", "texcoords", "indices"):
+        getattr(record.geometry, buffer_name).update_calls.clear()
+    next_data = _mesh_data(source_revision=(3, 1, 0, 22, 1, 16))
+    next_data.positions = data.positions + np.asarray((0.1, 0.0, 0.0), dtype=np.float32)
+    next_data.normals = data.normals
+    next_data.uvs0 = data.uvs0
+    next_data.skinning_cpu_fallback = True
+
+    cache.get_or_create(next_data, _FakeGfx, scene, force_geometry_update=True)
+
+    assert record.geometry.positions.update_calls
+    assert record.geometry.normals.update_calls
+    assert record.geometry.texcoords.update_calls == []
+    assert record.geometry.indices.update_calls == []
 
 
 def test_pygfx_mesh_cache_rebuilds_geometry_when_topology_shape_changes() -> None:
@@ -421,6 +518,153 @@ def test_pygfx_scene_bridge_uses_wgpu_vbo_builder_for_uv_seams(monkeypatch) -> N
     assert seen["vbo_builder"].__name__ == "_build_vbo_data"
 
 
+def test_skinned_animation_vbo_normals_are_cached_between_frames(monkeypatch) -> None:
+    node = SimpleNamespace(
+        name="skin",
+        is_skin=True,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        faces=[(0, 1, 2)],
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        uvs_lm=[],
+        bone_map=["root"],
+        skin_data=[(0, 1.0)],
+        render=True,
+        _gr_revision=3,
+        world_transform=lambda: ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+    vbo = np.zeros((3, 22), dtype=np.float32)
+    vbo[:, 0:3] = np.asarray(node.vertices, dtype=np.float32)
+    vbo[:, 3:6] = np.asarray(node.normals, dtype=np.float32)
+    vbo[:, 6:8] = np.asarray(node.uvs, dtype=np.float32)
+    vbo[:, 14] = 0.0
+    vbo[:, 18] = 1.0
+    calls = {"smooth": 0, "vbo": 0}
+
+    def fake_smooth(positions, normals, indices):
+        calls["smooth"] += 1
+        return normals
+
+    def fake_vbo_builder(*_args, **_kwargs):
+        calls["vbo"] += 1
+        return vbo, np.asarray([0, 1, 2], dtype=np.uint32)
+
+    monkeypatch.setattr(mesh_render_data_module, "smooth_render_normals", fake_smooth)
+
+    first = list(
+        mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=SimpleNamespace(time=0.0),
+            allow_cpu_skinning=False,
+            vbo_builder=fake_vbo_builder,
+        )
+    )
+    second = list(
+        mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=SimpleNamespace(time=0.1),
+            allow_cpu_skinning=False,
+            vbo_builder=fake_vbo_builder,
+        )
+    )
+
+    assert len(first) == 1
+    assert len(second) == 1
+    assert calls == {"smooth": 1, "vbo": 1}
+    assert second[0].source_revision[-1] == 1
+
+
+def test_rigid_animation_vbo_rows_are_cached_between_frames(monkeypatch) -> None:
+    node = SimpleNamespace(
+        name="rigid",
+        is_skin=False,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        faces=[(0, 1, 2)],
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        uvs_lm=[],
+        render=True,
+        _gr_revision=9,
+        world_transform=lambda: ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+    vbo = np.zeros((3, 10), dtype=np.float32)
+    vbo[:, 0:3] = np.asarray(node.vertices, dtype=np.float32)
+    vbo[:, 3:6] = np.asarray(node.normals, dtype=np.float32)
+    vbo[:, 6:8] = np.asarray(node.uvs, dtype=np.float32)
+    calls = {"smooth": 0, "vbo": 0}
+
+    def fake_smooth(positions, normals, indices):
+        calls["smooth"] += 1
+        return normals
+
+    def fake_vbo_builder(*_args, **_kwargs):
+        calls["vbo"] += 1
+        return vbo, np.asarray([0, 1, 2], dtype=np.uint32)
+
+    monkeypatch.setattr(mesh_render_data_module, "smooth_render_normals", fake_smooth)
+
+    first = list(
+        mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=SimpleNamespace(time=0.0),
+            vbo_builder=fake_vbo_builder,
+        )
+    )
+    second = list(
+        mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=SimpleNamespace(time=0.1),
+            vbo_builder=fake_vbo_builder,
+        )
+    )
+
+    assert len(first) == 1
+    assert len(second) == 1
+    assert calls == {"smooth": 1, "vbo": 1}
+
+
+def test_cpu_skinning_reuses_model_inverse_bind_uploader(monkeypatch) -> None:
+    calls = {"build": 0, "palette": 0}
+
+    class FakeUploader:
+        def __init__(self, max_bones):
+            self.max_bones = max_bones
+
+        def build_inverse_bind_pose(self, model):
+            calls["build"] += 1
+            return len(model.all_nodes())
+
+        def compute_skin_node_palette(self, _node, _anim_pose):
+            calls["palette"] += 1
+
+        def as_numpy_array(self):
+            return np.asarray([np.eye(4, dtype=np.float32)], dtype=np.float32)
+
+    monkeypatch.setattr(gpu_skinning_module, "MatrixPaletteUploader", FakeUploader)
+    node = SimpleNamespace(
+        name="skin",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_revision=0,
+    )
+    model = SimpleNamespace(name="model", supermodel="", all_nodes=lambda: [node])
+    skinning = SimpleNamespace(
+        is_skinned=True,
+        bone_indices=np.zeros((3, 4), dtype=np.uint16),
+        bone_weights=np.asarray([[1.0, 0.0, 0.0, 0.0]] * 3, dtype=np.float32),
+    )
+    positions = np.asarray([(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)], dtype=np.float32)
+    normals = np.asarray([(0.0, 0.0, 1.0)] * 3, dtype=np.float32)
+
+    skeleton_render_data_module.cpu_skin_vbo_arrays(node, positions, normals, skinning, SimpleNamespace(nodes={}), model=model)
+    skeleton_render_data_module.cpu_skin_vbo_arrays(node, positions, normals, skinning, SimpleNamespace(nodes={}), model=model)
+
+    assert calls == {"build": 1, "palette": 2}
+
+
 def test_pygfx_optional_scene_camera_light_cube_smoke() -> None:
     gfx = pytest.importorskip("pygfx")
 
@@ -469,7 +713,7 @@ def test_pygfx_keeps_legacy_overlay_gizmo_and_cpu_picking_contract() -> None:
     assert caps.supports_cpu_ray_picking is True
     assert caps.supports_gpu_id_picking is False
     assert renderer.use_native_gizmo_overlay is False
-    assert renderer.use_native_skeleton_overlay is False
+    assert renderer.use_native_skeleton_overlay is True
     assert renderer.use_native_light_helper_overlay is False
 
 
@@ -503,6 +747,35 @@ def test_viewport_pipeline_keeps_tool_overlay_for_pygfx_live_surface() -> None:
     assert "_gpu_renderer_requires_native_surface_passthrough" in source
     assert "_draw_live_surface_tool_overlay" in source
     assert "_update_live_surface_diagnostics()" in source
+
+
+def test_viewport_pipeline_skips_duplicate_cpu_skeleton_overlay_when_native_supported() -> None:
+    from src.gui.viewports.viewport_core.widgets.rendering_pipeline import ViewportRenderingPipelineMixin
+
+    overlay_source = inspect.getsource(ViewportRenderingPipelineMixin._draw_gpu_viewport_overlays)
+    live_source = inspect.getsource(ViewportRenderingPipelineMixin._draw_live_surface_tool_overlay)
+    dirty_source = inspect.getsource(ViewportRenderingPipelineMixin._can_skip_live_overlay_rebuild)
+    capability_source = inspect.getsource(ViewportRenderingPipelineMixin._gpu_renderer_supports_native_skeleton_overlay)
+
+    assert "native_skeleton = self._gpu_renderer_supports_native_skeleton_overlay()" in overlay_source
+    assert "self._renderer.show_bones and not native_skeleton" in overlay_source
+    assert "_can_skip_animation_cpu_overlay()" in live_source
+    assert "_can_skip_animation_cpu_overlay()" in dirty_source
+    assert "skeleton_overlay_supported" in capability_source
+
+
+def test_pygfx_animation_uses_native_skinning_and_retained_overlay_contract() -> None:
+    scene_source = inspect.getsource(PygfxSceneBridge.update_scene)
+    renderer_source = inspect.getsource(PygfxViewportRenderer.render)
+    cache_source = inspect.getsource(PygfxMeshCache._build_geometry)
+
+    assert "allow_cpu_skinning=False" in scene_source
+    assert "update_skin_palette" in scene_source
+    assert "can_update_animation_only" in renderer_source
+    assert "update_animation(scene" in renderer_source
+    assert "update_skeleton_overlay" in renderer_source
+    assert "skin_indices" in cache_source
+    assert "skin_weights" in cache_source
 
 
 def test_pygfx_live_surface_skips_legacy_hover_outline_to_avoid_duplicate_edges() -> None:

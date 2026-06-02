@@ -940,8 +940,26 @@ class MatrixPaletteUploader:
         active_formula = self._resolve_skin_formula_for_skin_node(skin_node)
         self._skin_palette_formula = active_formula
         self._skin_inverse_bind_source = "qBone_tBone_inverse_TR"
-        pose_nodes = {k.lower(): v for k, v in getattr(anim_pose, 'nodes', {}).items()} if anim_pose is not None else {}
-        world_cache: Dict[str, List[List[float]]] = {}
+        pose_cache_key = (
+            id(anim_pose),
+            round(float(getattr(anim_pose, "time", 0.0) or 0.0), 6) if anim_pose is not None else 0.0,
+            len(getattr(anim_pose, "nodes", {}) or {}) if anim_pose is not None else 0,
+        )
+        cached_pose = getattr(self, "_skin_node_pose_world_cache", None)
+        if isinstance(cached_pose, dict) and cached_pose.get("key") == pose_cache_key:
+            pose_nodes = cached_pose.get("pose_nodes", {})
+            world_cache = cached_pose.get("world_cache", {})
+        else:
+            pose_nodes = {k.lower(): v for k, v in getattr(anim_pose, 'nodes', {}).items()} if anim_pose is not None else {}
+            world_cache = {}
+            try:
+                self._skin_node_pose_world_cache = {
+                    "key": pose_cache_key,
+                    "pose_nodes": pose_nodes,
+                    "world_cache": world_cache,
+                }
+            except Exception:
+                pass
         skin_key = str(getattr(skin_node, 'name', '') or '').lower()
         if skin_key:
             skin_bind = self._world_pose_matrix(skin_key, {}, {})
@@ -987,38 +1005,55 @@ class MatrixPaletteUploader:
         # palette without re-reading env state.
         if active_formula == _SKIN_FORMULA_G5:
             self._skin_inverse_bind_source = "qBone_tBone_dfs_indexed_TR_no_invert"
+        bind_cache_key = (
+            active_formula,
+            tuple(str(name or "").lower() for name in bone_map[:self._max_bones]),
+            len(qbones),
+            len(tbones),
+            tuple(self._name_to_dfs_index.get(str(name or "").lower(), -1) for name in bone_map[:self._max_bones]),
+        )
+        cached_binds = getattr(skin_node, "_gr_static_skin_bind_cache", None)
+        if isinstance(cached_binds, dict) and cached_binds.get("key") == bind_cache_key:
+            static_bind_by_slot = dict(cached_binds.get("binds", {}) or {})
+        else:
+            static_bind_by_slot = {}
         for idx, bname in enumerate(bone_map[:self._max_bones]):
             bkey = str(bname or '').lower()
             world_pose_m = (
                 self._world_pose_matrix(bkey, pose_nodes, world_cache)
                 if bkey else _mat4_identity_py()
             )
-            if active_formula == _SKIN_FORMULA_G5:
-                # Resolve the bone's DFS index; fall back to identity if
-                # the bone is missing from the lookup so a malformed
-                # bone_map entry never crashes the renderer.
-                dfs_idx = self._name_to_dfs_index.get(bkey, -1) if bkey else -1
-                if 0 <= dfs_idx < len(qbones) and dfs_idx < len(tbones):
-                    inv_bind = self.qbone_inverse_bind_matrix_g5(
-                        qbones[dfs_idx], tbones[dfs_idx],
-                    )
-                    direct_bind = self.qbone_direct_bind_matrix(
-                        qbones[dfs_idx], tbones[dfs_idx],
-                    )
-                else:
-                    inv_bind = _mat4_identity_py()
-                    direct_bind = _mat4_identity_py()
+            cached_bind = static_bind_by_slot.get(idx)
+            if cached_bind is not None:
+                inv_bind, direct_bind = cached_bind
             else:
-                inv_bind = (
-                    self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
-                    if idx < len(qbones) and idx < len(tbones)
-                    else self._inv_bind.get(bkey, _mat4_identity_py())
-                )
-                direct_bind = (
-                    self.qbone_direct_bind_matrix(qbones[idx], tbones[idx])
-                    if idx < len(qbones) and idx < len(tbones)
-                    else _mat4_invert_py(inv_bind)
-                )
+                if active_formula == _SKIN_FORMULA_G5:
+                    # Resolve the bone's DFS index; fall back to identity if
+                    # the bone is missing from the lookup so a malformed
+                    # bone_map entry never crashes the renderer.
+                    dfs_idx = self._name_to_dfs_index.get(bkey, -1) if bkey else -1
+                    if 0 <= dfs_idx < len(qbones) and dfs_idx < len(tbones):
+                        inv_bind = self.qbone_inverse_bind_matrix_g5(
+                            qbones[dfs_idx], tbones[dfs_idx],
+                        )
+                        direct_bind = self.qbone_direct_bind_matrix(
+                            qbones[dfs_idx], tbones[dfs_idx],
+                        )
+                    else:
+                        inv_bind = _mat4_identity_py()
+                        direct_bind = _mat4_identity_py()
+                else:
+                    inv_bind = (
+                        self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
+                        if idx < len(qbones) and idx < len(tbones)
+                        else self._inv_bind.get(bkey, _mat4_identity_py())
+                    )
+                    direct_bind = (
+                        self.qbone_direct_bind_matrix(qbones[idx], tbones[idx])
+                        if idx < len(qbones) and idx < len(tbones)
+                        else _mat4_invert_py(inv_bind)
+                    )
+                static_bind_by_slot[idx] = (inv_bind, direct_bind)
             self._skin_local_inv_bind_by_slot[idx] = inv_bind
             self._skin_local_direct_bind_by_slot[idx] = direct_bind
             if active_formula == _SKIN_FORMULA_F11 and skin_bind_rot_only is not None and inv_skin_bind_rot_only is not None:
@@ -1039,6 +1074,10 @@ class MatrixPaletteUploader:
                 bone_name=str(bname or ''),
                 bone_index=idx,
             ))
+        try:
+            setattr(skin_node, "_gr_static_skin_bind_cache", {"key": bind_cache_key, "binds": static_bind_by_slot})
+        except Exception:
+            pass
         self._dirty = True
         return self._palette
 
