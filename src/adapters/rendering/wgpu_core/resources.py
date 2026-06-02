@@ -140,7 +140,8 @@ class WgpuResourceCache:
     def get_or_update_skin_palette(self, mesh_data, anim_pose, model) -> WgpuSkinResource | None:
         import wgpu
 
-        if not bool(getattr(mesh_data, "is_skinned", False)) or anim_pose is None:
+        is_bas_attachment = bool(getattr(getattr(mesh_data, "source", None), "_gr_bas_attachment_layer", False))
+        if not bool(getattr(mesh_data, "is_skinned", False)) or (anim_pose is None and not is_bas_attachment):
             return None
         device = self._renderer.device
         layout = getattr(self._renderer, "skin_bind_group_layout", None)
@@ -149,9 +150,18 @@ class WgpuResourceCache:
             return None
         try:
             from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
+            from src.core.rendering.mesh_render_data import bas_attachment_palette_model_for_node
+            from src.core.rendering.skeleton_render_data import (
+                bas_attachment_root_local_skin_palette,
+                skin_palette_flat_bytes,
+            )
         except Exception as exc:
             self.last_skinning_error = f"WGPU palette builder unavailable: {exc}"
             return None
+
+        source_model = model
+        if bool(getattr(mesh_data.source, "_gr_bas_attachment_layer", False)):
+            source_model = bas_attachment_palette_model_for_node(mesh_data.source) or model
 
         mesh_id = int(mesh_data.mesh_id)
         source_revision = tuple(getattr(mesh_data, "source_revision", ()) or ())
@@ -176,7 +186,7 @@ class WgpuResourceCache:
             )
             self.bind_group_creation_count += 1
             uploader = MatrixPaletteUploader(max_bones=max_bones)
-            uploader.build_inverse_bind_pose(model)
+            uploader.build_inverse_bind_pose(source_model)
             cached = WgpuSkinResource(
                 palette_buffer=palette_buffer,
                 bind_group=bind_group,
@@ -193,7 +203,9 @@ class WgpuResourceCache:
         if cached.pose_revision != pose_revision:
             started = time.perf_counter()
             palette = cached.uploader.compute_skin_node_palette(mesh_data.source, anim_pose)
-            payload = cached.uploader.as_flat_bytes()
+            palette_arr = cached.uploader.as_numpy_array()
+            palette_arr = bas_attachment_root_local_skin_palette(mesh_data.source, palette_arr, anim_pose)
+            payload = skin_palette_flat_bytes(palette_arr, cached.max_bones) or cached.uploader.as_flat_bytes()
             if not payload:
                 self.last_skinning_error = f"empty WGPU skin palette for {getattr(mesh_data.source, 'name', mesh_id)}"
                 return None

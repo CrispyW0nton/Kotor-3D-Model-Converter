@@ -359,11 +359,15 @@ class PygfxMeshCache:
             return None
 
     def update_skin_palette(self, record: PygfxMeshRecord, anim_pose, model=None) -> None:
-        if record is None or record.skeleton is None or anim_pose is None:
+        is_bas_attachment = bool(getattr(getattr(record, "source", None), "_gr_bas_attachment_layer", False))
+        if record is None or record.skeleton is None or (anim_pose is None and not is_bas_attachment):
             return
         try:
             from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
-            from src.core.rendering.skeleton_render_data import _cached_matrix_palette_uploader
+            from src.core.rendering.skeleton_render_data import (
+                _cached_matrix_palette_uploader,
+                bas_attachment_root_local_skin_palette,
+            )
             from src.core.rendering.mesh_render_data import bas_attachment_palette_model_for_node
 
             source_model = model
@@ -372,6 +376,7 @@ class PygfxMeshCache:
             uploader = _cached_matrix_palette_uploader(source_model, MAX_BONES, MatrixPaletteUploader)
             uploader.compute_skin_node_palette(record.source, anim_pose)
             palette = uploader.as_numpy_array()
+            palette = bas_attachment_root_local_skin_palette(record.source, palette, anim_pose)
             buffer = getattr(record.skeleton, "bone_matrices_buffer", None)
             data = getattr(buffer, "data", None)
             if palette is None or data is None or len(data) == 0:

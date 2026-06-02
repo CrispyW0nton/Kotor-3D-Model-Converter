@@ -5554,6 +5554,7 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
 
     from src.adapters.rendering import mesh_render_data
     from src.adapters.rendering import moderngl_renderer_impl as gpu_renderer_impl
+    from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     contract_path = Path(__file__).resolve().parents[1] / "src" / "systems" / "bas" / "README.md"
@@ -5572,6 +5573,10 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     assert "_bas_attachment_local_transform_np" in modern_gl_source
     assert "not bool(getattr(node, \"_gr_bas_attachment_layer\", False))" in modern_gl_source
     assert "BAS attachment skins are socket followers" in modern_gl_source
+
+    wgpu_resource_source = inspect.getsource(WgpuResourceCache.get_or_update_skin_palette)
+    assert "bas_attachment_palette_model_for_node" in wgpu_resource_source
+    assert "bas_attachment_root_local_skin_palette" in wgpu_resource_source
 
     mesh_source = inspect.getsource(mesh_render_data._extract_skinning)
     assert "_gr_bas_attachment_layer" in mesh_source
@@ -7521,6 +7526,61 @@ def test_qt_viewport_uses_profiled_navigation_actions() -> None:
     assert 'profile == "blender"' in source
     assert 'profile == "maya"' in source
     assert "QtCore.Qt.AltModifier" in source
+
+
+def test_qt_viewport_alt_middle_navigation_preempts_gizmo_drag() -> None:
+    from PySide6 import QtCore
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    viewport = SimpleNamespace(_navigation_profile="3dsmax")
+    viewport._navigation_action = MethodType(QtViewportWidget._navigation_action, viewport)
+    action, button = QtViewportWidget._navigation_action_for_buttons(
+        viewport,
+        QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton,
+        QtCore.Qt.AltModifier,
+    )
+
+    assert action == "orbit"
+    assert button == QtCore.Qt.MiddleButton
+
+    calls = []
+
+    class _Position:
+        def x(self):
+            return 100
+
+        def y(self):
+            return 120
+
+    class _Event:
+        def button(self):
+            return QtCore.Qt.MiddleButton
+
+        def position(self):
+            return _Position()
+
+    nav_viewport = SimpleNamespace(
+        _transform_gizmo_dragging=True,
+        _cancel_transform_gizmo_drag=lambda: calls.append("cancel"),
+        _renderer=SimpleNamespace(_hovered_bone=object()),
+        _clear_mesh_hover=lambda **_kwargs: calls.append("clear-hover"),
+        _frame_governor=SimpleNamespace(begin_interaction=lambda reason: calls.append(reason)),
+    )
+
+    QtViewportWidget._press_navigation(nav_viewport, _Event(), "orbit", button=QtCore.Qt.MiddleButton)
+
+    assert calls[0] == "cancel"
+    assert nav_viewport._nav_dragging == "orbit"
+    assert nav_viewport._nav_button == QtCore.Qt.MiddleButton
+
+    gizmo_viewport = SimpleNamespace()
+    assert QtViewportWidget._begin_transform_gizmo_drag(
+        gizmo_viewport,
+        100,
+        120,
+        QtCore.Qt.AltModifier,
+    ) is False
 
 
 def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:

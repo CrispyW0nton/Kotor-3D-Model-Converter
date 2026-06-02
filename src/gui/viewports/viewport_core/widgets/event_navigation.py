@@ -57,6 +57,11 @@ class ViewportEventNavigationMixin:
                 if self._nav_dragging:
                     self._drag_navigation(event)
                     return True
+                action, button = self._navigation_action_for_buttons(event.buttons(), event.modifiers())
+                if action:
+                    self._press_navigation(event, action, button=button)
+                    self._drag_navigation(event)
+                    return True
                 if self._measurement_mode and not (event.buttons() & QtCore.Qt.LeftButton):
                     self._handle_measurement_preview(event)
                     return True
@@ -264,9 +269,19 @@ class ViewportEventNavigationMixin:
                 return "zoom"
         return ""
 
-    def _press_navigation(self, event, action: str) -> None:
+    def _navigation_action_for_buttons(self, buttons, modifiers) -> tuple[str, object]:
+        for button in (QtCore.Qt.MiddleButton, QtCore.Qt.RightButton, QtCore.Qt.LeftButton):
+            if buttons & button:
+                action = self._navigation_action(button, modifiers)
+                if action:
+                    return action, button
+        return "", QtCore.Qt.NoButton
+
+    def _press_navigation(self, event, action: str, *, button=None) -> None:
+        if self._transform_gizmo_dragging:
+            self._cancel_transform_gizmo_drag()
         self._nav_dragging = action
-        self._nav_button = event.button()
+        self._nav_button = button if button is not None else event.button()
         self._mx = int(event.position().x())
         self._my = int(event.position().y())
         self._renderer._hovered_bone = None

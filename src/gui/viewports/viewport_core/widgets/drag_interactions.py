@@ -8,7 +8,9 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportDragInteractionsMixin:
-    def _begin_transform_gizmo_drag(self, x: int, y: int) -> bool:
+    def _begin_transform_gizmo_drag(self, x: int, y: int, modifiers=QtCore.Qt.NoModifier) -> bool:
+        if has_modifier(modifiers, QtCore.Qt.AltModifier):
+            return False
         node = self._active_gizmo_node()
         if not self._ensure_renderer_gimbal_state() or node is None:
             return False
@@ -99,7 +101,7 @@ class ViewportDragInteractionsMixin:
         if hasattr(self, "_selection_rubber_band"):
             self._selection_rubber_band.hide()
 
-        if self._begin_transform_gizmo_drag(x, y):
+        if self._begin_transform_gizmo_drag(x, y, event.modifiers()):
             return
 
         # ── T402: Prefer joint-dot click over plain bone hit-test ──────

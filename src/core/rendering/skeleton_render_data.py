@@ -306,7 +306,8 @@ def cpu_skin_vbo_arrays(
 ) -> tuple[object, object | None]:
     """Apply the same per-skin palette contract used by the ModernGL shader."""
 
-    if node is None or anim_pose is None or not bool(getattr(skinning, "is_skinned", False)):
+    is_bas_attachment = bool(getattr(node, "_gr_bas_attachment_layer", False))
+    if node is None or (anim_pose is None and not is_bas_attachment) or not bool(getattr(skinning, "is_skinned", False)):
         return positions, normals
     if skinning.bone_indices is None or skinning.bone_weights is None:
         return positions, normals
@@ -323,6 +324,7 @@ def cpu_skin_vbo_arrays(
         uploader = _cached_matrix_palette_uploader(source_model, MAX_BONES, MatrixPaletteUploader)
         uploader.compute_skin_node_palette(node, anim_pose)
         palette = uploader.as_numpy_array()
+        palette = bas_attachment_root_local_skin_palette(node, palette, anim_pose)
         if palette is None or len(palette) == 0:
             return positions, normals
 
@@ -368,6 +370,49 @@ def cpu_skin_vbo_arrays(
         return out_pos, out_norm
     except Exception:
         return positions, normals
+
+
+def bas_attachment_root_local_skin_palette(node, palette, anim_pose):
+    """Return a BAS attachment skin palette in attachment-root local space."""
+
+    if palette is None or not bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        return palette
+    try:
+        import numpy as np
+        from src.core.rendering.mesh_render_data import _bas_attachment_root_for_node, node_world_matrix
+
+        root = _bas_attachment_root_for_node(node)
+        if root is None:
+            return palette
+        arr = np.asarray(palette, dtype=np.float32)
+        if arr.ndim != 3 or arr.shape[1:] != (4, 4):
+            return palette
+        root_world = np.asarray(node_world_matrix(root, anim_pose=anim_pose), dtype=np.float32).reshape(4, 4)
+        root_inv = np.linalg.inv(root_world).astype(np.float32)
+        return np.einsum("ij,njk->nik", root_inv, arr, optimize=True).astype(np.float32)
+    except Exception:
+        return palette
+
+
+def skin_palette_flat_bytes(palette, max_bones: int) -> bytes:
+    """Pack a row-major skin palette as padded column-major float32 bytes."""
+
+    try:
+        import numpy as np
+
+        arr = np.asarray(palette, dtype=np.float32)
+        if arr.ndim != 3 or arr.shape[1:] != (4, 4):
+            return b""
+        max_count = max(0, int(max_bones))
+        if max_count <= 0:
+            return b""
+        count = min(len(arr), max_count)
+        out = np.zeros((max_count, 4, 4), dtype=np.float32)
+        out[:] = np.eye(4, dtype=np.float32)
+        out[:count] = arr[:count]
+        return np.ascontiguousarray(out.transpose((0, 2, 1))).tobytes()
+    except Exception:
+        return b""
 
 
 def _cached_matrix_palette_uploader(model, max_bones: int, uploader_cls):

@@ -107,6 +107,50 @@ def iter_mesh_render_data(
             bone_weights=vbo_bone_weights,
         )
         skinning_cpu_fallback = False
+        is_bas_attachment_skin = bool(
+            getattr(node, "_gr_bas_attachment_layer", False)
+            and getattr(node, "is_skin", False)
+            and getattr(skinning, "is_skinned", False)
+        )
+        if is_bas_attachment_skin and anim_pose is None:
+            skinning = SimpleNamespace(
+                is_skinned=False,
+                bone_indices=None,
+                bone_weights=None,
+                max_influences=0,
+                skeleton_id=0,
+                skin_revision=getattr(skinning, "skin_revision", 0),
+                bind_shape_matrix=None,
+                warning="BAS attachment skin rendered as socket-local preview mesh",
+            )
+        elif is_bas_attachment_skin:
+            try:
+                from src.core.rendering.skeleton_render_data import cpu_skin_vbo_arrays
+
+                skinned_positions, skinned_normals = cpu_skin_vbo_arrays(
+                    node,
+                    positions,
+                    normals,
+                    skinning,
+                    anim_pose,
+                    model=model,
+                )
+                if skinned_positions is not positions:
+                    positions = skinned_positions
+                    normals = skinned_normals
+                    skinning_cpu_fallback = True
+                    skinning = SimpleNamespace(
+                        is_skinned=False,
+                        bone_indices=None,
+                        bone_weights=None,
+                        max_influences=0,
+                        skeleton_id=0,
+                        skin_revision=getattr(skinning, "skin_revision", 0),
+                        bind_shape_matrix=None,
+                        warning="BAS attachment skin rendered as socket-local CPU-skinned preview mesh",
+                    )
+            except Exception:
+                pass
         if allow_cpu_skinning and anim_pose is not None and getattr(skinning, "is_skinned", False):
             try:
                 from src.core.rendering.skeleton_render_data import cpu_skin_vbo_arrays
@@ -224,8 +268,16 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
             vbo_world_orient = (0.0, 0.0, 0.0, 1.0)
         apply_skin_node_transform_for_bind = not skin_can_lbs
         if is_bas_attachment and is_skin:
-            apply_skin_node_transform_for_bind = True
-        cache_key = _skinned_lbs_vbo_cache_key(node, vbo_builder) if skin_can_lbs else _static_vbo_cache_key(node, vbo_builder)
+            apply_skin_node_transform_for_bind = anim_pose is None
+        cache_key = (
+            _skinned_lbs_vbo_cache_key(
+                node,
+                vbo_builder,
+                apply_skin_node_transform_for_bind=apply_skin_node_transform_for_bind,
+            )
+            if skin_can_lbs
+            else _static_vbo_cache_key(node, vbo_builder)
+        )
         cached_vbo = _get_skinned_lbs_vbo_cache(node, cache_key)
         if cached_vbo is not None:
             return (*cached_vbo, world_matrix)
@@ -270,7 +322,7 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
     return verts, normals, uvs0, uvs1, indices, None, None, world_matrix
 
 
-def _skinned_lbs_vbo_cache_key(node, vbo_builder):
+def _skinned_lbs_vbo_cache_key(node, vbo_builder, *, apply_skin_node_transform_for_bind: bool):
     skin_data = getattr(node, "skin_data", None)
     composite_offset = getattr(node, "_composite_nonskin_offset", None)
     if composite_offset is not None:
@@ -286,6 +338,7 @@ def _skinned_lbs_vbo_cache_key(node, vbo_builder):
         tuple(getattr(node, "bone_map", []) or ()),
         composite_offset,
         bool(getattr(node, "_gr_bas_attachment_layer", False)),
+        bool(apply_skin_node_transform_for_bind),
     )
 
 
@@ -864,11 +917,13 @@ def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
         current = getattr(current, "parent", None)
     chain.reverse()
 
-    pose_applies = _bas_attachment_pose_applies_to_root(bas_root, anim_pose)
+    pose_mode = _bas_attachment_pose_mode_for_root(bas_root, anim_pose)
     last_i = len(chain) - 1
     for index, chain_node in enumerate(chain):
         is_leaf = index == last_i
-        pose_node = _pose_node_for_transform(chain_node, anim_pose) if pose_applies else None
+        pose_node = None
+        if pose_mode == "source_local" or (pose_mode == "inherited_head_local" and _bas_inherited_head_pose_node_allowed(chain_node)):
+            pose_node = _pose_node_for_transform(chain_node, anim_pose)
         if pose_node is not None:
             lx, ly, lz = getattr(pose_node, "position", getattr(chain_node, "position", (0.0, 0.0, 0.0)))
             if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):
@@ -893,19 +948,66 @@ def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
     return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_orientation[:4])
 
 
-def _bas_attachment_pose_applies_to_root(bas_root, anim_pose) -> bool:
+def _bas_attachment_pose_mode_for_root(bas_root, anim_pose) -> str:
     if bas_root is None or anim_pose is None:
-        return False
+        return ""
     try:
         pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
         attachment_source_id = int(getattr(bas_root, "_gr_bas_attachment_source_model_id", 0) or 0)
         if pose_source_id and attachment_source_id and pose_source_id == attachment_source_id:
-            return True
+            return "source_local"
     except Exception:
         pass
     pose_source_name = str(getattr(anim_pose, "_gr_animation_source_model_name", "") or "").strip().lower()
     attachment_source_name = str(getattr(bas_root, "_gr_bas_attachment_source_model_name", "") or "").strip().lower()
-    return bool(pose_source_name and attachment_source_name and pose_source_name == attachment_source_name)
+    if pose_source_name and attachment_source_name and pose_source_name == attachment_source_name:
+        return "source_local"
+    if _bas_head_attachment_has_inherited_pose_tracks(bas_root, anim_pose):
+        return "inherited_head_local"
+    return ""
+
+
+def _bas_attachment_pose_applies_to_root(bas_root, anim_pose) -> bool:
+    return bool(_bas_attachment_pose_mode_for_root(bas_root, anim_pose))
+
+
+def _bas_head_attachment_has_inherited_pose_tracks(bas_root, anim_pose) -> bool:
+    if bas_root is None or anim_pose is None:
+        return False
+    slot = str(getattr(bas_root, "_gr_bas_attachment_slot", "") or "").strip().lower()
+    if slot != "head":
+        return False
+    pose_names = {str(name or "").lower() for name in (getattr(anim_pose, "nodes", {}) or {}).keys()}
+    if not pose_names:
+        return False
+    head_track_names = set()
+    stack = [bas_root]
+    visited: set[int] = set()
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        name = str(getattr(current, "name", "") or "").lower()
+        if name:
+            head_track_names.add(name)
+        stack.extend(getattr(current, "children", []) or [])
+    if not head_track_names:
+        return False
+    return bool(pose_names & head_track_names)
+
+
+def _bas_inherited_head_pose_node_allowed(node) -> bool:
+    name = str(getattr(node, "name", "") or "").strip().lower()
+    if not name:
+        return False
+    if name.startswith("f_"):
+        return True
+    if name.startswith("eye"):
+        return True
+    if name.startswith("teeth") or name.startswith("tongue"):
+        return True
+    return False
 
 
 def _pose_node_for_transform(node, anim_pose):

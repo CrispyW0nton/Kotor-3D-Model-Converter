@@ -107,7 +107,8 @@ class PygfxSceneBridge:
                 hovered=hovered,
                 force_geometry_update=force_geometry_update,
             )
-            if bool(getattr(mesh_data, "is_skinned", False)) and anim_pose is not None:
+            is_bas_attachment = bool(getattr(getattr(mesh_data, "source", None), "_gr_bas_attachment_layer", False))
+            if bool(getattr(mesh_data, "is_skinned", False)) and (anim_pose is not None or is_bas_attachment):
                 self.mesh_cache.update_skin_palette(record, anim_pose, model=model)
             self._apply_world_matrix(record.mesh, self._mesh_model_matrix(mesh_data), record)
             if getattr(record, "edge_mesh", None) is not None:

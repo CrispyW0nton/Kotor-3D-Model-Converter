@@ -665,7 +665,7 @@ def test_cpu_skinning_reuses_model_inverse_bind_uploader(monkeypatch) -> None:
     assert calls == {"build": 1, "palette": 2}
 
 
-def test_bas_attachment_skin_meshes_keep_attachment_local_skin_buffers(monkeypatch) -> None:
+def test_bas_attachment_skin_meshes_switch_bind_buffers_for_body_animation(monkeypatch) -> None:
     root = SimpleNamespace(
         name="head_root",
         parent=None,
@@ -712,6 +712,19 @@ def test_bas_attachment_skin_meshes_keep_attachment_local_skin_buffers(monkeypat
             out[:, 0:3] += np.asarray(world_pos, dtype=np.float32)
         return out, np.asarray([0, 1, 2], dtype=np.uint32)
 
+    rest_rows = list(
+        mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=None,
+            allow_cpu_skinning=False,
+            vbo_builder=fake_vbo_builder,
+        )
+    )
+
+    assert len(rest_rows) == 1
+    assert calls["apply_skin_node_transform_for_bind"] is True
+    assert tuple(np.round(rest_rows[0].positions[:, 2], 4)) == (0.0, 0.0, 0.0)
+
     rows = list(
         mesh_render_data_module.iter_mesh_render_data(
             model,
@@ -722,11 +735,12 @@ def test_bas_attachment_skin_meshes_keep_attachment_local_skin_buffers(monkeypat
     )
 
     assert len(rows) == 1
-    assert rows[0].is_skinned is True
-    assert calls["apply_skin_node_transform_for_bind"] is True
-    assert tuple(np.round(rows[0].positions[:, 2], 4)) == (0.0, 0.0, 0.0)
-    assert rows[0].bone_indices.shape == (3, 4)
-    assert rows[0].bone_weights.shape == (3, 4)
+    assert rows[0].is_skinned is False
+    assert rows[0].skinning_cpu_fallback is True
+    assert calls["apply_skin_node_transform_for_bind"] is False
+    assert tuple(np.round(rows[0].positions[:, 2], 4)) == (-2.0, -2.0, -2.0)
+    assert rows[0].bone_indices is None
+    assert rows[0].bone_weights is None
     palette_model = mesh_render_data_module.bas_attachment_palette_model_for_node(skin)
     assert palette_model is not None
     assert getattr(palette_model, "_gr_bas_attachment_palette_model") is True
@@ -749,7 +763,9 @@ def test_pygfx_skin_palette_uses_bas_attachment_local_model(monkeypatch) -> None
             pass
 
         def as_numpy_array(self):
-            return np.asarray([np.eye(4, dtype=np.float32)], dtype=np.float32)
+            matrix = np.eye(4, dtype=np.float32)
+            matrix[2, 3] = 2.0
+            return np.asarray([matrix], dtype=np.float32)
 
     monkeypatch.setattr(gpu_skinning_module, "MatrixPaletteUploader", FakeUploader)
 
@@ -784,6 +800,36 @@ def test_pygfx_skin_palette_uses_bas_attachment_local_model(monkeypatch) -> None
     )
 
     assert calls["build_nodes"] == [["head_root", "Head"]]
+    assert skeleton_buffer.data[0]["bone_matrices"][3, 2] == pytest.approx(2.0)
+    assert skeleton_buffer.data[0]["bone_matrices"][2, 3] == pytest.approx(0.0)
+
+
+def test_bas_attachment_skin_palette_is_attachment_root_local() -> None:
+    root = SimpleNamespace(
+        name="head_root",
+        parent=None,
+        children=[],
+        position=(0.0, 0.0, 10.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+        _gr_bas_attachment_slot="head",
+    )
+    skin = SimpleNamespace(
+        name="Head",
+        parent=root,
+        children=[],
+        is_skin=True,
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+    )
+    root.children = [skin]
+    palette = np.asarray([np.eye(4, dtype=np.float32)], dtype=np.float32)
+    palette[0, 2, 3] = 12.0
+
+    adjusted = skeleton_render_data_module.bas_attachment_root_local_skin_palette(skin, palette, None)
+
+    assert adjusted[0, 2, 3] == pytest.approx(2.0)
 
 
 def test_bas_attachment_nonskin_face_parts_use_only_matching_head_local_pose() -> None:
@@ -834,6 +880,107 @@ def test_bas_attachment_nonskin_face_parts_use_only_matching_head_local_pose() -
 
     assert tuple(np.round(mismatch[:3, 3], 4)) == (10.0, 0.0, 3.0)
     assert tuple(np.round(matched[:3, 3], 4)) == (11.0, 0.0, 3.0)
+
+
+def test_bas_head_attachment_face_parts_accept_inherited_body_pose_as_local_transform() -> None:
+    socket = SimpleNamespace(
+        name="headhook",
+        parent=None,
+        children=[],
+        position=(10.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    root = SimpleNamespace(
+        name="pmha01",
+        parent=socket,
+        children=[],
+        position=(0.0, 0.0, 1.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+        _gr_bas_attachment_slot="head",
+        _gr_bas_socket_name="headhook",
+        _gr_bas_attachment_source_model_id=123,
+    )
+    eye = SimpleNamespace(
+        name="eye",
+        parent=root,
+        children=[],
+        position=(0.0, 0.0, 2.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+        _gr_bas_attachment_source_model_id=123,
+    )
+    socket.children = [root]
+    root.children = [eye]
+    inherited_body_pose = SimpleNamespace(
+        time=0.0,
+        nodes={"eye": SimpleNamespace(name="eye", position=(1.0, 0.0, 2.0), rotation=(0.0, 0.0, 0.0, 1.0))},
+        _gr_animation_source_model_id=999,
+    )
+
+    matrix = mesh_render_data_module.mesh_model_matrix_for_node(eye, anim_pose=inherited_body_pose)
+
+    assert tuple(np.round(matrix[:3, 3], 4)) == (11.0, 0.0, 3.0)
+
+
+def test_carth_pmha01_bas_head_stays_socket_local_for_pause2() -> None:
+    k1_path = os.environ.get("K1_PATH", "")
+    if not k1_path or not os.path.isdir(k1_path):
+        pytest.skip("K1 install not available")
+
+    from src.adapters.rendering.moderngl_resources import _build_vbo_data
+    from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+    from src.core.assets.resource_manager import ResourceManager
+    from src.systems.bas.preview_composer import build_bas_preview_model
+
+    manager = ResourceManager()
+    assert manager.set_k1_dir(k1_path)
+    SuperModelResolver.configure(manager)
+    body = manager.load_model("P_CarthBB", "K1")
+    head = manager.load_model("pmha01", "K1")
+    assert body is not None
+    assert head is not None
+    preview = build_bas_preview_model(
+        body_model=body,
+        attachment_models={"head": head},
+        attachment_transforms={"head": {"position": [0, 0, 0], "rotation": [0, 0, 0, 1], "scale": [1, 1, 1]}},
+    )
+    engine = AnimationEngine(body)
+    assert engine.play("pause2", loop=True, blend=False)
+    engine.seek(9.82)
+    pose = engine.evaluate(9.82)
+    pose._gr_animation_source_model_id = id(body)
+    pose._gr_animation_source_model_name = body.name
+
+    def head_bounds(anim_pose):
+        for mesh_data in mesh_render_data_module.iter_mesh_render_data(
+            preview,
+            anim_pose=anim_pose,
+            allow_cpu_skinning=False,
+            vbo_builder=_build_vbo_data,
+        ):
+            if getattr(mesh_data.source, "name", "") != "head" or not getattr(mesh_data.source, "_gr_bas_attachment_layer", False):
+                continue
+            positions = np.asarray(mesh_data.positions, dtype=np.float32)
+            world_matrix = np.asarray(mesh_data.world_matrix, dtype=np.float32).reshape(4, 4)
+            world = (world_matrix @ np.column_stack([positions, np.ones(len(positions), dtype=np.float32)]).T).T[:, :3]
+            return positions, world, mesh_data
+        raise AssertionError("pmha01 head skin mesh not found")
+
+    rest_vbo, rest_world, rest_mesh = head_bounds(None)
+    anim_vbo, anim_world, anim_mesh = head_bounds(pose)
+
+    assert float(rest_world[:, 2].min()) == pytest.approx(1.50, abs=0.08)
+    assert float(rest_world[:, 2].max()) < 1.90
+    assert float(anim_world[:, 2].min()) == pytest.approx(1.50, abs=0.08)
+    assert float(anim_world[:, 2].max()) < 1.90
+    assert rest_mesh.is_skinned is False
+    assert anim_mesh.is_skinned is False
+    assert anim_mesh.skinning_cpu_fallback is True
+    assert float(anim_vbo[:, 2].max()) < 0.35
+    assert float(np.linalg.norm(anim_world.max(axis=0) - anim_world.min(axis=0))) < 0.85
 
 
 def test_pygfx_optional_scene_camera_light_cube_smoke() -> None:

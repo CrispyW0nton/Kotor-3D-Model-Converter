@@ -380,7 +380,14 @@ def _face_part_deltas(model, pose0, pose1, *, focus_node=None) -> list[dict[str,
     return rows[:20]
 
 
-def run(output_dir: Path, *, bas_only: bool = False) -> dict[str, Any]:
+def run(
+    output_dir: Path,
+    *,
+    bas_only: bool = False,
+    bas_body: str = "p_carthbb",
+    bas_head: str = "p_carthbbh",
+    exact_bas_only: bool = False,
+) -> dict[str, Any]:
     from PySide6 import QtWidgets
 
     from src.core.animation.animation_engine import SuperModelResolver
@@ -465,7 +472,7 @@ def run(output_dir: Path, *, bas_only: bool = False) -> dict[str, Any]:
             encoding="utf-8",
         )
 
-    if not bas_only:
+    if not bas_only and not exact_bas_only:
         fixtures = [
             ("K2", "n_darthmalak", "n_malak_alias_app_walk", ["walk", "g2r1"], None),
             ("K1", "p_carthbb", "p_carthbb_app_inherited_walk", ["walk"], True),
@@ -491,28 +498,44 @@ def run(output_dir: Path, *, bas_only: bool = False) -> dict[str, Any]:
                 results.append({"label": label, "status": "exception", "error": repr(exc)})
             write_progress()
 
-    body = manager.load_model("p_carthbb", "K1")
-    head = manager.load_model("p_carthbbh", "K1")
+    body = manager.load_model(bas_body, "K1")
+    head = manager.load_model(bas_head, "K1")
     if body is not None and head is not None:
         _load_window_model(window, body, "K1")
         window._bas_body_model = body
         window._bas_attachments = {}
         window._bas_attachment_resrefs = {}
         window._bas_attachment_transforms = {}
-        window._handle_bas_attach_requested("head", "p_carthbbh")
+        window._handle_bas_attach_requested("head", bas_head)
         head = getattr(window, "_current_head_model", None) or head
         bas_model = window._bas_preview_model
         _force_app_render(window, app, "bas app load", scene=True, resources=True, style=True, overlay=True, hud=True)
-        body_anim = _choose_animation(body, ["walk"], "K1", inherited=True)
-        if body_anim:
+        focus_node = _head_attachment_root(bas_model)
+        for body_anim, inherited in (
+            (_choose_animation(body, ["pause2"], "K1", inherited=False), False),
+            (_choose_animation(body, ["walk"], "K1", inherited=True), True),
+        ):
+            if not body_anim:
+                continue
             try:
-                results.append(_drive_window_animation(window, app, bas_model, body, body_anim, "bas_app_p_carthbb_head_body_walk", output_dir))
+                inherited_tag = "inherited_" if inherited else "local_"
+                results.append(
+                    _drive_window_animation(
+                        window,
+                        app,
+                        bas_model,
+                        body,
+                        body_anim,
+                        f"bas_app_{bas_body}_{bas_head}_body_{inherited_tag}{body_anim}",
+                        output_dir,
+                        focus_node=focus_node,
+                    )
+                )
             except Exception as exc:
-                results.append({"label": "bas_app_p_carthbb_head_body_walk", "status": "exception", "error": repr(exc)})
+                results.append({"label": f"bas_app_{bas_body}_{bas_head}_body_{body_anim}", "status": "exception", "error": repr(exc)})
             write_progress()
         head_anim = _choose_animation(head, ["talk"], "K1", inherited=False)
-        focus_node = _head_attachment_root(bas_model)
-        if head_anim:
+        if head_anim and not exact_bas_only:
             try:
                 results.append(
                     _drive_window_animation(
@@ -521,14 +544,58 @@ def run(output_dir: Path, *, bas_only: bool = False) -> dict[str, Any]:
                         bas_model,
                         head,
                         head_anim,
-                        "bas_app_p_carthbbh_head_local_talk",
+                        f"bas_app_{bas_body}_{bas_head}_head_local_talk",
                         output_dir,
                         focus_node=focus_node,
                     )
                 )
             except Exception as exc:
-                results.append({"label": "bas_app_p_carthbbh_head_local_talk", "status": "exception", "error": repr(exc)})
+                results.append({"label": f"bas_app_{bas_body}_{bas_head}_head_local_talk", "status": "exception", "error": repr(exc)})
             write_progress()
+
+    if exact_bas_only:
+        summary = []
+        for item in results:
+            cache = item.get("mesh_cache") or {}
+            summary.append(
+                {
+                    "label": item.get("label"),
+                    "status": item.get("status"),
+                    "animation": item.get("animation"),
+                    "shader_cycle": item.get("shader_cycle"),
+                    "texture_button": item.get("texture_button"),
+                    "visible_delta": (item.get("image_delta") or {}).get("visible_delta"),
+                    "changed_pixels": (item.get("image_delta") or {}).get("changed_pixels"),
+                    "pose_delta": item.get("pose_delta"),
+                    "render_budget_fps": item.get("render_budget_fps"),
+                    "backend": cache.get("backend"),
+                    "skinned_records": cache.get("skinned_records"),
+                    "native_skinned_mesh_records": cache.get("native_skinned_mesh_records"),
+                    "skinned_records_with_diffuse_maps": cache.get("skinned_records_with_diffuse_maps"),
+                    "moving_face_parts": sum(
+                        1
+                        for row in (item.get("face_part_deltas") or [])
+                        if float(row.get("matrix_max_delta", 0.0) or 0.0) > 1.0e-5
+                    ),
+                    "orbit_deltas": _orbit_delta_summary(item),
+                    "render_state": item.get("render_state"),
+                }
+            )
+        payload = {
+            "output_dir": str(output_dir),
+            "actual_application": True,
+            "startup_state": startup_state,
+            "backend": "pygfx_wgpu",
+            "render_modes": ["realistic", "shaded", "flat"],
+            "texture_visible": True,
+            "results": results,
+            "summary": summary,
+        }
+        (output_dir / "actual_app_pygfx_animation_results.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        (output_dir / "actual_app_pygfx_animation_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        window.close()
+        _process_events(app, 0.2)
+        return payload
 
     extra_head_fixtures = [
         ("p_bastilah", [["talk", "tlknorm", "listen"], ["pause1", "pause2"]], {"right_weapon": "w_blstrrfl_001", "belt": "i_belt_001"}),
@@ -635,8 +702,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Actual GhostRigger app pygfx animation visual harness.")
     parser.add_argument("--output-dir", default=str(ROOT / "artifacts" / "actual_app_pygfx_animation_20260602"))
     parser.add_argument("--bas-only", action="store_true", help="Skip standalone fixtures and run only BAS animation coverage.")
+    parser.add_argument("--bas-body", default="p_carthbb", help="K1 BAS body resref for the actual-app BAS fixture.")
+    parser.add_argument("--bas-head", default="p_carthbbh", help="K1 BAS head resref for the actual-app BAS fixture.")
+    parser.add_argument("--exact-bas-only", action="store_true", help="Run only the requested BAS body/head with body animations.")
     args = parser.parse_args()
-    payload = run(Path(args.output_dir), bas_only=bool(args.bas_only))
+    payload = run(
+        Path(args.output_dir),
+        bas_only=bool(args.bas_only),
+        bas_body=str(args.bas_body),
+        bas_head=str(args.bas_head),
+        exact_bas_only=bool(args.exact_bas_only),
+    )
     print(json.dumps(payload["summary"], indent=2))
     return 0
 
