@@ -74,6 +74,59 @@ The active development branch is `qt-ghostrigger`. The roadmap lives at
 `knowledge_base/roadmap/02_roadmap_2026_05.md`. Every commit message must
 reference its `T###` task ID. Open PRs against `qt-ghostrigger`, never `main`.
 
+## Architecture and system boundaries
+
+GhostRigger now uses a separated filesystem architecture. Before adding or
+moving code, identify the owning layer and put the change in that layer first;
+do not append new behavior to a convenient window, panel, viewport, or helper
+file just because that is where the call starts.
+
+- `src/core/<domain>/` owns headless domain models, services, validation,
+  scene/project state, resource rules, import/export decisions, and workflow
+  policies. Core code must not import Qt or `src.gui.*`.
+- `src/systems/<system_name>/` owns focused feature systems and model pipelines
+  that sit above core primitives, such as BAS assembly/composition. New durable
+  systems should get their own package here instead of being embedded in GUI
+  windows or viewport modules.
+- `src/adapters/<technology_or_surface>/` owns glue to external runtimes,
+  renderer backends, Qt-facing adapters, file/runtime APIs, and integration
+  boundaries. Keep technology-specific details here when they are not pure core
+  logic and not direct widget code.
+- `src/gui/windows/`, `src/gui/panels/`, `src/gui/dialogs/`, and
+  `src/gui/viewports/` own presentation, widgets, signals, user gestures,
+  theme/layout application, and calls into services. They must not become the
+  owner of parsing, model-pipeline logic, transform math, resource lifetime
+  rules, export formats, validation policy, or reusable business functions.
+- `src/math/` owns reusable math. Do not hide new transform, camera, layout,
+  pivot, projection, or coordinate-system math inside GUI files.
+- `src/io/`, `src/formats/`, and `src/resources/` own file formats, resource
+  discovery, and serialization/deserialization concerns. Do not implement
+  game-file parsing or format writing inside windows, panels, or viewport code.
+
+When adding a new function or system:
+
+1. Search for the existing owner with `rg` and inspect nearby packages before
+   editing.
+2. Name the owning product surface and owning code package in the change notes
+   or plan, for example `src/systems/bas`, `src/core/scene`,
+   `src/core/modules`, `src/adapters/qt_viewport`, or `src/gui/panels`.
+3. If no owner exists, create a focused module/package in the correct layer and
+   expose a small API for the UI to call. Do not create another broad
+   `helpers.py`, `utils.py`, or window-local function pile.
+4. Keep dependency direction clean: GUI may call core/systems/adapters; adapters
+   may wrap core/systems for a runtime; core and systems must stay usable
+   without importing GUI widgets.
+5. Window files such as `qt_main_window.py`, `module_editor_window.py`,
+   `qt_character_builder_window.py`, `qt_retarget_window.py`, and files under
+   `src/gui/windows/application_core/shared/` may orchestrate workflows, but
+   new reusable logic belongs in the owning core/system/adapter module first.
+6. If a window or panel change needs more than signal wiring, widget state, or a
+   short call into a service, extract the function into the owning subsystem and
+   keep the GUI as the caller.
+7. Add or update focused tests/contracts for the owning layer. Prefer testing
+   core/system behavior without Qt, then add visible GUI checks only for the
+   actual UI workflow.
+
 ## Tk removal — completed in M3 / T302
 
 Milestone M3 / T302 deleted the eight legacy Tk modules that previously
@@ -159,6 +212,15 @@ Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
   adding a feature, identify the owning product surface: Main Viewport/KMAX,
   Retarget Workbench, Character Studio, Module Studio, Map Studio, Resource
   Browser, Validation, Export, or Project/session infrastructure.
+- Treat GUI windows as composition roots and presentation shells. They may wire
+  menus, actions, panels, dialogs, signals, progress, and theme/layout state,
+  but they should call into the owning `src/core/`, `src/systems/`, or
+  `src/adapters/` module for reusable behavior.
+- Do not add parsing, import/export decisions, resource placement, transform
+  algorithms, model composition, validation, renderer residency, or workflow
+  policy directly to `src/gui/windows/*`, `src/gui/panels/*`, or
+  `src/gui/viewports/*`. Add that code to the matching subsystem and keep the
+  UI layer thin.
 - Keep workflow-specific controls inside their owning window or panel. For
   example, retarget mode, source/target animation choices, output animation
   naming, and retarget readiness belong in the Animation Retargeting Workbench,

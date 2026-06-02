@@ -15,6 +15,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.core.scene.scene_object import PivotData, Transform
 from src.core.scene.module_scene_import import ModuleRoomPlacement, resolve_module_room_placement
+from src.math.module_layout_math import module_anchor_relative_position
 from src.core.scene.scene_resource_ref import SceneResourceRef
 from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoice, AddModelToSceneDialog
 from src.gui.windows.application_core.application_core_lib.functions.geometry import (
@@ -427,9 +428,54 @@ class ResourceLoadingMixin:
             log.debug("module room placement lookup failed for %s:%s: %s", game, resref, exc)
             return None
 
-    def _placement_transform_for_new_model(self, module_placement: ModuleRoomPlacement | None = None) -> Transform:
+    def _module_group_anchor_for(self, module_placement: ModuleRoomPlacement | None):
+        if module_placement is None:
+            return None
+        group_id = str(getattr(module_placement, "group_id", "") or "")
+        if not group_id:
+            return None
+        candidates = [
+            obj
+            for obj in getattr(self.scene_manager.active_scene, "objects", []) or []
+            if str(getattr(obj, "group_id", "") or "") == group_id
+            and isinstance(getattr(obj, "metadata", None), dict)
+            and isinstance(obj.metadata.get("module_group"), dict)
+        ]
+        anchors = [obj for obj in candidates if bool(obj.metadata.get("module_anchor", False))]
+        return (anchors or candidates or [None])[0]
+
+    @staticmethod
+    def _module_group_anchor_lyt_position(anchor) -> tuple[float, float, float] | None:
+        if anchor is None:
+            return None
+        data = dict((getattr(anchor, "metadata", {}) or {}).get("module_group") or {})
+        position = data.get("position")
+        if position is None:
+            return None
+        try:
+            return tuple(float(v) for v in tuple(position)[:3])
+        except Exception:
+            return None
+
+    def _placement_transform_for_new_model(
+        self,
+        module_placement: ModuleRoomPlacement | None = None,
+        *,
+        module_anchor=None,
+    ) -> Transform:
         if module_placement is not None:
-            return Transform(position=module_placement.position)
+            if module_anchor is not None:
+                anchor_lyt = self._module_group_anchor_lyt_position(module_anchor)
+                if anchor_lyt is not None:
+                    anchor_scene = tuple(float(v) for v in getattr(module_anchor.transform, "position", (0.0, 0.0, 0.0))[:3])
+                    return Transform(
+                        position=module_anchor_relative_position(
+                            module_placement.position,
+                            anchor_lyt,
+                            anchor_scene,
+                        )
+                    )
+            return Transform(position=(0.0, 0.0, 0.0))
         placement = str(self._pending_scene_import_placement or "auto_offset")
         if placement == "origin":
             return Transform()
@@ -458,20 +504,29 @@ class ResourceLoadingMixin:
         if texture_dir and texture_dir not in self._scene_texture_dirs:
             self._scene_texture_dirs.append(texture_dir)
         module_placement = self._module_room_placement_for_ref(ref)
+        module_anchor = self._module_group_anchor_for(module_placement)
         instance = self.scene_manager.add_model_instance(
             ref,
-            transform=self._placement_transform_for_new_model(module_placement),
+            transform=self._placement_transform_for_new_model(module_placement, module_anchor=module_anchor),
             runtime_model=model,
             select=True,
         )
         if module_placement is not None:
-            self._apply_module_group_metadata(instance, model, module_placement)
+            self._apply_module_group_metadata(instance, model, module_placement, is_anchor=module_anchor is None)
         self.scene_manager.active_scene.game = ref.game or self.scene_manager.active_scene.game
         return instance
 
-    def _apply_module_group_metadata(self, instance, model, placement: ModuleRoomPlacement) -> None:
+    def _apply_module_group_metadata(
+        self,
+        instance,
+        model,
+        placement: ModuleRoomPlacement,
+        *,
+        is_anchor: bool = False,
+    ) -> None:
         instance.group_id = placement.group_id
         instance.metadata["module_group"] = placement.to_metadata()
+        instance.metadata["module_anchor"] = bool(is_anchor)
         instance.metadata["child_count"] = self._runtime_model_child_count(model)
         center = self._model_bounds_center(model)
         instance.pivot = PivotData(
