@@ -24,6 +24,16 @@ log = logging.getLogger(__name__)
 class AnimationWorkflowMixin:
     """Animation source selection, playback, baking, export, and library scan behavior."""
 
+    def _tag_animation_pose_source(self, pose, model):
+        if pose is None:
+            return pose
+        try:
+            setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
+            setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
+        except Exception:
+            pass
+        return pose
+
     def _handle_animation_selected(self, anim_name: str):
         model = self._animation_source_model()
         if not model or not anim_name:
@@ -103,7 +113,7 @@ class AnimationWorkflowMixin:
                     self._animation_engine = AnimationEngine(model)
                 if not self._animation_engine.play(anim_name, loop=False, blend=False):
                     return False
-                pose = self._animation_engine.evaluate(0.0)
+                pose = self._tag_animation_pose_source(self._animation_engine.evaluate(0.0), model)
                 current = self._animation_engine.current_animation
             length = float(getattr(current, "length", 0.0) or 0.0) if current is not None else 0.0
             self._animation_engine.seek(0.0)
@@ -157,7 +167,7 @@ class AnimationWorkflowMixin:
                     ok = self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False)
                 if ok:
                     try:
-                        self.viewport.set_anim_base_pose(self._animation_engine.evaluate(0.0))
+                        self.viewport.set_anim_base_pose(self._tag_animation_pose_source(self._animation_engine.evaluate(0.0), model))
                     except Exception:
                         pass
                     if hasattr(self.viewport, "set_animation_playback_active"):
@@ -578,7 +588,7 @@ class AnimationWorkflowMixin:
             t = max(0.0, min(100.0, float(percent))) / 100.0 * length
             was_playing = self._animation_engine.is_playing
             self._animation_engine.seek(t)
-            pose = self._animation_engine.evaluate()
+            pose = self._tag_animation_pose_source(self._animation_engine.evaluate(), model)
             if hasattr(self, "viewport"):
                 self.viewport.set_animation_pose(pose, name=anim_name, time=t, length=length)
             self.animations_panel.info.setPlainText(f"{anim_name}\n{t:.3f} / {length:.3f} s")
@@ -600,7 +610,7 @@ class AnimationWorkflowMixin:
             dt = max(1.0 / 60.0, min(now - self._animation_last_tick, 0.25))
         self._animation_last_tick = now
         still_playing = engine.advance(dt)
-        pose = engine.evaluate()
+        pose = self._tag_animation_pose_source(pose=engine.evaluate(), model=getattr(engine, "model", None))
         anim = engine.current_animation
         anim_name = getattr(anim, "name", "") if anim else ""
         anim_length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0

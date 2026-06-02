@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from src.core.rendering.mesh_render_data import iter_mesh_render_data, node_world_matrix
+from src.core.rendering.mesh_render_data import iter_mesh_render_data, mesh_model_matrix_for_node, node_world_matrix
 
 from .mesh_cache import PygfxMeshCache
 
@@ -158,12 +158,13 @@ class PygfxSceneBridge:
 
         for record in self.mesh_cache.records.values():
             source = getattr(record, "source", None)
-            if bool(getattr(record, "is_skinned", False)) and not bool(getattr(source, "_gr_bas_attachment_layer", False)):
+            if bool(getattr(record, "is_skinned", False)):
                 self.mesh_cache.update_skin_palette(record, anim_pose, model=model)
+            if bool(getattr(record, "is_skinned", False)) and not bool(getattr(source, "_gr_bas_attachment_layer", False)):
                 matrix = np.eye(4, dtype=np.float32)
             else:
                 try:
-                    matrix = node_world_matrix(source, anim_pose=anim_pose)
+                    matrix = mesh_model_matrix_for_node(source, anim_pose=anim_pose)
                 except Exception:
                     matrix = np.eye(4, dtype=np.float32)
             self._apply_world_matrix(record.mesh, matrix, record)

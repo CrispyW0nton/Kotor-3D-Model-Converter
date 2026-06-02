@@ -364,8 +364,12 @@ class PygfxMeshCache:
         try:
             from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
             from src.core.rendering.skeleton_render_data import _cached_matrix_palette_uploader
+            from src.core.rendering.mesh_render_data import bas_attachment_palette_model_for_node
 
-            uploader = _cached_matrix_palette_uploader(model, MAX_BONES, MatrixPaletteUploader)
+            source_model = model
+            if bool(getattr(record.source, "_gr_bas_attachment_layer", False)):
+                source_model = bas_attachment_palette_model_for_node(record.source) or model
+            uploader = _cached_matrix_palette_uploader(source_model, MAX_BONES, MatrixPaletteUploader)
             uploader.compute_skin_node_palette(record.source, anim_pose)
             palette = uploader.as_numpy_array()
             buffer = getattr(record.skeleton, "bone_matrices_buffer", None)
@@ -373,6 +377,20 @@ class PygfxMeshCache:
             if palette is None or data is None or len(data) == 0:
                 return
             count = min(len(data), len(palette))
+            # pygfx SkinnedMesh calls skeleton.update() during its object
+            # update. GhostRigger computes the final KotOR palette itself, so
+            # make this skeleton direct-buffer driven to avoid pygfx replacing
+            # the palette with identity Bone transforms every draw.
+            if not bool(getattr(record.skeleton, "_gr_direct_palette_update", False)):
+                try:
+                    record.skeleton.update = lambda: None
+                    record.skeleton._gr_direct_palette_update = True
+                except Exception:
+                    pass
+            try:
+                record.skeleton.update()
+            except Exception:
+                pass
             data[:count]["bone_matrices"] = np.asarray(palette[:count], dtype=np.float32).transpose((0, 2, 1))
             update_range = getattr(buffer, "update_range", None)
             if callable(update_range):

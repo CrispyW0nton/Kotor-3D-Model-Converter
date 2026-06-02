@@ -230,6 +230,11 @@ class BasWorkflowMixin:
         item_root = getattr(item_copy, "root_node", None)
         if socket is None or item_root is None:
             return False
+        try:
+            setattr(item_root, "_gr_bas_attachment_source_model_id", id(item))
+            setattr(item_root, "_gr_bas_attachment_source_model_name", str(getattr(item, "name", "") or ""))
+        except Exception:
+            pass
         self._prepare_bas_layer_root(item_root, socket, slot or socket_name)
         if not transform:
             item_root.rotation = (0.0, 0.0, 0.0, 1.0)
@@ -304,6 +309,11 @@ class BasWorkflowMixin:
             visited.add(id(current))
             setattr(current, "_gr_bas_attachment_layer", True)
             setattr(current, "_gr_bas_attachment_root_ref", root)
+            try:
+                setattr(current, "_gr_bas_attachment_source_model_id", int(getattr(root, "_gr_bas_attachment_source_model_id", 0) or 0))
+                setattr(current, "_gr_bas_attachment_source_model_name", str(getattr(root, "_gr_bas_attachment_source_model_name", "") or ""))
+            except Exception:
+                pass
             stack.extend(getattr(current, "children", []) or [])
     def _find_model_node(self, model, name: str):
         target = str(name or "").lower()
@@ -434,6 +444,8 @@ class BasWorkflowMixin:
         try:
             t = float(getattr(engine, "current_time", 0.0) or 0.0)
             pose = engine.evaluate(t)
+            if hasattr(self, "_tag_animation_pose_source"):
+                pose = self._tag_animation_pose_source(pose, getattr(engine, "model", None))
             self.viewport.set_animation_pose(
                 pose,
                 name=str(getattr(current, "name", "") or ""),

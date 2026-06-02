@@ -442,7 +442,8 @@ class MatrixPaletteUploader:
             return 0
 
         nodes = list(model.all_nodes()) if hasattr(model, 'all_nodes') else []
-        nodes = [n for n in nodes if not bool(getattr(n, "_gr_bas_attachment_layer", False))]
+        if not bool(getattr(model, "_gr_bas_attachment_palette_model", False)):
+            nodes = [n for n in nodes if not bool(getattr(n, "_gr_bas_attachment_layer", False))]
         self._model_name = str(getattr(model, 'name', '') or '').lower()
         self._model_supermodel = str(getattr(model, 'supermodel', '') or '').lower()
         # KMAX scene composites add wrapper nodes above imported MDLs.  When

@@ -665,6 +665,177 @@ def test_cpu_skinning_reuses_model_inverse_bind_uploader(monkeypatch) -> None:
     assert calls == {"build": 1, "palette": 2}
 
 
+def test_bas_attachment_skin_meshes_keep_attachment_local_skin_buffers(monkeypatch) -> None:
+    root = SimpleNamespace(
+        name="head_root",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        children=[],
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+    )
+    skin = SimpleNamespace(
+        name="Head",
+        parent=root,
+        children=[],
+        is_skin=True,
+        position=(0.0, 0.0, 2.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        vertices=[(0.0, 0.0, -2.0), (1.0, 0.0, -2.0), (0.0, 1.0, -2.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        faces=[(0, 1, 2)],
+        uvs=[],
+        uvs_lm=[],
+        bone_map=["head_root"],
+        skin_data=[object(), object(), object()],
+        qbone_list=[(1.0, 0.0, 0.0, 0.0), (1.0, 0.0, 0.0, 0.0)],
+        tbone_list=[(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)],
+        render=True,
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+        _gr_revision=1,
+    )
+    root.children = [skin]
+    vbo = np.zeros((3, 22), dtype=np.float32)
+    vbo[:, 3:6] = np.asarray(skin.normals, dtype=np.float32)
+    vbo[:, 14] = 0.0
+    vbo[:, 18] = 1.0
+    model = SimpleNamespace(all_nodes=lambda: [root, skin])
+    calls = {}
+
+    def fake_vbo_builder(_node, world_pos, _world_orient, **kwargs):
+        calls["apply_skin_node_transform_for_bind"] = kwargs.get("apply_skin_node_transform_for_bind")
+        out = vbo.copy()
+        out[:, 0:3] = np.asarray(skin.vertices, dtype=np.float32)
+        if kwargs.get("apply_skin_node_transform_for_bind"):
+            out[:, 0:3] += np.asarray(world_pos, dtype=np.float32)
+        return out, np.asarray([0, 1, 2], dtype=np.uint32)
+
+    rows = list(
+        mesh_render_data_module.iter_mesh_render_data(
+            model,
+            anim_pose=SimpleNamespace(time=0.25, nodes={}),
+            allow_cpu_skinning=False,
+            vbo_builder=fake_vbo_builder,
+        )
+    )
+
+    assert len(rows) == 1
+    assert rows[0].is_skinned is True
+    assert calls["apply_skin_node_transform_for_bind"] is True
+    assert tuple(np.round(rows[0].positions[:, 2], 4)) == (0.0, 0.0, 0.0)
+    assert rows[0].bone_indices.shape == (3, 4)
+    assert rows[0].bone_weights.shape == (3, 4)
+    palette_model = mesh_render_data_module.bas_attachment_palette_model_for_node(skin)
+    assert palette_model is not None
+    assert getattr(palette_model, "_gr_bas_attachment_palette_model") is True
+    assert [node.name for node in palette_model.all_nodes()] == ["head_root", "Head"]
+
+
+def test_pygfx_skin_palette_uses_bas_attachment_local_model(monkeypatch) -> None:
+    calls = {"build_nodes": []}
+
+    class FakeUploader:
+        def __init__(self, max_bones):
+            self.max_bones = max_bones
+
+        def build_inverse_bind_pose(self, model):
+            nodes = list(model.all_nodes())
+            calls["build_nodes"].append([getattr(node, "name", "") for node in nodes])
+            return len(nodes)
+
+        def compute_skin_node_palette(self, _node, _anim_pose):
+            pass
+
+        def as_numpy_array(self):
+            return np.asarray([np.eye(4, dtype=np.float32)], dtype=np.float32)
+
+    monkeypatch.setattr(gpu_skinning_module, "MatrixPaletteUploader", FakeUploader)
+
+    root = SimpleNamespace(
+        name="head_root",
+        parent=None,
+        children=[],
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+    )
+    skin = SimpleNamespace(
+        name="Head",
+        parent=root,
+        children=[],
+        is_skin=True,
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+    )
+    root.children = [skin]
+    skeleton_buffer = SimpleNamespace(
+        data=np.zeros(1, dtype=[("bone_matrices", np.float32, (4, 4))]),
+        update_range=lambda *_args, **_kwargs: None,
+    )
+    record = SimpleNamespace(source=skin, skeleton=SimpleNamespace(bone_matrices_buffer=skeleton_buffer))
+
+    PygfxMeshCache().update_skin_palette(
+        record,
+        SimpleNamespace(time=0.1, nodes={}),
+        model=SimpleNamespace(name="body", all_nodes=lambda: []),
+    )
+
+    assert calls["build_nodes"] == [["head_root", "Head"]]
+
+
+def test_bas_attachment_nonskin_face_parts_use_only_matching_head_local_pose() -> None:
+    socket = SimpleNamespace(
+        name="headhook",
+        parent=None,
+        children=[],
+        position=(10.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    root = SimpleNamespace(
+        name="p_carthbbh",
+        parent=socket,
+        children=[],
+        position=(0.0, 0.0, 1.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+        _gr_bas_socket_name="headhook",
+        _gr_bas_attachment_source_model_id=123,
+    )
+    eye = SimpleNamespace(
+        name="eye",
+        parent=root,
+        children=[],
+        position=(0.0, 0.0, 2.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+        _gr_bas_attachment_source_model_id=123,
+    )
+    socket.children = [root]
+    root.children = [eye]
+
+    bind_pose = SimpleNamespace(
+        time=0.0,
+        nodes={"eye": SimpleNamespace(name="eye", position=(1.0, 0.0, 2.0), rotation=(0.0, 0.0, 0.0, 1.0))},
+        _gr_animation_source_model_id=999,
+    )
+    head_pose = SimpleNamespace(
+        time=0.0,
+        nodes={"eye": SimpleNamespace(name="eye", position=(1.0, 0.0, 2.0), rotation=(0.0, 0.0, 0.0, 1.0))},
+        _gr_animation_source_model_id=123,
+    )
+
+    mismatch = mesh_render_data_module.mesh_model_matrix_for_node(eye, anim_pose=bind_pose)
+    matched = mesh_render_data_module.mesh_model_matrix_for_node(eye, anim_pose=head_pose)
+
+    assert tuple(np.round(mismatch[:3, 3], 4)) == (10.0, 0.0, 3.0)
+    assert tuple(np.round(matched[:3, 3], 4)) == (11.0, 0.0, 3.0)
+
+
 def test_pygfx_optional_scene_camera_light_cube_smoke() -> None:
     gfx = pytest.importorskip("pygfx")
 

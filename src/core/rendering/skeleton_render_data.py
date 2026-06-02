@@ -316,7 +316,7 @@ def cpu_skin_vbo_arrays(
     except Exception:
         return positions, normals
 
-    source_model = model or _root_model_from_node(node)
+    source_model = _skinning_palette_model_for_node(node, model)
     if source_model is None:
         return positions, normals
     try:
@@ -389,6 +389,19 @@ def _cached_matrix_palette_uploader(model, max_bones: int, uploader_cls):
     except Exception:
         pass
     return uploader
+
+
+def _skinning_palette_model_for_node(node, model=None):
+    if bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        try:
+            from src.core.rendering.mesh_render_data import bas_attachment_palette_model_for_node
+
+            palette_model = bas_attachment_palette_model_for_node(node)
+            if palette_model is not None:
+                return palette_model
+        except Exception:
+            pass
+    return model or _root_model_from_node(node)
 
 
 def _matrix_palette_uploader_cache_key(model, max_bones: int):

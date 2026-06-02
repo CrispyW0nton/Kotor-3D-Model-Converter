@@ -79,6 +79,11 @@ def tag_bas_attachment_subtree(node: Any, root: Any) -> None:
         visited.add(id(current))
         setattr(current, "_gr_bas_attachment_layer", True)
         setattr(current, "_gr_bas_attachment_root_ref", root)
+        try:
+            setattr(current, "_gr_bas_attachment_source_model_id", int(getattr(root, "_gr_bas_attachment_source_model_id", 0) or 0))
+            setattr(current, "_gr_bas_attachment_source_model_name", str(getattr(root, "_gr_bas_attachment_source_model_name", "") or ""))
+        except Exception:
+            pass
         stack.extend(getattr(current, "children", []) or [])
 
 
@@ -123,6 +128,11 @@ def attach_bas_item_to_preview(
     item_root = getattr(item_copy, "root_node", None)
     if socket is None or item_root is None:
         return False
+    try:
+        setattr(item_root, "_gr_bas_attachment_source_model_id", id(item_model))
+        setattr(item_root, "_gr_bas_attachment_source_model_name", str(getattr(item_model, "name", "") or ""))
+    except Exception:
+        pass
     prepare_bas_layer_root(item_root, socket, slot or socket_name)
     _apply_bas_layer_transform(item_root, transform)
     item_root.parent = socket

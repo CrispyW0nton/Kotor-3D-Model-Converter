@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Iterable
 
 
@@ -209,7 +210,7 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
         skin_can_lbs = bool(
             anim_pose is not None
             and is_skin
-            and not is_bas_attachment
+            and (not is_bas_attachment or bas_root is not None)
             and getattr(node, "bone_map", None)
             and getattr(node, "skin_data", None)
         )
@@ -221,6 +222,9 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
         elif is_bas_attachment and not is_skin:
             vbo_world_pos = (0.0, 0.0, 0.0)
             vbo_world_orient = (0.0, 0.0, 0.0, 1.0)
+        apply_skin_node_transform_for_bind = not skin_can_lbs
+        if is_bas_attachment and is_skin:
+            apply_skin_node_transform_for_bind = True
         cache_key = _skinned_lbs_vbo_cache_key(node, vbo_builder) if skin_can_lbs else _static_vbo_cache_key(node, vbo_builder)
         cached_vbo = _get_skinned_lbs_vbo_cache(node, cache_key)
         if cached_vbo is not None:
@@ -230,7 +234,7 @@ def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
             vbo_world_pos,
             vbo_world_orient,
             anim_pose_node=None,
-            apply_skin_node_transform_for_bind=not skin_can_lbs,
+            apply_skin_node_transform_for_bind=apply_skin_node_transform_for_bind,
         )
         if vdata is not None:
             positions = np.asarray(vdata[:, 0:3], dtype=np.float32)
@@ -281,6 +285,7 @@ def _skinned_lbs_vbo_cache_key(node, vbo_builder):
         id(skin_data),
         tuple(getattr(node, "bone_map", []) or ()),
         composite_offset,
+        bool(getattr(node, "_gr_bas_attachment_layer", False)),
     )
 
 
@@ -454,18 +459,19 @@ def _extract_skinning(
     bone_weights=None,
 ):
     if bool(getattr(node, "_gr_bas_attachment_layer", False)):
-        from types import SimpleNamespace
-
-        return SimpleNamespace(
-            bone_indices=None,
-            bone_weights=None,
-            max_influences=0,
-            skeleton_id=skeleton_id,
-            skin_revision=0,
-            bind_shape_matrix=None,
-            is_skinned=False,
-            warning="BAS attachment layers follow sockets outside body skinning",
-        )
+        if not bool(getattr(node, "is_skin", False)):
+            return SimpleNamespace(
+                bone_indices=None,
+                bone_weights=None,
+                max_influences=0,
+                skeleton_id=skeleton_id,
+                skin_revision=0,
+                bind_shape_matrix=None,
+                is_skinned=False,
+                warning="BAS attachment layers follow sockets outside body skinning",
+            )
+        palette_model = bas_attachment_palette_model_for_node(node)
+        skeleton_id = id(palette_model) if palette_model is not None else skeleton_id
     try:
         from src.core.rendering.skeleton_render_data import extract_skinning_arrays
 
@@ -477,8 +483,6 @@ def _extract_skinning(
             bone_weights=bone_weights,
         )
     except Exception:
-        from types import SimpleNamespace
-
         return SimpleNamespace(
             bone_indices=None,
             bone_weights=None,
@@ -489,6 +493,57 @@ def _extract_skinning(
             is_skinned=False,
             warning="skin adapter unavailable",
         )
+
+
+def bas_attachment_palette_model_for_node(node):
+    """Return an attachment-local pseudo-model for BAS head/gear skin palettes."""
+
+    root = _bas_attachment_root_for_node(node)
+    if root is None:
+        return None
+    cached = getattr(root, "_gr_bas_attachment_palette_model_cache", None)
+    if cached is not None:
+        return cached
+    nodes = _bas_attachment_subtree_nodes(root)
+    if not nodes:
+        return None
+    model = SimpleNamespace(
+        name=str(getattr(root, "name", "") or "bas_attachment"),
+        supermodel=str(getattr(root, "supermodel", "") or ""),
+        anim_scale=float(getattr(root, "anim_scale", 1.0) or 1.0),
+        root_node=root,
+        all_nodes=lambda: list(nodes),
+        _gr_bas_attachment_palette_model=True,
+    )
+    try:
+        setattr(root, "_gr_bas_attachment_palette_model_cache", model)
+    except Exception:
+        pass
+    return model
+
+
+def mesh_model_matrix_for_node(node, *, anim_pose=None):
+    """Return the world/model matrix a renderer should apply to one mesh node."""
+
+    if bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        root = _bas_attachment_root_for_node(node)
+        if root is not None and bool(getattr(node, "is_skin", False)):
+            return node_world_matrix(root, anim_pose=anim_pose)
+    return node_world_matrix(node, anim_pose=anim_pose)
+
+
+def _bas_attachment_subtree_nodes(root) -> list:
+    nodes = []
+    stack = [root]
+    visited = set()
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        nodes.append(current)
+        stack.extend(reversed(getattr(current, "children", []) or []))
+    return nodes
 
 
 def texture_image_to_rgba8(texture_data: TextureRenderData | None) -> tuple[int, int, bytes] | None:
@@ -809,11 +864,21 @@ def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
         current = getattr(current, "parent", None)
     chain.reverse()
 
+    pose_applies = _bas_attachment_pose_applies_to_root(bas_root, anim_pose)
     last_i = len(chain) - 1
     for index, chain_node in enumerate(chain):
         is_leaf = index == last_i
-        lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
-        rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        pose_node = _pose_node_for_transform(chain_node, anim_pose) if pose_applies else None
+        if pose_node is not None:
+            lx, ly, lz = getattr(pose_node, "position", getattr(chain_node, "position", (0.0, 0.0, 0.0)))
+            if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):
+                lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(pose_node, "rotation", getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0))))
+            if not all(math.isfinite(v) for v in rot):
+                rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        else:
+            lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
         node_rot = _quat_normalize(rot) if is_leaf else _quat_normalize_bind(rot)
         rx, ry, rz = _quat_rotate(parent_orientation, (lx, ly, lz))
         wx += rx
@@ -826,6 +891,39 @@ def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
         scale = 1.0 / math.sqrt(length_sq)
         parent_orientation = [float(v) * scale for v in parent_orientation[:4]]
     return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_orientation[:4])
+
+
+def _bas_attachment_pose_applies_to_root(bas_root, anim_pose) -> bool:
+    if bas_root is None or anim_pose is None:
+        return False
+    try:
+        pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
+        attachment_source_id = int(getattr(bas_root, "_gr_bas_attachment_source_model_id", 0) or 0)
+        if pose_source_id and attachment_source_id and pose_source_id == attachment_source_id:
+            return True
+    except Exception:
+        pass
+    pose_source_name = str(getattr(anim_pose, "_gr_animation_source_model_name", "") or "").strip().lower()
+    attachment_source_name = str(getattr(bas_root, "_gr_bas_attachment_source_model_name", "") or "").strip().lower()
+    return bool(pose_source_name and attachment_source_name and pose_source_name == attachment_source_name)
+
+
+def _pose_node_for_transform(node, anim_pose):
+    if node is None or anim_pose is None:
+        return None
+    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
+    pose_nodes_by_index = getattr(anim_pose, "nodes_by_index", {}) or {}
+    duplicate_node_names = set(getattr(anim_pose, "duplicate_node_names", set()) or set())
+    try:
+        pose_node = pose_nodes_by_index.get(int(getattr(node, "index", -1)))
+    except Exception:
+        pose_node = None
+    if pose_node is not None:
+        return pose_node
+    node_name_key = str(getattr(node, "name", "") or "").lower()
+    if node_name_key and node_name_key not in duplicate_node_names:
+        return pose_nodes.get(node_name_key)
+    return None
 
 
 def _bas_attachment_local_transform(node, bas_root):
