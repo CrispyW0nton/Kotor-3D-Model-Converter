@@ -9,6 +9,13 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-03
+
+- Character Builder auto-fit inspection hardening: Added a headless `inspect_external_model_fit(...)` report for imported character meshes and persisted the report into `kotor_fit_report` / `kotor_normalization.fit_report` metadata during KOTOR-space normalization. The report records fit policy, source/reference bounds, detected humanoid landmark frames, scale basis, confidence/warnings, and the native-KOTOR-skeleton-as-authority contract so the UI can make “Choose KOTOR Base + Load Custom Mesh + Auto-Fit” deterministic and inspectable before binding/export. No roadmap task ID applies.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: GhostRigger MCP/Ghidra backend was reachable via `kotor_binary_ping`; `ghostrigger_model_info` confirmed K1/K2 `pmbam` node, bone, bounding-box, classification, and supermodel facts; `ghostrigger_get_retarget_skeleton_info` confirmed K1 `pmbam` node hierarchy/socket facts; `ghostrigger_list_retarget_animations` confirmed K1 `pmbam` inherits its animation library through `S_KPMF0200`.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_fit_report`; `python -m pytest tests/test_character_builder_template_rig.py tests/test_character_builder_export_preflight.py tests/test_character_builder_skeleton_search.py tests/test_native_skeleton_snapshot.py tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_builder_hardening`; `python -m py_compile src/core/characters/headless_body_workflow.py tests/test_headless_body_workflow.py`.
+
 ## 2026-06-01
 
 - LordVader fork sync and Qt branch release-readiness pass: Merged the latest `partner/qt-ghostrigger` changes, preserved the new split renderer/viewport facades, kept local Character Builder/BAS/retarget/lightsaber work in the recovered tree, made FBX backend selection explicit so Autodesk SDK requests no longer silently fall back to Blender unless a caller opts in, refreshed the README for the Qt branch/modder workflows, and simplified `build.bat` around `requirements.txt` plus the PyInstaller spec. No roadmap task ID applies.

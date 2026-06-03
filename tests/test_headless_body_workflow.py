@@ -2413,3 +2413,130 @@ def test_external_world_position_drives_bone_world_position():
     node.external_world_position = (1.0, 2.0, 3.0)
 
     assert node.bone_world_position() == (1.0, 2.0, 3.0)
+
+
+def _fit_node(
+    name: str,
+    *,
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    parent=None,
+    flags: int = int(md.NodeFlags.HEADER),
+):
+    node = md.ModelNode(name=name, flags=flags)
+    node.position = position
+    if parent is not None:
+        node.parent = parent
+        parent.children.append(node)
+    return node
+
+
+def _fit_humanoid_model(
+    name: str,
+    *,
+    height: float,
+    shoulder_width: float,
+    foot_width: float,
+    mesh_height: float | None = None,
+):
+    root = _fit_node(name)
+    _fit_node("pelvis_g", position=(0.0, 0.0, height * 0.52), parent=root)
+    _fit_node("head_g", position=(0.0, 0.0, height), parent=root)
+    _fit_node("lcollar_g", position=(-shoulder_width * 0.5, 0.0, height * 0.78), parent=root)
+    _fit_node("rcollar_g", position=(shoulder_width * 0.5, 0.0, height * 0.78), parent=root)
+    _fit_node("lfoot_g", position=(-foot_width * 0.5, 0.0, 0.0), parent=root)
+    _fit_node("rfoot_g", position=(foot_width * 0.5, 0.0, 0.0), parent=root)
+    mesh = _fit_node(
+        f"{name}_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    h = float(mesh_height if mesh_height is not None else height)
+    mesh.vertices = [
+        (-shoulder_width * 0.5, -0.05, 0.0),
+        (shoulder_width * 0.5, 0.05, 0.0),
+        (0.0, 0.0, h),
+    ]
+    mesh.faces = [(0, 1, 2)]
+    return md.KotorModel(name=name, root_node=root)
+
+
+def test_external_fit_report_uses_humanoid_landmarks_when_available():
+    source = _fit_humanoid_model(
+        "external_body",
+        height=2.0,
+        shoulder_width=1.0,
+        foot_width=0.5,
+    )
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["scale_basis"] in {"reference_bounds_height", "bone_landmark_height"}
+    assert report["reference"] == "pmbam"
+    assert report["source_frame"]["landmarks"]["head"] == "head_g"
+    assert report["target_frame"]["landmarks"]["head"] == "head_g"
+    assert report["kotor_contract"]["native_skeleton_is_authority"] is True
+    assert report["kotor_contract"]["imported_mesh_role"] == "payload_guest"
+
+
+def test_normalization_persists_fit_report_in_model_metadata():
+    source = _fit_humanoid_model(
+        "external_body",
+        height=2.0,
+        shoulder_width=1.0,
+        foot_width=0.5,
+    )
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    result = wf.normalize_external_model_for_kotor(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "bone_landmark_basis"
+    assert "fit_report" in result
+    assert source.metadata["kotor_fit_report"]["fit_policy"] == "bone_landmark_basis"
+    assert source.metadata["kotor_normalization"]["fit_report"]["reference"] == "pmbam"
+    assert (
+        source.metadata["kotor_fit_report"]["kotor_contract"]["final_dag_source"]
+        == "selected_kotor_base"
+    )
+
+
+def test_external_fit_report_falls_back_to_bounds_when_landmarks_missing():
+    root = _fit_node("import_root")
+    mesh = _fit_node(
+        "body_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [(0.0, 0.0, 0.0), (0.2, 0.0, 0.0), (0.0, 0.2, 3.0)]
+    mesh.faces = [(0, 1, 2)]
+    source = md.KotorModel(name="body", root_node=root)
+
+    report = wf.inspect_external_model_fit(source, game_version="K1")
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "origin_height"
+    assert report["vertical_axis"] == "z"
+    assert any("falling back to bounds" in warning for warning in report["warnings"])

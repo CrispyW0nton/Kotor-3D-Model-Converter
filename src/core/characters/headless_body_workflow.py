@@ -152,6 +152,35 @@ class _HumanoidFitFrame:
     landmarks: Dict[str, str] = field(default_factory=dict)
 
 
+def _vec_as_list(value: Optional[Vec3]) -> Optional[List[float]]:
+    if value is None:
+        return None
+    return [float(value[0]), float(value[1]), float(value[2])]
+
+
+def _bounds_as_lists(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[Dict[str, List[float]]]:
+    if bounds is None:
+        return None
+    bb_min, bb_max = bounds
+    return {"min": _vec_as_list(bb_min) or [], "max": _vec_as_list(bb_max) or []}
+
+
+def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[str, Any]]:
+    if frame is None:
+        return None
+    return {
+        "origin": _vec_as_list(frame.origin),
+        "right": _vec_as_list(frame.right),
+        "forward": _vec_as_list(frame.forward),
+        "up": _vec_as_list(frame.up),
+        "height": float(frame.height),
+        "confidence": float(frame.confidence),
+        "landmarks": dict(frame.landmarks),
+    }
+
+
 # ──────────────────────────────────────────────────────────────────────
 #  Internal loader dispatch
 # ──────────────────────────────────────────────────────────────────────
@@ -539,6 +568,113 @@ def _infer_humanoid_fit_frame(
     )
 
 
+def inspect_external_model_fit(
+    model: Any,
+    *,
+    game_version: str = "K1",
+    target_height: Optional[float] = None,
+    reference_model: Optional[Any] = None,
+    reference_label: str = "",
+) -> Dict[str, Any]:
+    """Return the deterministic auto-fit facts for an external character mesh.
+
+    This function does not mutate *model*.  It exposes the same evidence used by
+    :func:`normalize_external_model_for_kotor`: source bounds, selected KOTOR
+    reference bounds, detected humanoid landmark frames, fallback axis choice,
+    confidence, scale basis, and actionable warnings.  The Character Builder UI
+    can display this report so a modder can understand why an import snapped or
+    rotated the way it did before committing the native KOTOR skeleton build.
+    """
+    bounds = _vertex_bounds(model)
+    if bounds is None:
+        return {
+            "ok": False,
+            "code": "no_vertices",
+            "message": "No vertex bounds were found on the imported mesh.",
+            "fit_policy": "none",
+            "warnings": ["Import contains no renderable vertices to fit."],
+        }
+
+    reference_bounds = _reference_model_fit_bounds(reference_model)
+    source_frame = _infer_humanoid_fit_frame(model, bounds=bounds)
+    target_frame = (
+        _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
+        if reference_model is not None else None
+    )
+    reference_height = _height_from_bounds(reference_bounds)
+
+    bb_min, bb_max = bounds
+    extents = tuple(max(0.0, bb_max[i] - bb_min[i]) for i in range(3))
+    vertical_axis_index = max(range(3), key=lambda i: extents[i])
+    fallback_source_height = max(extents[vertical_axis_index], 1.0e-6)
+    fallback_target_height = float(
+        target_height
+        or reference_height
+        or _kotor_template_humanoid_height(game_version)
+    )
+
+    warnings: List[str] = []
+    if source_frame is None:
+        warnings.append(
+            "Could not detect a complete humanoid landmark frame on the imported mesh; "
+            "falling back to bounds-based axis fitting."
+        )
+    elif source_frame.confidence < 0.75:
+        warnings.append(
+            f"Imported mesh landmark confidence is low ({source_frame.confidence:.2f})."
+        )
+    if reference_model is not None and target_frame is None:
+        warnings.append(
+            "Could not detect a complete humanoid landmark frame on the selected KOTOR base; "
+            "falling back to its bounds."
+        )
+    elif target_frame is not None and target_frame.confidence < 0.75:
+        warnings.append(
+            f"KOTOR base landmark confidence is low ({target_frame.confidence:.2f})."
+        )
+
+    if source_frame is not None and target_frame is not None:
+        target = float(target_height or reference_height or target_frame.height)
+        scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
+        policy = "bone_landmark_basis"
+        source_height = source_frame.height
+        scale_basis = "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height"
+        vertical_axis = "bone_landmarks"
+    else:
+        scale = fallback_target_height / fallback_source_height
+        policy = "selected_reference_bounds" if reference_bounds is not None else "origin_height"
+        source_height = fallback_source_height
+        scale_basis = "bounds_height"
+        vertical_axis = ("x", "y", "z")[vertical_axis_index]
+
+    return {
+        "ok": True,
+        "code": "fit_inspected",
+        "message": f"External mesh fit inspected using {policy}.",
+        "fit_policy": policy,
+        "scale_basis": scale_basis,
+        "scale": float(scale),
+        "source_height": float(source_height),
+        "target_height": float(
+            target_height
+            or reference_height
+            or (target_frame.height if target_frame is not None else fallback_target_height)
+        ),
+        "vertical_axis": vertical_axis,
+        "reference": str(reference_label or getattr(reference_model, "name", "") or ""),
+        "source_bounds": _bounds_as_lists(bounds),
+        "reference_bounds": _bounds_as_lists(reference_bounds),
+        "source_frame": _fit_frame_as_metadata(source_frame),
+        "target_frame": _fit_frame_as_metadata(target_frame),
+        "warnings": warnings,
+        "kotor_contract": {
+            "native_skeleton_is_authority": True,
+            "imported_mesh_role": "payload_guest",
+            "final_dag_source": "selected_kotor_base",
+        },
+    }
+
+
 def _basis_matrix(frame: _HumanoidFitFrame) -> Tuple[Vec3, Vec3, Vec3]:
     return (frame.right, frame.forward, frame.up)
 
@@ -890,6 +1026,13 @@ def normalize_external_model_for_kotor(
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
     )
+    fit_report = inspect_external_model_fit(
+        model,
+        game_version=game_version,
+        target_height=target_height,
+        reference_model=reference_model,
+        reference_label=reference_label,
+    )
 
     if source_frame is not None and target_frame is not None:
         reference_height = _height_from_bounds(reference_bounds)
@@ -939,8 +1082,10 @@ def normalize_external_model_for_kotor(
             "target_fit_landmarks": dict(target_frame.landmarks),
             "source_fit_confidence": source_frame.confidence,
             "target_fit_confidence": target_frame.confidence,
+            "fit_report": fit_report,
         }
         metadata["kotor_normalization"] = result
+        metadata["kotor_fit_report"] = fit_report
         return result
 
     extents = tuple(max(0.0, bb_max[i] - bb_min[i]) for i in range(3))
@@ -1018,8 +1163,10 @@ def normalize_external_model_for_kotor(
         "target_ground_z": target_ground_z,
         "external_world_positions_fit": True,
         "fit_policy": "selected_reference_bounds" if reference_bounds is not None else "origin_height",
+        "fit_report": fit_report,
     }
     metadata["kotor_normalization"] = result
+    metadata["kotor_fit_report"] = fit_report
     return result
 
 
@@ -3892,6 +4039,7 @@ __all__ = [
     "default_export_formats_for_mode",
     "export_scene",
     "generate_skeleton",
+    "inspect_external_model_fit",
     "load_body",
     "load_file_filter",
     "motion_assignment_options",
