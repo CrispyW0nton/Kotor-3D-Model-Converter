@@ -2852,7 +2852,14 @@ def test_normalization_persists_fit_report_in_model_metadata():
         source.metadata["kotor_fit_report"]["auto_fit_report"]["scale_factor"]
         == pytest.approx(0.8)
     )
+    fitted = source.metadata["kotor_fit_report"]["fitted_visual_overlay"]
+    assert fitted["coordinate_space"] == "kotor_world_after_fit"
+    assert fitted["source"]["origin"] == pytest.approx(fitted["target"]["origin"])
+    assert fitted["source"]["axes"]["forward"]["axis_label"] == "+y"
+    assert fitted["source"]["axes"]["up"]["axis_label"] == "+z"
+    assert fitted["source"]["bounds"]["max"][2] == pytest.approx(1.6)
     assert source.metadata["kotor_normalization"]["fit_report"]["reference"] == "pmbam"
+    assert source.metadata["kotor_normalization"]["fitted_visual_overlay"] == fitted
     assert (
         source.metadata["kotor_fit_report"]["kotor_contract"]["final_dag_source"]
         == "selected_kotor_base"

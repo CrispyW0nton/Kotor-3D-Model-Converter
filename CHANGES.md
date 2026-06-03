@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder fitted auto-fit overlay: normalization now persists a `fitted_visual_overlay` alongside the pre-fit `visual_overlay`, showing the imported mesh frame after it has been transformed into KOTOR world space against the selected native reference. This gives the viewport a deterministic source-vs-target overlay contract without changing the native skeleton authority rule. Roadmap task: `T1205` / Phase 2 launch hardening.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: Existing native-skeleton snapshot/autofit contracts plus reachable K1/K2 MCP installation state; no new engine binary assumptions were introduced.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_normalization_persists_fit_report_in_model_metadata tests/test_headless_body_workflow.py::test_external_fit_report_uses_humanoid_landmarks_when_available -q --basetemp .pytest_tmp_character_fitted_overlay`; `python -m py_compile src/core/characters/headless_body_workflow.py tests/test_headless_body_workflow.py`.
+
 - Character Builder auto-fit transparency: `inspect_external_model_fit(...)` now includes viewport-ready `visual_overlay` evidence with source/target bounds, frame origins, axis arrows, and landmark positions; the inspector now surfaces height/ground basis and landmark names so modders can understand why an imported mesh snapped, scaled, or rotated before binding the native KOTOR template skeleton. Roadmap task: `T1205` / Phase 2 launch hardening.
   Affected areas: `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_inspector_panel.py`, `tests/test_headless_body_workflow.py`, `tests/test_character_builder_skeleton_search.py`.
   Ground truth used: K1/K2 installations loaded through MCP and AgentDecompile/Ghidra backend reachable; detailed MDL compare tools were not exposed in this session, so this slice only improves fit-report evidence and does not introduce new engine binary assumptions.

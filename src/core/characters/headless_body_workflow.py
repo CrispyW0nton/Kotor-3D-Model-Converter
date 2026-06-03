@@ -190,29 +190,51 @@ def _fit_frame_visual_overlay(
     model: Any,
     frame: Optional[_HumanoidFitFrame],
     bounds: Optional[Tuple[Vec3, Vec3]],
+    *,
+    transform_point=None,
+    transform_direction=None,
+    axis_length_scale: float = 1.0,
 ) -> Dict[str, Any]:
     """Return viewport-friendly fit-frame evidence without mutating *model*."""
 
     overlay: Dict[str, Any] = {
-        "bounds": _bounds_as_lists(bounds),
-        "origin": _vec_as_list(frame.origin) if frame is not None else None,
+        "bounds": (
+            _bounds_as_lists(_transform_bounds(bounds, transform_point))
+            if transform_point is not None
+            else _bounds_as_lists(bounds)
+        ),
+        "origin": (
+            _vec_as_list(transform_point(frame.origin))
+            if frame is not None and transform_point is not None
+            else (_vec_as_list(frame.origin) if frame is not None else None)
+        ),
         "axes": {},
         "landmarks": [],
     }
     if frame is None:
         return overlay
 
-    axis_length = max(float(frame.height) * 0.25, 0.05)
+    axis_length = max(float(frame.height) * float(axis_length_scale) * 0.25, 0.05)
     axes: Dict[str, Dict[str, Any]] = {}
     for name, vector in (
         ("right", frame.right),
         ("forward", frame.forward),
         ("up", frame.up),
     ):
-        end = _vec_add(frame.origin, _vec_scale(vector, axis_length))
+        axis_vector = (
+            transform_direction(vector)
+            if transform_direction is not None
+            else vector
+        )
+        origin = (
+            transform_point(frame.origin)
+            if transform_point is not None
+            else frame.origin
+        )
+        end = _vec_add(origin, _vec_scale(axis_vector, axis_length))
         axes[name] = {
-            "axis_label": _axis_label_from_vector(vector),
-            "vector": _vec_as_list(vector),
+            "axis_label": _axis_label_from_vector(axis_vector),
+            "vector": _vec_as_list(axis_vector),
             "end": _vec_as_list(end),
         }
     overlay["axes"] = axes
@@ -226,13 +248,38 @@ def _fit_frame_visual_overlay(
         hit = named.get(clean)
         if hit is None:
             continue
+        position = (
+            transform_point(hit[1])
+            if transform_point is not None
+            else hit[1]
+        )
         landmarks.append({
             "role": str(role),
             "name": str(hit[0]),
-            "position": _vec_as_list(hit[1]),
+            "position": _vec_as_list(position),
         })
     overlay["landmarks"] = landmarks
     return overlay
+
+
+def _transform_bounds(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    transform_point,
+) -> Optional[Tuple[Vec3, Vec3]]:
+    if bounds is None or transform_point is None:
+        return bounds
+    bb_min, bb_max = bounds
+    points: List[Vec3] = []
+    for x in (bb_min[0], bb_max[0]):
+        for y in (bb_min[1], bb_max[1]):
+            for z in (bb_min[2], bb_max[2]):
+                points.append(transform_point((float(x), float(y), float(z))))
+    if not points:
+        return None
+    return (
+        tuple(min(point[i] for point in points) for i in range(3)),  # type: ignore[return-value]
+        tuple(max(point[i] for point in points) for i in range(3)),  # type: ignore[return-value]
+    )
 
 
 def _axis_label_from_vector(value: Optional[Vec3]) -> str:
@@ -1467,6 +1514,26 @@ def normalize_external_model_for_kotor(
             rel = _vec_scale(point, scale)
             return _mat_vec(rotation, rel)
 
+        fitted_visual_overlay = {
+            "coordinate_space": "kotor_world_after_fit",
+            "source": _fit_frame_visual_overlay(
+                model,
+                transform_source_frame,
+                bounds,
+                transform_point=transform_point,
+                transform_direction=transform_direction,
+                axis_length_scale=scale,
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                transform_target_frame,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        }
+        if isinstance(fit_report, dict):
+            fit_report = dict(fit_report)
+            fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+
         _apply_point_transform_to_model(
             model,
             transform_point=transform_point,
@@ -1502,6 +1569,7 @@ def normalize_external_model_for_kotor(
             "source_fit_confidence": transform_source_frame.confidence,
             "target_fit_confidence": transform_target_frame.confidence,
             "fit_report": fit_report,
+            "fitted_visual_overlay": fitted_visual_overlay,
         }
         metadata["kotor_normalization"] = result
         metadata["kotor_fit_report"] = fit_report
@@ -1557,6 +1625,21 @@ def normalize_external_model_for_kotor(
             offset=(0.0, 0.0, 0.0),
         )
 
+    fitted_visual_overlay = {
+        "coordinate_space": "kotor_world_after_fit",
+        "source": _fit_frame_visual_overlay(
+            model,
+            None,
+            bounds,
+            transform_point=transform_point,
+            axis_length_scale=scale,
+        ),
+        "target": None,
+    }
+    if isinstance(fit_report, dict):
+        fit_report = dict(fit_report)
+        fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+
     _apply_point_transform_to_model(
         model,
         transform_point=transform_point,
@@ -1583,6 +1666,7 @@ def normalize_external_model_for_kotor(
         "external_world_positions_fit": True,
         "fit_policy": "selected_reference_bounds" if reference_bounds is not None else "origin_height",
         "fit_report": fit_report,
+        "fitted_visual_overlay": fitted_visual_overlay,
     }
     metadata["kotor_normalization"] = result
     metadata["kotor_fit_report"] = fit_report
