@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder Ghidra findings ledger: Added `docs/ghidra_findings.md` as the engine-evidence ledger for Character Builder hardening, recording verified K1/K2 Ghidra binary metadata, MCP-confirmed `pmbam` native body facts, supermodel animation inheritance facts, and pending MDL-loader/socket/skin reverse-engineering tasks without inventing unverified function addresses. No roadmap task ID applies.
+  Affected areas: `docs/ghidra_findings.md`.
+  Ground truth used: GhostRigger MCP `kotor_binary_info`, `ghostrigger_model_info`, `ghostrigger_list_retarget_animations`, and `ghostrigger_audit`; broad `kotor_search_symbols` and `kotor_engine_script` attempts timed out, so function-address findings remain explicitly pending.
+  Verification: `git diff --check`.
+
 - Character Builder animation-library diagnostics: Instrumented `available_animation_library(...)` with stable diagnostic reason codes/details for empty supermodel libraries, including resolver-not-configured and missing-supermodel paths, and surfaced those diagnostics in the Step 3 Animation Library inspector label. Valid inherited libraries continue to populate standard KOTOR clips like `pause1`, `walk`, `run`, and `tlknorm`. No roadmap task ID applies.
   Affected areas: `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_inspector_panel.py`, `src/gui/panels/qt_character_builder_panel.py`, `tests/test_headless_body_workflow.py`, `tests/test_character_builder_skeleton_search.py`.
   Ground truth used: GhostRigger MCP `ghostrigger_list_retarget_animations` confirmed K1 `pmbam` has 0 local clips and 268 inherited clips through `S_KPMF0200 -> S_Female01 -> S_Male02 -> S_Male01`; K2 `pmbam` has 0 local clips and 456 inherited clips through `S_Female02 -> S_Female01 -> S_Male02 -> S_Male01`, including standard preview clips such as `pause1`, `run`, and `tlknorm`.
