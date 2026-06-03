@@ -2643,6 +2643,18 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     assert report["reference"] == "pmbam"
     assert report["source_frame"]["landmarks"]["head"] == "head_g"
     assert report["target_frame"]["landmarks"]["head"] == "head_g"
+    assert report["source_forward_axis"] == "+y"
+    assert report["source_up_axis"] == "+z"
+    assert report["target_forward_axis"] == "+y"
+    assert report["target_up_axis"] == "+z"
+    assert report["scale_factor"] == pytest.approx(0.8)
+    assert report["height_source"] == "landmarks"
+    assert report["ground_origin_basis"] == "feet"
+    assert report["fallback_used"] is False
+    assert report["confidence"] == pytest.approx(0.95)
+    assert "source:head=head_g" in report["used_landmarks"]
+    assert report["auto_fit_report"]["scale_factor"] == pytest.approx(0.8)
+    assert report["auto_fit_report"]["used_landmarks"] == report["used_landmarks"]
     assert report["kotor_contract"]["native_skeleton_is_authority"] is True
     assert report["kotor_contract"]["imported_mesh_role"] == "payload_guest"
 
@@ -2672,6 +2684,14 @@ def test_normalization_persists_fit_report_in_model_metadata():
     assert result["fit_policy"] == "bone_landmark_basis"
     assert "fit_report" in result
     assert source.metadata["kotor_fit_report"]["fit_policy"] == "bone_landmark_basis"
+    assert (
+        source.metadata["kotor_fit_report"]["auto_fit_report"]["source_forward_axis"]
+        == "+y"
+    )
+    assert (
+        source.metadata["kotor_fit_report"]["auto_fit_report"]["scale_factor"]
+        == pytest.approx(0.8)
+    )
     assert source.metadata["kotor_normalization"]["fit_report"]["reference"] == "pmbam"
     assert (
         source.metadata["kotor_fit_report"]["kotor_contract"]["final_dag_source"]
@@ -2695,4 +2715,9 @@ def test_external_fit_report_falls_back_to_bounds_when_landmarks_missing():
     assert report["ok"] is True
     assert report["fit_policy"] == "origin_height"
     assert report["vertical_axis"] == "z"
+    assert report["auto_fit_report"]["fallback_used"] is True
+    assert report["auto_fit_report"]["height_source"] == "bounds"
+    assert report["auto_fit_report"]["ground_origin_basis"] == "bounds_bottom"
+    assert report["auto_fit_report"]["source_forward_axis"] == "unknown"
+    assert report["auto_fit_report"]["source_up_axis"] == "+z"
     assert any("falling back to bounds" in warning for warning in report["warnings"])

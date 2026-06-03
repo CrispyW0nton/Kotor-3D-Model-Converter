@@ -99,6 +99,19 @@ def test_character_builder_import_fit_report_is_visible_in_inspector():
             "reference": "K1 / body / pmbam",
             "source_frame": {"confidence": 0.81},
             "target_frame": {"confidence": 0.94},
+            "auto_fit_report": {
+                "source_forward_axis": "+y",
+                "source_up_axis": "+z",
+                "target_forward_axis": "+y",
+                "target_up_axis": "+z",
+                "scale_factor": 0.42,
+                "height_source": "landmarks",
+                "ground_origin_basis": "feet",
+                "used_landmarks": ["source:head=head_g", "target:head=head_g"],
+                "confidence": 0.81,
+                "fallback_used": False,
+                "notes": "",
+            },
             "warnings": ["Imported mesh landmark confidence is low (0.81)."],
             "kotor_contract": {
                 "native_skeleton_is_authority": True,
@@ -117,6 +130,9 @@ def test_character_builder_import_fit_report_is_visible_in_inspector():
         assert "bone_landmark_basis" in text
         assert "42.0%" in text
         assert "K1 / body / pmbam" in text
+        assert "source fwd +y, up +z" in text
+        assert "target fwd +y, up +z" in text
+        assert "Auto-fit confidence: 0.81" in text
         assert "source 0.81" in text
         assert "selected KOTOR base" in text
         assert "Imported mesh landmark confidence is low" in text

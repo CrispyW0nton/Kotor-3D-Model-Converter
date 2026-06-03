@@ -37,6 +37,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+try:
+    from src.core.characters.character_autofit_report import AutoFitReport
+except ImportError:  # pragma: no cover - package-relative fallback
+    from core.characters.character_autofit_report import AutoFitReport  # type: ignore
+
 log = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────
@@ -179,6 +184,118 @@ def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[
         "confidence": float(frame.confidence),
         "landmarks": dict(frame.landmarks),
     }
+
+
+def _axis_label_from_vector(value: Optional[Vec3]) -> str:
+    """Return the signed dominant world axis for a unit-ish vector."""
+    if value is None:
+        return "unknown"
+    try:
+        components = (float(value[0]), float(value[1]), float(value[2]))
+    except Exception:
+        return "unknown"
+    magnitudes = [abs(v) for v in components]
+    axis_index = max(range(3), key=lambda i: magnitudes[i])
+    if magnitudes[axis_index] <= 1.0e-8:
+        return "unknown"
+    sign = "+" if components[axis_index] >= 0.0 else "-"
+    return f"{sign}{('x', 'y', 'z')[axis_index]}"
+
+
+def _axis_label_from_index(index: int) -> str:
+    try:
+        return f"+{('x', 'y', 'z')[int(index)]}"
+    except Exception:
+        return "unknown"
+
+
+def _ground_origin_basis(frame: Optional[_HumanoidFitFrame]) -> str:
+    if frame is None:
+        return "bounds_bottom"
+    landmarks = frame.landmarks or {}
+    if landmarks.get("left_foot") and landmarks.get("right_foot"):
+        return "feet"
+    if landmarks.get("pelvis"):
+        return "hips"
+    return "bounds_bottom"
+
+
+def _used_landmark_labels(
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+) -> Tuple[str, ...]:
+    labels: List[str] = []
+    for prefix, frame in (("source", source_frame), ("target", target_frame)):
+        if frame is None:
+            continue
+        for role, name in sorted((frame.landmarks or {}).items()):
+            labels.append(f"{prefix}:{role}={name}")
+    return tuple(labels)
+
+
+def _auto_fit_confidence(
+    *,
+    policy: str,
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+) -> float:
+    if policy == "bone_landmark_basis" and source_frame is not None and target_frame is not None:
+        return min(float(source_frame.confidence), float(target_frame.confidence))
+    if source_frame is not None:
+        return min(0.5, max(0.0, float(source_frame.confidence) * 0.5))
+    return 0.35
+
+
+def _make_auto_fit_report(
+    *,
+    policy: str,
+    scale: float,
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+    vertical_axis_index: int,
+    warnings: Sequence[str],
+) -> AutoFitReport:
+    fallback_used = policy != "bone_landmark_basis"
+    notes = "; ".join(str(w) for w in warnings if str(w))
+    if fallback_used and not notes:
+        notes = "Used bounds-based fitting because a complete landmark frame was unavailable."
+    source_forward_axis = (
+        _axis_label_from_vector(source_frame.forward)
+        if source_frame is not None and not fallback_used
+        else "unknown"
+    )
+    source_up_axis = (
+        _axis_label_from_vector(source_frame.up)
+        if source_frame is not None and not fallback_used
+        else _axis_label_from_index(vertical_axis_index)
+    )
+    target_forward_axis = (
+        _axis_label_from_vector(target_frame.forward)
+        if target_frame is not None
+        else "+y"
+    )
+    target_up_axis = (
+        _axis_label_from_vector(target_frame.up)
+        if target_frame is not None
+        else "+z"
+    )
+    return AutoFitReport(
+        source_forward_axis=source_forward_axis,
+        source_up_axis=source_up_axis,
+        target_forward_axis=target_forward_axis,
+        target_up_axis=target_up_axis,
+        scale_factor=float(scale),
+        height_source="bounds" if fallback_used else "landmarks",
+        ground_origin_basis=_ground_origin_basis(None if fallback_used else source_frame),
+        used_landmarks=_used_landmark_labels(source_frame, target_frame),
+        confidence=_auto_fit_confidence(
+            policy=policy,
+            source_frame=source_frame,
+            target_frame=target_frame,
+        ),
+        fallback_used=fallback_used,
+        notes=notes,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -587,11 +704,35 @@ def inspect_external_model_fit(
     """
     bounds = _vertex_bounds(model)
     if bounds is None:
+        auto_fit_report = AutoFitReport(
+            source_forward_axis="unknown",
+            source_up_axis="unknown",
+            target_forward_axis="+y",
+            target_up_axis="+z",
+            scale_factor=1.0,
+            height_source="bounds",
+            ground_origin_basis="bounds_bottom",
+            confidence=0.0,
+            fallback_used=True,
+            notes="Import contains no renderable vertices to fit.",
+        ).to_dict()
         return {
             "ok": False,
             "code": "no_vertices",
             "message": "No vertex bounds were found on the imported mesh.",
             "fit_policy": "none",
+            "source_forward_axis": auto_fit_report["source_forward_axis"],
+            "source_up_axis": auto_fit_report["source_up_axis"],
+            "target_forward_axis": auto_fit_report["target_forward_axis"],
+            "target_up_axis": auto_fit_report["target_up_axis"],
+            "scale_factor": auto_fit_report["scale_factor"],
+            "height_source": auto_fit_report["height_source"],
+            "ground_origin_basis": auto_fit_report["ground_origin_basis"],
+            "used_landmarks": auto_fit_report["used_landmarks"],
+            "confidence": auto_fit_report["confidence"],
+            "fallback_used": auto_fit_report["fallback_used"],
+            "notes": auto_fit_report["notes"],
+            "auto_fit_report": auto_fit_report,
             "warnings": ["Import contains no renderable vertices to fit."],
         }
 
@@ -647,6 +788,16 @@ def inspect_external_model_fit(
         scale_basis = "bounds_height"
         vertical_axis = ("x", "y", "z")[vertical_axis_index]
 
+    auto_fit = _make_auto_fit_report(
+        policy=policy,
+        scale=scale,
+        source_frame=source_frame,
+        target_frame=target_frame,
+        vertical_axis_index=vertical_axis_index,
+        warnings=warnings,
+    )
+    auto_fit_report = auto_fit.to_dict()
+
     return {
         "ok": True,
         "code": "fit_inspected",
@@ -666,6 +817,18 @@ def inspect_external_model_fit(
         "reference_bounds": _bounds_as_lists(reference_bounds),
         "source_frame": _fit_frame_as_metadata(source_frame),
         "target_frame": _fit_frame_as_metadata(target_frame),
+        "source_forward_axis": auto_fit.source_forward_axis,
+        "source_up_axis": auto_fit.source_up_axis,
+        "target_forward_axis": auto_fit.target_forward_axis,
+        "target_up_axis": auto_fit.target_up_axis,
+        "scale_factor": auto_fit.scale_factor,
+        "height_source": auto_fit.height_source,
+        "ground_origin_basis": auto_fit.ground_origin_basis,
+        "used_landmarks": auto_fit_report["used_landmarks"],
+        "confidence": auto_fit.confidence,
+        "fallback_used": auto_fit.fallback_used,
+        "notes": auto_fit.notes,
+        "auto_fit_report": auto_fit_report,
         "warnings": warnings,
         "kotor_contract": {
             "native_skeleton_is_authority": True,

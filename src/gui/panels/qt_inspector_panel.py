@@ -2230,6 +2230,11 @@ class QtInspectorPanel(QtWidgets.QWidget):
         reference = str(report.get("reference") or "selected KOTOR base")
         source_frame = report.get("source_frame") if isinstance(report.get("source_frame"), Mapping) else {}
         target_frame = report.get("target_frame") if isinstance(report.get("target_frame"), Mapping) else {}
+        auto_report = (
+            report.get("auto_fit_report")
+            if isinstance(report.get("auto_fit_report"), Mapping)
+            else report
+        )
 
         confidence_parts: List[str] = []
         for label_name, frame in (("source", source_frame), ("target", target_frame)):
@@ -2245,6 +2250,26 @@ class QtInspectorPanel(QtWidgets.QWidget):
             f"Auto-fit: {policy}, scale {scale_text}, {basis}.",
             f"Reference: {reference}.",
         ]
+        if isinstance(auto_report, Mapping):
+            source_forward = str(auto_report.get("source_forward_axis") or "unknown")
+            source_up = str(auto_report.get("source_up_axis") or "unknown")
+            target_forward = str(auto_report.get("target_forward_axis") or "unknown")
+            target_up = str(auto_report.get("target_up_axis") or "unknown")
+            lines.append(
+                "Axes: "
+                f"source fwd {source_forward}, up {source_up}; "
+                f"target fwd {target_forward}, up {target_up}."
+            )
+            confidence = auto_report.get("confidence")
+            if confidence is not None:
+                try:
+                    lines.append(f"Auto-fit confidence: {float(confidence):.2f}.")
+                except Exception:
+                    pass
+            fallback_used = bool(auto_report.get("fallback_used"))
+            if fallback_used:
+                note = str(auto_report.get("notes") or auto_report.get("ground_origin_basis") or "bounds fallback")
+                lines.append(f"Fallback fit used: {note}")
         if confidence_parts:
             lines.append("Landmark confidence: " + ", ".join(confidence_parts) + ".")
         contract = report.get("kotor_contract")
