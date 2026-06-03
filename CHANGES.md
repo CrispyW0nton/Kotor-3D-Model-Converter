@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder auto-fit transparency: `inspect_external_model_fit(...)` now includes viewport-ready `visual_overlay` evidence with source/target bounds, frame origins, axis arrows, and landmark positions; the inspector now surfaces height/ground basis and landmark names so modders can understand why an imported mesh snapped, scaled, or rotated before binding the native KOTOR template skeleton. Roadmap task: `T1205` / Phase 2 launch hardening.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_inspector_panel.py`, `tests/test_headless_body_workflow.py`, `tests/test_character_builder_skeleton_search.py`.
+  Ground truth used: K1/K2 installations loaded through MCP and AgentDecompile/Ghidra backend reachable; detailed MDL compare tools were not exposed in this session, so this slice only improves fit-report evidence and does not introduce new engine binary assumptions.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_external_fit_report_uses_humanoid_landmarks_when_available tests/test_headless_body_workflow.py::test_external_fit_report_falls_back_to_bounds_when_landmarks_missing tests/test_character_builder_skeleton_search.py::test_character_builder_import_fit_report_is_visible_in_inspector -q --basetemp .pytest_tmp_character_autofit_overlay`; `python -m py_compile src/core/characters/headless_body_workflow.py src/gui/panels/qt_inspector_panel.py tests/test_headless_body_workflow.py tests/test_character_builder_skeleton_search.py`.
+
 - Character Builder legacy AcuRig gating: all body and hand AcuRig UI actions are now behind the explicit legacy/experimental opt-in flag, and the inspector labels those controls as legacy so the native KOTOR template path remains the default game-export workflow. Roadmap task: `T1205`.
   Affected areas: `src/gui/panels/qt_character_builder_panel.py`, `src/gui/panels/qt_inspector_panel.py`, `tests/test_character_builder_template_rig.py`.
   Ground truth used: Existing native-skeleton snapshot/export-preflight evidence remains the contract; this change only gates legacy UI paths and introduces no new engine-format assumptions.

@@ -186,6 +186,55 @@ def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[
     }
 
 
+def _fit_frame_visual_overlay(
+    model: Any,
+    frame: Optional[_HumanoidFitFrame],
+    bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Dict[str, Any]:
+    """Return viewport-friendly fit-frame evidence without mutating *model*."""
+
+    overlay: Dict[str, Any] = {
+        "bounds": _bounds_as_lists(bounds),
+        "origin": _vec_as_list(frame.origin) if frame is not None else None,
+        "axes": {},
+        "landmarks": [],
+    }
+    if frame is None:
+        return overlay
+
+    axis_length = max(float(frame.height) * 0.25, 0.05)
+    axes: Dict[str, Dict[str, Any]] = {}
+    for name, vector in (
+        ("right", frame.right),
+        ("forward", frame.forward),
+        ("up", frame.up),
+    ):
+        end = _vec_add(frame.origin, _vec_scale(vector, axis_length))
+        axes[name] = {
+            "axis_label": _axis_label_from_vector(vector),
+            "vector": _vec_as_list(vector),
+            "end": _vec_as_list(end),
+        }
+    overlay["axes"] = axes
+
+    named = _named_positions(model)
+    landmarks: List[Dict[str, Any]] = []
+    for role, node_name in sorted((frame.landmarks or {}).items()):
+        if role == "side_pair":
+            continue
+        clean = _clean_landmark_name(node_name)
+        hit = named.get(clean)
+        if hit is None:
+            continue
+        landmarks.append({
+            "role": str(role),
+            "name": str(hit[0]),
+            "position": _vec_as_list(hit[1]),
+        })
+    overlay["landmarks"] = landmarks
+    return overlay
+
+
 def _axis_label_from_vector(value: Optional[Vec3]) -> str:
     """Return the signed dominant world axis for a unit-ish vector."""
     if value is None:
@@ -865,6 +914,16 @@ def inspect_external_model_fit(
             "fallback_used": auto_fit_report["fallback_used"],
             "notes": auto_fit_report["notes"],
             "auto_fit_report": auto_fit_report,
+            "visual_overlay": {
+                "coordinate_space": "source_pre_fit_and_kotor_reference",
+                "source": {
+                    "bounds": None,
+                    "origin": None,
+                    "axes": {},
+                    "landmarks": [],
+                },
+                "target": None,
+            },
             "warnings": ["Import contains no renderable vertices to fit."],
         }
 
@@ -986,6 +1045,19 @@ def inspect_external_model_fit(
         "fallback_used": auto_fit.fallback_used,
         "notes": auto_fit.notes,
         "auto_fit_report": auto_fit_report,
+        "visual_overlay": {
+            "coordinate_space": "source_pre_fit_and_kotor_reference",
+            "source": _fit_frame_visual_overlay(
+                model,
+                report_source_frame,
+                bounds,
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                report_target_frame,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        },
         "warnings": warnings,
         "kotor_contract": {
             "native_skeleton_is_authority": True,

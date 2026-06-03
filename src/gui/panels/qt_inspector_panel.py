@@ -2327,6 +2327,23 @@ class QtInspectorPanel(QtWidgets.QWidget):
             if fallback_used:
                 note = str(auto_report.get("notes") or auto_report.get("ground_origin_basis") or "bounds fallback")
                 lines.append(f"Fallback fit used: {note}")
+            height_source = str(auto_report.get("height_source") or "")
+            ground_basis = str(auto_report.get("ground_origin_basis") or "")
+            if height_source or ground_basis:
+                lines.append(
+                    "Height/ground: "
+                    f"{height_source or 'unknown height'}, "
+                    f"{ground_basis or 'unknown ground'}."
+                )
+            landmarks = [
+                str(value)
+                for value in (auto_report.get("used_landmarks") or [])
+                if str(value)
+            ]
+            if landmarks:
+                shown = ", ".join(landmarks[:6])
+                suffix = "" if len(landmarks) <= 6 else f", +{len(landmarks) - 6} more"
+                lines.append(f"Landmarks: {shown}{suffix}.")
         if confidence_parts:
             lines.append("Landmark confidence: " + ", ".join(confidence_parts) + ".")
         contract = report.get("kotor_contract")

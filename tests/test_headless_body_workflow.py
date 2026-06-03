@@ -2803,6 +2803,20 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     assert report["auto_fit_report"]["used_landmarks"] == report["used_landmarks"]
     assert report["kotor_contract"]["native_skeleton_is_authority"] is True
     assert report["kotor_contract"]["imported_mesh_role"] == "payload_guest"
+    overlay = report["visual_overlay"]
+    assert overlay["coordinate_space"] == "source_pre_fit_and_kotor_reference"
+    assert overlay["source"]["origin"] == pytest.approx([-0.0, 0.0, 0.0])
+    assert overlay["source"]["axes"]["forward"]["axis_label"] == "+y"
+    assert overlay["source"]["axes"]["up"]["axis_label"] == "+z"
+    assert any(
+        item["role"] == "head" and item["name"] == "head_g"
+        for item in overlay["source"]["landmarks"]
+    )
+    assert overlay["target"]["axes"]["forward"]["axis_label"] == "+y"
+    assert any(
+        item["role"] == "left_foot" and item["name"] == "lfoot_g"
+        for item in overlay["target"]["landmarks"]
+    )
 
 
 def test_normalization_persists_fit_report_in_model_metadata():
@@ -2866,6 +2880,9 @@ def test_external_fit_report_falls_back_to_bounds_when_landmarks_missing():
     assert report["auto_fit_report"]["ground_origin_basis"] == "bounds_bottom"
     assert report["auto_fit_report"]["source_forward_axis"] == "unknown"
     assert report["auto_fit_report"]["source_up_axis"] == "+z"
+    assert report["visual_overlay"]["source"]["bounds"]["max"] == pytest.approx([0.2, 0.2, 3.0])
+    assert report["visual_overlay"]["source"]["axes"] == {}
+    assert report["visual_overlay"]["source"]["landmarks"] == []
     assert any("falling back to bounds" in warning for warning in report["warnings"])
 
 

@@ -133,6 +133,8 @@ def test_character_builder_import_fit_report_is_visible_in_inspector():
         assert "source fwd +y, up +z" in text
         assert "target fwd +y, up +z" in text
         assert "Auto-fit confidence: 0.81" in text
+        assert "Height/ground: landmarks, feet" in text
+        assert "Landmarks: source:head=head_g, target:head=head_g" in text
         assert "source 0.81" in text
         assert "selected KOTOR base" in text
         assert "Imported mesh landmark confidence is low" in text
