@@ -19,6 +19,7 @@ from src.core.validation.validation_bus import (
     ValidationSubsystem,
 )
 
+from .kotor_constants import CHARACTER_EXPORT_EVIDENCE
 from .native_skeleton import (
     KOTOR_NATIVE_RESREF_MAX_LEN,
     NativeNodeSnapshot,
@@ -446,6 +447,8 @@ def _issue(
     fix_hint: str | None = None,
     details: dict[str, Any] | None = None,
 ) -> ValidationIssue:
+    payload = dict(details or {})
+    payload.setdefault("engine_evidence", CHARACTER_EXPORT_EVIDENCE)
     return ValidationIssue(
         severity=ValidationSeverity(severity),
         subsystem=ValidationSubsystem.CHARACTER,
@@ -453,7 +456,7 @@ def _issue(
         message=message,
         navigation=navigation,
         fix_hint=fix_hint,
-        details=details or {},
+        details=payload,
     )
 
 

@@ -11,8 +11,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
-
-KOTOR_NATIVE_RESREF_MAX_LEN = 16
+from .kotor_constants import KOTOR_NATIVE_RESREF_MAX_LEN
 
 
 KOTOR_SOCKET_CATEGORIES: dict[str, str] = {

@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder export preflight evidence metadata: Added `src/core/characters/kotor_constants.py` for Character Builder engine-evidence anchors and attached that evidence to every `character.export_preflight` issue, so preflight failures cite `docs/ghidra_findings.md`, current MCP fixture sources, the native-KOTOR-skeleton contract, and the pending Ghidra gaps instead of bare validation text. No roadmap task ID applies.
+  Affected areas: `src/core/characters/kotor_constants.py`, `src/core/characters/native_skeleton.py`, `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: GhostRigger MCP `ghostrigger_model_info` and `ghostrigger_list_retarget_animations` for K1/K2 `pmbam` refreshed in this working session.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py tests/test_native_skeleton_snapshot.py -q --basetemp .pytest_tmp_character_preflight_evidence`; `python -m py_compile src/core/characters/kotor_constants.py src/core/characters/native_skeleton.py src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder Ghidra findings ledger: Added `docs/ghidra_findings.md` as the engine-evidence ledger for Character Builder hardening, recording verified K1/K2 Ghidra binary metadata, MCP-confirmed `pmbam` native body facts, supermodel animation inheritance facts, and pending MDL-loader/socket/skin reverse-engineering tasks without inventing unverified function addresses. No roadmap task ID applies.
   Affected areas: `docs/ghidra_findings.md`.
   Ground truth used: GhostRigger MCP `kotor_binary_info`, `ghostrigger_model_info`, `ghostrigger_list_retarget_animations`, and `ghostrigger_audit`; broad `kotor_search_symbols` and `kotor_engine_script` attempts timed out, so function-address findings remain explicitly pending.
