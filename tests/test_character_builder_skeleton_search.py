@@ -140,6 +140,27 @@ def test_character_builder_import_fit_report_is_visible_in_inspector():
         inspector.deleteLater()
 
 
+def test_character_builder_refit_to_selected_base_button_emits_signal():
+    _qapp()
+    inspector = QtInspectorPanel()
+    received: list[bool] = []
+    try:
+        inspector.refitToSelectedBaseRequested.connect(lambda: received.append(True))
+
+        button = inspector.findChild(
+            QtWidgets.QPushButton,
+            "CharacterBuilderRefitToSelectedBaseButton",
+        )
+        assert button is not None
+        assert button.text() == "Re-fit to Selected Base"
+
+        button.click()
+
+        assert received == [True]
+    finally:
+        inspector.deleteLater()
+
+
 def test_character_builder_animation_library_diagnostics_are_visible():
     _qapp()
     inspector = QtInspectorPanel()

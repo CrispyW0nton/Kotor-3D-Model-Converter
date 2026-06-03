@@ -818,6 +818,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "fitAdjustmentResetRequested"):
             self.inspector.fitAdjustmentResetRequested.connect(
                 self._on_fit_adjustment_reset_requested)
+        if hasattr(self.inspector, "refitToSelectedBaseRequested"):
+            self.inspector.refitToSelectedBaseRequested.connect(
+                self._on_refit_to_selected_base_requested)
         self.inspector.validateRequested.connect(self._on_validate_requested)
         self.inspector.checkModelRequested.connect(self._on_check_model_requested)
         self.bottom_strip.bannerClicked.connect(self._on_validation_banner_clicked)
@@ -1436,6 +1439,28 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except Exception:                                  # pragma: no cover
             log.exception("inspector.set_import_fit_report failed")
 
+    def _selected_skeleton_template_fit_label(self) -> str:
+        selected_option = self._skeleton_template_options_by_key.get(
+            str(self._selected_skeleton_template_key or "")
+        )
+        if selected_option is None:
+            return ""
+        return str(
+            self._option_field(selected_option, "resref", "")
+            or self._option_field(selected_option, "name", "")
+            or ""
+        )
+
+    def _external_import_source_path(self, model: Any, entry: Any = None) -> str:
+        metadata = getattr(model, "metadata", None)
+        if isinstance(metadata, dict):
+            external = metadata.get("external_import")
+            if isinstance(external, dict):
+                path = str(external.get("source_path") or "")
+                if path:
+                    return path
+        return str(getattr(entry, "source_path", "") or "")
+
     def _body_model_for_fit_adjustment(self) -> tuple[Any, Any]:
         try:
             from core.geometry import model_data as _md
@@ -1540,6 +1565,81 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 kind="info",
             )
         self._push_import_fit_report_to_inspector()
+
+    @QtCore.Slot()
+    def _on_refit_to_selected_base_requested(self) -> None:
+        """Reload the original external mesh and auto-fit to the selected base."""
+        entry, model = self._body_model_for_fit_adjustment()
+        if model is None:
+            message = "Load a custom mesh before re-fitting to the selected base."
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="warning")
+            self.statusBar().showMessage(message, 6000)
+            return
+        if self._selected_skeleton_template_model is None:
+            message = "Choose a KOTOR base skeleton before re-fitting the custom mesh."
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="warning")
+            self.statusBar().showMessage(message, 6000)
+            return
+
+        source_path = self._external_import_source_path(model, entry)
+        if not source_path or not os.path.isfile(source_path):
+            message = (
+                "Cannot re-fit because the original external mesh path is missing. "
+                "Load the custom mesh again."
+            )
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="warning")
+            self.statusBar().showMessage(message, 7000)
+            return
+
+        try:
+            from src.core.characters import headless_body_workflow as _wf
+        except Exception:
+            try:
+                from core.characters import headless_body_workflow as _wf  # type: ignore
+            except Exception as exc:                         # pragma: no cover
+                message = f"Workflow service unavailable: {exc}"
+                if hasattr(self.inspector, "set_fit_adjustment_status"):
+                    self.inspector.set_fit_adjustment_status(message, kind="error")
+                self.statusBar().showMessage(message, 7000)
+                return
+
+        gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+             getattr(self.scene, "game_version", "K1")
+        fit_label = self._selected_skeleton_template_fit_label()
+        result = _wf.load_body(
+            source_path,
+            self.scene,
+            game_version=gv,
+            fit_reference_model=self._selected_skeleton_template_model,
+            fit_reference_label=fit_label,
+        )
+        if not result.ok:
+            message = str(result.message or "Re-fit failed.")
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="error")
+            self.bottom_strip.set_validation(
+                "error",
+                str(result.code or "REFIT_FAILED").upper(),
+                issues=[message],
+            )
+            self.statusBar().showMessage(message, 7000)
+            return
+
+        self._on_model_loaded_into_scene(result)
+        if hasattr(self.inspector, "set_fit_adjustment_status"):
+            self.inspector.set_fit_adjustment_status(
+                f"Re-fit to {fit_label or 'selected KOTOR base'} completed from the original import.",
+                kind="ok",
+            )
+        self.bottom_strip.set_validation(
+            "info",
+            "REFIT_COMPLETE",
+            issues=[f"Re-fit external mesh to {fit_label or 'selected KOTOR base'}."],
+        )
+        self.statusBar().showMessage("Re-fit to selected base completed.", 6000)
 
     def _load_model_in_viewport_with_textures(
         self,

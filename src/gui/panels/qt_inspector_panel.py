@@ -112,6 +112,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
     loadRequested             = QtCore.Signal()
     fitAdjustmentChanged      = QtCore.Signal(float, float, float, float, float, float, float)
     fitAdjustmentResetRequested = QtCore.Signal()
+    refitToSelectedBaseRequested = QtCore.Signal()
     validateRequested         = QtCore.Signal()
     checkModelRequested       = QtCore.Signal()
     romTestRequested          = QtCore.Signal()
@@ -337,12 +338,21 @@ class QtInspectorPanel(QtWidgets.QWidget):
         reset_btn.clicked.connect(self.fitAdjustmentResetRequested.emit)
         fit_layout.addWidget(reset_btn, 7, 0, 1, 2)
 
+        refit_btn = QtWidgets.QPushButton("Re-fit to Selected Base")
+        refit_btn.setObjectName("CharacterBuilderRefitToSelectedBaseButton")
+        refit_btn.setToolTip(
+            "Reload the original external mesh and run auto-fit again against "
+            "the currently selected KOTOR base skeleton."
+        )
+        refit_btn.clicked.connect(self.refitToSelectedBaseRequested.emit)
+        fit_layout.addWidget(refit_btn, 7, 2, 1, 2)
+
         self._fit_adjust_status = QtWidgets.QLabel("Auto-fit can be fine-tuned after import.")
         self._fit_adjust_status.setWordWrap(True)
         self._fit_adjust_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_adjust_status, 7, 2, 1, 2)
+        fit_layout.addWidget(self._fit_adjust_status, 8, 0, 1, 4)
 
         self._fit_report_label = QtWidgets.QLabel(
             "Auto-fit report will appear after loading a custom mesh."
@@ -352,7 +362,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_report_label.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_report_label, 8, 0, 1, 4)
+        fit_layout.addWidget(self._fit_report_label, 9, 0, 1, 4)
 
         for spin in (
             self._fit_scale_spin,

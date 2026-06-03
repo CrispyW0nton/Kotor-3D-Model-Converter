@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder selected-base re-fit action: Added a Step 1 `Re-fit to Selected Base` inspector button and controller path that reloads the original external mesh from its recorded import path before running `load_body(..., fit_reference_model=selected_base)` again. This prevents stacked/double normalization while giving modders an explicit way to retry deterministic auto-fit after changing the KOTOR base skeleton. Roadmap task: `T1205`.
+  Affected areas: `src/gui/panels/qt_inspector_panel.py`, `src/gui/panels/qt_character_builder_panel.py`, `tests/test_character_builder_skeleton_search.py`, `tests/test_skeleton_template_hud_wiring.py`.
+  Ground truth used: The previous T1205 PMBAM MCP fixture refresh remains the native-base contract for this UI/controller slice; no new model-pipeline assumptions were introduced.
+  Verification: `python -m pytest tests/test_character_builder_skeleton_search.py tests/test_skeleton_template_hud_wiring.py -q --basetemp .pytest_tmp_character_refit_base`; `python -m py_compile src/gui/panels/qt_inspector_panel.py src/gui/panels/qt_character_builder_panel.py tests/test_character_builder_skeleton_search.py tests/test_skeleton_template_hud_wiring.py`.
+
 - Character Builder formal auto-fit report contract: Added a headless `AutoFitReport` dataclass and wired `inspect_external_model_fit(...)` to publish source/target axes, scale factor, height source, ground-origin basis, landmark usage, confidence, fallback state, and notes while preserving the older fit-report keys. The Step 1 inspector now displays the axes/confidence/fallback evidence so a modder can tell whether an imported mesh snapped by humanoid landmarks or by bounds fallback before applying the native KOTOR template rig. Roadmap task: `T1205`.
   Affected areas: `src/core/characters/character_autofit_report.py`, `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_inspector_panel.py`, `tests/test_headless_body_workflow.py`, `tests/test_character_builder_skeleton_search.py`.
   Ground truth used: GhostRigger MCP `ghostrigger_model_info` refreshed K1 `pmbam` native body facts before backend edits; the selected native KOTOR base remains the final DAG authority while imported meshes stay geometry payloads.
