@@ -3756,6 +3756,28 @@ def _model_nodes(model: Any) -> List[Any]:
         return out
 
 
+def _native_template_build_summary(model: Any) -> BodyRigGenerateResult:
+    """Summarize the native-template rig path without invoking legacy AcuRig."""
+    nodes = _model_nodes(model)
+    skin_vertices = 0
+    for node in nodes:
+        if bool(getattr(node, "is_skin", False)) or bool(getattr(node, "skin_data", None)):
+            try:
+                skin_vertices += len(list(getattr(node, "skin_data", []) or []))
+            except Exception:
+                skin_vertices += 0
+    return BodyRigGenerateResult(
+        ok=True,
+        bone_count=len(nodes),
+        vertices_skinned=skin_vertices,
+        message=(
+            "Native KOTOR template rig applied; legacy AcuRig skeleton "
+            "generation skipped for export."
+        ),
+        code="native_template",
+    )
+
+
 def model_texture_names(model: Any) -> List[str]:
     """Return unique diffuse/aux texture names referenced by a model."""
     names: List[str] = []
@@ -3951,7 +3973,7 @@ def run_external_mesh_launch_workflow(
     """M12/T1205: one-shot external mesh to reloadable KOTOR export.
 
     This is the automation equivalent of the launch workflow a modder
-    expects: load external mesh, apply a KOTOR template, generate/bind,
+    expects: load external mesh, apply/bind a KOTOR native template,
     inherit PC motions, export MDL/MDX, then reload the result and verify
     hooks, supermodel, mesh count, and skin data.
     """
@@ -4005,30 +4027,7 @@ def run_external_mesh_launch_workflow(
         source_path=mesh_path,
     )
 
-    guides = place_body_guides(scene)
-    if not guides.ok:
-        return LaunchWorkflowResult(
-            load_result=load,
-            apply_result=applied,
-            guide_result=guides,
-            message=f"Launch workflow stopped at guide placement: {guides.message}",
-            code=getattr(guides, "code", "") or "guides_failed",
-        )
-
-    generated = generate_skeleton(
-        scene,
-        acurig=guides.acurig,
-        guides=guides.guides,
-    )
-    if not generated.ok:
-        return LaunchWorkflowResult(
-            load_result=load,
-            apply_result=applied,
-            guide_result=guides,
-            generate_result=generated,
-            message=f"Launch workflow stopped at skeleton generation: {generated.message}",
-            code=generated.code or "generate_failed",
-        )
+    generated = _native_template_build_summary(rigged_model)
 
     motion = assign_motion_source(
         scene,
@@ -4039,7 +4038,6 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
             message=f"Launch workflow stopped at motion assignment: {motion.message}",
@@ -4056,7 +4054,6 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
             export_result=exported,
@@ -4073,7 +4070,6 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
             export_result=exported,
@@ -4088,7 +4084,6 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
             export_result=exported,
@@ -4108,7 +4103,6 @@ def run_external_mesh_launch_workflow(
         ok=ok,
         load_result=load,
         apply_result=applied,
-        guide_result=guides,
         generate_result=generated,
         motion_result=motion,
         export_result=exported,

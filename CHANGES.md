@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder launch workflow native-template consolidation: The one-shot external-mesh launch proof now treats `apply_template_rig(...)` as the final native KOTOR skeleton/bind step and skips legacy AcuRig guide placement/skeleton generation before export. The launch result records a `native_template` build summary, and a regression test fails if `place_body_guides()` or `generate_skeleton()` re-enter that export proof path. Roadmap task: `T1205`.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: Previous MCP/native-skeleton fixture evidence remains the contract for this orchestration slice: the selected native KOTOR base is the DAG authority and imported meshes are payload guests; no new engine-format assumptions were introduced.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_t1205_launch_workflow_uses_native_template_without_acurig -q --basetemp .pytest_tmp_character_launch_native`; `python -m pytest tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_launch_native_all`; `python -m py_compile src/core/characters/headless_body_workflow.py tests/test_headless_body_workflow.py`.
+
 - Character Builder animation-library game-tag normalization: Added a shared K1/K2 normalizer for Character Builder motion-library lookup and resource-manager setup so labels such as `GameVersion.K2`, `KOTOR II`, `TSL`, and full KOTOR II titles resolve through the correct installed game before inherited supermodel clips are probed. Roadmap task: `T1204`.
   Affected areas: `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_character_builder_panel.py`, `tests/test_headless_body_workflow.py`.
   Ground truth used: Previous GhostRigger MCP animation-library fixture data remains the contract: K1 `pmbam` has 0 local clips and 268 inherited clips through its supermodel chain; K2 `pmbam` has 0 local clips and 456 inherited clips through its supermodel chain, including standard preview clips.

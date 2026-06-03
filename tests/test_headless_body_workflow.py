@@ -2353,6 +2353,90 @@ def test_t506_export_scene_sanitises_resref_for_filenames(monkeypatch, tmp_path)
                 f"forbidden char {ch!r} in basename {base!r}"
 
 
+def test_t1205_launch_workflow_uses_native_template_without_acurig(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("external_payload")
+    rigged_model = _FakeBodyModel("native_template_result")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"load_template": 0, "apply_template_rig": 0, "export": 0}
+
+    def _fake_load_body(*args, **kwargs):
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "custom.fbx"),
+            resref="custom_payload",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            calls["load_template"] += 1
+            assert game == "K1"
+            assert part == "body"
+            return _FakeBodyModel("pmbam")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            calls["apply_template_rig"] += 1
+            assert model is source_model
+            assert getattr(template, "name", "") == "pmbam"
+            assert game == "K1"
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "native template applied",
+            }
+
+    def _legacy_place_body_guides(*args, **kwargs):
+        raise AssertionError("legacy AcuRig guide placement must not run")
+
+    def _legacy_generate_skeleton(*args, **kwargs):
+        raise AssertionError("legacy AcuRig skeleton generation must not run")
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **kwargs):
+        calls["export"] += 1
+        assert scene.get_model(md.PartSlot.HEADLESS_BODY) is rigged_model
+        assert formats == ["kotor"]
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(tmp_path / "custom_payload.mdl"),
+                    message="exported",
+                )
+            ],
+            out_dir=str(tmp_path),
+            message="exported",
+        )
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "place_body_guides", _legacy_place_body_guides)
+    monkeypatch.setattr(wf, "generate_skeleton", _legacy_generate_skeleton)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+    monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: rigged_model)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "custom.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        motion_supermodel="S_Female02",
+    )
+
+    assert result.ok is True
+    assert result.code == "launch_verified"
+    assert result.guide_result is None
+    assert result.generate_result is not None
+    assert result.generate_result.code == "native_template"
+    assert result.reloaded_model is rigged_model
+    assert calls == {"load_template": 1, "apply_template_rig": 1, "export": 1}
+
+
 def test_t506_export_formats_constant_exposes_all_four_targets():
     """EXPORT_FORMATS must declare KOTOR + FBX + glTF + OBJ in that order."""
     keys = [k for k, _label, _exts in wf.EXPORT_FORMATS]
