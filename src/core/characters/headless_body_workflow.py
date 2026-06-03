@@ -3463,10 +3463,49 @@ def play_preview_animation(
         )
 
     chosen = None
+    source_model_name = str(getattr(body, "name", "") or "model")
+    anim_scale = 1.0
+    source_scope = "local"
     for a in _iter_model_animations(body):
         if getattr(a, "name", "").lower() == target:
             chosen = a
             break
+
+    if chosen is None:
+        raw_game = (
+            getattr(scene, "game_version", "")
+            or getattr(body, "game_version", "")
+            or "K1"
+        )
+        game_tag = normalize_kotor_game_tag(raw_game)
+        try:
+            from src.core.animation.animation_engine import SuperModelResolver
+        except ImportError:                                 # pragma: no cover
+            from core.animation.animation_engine import SuperModelResolver  # type: ignore
+        try:
+            resolved, resolved_scale = SuperModelResolver.resolve_animation(
+                body,
+                anim_name,
+                game_tag,
+            )
+        except Exception:
+            resolved, resolved_scale = None, 1.0
+        if resolved is not None:
+            chosen = resolved
+            anim_scale = float(resolved_scale or 1.0)
+            source_scope = "inherited"
+            try:
+                for (
+                    entry_name,
+                    entry_source,
+                    entry_scale,
+                ) in SuperModelResolver.list_all_animations(body, game_tag):
+                    if str(entry_name or "").lower() == target:
+                        source_model_name = str(entry_source or source_model_name)
+                        anim_scale = float(entry_scale or anim_scale)
+                        break
+            except Exception:
+                source_model_name = str(getattr(resolved, "source", "") or source_model_name)
 
     if chosen is None:
         motion_state = _motion_assignment_state(scene)
@@ -3531,6 +3570,11 @@ def play_preview_animation(
         length=length,
         message=f"Playing '{anim_name}' ({length:.2f}s).",
         code="playing",
+        details={
+            "source_model": source_model_name,
+            "source_scope": source_scope,
+            "anim_scale": anim_scale,
+        },
     )
 
 

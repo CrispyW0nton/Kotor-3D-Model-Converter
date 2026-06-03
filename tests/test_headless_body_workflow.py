@@ -1696,6 +1696,59 @@ def test_t1204_play_inherited_preview_succeeds_without_local_clip():
     assert "S_Female03" in result.message
 
 
+def test_t1204_play_inherited_library_clip_dispatches_resolved_supermodel_animation():
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "S_Male02"
+    body.anim_scale = 1.25
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [_FakeAnimation("spellready", 2.5)]
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            return super_model if str(resref).lower() == "s_male02" else None
+
+    class _Viewport:
+        def __init__(self):
+            self.calls = []
+
+        def set_animation_pose(self, pose, **kwargs):
+            self.calls.append({"pose": pose, **kwargs})
+
+    viewport = _Viewport()
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(_RM())
+    try:
+        library = wf.available_animation_library(scene)
+        result = wf.play_preview_animation(scene, "spellready", viewport=viewport)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    assert {name for _label, name in library.available} == {"spellready"}
+    assert result.ok is True
+    assert result.code == "playing"
+    assert result.playing == "spellready"
+    assert result.length == 2.5
+    assert result.details["source_model"] == "S_Male02"
+    assert result.details["source_scope"] == "inherited"
+    assert result.details["anim_scale"] == 1.25
+    assert len(viewport.calls) == 1
+    assert getattr(viewport.calls[0]["pose"], "name", "") == "spellready"
+    assert viewport.calls[0]["name"] == "spellready"
+    assert viewport.calls[0]["length"] == 2.5
+
+
 def test_t1204_imported_motion_assignment_reflects_preview_subset():
     scene, _body = _scene_with_animated_body()
 

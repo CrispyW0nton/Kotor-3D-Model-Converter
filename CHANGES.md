@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder inherited animation playback: the Step 3 animation library playback path now resolves inherited supermodel clips through `SuperModelResolver` before falling back to placeholder inherited-preview messaging, so any listed supermodel clip can dispatch to the viewport rather than only local body animations or the standard preview subset. Roadmap task: `T1204` / Phase 5 animation library reliability.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: K1 installation and K1/K2 Ghidra binary contexts were refreshed through MCP before touching model-pipeline workflow code; this slice changes library/playback resolution only and introduces no new MDL binary-format assumptions.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_t1204_animation_library_standard_supermodel_clips_populate tests/test_headless_body_workflow.py::test_t1204_play_inherited_preview_succeeds_without_local_clip tests/test_headless_body_workflow.py::test_t1204_play_inherited_library_clip_dispatches_resolved_supermodel_animation -q --basetemp .pytest_tmp_character_anim_library_play`; `python -m pytest tests/test_headless_body_workflow.py -k t1204 -q --basetemp .pytest_tmp_character_t1204_anim_library`; `python -m py_compile src/core/characters/headless_body_workflow.py tests/test_headless_body_workflow.py`.
+
 - Character Builder bone-map preflight: MDL export preflight now blocks skin bone maps that target missing nodes, case-changed nodes, or generated/imported nodes outside the selected `NativeSkeletonSnapshot`. This prevents custom mesh payloads from becoming hidden skeleton authority during export. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: K1 install loaded through MCP and K1 Ghidra binary context verified before backend preflight changes; existing `NativeSkeletonSnapshot` remains the final DAG contract authority while MDL-loader internals remain pending.
