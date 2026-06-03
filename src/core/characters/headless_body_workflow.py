@@ -1176,6 +1176,14 @@ def _mark_external_import(model: Any, source_path: str) -> None:
     if not isinstance(metadata, dict):
         metadata = {}
         setattr(model, "metadata", metadata)
+    try:
+        from src.core.characters.character_rig_state import mark_imported_temporary_skeleton
+    except ImportError:                                     # pragma: no cover
+        from core.characters.character_rig_state import mark_imported_temporary_skeleton  # type: ignore
+    mark_imported_temporary_skeleton(
+        model,
+        source="headless_body_workflow._mark_external_import",
+    )
     metadata["external_import"] = {
         "source_path": str(source_path or ""),
         "disable_kotor_uv_seam_fix": True,

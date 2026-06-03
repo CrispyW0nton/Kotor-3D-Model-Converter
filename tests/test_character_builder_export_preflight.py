@@ -11,6 +11,12 @@ from src.core.characters.character_export_preflight import (
     CharacterExportPreflightOptions,
     preflight_character_mdl_export,
 )
+from src.core.characters.character_rig_state import (
+    RIG_DAG_AUTHORITY_NATIVE_KOTOR,
+    RIG_STATE_NATIVE_TEMPLATE_FINAL,
+    get_character_rig_state,
+    mark_imported_temporary_skeleton,
+)
 from src.core.characters.character_validation_report import (
     CHARACTER_BUILDER_MANUAL_CHECKLIST,
     CharacterBuilderValidationReport,
@@ -105,6 +111,10 @@ def test_apply_template_rig_preserves_selected_native_supermodel() -> None:
     assert result["ok"] is True
     assert result["model"].supermodel == "S_KPMF0200"
     assert result["native_skeleton_snapshot"].supermodel == "S_KPMF0200"
+    state = get_character_rig_state(result["model"])
+    assert state is not None
+    assert state.state == RIG_STATE_NATIVE_TEMPLATE_FINAL
+    assert state.dag_authority == RIG_DAG_AUTHORITY_NATIVE_KOTOR
 
 
 def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -> None:
@@ -130,6 +140,22 @@ def test_character_export_preflight_blocks_missing_native_snapshot() -> None:
     )
 
     assert "character.export.missing_native_snapshot" in _codes(preflight)
+
+
+def test_character_export_preflight_blocks_imported_temporary_skeleton_state() -> None:
+    result = _rigged_character()
+    mark_imported_temporary_skeleton(result["model"], source="test_override")
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.not_native_template_final_rig")
+    assert issue.details["expected_state"] == RIG_STATE_NATIVE_TEMPLATE_FINAL
+    assert issue.details["actual_state"]["state"] == "imported_temporary_skeleton"
+    assert preflight.report.has_blocking is True
 
 
 def test_character_export_preflight_blocks_missing_required_socket() -> None:

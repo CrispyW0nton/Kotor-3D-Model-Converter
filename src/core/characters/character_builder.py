@@ -960,6 +960,15 @@ def apply_template_rig(
                 "bone_slots": bind_report.bone_count,
                 "source": "apply_template_rig",
             }
+            try:
+                from .character_rig_state import mark_native_template_final_rig
+            except ImportError:  # pragma: no cover
+                from src.core.characters.character_rig_state import mark_native_template_final_rig  # type: ignore
+            mark_native_template_final_rig(
+                result_model,
+                source="apply_template_rig",
+                native_snapshot_present=native_skeleton_snapshot is not None,
+            )
             setattr(result_model, "_gr_character_builder_bind_complete", True)
         except Exception as exc:
             log.error("apply_template_rig skin bind failed: %s", exc, exc_info=True)

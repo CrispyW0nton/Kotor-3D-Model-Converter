@@ -100,6 +100,15 @@ class _FakeBodyModel:
         self.supermodel = "S_Female02"
         self.model_type = int(md.ModelClassification.CHARACTER)
         self.metadata = {}
+        self.metadata["character_builder_rig_state"] = {
+            "state": "native_template_final",
+            "dag_authority": "native_kotor_base",
+            "mesh_role": "payload_guest",
+            "source": "test_fake_body",
+            "native_snapshot_present": True,
+            "legacy_acurig": False,
+        }
+        self._gr_character_builder_rig_state = dict(self.metadata["character_builder_rig_state"])
         self.root_node = _FakeNode(name)
         rootdummy = _FakeNode("rootdummy", self.root_node)
         headhook = _FakeNode("headhook", rootdummy)

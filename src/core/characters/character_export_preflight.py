@@ -20,6 +20,11 @@ from src.core.validation.validation_bus import (
 )
 
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX
+from .character_rig_state import (
+    RIG_STATE_NATIVE_TEMPLATE_FINAL,
+    get_character_rig_state,
+    is_native_template_final_rig,
+)
 from .native_skeleton import (
     KOTOR_NATIVE_RESREF_MAX_LEN,
     NativeNodeSnapshot,
@@ -41,6 +46,7 @@ class CharacterExportPreflightOptions:
     require_supermodel: bool = True
     require_skin_payload: bool = True
     require_required_sockets: bool = True
+    require_native_template_final_rig: bool = True
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -112,6 +118,7 @@ def preflight_character_mdl_export(
             ))
 
     _validate_resref(model, report)
+    _validate_character_rig_state(model, opts, report)
 
     if native_snapshot is not None:
         _validate_source_provenance(native_snapshot, opts, report)
@@ -123,6 +130,32 @@ def preflight_character_mdl_export(
         _validate_skin_payload(model, report)
 
     return CharacterExportPreflightResult(report=report, native_snapshot=native_snapshot)
+
+
+def _validate_character_rig_state(
+    model: Any,
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    if not opts.require_native_template_final_rig:
+        return
+    if is_native_template_final_rig(model):
+        return
+    state = get_character_rig_state(model)
+    state_data = state.to_dict() if state is not None else None
+    report.add(_issue(
+        "blocking",
+        "character.export.not_native_template_final_rig",
+        (
+            "Character export requires the final native KOTOR template rig state. "
+            "Imported or temporary skeletons cannot be exported as game-ready MDL/MDX."
+        ),
+        fix_hint="Use Build KOTOR Skeleton from the selected native base before exporting.",
+        details={
+            "expected_state": RIG_STATE_NATIVE_TEMPLATE_FINAL,
+            "actual_state": state_data,
+        },
+    ))
 
 
 def _validate_resref(model: Any, report: ValidationReport) -> None:
