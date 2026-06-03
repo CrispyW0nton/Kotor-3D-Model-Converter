@@ -186,6 +186,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_assignment_status: Optional[QtWidgets.QLabel] = None
         self._animation_library_combo: Optional[QtWidgets.QComboBox] = None
+        self._animation_library_status: Optional[QtWidgets.QLabel] = None
         self._preview_attachment_resref_combo: Optional[QtWidgets.QComboBox] = None
         self._preview_attachment_path: str = ""
         self._preview_attachment_status: Optional[QtWidgets.QLabel] = None
@@ -1367,6 +1368,17 @@ class QtInspectorPanel(QtWidgets.QWidget):
         library_buttons.addWidget(stop_library_btn)
         library_buttons.addStretch(1)
         library_layout.addLayout(library_buttons)
+        self._animation_library_status = QtWidgets.QLabel(
+            "Load the selected supermodel library to preview inherited animations."
+        )
+        self._animation_library_status.setObjectName(
+            "CharacterBuilderAnimationLibraryStatusLabel"
+        )
+        self._animation_library_status.setWordWrap(True)
+        self._animation_library_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        library_layout.addWidget(self._animation_library_status)
         layout.addWidget(library_group)
 
     def selected_motion_source(self) -> str:
@@ -1415,7 +1427,14 @@ class QtInspectorPanel(QtWidgets.QWidget):
                     return
             sm_combo.setEditText(supermodel)
 
-    def set_animation_library(self, available, missing=None) -> None:
+    def set_animation_library(
+        self,
+        available,
+        missing=None,
+        *,
+        message: str = "",
+        diagnostics=None,
+    ) -> None:
         combo = getattr(self, "_animation_library_combo", None)
         if combo is None:
             return
@@ -1427,6 +1446,20 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 combo.addItem(f"{label} ({name}) - missing", userData="")
         if available:
             combo.setCurrentIndex(0)
+        status = getattr(self, "_animation_library_status", None)
+        if status is not None:
+            reason_text = ", ".join(str(item) for item in (diagnostics or []) if str(item))
+            if available:
+                text = message or f"{len(available)} animation clip(s) available."
+                colour = "#7cd87c"
+            elif reason_text:
+                text = (message or "No animations available.") + f"\nDiagnostics: {reason_text}"
+                colour = "#ffd166"
+            else:
+                text = message or "No animations available."
+                colour = "#ffd166"
+            status.setText(text)
+            status.setStyleSheet(f"color:{colour}; font-size:8pt;")
 
     def set_preview_attachment_source(self, *, resref: str = "", path: str = "") -> None:
         self._preview_attachment_path = str(path or "")

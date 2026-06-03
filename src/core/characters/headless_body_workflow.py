@@ -2442,6 +2442,8 @@ class CheckActorResult:
     message          : Human-readable summary.
     code             : Stable tag — ``"listed" / "playing" / "stopped" /
                        "no_body" / "no_animations" / "anim_missing"``.
+    diagnostics      : Stable reason codes for empty/fallback states.
+    details          : JSON-friendly context for UI/debug displays.
     """
     ok:         bool                              = False
     available:  List[Tuple[str, str]]             = field(default_factory=list)
@@ -2450,6 +2452,8 @@ class CheckActorResult:
     length:     float                             = 0.0
     message:    str                               = ""
     code:       str                               = "listed"
+    diagnostics: List[str]                         = field(default_factory=list)
+    details:    Dict[str, Any]                     = field(default_factory=dict)
 
 
 def _motion_assignment_state(scene: Any) -> Dict[str, Any]:
@@ -2755,6 +2759,7 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         return CheckActorResult(
             message="No body model loaded. Load and build the character first.",
             code="no_body",
+            diagnostics=["no_body"],
         )
 
     game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
@@ -2765,8 +2770,9 @@ def available_animation_library(scene: Any) -> CheckActorResult:
 
     motion_state = _motion_assignment_state(scene)
     selected_supermodel = str(motion_state.get("supermodel") or "").strip()
+    effective_supermodel = selected_supermodel or _body_supermodel(body)
     list_model = body
-    if selected_supermodel and not _is_null_supermodel(selected_supermodel):
+    if effective_supermodel and not _is_null_supermodel(effective_supermodel):
         class _AnimationLibraryProxy:
             pass
 
@@ -2774,15 +2780,52 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         proxy.name = getattr(body, "name", "character")
         proxy.animations = list(_iter_model_animations(body))
         proxy.anim_scale = float(getattr(body, "anim_scale", 1.0) or 1.0)
-        proxy.supermodel = selected_supermodel
+        proxy.supermodel = effective_supermodel
         list_model = proxy
 
     entries: List[Tuple[str, str]] = []
+    diagnostics: List[str] = []
+    details: Dict[str, Any] = {
+        "game": game_tag,
+        "body": str(getattr(body, "name", "") or ""),
+        "motion_source": str(motion_state.get("source") or ""),
+        "selected_supermodel": selected_supermodel,
+        "effective_supermodel": effective_supermodel,
+        "local_animation_count": len(_iter_model_animations(body)),
+        "resolver_configured": getattr(SuperModelResolver, "_resource_manager", None) is not None,
+    }
+    if effective_supermodel and not _is_null_supermodel(effective_supermodel):
+        if not details["resolver_configured"]:
+            diagnostics.append("resolver_not_configured")
+        else:
+            try:
+                loaded_super = SuperModelResolver.load_supermodel(
+                    effective_supermodel,
+                    game_tag,
+                )
+            except Exception as exc:                       # pragma: no cover - defensive
+                loaded_super = None
+                diagnostics.append("supermodel_probe_exception")
+                details["supermodel_probe_error"] = str(exc)
+            if loaded_super is None:
+                diagnostics.append(f"supermodel_not_found:{effective_supermodel}")
+            else:
+                details["resolved_supermodel"] = str(
+                    getattr(loaded_super, "name", "") or effective_supermodel
+                )
+                details["resolved_supermodel_local_animation_count"] = len(
+                    _iter_model_animations(loaded_super)
+                )
+    else:
+        diagnostics.append("no_supermodel_selected")
+
     try:
         for name, source_model, _scale in SuperModelResolver.list_all_animations(list_model, game_tag):
             label = f"{name} [{source_model}]"
             entries.append((label, name))
-    except Exception:
+    except Exception as exc:
+        diagnostics.append("resolver_exception")
+        details["resolver_error"] = str(exc)
         entries = []
 
     if not entries:
@@ -2790,14 +2833,24 @@ def available_animation_library(scene: Any) -> CheckActorResult:
             name = str(getattr(anim, "name", "") or "")
             if name:
                 entries.append((f"{name} [{getattr(body, 'name', 'model')}]", name))
+        if entries:
+            diagnostics.append("local_fallback_used")
 
     if not entries:
+        if not diagnostics:
+            diagnostics.append("empty_chain")
+        reason_text = "; ".join(diagnostics)
         return CheckActorResult(
             ok=True,
             available=[],
             missing=[],
-            message="No animations are available from the body or its supermodel chain.",
+            message=(
+                "No animations are available from the body or its supermodel chain. "
+                f"Diagnostics: {reason_text}."
+            ),
             code="no_animations",
+            diagnostics=diagnostics,
+            details=details,
         )
 
     return CheckActorResult(
@@ -2806,6 +2859,8 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         missing=[],
         message=f"{len(entries)} animation clip(s) available.",
         code="listed",
+        diagnostics=diagnostics,
+        details=details,
     )
 
 

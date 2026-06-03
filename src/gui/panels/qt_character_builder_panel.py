@@ -2879,7 +2879,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "set_animation_library"):
             try:
                 self.inspector.set_animation_library(
-                    library.available, library.missing,
+                    library.available,
+                    library.missing,
+                    message=library.message,
+                    diagnostics=getattr(library, "diagnostics", []),
                 )
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_animation_library failed")

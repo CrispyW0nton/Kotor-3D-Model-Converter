@@ -1465,6 +1465,73 @@ def test_t1204_animation_library_lists_real_supermodel_chain(monkeypatch):
     assert {name for _label, name in preview.available} == {"pause1", "walk", "run"}
     assert "tlknorm" in {name for _label, name in preview.missing}
     assert {name for _label, name in library.available} >= {"pause1", "walk", "run"}
+    assert library.details["effective_supermodel"] == "S_Male02"
+
+
+def test_t1204_animation_library_standard_supermodel_clips_populate(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+    body.anim_scale = 1.0
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [
+        _FakeAnimation("pause1", 1.0),
+        _FakeAnimation("walk", 1.2),
+        _FakeAnimation("run", 0.8),
+        _FakeAnimation("tlknorm", 2.0),
+    ]
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            return super_model if str(resref).lower() == "s_male02" else None
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(_RM())
+    try:
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    names = {name for _label, name in library.available}
+    assert library.code == "listed"
+    assert {"pause1", "walk", "run", "tlknorm"}.issubset(names)
+    assert library.diagnostics == []
+    assert library.details["resolved_supermodel"] == "S_Male02"
+
+
+def test_t1204_animation_library_empty_reports_resolver_reason(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+    try:
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+
+    assert library.code == "no_animations"
+    assert library.available == []
+    assert "resolver_not_configured" in library.diagnostics
+    assert library.details["effective_supermodel"] == "S_Male02"
+    assert "Diagnostics:" in library.message
 
 
 def test_t1204_play_inherited_preview_succeeds_without_local_clip():

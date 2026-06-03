@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder animation-library diagnostics: Instrumented `available_animation_library(...)` with stable diagnostic reason codes/details for empty supermodel libraries, including resolver-not-configured and missing-supermodel paths, and surfaced those diagnostics in the Step 3 Animation Library inspector label. Valid inherited libraries continue to populate standard KOTOR clips like `pause1`, `walk`, `run`, and `tlknorm`. No roadmap task ID applies.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_inspector_panel.py`, `src/gui/panels/qt_character_builder_panel.py`, `tests/test_headless_body_workflow.py`, `tests/test_character_builder_skeleton_search.py`.
+  Ground truth used: GhostRigger MCP `ghostrigger_list_retarget_animations` confirmed K1 `pmbam` has 0 local clips and 268 inherited clips through `S_KPMF0200 -> S_Female01 -> S_Male02 -> S_Male01`; K2 `pmbam` has 0 local clips and 456 inherited clips through `S_Female02 -> S_Female01 -> S_Male02 -> S_Male01`, including standard preview clips such as `pause1`, `run`, and `tlknorm`.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py tests/test_character_builder_skeleton_search.py -q --basetemp .pytest_tmp_character_animation_library`; `python -m py_compile src/core/characters/headless_body_workflow.py src/gui/panels/qt_inspector_panel.py src/gui/panels/qt_character_builder_panel.py tests/test_headless_body_workflow.py tests/test_character_builder_skeleton_search.py`.
+
 - Character Builder legacy AcuRig path gate: Added an explicit OFF-by-default `set_legacy_acurig_enabled(...)` controller gate around the old `place_body_guides()` / `generate_skeleton()` slots, with warning status that directs normal exports back to the native KOTOR template `Build KOTOR Skeleton` path. No roadmap task ID applies.
   Affected areas: `src/gui/panels/qt_character_builder_panel.py`, `tests/test_character_builder_template_rig.py`.
   Verification: `python -m pytest tests/test_character_builder_template_rig.py tests/test_character_builder_skeleton_search.py -q --basetemp .pytest_tmp_character_legacy_gate`; `python -m py_compile src/gui/panels/qt_character_builder_panel.py tests/test_character_builder_template_rig.py`.

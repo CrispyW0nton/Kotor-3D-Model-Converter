@@ -122,3 +122,28 @@ def test_character_builder_import_fit_report_is_visible_in_inspector():
         assert "Imported mesh landmark confidence is low" in text
     finally:
         inspector.deleteLater()
+
+
+def test_character_builder_animation_library_diagnostics_are_visible():
+    _qapp()
+    inspector = QtInspectorPanel()
+    try:
+        inspector.set_animation_library(
+            [],
+            [],
+            message="No animations are available from the body or its supermodel chain.",
+            diagnostics=["resolver_not_configured", "supermodel_not_found:S_Male02"],
+        )
+
+        label = inspector.findChild(
+            QtWidgets.QLabel,
+            "CharacterBuilderAnimationLibraryStatusLabel",
+        )
+        assert label is not None
+        text = label.text()
+
+        assert "No animations are available" in text
+        assert "resolver_not_configured" in text
+        assert "supermodel_not_found:S_Male02" in text
+    finally:
+        inspector.deleteLater()
