@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder engine-evidence ledger: export preflight evidence now carries a separate targeted function/disassembly evidence tier for K1 `SwitchWeaponEvent` and `LoadVisualEffect`, and `docs/ghidra_findings.md` records the exact Ghidra MCP observations without claiming MDL-loader semantics are complete. Roadmap task: `T1205` / Phase 3 export hardening.
+  Affected areas: `src/core/characters/kotor_constants.py`, `docs/ghidra_findings.md`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: `mcp__ghostrigger.kotor_decompile_function` for K1 `0x00610f40` and `0x006a1880`; `mcp__ghostrigger.kotor_inspect_memory` for `0x0074f4d4`, `0x0074f4cc`, `0x0074b834`, and `0x00751d74`. The Ghidra decompiler process is still unavailable, so these are metadata/disassembly/string-address findings only.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_issues_carry_engine_evidence -q --basetemp .pytest_tmp_character_engine_evidence`; `python -m py_compile src/core/characters/kotor_constants.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder auto-fit viewport overlay: the Character Builder now forwards `fitted_visual_overlay` / `visual_overlay` metadata from the headless fit report into the shared viewport, and both software and GPU overlay paths draw fit-frame axes and landmarks. This lets modders visually compare the fitted imported mesh evidence against the selected KOTOR base without moving fit rules into Qt. Roadmap task: `T1205` / Phase 2 launch hardening.
   Affected areas: `src/gui/panels/qt_character_builder_panel.py`, `src/gui/viewports/viewport_core/widgets/scene_models.py`, `src/gui/viewports/viewport_core/widgets/rendering_pipeline.py`, `src/core/rendering/frame_core/renderer_setup.py`, `src/core/rendering/frame_core/renderer_overlays.py`, `src/core/rendering/frame_core/renderer_render_loop.py`, `tests/test_skeleton_template_hud_wiring.py`.
   Ground truth used: Existing native-skeleton/autofit metadata contracts; this UI slice only renders headless evidence and introduces no new KOTOR engine-format assumptions.

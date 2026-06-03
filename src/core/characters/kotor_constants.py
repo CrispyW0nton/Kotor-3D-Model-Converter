@@ -133,6 +133,45 @@ ENGINE_VERIFIED_SOCKET_STRING_REFS: tuple[dict[str, object], ...] = (
     },
 )
 
+ENGINE_VERIFIED_FUNCTION_DISASSEMBLY_EVIDENCE: tuple[dict[str, object], ...] = (
+    {
+        "game": "k1",
+        "function": "SwitchWeaponEvent",
+        "address": "00610f40",
+        "signature": "void __cdecl SwitchWeaponEvent(CAurObject *, char *, void *)",
+        "evidence_kind": "function_metadata_and_disassembly_decompiler_unavailable",
+        "observed_instruction_notes": (
+            "00610f7a loads exact static string address 0074f4d4 "
+            "('AppearanceForceUpdate') before CMPSB.REPE.",
+            "00610fa6 loads exact static string address 0074f4cc "
+            "('Loading') before CMPSB.REPE.",
+        ),
+        "character_builder_implication": (
+            "Do not cite this as socket semantics; it confirms targeted "
+            "function/disassembly access works while the decompiler is unavailable."
+        ),
+    },
+    {
+        "game": "k1",
+        "function": "LoadVisualEffect",
+        "address": "006a1880",
+        "signature": (
+            "int __thiscall LoadVisualEffect(CSWCVisualEffectOnObject *, "
+            "ushort, int, ulong, ulong, ulong, byte, uchar, Vector)"
+        ),
+        "evidence_kind": "function_metadata_and_disassembly_decompiler_unavailable",
+        "observed_instruction_notes": (
+            "006a1a15 pushes static string address 0074b834 "
+            "('Imp_HeadCon_Node') during visual-effect setup.",
+            "00751d74 is a verified static string address for 'handconjure'.",
+        ),
+        "character_builder_implication": (
+            "Visual-effect helper names must remain native-template-owned; "
+            "exact MDL-loader and missing-node behavior remain pending."
+        ),
+    },
+)
+
 CHARACTER_EXPORT_EVIDENCE: dict[str, object] = {
     "findings_doc": KOTOR_ENGINE_FINDINGS_DOC,
     "status": KOTOR_ENGINE_EVIDENCE_STATUS,
@@ -147,6 +186,7 @@ CHARACTER_EXPORT_EVIDENCE: dict[str, object] = {
         "mcp:kotor_engine_script:k2:selected_hook_string_refs",
     ),
     "engine_string_refs": ENGINE_VERIFIED_SOCKET_STRING_REFS,
+    "function_disassembly_evidence": ENGINE_VERIFIED_FUNCTION_DISASSEMBLY_EVIDENCE,
     "verified_native_contract": (
         "selected_native_base_owns_final_dag",
         "imported_mesh_is_payload_guest",

@@ -251,6 +251,19 @@ def test_character_export_preflight_issues_carry_engine_evidence() -> None:
     assert "mcp:ghostrigger_model_info:k1:pmbam" in evidence["verified_sources"]
     assert "mcp:kotor_engine_script:k1:selected_hook_string_refs" in evidence["verified_sources"]
     assert "selected_native_base_owns_final_dag" in evidence["verified_native_contract"]
+    function_evidence = {
+        entry["function"]: entry
+        for entry in evidence["function_disassembly_evidence"]
+        if entry["game"] == "k1"
+    }
+    assert function_evidence["LoadVisualEffect"]["address"] == "006a1880"
+    assert (
+        function_evidence["LoadVisualEffect"]["evidence_kind"]
+        == "function_metadata_and_disassembly_decompiler_unavailable"
+    )
+    assert "Imp_HeadCon_Node" in " ".join(
+        function_evidence["LoadVisualEffect"]["observed_instruction_notes"]
+    )
     refs = {
         (entry["game"], entry["string"]): tuple(entry["representative_refs"])
         for entry in evidence["engine_string_refs"]

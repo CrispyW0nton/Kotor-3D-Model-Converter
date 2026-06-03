@@ -123,6 +123,42 @@ Limitations:
 - Full socket attachment fallback behavior and missing-node behavior remain
   pending until the owning routines are decompiled or otherwise traced.
 
+## Targeted Function Metadata / Disassembly Evidence
+
+Source: GhostRigger MCP `kotor_decompile_function` and
+`kotor_inspect_memory`, queried 2026-06-03.
+
+The Ghidra decompiler process still did not launch, so this is not source-level
+decompilation.  However, targeted function metadata and disassembly are
+available for known addresses.  This is enough to record function names,
+signatures, instruction addresses, and static string addresses, while still
+keeping MDL parser semantics marked as pending.
+
+| Game | Function | Address | Evidence |
+| --- | --- | --- | --- |
+| K1 | `SwitchWeaponEvent` | `00610f40` | Function metadata reported signature `void __cdecl SwitchWeaponEvent(CAurObject *, char *, void *)`.  Disassembly at `00610f7a` loads static string address `0074f4d4`, and `00610fa6` loads `0074f4cc`; `kotor_inspect_memory` identifies those strings as `AppearanceForceUpdate` and `Loading`. |
+| K1 | `LoadVisualEffect` | `006a1880` | Function metadata reported signature `int __thiscall LoadVisualEffect(CSWCVisualEffectOnObject *, ushort, int, ulong, ulong, ulong, byte, uchar, Vector)`.  Disassembly at `006a1a15` pushes static string address `0074b834`; `kotor_inspect_memory` identifies the string as `Imp_HeadCon_Node`.  `kotor_inspect_memory` also verifies `00751d74` as the exact string `handconjure`. |
+
+Character Builder implications:
+
+- This confirms targeted address-level inspection is usable even when broad
+  symbol searches and the decompiler are unavailable.
+- `LoadVisualEffect` references visual-effect hook/configuration strings, so
+  helper nodes such as `handconjure`, `impact_bolt`, and related native
+  template helpers should remain native-template-owned.
+- `Imp_HeadCon_Node` is evidence for a visual-effect configuration/key string,
+  not proof that the exact native socket `headconjure` was found as an engine
+  string literal.
+- These findings still do **not** prove MDL parser layout, skin weight behavior,
+  full attachment fallback semantics, or missing-node behavior.
+
+Tooling caveat:
+
+- A broad `kotor_engine_script` memory scan returned no matches even for known
+  addresses that `kotor_inspect_memory` can read.  Do not treat that broad scan
+  as negative evidence.  Use targeted address reads or improved scripts for the
+  next reverse-engineering pass.
+
 ## Verified Animation Inheritance Fixture: `pmbam`
 
 Source: GhostRigger MCP `ghostrigger_list_retarget_animations`, queried
