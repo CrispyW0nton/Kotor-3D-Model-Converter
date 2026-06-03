@@ -19,7 +19,7 @@ from src.core.validation.validation_bus import (
     ValidationSubsystem,
 )
 
-from .kotor_constants import CHARACTER_EXPORT_EVIDENCE
+from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX
 from .native_skeleton import (
     KOTOR_NATIVE_RESREF_MAX_LEN,
     NativeNodeSnapshot,
@@ -409,6 +409,24 @@ def _validate_skin_rows(node: Any, bone_map: list[Any], report: ValidationReport
                 details={"vertex_index": row_index},
             ))
             continue
+        if len(influences) > KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX:
+            report.add(_issue(
+                "blocking",
+                "character.export.vertex_too_many_influences",
+                (
+                    f"Skin mesh '{name}' has a vertex with {len(influences)} "
+                    f"influences; the KOTOR MDL writer stores at most "
+                    f"{KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX}."
+                ),
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Prune and normalize skin weights before export.",
+                details={
+                    "vertex_index": row_index,
+                    "influence_count": len(influences),
+                    "max_influences": KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX,
+                    "evidence_status": "writer_format_contract_verified_ghidra_pending",
+                },
+            ))
         total = 0.0
         for influence in influences:
             bone_index = int(getattr(influence, "bone_index", -1))

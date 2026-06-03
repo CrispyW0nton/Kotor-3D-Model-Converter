@@ -11,6 +11,7 @@ KOTOR_ENGINE_FINDINGS_DOC = "docs/ghidra_findings.md"
 KOTOR_ENGINE_EVIDENCE_STATUS = "fixture_verified_function_addresses_pending"
 
 KOTOR_NATIVE_RESREF_MAX_LEN = 16
+KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX = 4
 
 VERIFIED_PMBAM_STRUCTURAL_NODES: tuple[str, ...] = (
     "PMBAM",
@@ -49,9 +50,11 @@ CHARACTER_EXPORT_EVIDENCE: dict[str, object] = {
         "preserve_native_supermodel_inheritance",
         "preserve_native_socket_helper_nodes",
     ),
+    "writer_format_contract": (
+        "MDLBinaryWriter writes four skin weights and four bone refs per skin vertex",
+    ),
     "pending_ghidra": (
         "mdl_loader_function_addresses",
-        "skin_weight_influence_limit",
         "engine_weight_normalization_behavior",
         "socket_attachment_function_addresses",
     ),

@@ -8,7 +8,6 @@ engine-evidence-backed preflight report beside every successful export.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -27,8 +26,6 @@ from src.core.validation.validation_bus import (
     ValidationReport,
     ValidationSeverity,
     ValidationSubsystem,
-    merge_validation_reports,
-    validation_report_to_dict,
 )
 
 from .character_export_preflight import (
@@ -38,6 +35,10 @@ from .character_export_preflight import (
 )
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE
 from .native_skeleton import NativeSkeletonSnapshot
+from .character_validation_report import (
+    CharacterBuilderValidationReport,
+    validation_report_paths,
+)
 
 
 LoaderCallable = Callable[[Path, Path], Any]
@@ -229,110 +230,39 @@ def _write_validation_artifacts(
     status: str,
     verified: bool,
 ) -> None:
-    payload = _validation_payload(
-        context,
-        mdl_path=mdl_path,
-        preflight=preflight,
-        reload_report=reload_report,
+    report = CharacterBuilderValidationReport(
         status=status,
         verified=verified,
-    )
-    context.write_text(
-        _validation_json_path(mdl_path),
-        json.dumps(payload, indent=2, sort_keys=True),
-    )
-    context.write_text(
-        _validation_text_path(mdl_path),
-        _validation_text(payload),
-    )
-
-
-def _validation_payload(
-    context: ExportJobContext,
-    *,
-    mdl_path: Path,
-    preflight: ValidationReport,
-    reload_report: ValidationReport | None,
-    status: str,
-    verified: bool,
-) -> dict[str, Any]:
-    merged = merge_validation_reports(
-        preflight,
-        reload_report or ValidationReport(source="character.export_transaction.verify"),
-    )
-    return {
-        "schema": "ghostrigger.character_export_validation.v1",
-        "status": status,
-        "verified": bool(verified),
-        "job_id": context.request.job_id,
-        "export_kind": context.request.kind,
-        "game": context.request.metadata.get("game"),
-        "resref": context.request.metadata.get("resref"),
-        "outputs": {
+        job_id=context.request.job_id,
+        export_kind=context.request.kind,
+        game=str(context.request.metadata.get("game") or ""),
+        resref=str(context.request.metadata.get("resref") or ""),
+        outputs={
             "mdl": str(mdl_path),
             "mdx": str(mdl_path.with_suffix(".mdx")),
             "validation_json": str(_validation_json_path(mdl_path)),
             "validation_text": str(_validation_text_path(mdl_path)),
         },
-        "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
-        "preflight_report": validation_report_to_dict(preflight),
-        "reload_report": validation_report_to_dict(reload_report)
-        if reload_report is not None else None,
-        "summary": {
-            "issue_count": len(merged.issues),
-            "blocking_count": len(merged.blocking_issues),
-            "export_allowed": not merged.has_blocking,
-        },
-    }
-
-
-def _validation_text(payload: dict[str, Any]) -> str:
-    lines = [
-        "GhostRigger Character Builder Export Validation",
-        f"Status: {payload.get('status')}",
-        f"Verified: {payload.get('verified')}",
-        f"Game: {payload.get('game')}",
-        f"Resref: {payload.get('resref')}",
-        "",
-        "Outputs:",
-    ]
-    for key, value in dict(payload.get("outputs") or {}).items():
-        lines.append(f"- {key}: {value}")
-    lines.extend(["", "Issues:"])
-    reports = [
-        ("preflight", payload.get("preflight_report")),
-        ("reload", payload.get("reload_report")),
-    ]
-    issue_count = 0
-    for report_name, report in reports:
-        if not isinstance(report, dict):
-            continue
-        for issue in list(report.get("issues") or []):
-            issue_count += 1
-            lines.append(
-                f"- [{report_name}] {issue.get('severity')} "
-                f"{issue.get('code')}: {issue.get('message')}"
-            )
-    if issue_count == 0:
-        lines.append("- none")
-    lines.extend([
-        "",
-        "Manual in-game checklist:",
-        "- Load as a player/NPC appearance without crash.",
-        "- Verify idle, walk, run, and dialog animations.",
-        "- Verify rhand/lhand weapon attachment.",
-        "- Verify headhook/headgear attachment where applicable.",
-        "- Verify supermodel inheritance in the target KOTOR game.",
-    ])
-    return "\n".join(lines) + "\n"
+        preflight_report=preflight,
+        reload_report=reload_report,
+        metadata=dict(context.request.metadata),
+    )
+    context.write_text(
+        _validation_json_path(mdl_path),
+        report.to_json(),
+    )
+    context.write_text(
+        _validation_text_path(mdl_path),
+        report.to_text(),
+    )
 
 
 def _validation_json_path(mdl_path: Path) -> Path:
-    return mdl_path.with_name(f"{mdl_path.stem}_validation_report.json")
+    return validation_report_paths(mdl_path)[0]
 
 
 def _validation_text_path(mdl_path: Path) -> Path:
-    return mdl_path.with_name(f"{mdl_path.stem}_validation_report.txt")
+    return validation_report_paths(mdl_path)[1]
 
 
 def _model_resref(model: Any, mdl_path: Path) -> str:

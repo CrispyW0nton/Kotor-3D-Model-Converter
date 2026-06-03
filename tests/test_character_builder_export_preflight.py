@@ -11,7 +11,12 @@ from src.core.characters.character_export_preflight import (
     CharacterExportPreflightOptions,
     preflight_character_mdl_export,
 )
+from src.core.characters.character_validation_report import (
+    CHARACTER_BUILDER_MANUAL_CHECKLIST,
+    CharacterBuilderValidationReport,
+)
 from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+from src.core.validation.validation_bus import ValidationReport
 
 
 def _node(
@@ -224,6 +229,53 @@ def test_character_export_preflight_blocks_qbone_tbone_mismatch() -> None:
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_vertices_with_more_than_four_influences() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.bone_map = list(mesh.bone_map) + list(mesh.bone_map) * 4
+    mesh.qbone_list = list(mesh.bone_map)
+    mesh.tbone_list = list(mesh.bone_map)
+    mesh.skin_data[0].influences = [
+        type("Influence", (), {"bone_index": index, "weight": 0.2})()
+        for index in range(5)
+    ]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.vertex_too_many_influences")
+    assert issue.details["max_influences"] == 4
+    assert issue.details["evidence_status"] == "writer_format_contract_verified_ghidra_pending"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_builder_validation_report_has_full_manual_checklist() -> None:
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(source="test.preflight"),
+    )
+
+    data = report.to_dict()
+
+    assert data["manual_in_game_checklist"] == list(CHARACTER_BUILDER_MANUAL_CHECKLIST)
+    assert len(data["manual_in_game_checklist"]) == 12
+    assert "Two-handed weapon both hand sockets" in data["manual_in_game_checklist"]
+    assert "Loading in both KOTOR 1 and KOTOR 2" in data["manual_in_game_checklist"]
+    text = report.to_text()
+    assert "1. Load as player character without crash" in text
+    assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
+
+
 class _FakeCharacterWriter:
     calls: list = []
 
@@ -264,7 +316,10 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert payload["verified"] is True
     assert payload["status"] == "verified"
     assert payload["engine_evidence"]["findings_doc"] == "docs/ghidra_findings.md"
-    assert "Manual in-game checklist" in text_path.read_text(encoding="utf-8")
+    assert len(payload["manual_in_game_checklist"]) == 12
+    text = text_path.read_text(encoding="utf-8")
+    assert "Manual in-game checklist" in text
+    assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
 
 
 def test_character_export_transaction_preflight_failure_never_calls_writer(tmp_path) -> None:
