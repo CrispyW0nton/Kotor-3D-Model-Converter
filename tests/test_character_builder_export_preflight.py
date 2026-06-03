@@ -316,6 +316,67 @@ def test_character_export_preflight_blocks_vertices_with_more_than_four_influenc
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_missing_bonemap_target() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.bone_map = ["missing_native_node"]
+    mesh.qbone_list = [(0.0, 0.0, 0.0, 1.0)]
+    mesh.tbone_list = [(0.0, 0.0, 0.0)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.bonemap_target_missing")
+    assert issue.details["bone_name"] == "missing_native_node"
+    assert issue.details["bone_map_index"] == 0
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_bonemap_case_change() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.bone_map = ["RootDummy"]
+    mesh.qbone_list = [(0.0, 0.0, 0.0, 1.0)]
+    mesh.tbone_list = [(0.0, 0.0, 0.0)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.bonemap_target_case_changed")
+    assert issue.details["bone_name"] == "RootDummy"
+    assert issue.details["actual_node_name"] == "rootdummy"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_bonemap_target_outside_native_snapshot() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.bone_map = ["custom_body"]
+    mesh.qbone_list = [(0.0, 0.0, 0.0, 1.0)]
+    mesh.tbone_list = [(0.0, 0.0, 0.0)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.bonemap_target_not_native")
+    assert issue.details["bone_name"] == "custom_body"
+    assert issue.details["native_snapshot_model"] == "pmbam"
+    assert issue.details["engine_evidence_status"] == "fixture_verified_function_addresses_pending"
+    assert preflight.report.has_blocking is True
+
+
 def test_character_builder_validation_report_has_full_manual_checklist() -> None:
     report = CharacterBuilderValidationReport(
         status="verified",

@@ -50,6 +50,7 @@ class CharacterExportPreflightOptions:
     require_native_snapshot: bool = True
     require_supermodel: bool = True
     require_skin_payload: bool = True
+    require_native_bone_map_targets: bool = True
     require_required_sockets: bool = True
     require_native_template_final_rig: bool = True
     strict_parent_paths: bool = True
@@ -132,7 +133,7 @@ def preflight_character_mdl_export(
         _validate_socket_categories(model, native_snapshot, opts, report)
 
     if opts.require_skin_payload:
-        _validate_skin_payload(model, report)
+        _validate_skin_payload(model, native_snapshot, opts, report)
 
     return CharacterExportPreflightResult(report=report, native_snapshot=native_snapshot)
 
@@ -411,7 +412,12 @@ def _engine_string_refs_for_names(game: str, names: tuple[str, ...]) -> list[dic
     return refs
 
 
-def _validate_skin_payload(model: Any, report: ValidationReport) -> None:
+def _validate_skin_payload(
+    model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
     skin_nodes = [
         node for node in _iter_nodes(model)
         if bool(getattr(node, "is_skin", False))
@@ -487,7 +493,120 @@ def _validate_skin_payload(model: Any, report: ValidationReport) -> None:
                 fix_hint="Rebuild qbone/tbone skin metadata before export.",
                 details={"bone_map": len(bone_map), "tbone_list": len(tbone_list)},
             ))
+        if bone_map:
+            _validate_bone_map_targets(node, bone_map, model, native_snapshot, opts, report)
         _validate_skin_rows(node, bone_map, report)
+
+
+def _validate_bone_map_targets(
+    node: Any,
+    bone_map: list[Any],
+    model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    """Require skin bindings to target the selected native KOTOR DAG.
+
+    See ``CHARACTER_EXPORT_EVIDENCE`` and ``docs/ghidra_findings.md`` for the
+    current evidence tier: native fixture/snapshot contracts are verified,
+    while final MDL loader skin-reference semantics are still pending.
+    """
+    mesh_name = str(getattr(node, "name", "") or "")
+    current_nodes = list(_iter_nodes(model))
+    current_names = {str(getattr(current, "name", "") or "") for current in current_nodes}
+    current_lower = {name.lower(): name for name in current_names}
+    native_names = set(native_snapshot.node_names()) if native_snapshot is not None else set()
+    native_lower = {name.lower(): name for name in native_names}
+
+    for bone_map_index, bone_name_raw in enumerate(bone_map):
+        bone_name = str(bone_name_raw or "").strip()
+        if not bone_name:
+            report.add(_issue(
+                "blocking",
+                "character.export.bonemap_empty_target",
+                f"Skin mesh '{mesh_name}' has an empty bone-map target.",
+                navigation=ValidationNavigationTarget(node_name=mesh_name),
+                fix_hint="Rebuild the skin bone map from the selected native KOTOR skeleton.",
+                details={"bone_map_index": bone_map_index},
+            ))
+            continue
+
+        if bone_name not in current_names:
+            lower_match = current_lower.get(bone_name.lower())
+            if lower_match is not None:
+                report.add(_issue(
+                    "blocking",
+                    "character.export.bonemap_target_case_changed",
+                    (
+                        f"Skin mesh '{mesh_name}' bone-map target '{bone_name}' "
+                        f"does not match native node casing '{lower_match}'."
+                    ),
+                    navigation=ValidationNavigationTarget(node_name=mesh_name),
+                    fix_hint="Restore exact KOTOR node casing in the skin bone map.",
+                    details={
+                        "bone_map_index": bone_map_index,
+                        "bone_name": bone_name,
+                        "actual_node_name": lower_match,
+                    },
+                ))
+            else:
+                report.add(_issue(
+                    "blocking",
+                    "character.export.bonemap_target_missing",
+                    f"Skin mesh '{mesh_name}' bone-map target '{bone_name}' does not exist in the export DAG.",
+                    navigation=ValidationNavigationTarget(node_name=mesh_name),
+                    fix_hint="Bind skin weights only to nodes that exist in the selected native KOTOR skeleton.",
+                    details={
+                        "bone_map_index": bone_map_index,
+                        "bone_name": bone_name,
+                    },
+                ))
+            continue
+
+        if not opts.require_native_bone_map_targets or native_snapshot is None:
+            continue
+
+        if bone_name in native_names:
+            continue
+        native_case_match = native_lower.get(bone_name.lower())
+        if native_case_match is not None:
+            report.add(_issue(
+                "blocking",
+                "character.export.bonemap_native_target_case_changed",
+                (
+                    f"Skin mesh '{mesh_name}' bone-map target '{bone_name}' "
+                    f"does not match native snapshot casing '{native_case_match}'."
+                ),
+                navigation=ValidationNavigationTarget(node_name=mesh_name),
+                fix_hint="Use exact native KOTOR node casing in the skin bone map.",
+                details={
+                    "bone_map_index": bone_map_index,
+                    "bone_name": bone_name,
+                    "expected_native_name": native_case_match,
+                    "native_snapshot_model": native_snapshot.model_name,
+                },
+            ))
+        else:
+            report.add(_issue(
+                "blocking",
+                "character.export.bonemap_target_not_native",
+                (
+                    f"Skin mesh '{mesh_name}' bone-map target '{bone_name}' "
+                    "is not part of the selected native KOTOR skeleton snapshot."
+                ),
+                navigation=ValidationNavigationTarget(node_name=mesh_name),
+                fix_hint=(
+                    "Remove imported/temporary skeleton nodes from the skin bone map "
+                    "and bind the mesh to the native KOTOR template nodes."
+                ),
+                details={
+                    "bone_map_index": bone_map_index,
+                    "bone_name": bone_name,
+                    "native_snapshot_model": native_snapshot.model_name,
+                    "engine_evidence_status": CHARACTER_EXPORT_EVIDENCE["status"],
+                },
+            ))
 
 
 def _validate_skin_rows(node: Any, bone_map: list[Any], report: ValidationReport) -> None:
