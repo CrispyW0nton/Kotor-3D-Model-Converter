@@ -1592,6 +1592,68 @@ def test_t1204_animation_library_standard_supermodel_clips_populate(monkeypatch)
     assert library.details["resolved_supermodel"] == "S_Male02"
 
 
+def test_t1204_normalize_kotor_game_tag_accepts_ui_and_enum_labels():
+    assert wf.normalize_kotor_game_tag(None) == "K1"
+    assert wf.normalize_kotor_game_tag("") == "K1"
+    assert wf.normalize_kotor_game_tag("K1") == "K1"
+    assert wf.normalize_kotor_game_tag("GameVersion.K1") == "K1"
+    assert wf.normalize_kotor_game_tag(md.GameVersion.K1) == "K1"
+    assert wf.normalize_kotor_game_tag("K2") == "K2"
+    assert wf.normalize_kotor_game_tag("GameVersion.K2") == "K2"
+    assert wf.normalize_kotor_game_tag("KOTOR II") == "K2"
+    assert wf.normalize_kotor_game_tag("Knights of the Old Republic II") == "K2"
+    assert wf.normalize_kotor_game_tag("TSL") == "K2"
+    assert wf.normalize_kotor_game_tag(md.GameVersion.K2) == "K2"
+
+
+def test_t1204_animation_library_reports_normalized_kotor2_game(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    scene.game_version = "Knights of the Old Republic II"
+    body.supermodel = "NULL"
+    body.anim_scale = 1.0
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [
+        _FakeAnimation("pause1", 1.0),
+        _FakeAnimation("walk", 1.2),
+    ]
+
+    class _RM:
+        calls = []
+
+        def load_model(self, resref, game="K1"):
+            self.calls.append((str(resref), str(game)))
+            if str(resref).lower() == "s_male02" and game == "K2":
+                return super_model
+            return None
+
+    resource_manager = _RM()
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(resource_manager)
+    try:
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    names = {name for _label, name in library.available}
+    assert library.code == "listed"
+    assert {"pause1", "walk"}.issubset(names)
+    assert library.details["game"] == "K2"
+    assert library.details["raw_game"] == "Knights of the Old Republic II"
+    assert ("S_Male02", "K2") in resource_manager.calls
+
+
 def test_t1204_animation_library_empty_reports_resolver_reason(monkeypatch):
     scene, body = _scene_with_animated_body()
     body.supermodel = "NULL"

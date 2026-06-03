@@ -2832,6 +2832,49 @@ def _is_null_supermodel(value: str) -> bool:
     return (value or "").strip().upper() in {"", "NULL", "NONE"}
 
 
+def normalize_kotor_game_tag(game: Any) -> str:
+    """Return the canonical KOTOR game tag used for installed resources."""
+    if game is None:
+        return "K1"
+
+    name = str(getattr(game, "name", "") or "").strip().upper()
+    if name in {"K1", "K2"}:
+        return name
+
+    value = getattr(game, "value", None)
+    if value in {1, "1"}:
+        return "K1"
+    if value in {2, "2"}:
+        return "K2"
+
+    text = str(game or "").strip().upper().replace("_", " ")
+    if not text:
+        return "K1"
+    if text in {"K1", "1", "GAMEVERSION.K1", "GAMEVERSION K1", "KOTOR I", "KOTOR 1"}:
+        return "K1"
+    if text in {
+        "K2",
+        "2",
+        "GAMEVERSION.K2",
+        "GAMEVERSION K2",
+        "KOTOR II",
+        "KOTOR 2",
+        "TSL",
+        "THE SITH LORDS",
+    }:
+        return "K2"
+    if (
+        "KOTOR2" in text
+        or "KOTOR 2" in text
+        or "KOTOR II" in text
+        or "OLD REPUBLIC II" in text
+        or "SITH LORDS" in text
+        or "TSL" in text
+    ):
+        return "K2"
+    return "K1"
+
+
 def _body_supermodel(body: Any) -> str:
     return str(getattr(body, "supermodel", "") or "").strip()
 
@@ -2988,7 +3031,8 @@ def available_preview_animations(scene: Any) -> CheckActorResult:
     if motion_source == MOTION_SOURCE_INHERITED:
         supermodel = str(motion_state.get("supermodel") or _body_supermodel(body))
         if not _is_null_supermodel(supermodel):
-            game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
+            raw_game = getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1"
+            game_tag = normalize_kotor_game_tag(raw_game)
             available: List[Tuple[str, str]] = []
             missing: List[Tuple[str, str]] = []
             try:
@@ -3119,7 +3163,8 @@ def available_animation_library(scene: Any) -> CheckActorResult:
             diagnostics=["no_body"],
         )
 
-    game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
+    raw_game = getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1"
+    game_tag = normalize_kotor_game_tag(raw_game)
     try:
         from src.core.animation.animation_engine import SuperModelResolver
     except ImportError:                                     # pragma: no cover
@@ -3151,6 +3196,9 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         "local_animation_count": len(_iter_model_animations(body)),
         "resolver_configured": getattr(SuperModelResolver, "_resource_manager", None) is not None,
     }
+    raw_game_label = str(raw_game or "")
+    if raw_game_label and raw_game_label.upper() != game_tag:
+        details["raw_game"] = raw_game_label
     if effective_supermodel and not _is_null_supermodel(effective_supermodel):
         if not details["resolver_configured"]:
             diagnostics.append("resolver_not_configured")
@@ -4486,6 +4534,7 @@ __all__ = [
     "load_body",
     "load_file_filter",
     "motion_assignment_options",
+    "normalize_kotor_game_tag",
     "normalize_external_model_for_kotor",
     "place_body_guides",
     "place_hand_guides",

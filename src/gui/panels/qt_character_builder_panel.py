@@ -1722,11 +1722,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _ensure_game_resource_manager(self, game: str = "") -> Optional[Any]:
         """Index the configured game install and wire it to animation/texture systems."""
-        game_key = str(game or getattr(self.scene, "game_version", "K1") or "K1").upper()
-        if game_key.endswith("2"):
-            game_key = "K2"
-        else:
-            game_key = "K1"
+        raw_game = game or getattr(self.scene, "game_version", "K1") or "K1"
+        try:
+            from src.core.characters.headless_body_workflow import normalize_kotor_game_tag
+        except ImportError:                              # pragma: no cover
+            from core.characters.headless_body_workflow import normalize_kotor_game_tag  # type: ignore
+        game_key = normalize_kotor_game_tag(raw_game)
         if self._resource_manager is None:
             try:
                 from src.core.assets.resource_manager import get_manager
@@ -1784,7 +1785,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _installed_skeleton_template_rows(self, game: str) -> list[dict[str, str]]:
         """Return installed KOTOR MDLs for the base-skeleton picker."""
-        game_key = str(game or "K1").upper()
+        try:
+            from src.core.characters.headless_body_workflow import normalize_kotor_game_tag
+        except ImportError:                              # pragma: no cover
+            from core.characters.headless_body_workflow import normalize_kotor_game_tag  # type: ignore
+        game_key = normalize_kotor_game_tag(game)
         cached = self._installed_skeleton_template_rows_by_game.get(game_key)
         if cached is not None:
             return list(cached)

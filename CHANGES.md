@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder animation-library game-tag normalization: Added a shared K1/K2 normalizer for Character Builder motion-library lookup and resource-manager setup so labels such as `GameVersion.K2`, `KOTOR II`, `TSL`, and full KOTOR II titles resolve through the correct installed game before inherited supermodel clips are probed. Roadmap task: `T1204`.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `src/gui/panels/qt_character_builder_panel.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: Previous GhostRigger MCP animation-library fixture data remains the contract: K1 `pmbam` has 0 local clips and 268 inherited clips through its supermodel chain; K2 `pmbam` has 0 local clips and 456 inherited clips through its supermodel chain, including standard preview clips.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_anim_game_tags`; `python -m py_compile src/core/characters/headless_body_workflow.py src/gui/panels/qt_character_builder_panel.py tests/test_headless_body_workflow.py`.
+
 - Character Builder socket preflight evidence details: Export preflight now attaches native expected socket node names plus verified engine hook string refs to missing/renamed socket issues, so failures such as a missing `lhand` or case-changed `rhand` are tied directly to the selected native skeleton and the current Ghidra string-evidence ledger. Roadmap task: `T1205`.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: GhostRigger MCP `ghostrigger_model_info` refreshed K1 `pmbam` fixture facts before backend edits; the previous `kotor_engine_script` exact-string evidence remains the cited engine hook evidence.
