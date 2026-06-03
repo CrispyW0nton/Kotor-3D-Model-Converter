@@ -2671,6 +2671,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         ``self._acurig`` (shared with T503) so subsequent mask toggles
         and the next body-rig pass keep working on the same instance.
         """
+        if not self._require_legacy_acurig_enabled("Rebuild Hand Guides"):
+            return
+
         from core.characters import headless_body_workflow as _wf
 
         result = _wf.place_hand_guides(
@@ -2732,6 +2735,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         :func:`headless_body_workflow.apply_hand_masks` so AcuRig's
         :class:`BoneMask` mirrors the UI.
         """
+        if not self._require_legacy_acurig_enabled("Hand weight mask edits"):
+            return
+
         from core.characters import headless_body_workflow as _wf
 
         if self._acurig is None:

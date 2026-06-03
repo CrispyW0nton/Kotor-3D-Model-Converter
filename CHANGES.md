@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder legacy AcuRig gating: all body and hand AcuRig UI actions are now behind the explicit legacy/experimental opt-in flag, and the inspector labels those controls as legacy so the native KOTOR template path remains the default game-export workflow. Roadmap task: `T1205`.
+  Affected areas: `src/gui/panels/qt_character_builder_panel.py`, `src/gui/panels/qt_inspector_panel.py`, `tests/test_character_builder_template_rig.py`.
+  Ground truth used: Existing native-skeleton snapshot/export-preflight evidence remains the contract; this change only gates legacy UI paths and introduces no new engine-format assumptions.
+  Verification: `python -m pytest tests/test_character_builder_template_rig.py -q --basetemp .pytest_tmp_character_legacy_gate`; `python -m py_compile src/gui/panels/qt_character_builder_panel.py src/gui/panels/qt_inspector_panel.py tests/test_character_builder_template_rig.py`.
+
 - Character Builder template-rig scale authority: `apply_template_rig(...)` no longer scales the selected native KOTOR skeleton when callers request auto/manual scale. The requested scale is recorded as a diagnostic, while the applied skeleton scale remains `1.0`; imported mesh fitting must happen before binding so the native skeleton snapshot remains the final DAG authority. Roadmap task: `T1205`.
   Affected areas: `src/core/characters/character_builder.py`, `tests/test_character_builder_template_rig.py`, `tests/test_launch_workflow.py`.
   Ground truth used: Existing native-skeleton snapshot/export-preflight evidence remains the contract: selected KOTOR base owns final node names, hierarchy, helper/socket transforms, and supermodel inheritance; no new engine-format assumptions were introduced.

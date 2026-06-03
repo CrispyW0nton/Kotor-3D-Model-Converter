@@ -829,24 +829,25 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T503 — Body-rig action buttons (body step only) ─────
         if step == _STEP_RIG_BODY:
-            actions = QtWidgets.QGroupBox("Create Skeleton")
+            actions = QtWidgets.QGroupBox("Legacy / Experimental AcuRig")
             actions_layout = QtWidgets.QVBoxLayout(actions)
             actions_layout.setSpacing(4)
 
-            self._place_guides_btn = QtWidgets.QPushButton("Place Body Guides")
+            self._place_guides_btn = QtWidgets.QPushButton("Legacy: Place Body Guides")
             self._place_guides_btn.setToolTip(
-                "Snap AcuRig humanoid guide pins onto the body model.\n"
-                "Use the joint-dot HUD to fine-tune positions; drag with\n"
-                "Symmetry enabled to mirror across the X axis."
+                "Legacy/experimental AcuRig diagnostic path. Disabled by\n"
+                "default for game export. The normal Character Builder path\n"
+                "uses Build KOTOR Skeleton from the selected native template."
             )
             self._place_guides_btn.clicked.connect(self.placeGuidesRequested.emit)
             actions_layout.addWidget(self._place_guides_btn)
 
-            self._generate_skeleton_btn = QtWidgets.QPushButton("Create New Skeleton")
+            self._generate_skeleton_btn = QtWidgets.QPushButton("Legacy: Create New Skeleton")
             self._generate_skeleton_btn.setProperty("accent", True)
             self._generate_skeleton_btn.setToolTip(
-                "Build bones from the current guides + run heat-map\n"
-                "skinning (accurig.build_skeleton + auto_skin)."
+                "Legacy/experimental AcuRig skeleton generation. Use only\n"
+                "for diagnostics; game exports should use the native KOTOR\n"
+                "template skeleton as the final DAG authority."
             )
             self._generate_skeleton_btn.clicked.connect(
                 self.generateSkeletonRequested.emit
@@ -864,15 +865,15 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T504 — Hand-rig action group (hands step only) ──────
         if step == _STEP_RIG_HANDS:
-            hand_actions = QtWidgets.QGroupBox("Align Bones")
+            hand_actions = QtWidgets.QGroupBox("Legacy / Experimental Hand AcuRig")
             hand_layout = QtWidgets.QVBoxLayout(hand_actions)
             hand_layout.setSpacing(4)
 
-            self._place_hand_guides_btn = QtWidgets.QPushButton("Rebuild Hand Guides")
+            self._place_hand_guides_btn = QtWidgets.QPushButton("Legacy: Rebuild Hand Guides")
             self._place_hand_guides_btn.setToolTip(
-                "Re-snap wrist + finger guide pins onto the body model.\n"
-                "Run this *after* Generate Skeleton so AcuRig knows the\n"
-                "final bone positions."
+                "Legacy/experimental AcuRig hand diagnostic path. Disabled\n"
+                "by default because game exports should keep the selected\n"
+                "native KOTOR skeleton hierarchy."
             )
             self._place_hand_guides_btn.clicked.connect(
                 self.placeHandGuidesRequested.emit

@@ -74,11 +74,27 @@ def test_character_builder_legacy_acurig_slots_are_off_by_default() -> None:
     init_source = inspect.getsource(QtCharacterBuilderWindow.__init__)
     place_source = inspect.getsource(QtCharacterBuilderWindow._on_place_body_guides_requested)
     generate_source = inspect.getsource(QtCharacterBuilderWindow._on_generate_skeleton_requested)
+    hand_source = inspect.getsource(QtCharacterBuilderWindow._on_place_hand_guides_requested)
+    mask_source = inspect.getsource(QtCharacterBuilderWindow._on_hand_mask_changed)
 
     assert "_legacy_acurig_enabled = False" in init_source
     assert hasattr(QtCharacterBuilderWindow, "set_legacy_acurig_enabled")
     assert "_require_legacy_acurig_enabled" in place_source
     assert "_require_legacy_acurig_enabled" in generate_source
+    assert "_require_legacy_acurig_enabled" in hand_source
+    assert "_require_legacy_acurig_enabled" in mask_source
+
+
+def test_character_builder_inspector_labels_legacy_acurig_controls() -> None:
+    from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
+
+    source = inspect.getsource(QtInspectorPanel._populate_rig_page)
+
+    assert "Legacy / Experimental AcuRig" in source
+    assert "Legacy: Place Body Guides" in source
+    assert "Legacy: Create New Skeleton" in source
+    assert "Legacy / Experimental Hand AcuRig" in source
+    assert "Legacy: Rebuild Hand Guides" in source
 
 
 def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> None:
