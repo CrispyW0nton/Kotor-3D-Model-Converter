@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder legacy AcuRig path gate: Added an explicit OFF-by-default `set_legacy_acurig_enabled(...)` controller gate around the old `place_body_guides()` / `generate_skeleton()` slots, with warning status that directs normal exports back to the native KOTOR template `Build KOTOR Skeleton` path. No roadmap task ID applies.
+  Affected areas: `src/gui/panels/qt_character_builder_panel.py`, `tests/test_character_builder_template_rig.py`.
+  Verification: `python -m pytest tests/test_character_builder_template_rig.py tests/test_character_builder_skeleton_search.py -q --basetemp .pytest_tmp_character_legacy_gate`; `python -m py_compile src/gui/panels/qt_character_builder_panel.py tests/test_character_builder_template_rig.py`.
+
 - Character Builder auto-fit inspector transparency: Surfaced the persisted `kotor_fit_report` from imported external meshes in the Step 1 Import Fit inspector area, including fit policy, scale basis, selected KOTOR reference, landmark confidence, warnings, and the native-template contract. This keeps the KOTOR base skeleton as the export authority while making the auto-fit decision inspectable before applying the template rig. No roadmap task ID applies.
   Affected areas: `src/gui/panels/qt_inspector_panel.py`, `src/gui/panels/qt_character_builder_panel.py`, `tests/test_character_builder_skeleton_search.py`.
   Verification: `python -m pytest tests/test_character_builder_skeleton_search.py tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_fit_ui`; `python -m py_compile src/gui/panels/qt_inspector_panel.py src/gui/panels/qt_character_builder_panel.py tests/test_character_builder_skeleton_search.py`.

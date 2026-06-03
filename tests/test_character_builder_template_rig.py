@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import math
 
 from src.core.characters.character_builder import apply_template_rig
@@ -13,6 +14,7 @@ from src.core.geometry.model_data import (
     VertexSkinData,
 )
 from src.core.diagnostics.validation_service import ValidationService
+from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.systems.bas.preview_composer import build_bas_preview_model
 
 
@@ -66,6 +68,17 @@ def test_character_builder_preview_uses_bas_socket_layers_for_attachments() -> N
     assert preview_rhand.children[-1]._gr_bas_socket_name == "rhand"
     assert preview_headhook.children[-1].children[0]._gr_bas_attachment_layer is True
     assert preview.find_node("body_skin").bone_map == ["BodyRoot", "headhook", "rhand"]
+
+
+def test_character_builder_legacy_acurig_slots_are_off_by_default() -> None:
+    init_source = inspect.getsource(QtCharacterBuilderWindow.__init__)
+    place_source = inspect.getsource(QtCharacterBuilderWindow._on_place_body_guides_requested)
+    generate_source = inspect.getsource(QtCharacterBuilderWindow._on_generate_skeleton_requested)
+
+    assert "_legacy_acurig_enabled = False" in init_source
+    assert hasattr(QtCharacterBuilderWindow, "set_legacy_acurig_enabled")
+    assert "_require_legacy_acurig_enabled" in place_source
+    assert "_require_legacy_acurig_enabled" in generate_source
 
 
 def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> None:

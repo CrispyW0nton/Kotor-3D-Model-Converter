@@ -427,6 +427,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # "Generate Skeleton" so user-locked guide overrides survive
         # across the two clicks.  Lazily populated by the body-rig slot.
         self._acurig: Optional[Any] = None
+        self._legacy_acurig_enabled = False
         self._body_guides: dict[str, Any] = {}
         self._body_guide_history: Optional[Any] = None
         # M12 / T1202 — selected KOTOR skeleton template for imported
@@ -483,6 +484,38 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_renderer_settings"):
             viewport.set_renderer_settings(settings)
+
+    def set_legacy_acurig_enabled(self, enabled: bool) -> None:
+        """Opt into the experimental AcuRig body-generation path.
+
+        The normal Character Builder export workflow uses the selected native
+        KOTOR template through ``apply_template_rig``.  AcuRig remains available
+        only as an explicit legacy/experimental diagnostic path.
+        """
+        self._legacy_acurig_enabled = bool(enabled)
+
+    def _require_legacy_acurig_enabled(self, action_label: str) -> bool:
+        """Return True only when the legacy AcuRig path has been opted into."""
+        if bool(getattr(self, "_legacy_acurig_enabled", False)):
+            return True
+        message = (
+            f"{action_label} uses the legacy/experimental AcuRig path and is "
+            "disabled by default. Use Build KOTOR Skeleton to bind the selected "
+            "native KOTOR template for game export."
+        )
+        if hasattr(self.inspector, "set_body_rig_status"):
+            try:
+                self.inspector.set_body_rig_status(message, kind="warning")
+            except Exception:                              # pragma: no cover
+                log.exception("inspector.set_body_rig_status failed")
+        if hasattr(self, "bottom_strip"):
+            self.bottom_strip.set_validation(
+                "warning",
+                "LEGACY_ACURIG_DISABLED",
+                issues=[message],
+            )
+        self.statusBar().showMessage(message, 7000)
+        return False
 
     def apply_ghost_theme(self, theme) -> None:
         update_legacy_palette(theme)
@@ -2390,6 +2423,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         subsequent *Generate Skeleton* click reuses it (preserving any
         user-locked guide overrides).
         """
+        if not self._require_legacy_acurig_enabled("Place Body Guides"):
+            return
+
         from core.characters import headless_body_workflow as _wf
 
         result = _wf.place_body_guides(
@@ -2449,6 +2485,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         respected), pushes status into the inspector + bottom strip, and
         refreshes the viewport with the freshly-rigged model on success.
         """
+        if not self._require_legacy_acurig_enabled("Create New Skeleton"):
+            return
+
         from core.characters import headless_body_workflow as _wf
 
         result = _wf.generate_skeleton(
