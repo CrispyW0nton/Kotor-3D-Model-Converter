@@ -216,6 +216,34 @@ def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
     assert "self._renderer._draw_ext_skeleton(draw, w, h)" in viewport
 
 
+def test_character_builder_pushes_auto_fit_overlay_to_viewport() -> None:
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
+    renderer = _read("src/gui/rendering/frame_core/renderer_overlays.py")
+    setup = _read("src/core/rendering/frame_core/renderer_setup.py")
+
+    assert "report.get(\"fitted_visual_overlay\")" in builder
+    assert "report.get(\"visual_overlay\")" in builder
+    assert "viewport.set_character_fit_overlay(overlay)" in builder
+    assert "viewport.clear_character_fit_overlay()" in builder
+    assert "def set_character_fit_overlay" in viewport
+    assert "def clear_character_fit_overlay" in viewport
+    assert "self._renderer.set_character_fit_overlay(overlay)" in viewport
+    assert "_character_fit_overlay" in setup
+    assert "def set_character_fit_overlay" in renderer
+    assert "def _draw_character_fit_overlay" in renderer
+
+
+def test_gpu_and_software_paths_draw_character_fit_overlay() -> None:
+    viewport = _read("src/gui/viewports/qt_viewport.py")
+    render_loop = _read("src/core/rendering/frame_core/renderer_render_loop.py")
+
+    assert 'getattr(self._renderer, "_character_fit_overlay", None)' in viewport
+    assert "self._renderer._draw_character_fit_overlay(draw, w, h)" in viewport
+    assert 'getattr(self, "_character_fit_overlay", None)' in render_loop
+    assert "self._draw_character_fit_overlay(draw, W, H)" in render_loop
+
+
 def test_gpu_skinning_guards_external_parent_cycles() -> None:
     skinning = _read("src/core/animation/gpu_skinning.py")
 

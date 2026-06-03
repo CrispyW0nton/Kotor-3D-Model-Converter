@@ -1430,14 +1430,29 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _push_import_fit_report_to_inspector(self, model: Any = None) -> None:
         """Synchronize Character Builder inspector fit evidence from *model*."""
-        if not hasattr(self.inspector, "set_import_fit_report"):
-            return
         if model is None:
             _entry, model = self._body_model_for_fit_adjustment()
+        report = self._extract_import_fit_report(model)
+        if hasattr(self.inspector, "set_import_fit_report"):
+            try:
+                self.inspector.set_import_fit_report(report)
+            except Exception:                                  # pragma: no cover
+                log.exception("inspector.set_import_fit_report failed")
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        overlay = None
+        if isinstance(report, dict):
+            fitted = report.get("fitted_visual_overlay")
+            visual = report.get("visual_overlay")
+            overlay = fitted if isinstance(fitted, dict) else visual if isinstance(visual, dict) else None
         try:
-            self.inspector.set_import_fit_report(self._extract_import_fit_report(model))
-        except Exception:                                  # pragma: no cover
-            log.exception("inspector.set_import_fit_report failed")
+            if overlay is not None and hasattr(viewport, "set_character_fit_overlay"):
+                viewport.set_character_fit_overlay(overlay)
+            elif hasattr(viewport, "clear_character_fit_overlay"):
+                viewport.clear_character_fit_overlay()
+        except Exception:                                      # pragma: no cover
+            log.exception("viewport fit overlay sync failed")
 
     def _selected_skeleton_template_fit_label(self) -> str:
         selected_option = self._skeleton_template_options_by_key.get(

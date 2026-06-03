@@ -172,6 +172,7 @@ class RendererSetupMixin:
         self._ext_skel_offset: List[float] = [0.0, 0.0, 0.0]
         self._ext_skel_scale: float = 1.0
         self._ext_bone_screen_positions: List[Tuple] = []
+        self._character_fit_overlay: Optional[Dict] = None
         self.show_walkmesh:       bool = False
         self.show_walkmesh_walk:  bool = True
         self.show_walkmesh_block: bool = True
