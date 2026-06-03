@@ -1371,10 +1371,37 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 )
             except Exception:
                 log.exception("inspector.set_fit_adjustment failed")
+        self._push_import_fit_report_to_inspector(result.model)
         self._refresh_skeleton_template_options()
         self._refresh_motion_assignment_state()
         self._update_title()
         self._schedule_live_validation("model_loaded")
+
+    def _extract_import_fit_report(self, model: Any) -> Optional[dict[str, Any]]:
+        """Return the auto-fit report persisted on an imported external mesh."""
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            return None
+        report = metadata.get("kotor_fit_report")
+        if isinstance(report, dict):
+            return report
+        normalization = metadata.get("kotor_normalization")
+        if isinstance(normalization, dict):
+            nested = normalization.get("fit_report")
+            if isinstance(nested, dict):
+                return nested
+        return None
+
+    def _push_import_fit_report_to_inspector(self, model: Any = None) -> None:
+        """Synchronize Character Builder inspector fit evidence from *model*."""
+        if not hasattr(self.inspector, "set_import_fit_report"):
+            return
+        if model is None:
+            _entry, model = self._body_model_for_fit_adjustment()
+        try:
+            self.inspector.set_import_fit_report(self._extract_import_fit_report(model))
+        except Exception:                                  # pragma: no cover
+            log.exception("inspector.set_import_fit_report failed")
 
     def _body_model_for_fit_adjustment(self) -> tuple[Any, Any]:
         try:
@@ -1479,6 +1506,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 "Fit controls reset. Reload the mesh to discard applied corrections.",
                 kind="info",
             )
+        self._push_import_fit_report_to_inspector()
 
     def _load_model_in_viewport_with_textures(
         self,
@@ -1954,6 +1982,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         message = str(result.get("message") or "Template skeleton applied.")
         if hasattr(self.inspector, "set_skeleton_template_status"):
             self.inspector.set_skeleton_template_status(message, kind="ok")
+        self._push_import_fit_report_to_inspector(rigged_model)
         self.bottom_strip.set_validation(
             "info",
             "SKELETON_TEMPLATE",

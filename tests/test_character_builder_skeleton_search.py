@@ -1,0 +1,124 @@
+"""Character Builder base-model search tests."""
+
+from __future__ import annotations
+
+import os
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from PySide6 import QtWidgets
+
+from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
+
+
+def _qapp():
+    return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+
+def _sample_options():
+    return [
+        {
+            "key": "game:k1:pmbam:installation",
+            "source": "installation",
+            "game": "K1",
+            "part": "body",
+            "name": "pmbam",
+            "resref": "pmbam",
+            "path": "installation:pmbam.mdl",
+        },
+        {
+            "key": "game:k1:n_mandalorian03:installation",
+            "source": "installation",
+            "game": "K1",
+            "part": "body",
+            "name": "n_mandalorian03",
+            "resref": "n_mandalorian03",
+            "path": "installation:n_mandalorian03.mdl",
+        },
+        {
+            "key": "game:k1:n_sithsoldier:installation",
+            "source": "installation",
+            "game": "K1",
+            "part": "body",
+            "name": "n_sithsoldier",
+            "resref": "n_sithsoldier",
+            "path": "installation:n_sithsoldier.mdl",
+        },
+    ]
+
+
+def test_character_builder_base_picker_suggests_indexed_models_as_user_types():
+    _qapp()
+    inspector = QtInspectorPanel()
+    try:
+        inspector.set_skeleton_template_options(_sample_options())
+        combo = inspector._skeleton_template_combo
+        assert combo is not None
+        assert combo.isEditable()
+
+        completer = combo.completer()
+        assert completer is not None
+
+        inspector._show_skeleton_template_completions("n_")
+        model = completer.completionModel()
+        suggestions = [model.index(row, 0).data() for row in range(model.rowCount())]
+
+        assert "n_mandalorian03" in suggestions
+        assert "n_sithsoldier" in suggestions
+        assert "pmbam" not in suggestions
+    finally:
+        inspector.deleteLater()
+
+
+def test_character_builder_base_picker_exact_typed_model_resolves_to_indexed_key():
+    _qapp()
+    inspector = QtInspectorPanel()
+    try:
+        inspector.set_skeleton_template_options(_sample_options())
+        combo = inspector._skeleton_template_combo
+        assert combo is not None
+
+        combo.setEditText("n_mandalorian03")
+
+        assert (
+            inspector.selected_skeleton_template_key()
+            == "game:k1:n_mandalorian03:installation"
+        )
+    finally:
+        inspector.deleteLater()
+
+
+def test_character_builder_import_fit_report_is_visible_in_inspector():
+    _qapp()
+    inspector = QtInspectorPanel()
+    try:
+        inspector.set_import_fit_report({
+            "fit_policy": "bone_landmark_basis",
+            "scale_basis": "reference_bounds_height",
+            "scale": 0.42,
+            "reference": "K1 / body / pmbam",
+            "source_frame": {"confidence": 0.81},
+            "target_frame": {"confidence": 0.94},
+            "warnings": ["Imported mesh landmark confidence is low (0.81)."],
+            "kotor_contract": {
+                "native_skeleton_is_authority": True,
+                "imported_mesh_role": "payload_guest",
+                "final_dag_source": "selected_kotor_base",
+            },
+        })
+
+        label = inspector.findChild(
+            QtWidgets.QLabel,
+            "CharacterBuilderImportFitReportLabel",
+        )
+        assert label is not None
+        text = label.text()
+
+        assert "bone_landmark_basis" in text
+        assert "42.0%" in text
+        assert "K1 / body / pmbam" in text
+        assert "source 0.81" in text
+        assert "selected KOTOR base" in text
+        assert "Imported mesh landmark confidence is low" in text
+    finally:
+        inspector.deleteLater()

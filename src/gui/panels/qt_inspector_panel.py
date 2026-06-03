@@ -43,7 +43,8 @@ Spec:    knowledge_base/roadmap/01_qt_branch_audit.md §4.3.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Mapping
+from typing import Any, Dict, Iterable, List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -179,6 +180,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_pos_y_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_pos_z_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_adjust_status: Optional[QtWidgets.QLabel] = None
+        self._fit_report_label: Optional[QtWidgets.QLabel] = None
         # M12 / T1204 — mode-aware motion assignment.
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
@@ -340,6 +342,16 @@ class QtInspectorPanel(QtWidgets.QWidget):
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
         fit_layout.addWidget(self._fit_adjust_status, 7, 2, 1, 2)
+
+        self._fit_report_label = QtWidgets.QLabel(
+            "Auto-fit report will appear after loading a custom mesh."
+        )
+        self._fit_report_label.setObjectName("CharacterBuilderImportFitReportLabel")
+        self._fit_report_label.setWordWrap(True)
+        self._fit_report_label.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        fit_layout.addWidget(self._fit_report_label, 8, 0, 1, 4)
 
         for spin in (
             self._fit_scale_spin,
@@ -2158,6 +2170,58 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "error": "#ff6b6b",
         }.get(str(kind).lower(), C.get("text2", "#888"))
         label.setText(str(message))
+        label.setStyleSheet(f"color:{colour}; font-size:8pt;")
+
+    def set_import_fit_report(self, report: Optional[Mapping[str, Any]]) -> None:
+        """Show the headless auto-fit evidence for the imported mesh.
+
+        The Character Builder keeps the native KOTOR template as the final DAG
+        authority.  This label only explains how the external mesh was scaled
+        and oriented before the user applies that template skeleton.
+        """
+        label = getattr(self, "_fit_report_label", None)
+        if label is None:
+            return
+        if not report:
+            label.setText("Auto-fit report will appear after loading a custom mesh.")
+            label.setStyleSheet(f"color:{C.get('text2', '#888')}; font-size:8pt;")
+            return
+
+        policy = str(report.get("fit_policy") or "unknown")
+        scale = report.get("scale")
+        try:
+            scale_text = f"{float(scale) * 100.0:.1f}%"
+        except Exception:
+            scale_text = "unknown scale"
+        basis = str(report.get("scale_basis") or report.get("vertical_axis") or "unknown basis")
+        reference = str(report.get("reference") or "selected KOTOR base")
+        source_frame = report.get("source_frame") if isinstance(report.get("source_frame"), Mapping) else {}
+        target_frame = report.get("target_frame") if isinstance(report.get("target_frame"), Mapping) else {}
+
+        confidence_parts: List[str] = []
+        for label_name, frame in (("source", source_frame), ("target", target_frame)):
+            value = frame.get("confidence") if isinstance(frame, Mapping) else None
+            if value is not None:
+                try:
+                    confidence_parts.append(f"{label_name} {float(value):.2f}")
+                except Exception:
+                    pass
+        warnings = [str(w) for w in (report.get("warnings") or []) if str(w)]
+
+        lines = [
+            f"Auto-fit: {policy}, scale {scale_text}, {basis}.",
+            f"Reference: {reference}.",
+        ]
+        if confidence_parts:
+            lines.append("Landmark confidence: " + ", ".join(confidence_parts) + ".")
+        contract = report.get("kotor_contract")
+        if isinstance(contract, Mapping) and contract.get("native_skeleton_is_authority"):
+            lines.append("Final skeleton: selected KOTOR base; imported mesh is geometry payload.")
+        if warnings:
+            lines.append("Warning: " + warnings[0])
+
+        colour = "#ffd166" if warnings else "#7cd87c"
+        label.setText("\n".join(lines))
         label.setStyleSheet(f"color:{colour}; font-size:8pt;")
 
     def populate_joints(self, names: Iterable[str]) -> None:
