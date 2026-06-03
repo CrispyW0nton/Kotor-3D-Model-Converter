@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder socket preflight evidence details: Export preflight now attaches native expected socket node names plus verified engine hook string refs to missing/renamed socket issues, so failures such as a missing `lhand` or case-changed `rhand` are tied directly to the selected native skeleton and the current Ghidra string-evidence ledger. Roadmap task: `T1205`.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: GhostRigger MCP `ghostrigger_model_info` refreshed K1 `pmbam` fixture facts before backend edits; the previous `kotor_engine_script` exact-string evidence remains the cited engine hook evidence.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py tests/test_native_skeleton_snapshot.py -q --basetemp .pytest_tmp_character_socket_evidence`; `python -m py_compile src/core/characters/character_export_preflight.py src/core/characters/kotor_constants.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder engine hook string evidence: Extended the Ghidra findings ledger and Character Builder export-evidence constants with verified exact string-reference evidence for selected K1/K2 hooks (`rhand`, `lhand`, K1 `camerahook`, `handconjure`, `impact_bolt`, `FreeLookHook`) while keeping MDL-loader internals, full socket semantics, and missing-node behavior explicitly pending. Roadmap task: `T1205`.
   Affected areas: `docs/ghidra_findings.md`, `src/core/characters/kotor_constants.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: GhostRigger MCP `kotor_engine_script` exact-string reference scans and representative `kotor_decompile_function` metadata/disassembly attempts for `SwitchWeaponEvent` and `ApplyLightsaberThrow`; the Ghidra decompiler process did not launch, so findings are recorded as string-reference evidence rather than full decompiled routine semantics.

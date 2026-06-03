@@ -19,7 +19,12 @@ from src.core.validation.validation_bus import (
     ValidationSubsystem,
 )
 
-from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX
+from .kotor_constants import (
+    CHARACTER_EXPORT_EVIDENCE,
+    ENGINE_VERIFIED_SOCKET_STRING_REFS,
+    KOTOR_ENGINE_SOCKET_STRING_EVIDENCE_STATUS,
+    KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX,
+)
 from .character_rig_state import (
     RIG_STATE_NATIVE_TEMPLATE_FINAL,
     get_character_rig_state,
@@ -289,6 +294,7 @@ def _validate_native_dag(
                     "expected_path": list(expected_path),
                     "actual_path": list(_node_path(lower_match)),
                     "role": native_node.export_role,
+                    **_native_socket_evidence_details(snapshot, native_node),
                 },
             ))
             continue
@@ -302,7 +308,11 @@ def _validate_native_dag(
                 ),
                 navigation=ValidationNavigationTarget(node_name=native_node.name),
                 fix_hint="Rebuild from the selected native skeleton or restore the node parent path.",
-                details={"expected_path": list(expected_path), "role": native_node.export_role},
+                details={
+                    "expected_path": list(expected_path),
+                    "role": native_node.export_role,
+                    **_native_socket_evidence_details(snapshot, native_node),
+                },
             ))
         elif _find_node_exact_name(current_nodes, native_node.name) is None:
             report.add(_issue(
@@ -311,7 +321,10 @@ def _validate_native_dag(
                 f"Native {native_node.export_role} node '{native_node.name}' is missing.",
                 navigation=ValidationNavigationTarget(node_name=native_node.name),
                 fix_hint="Restore the native node before export.",
-                details={"role": native_node.export_role},
+                details={
+                    "role": native_node.export_role,
+                    **_native_socket_evidence_details(snapshot, native_node),
+                },
             ))
 
 
@@ -331,22 +344,71 @@ def _validate_socket_categories(
     }
     for category in opts.required_socket_categories:
         if category not in present_categories:
+            category_evidence = _socket_category_evidence_details(snapshot, category)
             report.add(_issue(
                 "blocking",
                 "character.export.required_socket_missing",
                 f"Required KOTOR attachment socket category '{category}' is missing.",
                 fix_hint="Restore the native attachment hook before export.",
-                details={"category": category},
+                details={"category": category, **category_evidence},
             ))
     for category in opts.recommended_socket_categories:
         if category not in present_categories:
+            category_evidence = _socket_category_evidence_details(snapshot, category)
             report.add(_issue(
                 "warning",
                 "character.export.recommended_socket_missing",
                 f"Recommended KOTOR attachment socket category '{category}' is missing.",
                 fix_hint="Preview equipment, weapons, and cutscene hooks before treating this model as game-ready.",
-                details={"category": category},
+                details={"category": category, **category_evidence},
             ))
+
+
+def _socket_category_evidence_details(
+    snapshot: NativeSkeletonSnapshot,
+    category: str,
+) -> dict[str, Any]:
+    expected_nodes = tuple(
+        node.name for node in snapshot.nodes
+        if node.socket_category == category
+    )
+    refs = _engine_string_refs_for_names(snapshot.game, expected_nodes)
+    return {
+        "expected_native_socket_nodes": list(expected_nodes),
+        "engine_string_evidence_status": KOTOR_ENGINE_SOCKET_STRING_EVIDENCE_STATUS,
+        "engine_string_refs": refs,
+    }
+
+
+def _native_socket_evidence_details(
+    snapshot: NativeSkeletonSnapshot,
+    node: NativeNodeSnapshot,
+) -> dict[str, Any]:
+    if not node.socket_category:
+        return {}
+    refs = _engine_string_refs_for_names(snapshot.game, (node.name,))
+    return {
+        "socket_category": node.socket_category,
+        "engine_string_evidence_status": KOTOR_ENGINE_SOCKET_STRING_EVIDENCE_STATUS,
+        "engine_string_refs": refs,
+    }
+
+
+def _engine_string_refs_for_names(game: str, names: tuple[str, ...]) -> list[dict[str, object]]:
+    game_key = str(game or "").strip().lower()
+    wanted = {str(name or "") for name in names}
+    refs: list[dict[str, object]] = []
+    for entry in ENGINE_VERIFIED_SOCKET_STRING_REFS:
+        if str(entry.get("game", "")).lower() != game_key:
+            continue
+        if str(entry.get("string", "")) not in wanted:
+            continue
+        refs.append({
+            "string": str(entry.get("string", "")),
+            "string_address": str(entry.get("string_address", "")),
+            "representative_refs": list(entry.get("representative_refs", ()) or ()),
+        })
+    return refs
 
 
 def _validate_skin_payload(model: Any, report: ValidationReport) -> None:

@@ -159,7 +159,11 @@ def test_character_export_preflight_blocks_imported_temporary_skeleton_state() -
 
 
 def test_character_export_preflight_blocks_missing_required_socket() -> None:
-    result = _rigged_character(_native_template(include_lhand=False))
+    result = _rigged_character()
+    lhand = result["model"].find_node("lhand")
+    assert lhand is not None
+    assert lhand.parent is not None
+    lhand.parent.children.remove(lhand)
 
     preflight = preflight_character_mdl_export(
         result["model"],
@@ -168,6 +172,12 @@ def test_character_export_preflight_blocks_missing_required_socket() -> None:
     )
 
     assert "character.export.required_socket_missing" in _codes(preflight)
+    issue = _issue_by_code(preflight, "character.export.required_socket_missing")
+    assert issue.details["category"] == "left_hand"
+    assert issue.details["expected_native_socket_nodes"] == ["lhand"]
+    assert issue.details["engine_string_evidence_status"] == "selected_hook_string_refs_verified_parser_pending"
+    assert issue.details["engine_string_refs"][0]["string"] == "lhand"
+    assert "SwitchWeaponEvent@00610f40" in issue.details["engine_string_refs"][0]["representative_refs"]
     assert preflight.report.has_blocking is True
 
 
@@ -184,6 +194,10 @@ def test_character_export_preflight_detects_exact_node_case_changes() -> None:
     )
 
     assert "character.export.node_case_changed" in _codes(preflight)
+    issue = _issue_by_code(preflight, "character.export.node_case_changed")
+    assert issue.details["socket_category"] == "right_hand"
+    assert issue.details["engine_string_refs"][0]["string"] == "rhand"
+    assert "SwitchWeaponEvent@00610f40" in issue.details["engine_string_refs"][0]["representative_refs"]
     assert preflight.report.has_blocking is True
 
 
