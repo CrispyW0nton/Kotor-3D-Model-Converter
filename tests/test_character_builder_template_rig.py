@@ -178,7 +178,7 @@ def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -
     assert rigged_mesh._gr_vertices_in_kotor_world is True
 
 
-def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -> None:
+def test_apply_template_rig_does_not_scale_native_template_in_manual_mode() -> None:
     src_root = _node("import_root")
     mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
     mesh.vertices = [(0.0, 0.0, 0.0)]
@@ -190,7 +190,7 @@ def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -
     hand.position = (1.25, 0.5, 0.75)
     template = KotorModel(name="adjusted", root_node=kotor_root)
 
-    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual", scale_factor=1.0)
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual", scale_factor=2.0)
 
     assert result["ok"] is True
     rigged_hand = result["model"].find_node("rhand")
@@ -199,6 +199,12 @@ def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -
     assert math.isclose(rigged_hand.position[1], 0.5)
     assert math.isclose(rigged_hand.position[2], 0.75)
     assert result["scale"] == 1.0
+    assert result["requested_scale"] == 2.0
+    assert any("ignored" in warning for warning in result["warnings"])
+    assert (
+        result["model"].metadata["character_builder_bind"]["skeleton_scale_applied"]
+        == 1.0
+    )
 
 
 def test_apply_template_rig_preserves_kotor_helper_mesh_skeleton_hooks() -> None:

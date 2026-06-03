@@ -819,8 +819,10 @@ def apply_template_rig(
     mesh_model      : KotorModel of the imported OBJ/FBX mesh (no rig)
     template_model  : KotorModel from load_template()
     game            : 'K1' or 'K2'
-    scale_mode      : 'auto' (match heights) or 'manual'
-    scale_factor    : only used when scale_mode == 'manual'
+    scale_mode      : compatibility input only. Imported meshes should already
+                      be auto-fitted before binding; the selected KOTOR
+                      skeleton is never scaled here.
+    scale_factor    : compatibility input only when scale_mode == 'manual'
 
     Returns
     -------
@@ -840,18 +842,29 @@ def apply_template_rig(
 
     warnings: List[str] = []
 
-    # Compute scale factor
+    # Compute the caller's requested scale for diagnostics only. The selected
+    # native KOTOR skeleton remains the final DAG authority and is not scaled
+    # in this binding step.
+    requested_scale = 1.0
     applied_scale = 1.0
     if scale_mode == "auto":
         try:
             mesh_h = _model_height(mesh_model)
             tmpl_h = _model_height(template_model)
             if tmpl_h > 0.01:
-                applied_scale = mesh_h / tmpl_h
+                requested_scale = mesh_h / tmpl_h
         except Exception as exc:
             warnings.append(f"Auto-scale failed: {exc}")
     elif scale_mode == "manual":
-        applied_scale = max(0.01, float(scale_factor))
+        requested_scale = max(0.01, float(scale_factor))
+    else:
+        warnings.append(f"Unknown scale mode '{scale_mode}'; using native template scale.")
+    if abs(requested_scale - 1.0) > 0.001:
+        warnings.append(
+            "Requested skeleton scale "
+            f"{requested_scale:.3f} was ignored; re-fit the imported mesh "
+            "to the selected KOTOR base before binding."
+        )
 
     # Clone mesh model
     try:
@@ -887,11 +900,6 @@ def apply_template_rig(
 
         import copy
         skel_root = copy.deepcopy(tmpl_root)
-
-        # Apply scale to skeleton positions if needed
-        if abs(applied_scale - 1.0) > 0.001:
-            _scale_skeleton(skel_root, applied_scale)
-            warnings.append(f"Skeleton scaled by {applied_scale:.3f} to match mesh height")
 
         removed_template_meshes = _strip_render_geometry_from_skeleton(skel_root)
         mesh_payloads = _extract_clean_mesh_payloads(mesh_model)
@@ -959,6 +967,8 @@ def apply_template_rig(
                 "weighted_vertices": bind_report.weighted_vertices,
                 "bone_slots": bind_report.bone_count,
                 "source": "apply_template_rig",
+                "skeleton_scale_applied": applied_scale,
+                "requested_skeleton_scale": requested_scale,
             }
             try:
                 from .character_rig_state import mark_native_template_final_rig
@@ -998,6 +1008,7 @@ def apply_template_rig(
             ),
             "warnings": warnings,
             "scale": applied_scale,
+            "requested_scale": requested_scale,
             "meshes": len(mesh_payloads),
             "skinned_meshes": bind_report.skinned_meshes,
             "weighted_vertices": bind_report.weighted_vertices,
