@@ -3832,8 +3832,39 @@ def _export_single_format(
 
     try:
         if fmt_key == "kotor":
-            writer_cls = _import_mdl_binary_writer()
-            writer_cls().write_files(body, out_path)
+            try:
+                from src.core.characters.character_export_transaction import (
+                    CharacterBuilderExportTransactionRequest,
+                    export_character_mdl_mdx_transaction,
+                )
+            except ImportError:  # pragma: no cover
+                from core.characters.character_export_transaction import (  # type: ignore
+                    CharacterBuilderExportTransactionRequest,
+                    export_character_mdl_mdx_transaction,
+                )
+
+            def _reload_exported(mdl_path, _mdx_path):
+                return _load_exported_kotor_model(str(mdl_path))
+
+            tx = export_character_mdl_mdx_transaction(
+                CharacterBuilderExportTransactionRequest(
+                    model=body,
+                    output_mdl_path=out_path,
+                    game=str(getattr(scene, "game_version", "") or "K1"),
+                    native_snapshot=getattr(body, "_gr_native_skeleton_snapshot", None),
+                    overwrite=True,
+                    metadata={"workflow": "headless_body_workflow.export_scene"},
+                    writer_cls=_import_mdl_binary_writer(),
+                    loader=_reload_exported,
+                )
+            )
+            if not tx.succeeded:
+                messages = [
+                    issue.message
+                    for issue in tx.export_job_result.validation_report.issues
+                    if getattr(issue, "message", "")
+                ]
+                raise RuntimeError("; ".join(messages) or "Character export transaction failed")
         elif fmt_key == "fbx":
             fbx_cls, _gltf_cls, _obj_cls = _import_mesh_exporters()
             ok = fbx_cls().export(body, out_path)

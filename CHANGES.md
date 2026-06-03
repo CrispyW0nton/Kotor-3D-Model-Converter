@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder staged export transaction: Added `CharacterBuilderExportTransaction` core support for MDL/MDX export through the shared `ExportJob` staging/promote/rollback lifecycle, including preflight gating, post-write reload verification, and `<resref>_validation_report.json` / `<resref>_validation_report.txt` artifacts with engine-evidence metadata and a manual in-game checklist. The KOTOR row in `headless_body_workflow.export_scene(...)` now uses this transaction path while FBX/glTF/OBJ remain on their existing exporters. Roadmap task: `T1205`.
+  Affected areas: `src/core/characters/character_export_transaction.py`, `src/core/characters/headless_body_workflow.py`, `tests/test_character_builder_export_preflight.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: GhostRigger MCP `ghostrigger_model_info` confirmed K1 `pmbam` has a 61-node native character DAG, 17 hooks/helpers/bones, and supermodel `S_KPMF0200`, matching the native-skeleton export contract.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_export_transaction`; `python -m py_compile src/core/characters/character_export_transaction.py src/core/characters/headless_body_workflow.py src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py tests/test_headless_body_workflow.py`.
+
 - Character Builder export preflight evidence metadata: Added `src/core/characters/kotor_constants.py` for Character Builder engine-evidence anchors and attached that evidence to every `character.export_preflight` issue, so preflight failures cite `docs/ghidra_findings.md`, current MCP fixture sources, the native-KOTOR-skeleton contract, and the pending Ghidra gaps instead of bare validation text. No roadmap task ID applies.
   Affected areas: `src/core/characters/kotor_constants.py`, `src/core/characters/native_skeleton.py`, `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: GhostRigger MCP `ghostrigger_model_info` and `ghostrigger_list_retarget_animations` for K1/K2 `pmbam` refreshed in this working session.

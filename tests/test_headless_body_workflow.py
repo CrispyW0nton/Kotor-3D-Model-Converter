@@ -15,6 +15,7 @@ import importlib.util as _il_util
 import os
 import pathlib
 import sys
+from types import SimpleNamespace
 from typing import Any, List
 
 import pytest
@@ -69,8 +70,20 @@ except Exception as exc:                                    # pragma: no cover
 class _FakeNode:
     """Minimal stand-in for a ``ModelNode``."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, parent=None):
         self.name = name
+        self.parent = parent
+        self.children = []
+        self.is_skin = False
+        self.is_mesh = False
+        self.vertices = []
+        self.faces = []
+        self.skin_data = []
+        self.bone_map = []
+        self.qbone_list = []
+        self.tbone_list = []
+        if parent is not None:
+            parent.children.append(self)
 
 
 class _FakeBodyModel:
@@ -86,11 +99,72 @@ class _FakeBodyModel:
         self.name = name
         self.supermodel = "S_Female02"
         self.model_type = int(md.ModelClassification.CHARACTER)
-        self._nodes = [
-            _FakeNode("rootdummy"),
-            _FakeNode("headhook"),
-            _FakeNode("rhand"),
+        self.metadata = {}
+        self.root_node = _FakeNode(name)
+        rootdummy = _FakeNode("rootdummy", self.root_node)
+        headhook = _FakeNode("headhook", rootdummy)
+        rhand = _FakeNode("rhand", rootdummy)
+        lhand = _FakeNode("lhand", rootdummy)
+        skin = _FakeNode("custom_body", self.root_node)
+        skin.is_skin = True
+        skin.vertices = [(0.0, 0.0, 0.0)]
+        skin.faces = [(0, 0, 0)]
+        skin.bone_map = [rootdummy]
+        skin.qbone_list = [rootdummy]
+        skin.tbone_list = [rootdummy]
+        skin.skin_data = [
+            SimpleNamespace(
+                influences=[
+                    SimpleNamespace(bone_index=0, weight=1.0),
+                ]
+            )
         ]
+        self._nodes = [
+            self.root_node,
+            rootdummy,
+            headhook,
+            rhand,
+            lhand,
+            skin,
+        ]
+        self._gr_native_skeleton_snapshot = SimpleNamespace(
+            model_name=name,
+            game="K1",
+            supermodel="S_Female02",
+            metadata={"source_resref": name, "source_game": "K1"},
+            nodes=[
+                SimpleNamespace(
+                    name=name,
+                    full_path=(name,),
+                    export_role="helper",
+                    socket_category=None,
+                ),
+                SimpleNamespace(
+                    name="rootdummy",
+                    full_path=(name, "rootdummy"),
+                    export_role="helper",
+                    socket_category=None,
+                ),
+                SimpleNamespace(
+                    name="headhook",
+                    full_path=(name, "rootdummy", "headhook"),
+                    export_role="socket",
+                    socket_category="head",
+                ),
+                SimpleNamespace(
+                    name="rhand",
+                    full_path=(name, "rootdummy", "rhand"),
+                    export_role="socket",
+                    socket_category="right_hand",
+                ),
+                SimpleNamespace(
+                    name="lhand",
+                    full_path=(name, "rootdummy", "lhand"),
+                    export_role="socket",
+                    socket_category="left_hand",
+                ),
+            ],
+        )
 
     def all_nodes(self):
         return list(self._nodes)
@@ -1755,6 +1829,12 @@ def _install_fake_exporters(monkeypatch):
         wf,
         "_import_mesh_exporters",
         lambda: (_FakeFBXExporter, _FakeGLTFExporter, _FakeOBJExporter),
+    )
+    monkeypatch.setattr(
+        wf,
+        "_load_exported_kotor_model",
+        lambda _mdl_path: _FakeMDLBinaryWriter.calls[-1][0]
+        if _FakeMDLBinaryWriter.calls else None,
     )
     return {
         "mdl": _FakeMDLBinaryWriter,

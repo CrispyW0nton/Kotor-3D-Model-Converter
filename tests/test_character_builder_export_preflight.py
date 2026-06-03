@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import json
+
 from src.core.characters.character_builder import apply_template_rig
+from src.core.characters.character_export_transaction import (
+    CharacterBuilderExportTransactionRequest,
+    export_character_mdl_mdx_transaction,
+)
 from src.core.characters.character_export_preflight import (
     CharacterExportPreflightOptions,
     preflight_character_mdl_export,
@@ -216,3 +222,100 @@ def test_character_export_preflight_blocks_qbone_tbone_mismatch() -> None:
     assert "character.export.qbone_mismatch" in _codes(preflight)
     assert "character.export.tbone_mismatch" in _codes(preflight)
     assert preflight.report.has_blocking is True
+
+
+class _FakeCharacterWriter:
+    calls: list = []
+
+    def write_files(self, model, mdl_path: str) -> None:
+        from pathlib import Path
+
+        _FakeCharacterWriter.calls.append((model, mdl_path))
+        path = Path(mdl_path)
+        path.write_bytes(b"mdl")
+        path.with_suffix(".mdx").write_bytes(b"mdx")
+
+
+def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    output = tmp_path / "grbody.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: result["model"],
+        )
+    )
+
+    assert tx.succeeded is True
+    assert _FakeCharacterWriter.calls
+    assert output.read_bytes() == b"mdl"
+    assert output.with_suffix(".mdx").read_bytes() == b"mdx"
+    report_path = tmp_path / "grbody_validation_report.json"
+    text_path = tmp_path / "grbody_validation_report.txt"
+    assert report_path.exists()
+    assert text_path.exists()
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == "ghostrigger.character_export_validation.v1"
+    assert payload["verified"] is True
+    assert payload["status"] == "verified"
+    assert payload["engine_evidence"]["findings_doc"] == "docs/ghidra_findings.md"
+    assert "Manual in-game checklist" in text_path.read_text(encoding="utf-8")
+
+
+def test_character_export_transaction_preflight_failure_never_calls_writer(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    delattr(result["model"], "_gr_native_skeleton_snapshot")
+    output = tmp_path / "blocked.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=None,
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: result["model"],
+        )
+    )
+
+    assert tx.succeeded is False
+    assert _FakeCharacterWriter.calls == []
+    assert not output.exists()
+    assert not output.with_suffix(".mdx").exists()
+    assert not (tmp_path / "blocked_validation_report.json").exists()
+    assert "character.export.missing_native_snapshot" in {
+        issue.code for issue in tx.export_job_result.validation_report.issues
+    }
+
+
+def test_character_export_transaction_reload_failure_leaves_no_final_files(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    output = tmp_path / "reload_fail.mdl"
+
+    def _broken_loader(_mdl, _mdx):
+        raise RuntimeError("readback broke")
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=_broken_loader,
+        )
+    )
+
+    assert tx.succeeded is False
+    assert _FakeCharacterWriter.calls
+    assert not output.exists()
+    assert not output.with_suffix(".mdx").exists()
+    assert not (tmp_path / "reload_fail_validation_report.json").exists()
+    assert "character.export.reload_failed" in {
+        issue.code for issue in tx.export_job_result.validation_report.issues
+    }
