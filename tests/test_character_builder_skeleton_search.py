@@ -161,6 +161,25 @@ def test_character_builder_refit_to_selected_base_button_emits_signal():
         inspector.deleteLater()
 
 
+def test_character_builder_fit_override_selectors_are_reported():
+    _qapp()
+    inspector = QtInspectorPanel()
+    try:
+        inspector._fit_source_forward_combo.setCurrentText("+Z")
+        inspector._fit_source_up_combo.setCurrentText("+Y")
+        inspector._fit_height_source_combo.setCurrentText("Bounds")
+        inspector._fit_ground_basis_combo.setCurrentText("Bounds Bottom")
+
+        assert inspector.selected_fit_override() == {
+            "source_forward_axis": "+z",
+            "source_up_axis": "+y",
+            "height_source": "bounds",
+            "ground_origin_basis": "bounds_bottom",
+        }
+    finally:
+        inspector.deleteLater()
+
+
 def test_character_builder_animation_library_diagnostics_are_visible():
     _qapp()
     inspector = QtInspectorPanel()

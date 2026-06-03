@@ -1609,12 +1609,19 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
              getattr(self.scene, "game_version", "K1")
         fit_label = self._selected_skeleton_template_fit_label()
+        fit_override = {}
+        if hasattr(self.inspector, "selected_fit_override"):
+            try:
+                fit_override = self.inspector.selected_fit_override()
+            except Exception:
+                log.exception("inspector.selected_fit_override failed")
         result = _wf.load_body(
             source_path,
             self.scene,
             game_version=gv,
             fit_reference_model=self._selected_skeleton_template_model,
             fit_reference_label=fit_label,
+            fit_override=fit_override,
         )
         if not result.ok:
             message = str(result.message or "Re-fit failed.")

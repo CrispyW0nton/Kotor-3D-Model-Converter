@@ -38,9 +38,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 try:
-    from src.core.characters.character_autofit_report import AutoFitReport
+    from src.core.characters.character_autofit_report import AutoFitOverride, AutoFitReport
 except ImportError:  # pragma: no cover - package-relative fallback
-    from core.characters.character_autofit_report import AutoFitReport  # type: ignore
+    from core.characters.character_autofit_report import AutoFitOverride, AutoFitReport  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -209,6 +209,44 @@ def _axis_label_from_index(index: int) -> str:
         return "unknown"
 
 
+def _axis_vector_from_label(label: Any) -> Optional[Vec3]:
+    raw = str(label or "").strip().lower()
+    if raw in {"", "auto", "unknown"}:
+        return None
+    sign = -1.0 if raw.startswith("-") else 1.0
+    axis = raw[-1:] if raw[-1:] in {"x", "y", "z"} else raw
+    if axis == "x":
+        return (sign, 0.0, 0.0)
+    if axis == "y":
+        return (0.0, sign, 0.0)
+    if axis == "z":
+        return (0.0, 0.0, sign)
+    return None
+
+
+def _bounds_extent_along_axis(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    axis: Vec3,
+) -> float:
+    if bounds is None:
+        return 0.0
+    bb_min, bb_max = bounds
+    values: List[float] = []
+    for x in (bb_min[0], bb_max[0]):
+        for y in (bb_min[1], bb_max[1]):
+            for z in (bb_min[2], bb_max[2]):
+                values.append(_vec_dot((float(x), float(y), float(z)), axis))
+    if not values:
+        return 0.0
+    return max(values) - min(values)
+
+
+def _coerce_auto_fit_override(value: Any) -> AutoFitOverride:
+    if isinstance(value, AutoFitOverride):
+        return value
+    return AutoFitOverride.from_mapping(value)
+
+
 def _ground_origin_basis(frame: Optional[_HumanoidFitFrame]) -> str:
     if frame is None:
         return "bounds_bottom"
@@ -218,6 +256,81 @@ def _ground_origin_basis(frame: Optional[_HumanoidFitFrame]) -> str:
     if landmarks.get("pelvis"):
         return "hips"
     return "bounds_bottom"
+
+
+def _default_target_fit_frame(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[_HumanoidFitFrame]:
+    if bounds is None:
+        return None
+    height = _height_from_bounds(bounds)
+    if height <= 1.0e-6:
+        return None
+    return _HumanoidFitFrame(
+        origin=_bounds_ground_center(bounds),
+        right=(1.0, 0.0, 0.0),
+        forward=(0.0, 1.0, 0.0),
+        up=(0.0, 0.0, 1.0),
+        height=height,
+        confidence=0.55,
+        landmarks={},
+    )
+
+
+def _manual_override_frame(
+    model: Any,
+    *,
+    bounds: Tuple[Vec3, Vec3],
+    source_frame: Optional[_HumanoidFitFrame],
+    override: AutoFitOverride,
+) -> Optional[_HumanoidFitFrame]:
+    forward = _axis_vector_from_label(override.source_forward_axis)
+    up = _axis_vector_from_label(override.source_up_axis)
+    if forward is None or up is None:
+        return None
+    if abs(_vec_dot(forward, up)) > 1.0e-6:
+        return None
+    right = _vec_normalize(_vec_cross(forward, up))
+    if right is None:
+        return None
+    forward = _vec_normalize(_vec_cross(up, right))
+    if forward is None:
+        return None
+
+    ground_basis = str(override.ground_origin_basis or "auto").strip().lower()
+    if ground_basis == "auto":
+        ground_basis = _ground_origin_basis(source_frame)
+    origin = _bounds_ground_center(bounds)
+    if ground_basis == "feet" and source_frame is not None:
+        origin = source_frame.origin
+    elif ground_basis == "hips":
+        pelvis = _find_landmark(_named_positions(model), _PELVIS_ALIASES)
+        if pelvis is not None:
+            origin = pelvis[1]
+        elif source_frame is not None:
+            origin = source_frame.origin
+
+    height_source = str(override.height_source or "auto").strip().lower()
+    if height_source == "auto":
+        height_source = "landmarks" if source_frame is not None else "bounds"
+    if height_source == "landmarks" and source_frame is not None:
+        height = source_frame.height
+    else:
+        height = _bounds_extent_along_axis(bounds, up)
+    if height <= 1.0e-6:
+        return None
+    landmarks = dict(source_frame.landmarks) if source_frame is not None else {}
+    landmarks["manual_source_forward_axis"] = str(override.source_forward_axis or "")
+    landmarks["manual_source_up_axis"] = str(override.source_up_axis or "")
+    return _HumanoidFitFrame(
+        origin=origin,
+        right=right,
+        forward=forward,
+        up=up,
+        height=height,
+        confidence=0.9 if source_frame is not None else 0.65,
+        landmarks=landmarks,
+    )
 
 
 def _used_landmark_labels(
@@ -241,6 +354,10 @@ def _auto_fit_confidence(
 ) -> float:
     if policy == "bone_landmark_basis" and source_frame is not None and target_frame is not None:
         return min(float(source_frame.confidence), float(target_frame.confidence))
+    if policy == "manual_axis_override" and source_frame is not None:
+        if target_frame is not None:
+            return min(float(source_frame.confidence), float(target_frame.confidence))
+        return float(source_frame.confidence)
     if source_frame is not None:
         return min(0.5, max(0.0, float(source_frame.confidence) * 0.5))
     return 0.35
@@ -254,9 +371,14 @@ def _make_auto_fit_report(
     target_frame: Optional[_HumanoidFitFrame],
     vertical_axis_index: int,
     warnings: Sequence[str],
+    override: Optional[AutoFitOverride] = None,
 ) -> AutoFitReport:
-    fallback_used = policy != "bone_landmark_basis"
+    manual_used = policy == "manual_axis_override"
+    fallback_used = policy not in {"bone_landmark_basis", "manual_axis_override"}
     notes = "; ".join(str(w) for w in warnings if str(w))
+    if manual_used:
+        manual_note = "Manual source axis/ground override used for this fit."
+        notes = f"{manual_note} {notes}".strip()
     if fallback_used and not notes:
         notes = "Used bounds-based fitting because a complete landmark frame was unavailable."
     source_forward_axis = (
@@ -279,14 +401,23 @@ def _make_auto_fit_report(
         if target_frame is not None
         else "+z"
     )
+    height_source = "bounds" if fallback_used else "landmarks"
+    ground_basis = _ground_origin_basis(None if fallback_used else source_frame)
+    if manual_used and override is not None:
+        override_height = str(override.height_source or "auto").strip().lower()
+        override_ground = str(override.ground_origin_basis or "auto").strip().lower()
+        if override_height not in {"", "auto"}:
+            height_source = override_height
+        if override_ground not in {"", "auto"}:
+            ground_basis = override_ground
     return AutoFitReport(
         source_forward_axis=source_forward_axis,
         source_up_axis=source_up_axis,
         target_forward_axis=target_forward_axis,
         target_up_axis=target_up_axis,
         scale_factor=float(scale),
-        height_source="bounds" if fallback_used else "landmarks",
-        ground_origin_basis=_ground_origin_basis(None if fallback_used else source_frame),
+        height_source=height_source,
+        ground_origin_basis=ground_basis,
         used_landmarks=_used_landmark_labels(source_frame, target_frame),
         confidence=_auto_fit_confidence(
             policy=policy,
@@ -692,6 +823,7 @@ def inspect_external_model_fit(
     target_height: Optional[float] = None,
     reference_model: Optional[Any] = None,
     reference_label: str = "",
+    fit_override: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Return the deterministic auto-fit facts for an external character mesh.
 
@@ -742,6 +874,17 @@ def inspect_external_model_fit(
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
     )
+    override = _coerce_auto_fit_override(fit_override)
+    manual_source_frame = (
+        _manual_override_frame(
+            model,
+            bounds=bounds,
+            source_frame=source_frame,
+            override=override,
+        )
+        if override.is_active() else None
+    )
+    manual_target_frame = target_frame or _default_target_fit_frame(reference_bounds)
     reference_height = _height_from_bounds(reference_bounds)
 
     bb_min, bb_max = bounds
@@ -774,27 +917,41 @@ def inspect_external_model_fit(
             f"KOTOR base landmark confidence is low ({target_frame.confidence:.2f})."
         )
 
-    if source_frame is not None and target_frame is not None:
+    if manual_source_frame is not None and manual_target_frame is not None:
+        target = float(target_height or reference_height or manual_target_frame.height)
+        scale = target / manual_source_frame.height if manual_source_frame.height > 1.0e-6 else 1.0
+        policy = "manual_axis_override"
+        source_height = manual_source_frame.height
+        scale_basis = "manual_override_height"
+        vertical_axis = "manual_override"
+        report_source_frame = manual_source_frame
+        report_target_frame = manual_target_frame
+    elif source_frame is not None and target_frame is not None:
         target = float(target_height or reference_height or target_frame.height)
         scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
         policy = "bone_landmark_basis"
         source_height = source_frame.height
         scale_basis = "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height"
         vertical_axis = "bone_landmarks"
+        report_source_frame = source_frame
+        report_target_frame = target_frame
     else:
         scale = fallback_target_height / fallback_source_height
         policy = "selected_reference_bounds" if reference_bounds is not None else "origin_height"
         source_height = fallback_source_height
         scale_basis = "bounds_height"
         vertical_axis = ("x", "y", "z")[vertical_axis_index]
+        report_source_frame = source_frame
+        report_target_frame = target_frame
 
     auto_fit = _make_auto_fit_report(
         policy=policy,
         scale=scale,
-        source_frame=source_frame,
-        target_frame=target_frame,
+        source_frame=report_source_frame,
+        target_frame=report_target_frame,
         vertical_axis_index=vertical_axis_index,
         warnings=warnings,
+        override=override,
     )
     auto_fit_report = auto_fit.to_dict()
 
@@ -815,8 +972,8 @@ def inspect_external_model_fit(
         "reference": str(reference_label or getattr(reference_model, "name", "") or ""),
         "source_bounds": _bounds_as_lists(bounds),
         "reference_bounds": _bounds_as_lists(reference_bounds),
-        "source_frame": _fit_frame_as_metadata(source_frame),
-        "target_frame": _fit_frame_as_metadata(target_frame),
+        "source_frame": _fit_frame_as_metadata(report_source_frame),
+        "target_frame": _fit_frame_as_metadata(report_target_frame),
         "source_forward_axis": auto_fit.source_forward_axis,
         "source_up_axis": auto_fit.source_up_axis,
         "target_forward_axis": auto_fit.target_forward_axis,
@@ -1170,6 +1327,7 @@ def normalize_external_model_for_kotor(
     target_height: Optional[float] = None,
     reference_model: Optional[Any] = None,
     reference_label: str = "",
+    fit_override: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Scale and orient an imported external mesh into KOTOR humanoid space.
 
@@ -1189,23 +1347,45 @@ def normalize_external_model_for_kotor(
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
     )
+    override = _coerce_auto_fit_override(fit_override)
+    manual_source_frame = (
+        _manual_override_frame(
+            model,
+            bounds=bounds,
+            source_frame=source_frame,
+            override=override,
+        )
+        if override.is_active() else None
+    )
+    manual_target_frame = target_frame or _default_target_fit_frame(reference_bounds)
     fit_report = inspect_external_model_fit(
         model,
         game_version=game_version,
         target_height=target_height,
         reference_model=reference_model,
         reference_label=reference_label,
+        fit_override=override,
     )
 
-    if source_frame is not None and target_frame is not None:
+    transform_source_frame = manual_source_frame
+    transform_target_frame = manual_target_frame
+    transform_policy = "manual_axis_override"
+    transform_scale_basis = "manual_override_height"
+    if transform_source_frame is None or transform_target_frame is None:
+        transform_source_frame = source_frame
+        transform_target_frame = target_frame
+        transform_policy = "bone_landmark_basis"
+        transform_scale_basis = ""
+
+    if transform_source_frame is not None and transform_target_frame is not None:
         reference_height = _height_from_bounds(reference_bounds)
-        target = float(target_height or reference_height or target_frame.height)
-        scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
-        rotation = _basis_rotation(source_frame, target_frame)
+        target = float(target_height or reference_height or transform_target_frame.height)
+        scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
+        rotation = _basis_rotation(transform_source_frame, transform_target_frame)
 
         def transform_point(point: Vec3) -> Vec3:
-            rel = _vec_scale(_vec_sub(point, source_frame.origin), scale)
-            return _vec_add(target_frame.origin, _mat_vec(rotation, rel))
+            rel = _vec_scale(_vec_sub(point, transform_source_frame.origin), scale)
+            return _vec_add(transform_target_frame.origin, _mat_vec(rotation, rel))
 
         def transform_direction(direction: Vec3) -> Vec3:
             rotated = _mat_vec(rotation, direction)
@@ -1231,20 +1411,24 @@ def normalize_external_model_for_kotor(
             "ok": True,
             "code": "normalized",
             "scale": scale,
-            "source_height": source_frame.height,
+            "source_height": transform_source_frame.height,
             "target_height": target,
             "reference": reference_label or getattr(reference_model, "name", "") or "",
-            "vertical_axis": "bone_landmarks",
-            "offset": _vec_sub(target_frame.origin, _mat_vec(rotation, _vec_scale(source_frame.origin, scale))),
-            "target_center_xy": (target_frame.origin[0], target_frame.origin[1]),
-            "target_ground_z": target_frame.origin[2],
+            "vertical_axis": "manual_override" if transform_policy == "manual_axis_override" else "bone_landmarks",
+            "offset": _vec_sub(transform_target_frame.origin, _mat_vec(rotation, _vec_scale(transform_source_frame.origin, scale))),
+            "target_center_xy": (transform_target_frame.origin[0], transform_target_frame.origin[1]),
+            "target_ground_z": transform_target_frame.origin[2],
             "external_world_positions_fit": True,
-            "fit_policy": "bone_landmark_basis",
-            "scale_basis": "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height",
-            "source_fit_landmarks": dict(source_frame.landmarks),
-            "target_fit_landmarks": dict(target_frame.landmarks),
-            "source_fit_confidence": source_frame.confidence,
-            "target_fit_confidence": target_frame.confidence,
+            "fit_policy": transform_policy,
+            "scale_basis": (
+                transform_scale_basis
+                if transform_scale_basis
+                else ("reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height")
+            ),
+            "source_fit_landmarks": dict(transform_source_frame.landmarks),
+            "target_fit_landmarks": dict(transform_target_frame.landmarks),
+            "source_fit_confidence": transform_source_frame.confidence,
+            "target_fit_confidence": transform_target_frame.confidence,
             "fit_report": fit_report,
         }
         metadata["kotor_normalization"] = result
@@ -1397,6 +1581,7 @@ def load_body(
     allow_mode_correction: bool = False,
     fit_reference_model: Optional[Any] = None,
     fit_reference_label: str = "",
+    fit_override: Optional[Any] = None,
 ) -> LoadResult:
     """Load a body model from *path* and assign it to *scene*.
 
@@ -1489,6 +1674,7 @@ def load_body(
             game_version=gv,
             reference_model=fit_reference_model,
             reference_label=fit_reference_label,
+            fit_override=fit_override,
         )
 
     # ── Detect mode ─────────────────────────────────────────────────

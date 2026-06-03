@@ -182,6 +182,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_pos_z_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_adjust_status: Optional[QtWidgets.QLabel] = None
         self._fit_report_label: Optional[QtWidgets.QLabel] = None
+        self._fit_source_forward_combo: Optional[QtWidgets.QComboBox] = None
+        self._fit_source_up_combo: Optional[QtWidgets.QComboBox] = None
+        self._fit_height_source_combo: Optional[QtWidgets.QComboBox] = None
+        self._fit_ground_basis_combo: Optional[QtWidgets.QComboBox] = None
         # M12 / T1204 — mode-aware motion assignment.
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
@@ -334,9 +338,34 @@ class QtInspectorPanel(QtWidgets.QWidget):
             fit_layout.addWidget(QtWidgets.QLabel(label), row, 0)
             fit_layout.addWidget(spin, row, 1, 1, 3)
 
+        axis_options = ["Auto", "+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+        self._fit_source_forward_combo = QtWidgets.QComboBox()
+        self._fit_source_forward_combo.addItems(axis_options)
+        self._fit_source_forward_combo.setToolTip("Override the imported mesh's forward axis before re-fit.")
+        fit_layout.addWidget(QtWidgets.QLabel("Source Forward"), 7, 0)
+        fit_layout.addWidget(self._fit_source_forward_combo, 7, 1)
+
+        self._fit_source_up_combo = QtWidgets.QComboBox()
+        self._fit_source_up_combo.addItems(axis_options)
+        self._fit_source_up_combo.setToolTip("Override the imported mesh's up axis before re-fit.")
+        fit_layout.addWidget(QtWidgets.QLabel("Source Up"), 7, 2)
+        fit_layout.addWidget(self._fit_source_up_combo, 7, 3)
+
+        self._fit_height_source_combo = QtWidgets.QComboBox()
+        self._fit_height_source_combo.addItems(["Auto", "Landmarks", "Bounds"])
+        self._fit_height_source_combo.setToolTip("Choose whether re-fit height comes from detected landmarks or mesh bounds.")
+        fit_layout.addWidget(QtWidgets.QLabel("Height"), 8, 0)
+        fit_layout.addWidget(self._fit_height_source_combo, 8, 1)
+
+        self._fit_ground_basis_combo = QtWidgets.QComboBox()
+        self._fit_ground_basis_combo.addItems(["Auto", "Feet", "Hips", "Bounds Bottom"])
+        self._fit_ground_basis_combo.setToolTip("Choose the origin used to snap the imported mesh to the KOTOR base.")
+        fit_layout.addWidget(QtWidgets.QLabel("Ground"), 8, 2)
+        fit_layout.addWidget(self._fit_ground_basis_combo, 8, 3)
+
         reset_btn = QtWidgets.QPushButton("Reset Fit")
         reset_btn.clicked.connect(self.fitAdjustmentResetRequested.emit)
-        fit_layout.addWidget(reset_btn, 7, 0, 1, 2)
+        fit_layout.addWidget(reset_btn, 9, 0, 1, 2)
 
         refit_btn = QtWidgets.QPushButton("Re-fit to Selected Base")
         refit_btn.setObjectName("CharacterBuilderRefitToSelectedBaseButton")
@@ -345,14 +374,14 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "the currently selected KOTOR base skeleton."
         )
         refit_btn.clicked.connect(self.refitToSelectedBaseRequested.emit)
-        fit_layout.addWidget(refit_btn, 7, 2, 1, 2)
+        fit_layout.addWidget(refit_btn, 9, 2, 1, 2)
 
         self._fit_adjust_status = QtWidgets.QLabel("Auto-fit can be fine-tuned after import.")
         self._fit_adjust_status.setWordWrap(True)
         self._fit_adjust_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_adjust_status, 8, 0, 1, 4)
+        fit_layout.addWidget(self._fit_adjust_status, 10, 0, 1, 4)
 
         self._fit_report_label = QtWidgets.QLabel(
             "Auto-fit report will appear after loading a custom mesh."
@@ -362,7 +391,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_report_label.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_report_label, 9, 0, 1, 4)
+        fit_layout.addWidget(self._fit_report_label, 11, 0, 1, 4)
 
         for spin in (
             self._fit_scale_spin,
@@ -2159,6 +2188,23 @@ class QtInspectorPanel(QtWidgets.QWidget):
         if not self._symmetry_checkboxes:
             return True
         return bool(self._symmetry_checkboxes[0].isChecked())
+
+    def selected_fit_override(self) -> Dict[str, str]:
+        """Return manual auto-fit override choices for a re-fit operation."""
+        def combo_value(combo: Optional[QtWidgets.QComboBox]) -> str:
+            if combo is None:
+                return "auto"
+            text = str(combo.currentText() or "").strip().lower()
+            if not text:
+                return "auto"
+            return text.replace(" ", "_")
+
+        return {
+            "source_forward_axis": combo_value(self._fit_source_forward_combo),
+            "source_up_axis": combo_value(self._fit_source_up_combo),
+            "height_source": combo_value(self._fit_height_source_combo),
+            "ground_origin_basis": combo_value(self._fit_ground_basis_combo),
+        }
 
     def set_fit_adjustment(
         self,

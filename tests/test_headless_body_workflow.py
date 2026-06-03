@@ -2721,3 +2721,82 @@ def test_external_fit_report_falls_back_to_bounds_when_landmarks_missing():
     assert report["auto_fit_report"]["source_forward_axis"] == "unknown"
     assert report["auto_fit_report"]["source_up_axis"] == "+z"
     assert any("falling back to bounds" in warning for warning in report["warnings"])
+
+
+def test_external_fit_report_accepts_manual_axis_override_for_bounds_only_mesh():
+    root = _fit_node("import_root")
+    mesh = _fit_node(
+        "body_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [(-0.5, 0.0, -0.25), (0.5, 2.0, 0.25), (0.0, 1.0, 0.5)]
+    mesh.faces = [(0, 1, 2)]
+    source = md.KotorModel(name="body", root_node=root)
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+        fit_override={
+            "source_forward_axis": "+z",
+            "source_up_axis": "+y",
+            "height_source": "bounds",
+            "ground_origin_basis": "bounds_bottom",
+        },
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "manual_axis_override"
+    assert report["vertical_axis"] == "manual_override"
+    assert report["auto_fit_report"]["fallback_used"] is False
+    assert report["auto_fit_report"]["source_forward_axis"] == "+z"
+    assert report["auto_fit_report"]["source_up_axis"] == "+y"
+    assert report["auto_fit_report"]["height_source"] == "bounds"
+    assert report["auto_fit_report"]["ground_origin_basis"] == "bounds_bottom"
+    assert report["auto_fit_report"]["confidence"] == pytest.approx(0.65)
+    assert "Manual source axis/ground override" in report["auto_fit_report"]["notes"]
+
+
+def test_normalization_uses_manual_axis_override_without_double_fallback():
+    root = _fit_node("import_root")
+    mesh = _fit_node(
+        "body_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [(-0.5, 0.0, -0.25), (0.5, 2.0, 0.25), (0.0, 1.0, 0.5)]
+    mesh.faces = [(0, 1, 2)]
+    source = md.KotorModel(name="body", root_node=root)
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    result = wf.normalize_external_model_for_kotor(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+        fit_override={
+            "source_forward_axis": "+z",
+            "source_up_axis": "+y",
+            "height_source": "bounds",
+            "ground_origin_basis": "bounds_bottom",
+        },
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "manual_axis_override"
+    assert result["fit_report"]["auto_fit_report"]["fallback_used"] is False
+    assert source.metadata["kotor_fit_report"]["fit_policy"] == "manual_axis_override"
+    assert source.metadata["kotor_fit_report"]["source_up_axis"] == "+y"

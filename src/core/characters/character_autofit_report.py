@@ -46,7 +46,41 @@ class AutoFitReport:
         }
 
 
+@dataclass(frozen=True)
+class AutoFitOverride:
+    """Optional modder-supplied axes/ground rules for deterministic re-fit."""
+
+    source_forward_axis: str | None = None
+    source_up_axis: str | None = None
+    height_source: str = "auto"
+    ground_origin_basis: str = "auto"
+
+    def is_active(self) -> bool:
+        """Return True when at least one override value should affect fitting."""
+        return any(
+            str(value or "").strip().lower() not in {"", "auto"}
+            for value in (
+                self.source_forward_axis,
+                self.source_up_axis,
+                self.height_source,
+                self.ground_origin_basis,
+            )
+        )
+
+    @classmethod
+    def from_mapping(cls, data: Any) -> "AutoFitOverride":
+        """Create an override from a UI/controller mapping."""
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            source_forward_axis=data.get("source_forward_axis"),
+            source_up_axis=data.get("source_up_axis"),
+            height_source=str(data.get("height_source") or "auto"),
+            ground_origin_basis=str(data.get("ground_origin_basis") or "auto"),
+        )
+
+
 CharacterAutoFitReport = AutoFitReport
 
 
-__all__ = ["AutoFitReport", "CharacterAutoFitReport"]
+__all__ = ["AutoFitReport", "AutoFitOverride", "CharacterAutoFitReport"]
