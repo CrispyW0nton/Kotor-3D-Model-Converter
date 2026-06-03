@@ -233,8 +233,18 @@ def test_character_export_preflight_issues_carry_engine_evidence() -> None:
     evidence = issue.details["engine_evidence"]
     assert evidence["findings_doc"] == "docs/ghidra_findings.md"
     assert evidence["status"] == "fixture_verified_function_addresses_pending"
+    assert evidence["engine_string_evidence_status"] == "selected_hook_string_refs_verified_parser_pending"
     assert "mcp:ghostrigger_model_info:k1:pmbam" in evidence["verified_sources"]
+    assert "mcp:kotor_engine_script:k1:selected_hook_string_refs" in evidence["verified_sources"]
     assert "selected_native_base_owns_final_dag" in evidence["verified_native_contract"]
+    refs = {
+        (entry["game"], entry["string"]): tuple(entry["representative_refs"])
+        for entry in evidence["engine_string_refs"]
+    }
+    assert "SwitchWeaponEvent@00610f40" in refs[("k1", "rhand")]
+    assert "SwitchWeaponEvent@0040f4a0" in refs[("k2", "rhand")]
+    assert refs[("k1", "lhand")]
+    assert refs[("k2", "lhand")]
 
 
 def test_character_export_preflight_blocks_qbone_tbone_mismatch() -> None:

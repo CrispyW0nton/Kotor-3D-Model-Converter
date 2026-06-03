@@ -26,9 +26,11 @@ Source: GhostRigger MCP `kotor_binary_info`, queried 2026-06-03.
 
 The shared Ghidra repository is `Odyssey`.  Broad symbol searches for `Model`,
 `MDL`, and `super`, plus a narrower function-iteration script, timed out on
-2026-06-03.  Function addresses for the MDL loader, animation resolver, and
-socket attachment routines are therefore not yet verified and must not be cited
-as confirmed.
+2026-06-03.  Function addresses for the MDL loader and animation resolver are
+therefore not yet verified and must not be cited as confirmed.  A later targeted
+string-reference scan did verify selected hardcoded hook strings and
+representative referring functions; those are recorded separately below because
+they are narrower evidence than a fully decompiled attachment routine.
 
 ## Verified Native Body Fixture: `pmbam`
 
@@ -79,6 +81,47 @@ Implications for Character Builder:
   than imported-mesh bones.
 - A generated character that began from `pmbam` should not be considered
   export-ready without a native snapshot/provenance record.
+
+## Engine String Evidence: Attachment and Visual Hooks
+
+Source: GhostRigger MCP `kotor_engine_script`, queried 2026-06-03.
+
+This pass searched for exact defined string literals and collected references
+to those strings.  It confirms that selected hook names are hardcoded and used
+by representative K1/K2 weapon, visual-effect, camera, and control routines.
+It does **not** yet prove complete MDL-loader behavior, full attachment
+fallback behavior, or all socket semantics.
+
+| Game | Exact string | String address | Representative referring functions |
+| --- | --- | --- | --- |
+| K1 | `rhand` | `0074f334` | `SwitchWeaponEvent@00610f40`, `ApplyLightsaberThrow@006a30e0`, `LoadVisualEffect@006a1880`, `HideWieldedItems@0069a6b0` |
+| K1 | `lhand` | `0074f4b8` | `SwitchWeaponEvent@00610f40`, `LoadVisualEffect@006a1880`, `HideWieldedItems@0069a6b0` |
+| K1 | `camerahook` | `0074f42c` | `SetAnimatedCamera@00641010`, `SetCamera@00671670`, `Setup3DScene@006100f0` |
+| K1 | `handconjure` | `00751d74` | `LoadVisualEffect@006a1880`, `ApplySpellVisual@006a2e10`, `LoadConjureVisual@00695f30` |
+| K1 | `impact_bolt` | `00751d40` | `HandleServerToPlayerSafeProjectileProjectile@006501b0` |
+| K1 | `FreeLookHook` | `0075164c` | `Control@00639d00` |
+| K2 | `rhand` | `00985e94` | `SwitchWeaponEvent@0040f4a0`, `ApplyLightsaberThrow@004fec40`, `LoadVisualEffect@004fae10`, `HideWieldedItems@004f5d80` |
+| K2 | `lhand` | `00985e8c` | `SwitchWeaponEvent@0040f4a0`, `LoadVisualEffect@004fae10`, `HideWieldedItems@004f5d80` |
+| K2 | `handconjure` | `00988b6c` | `LoadVisualEffect@004fae10`, `ApplySpellVisual@004fe950`, `LoadConjureVisual@004895b0` |
+| K2 | `impact_bolt` | `009892c8` | `HandleServerToPlayerSafeProjectileProjectile@004bd180` |
+| K2 | `FreeLookHook` | `0098b10c` | `Control@004e8350` |
+
+Targeted decompile attempts for representative functions such as
+`SwitchWeaponEvent` and `ApplyLightsaberThrow` returned function metadata and
+disassembly, but the Ghidra decompiler process did not launch in the current
+environment.  Therefore this section should be cited as string-reference
+evidence, not as a full source-level semantic proof.
+
+Limitations:
+
+- The exact-string scan did not find defined literals for `headhook`,
+  `LightsaberHook`, `DeflectHook`, or `headconjure` in this pass.  Those names
+  remain fixture-verified through model data, not engine-string-verified.
+- The absence of a defined exact string does not prove that a hook is unused;
+  it may be constructed indirectly, referenced through data tables, hashed, or
+  handled by model-specific runtime state.
+- Full socket attachment fallback behavior and missing-node behavior remain
+  pending until the owning routines are decompiled or otherwise traced.
 
 ## Verified Animation Inheritance Fixture: `pmbam`
 
@@ -136,9 +179,13 @@ engine-complete export hardening:
    maximum influences per vertex, and whether the engine normalizes weights.
 4. Locate supermodel name resolution and confirm resref case behavior.
 5. Locate animation-node matching and confirm exact/case/hash/index behavior.
-6. Locate equipment/socket attachment routines for `headhook`, `rhand`,
-   `lhand`, `LightsaberHook`, `camerahook`, and related helpers.
+6. Complete equipment/socket attachment routine analysis.  Selected string refs
+   are now verified for `rhand`, `lhand`, `camerahook` in K1, `handconjure`,
+   `impact_bolt`, and `FreeLookHook`; full semantics and missing-node behavior
+   remain pending.
+7. Narrow or disprove explicit engine string/function evidence for `headhook`,
+   `LightsaberHook`, `DeflectHook`, and `headconjure`.
 
 Until these function addresses are confirmed, Character Builder code should cite
-this document only for the verified fixture facts above, not for engine-loader
-internals.
+this document only for the verified fixture facts and selected hook string refs
+above, not for engine-loader internals.
