@@ -983,6 +983,7 @@ def inspect_external_model_fit(
             "fallback_used": auto_fit_report["fallback_used"],
             "notes": auto_fit_report["notes"],
             "auto_fit_report": auto_fit_report,
+            "fit_transform": None,
             "visual_overlay": {
                 "coordinate_space": "source_pre_fit_and_kotor_reference",
                 "source": {
@@ -1082,6 +1083,50 @@ def inspect_external_model_fit(
         override=override,
     )
     auto_fit_report = auto_fit.to_dict()
+    fit_transform: Dict[str, Any] | None = None
+    if report_source_frame is not None and report_target_frame is not None:
+        fit_transform = _fit_transform_metadata(
+            policy=policy,
+            scale=scale,
+            rotation_matrix=_basis_rotation(report_source_frame, report_target_frame),
+            source_origin=report_source_frame.origin,
+            target_origin=report_target_frame.origin,
+        )
+    else:
+        mapped_min = _axis_map_to_kotor_z(bb_min, vertical_axis_index)
+        mapped_max = _axis_map_to_kotor_z(bb_max, vertical_axis_index)
+        norm_min = tuple(min(mapped_min[i], mapped_max[i]) for i in range(3))
+        norm_max = tuple(max(mapped_min[i], mapped_max[i]) for i in range(3))
+        center_x = (norm_min[0] + norm_max[0]) * 0.5
+        center_y = (norm_min[1] + norm_max[1]) * 0.5
+        if reference_bounds is not None:
+            ref_min, ref_max = reference_bounds
+            target_center_x = (float(ref_min[0]) + float(ref_max[0])) * 0.5
+            target_center_y = (float(ref_min[1]) + float(ref_max[1])) * 0.5
+            target_ground_z = float(ref_min[2])
+        else:
+            target_center_x = 0.0
+            target_center_y = 0.0
+            target_ground_z = 0.0
+        offset = (
+            target_center_x - center_x * scale,
+            target_center_y - center_y * scale,
+            target_ground_z - norm_min[2] * scale,
+        )
+        source_origin = _bounds_ground_center(bounds)
+        target_origin = _transform_point_for_kotor(
+            source_origin,
+            vertical_axis=vertical_axis_index,
+            scale=scale,
+            offset=offset,
+        )
+        fit_transform = _fit_transform_metadata(
+            policy=policy,
+            scale=scale,
+            rotation_matrix=_axis_map_matrix_to_kotor_z(vertical_axis_index),
+            source_origin=source_origin,
+            target_origin=target_origin,
+        )
 
     return {
         "ok": True,
@@ -1114,6 +1159,7 @@ def inspect_external_model_fit(
         "fallback_used": auto_fit.fallback_used,
         "notes": auto_fit.notes,
         "auto_fit_report": auto_fit_report,
+        "fit_transform": fit_transform,
         "visual_overlay": {
             "coordinate_space": "source_pre_fit_and_kotor_reference",
             "source": _fit_frame_visual_overlay(
@@ -1162,6 +1208,73 @@ def _mat_vec(matrix: Tuple[Vec3, Vec3, Vec3], vector: Vec3) -> Vec3:
         matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
         matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2],
     )
+
+
+def _matrix_as_lists(matrix: Tuple[Vec3, Vec3, Vec3]) -> List[List[float]]:
+    return [[float(value) for value in row] for row in matrix]
+
+
+def _scale_matrix(matrix: Tuple[Vec3, Vec3, Vec3], scale: float) -> Tuple[Vec3, Vec3, Vec3]:
+    return tuple(
+        tuple(float(value) * float(scale) for value in row)
+        for row in matrix
+    )  # type: ignore[return-value]
+
+
+def _translation_for_affine(
+    matrix: Tuple[Vec3, Vec3, Vec3],
+    source_origin: Vec3,
+    target_origin: Vec3,
+) -> Vec3:
+    mapped_origin = _mat_vec(matrix, source_origin)
+    return _vec_sub(target_origin, mapped_origin)
+
+
+def _axis_map_matrix_to_kotor_z(vertical_axis: int) -> Tuple[Vec3, Vec3, Vec3]:
+    if vertical_axis == 1:  # Y-up external model -> KOTOR Z-up
+        return (
+            (1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 1.0, 0.0),
+        )
+    if vertical_axis == 0:  # X-up external model -> KOTOR Z-up
+        return (
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 0.0),
+        )
+    return (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+
+
+def _fit_transform_metadata(
+    *,
+    policy: str,
+    scale: float,
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    source_origin: Vec3,
+    target_origin: Vec3,
+) -> Dict[str, Any]:
+    linear_matrix = _scale_matrix(rotation_matrix, scale)
+    translation = _translation_for_affine(
+        linear_matrix,
+        source_origin,
+        target_origin,
+    )
+    return {
+        "coordinate_space": "source_model_to_kotor_world",
+        "policy": str(policy),
+        "formula": "kotor_point = linear_matrix * source_point + translation",
+        "scale": float(scale),
+        "rotation_matrix": _matrix_as_lists(rotation_matrix),
+        "linear_matrix": _matrix_as_lists(linear_matrix),
+        "translation": _vec_as_list(translation),
+        "source_origin": _vec_as_list(source_origin),
+        "target_origin": _vec_as_list(target_origin),
+    }
 
 
 def _kotor_template_humanoid_height(game_version: str) -> float:
@@ -1523,6 +1636,13 @@ def normalize_external_model_for_kotor(
         target = float(target_height or reference_height or transform_target_frame.height)
         scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
         rotation = _basis_rotation(transform_source_frame, transform_target_frame)
+        fit_transform = _fit_transform_metadata(
+            policy=transform_policy,
+            scale=scale,
+            rotation_matrix=rotation,
+            source_origin=transform_source_frame.origin,
+            target_origin=transform_target_frame.origin,
+        )
 
         def transform_point(point: Vec3) -> Vec3:
             rel = _vec_scale(_vec_sub(point, transform_source_frame.origin), scale)
@@ -1555,6 +1675,7 @@ def normalize_external_model_for_kotor(
         if isinstance(fit_report, dict):
             fit_report = dict(fit_report)
             fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+            fit_report["fit_transform"] = fit_transform
 
         _apply_point_transform_to_model(
             model,
@@ -1590,6 +1711,7 @@ def normalize_external_model_for_kotor(
             "target_fit_landmarks": dict(transform_target_frame.landmarks),
             "source_fit_confidence": transform_source_frame.confidence,
             "target_fit_confidence": transform_target_frame.confidence,
+            "fit_transform": fit_transform,
             "fit_report": fit_report,
             "fitted_visual_overlay": fitted_visual_overlay,
         }
@@ -1623,6 +1745,20 @@ def normalize_external_model_for_kotor(
         target_center_x - center_x * scale,
         target_center_y - center_y * scale,
         target_ground_z - norm_min[2] * scale,
+    )
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = _transform_point_for_kotor(
+        source_origin,
+        vertical_axis=vertical_axis,
+        scale=scale,
+        offset=offset,
+    )
+    fit_transform = _fit_transform_metadata(
+        policy="selected_reference_bounds" if reference_bounds is not None else "origin_height",
+        scale=scale,
+        rotation_matrix=_axis_map_matrix_to_kotor_z(vertical_axis),
+        source_origin=source_origin,
+        target_origin=target_origin,
     )
 
     def transform_point(point: Vec3) -> Vec3:
@@ -1661,6 +1797,7 @@ def normalize_external_model_for_kotor(
     if isinstance(fit_report, dict):
         fit_report = dict(fit_report)
         fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+        fit_report["fit_transform"] = fit_transform
 
     _apply_point_transform_to_model(
         model,
@@ -1687,6 +1824,7 @@ def normalize_external_model_for_kotor(
         "target_ground_z": target_ground_z,
         "external_world_positions_fit": True,
         "fit_policy": "selected_reference_bounds" if reference_bounds is not None else "origin_height",
+        "fit_transform": fit_transform,
         "fit_report": fit_report,
         "fitted_visual_overlay": fitted_visual_overlay,
     }

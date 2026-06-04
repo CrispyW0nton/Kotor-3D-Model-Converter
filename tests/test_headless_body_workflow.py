@@ -2640,6 +2640,17 @@ def test_external_model_normalization_snaps_to_selected_reference_frame():
     assert result["fit_policy"] == "selected_reference_bounds"
     assert result["target_center_xy"] == pytest.approx((5.0, -2.0))
     assert result["target_ground_z"] == pytest.approx(0.25)
+    transform = result["fit_transform"]
+    assert transform["policy"] == "selected_reference_bounds"
+    assert transform["scale"] == pytest.approx(0.2)
+    for row, expected in zip(transform["linear_matrix"], [
+        [0.2, 0.0, 0.0],
+        [0.0, 0.2, 0.0],
+        [0.0, 0.0, 0.2],
+    ]):
+        assert row == pytest.approx(expected)
+    assert transform["translation"] == pytest.approx([5.0, -2.0, 0.25])
+    assert result["fit_report"]["fit_transform"] == transform
     assert model.bb_min[2] == pytest.approx(0.25)
     assert model.bb_max[2] == pytest.approx(2.25)
     assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
@@ -2870,6 +2881,23 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     assert "source:head=head_g" in report["used_landmarks"]
     assert report["auto_fit_report"]["scale_factor"] == pytest.approx(0.8)
     assert report["auto_fit_report"]["used_landmarks"] == report["used_landmarks"]
+    transform = report["fit_transform"]
+    assert transform["policy"] == "bone_landmark_basis"
+    assert transform["formula"] == "kotor_point = linear_matrix * source_point + translation"
+    assert transform["scale"] == pytest.approx(0.8)
+    for row, expected in zip(transform["rotation_matrix"], [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]):
+        assert row == pytest.approx(expected)
+    for row, expected in zip(transform["linear_matrix"], [
+        [0.8, 0.0, 0.0],
+        [0.0, 0.8, 0.0],
+        [0.0, 0.0, 0.8],
+    ]):
+        assert row == pytest.approx(expected)
+    assert transform["translation"] == pytest.approx([0.0, 0.0, 0.0])
     assert report["kotor_contract"]["native_skeleton_is_authority"] is True
     assert report["kotor_contract"]["imported_mesh_role"] == "payload_guest"
     overlay = report["visual_overlay"]
@@ -2942,6 +2970,8 @@ def test_normalization_persists_fit_report_in_model_metadata():
     assert result["fit_policy"] == "bone_landmark_basis"
     assert "fit_report" in result
     assert source.metadata["kotor_fit_report"]["fit_policy"] == "bone_landmark_basis"
+    assert source.metadata["kotor_normalization"]["fit_transform"] == result["fit_transform"]
+    assert source.metadata["kotor_fit_report"]["fit_transform"] == result["fit_transform"]
     assert (
         source.metadata["kotor_fit_report"]["auto_fit_report"]["source_forward_axis"]
         == "+y"
