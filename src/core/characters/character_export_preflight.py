@@ -823,7 +823,8 @@ def _validate_toe_forward_alignment(
         return
 
     threshold = float(opts.min_auto_fit_toe_forward_alignment)
-    if _auto_fit_should_require_source_toe_forward(fit_report, opts):
+    require_toe_forward = _auto_fit_should_require_toe_forward(fit_report, opts)
+    if require_toe_forward:
         source_frame = fit_report.get("source_frame")
         source_frame = source_frame if isinstance(source_frame, dict) else {}
         if not _auto_fit_frame_has_toe_landmarks(source_frame):
@@ -846,6 +847,34 @@ def _validate_toe_forward_alignment(
                     "required_alignment": threshold,
                     "landmarks": dict(source_frame.get("landmarks") or {}),
                     "landmark_sources": dict(source_frame.get("landmark_sources") or {}),
+                    "source_imported_armature": dict(
+                        _auto_fit_imported_skeleton_guide_evidence(fit_report)
+                    ),
+                    "fit_policy": fit_policy,
+                },
+            ))
+        target_frame = fit_report.get("target_frame")
+        target_frame = target_frame if isinstance(target_frame, dict) else {}
+        if not _auto_fit_frame_has_toe_landmarks(target_frame):
+            report.add(_issue(
+                "warning",
+                "character.export.auto_fit_toe_forward_needs_review",
+                "Character auto-fit toe-forward facing evidence is missing for the selected KOTOR base.",
+                fix_hint=(
+                    "Re-run Auto-Fit with the current Character Builder and selected "
+                    "native KOTOR base so target foot/toe landmarks are recorded for "
+                    "orientation review."
+                ),
+                details={
+                    "reason": "target_toe_landmarks_not_recorded",
+                    "reasons": ["target_toe_landmarks_not_recorded"],
+                    "frame": "target_frame",
+                    "toe_forward_alignment": _safe_float(
+                        target_frame.get("toe_forward_alignment")
+                    ),
+                    "required_alignment": threshold,
+                    "landmarks": dict(target_frame.get("landmarks") or {}),
+                    "landmark_sources": dict(target_frame.get("landmark_sources") or {}),
                     "source_imported_armature": dict(
                         _auto_fit_imported_skeleton_guide_evidence(fit_report)
                     ),
@@ -899,7 +928,7 @@ def _auto_fit_frame_has_toe_landmarks(frame: dict[str, Any]) -> bool:
     )
 
 
-def _auto_fit_should_require_source_toe_forward(
+def _auto_fit_should_require_toe_forward(
     fit_report: dict[str, Any],
     opts: CharacterExportPreflightOptions,
 ) -> bool:

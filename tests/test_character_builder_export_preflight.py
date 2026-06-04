@@ -842,6 +842,40 @@ def test_character_export_preflight_warns_when_rigged_source_toe_evidence_missin
     assert preflight.export_allowed is True
 
 
+def test_character_export_preflight_warns_when_target_toe_evidence_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["source_imported_armature"]["guide_joint_count"] = 65
+    fit["source_imported_armature"]["scene_guide_joint_count"] = 65
+    fit["source_frame"]["landmarks"].update({
+        "left_toe": "LeftToeBase",
+        "right_toe": "RightToeBase",
+    })
+    fit["source_frame"]["landmark_sources"].update({
+        "left_toe": "imported_skeleton",
+        "right_toe": "imported_skeleton",
+    })
+    fit["source_frame"]["toe_forward_alignment"] = 0.91
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_toe_forward_needs_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == ["target_toe_landmarks_not_recorded"]
+    assert issue.details["frame"] == "target_frame"
+    assert issue.details["source_imported_armature"]["guide_joint_count"] == 65
+    assert issue.details["landmarks"]["left_foot"] == "lfoot_g"
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_accepts_small_source_without_toe_guides() -> None:
     result = _rigged_character()
 
