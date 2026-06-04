@@ -440,6 +440,13 @@ def _validate_native_render_replacement_evidence(
                 "mismatches": fact_mismatches,
             })
             continue
+        if path in current_paths:
+            invalid_replacements.append({
+                "reason": "node_still_present",
+                "path": list(path),
+                "role": native_node.export_role,
+            })
+            continue
         replacement_by_path[path] = entry
 
     if invalid_replacements:

@@ -401,6 +401,39 @@ def test_character_export_preflight_blocks_stale_render_replacement_facts() -> N
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_replacement_record_for_present_node() -> None:
+    result = _rigged_character()
+    root = result["model"].root_node
+    assert root is not None
+    torso = _node(
+        "Torso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+    )
+    torso.vertices = [(0.0, 0.0, 0.0)]
+    torso.faces = [(0, 0, 0)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.invalid_native_render_replacement_evidence",
+    )
+    invalid = issue.details["invalid_replacements"]
+    assert invalid == [
+        {
+            "reason": "node_still_present",
+            "path": ["PMBAM", "Torso"],
+            "role": "skin_mesh",
+        }
+    ]
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_missing_required_socket() -> None:
     result = _rigged_character()
     lhand = result["model"].find_node("lhand")
