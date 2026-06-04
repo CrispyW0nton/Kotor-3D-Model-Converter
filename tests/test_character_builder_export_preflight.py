@@ -161,6 +161,25 @@ def test_character_export_preflight_accepts_k2_native_snapshot_and_supermodel() 
     assert preflight.report.has_blocking is False
 
 
+def test_character_export_preflight_blocks_supermodel_case_change() -> None:
+    result = _rigged_character()
+    result["model"].supermodel = "s_kpmf0200"
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.supermodel_case_changed")
+    assert issue.severity.value == "blocking"
+    assert issue.details["expected"] == "S_KPMF0200"
+    assert issue.details["actual"] == "s_kpmf0200"
+    assert issue.details["pending_ghidra"] == "supermodel name resolution and resref case behavior"
+    assert "Restore the exact supermodel casing" in issue.fix_hint
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_native_snapshot_game_mismatch() -> None:
     result = _rigged_character()
 
@@ -763,6 +782,34 @@ def test_character_export_transaction_blocks_wrong_game_before_writer(tmp_path) 
         "character.export.native_snapshot_game_mismatch",
     )
     assert issue.details["export_game"] == "K2"
+
+
+def test_character_export_transaction_blocks_supermodel_case_before_writer(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    result["model"].supermodel = "s_kpmf0200"
+    output = tmp_path / "bad_supermodel_case.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: result["model"],
+        )
+    )
+
+    assert tx.succeeded is False
+    assert _FakeCharacterWriter.calls == []
+    assert not output.exists()
+    assert not output.with_suffix(".mdx").exists()
+    issue = _issue_by_code(
+        tx.preflight_result,
+        "character.export.supermodel_case_changed",
+    )
+    assert issue.details["expected"] == "S_KPMF0200"
+    assert issue.details["actual"] == "s_kpmf0200"
 
 
 def test_character_export_transaction_blocks_unknown_game_before_writer(tmp_path) -> None:

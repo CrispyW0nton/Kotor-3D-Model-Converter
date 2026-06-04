@@ -328,14 +328,23 @@ def _validate_supermodel(
         ))
     elif actual != expected:
         report.add(_issue(
-            "warning",
+            "blocking",
             "character.export.supermodel_case_changed",
             (
                 f"Generated character supermodel casing changed from '{expected}' "
                 f"to '{actual}'."
             ),
-            fix_hint="Keep native casing for writer/readback parity.",
-            details={"expected": expected, "actual": actual},
+            fix_hint=(
+                "Restore the exact supermodel casing from the selected native "
+                "base before export. KOTOR supermodel case behavior is still "
+                "Ghidra-pending, so Character Builder preserves the native value."
+            ),
+            details={
+                "expected": expected,
+                "actual": actual,
+                "evidence_status": CHARACTER_EXPORT_EVIDENCE["status"],
+                "pending_ghidra": "supermodel name resolution and resref case behavior",
+            },
         ))
 
 
