@@ -4,6 +4,7 @@ import inspect
 import math
 
 from src.core.characters.character_builder import apply_template_rig
+from src.core.characters.character_rig_state import get_character_rig_state
 from src.core.geometry.model_data import (
     BoneWeight,
     CharacterScene,
@@ -124,7 +125,10 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     kotor_root = _node("N_Mandalorian")
     _node("rootdummy", parent=kotor_root)
     _node("template_body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=kotor_root)
-    template = KotorModel(name="n_mandalorian03", root_node=kotor_root, supermodel="S_Female02")
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+    template._gr_source_resref = "n_mandalorian"
+    template._gr_source_game = "K1"
+    template._gr_source_layer = "game_library"
 
     result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
 
@@ -158,7 +162,25 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert rigged_mesh.position == (0.0, 0.0, 0.0)
     assert rigged_mesh.rotation == (0.0, 0.0, 0.0, 1.0)
     assert rigged_mesh.vertices[0] == (11.0, 2.0, 3.0)
-    assert rigged.metadata["character_builder_bind"]["status"] == "bound_to_native_kotor_skeleton"
+    bind = rigged.metadata["character_builder_bind"]
+    assert bind["status"] == "bound_to_native_kotor_skeleton"
+    assert bind["native_base"] == {
+        "source_resref": "n_mandalorian",
+        "model_name": "n_mandalorian",
+        "game": "K1",
+        "supermodel": "S_Female02",
+        "dag_authority": "native_kotor_base",
+    }
+    assert bind["imported_payload"]["model_name"] == "bendak"
+    assert bind["imported_payload"]["mesh_role"] == "payload_guest"
+    assert bind["imported_payload"]["mesh_names"] == ["Bendak"]
+    state = get_character_rig_state(rigged)
+    assert state is not None
+    assert state.native_base_resref == "n_mandalorian"
+    assert state.native_base_model_name == "n_mandalorian"
+    assert state.native_base_game == "K1"
+    assert state.imported_payload_name == "bendak"
+    assert state.payload_mesh_names == ("Bendak",)
     assert rigged._gr_character_builder_bind_complete is True
     assert "KOTOR skeleton built" in result["message"]
     assert result["skinned_meshes"] == 1

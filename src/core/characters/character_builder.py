@@ -959,9 +959,49 @@ def apply_template_rig(
             if not isinstance(metadata, dict):
                 metadata = {}
                 setattr(result_model, "metadata", metadata)
+            native_metadata = (
+                dict(getattr(native_skeleton_snapshot, "metadata", {}) or {})
+                if native_skeleton_snapshot is not None else
+                {}
+            )
+            native_base_resref = str(
+                native_metadata.get("source_resref")
+                or getattr(template_model, "_gr_source_resref", "")
+                or getattr(template_model, "name", "")
+                or ""
+            )
+            native_base_game = str(
+                native_metadata.get("source_game")
+                or getattr(template_model, "_gr_source_game", "")
+                or game
+                or ""
+            )
+            native_base_model_name = str(
+                getattr(native_skeleton_snapshot, "model_name", "")
+                if native_skeleton_snapshot is not None else
+                getattr(template_model, "name", "")
+            )
+            imported_payload_name = str(getattr(mesh_model, "name", "") or "")
+            payload_mesh_names = tuple(
+                str(getattr(mesh_node, "name", "") or "")
+                for mesh_node in mesh_payloads
+            )
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
+                "native_base": {
+                    "source_resref": native_base_resref,
+                    "model_name": native_base_model_name,
+                    "game": native_base_game,
+                    "supermodel": sm or "NULL",
+                    "dag_authority": "native_kotor_base",
+                },
+                "imported_payload": {
+                    "model_name": imported_payload_name,
+                    "mesh_role": "payload_guest",
+                    "mesh_names": list(payload_mesh_names),
+                    "removed_import_armature_or_helper_nodes": removed_import_nodes,
+                },
                 "mesh_count": len(mesh_payloads),
                 "skinned_meshes": bind_report.skinned_meshes,
                 "weighted_vertices": bind_report.weighted_vertices,
@@ -978,6 +1018,11 @@ def apply_template_rig(
                 result_model,
                 source="apply_template_rig",
                 native_snapshot_present=native_skeleton_snapshot is not None,
+                native_base_resref=native_base_resref,
+                native_base_model_name=native_base_model_name,
+                native_base_game=native_base_game,
+                imported_payload_name=imported_payload_name,
+                payload_mesh_names=payload_mesh_names,
             )
             setattr(result_model, "_gr_character_builder_bind_complete", True)
         except Exception as exc:

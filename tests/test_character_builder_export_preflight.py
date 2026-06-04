@@ -850,6 +850,11 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["imported_mesh_role"] == "payload_guest"
     assert workflow["final_dag_source"] == "selected_kotor_base"
     assert workflow["rig_state"]["state"] == "native_template_final"
+    assert workflow["rig_state"]["native_base_resref"] == "pmbam"
+    assert workflow["rig_state"]["native_base_model_name"] == "pmbam"
+    assert workflow["rig_state"]["native_base_game"] == "K1"
+    assert workflow["rig_state"]["imported_payload_name"] == "grbody"
+    assert workflow["rig_state"]["payload_mesh_names"] == ["custom_body"]
     assert workflow["fit_report"]["fit_policy"] == "bone_landmark_basis"
     assert workflow["fit_report"]["fit_transform"]["scale"] == 0.8
     assert workflow["normalization"]["fit_transform"]["translation"] == [0.0, 0.0, 0.0]

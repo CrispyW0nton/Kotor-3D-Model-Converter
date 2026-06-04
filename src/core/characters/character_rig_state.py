@@ -31,6 +31,11 @@ class CharacterRigState:
     mesh_role: str = MESH_ROLE_PAYLOAD_GUEST
     source: str = ""
     native_snapshot_present: bool = False
+    native_base_resref: str = ""
+    native_base_model_name: str = ""
+    native_base_game: str = ""
+    imported_payload_name: str = ""
+    payload_mesh_names: tuple[str, ...] = ()
     legacy_acurig: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -40,6 +45,11 @@ class CharacterRigState:
             "mesh_role": self.mesh_role,
             "source": self.source,
             "native_snapshot_present": bool(self.native_snapshot_present),
+            "native_base_resref": self.native_base_resref,
+            "native_base_model_name": self.native_base_model_name,
+            "native_base_game": self.native_base_game,
+            "imported_payload_name": self.imported_payload_name,
+            "payload_mesh_names": list(self.payload_mesh_names),
             "legacy_acurig": bool(self.legacy_acurig),
         }
 
@@ -63,6 +73,11 @@ def mark_native_template_final_rig(
     *,
     source: str = "apply_template_rig",
     native_snapshot_present: bool = False,
+    native_base_resref: str = "",
+    native_base_model_name: str = "",
+    native_base_game: str = "",
+    imported_payload_name: str = "",
+    payload_mesh_names: tuple[str, ...] | list[str] = (),
 ) -> CharacterRigState:
     """Mark a generated model as using the native KOTOR template DAG."""
 
@@ -71,6 +86,11 @@ def mark_native_template_final_rig(
         dag_authority=RIG_DAG_AUTHORITY_NATIVE_KOTOR,
         source=source,
         native_snapshot_present=bool(native_snapshot_present),
+        native_base_resref=str(native_base_resref or ""),
+        native_base_model_name=str(native_base_model_name or ""),
+        native_base_game=str(native_base_game or ""),
+        imported_payload_name=str(imported_payload_name or ""),
+        payload_mesh_names=tuple(str(name or "") for name in (payload_mesh_names or ())),
         legacy_acurig=False,
     )
     _write_state(model, state)
@@ -141,5 +161,12 @@ def _state_from_dict(data: dict[str, Any]) -> CharacterRigState:
         mesh_role=str(data.get("mesh_role") or MESH_ROLE_PAYLOAD_GUEST),
         source=str(data.get("source") or ""),
         native_snapshot_present=bool(data.get("native_snapshot_present")),
+        native_base_resref=str(data.get("native_base_resref") or ""),
+        native_base_model_name=str(data.get("native_base_model_name") or ""),
+        native_base_game=str(data.get("native_base_game") or ""),
+        imported_payload_name=str(data.get("imported_payload_name") or ""),
+        payload_mesh_names=tuple(
+            str(name or "") for name in (data.get("payload_mesh_names") or ())
+        ),
         legacy_acurig=bool(data.get("legacy_acurig")),
     )
