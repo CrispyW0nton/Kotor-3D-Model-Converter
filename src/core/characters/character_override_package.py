@@ -724,12 +724,39 @@ def _build_readme(manifest: dict[str, Any]) -> str:
         paired = dict(fit_gate.get("paired_landmark_alignment") or {})
         if paired.get("present"):
             worst = str(paired.get("worst_pair_role") or "").strip()
+            scale_bits: list[str] = []
+            height_scale = paired.get("height_scale")
+            solved_scale = paired.get("solved_scale")
+            applied_scale = paired.get("applied_scale")
+            applied_basis = str(paired.get("applied_scale_basis") or "").strip()
+            if height_scale is not None:
+                scale_bits.append(f"height={height_scale}")
+            if solved_scale is not None:
+                scale_bits.append(f"solved={solved_scale}")
+            if applied_scale is not None:
+                scale_bits.append(
+                    "applied="
+                    f"{applied_scale}"
+                    + (f" ({applied_basis})" if applied_basis else "")
+                )
+            rotation_bits: list[str] = []
+            rotation_basis = str(paired.get("rotation_basis") or "").strip()
+            if rotation_basis:
+                rotation_bits.append(rotation_basis)
+            if paired.get("similarity_transform_accepted"):
+                rotation_bits.append("accepted")
             lines.append(
                 "Fit paired landmarks: "
                 f"{paired.get('pair_count')} pairs, "
                 f"rms={paired.get('rms_error')}, "
                 f"max={paired.get('max_error')}"
                 + (f", worst={worst}" if worst else "")
+                + (f", scale {' / '.join(scale_bits)}" if scale_bits else "")
+                + (
+                    f", rotation {' / '.join(rotation_bits)}"
+                    if rotation_bits
+                    else ""
+                )
             )
         engine = dict(evidence_gates.get("engine") or {})
         if engine:

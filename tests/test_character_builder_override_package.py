@@ -103,8 +103,13 @@ def _write_source_export(
                             "error": 0.55,
                         }
                     ],
+                    "height_scale": 0.8,
+                    "height_scale_basis": "bone_landmark_height",
                     "applied_scale": 0.8,
                     "solved_scale": 0.79,
+                    "applied_scale_basis": "bone_landmark_height",
+                    "similarity_transform_accepted": False,
+                    "rotation_basis": "bone_landmark_basis",
                 },
                 "warning_issue_codes": [
                     "character.export.auto_fit_paired_landmarks_need_review",
@@ -251,7 +256,11 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert "Game-ready blockers:" in readme
     assert "- fit=needs_review" in readme
     assert "Evidence gates: fit=needs_review" in readme
-    assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55, worst=left" in readme
+    assert (
+        "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55, worst=left, "
+        "scale height=0.8 / solved=0.79 / applied=0.8 (bone_landmark_height), "
+        "rotation bone_landmark_basis"
+    ) in readme
     assert "Engine evidence: partial_reverse_engineering (pending Ghidra: 2)" in readme
     assert "Do not overwrite a live game install" in readme
 
@@ -298,12 +307,16 @@ def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(t
 
     assert result.succeeded is True
     assert (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    readme = (tmp_path / "package" / "n_mandalorian03_override_readme.txt").read_text(
+        encoding="utf-8"
+    )
     assert result.manifest["character_builder_evidence_gates"]["fit"]["stage"] == "passed"
     paired = result.manifest["character_builder_evidence_gates"]["fit"][
         "paired_landmark_alignment"
     ]
     assert paired["similarity_transform_accepted"] is True
     assert paired["rotation_basis"] == "paired_skeleton_similarity"
+    assert "rotation paired_skeleton_similarity / accepted" in readme
     assert result.manifest["replacement_target"]["compatible"] is True
     assert (
         result.manifest["replacement_target"]["target_numbered_variant_base"]
