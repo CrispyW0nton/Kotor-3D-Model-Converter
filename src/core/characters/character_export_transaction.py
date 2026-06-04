@@ -8,6 +8,7 @@ engine-evidence-backed preflight report beside every successful export.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -632,6 +633,7 @@ def _write_validation_artifacts(
             "validation_json": str(_validation_json_path(mdl_path)),
             "validation_text": str(_validation_text_path(mdl_path)),
         },
+        output_hashes=_staged_output_hashes(context, mdl_path),
         preflight_report=preflight,
         reload_report=reload_report,
         metadata=dict(context.request.metadata),
@@ -652,6 +654,36 @@ def _validation_json_path(mdl_path: Path) -> Path:
 
 def _validation_text_path(mdl_path: Path) -> Path:
     return validation_report_paths(mdl_path)[1]
+
+
+def _staged_output_hashes(
+    context: ExportJobContext,
+    mdl_path: Path,
+) -> dict[str, dict[str, Any]]:
+    hashes: dict[str, dict[str, Any]] = {}
+    for artifact, final_path in (
+        ("mdl", mdl_path),
+        ("mdx", mdl_path.with_suffix(".mdx")),
+    ):
+        try:
+            staged_path = context.staged_path_for(final_path)
+        except KeyError:
+            continue
+        if not staged_path.exists():
+            continue
+        hashes[artifact] = _file_hash(staged_path)
+    return hashes
+
+
+def _file_hash(path: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {
+        "sha256": digest.hexdigest(),
+        "size": Path(path).stat().st_size,
+    }
 
 
 def _model_resref(model: Any, mdl_path: Path) -> str:

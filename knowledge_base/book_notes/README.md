@@ -45,7 +45,9 @@ Before changing code in a subsystem, check the crosswalk:
   implementation.
 - **Character Builder rigging/skinning**: native KOTOR DAG remains authority;
   imported mesh is payload; auto-fit, bind pose, symmetry, and weight-transfer
-  evidence must be explicit before export.
+  evidence must be explicit before export. Treat fit, bind, and weights as
+  separate gates, and prefer landmark-backed donor weight transfer over
+  nearest-bone guesses for Bendak-style custom body imports.
 - **Core architecture**: use-case services, provider/adapters, ValidationBus,
   ExportJob, ResourceAddress, GhostRiggerProject integration.
 - **Performance**: game-loop timing, profiling, resource loading, concurrency

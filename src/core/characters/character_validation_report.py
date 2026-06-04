@@ -44,6 +44,7 @@ def build_character_game_test_evidence(
     tested_games: tuple[str, ...] | list[str],
     checklist_results: dict[str, bool] | list[dict[str, Any]],
     per_game_checklist_results: dict[str, Any] | None = None,
+    tested_output_hashes: dict[str, Any] | None = None,
     tester: str = "",
     notes: str = "",
     artifacts: tuple[str, ...] | list[str] = (),
@@ -79,6 +80,7 @@ def build_character_game_test_evidence(
             fallback=checklist,
         ),
         "per_game_checklist_results": per_game_checklists,
+        "tested_output_hashes": _normalize_output_hashes(tested_output_hashes),
         "tester": str(tester or ""),
         "notes": str(notes or ""),
         "artifacts": [str(item or "") for item in artifacts if str(item or "").strip()],
@@ -86,13 +88,27 @@ def build_character_game_test_evidence(
     }
 
 
-def character_game_test_evidence_passed(evidence: Any) -> bool:
+def character_game_test_evidence_passed(
+    evidence: Any,
+    expected_output_hashes: dict[str, Any] | None = None,
+    *,
+    require_output_hashes: bool = False,
+) -> bool:
     """Return True when evidence proves the full K1/K2 in-game checklist."""
 
-    return not character_game_test_evidence_missing(evidence)
+    return not character_game_test_evidence_missing(
+        evidence,
+        expected_output_hashes,
+        require_output_hashes=require_output_hashes,
+    )
 
 
-def character_game_test_evidence_missing(evidence: Any) -> dict[str, Any]:
+def character_game_test_evidence_missing(
+    evidence: Any,
+    expected_output_hashes: dict[str, Any] | None = None,
+    *,
+    require_output_hashes: bool = False,
+) -> dict[str, Any]:
     """Return missing/failed proof facts for Character Builder game testing."""
 
     missing: dict[str, Any] = {}
@@ -140,6 +156,33 @@ def character_game_test_evidence_missing(evidence: Any) -> dict[str, Any]:
         missing["missing_per_game_checklists"] = missing_per_game
     if failed_by_game:
         missing["failed_checklist_items_by_game"] = failed_by_game
+
+    expected_hashes = _normalize_output_hashes(expected_output_hashes)
+    if require_output_hashes and not expected_hashes:
+        missing["expected_output_hashes"] = "missing"
+    if expected_hashes:
+        tested_hashes = _normalize_output_hashes(evidence.get("tested_output_hashes"))
+        missing_hashes = [
+            key for key in expected_hashes
+            if key not in tested_hashes
+        ]
+        mismatched: dict[str, dict[str, Any]] = {}
+        for key, expected in expected_hashes.items():
+            actual = tested_hashes.get(key)
+            if actual is None:
+                continue
+            if (
+                actual.get("sha256") != expected.get("sha256")
+                or actual.get("size") != expected.get("size")
+            ):
+                mismatched[key] = {
+                    "expected": expected,
+                    "actual": actual,
+                }
+        if missing_hashes:
+            missing["missing_tested_output_hashes"] = missing_hashes
+        if mismatched:
+            missing["mismatched_tested_output_hashes"] = mismatched
     return missing
 
 
@@ -213,6 +256,26 @@ def _normalize_per_game_artifacts(value: Any) -> dict[str, list[str]]:
     return results
 
 
+def _normalize_output_hashes(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for key, item in value.items():
+        if not isinstance(item, dict):
+            continue
+        artifact = str(key or "").strip().lower()
+        digest = str(item.get("sha256") or "").strip().lower()
+        if not artifact or not digest:
+            continue
+        payload: dict[str, Any] = {"sha256": digest}
+        try:
+            payload["size"] = int(item.get("size"))
+        except (TypeError, ValueError, OverflowError):
+            pass
+        result[artifact] = payload
+    return result
+
+
 def _summarize_game_checklists(
     per_game: dict[str, dict[str, bool]],
     *,
@@ -246,6 +309,7 @@ class CharacterBuilderValidationReport:
     preflight_report: ValidationReport
     reload_report: ValidationReport | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    output_hashes: dict[str, Any] = field(default_factory=dict)
     game_tested: bool = False
     game_test_evidence: dict[str, Any] = field(default_factory=dict)
 
@@ -260,7 +324,11 @@ class CharacterBuilderValidationReport:
     def capability_stage(self) -> str:
         """Return the strongest proven Character Builder export stage."""
 
-        if self.game_tested and character_game_test_evidence_passed(self.game_test_evidence):
+        if self.game_tested and character_game_test_evidence_passed(
+            self.game_test_evidence,
+            _normalize_output_hashes(self.output_hashes),
+            require_output_hashes=True,
+        ):
             return CAPABILITY_STAGE_GAME_TESTED
         if self.verified:
             return CAPABILITY_STAGE_EXPORT_CANDIDATE
@@ -268,9 +336,18 @@ class CharacterBuilderValidationReport:
 
     def to_dict(self) -> dict[str, Any]:
         merged = self.merged_report
-        game_evidence_complete = character_game_test_evidence_passed(self.game_test_evidence)
+        normalized_output_hashes = _normalize_output_hashes(self.output_hashes)
+        game_evidence_complete = character_game_test_evidence_passed(
+            self.game_test_evidence,
+            normalized_output_hashes,
+            require_output_hashes=bool(self.game_tested),
+        )
         game_evidence_missing = (
-            character_game_test_evidence_missing(self.game_test_evidence)
+            character_game_test_evidence_missing(
+                self.game_test_evidence,
+                normalized_output_hashes,
+                require_output_hashes=bool(self.game_tested),
+            )
             if self.game_tested or self.game_test_evidence else
             {}
         )
@@ -301,6 +378,7 @@ class CharacterBuilderValidationReport:
             "game": self.game,
             "resref": self.resref,
             "outputs": dict(self.outputs),
+            "output_hashes": normalized_output_hashes,
             "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
             "manual_in_game_checklist": list(CHARACTER_BUILDER_MANUAL_CHECKLIST),
             "game_test_evidence": dict(self.game_test_evidence or {}),

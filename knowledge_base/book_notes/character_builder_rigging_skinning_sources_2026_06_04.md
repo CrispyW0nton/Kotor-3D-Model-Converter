@@ -81,6 +81,39 @@ Character Builder should make these stages visible and separately validated:
    Symmetry, guide movement, center-pivot, and freeze-transform operations must
    be explicit, undoable, and captured in session/export reports.
 
+## Added Pass: Fit, Bind, And Weight Are Separate Evidence
+
+The second scan of the two sources reinforced a distinction that matters a lot
+for Character Builder:
+
+```text
+mesh appears lined up
+!=
+mesh has a trustworthy bind pose
+!=
+mesh has safe KOTOR skin weights
+```
+
+This is the most important Character Builder lesson from the new sources. A
+custom body can look acceptable in the viewport and still fail inherited KOTOR
+animations if its solved fit transform, bind snapshot, or donor-weight
+correspondence is weak.
+
+Product rule:
+
+- **Fit** answers: does the imported mesh face the native KOTOR skeleton's
+  front direction, match its up axis, stand at the correct root height, and
+  scale to the selected base?
+- **Bind** answers: has Build/Confirm attached the imported payload to the
+  preserved native KOTOR node DAG with a stable bind-pose snapshot?
+- **Weight** answers: do all vertices have normalized, valid influences from
+  allowed native deform nodes, preferably transferred from a comparable donor
+  body rather than guessed by nearest bone?
+
+The UI should report those as separate readiness states. A single green
+"built" state is too vague for a modder trying to diagnose why Bendak animates
+badly on the `n_mandalorian` skeleton.
+
 ## Applicable Rigging Principles
 
 ### Joint Placement And Orientation Are First-Class Gates
@@ -107,6 +140,31 @@ Roadmap impact:
 - T2203 export evidence should include the final fit transform and whether it
   was auto-solved or manually changed.
 
+### Freeze Transform Is A Bind-Pose Operation, Not A Visual Shortcut
+
+The rigging book's transform cleanup guidance is Maya-specific, but the
+principle maps cleanly to GhostRigger: the editor may offer Center Pivot and
+Freeze Transform actions, but they must not silently move the actual exported
+native node DAG or hide a bad fit.
+
+GhostRigger rule:
+
+- Center Pivot should modify the editable scene/payload pivot while preserving
+  visible geometry.
+- Freeze Transform should bake the current mesh-fit correction into the
+  Character Builder session and create or update explicit bind evidence.
+- Freeze Transform must be undoable and should report before/after position,
+  rotation, scale, and affected payload nodes.
+- It must not rename nodes, collapse native KOTOR pivots, or rewrite the base
+  snapshot without a structural diff.
+
+Roadmap impact:
+
+- T2102 needs tests that prove freeze keeps the custom mesh visually stable
+  while changing only the intended authored fit/bind state.
+- T2203/T2204 reports should include whether the exported candidate used a
+  frozen fit transform.
+
 ### Symmetry Is Useful, But KOTOR Names Still Win
 
 The rigging book treats mirrored limbs as a speed tool, not as a reason to
@@ -127,6 +185,13 @@ Roadmap impact:
 - T2103 should test both "symmetry on" and "symmetry off" paths.
 - Left/right guide maps should live in core data, not be inferred in the Qt
   paint/event layer.
+
+Important nuance:
+
+- Mirrored limbs may intentionally have different local axes while still
+  behaving symmetrically. Character Builder should mirror desired guide motion
+  in the native model's body space, not blindly copy local Euler channels from
+  one side to the other.
 
 ### Skinning Quality Is Not Optional Polish
 
@@ -180,6 +245,36 @@ Roadmap impact:
 - Add tests that intentionally catch left/right crossed limb weights and
   wrist/ankle twist artifacts.
 
+Practical implementation ladder:
+
+1. **Native donor transfer**: preferred when the selected KOTOR base has a
+   comparable body surface. Use the base/donor skin as the source of truth.
+2. **Region-constrained nearest surface/vertex transfer**: acceptable when a
+   donor mesh exists but the surface shapes differ. Search only inside matching
+   body regions so hands, feet, shoulders, hips, and centerline vertices cannot
+   borrow from the wrong side.
+3. **Region-constrained nearest bone**: fallback quality. It should be labeled
+   "first pass" and must require inherited-animation preview before export
+   confidence increases.
+
+The paper's topology and normalization assumptions are a direct warning for
+GhostRigger: donor-weight transfer should only be trusted after the mesh has
+been normalized to the native skeleton's scale/orientation and the body-region
+landmarks are plausible.
+
+Suggested correspondence landmarks for the first Character Builder product
+slice:
+
+- root / pelvis center;
+- head or helmet center;
+- left and right hands;
+- left and right knees;
+- left and right feet or ankles;
+- optional shoulders and elbows for armor-heavy meshes.
+
+These landmarks can be auto-solved where possible, but the UI should let a
+modder correct them before Build/Confirm.
+
 ### Bind Pose And Deformation Preview Must Be Evidence
 
 The rigging book emphasizes testing skin by rotating joints and returning to
@@ -202,6 +297,19 @@ Roadmap impact:
 - T1901/T1902 should unblock the Animation Library dropdown for selected
   supermodels.
 - T2205 should keep the in-game manual checklist attached to packaged outputs.
+
+Minimum deformation-risk preview set:
+
+- idle or ready stance, to catch bind-pose drift;
+- walk/run, to catch crossed legs, hip drift, and foot twist;
+- one attack/gesture/cast clip, to catch shoulder, elbow, wrist, and hand
+  influence problems;
+- one head/attachment preview if the model uses `headhook`, weapons, masks, or
+  goggles.
+
+The output should name the sampled supermodel animation, source supermodel, and
+the risky regions observed by validation. This supports honest labels such as
+"reload-verified export candidate" instead of "game-ready".
 
 ### Performance Belongs In The Pipeline Design
 
@@ -232,6 +340,12 @@ GhostRigger rule:
    and one combat/gesture clip when available.
 7. Export only through staged transactions and keep the capability label honest:
    reload-verified export candidate until KOTOR in-game testing passes.
+8. Treat fit confidence, bind confidence, and weight confidence as separate
+   report fields.
+9. Require donor-weight correspondence landmarks before trusting automatic
+   weight transfer on armor-heavy custom meshes like Bendak.
+10. Keep every fit/bind/weight operation headless and report-producing; Qt
+    controls should orchestrate those services, not own their math.
 
 ## Suggested Tests And Reports
 
@@ -239,11 +353,17 @@ Add or extend tests around these future slices:
 
 - Bendak auto-fit records front/up/scale/root confidence against
   `n_mandalorian`.
+- Bendak auto-fit requires plausible root, head, hand, knee, and foot landmark
+  correspondence before donor weights are considered trusted.
 - Build/Confirm cannot proceed if fit confidence is below a strict threshold
   unless the user has explicitly accepted manual correction.
+- Build/Confirm writes a bind snapshot and distinguishes mesh-fit transform
+  from native KOTOR node transforms.
 - Symmetry-on guide edits update only paired compatible nodes.
 - Symmetry-off guide edits affect only the selected node.
 - Donor weight transfer blocks zero-weight and wrong-side vertices.
+- Donor weight transfer is rejected or downgraded when the imported mesh has not
+  been normalized to the selected native base's scale/orientation.
 - Previewing an inherited supermodel animation writes an audit record with
   sampled animation name, source supermodel, and deformation-risk warnings.
 - Export report includes bind-pose snapshot, fit transform, donor-weight mode,

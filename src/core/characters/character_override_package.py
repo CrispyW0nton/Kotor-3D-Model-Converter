@@ -9,6 +9,7 @@ resref, with a manifest that preserves Character Builder validation evidence.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -137,7 +138,14 @@ def package_character_override_candidate(
         source_mdx = request.source_mdl_path.with_suffix(".mdx")
         context.write_bytes(target_mdl, request.source_mdl_path.read_bytes())
         context.write_bytes(target_mdx, source_mdx.read_bytes())
-        manifest = _build_manifest(request, validation_payload, target_mdl, target_mdx)
+        package_hashes = _staged_output_hashes(context, target_mdl, target_mdx)
+        manifest = _build_manifest(
+            request,
+            validation_payload,
+            target_mdl,
+            target_mdx,
+            package_hashes=package_hashes,
+        )
         manifest_holder["manifest"] = manifest
         context.write_text(
             manifest_path,
@@ -178,7 +186,13 @@ def package_character_override_candidate(
     manifest = (
         manifest_holder.get("manifest")
         if export_result.succeeded
-        else _build_manifest(request, validation_payload, target_mdl, target_mdx)
+        else _build_manifest(
+            request,
+            validation_payload,
+            target_mdl,
+            target_mdx,
+            package_hashes={},
+        )
         if validation_payload
         else {}
     )
@@ -277,12 +291,39 @@ def _validation_payload_issues(
             "Character Builder export is not at an install-package capable stage.",
             details={"stage": stage},
         ))
+    output_hashes = _normalize_output_hashes(payload.get("output_hashes"))
+    if not output_hashes:
+        issues.append(_issue(
+            "character.override_package.output_hashes_missing",
+            (
+                "Character Builder validation report does not record MDL/MDX "
+                "output hashes."
+            ),
+        ))
+    else:
+        actual_hashes = _file_pair_hashes(request.source_mdl_path)
+        mismatched = _hash_mismatches(output_hashes, actual_hashes)
+        if mismatched:
+            issues.append(_issue(
+                "character.override_package.output_hash_mismatch",
+                (
+                    "Character Builder validation report hashes do not match "
+                    "the MDL/MDX files being packaged."
+                ),
+                details={"mismatches": mismatched},
+            ))
+
     if stage == "game_tested" and not character_game_test_evidence_passed(
-        payload.get("game_test_evidence")
+        payload.get("game_test_evidence"),
+        output_hashes,
+        require_output_hashes=True,
     ):
         issues.append(_issue(
             "character.override_package.game_test_evidence_incomplete",
-            "Character Builder export claims game-tested status without complete K1/K2 checklist evidence.",
+            (
+                "Character Builder export claims game-tested status without "
+                "complete K1/K2 checklist and artifact-hash evidence."
+            ),
             details={
                 "stage": stage,
                 "game_test_status": capability.get("game_test_status"),
@@ -324,6 +365,8 @@ def _build_manifest(
     validation_payload: dict[str, Any],
     target_mdl: Path,
     target_mdx: Path,
+    *,
+    package_hashes: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     capability = validation_payload.get("capability")
     capability = capability if isinstance(capability, dict) else {}
@@ -346,6 +389,11 @@ def _build_manifest(
             "validation_report": str(
                 request.validation_report_path or _default_validation_report_path(request.source_mdl_path)
             ),
+            "output_hashes": _normalize_output_hashes(validation_payload.get("output_hashes")),
+        },
+        "package_output_hashes": {
+            "algorithm": "sha256",
+            "artifacts": package_hashes,
         },
         "capability": {
             "stage": capability.get("stage", "blocked"),
@@ -399,6 +447,77 @@ def _target_mdl_path(output_dir: Path, target_resref: str) -> Path:
 def _default_validation_report_path(source_mdl: Path) -> Path:
     path = Path(source_mdl)
     return path.with_name(f"{path.stem}_validation_report.json")
+
+
+def _staged_output_hashes(
+    context: ExportJobContext,
+    target_mdl: Path,
+    target_mdx: Path,
+) -> dict[str, dict[str, Any]]:
+    hashes: dict[str, dict[str, Any]] = {}
+    for artifact, final_path in (("mdl", target_mdl), ("mdx", target_mdx)):
+        staged = context.staged_path_for(final_path)
+        if staged.exists():
+            hashes[artifact] = _file_hash(staged)
+    return hashes
+
+
+def _file_pair_hashes(source_mdl: Path) -> dict[str, dict[str, Any]]:
+    hashes: dict[str, dict[str, Any]] = {}
+    mdl = Path(source_mdl)
+    mdx = mdl.with_suffix(".mdx")
+    if mdl.exists():
+        hashes["mdl"] = _file_hash(mdl)
+    if mdx.exists():
+        hashes["mdx"] = _file_hash(mdx)
+    return hashes
+
+
+def _file_hash(path: Path) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return {"sha256": digest.hexdigest(), "size": Path(path).stat().st_size}
+
+
+def _normalize_output_hashes(value: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for key, item in value.items():
+        if not isinstance(item, dict):
+            continue
+        artifact = str(key or "").strip().lower()
+        digest = str(item.get("sha256") or "").strip().lower()
+        if not artifact or not digest:
+            continue
+        payload: dict[str, Any] = {"sha256": digest}
+        try:
+            payload["size"] = int(item.get("size"))
+        except (TypeError, ValueError, OverflowError):
+            pass
+        result[artifact] = payload
+    return result
+
+
+def _hash_mismatches(
+    expected_hashes: dict[str, dict[str, Any]],
+    actual_hashes: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    mismatches: dict[str, dict[str, Any]] = {}
+    for artifact in ("mdl", "mdx"):
+        expected = expected_hashes.get(artifact)
+        actual = actual_hashes.get(artifact)
+        if expected is None or actual is None:
+            mismatches[artifact] = {"expected": expected, "actual": actual}
+            continue
+        if (
+            expected.get("sha256") != actual.get("sha256")
+            or expected.get("size") != actual.get("size")
+        ):
+            mismatches[artifact] = {"expected": expected, "actual": actual}
+    return mismatches
 
 
 def _issue(

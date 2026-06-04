@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+import hashlib
 import json
 
 from src.core.characters.character_builder import apply_template_rig
@@ -153,6 +154,13 @@ def _stamp_valid_fit_evidence(result: dict, *, confidence: float = 0.95) -> dict
         "fit_transform": model.metadata["kotor_fit_report"]["fit_transform"],
     }
     return result
+
+
+def _test_output_hashes() -> dict[str, dict[str, int | str]]:
+    return {
+        "mdl": {"sha256": hashlib.sha256(b"mdl").hexdigest(), "size": 3},
+        "mdx": {"sha256": hashlib.sha256(b"mdx").hexdigest(), "size": 3},
+    }
 
 
 def _rigged_character(template: KotorModel | None = None, *, game: str = "K1") -> dict:
@@ -1216,9 +1224,11 @@ def test_character_builder_game_test_evidence_requires_per_game_checklists() -> 
 
 
 def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_evidence() -> None:
+    output_hashes = _test_output_hashes()
     evidence = build_character_game_test_evidence(
         tested_games=["K1", "K2"],
         checklist_results={item: True for item in CHARACTER_BUILDER_MANUAL_CHECKLIST},
+        tested_output_hashes=output_hashes,
         tester="manual qa",
         notes="Bendak replacement smoke passed.",
         artifacts=["k1_screenshot.png", "k2_screenshot.png"],
@@ -1231,6 +1241,7 @@ def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_e
         game="K1",
         resref="grbody",
         outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        output_hashes=output_hashes,
         preflight_report=ValidationReport(source="test.preflight"),
         game_tested=True,
         game_test_evidence=evidence,
@@ -1251,7 +1262,42 @@ def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_e
     assert data["game_test_evidence"]["per_game_checklist_results"]["K2"][
         "Loading in both KOTOR 1 and KOTOR 2"
     ] is True
+    assert data["game_test_evidence"]["tested_output_hashes"] == output_hashes
+    assert data["output_hashes"] == output_hashes
     assert data["game_test_evidence_missing"] == {}
+
+
+def test_character_builder_validation_report_blocks_game_test_hash_mismatch() -> None:
+    output_hashes = _test_output_hashes()
+    tested_hashes = copy.deepcopy(output_hashes)
+    tested_hashes["mdl"]["sha256"] = "0" * 64
+    evidence = build_character_game_test_evidence(
+        tested_games=["K1", "K2"],
+        checklist_results={item: True for item in CHARACTER_BUILDER_MANUAL_CHECKLIST},
+        tested_output_hashes=tested_hashes,
+        tester="manual qa",
+    )
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        output_hashes=output_hashes,
+        preflight_report=ValidationReport(source="test.preflight"),
+        game_tested=True,
+        game_test_evidence=evidence,
+    )
+
+    data = report.to_dict()
+
+    assert data["capability"]["stage"] == "export_candidate"
+    assert data["capability"]["game_tested"] is False
+    mismatch = data["game_test_evidence_missing"]["mismatched_tested_output_hashes"]["mdl"]
+    assert mismatch["expected"] == output_hashes["mdl"]
+    assert mismatch["actual"] == tested_hashes["mdl"]
 
 
 def test_character_builder_validation_text_includes_actionable_issue_context() -> None:
@@ -1356,6 +1402,14 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert payload["capability"]["stage"] == "export_candidate"
     assert payload["capability"]["game_tested"] is False
     assert payload["capability"]["game_test_status"] == "not_game_tested"
+    assert payload["output_hashes"]["mdl"] == {
+        "sha256": hashlib.sha256(b"mdl").hexdigest(),
+        "size": 3,
+    }
+    assert payload["output_hashes"]["mdx"] == {
+        "sha256": hashlib.sha256(b"mdx").hexdigest(),
+        "size": 3,
+    }
     assert payload["engine_evidence"]["findings_doc"] == "docs/ghidra_findings.md"
     assert len(payload["manual_in_game_checklist"]) == 12
     workflow = payload["metadata"]["character_builder_workflow"]
