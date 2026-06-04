@@ -62,6 +62,7 @@ _FIT_EVIDENCE_CODES = frozenset({
     "character.export.auto_fit_source_landmarks_need_review",
     "character.export.auto_fit_imported_skeleton_guides_not_recorded",
     "character.export.auto_fit_paired_landmarks_need_review",
+    "character.export.auto_fit_toe_forward_needs_review",
     "character.export.auto_fit_contract_mismatch",
 })
 
@@ -430,6 +431,7 @@ def character_builder_evidence_gates(
     )
     fit_landmark_sources = _fit_landmark_source_summary(fit_report)
     fit_landmark_alignment = _fit_landmark_alignment_summary(fit_report)
+    fit_toe_forward = _fit_toe_forward_summary(fit_report)
     fit_imported_armature = _fit_imported_armature_summary(fit_report)
     fit_stage = _gate_stage(
         fit_codes,
@@ -455,6 +457,7 @@ def character_builder_evidence_gates(
         "source_imported_armature_scene_guide_count": fit_imported_armature["scene_guide_joint_count"],
         "source_imported_armature_names": fit_imported_armature["armature_names"],
         "paired_landmark_alignment": fit_landmark_alignment,
+        "toe_forward_alignment": fit_toe_forward,
         "fit_transform_present": bool(_mapping(fit_report.get("fit_transform"))),
         "blocking_issue_codes": fit_codes["blocking"],
         "warning_issue_codes": fit_codes["warning"],
@@ -745,6 +748,32 @@ def _fit_landmark_alignment_summary(fit_report: dict[str, Any]) -> dict[str, Any
         "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
         "translation_basis": str(alignment.get("translation_basis") or ""),
         "error_basis": str(alignment.get("error_basis") or ""),
+    }
+
+
+def _fit_toe_forward_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": _fit_toe_forward_frame_summary(
+            _mapping(fit_report.get("source_frame"))
+        ),
+        "target": _fit_toe_forward_frame_summary(
+            _mapping(fit_report.get("target_frame"))
+        ),
+    }
+
+
+def _fit_toe_forward_frame_summary(frame: dict[str, Any]) -> dict[str, Any]:
+    landmarks = _mapping(frame.get("landmarks"))
+    required_roles = ("left_foot", "right_foot", "left_toe", "right_toe")
+    has_toe_landmarks = all(bool(landmarks.get(role)) for role in required_roles)
+    return {
+        "has_toe_landmarks": bool(has_toe_landmarks),
+        "toe_forward_alignment": _safe_float(frame.get("toe_forward_alignment")),
+        "landmarks": {
+            role: str(landmarks.get(role) or "")
+            for role in required_roles
+            if str(landmarks.get(role) or "").strip()
+        },
     }
 
 

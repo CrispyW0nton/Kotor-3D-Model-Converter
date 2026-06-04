@@ -759,6 +759,64 @@ def test_character_export_preflight_warns_when_single_fit_landmark_is_far() -> N
     assert preflight.export_allowed is True
 
 
+def test_character_export_preflight_warns_when_toe_forward_disagrees() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["source_frame"]["landmarks"].update({
+        "left_toe": "LeftToeBase",
+        "right_toe": "RightToeBase",
+    })
+    fit["source_frame"]["landmark_sources"].update({
+        "left_toe": "imported_skeleton",
+        "right_toe": "imported_skeleton",
+    })
+    fit["source_frame"]["toe_forward_alignment"] = -0.2
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_toe_forward_needs_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["frame"] == "source_frame"
+    assert issue.details["reasons"] == ["low_alignment"]
+    assert issue.details["toe_forward_alignment"] == -0.2
+    assert issue.details["required_alignment"] == 0.5
+    assert issue.details["landmarks"]["left_toe"] == "LeftToeBase"
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_accepts_aligned_toe_forward_evidence() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    for frame_name in ("source_frame", "target_frame"):
+        fit[frame_name]["landmarks"].update({
+            "left_toe": "LeftToeBase" if frame_name == "source_frame" else "lfootT_g",
+            "right_toe": "RightToeBase" if frame_name == "source_frame" else "rfootT_g",
+        })
+        fit[frame_name]["toe_forward_alignment"] = 0.91
+    fit["source_frame"]["landmark_sources"].update({
+        "left_toe": "imported_skeleton",
+        "right_toe": "imported_skeleton",
+    })
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    assert "character.export.auto_fit_toe_forward_needs_review" not in _codes(preflight)
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_warns_on_fallback_skin_binding() -> None:
     result = _rigged_character()
 
@@ -1945,6 +2003,76 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert paired["pair_errors"][0]["error"] == 0.42
     assert "Fit paired landmarks: 3 pairs, rms=0.42" in report.to_text()
     assert "worst=left" in report.to_text()
+
+
+def test_character_builder_validation_report_records_toe_forward_gate() -> None:
+    fit_report = _valid_fit_report()
+    fit_report["source_frame"]["landmarks"].update({
+        "left_toe": "LeftToeBase",
+        "right_toe": "RightToeBase",
+    })
+    fit_report["source_frame"]["toe_forward_alignment"] = -0.2
+    fit_report["target_frame"]["landmarks"].update({
+        "left_toe": "lfootT_g",
+        "right_toe": "rfootT_g",
+    })
+    fit_report["target_frame"]["toe_forward_alignment"] = 0.91
+
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(
+            source="test.preflight",
+            issues=[
+                ValidationIssue(
+                    severity=ValidationSeverity.WARNING,
+                    subsystem=ValidationSubsystem.CHARACTER,
+                    code="character.export.auto_fit_toe_forward_needs_review",
+                    message="Toe-forward fit needs review.",
+                )
+            ],
+        ),
+        metadata={
+            "character_builder_workflow": {
+                "fit_report": fit_report,
+                "bind": {
+                    "skin_binding": {
+                        "weighting_method": "native_template_nearest_vertex_donor",
+                        "quality_stage": "donor_transfer_first_pass",
+                        "donor_weight_transfer": True,
+                        "mesh_reports": [{"mesh_name": "custom_body"}],
+                    }
+                },
+                "rig_state": {
+                    "state": "native_template_final",
+                    "dag_authority": "native_kotor_base",
+                },
+                "native_snapshot": {
+                    "model_name": "pmbam",
+                    "game": "K1",
+                    "dag_fingerprint": "a" * 64,
+                },
+            }
+        },
+    )
+
+    fit = report.to_dict()["character_builder_evidence_gates"]["fit"]
+    assert fit["stage"] == "needs_review"
+    assert fit["warning_issue_codes"] == [
+        "character.export.auto_fit_toe_forward_needs_review"
+    ]
+    toe = fit["toe_forward_alignment"]
+    assert toe["source"]["has_toe_landmarks"] is True
+    assert toe["source"]["toe_forward_alignment"] == -0.2
+    assert toe["source"]["landmarks"]["left_toe"] == "LeftToeBase"
+    assert toe["target"]["has_toe_landmarks"] is True
+    assert toe["target"]["toe_forward_alignment"] == 0.91
+    assert toe["target"]["landmarks"]["right_toe"] == "rfootT_g"
 
 
 def test_character_builder_validation_report_records_engine_evidence_gate() -> None:

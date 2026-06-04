@@ -80,6 +80,7 @@ class CharacterExportPreflightOptions:
     min_auto_fit_paired_landmarks: int = 4
     max_auto_fit_landmark_rms_error: float = 0.15
     max_auto_fit_landmark_pair_error: float = 0.15
+    min_auto_fit_toe_forward_alignment: float = 0.50
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -700,6 +701,12 @@ def _validate_auto_fit_evidence(
         opts=opts,
         report=report,
     )
+    _validate_toe_forward_alignment(
+        fit_policy=fit_policy,
+        fit_report=fit_report,
+        opts=opts,
+        report=report,
+    )
 
     contract_mismatches: dict[str, Any] = {}
     if contract.get("native_skeleton_is_authority") is not True:
@@ -802,6 +809,63 @@ def _validate_paired_landmark_alignment(
             "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
         },
     ))
+
+
+def _validate_toe_forward_alignment(
+    *,
+    fit_policy: str,
+    fit_report: dict[str, Any],
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    if fit_policy != "bone_landmark_basis":
+        return
+
+    threshold = float(opts.min_auto_fit_toe_forward_alignment)
+    for frame_name in ("source_frame", "target_frame"):
+        frame = fit_report.get(frame_name)
+        frame = frame if isinstance(frame, dict) else {}
+        if not _auto_fit_frame_has_toe_landmarks(frame):
+            continue
+        alignment = _safe_float(frame.get("toe_forward_alignment"))
+        reasons: list[str] = []
+        if alignment is None or not math.isfinite(alignment):
+            reasons.append("not_recorded")
+        elif alignment < threshold:
+            reasons.append("low_alignment")
+        if not reasons:
+            continue
+        report.add(_issue(
+            "warning",
+            "character.export.auto_fit_toe_forward_needs_review",
+            "Character auto-fit toe-forward facing evidence needs review.",
+            fix_hint=(
+                "Review the imported mesh orientation and selected KOTOR base. "
+                "Toe or foot-end guide direction should agree with the inferred "
+                "humanoid forward axis before treating this fit as launch-quality."
+            ),
+            details={
+                "reason": ",".join(reasons),
+                "reasons": reasons,
+                "frame": frame_name,
+                "toe_forward_alignment": alignment,
+                "required_alignment": threshold,
+                "landmarks": dict(frame.get("landmarks") or {}),
+                "landmark_sources": dict(frame.get("landmark_sources") or {}),
+                "fit_policy": fit_policy,
+            },
+        ))
+
+
+def _auto_fit_frame_has_toe_landmarks(frame: dict[str, Any]) -> bool:
+    landmarks = frame.get("landmarks")
+    landmarks = landmarks if isinstance(landmarks, dict) else {}
+    return bool(
+        landmarks.get("left_foot")
+        and landmarks.get("right_foot")
+        and landmarks.get("left_toe")
+        and landmarks.get("right_toe")
+    )
 
 
 def _auto_fit_source_landmark_sources(fit_report: dict[str, Any]) -> dict[str, str]:
