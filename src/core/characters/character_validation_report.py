@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from src.core.validation.validation_bus import (
+    ValidationIssue,
     ValidationReport,
+    ValidationSeverity,
     merge_validation_reports,
     validation_report_to_dict,
 )
@@ -37,6 +40,76 @@ REQUIRED_CHARACTER_BUILDER_GAME_TEST_GAMES: tuple[str, ...] = ("K1", "K2")
 CAPABILITY_STAGE_BLOCKED = "blocked"
 CAPABILITY_STAGE_EXPORT_CANDIDATE = "export_candidate"
 CAPABILITY_STAGE_GAME_TESTED = "game_tested"
+
+_FIT_EVIDENCE_CODES = frozenset({
+    "character.export.missing_auto_fit_evidence",
+    "character.export.incomplete_auto_fit_evidence",
+    "character.export.invalid_auto_fit_scale",
+    "character.export.invalid_auto_fit_translation",
+    "character.export.missing_auto_fit_confidence",
+    "character.export.low_auto_fit_confidence",
+    "character.export.fallback_auto_fit_used",
+    "character.export.auto_fit_contract_mismatch",
+})
+
+_BIND_EVIDENCE_CODES = frozenset({
+    "character.export.no_model",
+    "character.export.missing_native_snapshot",
+    "character.export.snapshot_failed",
+    "character.export.not_native_template_final_rig",
+    "character.export.missing_bind_provenance",
+    "character.export.bind_provenance_mismatch",
+    "character.export.render_replacement_count_mismatch",
+    "character.export.render_replacement_count_malformed",
+    "character.export.invalid_native_render_replacement_evidence",
+    "character.export.missing_native_render_replacement_evidence",
+    "character.export.native_snapshot_game_unknown",
+    "character.export.native_snapshot_game_mismatch",
+    "character.export.no_native_source",
+    "character.export.supermodel_added",
+    "character.export.supermodel_mismatch",
+    "character.export.supermodel_case_changed",
+    "character.export.node_case_changed",
+    "character.export.node_path_changed",
+    "character.export.node_path_missing",
+    "character.export.node_missing",
+    "character.export.required_socket_missing",
+    "character.export.non_native_skeleton_node",
+})
+
+_WEIGHT_EVIDENCE_CODES = frozenset({
+    "character.export.missing_skin_binding_evidence",
+    "character.export.fallback_skin_binding",
+    "character.export.no_skin_payload",
+    "character.export.empty_skin_geometry",
+    "character.export.empty_bonemap",
+    "character.export.skin_row_count_mismatch",
+    "character.export.no_skin_rows",
+    "character.export.qbone_mismatch",
+    "character.export.tbone_mismatch",
+    "character.export.bonemap_empty_target",
+    "character.export.bonemap_target_case_changed",
+    "character.export.bonemap_target_missing",
+    "character.export.bonemap_native_target_case_changed",
+    "character.export.bonemap_target_not_native",
+    "character.export.vertex_unweighted",
+    "character.export.vertex_too_many_influences",
+    "character.export.vertex_weight_nonfinite",
+    "character.export.vertex_weight_negative",
+    "character.export.vertex_bone_index_out_of_range",
+    "character.export.vertex_weight_zero_sum",
+    "character.export.vertex_weight_sum",
+})
+
+_GEOMETRY_EVIDENCE_CODES = frozenset({
+    "character.export.vertex_malformed",
+    "character.export.vertex_nonfinite",
+    "character.export.normal_nonfinite",
+    "character.export.face_malformed",
+    "character.export.face_index_nonfinite",
+    "character.export.face_index_noninteger",
+    "character.export.face_index_out_of_range",
+})
 
 
 def build_character_game_test_evidence(
@@ -295,6 +368,188 @@ def _summarize_game_checklists(
     return summary
 
 
+def character_builder_evidence_gates(
+    workflow: dict[str, Any],
+    preflight_report: ValidationReport,
+) -> dict[str, dict[str, Any]]:
+    """Summarize fit, bind, and weight proof as separate export gates."""
+
+    workflow = workflow if isinstance(workflow, dict) else {}
+    issues = list(getattr(preflight_report, "issues", []) or [])
+    fit_report = _mapping(workflow.get("fit_report"))
+    bind = _mapping(workflow.get("bind"))
+    rig_state = _mapping(workflow.get("rig_state"))
+    native_snapshot = _mapping(workflow.get("native_snapshot"))
+    skin_binding = _mapping(bind.get("skin_binding"))
+
+    fit_codes = _gate_issue_codes(issues, _FIT_EVIDENCE_CODES)
+    bind_codes = _gate_issue_codes(issues, _BIND_EVIDENCE_CODES)
+    weight_codes = _gate_issue_codes(
+        issues,
+        _WEIGHT_EVIDENCE_CODES | _GEOMETRY_EVIDENCE_CODES,
+    )
+
+    fit_confidence = _safe_float(
+        fit_report.get(
+            "confidence",
+            _mapping(fit_report.get("auto_fit_report")).get("confidence"),
+        )
+    )
+    fit_stage = _gate_stage(
+        fit_codes,
+        present=bool(fit_report),
+        warning_label="needs_review",
+    )
+    fit = {
+        "stage": fit_stage,
+        "present": bool(fit_report),
+        "policy": str(fit_report.get("fit_policy") or ""),
+        "confidence": fit_confidence,
+        "fallback_used": bool(fit_report.get(
+            "fallback_used",
+            _mapping(fit_report.get("auto_fit_report")).get("fallback_used", False),
+        )),
+        "fit_transform_present": bool(_mapping(fit_report.get("fit_transform"))),
+        "blocking_issue_codes": fit_codes["blocking"],
+        "warning_issue_codes": fit_codes["warning"],
+    }
+
+    bind_present = bool(bind) or bool(rig_state) or bool(native_snapshot)
+    bind = {
+        "stage": _gate_stage(bind_codes, present=bind_present),
+        "present": bind_present,
+        "rig_state": str(rig_state.get("state") or ""),
+        "dag_authority": str(
+            rig_state.get("dag_authority")
+            or _mapping(bind.get("native_base")).get("dag_authority")
+            or ""
+        ),
+        "native_model": str(native_snapshot.get("model_name") or ""),
+        "native_game": str(native_snapshot.get("game") or ""),
+        "native_dag_fingerprint": str(native_snapshot.get("dag_fingerprint") or ""),
+        "bind_status": str(bind.get("status") or ""),
+        "blocking_issue_codes": bind_codes["blocking"],
+        "warning_issue_codes": bind_codes["warning"],
+    }
+
+    weighting_method = str(skin_binding.get("weighting_method") or "")
+    quality_stage = str(skin_binding.get("quality_stage") or "")
+    donor_weight_transfer = bool(skin_binding.get("donor_weight_transfer"))
+    weight_stage = _weight_gate_stage(
+        weight_codes,
+        skin_binding_present=bool(skin_binding),
+        donor_weight_transfer=donor_weight_transfer,
+        quality_stage=quality_stage,
+        weighting_method=weighting_method,
+    )
+    weight = {
+        "stage": weight_stage,
+        "present": bool(skin_binding),
+        "weighting_method": weighting_method,
+        "quality_stage": quality_stage,
+        "donor_weight_transfer": donor_weight_transfer,
+        "mesh_report_count": len(list(skin_binding.get("mesh_reports") or [])),
+        "blocking_issue_codes": weight_codes["blocking"],
+        "warning_issue_codes": weight_codes["warning"],
+    }
+
+    return {
+        "schema": {
+            "name": "ghostrigger.character_builder_evidence_gates.v1",
+            "meaning": (
+                "Fit, bind, and weight are separate Character Builder proof "
+                "gates. A character can pass one gate while another remains "
+                "fallback-quality or blocked."
+            ),
+        },
+        "fit": fit,
+        "bind": bind,
+        "weight": weight,
+    }
+
+
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _gate_issue_codes(
+    issues: list[ValidationIssue],
+    relevant_codes: frozenset[str],
+) -> dict[str, list[str]]:
+    blocking: list[str] = []
+    warning: list[str] = []
+    for issue in issues:
+        code = str(getattr(issue, "code", "") or "")
+        if code not in relevant_codes:
+            continue
+        severity = getattr(issue, "severity", "")
+        if severity == ValidationSeverity.BLOCKING:
+            blocking.append(code)
+        else:
+            warning.append(code)
+    return {
+        "blocking": sorted(set(blocking)),
+        "warning": sorted(set(warning)),
+    }
+
+
+def _gate_stage(
+    codes: dict[str, list[str]],
+    *,
+    present: bool,
+    warning_label: str = "warning",
+) -> str:
+    if codes.get("blocking"):
+        return "blocked"
+    if not present:
+        return "missing"
+    if codes.get("warning"):
+        return warning_label
+    return "passed"
+
+
+def _weight_gate_stage(
+    codes: dict[str, list[str]],
+    *,
+    skin_binding_present: bool,
+    donor_weight_transfer: bool,
+    quality_stage: str,
+    weighting_method: str,
+) -> str:
+    if codes.get("blocking"):
+        return "blocked"
+    if not skin_binding_present:
+        return "missing"
+    if (
+        weighting_method == "nearest_kotor_bone_segment"
+        or quality_stage in {"fallback_first_pass", "donor_transfer_partial"}
+        or not donor_weight_transfer
+        or codes.get("warning")
+    ):
+        return quality_stage or "fallback_first_pass"
+    return "trusted_donor_transfer"
+
+
+def _evidence_gate_stage(
+    gates: dict[str, Any],
+    key: str,
+) -> str:
+    gate = gates.get(key)
+    if not isinstance(gate, dict):
+        return "missing"
+    return str(gate.get("stage") or "missing")
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(result):
+        return None
+    return result
+
+
 @dataclass(frozen=True)
 class CharacterBuilderValidationReport:
     """Machine-readable and human-readable Character Builder export proof."""
@@ -337,6 +592,11 @@ class CharacterBuilderValidationReport:
     def to_dict(self) -> dict[str, Any]:
         merged = self.merged_report
         normalized_output_hashes = _normalize_output_hashes(self.output_hashes)
+        workflow = dict(self.metadata.get("character_builder_workflow") or {})
+        evidence_gates = character_builder_evidence_gates(
+            workflow,
+            self.preflight_report,
+        )
         game_evidence_complete = character_game_test_evidence_passed(
             self.game_test_evidence,
             normalized_output_hashes,
@@ -383,6 +643,7 @@ class CharacterBuilderValidationReport:
             "manual_in_game_checklist": list(CHARACTER_BUILDER_MANUAL_CHECKLIST),
             "game_test_evidence": dict(self.game_test_evidence or {}),
             "game_test_evidence_missing": dict(game_evidence_missing or {}),
+            "character_builder_evidence_gates": evidence_gates,
             "preflight_report": validation_report_to_dict(self.preflight_report),
             "reload_report": validation_report_to_dict(self.reload_report)
             if self.reload_report is not None else None,
@@ -421,6 +682,7 @@ class CharacterBuilderValidationReport:
             fit_report = dict(workflow.get("fit_report") or {})
             fit_transform = dict(fit_report.get("fit_transform") or {})
             native_snapshot = dict(workflow.get("native_snapshot") or {})
+            evidence_gates = dict(payload.get("character_builder_evidence_gates") or {})
             lines.extend(["", "Character Builder workflow evidence:"])
             lines.append(
                 f"- Final DAG source: {workflow.get('final_dag_source')}"
@@ -444,6 +706,13 @@ class CharacterBuilderValidationReport:
                 lines.append(
                     f"- Fit transform: scale {fit_transform.get('scale')} "
                     f"translation {fit_transform.get('translation')}"
+                )
+            if evidence_gates:
+                lines.append(
+                    "- Evidence gates: "
+                    f"fit={_evidence_gate_stage(evidence_gates, 'fit')}, "
+                    f"bind={_evidence_gate_stage(evidence_gates, 'bind')}, "
+                    f"weight={_evidence_gate_stage(evidence_gates, 'weight')}"
                 )
 
         lines.extend(["", "Issues:"])

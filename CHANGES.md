@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder evidence gates: validation reports now publish a structured `ghostrigger.character_builder_evidence_gates.v1` summary that treats mesh fit, native-DAG bind, and skin weights as separate proof gates. The text report now calls out fit/bind/weight stages so fallback nearest-bone skinning remains visible even when export/reload verification passes. Roadmap task: `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP confirmed both configured K1 and K2 installs are visible and both expose `n_mandalorian`, reinforcing that Character Builder proof must stay per-engine and evidence-based; this slice reports existing preflight/workflow facts and does not change MDL writer or loader semantics.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_transaction_stages_verifies_and_writes_reports -q --basetemp .pytest_tmp_character_evidence_gates_targeted`; `python -m pytest tests/test_character_builder_export_preflight.py tests/test_character_builder_override_package.py -q --basetemp .pytest_tmp_character_evidence_gates`; `python -m pytest tests/test_character_builder_bendak_local_fixture.py tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_evidence_gates_bendak_headless`; `python -m py_compile src/core/characters/character_validation_report.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder rigging/skinning knowledge-base pass: added the Tina O'Hailey rigging book and Pan et al. automatic skinning/weight-retargeting paper to the development notes, with Character Builder rules for separating mesh-fit, bind-pose, and skin-weight evidence; landmark-backed donor weight transfer; symmetry safety; freeze-transform reporting; and inherited-animation deformation preview. Roadmap task: `T1803` / `T2102` / `T2203`.
   Affected areas: `knowledge_base/book_notes/character_builder_rigging_skinning_sources_2026_06_04.md`, `knowledge_base/book_notes/README.md`.
   Verification: local PDF metadata/keyword scan with `pypdf`; `git diff --check`.

@@ -1395,6 +1395,9 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     text_path = tmp_path / "grbody_validation_report.txt"
     assert report_path.exists()
     assert text_path.exists()
+    assert "Evidence gates: fit=passed, bind=passed, weight=fallback_first_pass" in (
+        text_path.read_text(encoding="utf-8")
+    )
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["schema"] == "ghostrigger.character_export_validation.v1"
     assert payload["verified"] is True
@@ -1416,6 +1419,20 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["native_skeleton_is_authority"] is True
     assert workflow["imported_mesh_role"] == "payload_guest"
     assert workflow["final_dag_source"] == "selected_kotor_base"
+    gates = payload["character_builder_evidence_gates"]
+    assert gates["schema"]["name"] == "ghostrigger.character_builder_evidence_gates.v1"
+    assert gates["fit"]["stage"] == "passed"
+    assert gates["fit"]["policy"] == "bone_landmark_basis"
+    assert gates["fit"]["confidence"] == 0.95
+    assert gates["bind"]["stage"] == "passed"
+    assert gates["bind"]["rig_state"] == "native_template_final"
+    assert gates["bind"]["dag_authority"] == "native_kotor_base"
+    assert gates["weight"]["stage"] == "fallback_first_pass"
+    assert gates["weight"]["weighting_method"] == "nearest_kotor_bone_segment"
+    assert gates["weight"]["donor_weight_transfer"] is False
+    assert gates["weight"]["warning_issue_codes"] == [
+        "character.export.fallback_skin_binding"
+    ]
     assert workflow["rig_state"]["state"] == "native_template_final"
     assert workflow["rig_state"]["native_base_resref"] == "pmbam"
     assert workflow["rig_state"]["native_base_model_name"] == "pmbam"
