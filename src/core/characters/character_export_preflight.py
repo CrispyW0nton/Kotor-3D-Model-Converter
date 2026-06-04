@@ -638,6 +638,8 @@ def _validate_skin_payload(
                 navigation=ValidationNavigationTarget(node_name=name),
                 fix_hint="Verify the imported mesh payload before export.",
             ))
+        if vertices and faces:
+            _validate_skin_geometry_values(node, vertices, faces, report)
         if not bone_map:
             report.add(_issue(
                 "blocking",
@@ -674,6 +676,14 @@ def _validate_skin_payload(
                 fix_hint="Rebuild qbone/tbone skin metadata before export.",
                 details={"bone_map": len(bone_map), "qbone_list": len(qbone_list)},
             ))
+        if bone_map and qbone_list:
+            _validate_bind_transform_rows(
+                node,
+                qbone_list,
+                kind="qbone",
+                expected_components=4,
+                report=report,
+            )
         if bone_map and len(tbone_list) != len(bone_map):
             report.add(_issue(
                 "blocking",
@@ -683,9 +693,121 @@ def _validate_skin_payload(
                 fix_hint="Rebuild qbone/tbone skin metadata before export.",
                 details={"bone_map": len(bone_map), "tbone_list": len(tbone_list)},
             ))
+        if bone_map and tbone_list:
+            _validate_bind_transform_rows(
+                node,
+                tbone_list,
+                kind="tbone",
+                expected_components=3,
+                report=report,
+            )
         if bone_map:
             _validate_bone_map_targets(node, bone_map, model, native_snapshot, opts, report)
         _validate_skin_rows(node, bone_map, report)
+
+
+def _validate_skin_geometry_values(
+    node: Any,
+    vertices: list[Any],
+    faces: list[Any],
+    report: ValidationReport,
+) -> None:
+    name = str(getattr(node, "name", "") or "")
+    for vertex_index, vertex in enumerate(vertices):
+        components = _numeric_components(vertex)
+        if len(components) < 3:
+            report.add(_issue(
+                "blocking",
+                "character.export.vertex_malformed",
+                f"Skin mesh '{name}' has a vertex without three coordinates.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild the imported mesh payload before export.",
+                details={"vertex_index": vertex_index, "component_count": len(components)},
+            ))
+            continue
+        if not _all_finite(components[:3]):
+            report.add(_issue(
+                "blocking",
+                "character.export.vertex_nonfinite",
+                f"Skin mesh '{name}' has a vertex with non-finite coordinates.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild or clean the imported mesh payload before export.",
+                details={"vertex_index": vertex_index, "coordinates": [str(value) for value in components[:3]]},
+            ))
+
+    normals = list(getattr(node, "normals", []) or [])
+    for normal_index, normal in enumerate(normals):
+        components = _numeric_components(normal)
+        if len(components) < 3 or not _all_finite(components[:3]):
+            report.add(_issue(
+                "blocking",
+                "character.export.normal_nonfinite",
+                f"Skin mesh '{name}' has an invalid normal vector.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild mesh normals before export.",
+                details={"normal_index": normal_index, "components": [str(value) for value in components]},
+            ))
+
+    for face_index, face in enumerate(faces):
+        try:
+            indices = [int(value) for value in _numeric_components(face)]
+        except (TypeError, ValueError, OverflowError):
+            indices = []
+        if len(indices) < 3:
+            report.add(_issue(
+                "blocking",
+                "character.export.face_malformed",
+                f"Skin mesh '{name}' has a face without three vertex indices.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Triangulate or rebuild the imported mesh payload before export.",
+                details={"face_index": face_index, "index_count": len(indices)},
+            ))
+            continue
+        bad_indices = [index for index in indices[:3] if index < 0 or index >= len(vertices)]
+        if bad_indices:
+            report.add(_issue(
+                "blocking",
+                "character.export.face_index_out_of_range",
+                f"Skin mesh '{name}' has a face referencing a missing vertex.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild mesh faces before export.",
+                details={
+                    "face_index": face_index,
+                    "bad_indices": bad_indices,
+                    "vertex_count": len(vertices),
+                },
+            ))
+
+
+def _validate_bind_transform_rows(
+    node: Any,
+    rows: list[Any],
+    *,
+    kind: str,
+    expected_components: int,
+    report: ValidationReport,
+) -> None:
+    name = str(getattr(node, "name", "") or "")
+    for row_index, row in enumerate(rows):
+        try:
+            components = _numeric_components(row)
+        except (TypeError, ValueError, OverflowError):
+            components = []
+        if len(components) < expected_components or not _all_finite(components[:expected_components]):
+            report.add(_issue(
+                "blocking",
+                f"character.export.{kind}_nonfinite",
+                f"Skin mesh '{name}' has invalid {kind} bind-transform metadata.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild qbone/tbone skin metadata before export.",
+                details={
+                    "row_index": row_index,
+                    "component_count": len(components),
+                    "expected_components": expected_components,
+                    "components": [str(value) for value in components],
+                    "evidence_status": "writer_format_contract_verified_ghidra_pending",
+                },
+            ))
 
 
 def _validate_bone_map_targets(
@@ -797,6 +919,40 @@ def _validate_bone_map_targets(
                     "engine_evidence_status": CHARACTER_EXPORT_EVIDENCE["status"],
                 },
             ))
+
+
+def _numeric_components(value: Any) -> list[float]:
+    if isinstance(value, (str, bytes)):
+        raise TypeError("string values are not numeric components")
+    if isinstance(value, (int, float)):
+        return [float(value)]
+    components: list[float] = []
+    if isinstance(value, dict):
+        iterable = value.values()
+    elif isinstance(value, (list, tuple)):
+        iterable = value
+    else:
+        attrs = [getattr(value, attr) for attr in ("x", "y", "z", "w") if hasattr(value, attr)]
+        if attrs:
+            iterable = attrs
+        else:
+            try:
+                iterable = iter(value)
+            except TypeError as exc:
+                raise TypeError("value is not a numeric component sequence") from exc
+
+    for item in iterable:
+        if isinstance(item, (list, tuple, dict)):
+            components.extend(_numeric_components(item))
+        elif isinstance(item, (str, bytes)):
+            raise TypeError("string values are not numeric components")
+        else:
+            components.append(float(item))
+    return components
+
+
+def _all_finite(values: list[float]) -> bool:
+    return all(math.isfinite(value) for value in values)
 
 
 def _validate_skin_rows(node: Any, bone_map: list[Any], report: ValidationReport) -> None:

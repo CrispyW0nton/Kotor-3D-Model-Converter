@@ -450,6 +450,55 @@ def test_character_export_preflight_blocks_qbone_tbone_mismatch() -> None:
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_nonfinite_skin_geometry() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.vertices[1] = (float("nan"), 0.0, 0.0)
+    mesh.normals[0] = (0.0, float("inf"), 1.0)
+    mesh.faces = [(0, 1, 99)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    vertex = _issue_by_code(preflight, "character.export.vertex_nonfinite")
+    normal = _issue_by_code(preflight, "character.export.normal_nonfinite")
+    face = _issue_by_code(preflight, "character.export.face_index_out_of_range")
+    assert vertex.details["vertex_index"] == 1
+    assert vertex.details["coordinates"] == ["nan", "0.0", "0.0"]
+    assert normal.details["normal_index"] == 0
+    assert face.details["bad_indices"] == [99]
+    assert face.details["vertex_count"] == 3
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_invalid_bind_transform_metadata() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    assert mesh.qbone_list
+    assert mesh.tbone_list
+    mesh.qbone_list[0] = (0.0, 0.0, float("nan"), 1.0)
+    mesh.tbone_list[0] = (0.0, float("inf"), 0.0)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    qbone = _issue_by_code(preflight, "character.export.qbone_nonfinite")
+    tbone = _issue_by_code(preflight, "character.export.tbone_nonfinite")
+    assert qbone.details["expected_components"] == 4
+    assert qbone.details["components"] == ["0.0", "0.0", "nan", "1.0"]
+    assert tbone.details["expected_components"] == 3
+    assert tbone.details["components"] == ["0.0", "inf", "0.0"]
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_vertices_with_more_than_four_influences() -> None:
     result = _rigged_character()
     mesh = result["model"].find_node("custom_body")
