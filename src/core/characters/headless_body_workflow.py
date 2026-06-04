@@ -684,16 +684,43 @@ def _scale_for_landmark_fit(
 
     scale = float(height_scale) if math.isfinite(float(height_scale)) else 1.0
     basis = str(height_scale_basis or "bone_landmark_height")
-    if landmark_alignment is None:
+    if not _landmark_similarity_alignment_is_usable(
+        height_scale=scale,
+        landmark_alignment=landmark_alignment,
+        min_pair_count=min_pair_count,
+        max_similarity_height_ratio=max_similarity_height_ratio,
+        max_rms_error=max_rms_error,
+        max_pair_error=max_pair_error,
+    ):
         return scale, basis
+    try:
+        solved_scale = float(landmark_alignment.get("scale"))
+    except Exception:
+        return scale, basis
+    return solved_scale, "paired_skeleton_similarity_scale"
 
+
+def _landmark_similarity_alignment_is_usable(
+    *,
+    height_scale: float,
+    landmark_alignment: Optional[Dict[str, Any]],
+    min_pair_count: int = 8,
+    max_similarity_height_ratio: float = 1.35,
+    max_rms_error: float = 0.15,
+    max_pair_error: float = 0.16,
+) -> bool:
+    """Return True when a paired-landmark solve may drive transform choices."""
+
+    if landmark_alignment is None:
+        return False
     try:
         solved_scale = float(landmark_alignment.get("scale"))
         pair_count = int(landmark_alignment.get("pair_count") or 0)
         rms_error = float(landmark_alignment.get("rms_error") or 0.0)
         max_error = float(landmark_alignment.get("max_error") or 0.0)
+        base_scale = float(height_scale)
     except Exception:
-        return scale, basis
+        return False
     if (
         pair_count < int(min_pair_count)
         or not math.isfinite(solved_scale)
@@ -703,14 +730,13 @@ def _scale_for_landmark_fit(
         or not math.isfinite(max_error)
         or max_error > float(max_pair_error)
     ):
-        return scale, basis
+        return False
 
-    if scale > 1.0e-8:
-        ratio = solved_scale / scale
+    if math.isfinite(base_scale) and base_scale > 1.0e-8:
+        ratio = solved_scale / base_scale
         if ratio < 1.0 / float(max_similarity_height_ratio) or ratio > float(max_similarity_height_ratio):
-            return scale, basis
-
-    return solved_scale, "paired_skeleton_similarity_scale"
+            return False
+    return True
 
 
 def _make_auto_fit_report(
@@ -1532,6 +1558,10 @@ def inspect_external_model_fit(
         similarity_alignment = _landmark_similarity_alignment(source_frame, target_frame)
         height_scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
         height_scale_basis = scale_basis
+        use_similarity_transform = _landmark_similarity_alignment_is_usable(
+            height_scale=height_scale,
+            landmark_alignment=similarity_alignment,
+        )
         scale, scale_basis = _scale_for_landmark_fit(
             height_scale=height_scale,
             height_scale_basis=height_scale_basis,
@@ -1544,6 +1574,14 @@ def inspect_external_model_fit(
             similarity_alignment["height_scale_basis"] = height_scale_basis
             similarity_alignment["applied_scale"] = float(scale)
             similarity_alignment["applied_scale_basis"] = scale_basis
+            similarity_alignment["similarity_transform_accepted"] = bool(
+                use_similarity_transform
+            )
+            similarity_alignment["rotation_basis"] = (
+                "paired_skeleton_similarity"
+                if use_similarity_transform else
+                "bone_landmark_basis"
+            )
         policy = "bone_landmark_basis"
         source_height = source_frame.height
         vertical_axis = "bone_landmarks"
@@ -1573,9 +1611,13 @@ def inspect_external_model_fit(
     auto_fit_report = auto_fit.to_dict()
     fit_transform: Dict[str, Any] | None = None
     if report_source_frame is not None and report_target_frame is not None:
+        use_similarity_transform = bool(
+            report_landmark_alignment
+            and report_landmark_alignment.get("similarity_transform_accepted")
+        )
         rotation = (
             report_landmark_alignment["rotation_matrix"]
-            if report_landmark_alignment is not None
+            if report_landmark_alignment is not None and use_similarity_transform
             else _basis_rotation(report_source_frame, report_target_frame)
         )
         preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
@@ -2051,6 +2093,12 @@ def _fit_transform_metadata(
             "error_basis": str(
                 landmark_alignment.get("error_basis") or ""
             ),
+            "similarity_transform_accepted": bool(
+                landmark_alignment.get("similarity_transform_accepted")
+            ),
+            "rotation_basis": str(
+                landmark_alignment.get("rotation_basis") or ""
+            ),
             "solved_scale": float(
                 landmark_alignment.get("solved_scale")
                 or landmark_alignment.get("scale")
@@ -2455,6 +2503,10 @@ def normalize_external_model_for_kotor(
         )
         height_scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
         height_scale_basis = transform_scale_basis
+        use_similarity_transform = _landmark_similarity_alignment_is_usable(
+            height_scale=height_scale,
+            landmark_alignment=landmark_alignment,
+        )
         scale, transform_scale_basis = _scale_for_landmark_fit(
             height_scale=height_scale,
             height_scale_basis=height_scale_basis,
@@ -2462,7 +2514,7 @@ def normalize_external_model_for_kotor(
         )
         rotation = (
             landmark_alignment["rotation_matrix"]
-            if landmark_alignment is not None
+            if landmark_alignment is not None and use_similarity_transform
             else _basis_rotation(transform_source_frame, transform_target_frame)
         )
         if landmark_alignment is not None:
@@ -2472,6 +2524,14 @@ def normalize_external_model_for_kotor(
             landmark_alignment["height_scale_basis"] = height_scale_basis
             landmark_alignment["applied_scale"] = float(scale)
             landmark_alignment["applied_scale_basis"] = transform_scale_basis
+            landmark_alignment["similarity_transform_accepted"] = bool(
+                use_similarity_transform
+            )
+            landmark_alignment["rotation_basis"] = (
+                "paired_skeleton_similarity"
+                if use_similarity_transform else
+                "bone_landmark_basis"
+            )
         preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
             transform_source_frame,
             transform_target_frame,

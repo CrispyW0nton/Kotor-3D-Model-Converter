@@ -3724,11 +3724,13 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
     )
     target_mesh.vertices = [(-0.4, 0.0, 0.0), (0.4, 0.0, 0.0), (0.0, 0.0, 1.6)]
     target_mesh.faces = [(0, 1, 2)]
+    source_model = md.KotorModel(name="bendak_payload", root_node=root)
+    target_model = md.KotorModel(name="n_mandalorian", root_node=target_root)
 
     report = wf.inspect_external_model_fit(
-        md.KotorModel(name="bendak_payload", root_node=root),
+        source_model,
         game_version="K1",
-        reference_model=md.KotorModel(name="n_mandalorian", root_node=target_root),
+        reference_model=target_model,
         reference_label="n_mandalorian",
     )
 
@@ -3745,7 +3747,15 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
     assert alignment["solved_scale"] == pytest.approx(0.16343729497011864)
     assert alignment["applied_scale"] == pytest.approx(0.16)
     assert alignment["applied_scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["similarity_transform_accepted"] is False
+    assert alignment["rotation_basis"] == "bone_landmark_basis"
     assert alignment["max_error"] > 0.16
+    for row, expected in zip(report["fit_transform"]["rotation_matrix"], [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]):
+        assert row == pytest.approx(expected)
     assert set(alignment["paired_roles"]) == {
         "pelvis",
         "head",
@@ -3764,6 +3774,21 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
         and item["source"] == "imported_skeleton"
         for item in report["visual_overlay"]["source"]["landmarks"]
     )
+    normalized = wf.normalize_external_model_for_kotor(
+        source_model,
+        game_version="K1",
+        reference_model=target_model,
+        reference_label="n_mandalorian",
+    )
+    normalized_alignment = normalized["fit_transform"]["landmark_alignment"]
+    assert normalized_alignment["similarity_transform_accepted"] is False
+    assert normalized_alignment["rotation_basis"] == "bone_landmark_basis"
+    for row, expected in zip(normalized["fit_transform"]["rotation_matrix"], [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]):
+        assert row == pytest.approx(expected)
 
 
 def test_external_fit_report_uses_imported_toe_guides_for_front_facing_axis():
