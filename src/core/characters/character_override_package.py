@@ -57,6 +57,10 @@ _GAME_READY_GATE_ACCEPTED_STAGES: dict[str, frozenset[str]] = {
     "material": frozenset({"passed"}),
     "engine": frozenset({"passed"}),
 }
+_AUTO_FIT_ROTATION_BASES = frozenset({
+    "bone_landmark_basis",
+    "paired_skeleton_similarity",
+})
 
 
 @dataclass
@@ -491,12 +495,29 @@ def _replacement_ready_fit_issues(
     pair_count = _safe_int(paired.get("pair_count"))
     rms_error = _safe_float(paired.get("rms_error"))
     max_error = _safe_float(paired.get("max_error"))
+    rotation_basis = str(paired.get("rotation_basis") or "")
+    similarity_accepted = paired.get("similarity_transform_accepted")
     if pair_count is None or pair_count < request.min_fit_paired_landmarks:
         reasons.append("too_few_paired_landmarks")
     if rms_error is None or rms_error > request.max_fit_landmark_rms_error:
         reasons.append("rms_error_too_high")
     if max_error is None or max_error > request.max_fit_landmark_pair_error:
         reasons.append("max_pair_error_too_high")
+    if not isinstance(similarity_accepted, bool):
+        reasons.append("missing_similarity_transform_acceptance")
+    if not rotation_basis:
+        reasons.append("missing_rotation_basis")
+    elif rotation_basis not in _AUTO_FIT_ROTATION_BASES:
+        reasons.append("unexpected_rotation_basis")
+    if (
+        isinstance(similarity_accepted, bool)
+        and rotation_basis in _AUTO_FIT_ROTATION_BASES
+        and (
+            (similarity_accepted and rotation_basis != "paired_skeleton_similarity")
+            or (not similarity_accepted and rotation_basis == "paired_skeleton_similarity")
+        )
+    ):
+        reasons.append("rotation_acceptance_mismatch")
 
     if not reasons:
         return issues
@@ -517,6 +538,9 @@ def _replacement_ready_fit_issues(
             "required_pair_count": request.min_fit_paired_landmarks,
             "max_rms_error": request.max_fit_landmark_rms_error,
             "max_pair_error": request.max_fit_landmark_pair_error,
+            "similarity_transform_accepted": similarity_accepted,
+            "rotation_basis": rotation_basis,
+            "accepted_rotation_bases": sorted(_AUTO_FIT_ROTATION_BASES),
         },
     ))
     return issues

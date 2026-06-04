@@ -100,6 +100,8 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert alignment.get("applied_scale") == pytest.approx(
         alignment.get("solved_scale")
     )
+    assert alignment.get("similarity_transform_accepted") is True
+    assert alignment.get("rotation_basis") == "paired_skeleton_similarity"
     assert alignment.get("pair_count") == 8
     assert alignment.get("rms_error") < 0.15
     assert alignment.get("max_error") < 0.16
@@ -145,3 +147,8 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
         "compatible": True,
         "accepted_native_base_resrefs": ["n_mandalorian", "n_mandalorian03"],
     }
+    packaged_alignment = package.manifest["character_builder_evidence_gates"]["fit"][
+        "paired_landmark_alignment"
+    ]
+    assert packaged_alignment["similarity_transform_accepted"] is True
+    assert packaged_alignment["rotation_basis"] == "paired_skeleton_similarity"

@@ -195,6 +195,8 @@ def _mark_clean_skeleton_fit(validation_path: Path) -> dict:
     paired["rms_error"] = 0.04
     paired["max_error"] = 0.08
     paired["worst_pair_role"] = "right_toe"
+    paired["similarity_transform_accepted"] = True
+    paired["rotation_basis"] = "paired_skeleton_similarity"
     validation_path.write_text(json.dumps(payload), encoding="utf-8")
     return payload
 
@@ -297,11 +299,51 @@ def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(t
     assert result.succeeded is True
     assert (tmp_path / "package" / "n_mandalorian03.mdl").exists()
     assert result.manifest["character_builder_evidence_gates"]["fit"]["stage"] == "passed"
+    paired = result.manifest["character_builder_evidence_gates"]["fit"][
+        "paired_landmark_alignment"
+    ]
+    assert paired["similarity_transform_accepted"] is True
+    assert paired["rotation_basis"] == "paired_skeleton_similarity"
     assert result.manifest["replacement_target"]["compatible"] is True
     assert (
         result.manifest["replacement_target"]["target_numbered_variant_base"]
         == "n_mandalorian"
     )
+
+
+def test_character_override_package_strict_fit_gate_blocks_missing_rotation_provenance(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    payload = _mark_clean_skeleton_fit(validation_path)
+    paired = payload["character_builder_evidence_gates"]["fit"][
+        "paired_landmark_alignment"
+    ]
+    paired.pop("similarity_transform_accepted", None)
+    paired.pop("rotation_basis", None)
+    validation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.replacement_fit_not_ready"
+    )
+    assert issue.details["reasons"] == [
+        "missing_similarity_transform_acceptance",
+        "missing_rotation_basis",
+    ]
+    assert issue.details["similarity_transform_accepted"] is None
+    assert issue.details["rotation_basis"] == ""
 
 
 def test_character_override_package_strict_gate_blocks_target_native_base_mismatch(tmp_path: Path) -> None:
