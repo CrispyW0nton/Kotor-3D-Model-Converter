@@ -242,6 +242,38 @@ def test_character_export_preflight_detects_exact_node_case_changes() -> None:
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_reparented_native_deform_helper() -> None:
+    result = _rigged_character()
+    torso_upr = result["model"].find_node("torsoUpr_g")
+    assert torso_upr is not None
+    assert torso_upr.parent is not None
+    old_parent = torso_upr.parent
+    old_parent.children.remove(torso_upr)
+    root = result["model"].root_node
+    assert root is not None
+    torso_upr.parent = root
+    root.children.append(torso_upr)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.node_path_changed")
+    assert issue.details["role"] == "deform_helper"
+    assert issue.details["expected_path"] == [
+        "PMBAM",
+        "cutscenedummy",
+        "rootdummy",
+        "torso_g",
+        "torsoUpr_g",
+    ]
+    assert issue.details["actual_path"] == ["PMBAM", "torsoUpr_g"]
+    assert "animation inheritance depends on exact node paths" in issue.fix_hint
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_missing_skin_payload() -> None:
     template = _native_template()
 

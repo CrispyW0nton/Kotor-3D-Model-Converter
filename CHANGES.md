@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder native-DAG path guard: export preflight now distinguishes a native helper/deform/socket node that still exists but has moved from its recorded parent path from a truly missing node, and blocks export with both expected and actual paths. This makes native-template hierarchy drift actionable before MDL/MDX writing. Roadmap task: `T1205` / Phase 4 export hardening.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; both games preserve the verified 17 structural/helper nodes while using different native supermodels.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_reparented_native_deform_helper tests/test_character_builder_export_preflight.py::test_character_export_preflight_detects_exact_node_case_changes tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_missing_required_socket -q --basetemp .pytest_tmp_character_native_path_guard`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_native_path_guard_full`; `python -m py_compile src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder K2 native-template export coverage: export/preflight fixtures now model K2 `pmbam` with its K2-native `S_Female02` supermodel provenance, and positive K2 preflight plus staged transaction/report tests lock that path as an allowed native-template export candidate instead of only testing K1/K2 mismatch blocking. Roadmap task: `T1205` / Phase 4 export hardening and Phase 6 validation reporting.
   Affected areas: `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the test-contract change; K2 `pmbam` reports 61 nodes, no local animations, and supermodel `S_Female02`.

@@ -353,6 +353,28 @@ def _validate_native_dag(
             ))
             continue
         if opts.strict_parent_paths:
+            exact_name_match = _find_node_exact_name(current_nodes, native_node.name)
+            if exact_name_match is not None:
+                report.add(_issue(
+                    "blocking",
+                    "character.export.node_path_changed",
+                    (
+                        f"Native {native_node.export_role} node '{native_node.name}' "
+                        "is present but no longer lives at its original parent path."
+                    ),
+                    navigation=ValidationNavigationTarget(node_name=native_node.name),
+                    fix_hint=(
+                        "Restore the selected native skeleton hierarchy before export; "
+                        "KOTOR animation inheritance depends on exact node paths."
+                    ),
+                    details={
+                        "expected_path": list(expected_path),
+                        "actual_path": list(_node_path(exact_name_match)),
+                        "role": native_node.export_role,
+                        **_native_socket_evidence_details(snapshot, native_node),
+                    },
+                ))
+                continue
             report.add(_issue(
                 "blocking",
                 "character.export.node_path_missing",
