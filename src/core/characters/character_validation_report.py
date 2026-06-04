@@ -754,6 +754,8 @@ def _fit_landmark_alignment_summary(fit_report: dict[str, Any]) -> dict[str, Any
             item for item in list(alignment.get("pair_errors") or [])
             if isinstance(item, dict)
         ],
+        "height_scale": _safe_float(alignment.get("height_scale")),
+        "height_scale_basis": str(alignment.get("height_scale_basis") or ""),
         "applied_scale": _safe_float(alignment.get("applied_scale")),
         "solved_scale": _safe_float(alignment.get("solved_scale")),
         "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
@@ -1135,12 +1137,28 @@ class CharacterBuilderValidationReport:
                 paired = dict(fit_gate.get("paired_landmark_alignment") or {})
                 if paired.get("present"):
                     worst = str(paired.get("worst_pair_role") or "").strip()
+                    scale_bits: list[str] = []
+                    height_scale = paired.get("height_scale")
+                    solved_scale = paired.get("solved_scale")
+                    applied_scale = paired.get("applied_scale")
+                    applied_basis = str(paired.get("applied_scale_basis") or "").strip()
+                    if height_scale is not None:
+                        scale_bits.append(f"height={height_scale}")
+                    if solved_scale is not None:
+                        scale_bits.append(f"solved={solved_scale}")
+                    if applied_scale is not None:
+                        scale_bits.append(
+                            "applied="
+                            f"{applied_scale}"
+                            + (f" ({applied_basis})" if applied_basis else "")
+                        )
                     lines.append(
                         "- Fit paired landmarks: "
                         f"{paired.get('pair_count')} pairs, "
                         f"rms={paired.get('rms_error')}, "
                         f"max={paired.get('max_error')}"
                         + (f", worst={worst}" if worst else "")
+                        + (f", scale {' / '.join(scale_bits)}" if scale_bits else "")
                     )
                 toe_forward = dict(fit_gate.get("toe_forward_alignment") or {})
                 toe_text = _toe_forward_text_summary(toe_forward)

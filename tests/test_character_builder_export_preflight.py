@@ -187,6 +187,8 @@ def _valid_fit_report(
                     },
                 ],
                 "translation_basis": "native_fit_origin",
+                "height_scale": 0.8,
+                "height_scale_basis": "bone_landmark_height",
                 "solved_scale": 0.79,
                 "applied_scale": 0.8,
                 "applied_scale_basis": "bone_landmark_height",
@@ -2223,6 +2225,11 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert paired["worst_pair_role"] == "left"
     assert paired["translation_basis"] == "ground_snapped_native_fit_origin"
     assert paired["error_basis"] == "applied_fit_transform"
+    assert paired["height_scale"] == 0.8
+    assert paired["height_scale_basis"] == "bone_landmark_height"
+    assert paired["solved_scale"] == 0.79
+    assert paired["applied_scale"] == 0.8
+    assert paired["applied_scale_basis"] == "bone_landmark_height"
     assert paired["pair_errors"][0]["role"] == "left"
     assert paired["pair_errors"][0]["error"] == 0.42
     quality = fit["quality_summary"]
@@ -2234,6 +2241,9 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert "Fit quality: Skeleton-driven Auto-Fit needs review" in report.to_text()
     assert "Fit paired landmarks: 3 pairs, rms=0.42" in report.to_text()
     assert "worst=left" in report.to_text()
+    assert "scale height=0.8 / solved=0.79 / applied=0.8 (bone_landmark_height)" in (
+        report.to_text()
+    )
 
 
 def test_character_builder_validation_report_records_toe_forward_gate() -> None:
