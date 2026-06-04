@@ -756,19 +756,46 @@ def _validate_skin_geometry_values(
 
     for face_index, face in enumerate(faces):
         try:
-            indices = [int(value) for value in _numeric_components(face)]
+            face_components = _numeric_components(face)
         except (TypeError, ValueError, OverflowError):
-            indices = []
-        if len(indices) < 3:
+            face_components = []
+        if len(face_components) < 3:
             report.add(_issue(
                 "blocking",
                 "character.export.face_malformed",
                 f"Skin mesh '{name}' has a face without three vertex indices.",
                 navigation=ValidationNavigationTarget(node_name=name),
                 fix_hint="Triangulate or rebuild the imported mesh payload before export.",
-                details={"face_index": face_index, "index_count": len(indices)},
+                details={"face_index": face_index, "index_count": len(face_components)},
             ))
             continue
+        first_three = face_components[:3]
+        nonfinite_indices = [str(value) for value in first_three if not math.isfinite(value)]
+        if nonfinite_indices:
+            report.add(_issue(
+                "blocking",
+                "character.export.face_index_nonfinite",
+                f"Skin mesh '{name}' has a face with non-finite vertex indices.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild mesh faces before export.",
+                details={"face_index": face_index, "indices": nonfinite_indices},
+            ))
+            continue
+        noninteger_indices = [value for value in first_three if not float(value).is_integer()]
+        if noninteger_indices:
+            report.add(_issue(
+                "blocking",
+                "character.export.face_index_noninteger",
+                f"Skin mesh '{name}' has a face with non-integer vertex indices.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild mesh faces before export; MDL face indices must reference exact vertices.",
+                details={
+                    "face_index": face_index,
+                    "indices": [str(value) for value in noninteger_indices],
+                },
+            ))
+            continue
+        indices = [int(value) for value in first_three]
         bad_indices = [index for index in indices[:3] if index < 0 or index >= len(vertices)]
         if bad_indices:
             report.add(_issue(

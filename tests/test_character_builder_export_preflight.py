@@ -497,6 +497,25 @@ def test_character_export_preflight_reports_malformed_geometry_without_crashing(
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_noninteger_face_indices() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.faces = [(0, 1.5, 2)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.face_index_noninteger")
+    assert issue.severity.value == "blocking"
+    assert issue.details["face_index"] == 0
+    assert issue.details["indices"] == ["1.5"]
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_invalid_bind_transform_metadata() -> None:
     result = _rigged_character()
     mesh = result["model"].find_node("custom_body")

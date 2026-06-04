@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder face-index preflight: skin-payload face validation now blocks non-finite and non-integer face indices before converting them to integers, preventing imported mesh data such as `1.5` from being silently truncated into a different vertex reference. Roadmap task: `T1205` / Phase 4 export hardening.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; this slice validates GhostRigger payload integrity and does not add new KOTOR MDL-loader assumptions.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_nonfinite_skin_geometry tests/test_character_builder_export_preflight.py::test_character_export_preflight_reports_malformed_geometry_without_crashing tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_noninteger_face_indices -q --basetemp .pytest_tmp_character_face_index_gate`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_face_index_gate_full`; `python -m py_compile src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder malformed geometry crash guard: skin-payload preflight now converts malformed vertex/normal component rows into blocking validation issues instead of raising Python exceptions. Bad imported mesh payloads now fail with actionable export-report details while the native KOTOR DAG gate remains intact. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight resilience change; this slice changes malformed imported-payload reporting only and introduces no new engine-loader assumptions.
