@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Repository artifact cleanup: removed generated export/test artifact dumps from version control so repository line counts reflect maintained source instead of validation output. Hardened ignore rules so `exports/`, `artifacts/`, and zipped pytest test-artifact caches stay local. No roadmap task ID applies.
+  Affected areas: `.gitignore`, `exports/`, `artifacts/`, `knowledge_base/test_artifacts/*.zip`.
+  Verification: measured tracked line counts before cleanup, identifying `exports/` at about 4.13M lines; re-ran tracked line-count and tracked-artifact checks after removal.
+
 - Native Visual Studio wrapper scaffold: added a Visual Studio 2022 solution and native C++ launcher project so GhostRigger can be opened, built, and started from Visual Studio while the existing Python/Qt application remains intact. No roadmap task ID applies.
   Affected areas: `GhostRigger.sln`, `native/GhostRiggerNative/GhostRiggerNative.vcxproj`, `native/GhostRiggerNative/GhostRiggerNative.vcxproj.filters`, `native/GhostRiggerNative/main.cpp`, `native/README.md`.
   Verification: validated the solution/project XML/text scaffold with targeted PowerShell parsing checks; native compilation was not run because the Visual Studio C++ build tools were not invoked in this environment.
