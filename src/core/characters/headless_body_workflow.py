@@ -482,6 +482,29 @@ def _fit_frame_uses_skeleton_landmarks(
     )
 
 
+def _has_fit_landmarks(
+    frame: Optional[_HumanoidFitFrame],
+    *roles: str,
+) -> bool:
+    if frame is None:
+        return False
+    positions = frame.landmark_positions or {}
+    return all(role in positions for role in roles)
+
+
+def _preserve_skeleton_landmark_origin_for_fit(
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+) -> bool:
+    """Prefer skeleton feet/origin over render bounds for rigged payloads."""
+
+    return (
+        _fit_frame_uses_skeleton_landmarks(source_frame)
+        and _has_fit_landmarks(source_frame, "left_foot", "right_foot")
+        and _has_fit_landmarks(target_frame, "left_foot", "right_foot")
+    )
+
+
 def _target_height_for_landmark_fit(
     *,
     explicit_target_height: Optional[float],
@@ -1269,6 +1292,15 @@ def inspect_external_model_fit(
             if report_landmark_alignment is not None
             else _basis_rotation(report_source_frame, report_target_frame)
         )
+        preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
+            report_source_frame,
+            report_target_frame,
+        )
+        translation_basis = (
+            "skeleton_landmark_native_fit_origin"
+            if preserve_skeleton_origin else
+            "ground_snapped_native_fit_origin"
+        )
         target_origin = _ground_snapped_target_origin(
             bounds=bounds,
             rotation_matrix=rotation,
@@ -1277,6 +1309,7 @@ def inspect_external_model_fit(
             target_origin=report_target_frame.origin,
             target_frame=report_target_frame,
             reference_bounds=reference_bounds,
+            preserve_target_origin=preserve_skeleton_origin,
         )
         if report_landmark_alignment is not None:
             report_landmark_alignment = _landmark_alignment_for_applied_transform(
@@ -1288,7 +1321,7 @@ def inspect_external_model_fit(
                 source_origin=report_source_frame.origin,
                 target_origin=target_origin,
                 applied_scale_basis=scale_basis,
-                translation_basis="ground_snapped_native_fit_origin",
+                translation_basis=translation_basis,
             )
         fit_transform = _fit_transform_metadata(
             policy=policy,
@@ -1631,7 +1664,10 @@ def _ground_snapped_target_origin(
     target_origin: Vec3,
     target_frame: Optional[_HumanoidFitFrame] = None,
     reference_bounds: Optional[Tuple[Vec3, Vec3]] = None,
+    preserve_target_origin: bool = False,
 ) -> Vec3:
+    if preserve_target_origin:
+        return target_origin
     if bounds is None:
         return target_origin
     linear_matrix = _scale_matrix(rotation_matrix, scale)
@@ -2135,6 +2171,15 @@ def normalize_external_model_for_kotor(
             landmark_alignment["solved_scale"] = float(landmark_alignment["scale"])
             landmark_alignment["applied_scale"] = float(scale)
             landmark_alignment["applied_scale_basis"] = transform_scale_basis
+        preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
+            transform_source_frame,
+            transform_target_frame,
+        )
+        translation_basis = (
+            "skeleton_landmark_native_fit_origin"
+            if preserve_skeleton_origin else
+            "ground_snapped_native_fit_origin"
+        )
         target_origin = _ground_snapped_target_origin(
             bounds=bounds,
             rotation_matrix=rotation,
@@ -2143,6 +2188,7 @@ def normalize_external_model_for_kotor(
             target_origin=transform_target_frame.origin,
             target_frame=transform_target_frame,
             reference_bounds=reference_bounds,
+            preserve_target_origin=preserve_skeleton_origin,
         )
         if landmark_alignment is not None:
             landmark_alignment = _landmark_alignment_for_applied_transform(
@@ -2154,7 +2200,7 @@ def normalize_external_model_for_kotor(
                 source_origin=transform_source_frame.origin,
                 target_origin=target_origin,
                 applied_scale_basis=transform_scale_basis,
-                translation_basis="ground_snapped_native_fit_origin",
+                translation_basis=translation_basis,
             )
         fit_transform = _fit_transform_metadata(
             policy=transform_policy,

@@ -3426,7 +3426,7 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     }
     assert (
         transform["landmark_alignment"]["translation_basis"]
-        == "ground_snapped_native_fit_origin"
+        == "skeleton_landmark_native_fit_origin"
     )
     assert transform["landmark_alignment"]["error_basis"] == "applied_fit_transform"
     assert transform["landmark_alignment"]["worst_pair_role"] in {
@@ -3533,7 +3533,11 @@ def test_external_fit_report_prefers_imported_skeleton_over_mesh_name_collision(
         report["fit_transform"]["landmark_alignment"]["error_basis"]
         == "applied_fit_transform"
     )
-    assert report["fit_transform"]["landmark_alignment"]["rms_error"] > 0.1
+    assert (
+        report["fit_transform"]["landmark_alignment"]["translation_basis"]
+        == "skeleton_landmark_native_fit_origin"
+    )
+    assert report["fit_transform"]["landmark_alignment"]["rms_error"] < 0.5
     assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
     assert any(
         item["role"] == "head"
@@ -3597,6 +3601,10 @@ def test_external_fit_report_scales_rigged_payload_from_skeleton_not_render_boun
     assert (
         report["fit_transform"]["landmark_alignment"]["applied_scale_basis"]
         == "paired_skeleton_landmark_height"
+    )
+    assert (
+        report["fit_transform"]["landmark_alignment"]["translation_basis"]
+        == "skeleton_landmark_native_fit_origin"
     )
     assert report["reference_bounds"]["max"][2] == pytest.approx(3.2)
 
