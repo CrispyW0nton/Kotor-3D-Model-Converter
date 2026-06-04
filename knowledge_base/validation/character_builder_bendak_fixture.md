@@ -6,23 +6,29 @@
 
 ## Fixture Contract
 
-Use this external FBX as the continual Character Builder test model:
+Use this external FBX as the continual Character Builder custom mesh payload:
 
 ```text
 C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\BendakStarkiller\Bendak.fbx
 ```
 
-The intended KOTOR replacement target is:
+Use this KOTOR model as the native skeleton / node-DAG authority:
+
+```text
+n_mandalorian
+```
+
+The optional intended replacement/variant target for packaging tests is:
 
 ```text
 n_mandalorian03
 ```
 
-Success means GhostRigger can transform the Bendak FBX into a usable KOTOR
-replacement for `n_mandalorian03`, with the imported mesh aligned to the native
-KOTOR template, bound to the preserved Odyssey node DAG, able to preview inherited
-animations, and exported as an MDL/MDX candidate that reloads through the normal
-validation gates.
+Success means GhostRigger can import the Bendak FBX as a custom mesh, fit it to
+the `n_mandalorian` KOTOR skeleton, discard/quarantine any external FBX skeleton
+as final authority, bind the Bendak mesh to the preserved Odyssey node DAG,
+preview inherited/local Mandalorian animations, and export an MDL/MDX candidate
+that reloads through the normal validation gates.
 
 Do not commit the FBX into the repository. It is a local modding fixture and
 should be referenced by absolute path in manual QA notes or local-only test
@@ -41,18 +47,19 @@ MCP checks on 2026-06-04 confirmed:
   and supermodel `S_KPMF0200`.
 - K1 Ghidra context is loaded for future engine-loader checks.
 
-Treat `n_mandalorian03` as the intended replacement/variant target and
-`n_mandalorian` as the native base MDL that supplies the KOTOR node DAG. The
-Character Builder must keep both identities visible: loading `n_mandalorian` is
-allowed only as the explicit source MDL for the selected `n_mandalorian03`
-target, never as a silent target substitution.
+Treat `n_mandalorian` as the mandatory native base MDL that supplies the KOTOR
+node DAG for this fixture. If a packaging/export test targets
+`n_mandalorian03`, the Character Builder must keep both identities visible:
+`n_mandalorian` is the base skeleton, while `n_mandalorian03` is only the
+requested replacement/variant target.
 
 ## Required Workflow
 
 1. Open Character Builder.
-2. Select or resolve the KOTOR base skeleton/model target for `n_mandalorian03`.
-   The selected option should show that it loads base MDL `n_mandalorian` when
-   `n_mandalorian03.mdl` is not present as a separate resource.
+2. Select `n_mandalorian` as the KOTOR base skeleton/model.
+   If the user types `n_mandalorian03` for an export/replacement target, the UI
+   should explicitly show that it still loads base MDL `n_mandalorian` for the
+   native skeleton.
 3. Import `Bendak.fbx`.
 4. Auto-fit the imported mesh to the KOTOR base:
    - correct front-facing direction,

@@ -34,7 +34,7 @@ from .character_export_preflight import (
     preflight_character_mdl_export,
 )
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE
-from .native_skeleton import NativeSkeletonSnapshot
+from .native_skeleton import NativeSkeletonSnapshot, native_skeleton_fingerprint
 from .character_validation_report import (
     CharacterBuilderValidationReport,
     validation_report_paths,
@@ -342,10 +342,13 @@ def _character_builder_workflow_evidence(
 
     snapshot_summary = None
     if native_snapshot is not None:
+        fingerprint = native_skeleton_fingerprint(native_snapshot)
         snapshot_summary = {
             "model_name": native_snapshot.model_name,
             "game": native_snapshot.game,
             "supermodel": native_snapshot.supermodel,
+            "dag_fingerprint": fingerprint,
+            "dag_fingerprint_algorithm": "sha256",
             "node_count": native_snapshot.node_count,
             "mesh_node_count": native_snapshot.mesh_node_count,
             "skin_node_count": native_snapshot.skin_node_count,
@@ -382,10 +385,13 @@ def _reloaded_model_summary(
         })
     snapshot = None
     if native_snapshot is not None:
+        fingerprint = native_skeleton_fingerprint(native_snapshot)
         snapshot = {
             "model_name": native_snapshot.model_name,
             "game": native_snapshot.game,
             "supermodel": native_snapshot.supermodel,
+            "dag_fingerprint": fingerprint,
+            "dag_fingerprint_algorithm": "sha256",
             "node_count": native_snapshot.node_count,
             "hook_names": list(native_snapshot.hook_names),
         }

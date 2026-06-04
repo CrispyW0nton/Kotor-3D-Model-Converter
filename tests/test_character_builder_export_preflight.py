@@ -23,6 +23,7 @@ from src.core.characters.character_validation_report import (
     CHARACTER_BUILDER_MANUAL_CHECKLIST,
     CharacterBuilderValidationReport,
 )
+from src.core.characters.native_skeleton import native_skeleton_fingerprint
 from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
 from src.core.validation.validation_bus import (
     ValidationIssue,
@@ -855,6 +856,10 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["native_snapshot"]["model_name"] == "pmbam"
     assert workflow["native_snapshot"]["game"] == "K1"
     assert workflow["native_snapshot"]["supermodel"] == "S_KPMF0200"
+    expected_fingerprint = native_skeleton_fingerprint(result["native_skeleton_snapshot"])
+    assert workflow["native_snapshot"]["dag_fingerprint"] == expected_fingerprint
+    assert workflow["native_snapshot"]["dag_fingerprint_algorithm"] == "sha256"
+    assert len(workflow["native_snapshot"]["dag_fingerprint"]) == 64
     reload_issues = {
         issue["code"]: issue
         for issue in payload["reload_report"]["issues"]
@@ -868,6 +873,8 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert reload_summary["skin_payloads"][0]["skin_rows"] == 3
     assert reload_summary["native_snapshot_checked"]["game"] == "K1"
     assert reload_summary["native_snapshot_checked"]["supermodel"] == "S_KPMF0200"
+    assert reload_summary["native_snapshot_checked"]["dag_fingerprint"] == expected_fingerprint
+    assert reload_summary["native_snapshot_checked"]["dag_fingerprint_algorithm"] == "sha256"
     text = text_path.read_text(encoding="utf-8")
     assert "Capability stage: export_candidate" in text
     assert "Game tested: False" in text
@@ -877,6 +884,35 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert "reloaded_model={model_name: grbody" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
+
+
+def test_native_skeleton_fingerprint_tracks_dag_contract_not_paths() -> None:
+    result = _rigged_character()
+    snapshot = result["native_skeleton_snapshot"]
+    baseline = native_skeleton_fingerprint(snapshot)
+
+    path_only = replace(
+        snapshot,
+        metadata={
+            **dict(snapshot.metadata or {}),
+            "source_mdl_path": "C:/different/install/pmbam.mdl",
+            "source_mdx_path": "C:/different/install/pmbam.mdx",
+        },
+    )
+    assert native_skeleton_fingerprint(path_only) == baseline
+
+    game_changed = replace(snapshot, game="K2")
+    assert native_skeleton_fingerprint(game_changed) != baseline
+
+    node = snapshot.nodes[0]
+    node_changed = replace(
+        snapshot,
+        nodes=(
+            replace(node, full_path=("DifferentRoot",), parent_path=()),
+            *snapshot.nodes[1:],
+        ),
+    )
+    assert native_skeleton_fingerprint(node_changed) != baseline
 
 
 def test_character_export_transaction_reload_verifies_without_workflow_markers(tmp_path) -> None:
