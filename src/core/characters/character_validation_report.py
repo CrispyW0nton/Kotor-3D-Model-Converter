@@ -681,6 +681,7 @@ def _fit_landmark_alignment_summary(fit_report: dict[str, Any]) -> dict[str, Any
         "solved_scale": _safe_float(alignment.get("solved_scale")),
         "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
         "translation_basis": str(alignment.get("translation_basis") or ""),
+        "error_basis": str(alignment.get("error_basis") or ""),
     }
 
 

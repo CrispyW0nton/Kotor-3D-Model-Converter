@@ -3424,6 +3424,11 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
         "bone_landmark_height",
         "paired_skeleton_landmark_height",
     }
+    assert (
+        transform["landmark_alignment"]["translation_basis"]
+        == "ground_snapped_native_fit_origin"
+    )
+    assert transform["landmark_alignment"]["error_basis"] == "applied_fit_transform"
     assert transform["landmark_alignment"]["worst_pair_role"] in {
         "pelvis",
         "head",
@@ -3524,6 +3529,11 @@ def test_external_fit_report_prefers_imported_skeleton_over_mesh_name_collision(
     assert report["fit_transform"]["landmark_alignment"]["method"] == "paired_skeleton_landmark_similarity"
     assert abs(report["fit_transform"]["landmark_alignment"]["solved_scale"] - 0.16) > 1.0e-3
     assert report["fit_transform"]["landmark_alignment"]["applied_scale"] == pytest.approx(0.16)
+    assert (
+        report["fit_transform"]["landmark_alignment"]["error_basis"]
+        == "applied_fit_transform"
+    )
+    assert report["fit_transform"]["landmark_alignment"]["rms_error"] > 0.1
     assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
     assert any(
         item["role"] == "head"

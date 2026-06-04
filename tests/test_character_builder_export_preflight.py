@@ -1646,6 +1646,12 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     ]
     fit_report["fit_transform"]["landmark_alignment"]["rms_error"] = 0.42
     fit_report["fit_transform"]["landmark_alignment"]["worst_pair_role"] = "left"
+    fit_report["fit_transform"]["landmark_alignment"]["translation_basis"] = (
+        "ground_snapped_native_fit_origin"
+    )
+    fit_report["fit_transform"]["landmark_alignment"]["error_basis"] = (
+        "applied_fit_transform"
+    )
     fit_report["fit_transform"]["landmark_alignment"]["pair_errors"] = [
         {
             "role": "left",
@@ -1711,6 +1717,8 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert paired["paired_roles"] == ["pelvis", "head", "left"]
     assert paired["rms_error"] == 0.42
     assert paired["worst_pair_role"] == "left"
+    assert paired["translation_basis"] == "ground_snapped_native_fit_origin"
+    assert paired["error_basis"] == "applied_fit_transform"
     assert paired["pair_errors"][0]["role"] == "left"
     assert paired["pair_errors"][0]["error"] == 0.42
     assert "Fit paired landmarks: 3 pairs, rms=0.42" in report.to_text()

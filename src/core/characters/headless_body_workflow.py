@@ -1278,6 +1278,18 @@ def inspect_external_model_fit(
             target_frame=report_target_frame,
             reference_bounds=reference_bounds,
         )
+        if report_landmark_alignment is not None:
+            report_landmark_alignment = _landmark_alignment_for_applied_transform(
+                report_landmark_alignment,
+                report_source_frame,
+                report_target_frame,
+                rotation_matrix=rotation,
+                applied_scale=scale,
+                source_origin=report_source_frame.origin,
+                target_origin=target_origin,
+                applied_scale_basis=scale_basis,
+                translation_basis="ground_snapped_native_fit_origin",
+            )
         fit_transform = _fit_transform_metadata(
             policy=policy,
             scale=scale,
@@ -1526,6 +1538,62 @@ def _landmark_similarity_alignment(
     }
 
 
+def _landmark_alignment_for_applied_transform(
+    alignment: Optional[Dict[str, Any]],
+    source: _HumanoidFitFrame,
+    target: _HumanoidFitFrame,
+    *,
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    applied_scale: float,
+    source_origin: Vec3,
+    target_origin: Vec3,
+    applied_scale_basis: str,
+    translation_basis: str,
+) -> Optional[Dict[str, Any]]:
+    """Recompute pair residuals for the exact transform applied to the model."""
+
+    if alignment is None:
+        return None
+    pairs = _paired_landmark_positions(source, target)
+    if not pairs:
+        return dict(alignment)
+    linear_matrix = _scale_matrix(rotation_matrix, applied_scale)
+    translation = _translation_for_affine(
+        linear_matrix,
+        source_origin,
+        target_origin,
+    )
+    pair_errors: List[Dict[str, Any]] = []
+    squared_total = 0.0
+    max_error = 0.0
+    worst_pair_role = ""
+    for role, source_point, target_point in pairs:
+        mapped_point = _vec_add(_mat_vec(linear_matrix, source_point), translation)
+        delta = _vec_sub(mapped_point, target_point)
+        error = _vec_len(delta)
+        squared_total += error * error
+        if error > max_error:
+            max_error = error
+            worst_pair_role = str(role)
+        pair_errors.append({
+            "role": str(role),
+            "source_position": [float(value) for value in source_point],
+            "target_position": [float(value) for value in target_point],
+            "mapped_position": [float(value) for value in mapped_point],
+            "error": float(error),
+        })
+    result = dict(alignment)
+    result["pair_errors"] = pair_errors
+    result["rms_error"] = math.sqrt(squared_total / float(len(pair_errors)))
+    result["max_error"] = float(max_error)
+    result["worst_pair_role"] = worst_pair_role
+    result["applied_scale"] = float(applied_scale)
+    result["applied_scale_basis"] = str(applied_scale_basis or "")
+    result["translation_basis"] = str(translation_basis or "")
+    result["error_basis"] = "applied_fit_transform"
+    return result
+
+
 def _mat_vec(matrix: Tuple[Vec3, Vec3, Vec3], vector: Vec3) -> Vec3:
     return (
         matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
@@ -1654,6 +1722,9 @@ def _fit_transform_metadata(
             "pair_errors": list(landmark_alignment.get("pair_errors") or []),
             "translation_basis": str(
                 landmark_alignment.get("translation_basis") or ""
+            ),
+            "error_basis": str(
+                landmark_alignment.get("error_basis") or ""
             ),
             "solved_scale": float(
                 landmark_alignment.get("solved_scale")
@@ -2073,6 +2144,18 @@ def normalize_external_model_for_kotor(
             target_frame=transform_target_frame,
             reference_bounds=reference_bounds,
         )
+        if landmark_alignment is not None:
+            landmark_alignment = _landmark_alignment_for_applied_transform(
+                landmark_alignment,
+                transform_source_frame,
+                transform_target_frame,
+                rotation_matrix=rotation,
+                applied_scale=scale,
+                source_origin=transform_source_frame.origin,
+                target_origin=target_origin,
+                applied_scale_basis=transform_scale_basis,
+                translation_basis="ground_snapped_native_fit_origin",
+            )
         fit_transform = _fit_transform_metadata(
             policy=transform_policy,
             scale=scale,
