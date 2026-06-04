@@ -560,15 +560,24 @@ def _game_ready_claim_issues(
         for item in list(capability.get("game_ready_blockers") or [])
         if str(item or "").strip()
     ]
-    actual_stages = capability.get("game_ready_actual_gate_stages")
-    actual_stages = (
-        actual_stages if isinstance(actual_stages, dict)
-        else _gate_stages_from_payload(payload)
-    )
+    claimed_stages = capability.get("game_ready_actual_gate_stages")
+    claimed_stages = claimed_stages if isinstance(claimed_stages, dict) else {}
+    evidence_stages = _gate_stages_from_payload(payload)
+    actual_stages = claimed_stages or evidence_stages
+    claim_mismatches = {
+        gate: {
+            "claimed": str(claimed_stages.get(gate) or "missing"),
+            "evidence": str(evidence_stages.get(gate) or "missing"),
+        }
+        for gate in _GAME_READY_GATE_ACCEPTED_STAGES
+        if claimed_stages
+        and str(claimed_stages.get(gate) or "missing")
+        != str(evidence_stages.get(gate) or "missing")
+    }
     stage_mismatches = {
-        gate: str(actual_stages.get(gate) or "missing")
+        gate: str(evidence_stages.get(gate) or "missing")
         for gate, accepted in _GAME_READY_GATE_ACCEPTED_STAGES.items()
-        if str(actual_stages.get(gate) or "missing") not in accepted
+        if str(evidence_stages.get(gate) or "missing") not in accepted
     }
     reasons: list[str] = []
     if stage != "game_tested":
@@ -577,9 +586,11 @@ def _game_ready_claim_issues(
         reasons.append("not_marked_game_tested")
     if blockers:
         reasons.append("blockers_present")
+    if claim_mismatches:
+        reasons.append("capability_gate_stage_mismatch")
     if stage_mismatches:
         reasons.append("gate_stage_mismatch")
-    if not actual_stages:
+    if not evidence_stages:
         reasons.append("gate_stages_missing")
     if not reasons:
         return []
@@ -597,6 +608,8 @@ def _game_ready_claim_issues(
             "game_ready": capability.get("game_ready"),
             "game_ready_blockers": blockers,
             "actual_gate_stages": dict(actual_stages or {}),
+            "evidence_gate_stages": dict(evidence_stages or {}),
+            "capability_gate_stage_mismatches": claim_mismatches,
             "stage_mismatches": stage_mismatches,
             "required_gate_stages": {
                 gate: sorted(stages)

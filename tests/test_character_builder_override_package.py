@@ -512,6 +512,55 @@ def test_character_override_package_rejects_invalid_game_ready_claim(tmp_path: P
     assert issue.details["stage_mismatches"]["engine"] == "partial_reverse_engineering"
 
 
+def test_character_override_package_rejects_game_ready_claim_when_capability_stages_disagree_with_evidence_gates(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    payload = json.loads(validation_path.read_text(encoding="utf-8"))
+    payload["capability"]["game_ready"] = True
+    payload["capability"]["stage"] = "game_tested"
+    payload["capability"]["game_tested"] = True
+    payload["capability"]["game_ready_blockers"] = []
+    payload["capability"]["game_ready_actual_gate_stages"] = {
+        "fit": "passed",
+        "bind": "passed",
+        "weight": "trusted_donor_transfer",
+        "animation": "passed",
+        "material": "passed",
+        "engine": "passed",
+    }
+    validation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.game_ready_claim_invalid"
+    )
+    assert "capability_gate_stage_mismatch" in issue.details["reasons"]
+    assert "gate_stage_mismatch" in issue.details["reasons"]
+    mismatches = issue.details["capability_gate_stage_mismatches"]
+    assert mismatches["fit"] == {"claimed": "passed", "evidence": "needs_review"}
+    assert mismatches["weight"] == {
+        "claimed": "trusted_donor_transfer",
+        "evidence": "donor_transfer_first_pass",
+    }
+    assert mismatches["engine"] == {
+        "claimed": "passed",
+        "evidence": "partial_reverse_engineering",
+    }
+    assert issue.details["evidence_gate_stages"]["fit"] == "needs_review"
+    assert issue.details["actual_gate_stages"]["fit"] == "passed"
+
+
 def test_character_override_package_preserves_complete_game_test_evidence(tmp_path: Path) -> None:
     output_hashes = _test_output_hashes()
     evidence = build_character_game_test_evidence(
