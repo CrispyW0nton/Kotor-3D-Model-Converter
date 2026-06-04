@@ -1565,6 +1565,30 @@ def test_character_export_preflight_blocks_leftover_imported_armature_node() -> 
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_empty_imported_mesh_flag_helper() -> None:
+    result = _rigged_character()
+    root = result["model"].root_node
+    assert root is not None
+    helper = _node(
+        "ArmatureGuide",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        parent=root,
+    )
+    helper._gr_imported_armature_joint = True
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.non_native_skeleton_node")
+    assert issue.details["node_name"] == "ArmatureGuide"
+    assert issue.details["allowed_non_native_role"] == "mesh_or_skin_payload"
+    assert issue.details["actual_path"] == ["PMBAM", "ArmatureGuide"]
+    assert preflight.report.has_blocking is True
+
+
 def test_character_builder_validation_report_has_full_manual_checklist() -> None:
     report = CharacterBuilderValidationReport(
         status="verified",

@@ -1343,13 +1343,9 @@ def _validate_no_non_native_skeleton_nodes(
 
 
 def _is_exportable_mesh_payload(node: Any) -> bool:
-    if bool(getattr(node, "is_skin", False)):
-        return True
-    if bool(getattr(node, "is_mesh", False)):
-        return True
-    if list(getattr(node, "vertices", []) or []) or list(getattr(node, "faces", []) or []):
-        return True
-    return False
+    vertices = list(getattr(node, "vertices", []) or [])
+    faces = list(getattr(node, "faces", []) or [])
+    return bool(vertices or faces)
 
 
 def _socket_category_evidence_details(
