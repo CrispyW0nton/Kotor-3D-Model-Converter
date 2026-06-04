@@ -401,6 +401,18 @@ class QtGhostRiggerMainWindow(
             game = str(getattr(self, "_current_game", "") or "K2")
             self._load_resource_model_on_ui_thread(str(resref or ""), game)
 
+        def new_scene(game: str = "", force: object = False) -> None:
+            if not bool(force) and not self._prompt_save_dirty_scene():
+                self._log("IPC new_scene cancelled by dirty-scene prompt.", "warning")
+                return
+            self._create_new_scene_from_ipc(str(game or ""))
+
+        def open_scene(path: str, force: object = False) -> None:
+            self._open_scene_from_ipc(str(path or ""), force=bool(force))
+
+        def save_scene(path: str = "") -> None:
+            self._save_scene_from_ipc(str(path or ""))
+
         def open_blueprint_resource(resource_type: str):
             def _open(resref: str, module_dir: str = "") -> None:
                 game = str(getattr(self, "_current_game", "") or "K2")
@@ -413,6 +425,67 @@ class QtGhostRiggerMainWindow(
 
         def show_panel(panel: str) -> None:
             self._show_workspace_dock(str(panel or ""))
+
+        def open_tool(tool: str) -> None:
+            key = re.sub(r"[^a-z0-9]+", "_", str(tool or "").strip().lower()).strip("_")
+            dock_aliases = {
+                "content_browser": "content_browser",
+                "browser": "content_browser",
+                "scene": "scene",
+                "scene_outliner": "scene",
+                "properties": "properties",
+                "nodes": "nodes",
+                "skeleton": "nodes",
+                "animations": "animations",
+                "animation_browser": "animations",
+                "body_attachment": "body_attachment",
+                "bas": "body_attachment",
+                "lighting": "lighting",
+                "lights": "lighting",
+                "cameras": "cameras",
+                "module_meshes": "module_meshes",
+                "sprite_materials": "sprite_materials",
+                "mesh_tools": "mesh_tools",
+                "adjust_pivot": "adjust_pivot",
+                "twoda": "2das",
+                "2da": "2das",
+                "2das": "2das",
+                "resources": "resources",
+                "resource_browser": "resources",
+                "diagnostics": "diagnostics",
+                "sequence_editor_dock": "sequence_editor",
+            }
+            if key in dock_aliases:
+                self._show_workspace_dock(dock_aliases[key])
+                self._log(f"IPC open_tool dock: {tool}", "info")
+                return
+            tool_actions = {
+                "module_editor": self._open_module_editor_window,
+                "gmodular": self._open_module_editor_window,
+                "rig": self._open_rig_window,
+                "rigging": self._open_rig_window,
+                "rigging_window": self._open_rig_window,
+                "texture_tool": self._open_texture_tool_window,
+                "textures": self._open_texture_tool_window,
+                "blueprint": self._open_blueprint_editor_window,
+                "blueprint_editor": self._open_blueprint_editor_window,
+                "character_builder": self._open_qt_character_builder_window,
+                "character_studio": self._open_qt_character_builder_window,
+                "retarget": self._open_animation_retarget_window,
+                "retarget_workbench": self._open_animation_retarget_window,
+                "animation_retarget": self._open_animation_retarget_window,
+                "unreal_animator": self._open_unreal_animator_window,
+                "sequence_editor": self._open_sequence_editor_window,
+                "sequence_editor_window": self._open_sequence_editor_window,
+                "settings": self._open_settings_dialog,
+                "theme_editor": self._open_theme_editor_window,
+            }
+            action = tool_actions.get(key)
+            if action is None:
+                self._log(f"IPC open_tool: unknown tool {tool}", "warning")
+                return
+            action()
+            self._log(f"IPC open_tool: {tool}", "info")
 
         def select_module_mesh(mesh_name: str) -> None:
             self._select_module_mesh_by_name_from_ipc(str(mesh_name or ""))
@@ -484,8 +557,12 @@ class QtGhostRiggerMainWindow(
                     "open_utd": open_blueprint_resource("utd"),
                     "open_mdl": open_mdl,
                     "load_model_by_resref": load_model_by_resref,
+                    "new_scene": new_scene,
+                    "open_scene": open_scene,
+                    "save_scene": save_scene,
                     "refresh_viewport": refresh_viewport,
                     "show_panel": show_panel,
+                    "open_tool": open_tool,
                     "select_module_mesh": select_module_mesh,
                     "set_renderer_backend": set_renderer_backend,
                     "set_dummy_helpers": set_dummy_helpers,

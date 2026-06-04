@@ -229,8 +229,12 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '"open_utd": open_blueprint_resource("utd")' in source
     assert '"open_mdl": open_mdl' in source
     assert '"load_model_by_resref": load_model_by_resref' in source
+    assert '"new_scene": new_scene' in source
+    assert '"open_scene": open_scene' in source
+    assert '"save_scene": save_scene' in source
     assert '"refresh_viewport": refresh_viewport' in source
     assert '"show_panel": show_panel' in source
+    assert '"open_tool": open_tool' in source
     assert '"select_module_mesh": select_module_mesh' in source
     assert '"set_renderer_backend": set_renderer_backend' in source
     assert '"set_dummy_helpers": set_dummy_helpers' in source
@@ -239,13 +243,28 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '"capture_viewport": capture_viewport' in source
     assert "self._start_ipc_server()" in source
     assert "ipc_server.stop()" in lifecycle_source
+    assert '@app.route("/api/new_scene", methods=["POST"])' in server_source
+    assert '@app.route("/api/open_scene", methods=["POST"])' in server_source
+    assert '@app.route("/api/save_scene", methods=["POST"])' in server_source
     assert '@app.route("/api/show_panel", methods=["POST"])' in server_source
+    assert '@app.route("/api/open_tool", methods=["POST"])' in server_source
     assert '@app.route("/api/select_module_mesh", methods=["POST"])' in server_source
     assert '@app.route("/api/set_renderer_backend", methods=["POST"])' in server_source
     assert '@app.route("/api/set_dummy_helpers", methods=["POST"])' in server_source
     assert '@app.route("/api/set_light_helpers", methods=["POST"])' in server_source
     assert '@app.route("/api/select_helper", methods=["POST"])' in server_source
     assert '@app.route("/api/capture_viewport", methods=["POST"])' in server_source
+    assert '"module_editor": self._open_module_editor_window' in source
+    assert '"character_builder": self._open_qt_character_builder_window' in source
+    assert '"retarget_workbench": self._open_animation_retarget_window' in source
+    assert '"unreal_animator": self._open_unreal_animator_window' in source
+    assert '"sequence_editor": self._open_sequence_editor_window' in source
+    assert '"blueprint_editor": self._open_blueprint_editor_window' in source
+    assert '"resource_browser": "resources"' in source
+    scene_source = (ROOT / "src/gui/windows/application_core/shared/scene_workflow.py").read_text(encoding="utf-8")
+    assert "def _create_new_scene_from_ipc" in scene_source
+    assert "def _open_scene_from_ipc" in scene_source
+    assert "def _save_scene_from_ipc" in scene_source
 
 
 def test_ipc_module_mesh_selector_uses_existing_panel_and_viewport_sync_paths() -> None:

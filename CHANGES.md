@@ -9,6 +9,16 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-05
+
+- IPC KMAX scene lifecycle: added `/api/new_scene`, `/api/open_scene`, and `/api/save_scene` plus matching client helpers so IPC callers can create, open, and save GhostRigger KMAX scenes without going through file dialogs. The Qt callbacks route through `SceneWorkflowMixin` helpers, preserving scene refresh, recent-file updates, dirty state, renderer invalidation, and sprite-material sync behavior. No roadmap task ID applies.
+  Affected areas: `src/ipc/server.py`, `src/ipc/client.py`, `src/gui/windows/qt_main_window.py`, `src/gui/windows/application_core/shared/scene_workflow.py`, `tests/test_core_contracts.py`.
+  Verification: `python -m py_compile src\ipc\server.py src\ipc\client.py src\gui\windows\qt_main_window.py src\gui\windows\application_core\shared\scene_workflow.py tests\test_core_contracts.py`; `python -m pytest tests/test_core_contracts.py::test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks -q` (`1 passed`). Launched `build\vs\x64\Release\GhostRiggerNative.exe` visibly, confirmed `/api/health`, opened `P:\OAI\Agent\GhostRiggerGH\test_scene.kmax` through `/api/open_scene`, saved `P:\OAI\Agent\GhostRiggerGH\artifacts\ipc_scene_save_roundtrip.kmax` through `/api/save_scene`, confirmed the saved file exists, and captured `artifacts/visual_ipc_open_save_scene_test_scene.png` showing the loaded scene and IPC scene logs in the running C++-launched app.
+
+- IPC workbench opening: added `/api/open_tool` and the matching `open_ghostrigger_tool()` client helper so IPC callers can open GhostRigger workbench/tool surfaces, not just viewport panels. The Qt callback maps stable aliases to existing dock and standalone window openers, including Resource Browser, Content Browser, Module Meshes, Sprite Materials, Blueprint Editor, Module Editor, Character Builder, Retarget Workbench, Unreal Animator, Sequence Editor, Rigging, Texture Tool, Settings, and Theme Editor. No roadmap task ID applies.
+  Affected areas: `src/ipc/server.py`, `src/ipc/client.py`, `src/gui/windows/qt_main_window.py`, `src/gui/dialogs/qt_dialogs.py`, `tests/test_core_contracts.py`.
+  Verification: `python -m py_compile src\ipc\server.py src\ipc\client.py src\gui\windows\qt_main_window.py src\gui\dialogs\qt_dialogs.py tests\test_core_contracts.py`; `python -m pytest tests/test_core_contracts.py::test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks -q` (`1 passed`). Launched `build\vs\x64\Release\GhostRiggerNative.exe` visibly, confirmed `/api/health`, opened `blueprint_editor` via `/api/open_tool`, opened `resource_browser` via `/api/open_tool`, and captured `artifacts/visual_ipc_open_tool_blueprint_resource_browser.png` showing both surfaces in the running C++-launched app.
+
 ## 2026-06-04
 
 - ModernGL dummy-helper overlay parity: made the viewport dummy/helper marker overlay and helper hit-testing run for ModernGL as well as Direct3D/WGPU while preserving pygfx's native helper overlay path. Added IPC visual-QA controls for renderer switching, dummy/light helper visibility, helper selection, and viewport capture so this workflow can be driven through the running app. No roadmap task ID applies.

@@ -413,6 +413,6 @@ def show_ipc_info(parent: Optional[QtWidgets.QWidget] = None) -> None:
     QtWidgets.QMessageBox.information(
         parent,
         "IPC Protocol Info",
-        "GhostRigger IPC runs on port 7001. It accepts MDL loads, UTC/UTP/UTD blueprint opens, viewport refreshes, panel display requests, and module mesh selection for visible QA.",
+        "GhostRigger IPC runs on port 7001. It accepts MDL loads, UTC/UTP/UTD blueprint opens, viewport refreshes, panel and workbench open requests, renderer/helper controls, viewport captures, and module mesh selection for visible QA.",
     )
 

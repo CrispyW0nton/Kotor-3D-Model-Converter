@@ -230,6 +230,46 @@ class GhostRiggerIPCServer:
                 self._schedule_callback(cb, game, resref)
             return jsonify({"status": "ok", "loading": resref, "game": game})
 
+        @app.route("/api/new_scene", methods=["POST"])
+        def route_new_scene():
+            """Create a new KMAX scene in the running application."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            game = str(payload.get("game", body.get("game", "")) or "").strip()
+            force = bool(payload.get("force", body.get("force", False)))
+
+            cb = self.callbacks.get("new_scene")
+            if cb is not None:
+                self._schedule_callback(cb, game, force)
+            return jsonify({"status": "ok", "game": game, "force": force})
+
+        @app.route("/api/open_scene", methods=["POST"])
+        def route_open_scene():
+            """Open a KMAX scene by path in the running application."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            path = str(payload.get("path", body.get("path", "")) or "").strip()
+            if not path:
+                return jsonify({"error": "missing path"}), 400
+            force = bool(payload.get("force", body.get("force", False)))
+
+            cb = self.callbacks.get("open_scene")
+            if cb is not None:
+                self._schedule_callback(cb, path, force)
+            return jsonify({"status": "ok", "opening": path, "force": force})
+
+        @app.route("/api/save_scene", methods=["POST"])
+        def route_save_scene():
+            """Save the active KMAX scene, optionally to a supplied path."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            path = str(payload.get("path", body.get("path", "")) or "").strip()
+
+            cb = self.callbacks.get("save_scene")
+            if cb is not None:
+                self._schedule_callback(cb, path)
+            return jsonify({"status": "ok", "path": path})
+
         @app.route("/api/show_panel", methods=["POST"])
         def route_show_panel():
             """Show a GhostRigger dock/panel in the running UI for visual QA."""
@@ -243,6 +283,20 @@ class GhostRiggerIPCServer:
             if cb is not None:
                 self._schedule_callback(cb, panel)
             return jsonify({"status": "ok", "showing": panel})
+
+        @app.route("/api/open_tool", methods=["POST"])
+        def route_open_tool():
+            """Open a GhostRigger workbench, standalone tool window, or dock."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            tool = str(payload.get("tool", body.get("tool", "")) or "").strip()
+            if not tool:
+                return jsonify({"error": "missing tool"}), 400
+
+            cb = self.callbacks.get("open_tool")
+            if cb is not None:
+                self._schedule_callback(cb, tool)
+            return jsonify({"status": "ok", "opening": tool})
 
         @app.route("/api/select_module_mesh", methods=["POST"])
         def route_select_module_mesh():

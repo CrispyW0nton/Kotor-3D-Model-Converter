@@ -29,7 +29,13 @@ class SceneWorkflowMixin:
     def _new_scene(self):
         if not self._prompt_save_dirty_scene():
             return
+        self._create_new_scene_from_ipc()
+
+    def _create_new_scene_from_ipc(self, game: str = "") -> bool:
+        requested_game = str(game or "").strip().upper()
         game = str(self.settings_data.get("default_game") or "K1").upper()
+        if requested_game in {"K1", "K2"}:
+            game = requested_game
         self.scene_manager.create_new_scene(game=game)
         self._scene_texture_dirs.clear()
         self._set_model_internal(None)
@@ -41,6 +47,7 @@ class SceneWorkflowMixin:
             bus.record_scene_update("scene_cleared")
         self._invalidate_renderer_resources("new empty scene")
         self._log("New empty scene created.", "success")
+        return True
 
     def _close_scene(self):
         self._new_scene()
@@ -75,6 +82,18 @@ class SceneWorkflowMixin:
             self._log(f"Scene load failed:\n{traceback.format_exc()}", "error")
             QtWidgets.QMessageBox.warning(self, "Open Scene", "Could not open the selected .kmax scene.")
             return False
+
+    def _open_scene_from_ipc(self, path: str, *, force: bool = False) -> bool:
+        scene_path = Path(str(path or "")).expanduser()
+        if not scene_path.is_absolute():
+            scene_path = (Path.cwd() / scene_path).resolve()
+        if not scene_path.exists():
+            self._log(f"IPC open_scene: not found {scene_path}", "warning")
+            return False
+        if not force and not self._prompt_save_dirty_scene():
+            self._log("IPC open_scene cancelled by dirty-scene prompt.", "warning")
+            return False
+        return self._load_scene_from_path(str(scene_path))
 
     def _save_scene(self) -> bool:
         scene = self.scene_manager.active_scene
@@ -117,6 +136,31 @@ class SceneWorkflowMixin:
         except Exception:
             self._log(f"Scene save-as failed:\n{traceback.format_exc()}", "error")
             QtWidgets.QMessageBox.warning(self, "Save Scene As", "Could not save the current scene.")
+            return False
+
+    def _save_scene_from_ipc(self, path: str = "") -> bool:
+        scene = self.scene_manager.active_scene
+        target = str(path or "").strip()
+        if not target:
+            if not scene.path:
+                self._log("IPC save_scene: no scene path supplied.", "warning")
+                return False
+            return self._save_scene()
+        scene_path = Path(target).expanduser()
+        if not scene_path.is_absolute():
+            scene_path = (Path.cwd() / scene_path).resolve()
+        if scene_path.suffix.lower() != ".kmax":
+            scene_path = scene_path.with_suffix(".kmax")
+        try:
+            self._sync_active_scene_sprite_material_overrides()
+            self.scene_manager.save_kmax_as(scene_path)
+            self.settings_data["last_kmax_dir"] = str(scene_path.parent)
+            self._add_recent_scene(str(scene_path))
+            self._update_scene_chrome()
+            self._log(f"IPC save_scene: {scene_path}", "success")
+            return True
+        except Exception:
+            self._log(f"IPC save_scene failed:\n{traceback.format_exc()}", "error")
             return False
 
     def _export_scene(self):

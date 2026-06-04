@@ -162,6 +162,46 @@ def show_ghostrigger_panel(panel: str) -> None:
     )
 
 
+def open_ghostrigger_tool(tool: str) -> None:
+    """Ask a running GhostRigger instance to open a workbench/tool surface."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "open_tool",
+        payload={"tool": tool},
+        on_result=_log_result("open_tool -> GhostRigger"),
+    )
+
+
+def new_ghostrigger_scene(game: str = "", *, force: bool = False) -> None:
+    """Ask a running GhostRigger instance to create a new KMAX scene."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "new_scene",
+        payload={"game": game, "force": bool(force)},
+        on_result=_log_result("new_scene -> GhostRigger"),
+    )
+
+
+def open_ghostrigger_scene(path: str, *, force: bool = False) -> None:
+    """Ask a running GhostRigger instance to open a KMAX scene path."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "open_scene",
+        payload={"path": path, "force": bool(force)},
+        on_result=_log_result("open_scene -> GhostRigger"),
+    )
+
+
+def save_ghostrigger_scene(path: str = "") -> None:
+    """Ask a running GhostRigger instance to save the active KMAX scene."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "save_scene",
+        payload={"path": path},
+        on_result=_log_result("save_scene -> GhostRigger"),
+    )
+
+
 def select_ghostrigger_module_mesh(mesh: str) -> None:
     """Ask a running GhostRigger instance to select a module mesh by label."""
     ipc_call_async(
