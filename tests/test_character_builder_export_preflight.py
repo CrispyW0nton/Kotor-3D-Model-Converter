@@ -614,6 +614,49 @@ def test_character_export_preflight_warns_when_auto_fit_uses_mesh_payload_landma
     assert preflight.export_allowed is True
 
 
+def test_character_export_preflight_warns_when_imported_skeleton_guides_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit.pop("source_imported_armature", None)
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_imported_skeleton_guides_not_recorded",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["imported_skeleton_roles"] == [
+        "head",
+        "left",
+        "left_foot",
+        "pelvis",
+        "right",
+        "right_foot",
+    ]
+    assert issue.details["source_imported_armature"] == {}
+    assert "records the imported FBX armature or skeleton guide count" in issue.fix_hint
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_accepts_imported_skeleton_guide_inventory() -> None:
+    result = _rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    assert "character.export.auto_fit_imported_skeleton_guides_not_recorded" not in _codes(preflight)
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_warns_when_paired_landmark_alignment_missing() -> None:
     result = _rigged_character()
     fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
@@ -1758,6 +1801,61 @@ def test_character_builder_validation_report_records_mesh_payload_fit_landmarks(
     ]
     assert "fit=needs_review" in report.to_text()
     assert "Fit landmark sources: mesh_payload_landmarks (mesh_payload=4)" in report.to_text()
+
+
+def test_character_builder_validation_report_records_missing_imported_guide_evidence() -> None:
+    fit_report = _valid_fit_report()
+    fit_report.pop("source_imported_armature", None)
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(
+            source="test.preflight",
+            issues=[
+                ValidationIssue(
+                    severity=ValidationSeverity.WARNING,
+                    subsystem=ValidationSubsystem.CHARACTER,
+                    code="character.export.auto_fit_imported_skeleton_guides_not_recorded",
+                    message="Imported guide inventory missing.",
+                )
+            ],
+        ),
+        metadata={
+            "character_builder_workflow": {
+                "fit_report": fit_report,
+                "bind": {
+                    "skin_binding": {
+                        "weighting_method": "native_template_nearest_vertex_donor",
+                        "quality_stage": "donor_transfer_first_pass",
+                        "donor_weight_transfer": True,
+                        "mesh_reports": [{"mesh_name": "custom_body"}],
+                    }
+                },
+                "rig_state": {
+                    "state": "native_template_final",
+                    "dag_authority": "native_kotor_base",
+                },
+                "native_snapshot": {
+                    "model_name": "pmbam",
+                    "game": "K1",
+                    "dag_fingerprint": "a" * 64,
+                },
+            }
+        },
+    )
+
+    fit = report.to_dict()["character_builder_evidence_gates"]["fit"]
+    assert fit["stage"] == "needs_review"
+    assert fit["source_uses_imported_skeleton_landmarks"] is True
+    assert fit["source_imported_armature_guide_count"] == 0
+    assert fit["warning_issue_codes"] == [
+        "character.export.auto_fit_imported_skeleton_guides_not_recorded"
+    ]
 
 
 def test_character_builder_validation_report_records_paired_landmark_alignment_gate() -> None:

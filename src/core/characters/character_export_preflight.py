@@ -663,6 +663,36 @@ def _validate_auto_fit_evidence(
                     "accepted_skeleton_sources": sorted(_SKELETON_FIT_LANDMARK_SOURCES),
                 },
             ))
+        imported_skeleton_roles = sorted(
+            role for role, source in landmark_sources.items()
+            if source == "imported_skeleton"
+        )
+        if imported_skeleton_roles:
+            imported_guide_evidence = _auto_fit_imported_skeleton_guide_evidence(
+                fit_report
+            )
+            guide_count = _safe_int(imported_guide_evidence.get("guide_joint_count")) or 0
+            scene_count = _safe_int(imported_guide_evidence.get("scene_guide_joint_count")) or 0
+            if guide_count <= 0 and scene_count <= 0:
+                report.add(_issue(
+                    "warning",
+                    "character.export.auto_fit_imported_skeleton_guides_not_recorded",
+                    (
+                        "Character auto-fit used imported skeleton landmarks but "
+                        "does not preserve the imported guide inventory."
+                    ),
+                    fix_hint=(
+                        "Re-run Auto-Fit with the current Character Builder so the "
+                        "fit report records the imported FBX armature or skeleton "
+                        "guide count before the native KOTOR rig strips temporary "
+                        "guide nodes."
+                    ),
+                    details={
+                        "fit_policy": fit_policy,
+                        "imported_skeleton_roles": imported_skeleton_roles,
+                        "source_imported_armature": dict(imported_guide_evidence),
+                    },
+                ))
 
     _validate_paired_landmark_alignment(
         fit_policy=fit_policy,
@@ -784,6 +814,11 @@ def _auto_fit_source_landmark_sources(fit_report: dict[str, Any]) -> dict[str, s
         for role, source in raw_sources.items()
         if str(role or "").strip()
     }
+
+
+def _auto_fit_imported_skeleton_guide_evidence(fit_report: dict[str, Any]) -> dict[str, Any]:
+    raw = fit_report.get("source_imported_armature")
+    return dict(raw) if isinstance(raw, dict) else {}
 
 
 def _validate_native_render_replacement_evidence(

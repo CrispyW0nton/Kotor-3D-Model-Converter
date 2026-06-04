@@ -60,6 +60,7 @@ _FIT_EVIDENCE_CODES = frozenset({
     "character.export.fallback_auto_fit_used",
     "character.export.auto_fit_landmark_sources_not_recorded",
     "character.export.auto_fit_source_landmarks_need_review",
+    "character.export.auto_fit_imported_skeleton_guides_not_recorded",
     "character.export.auto_fit_paired_landmarks_need_review",
     "character.export.auto_fit_contract_mismatch",
 })
