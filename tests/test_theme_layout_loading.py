@@ -101,6 +101,29 @@ def test_theme_defaults_prefer_default_ui_variants() -> None:
     assert manager.select_theme("missing", apply=False).id == "default"
 
 
+def test_theme_manager_maps_legacy_theme_ids_to_default_variants() -> None:
+    manager = ThemeManager(
+        ROOT,
+        {
+            "theme_layout": {
+                "selected_theme": "droid",
+                "os_light_theme": "light",
+                "os_dark_theme": "matrix",
+            },
+        },
+    )
+
+    assert manager.get_theme().id == "default_droid"
+    assert manager.get_theme("matrix").id == "default_matrix"
+    assert manager.select_theme("classic", apply=False).id == "default_classic"
+    assert manager.settings.selected_theme == "default_classic"
+    manager.settings.theme_mode = "follow_os"
+    manager.os_detector.current_mode = lambda: "dark"  # type: ignore[method-assign]
+    assert manager.resolve_theme_id() == "default_matrix"
+    manager.os_detector.current_mode = lambda: "light"  # type: ignore[method-assign]
+    assert manager.resolve_theme_id() == "default_light"
+
+
 def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

@@ -476,7 +476,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         layout_manager = getattr(parent, "layout_manager", None)
         if theme_manager is not None:
             theme_manager.register_theme_aware_widget(self)
-            self.apply_ghost_theme(theme_manager.current_theme or theme_manager.get_theme())
+            theme = theme_manager.current_theme or theme_manager.get_theme()
+            if getattr(theme, "is_native", lambda: False)():
+                self.apply_native_theme()
+            else:
+                self.apply_ghost_theme(theme)
         if layout_manager is not None:
             self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
 
@@ -518,12 +522,173 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         return False
 
     def apply_ghost_theme(self, theme) -> None:
+        if getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
         update_legacy_palette(theme)
-        self.setStyleSheet("")
-        for widget in (getattr(self, "viewport", None), getattr(self, "rail", None), getattr(self, "inspector", None), getattr(self, "properties", None), getattr(self, "bottom_strip", None)):
+        self.setStyleSheet(self._character_builder_theme_stylesheet(theme))
+        themed: set[int] = set()
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget_id = id(widget)
+            if widget_id in themed:
+                continue
+            themed.add(widget_id)
             hook = getattr(widget, "apply_ghost_theme", None)
             if callable(hook):
                 hook(theme)
+
+    def apply_native_theme(self) -> None:
+        self.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            hook = getattr(widget, "apply_native_theme", None)
+            if callable(hook):
+                hook()
+
+    @staticmethod
+    def _character_builder_theme_stylesheet(theme) -> str:
+        """Return window-scoped styling for palette-only Character Builder themes."""
+
+        c = theme.color
+        m = theme.metric
+        radius = m("border.radius", 3)
+        input_height = m("input.height", max(18, m("button.height", 28) - 8))
+        button_padding_x = m("button.paddingX", m("button.paddingH", 10))
+        button_padding_y = m("button.paddingY", m("button.paddingV", 5))
+        return f"""
+        QMainWindow#QtCharacterBuilderWindow,
+        QMainWindow#QtCharacterBuilderWindow QWidget {{
+            background: {c('window.background')};
+            color: {c('window.text', c('text.primary'))};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QMenuBar,
+        QMainWindow#QtCharacterBuilderWindow QMenu,
+        QMainWindow#QtCharacterBuilderWindow QToolBar,
+        QMainWindow#QtCharacterBuilderWindow QStatusBar {{
+            background: {c('toolbar.background')};
+            color: {c('text.primary')};
+            border: 0;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QToolBar#CharacterBuilderToolbar,
+        QMainWindow#QtCharacterBuilderWindow QToolBar#CharacterBuilderToolbarContents,
+        QMainWindow#QtCharacterBuilderWindow QScrollArea#CharacterBuilderToolbarScroll {{
+            background: {c('toolbar.background')};
+            border: 0;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QSplitter::handle,
+        QMainWindow#QtCharacterBuilderWindow QMainWindow::separator {{
+            background: {c('panel.border')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QGroupBox {{
+            color: {c('text.primary')};
+            border: 1px solid {c('groupbox.border')};
+            border-radius: {radius}px;
+            margin-top: {m('groupbox.margin', 8)}px;
+            padding-top: {m('groupbox.margin', 8)}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 8px;
+            color: {c('groupbox.title')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QListWidget,
+        QMainWindow#QtCharacterBuilderWindow QTextEdit,
+        QMainWindow#QtCharacterBuilderWindow QPlainTextEdit,
+        QMainWindow#QtCharacterBuilderWindow QTreeWidget,
+        QMainWindow#QtCharacterBuilderWindow QTableWidget,
+        QMainWindow#QtCharacterBuilderWindow QTableView,
+        QMainWindow#QtCharacterBuilderWindow QTabWidget::pane {{
+            background: {c('table.background', c('viewport.background'))};
+            color: {c('table.text', c('text.primary'))};
+            border: 1px solid {c('panel.border')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QHeaderView::section {{
+            background: {c('table.headerBackground')};
+            color: {c('table.headerText')};
+            border: 1px solid {c('table.grid', c('panel.border'))};
+            padding: 4px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QLineEdit,
+        QMainWindow#QtCharacterBuilderWindow QComboBox,
+        QMainWindow#QtCharacterBuilderWindow QDoubleSpinBox,
+        QMainWindow#QtCharacterBuilderWindow QSpinBox {{
+            background: {c('input.background')};
+            color: {c('input.text')};
+            border: 1px solid {c('input.border')};
+            border-radius: {radius}px;
+            padding: 4px 6px;
+            min-height: {input_height}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QLineEdit:focus,
+        QMainWindow#QtCharacterBuilderWindow QComboBox:focus,
+        QMainWindow#QtCharacterBuilderWindow QDoubleSpinBox:focus,
+        QMainWindow#QtCharacterBuilderWindow QSpinBox:focus {{
+            border-color: {c('input.focusBorder')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QComboBox QAbstractItemView {{
+            background: {c('panel.backgroundAlt', c('panel.altBackground'))};
+            color: {c('text.primary')};
+            selection-background-color: {c('selection.background')};
+            selection-color: {c('selection.text')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton,
+        QMainWindow#QtCharacterBuilderWindow QToolButton {{
+            background: {c('button.background')};
+            color: {c('button.text')};
+            border: 1px solid {c('panel.border')};
+            border-radius: {radius}px;
+            padding: {button_padding_y}px {button_padding_x}px;
+            min-height: {m('button.height', 28)}px;
+            min-width: {m('button.minWidth', 76)}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton:hover,
+        QMainWindow#QtCharacterBuilderWindow QToolButton:hover {{
+            background: {c('button.hover')};
+            color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton:checked,
+        QMainWindow#QtCharacterBuilderWindow QToolButton:checked {{
+            background: {c('button.checked')};
+            color: {c('button.checkedText', c('button.text'))};
+            border-color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton:disabled,
+        QMainWindow#QtCharacterBuilderWindow QToolButton:disabled {{
+            background: {c('button.disabledBackground')};
+            color: {c('button.disabledText', c('text.disabled'))};
+            border-color: {c('panel.border')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton[accent="true"],
+        QMainWindow#QtCharacterBuilderWindow QToolButton[accent="true"] {{
+            background: {c('accent.primary')};
+            color: {c('button.accentText')};
+            border-color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QTabBar::tab {{
+            background: {c('tab.background')};
+            color: {c('tab.text')};
+            border: 1px solid {c('panel.border')};
+            padding: {m('tab.paddingY', m('tab.padding', 4))}px {m('tab.paddingX', 12)}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QTabBar::tab:selected {{
+            background: {c('tab.selectedBackground')};
+            color: {c('tab.selectedText')};
+            border-color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QScrollBar:vertical,
+        QMainWindow#QtCharacterBuilderWindow QScrollBar:horizontal {{
+            background: {c('scrollbar.background')};
+            border: 0;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QScrollBar::handle:vertical,
+        QMainWindow#QtCharacterBuilderWindow QScrollBar::handle:horizontal {{
+            background: {c('scrollbar.handle')};
+            border-radius: {radius}px;
+            min-height: 24px;
+            min-width: 24px;
+        }}
+        """
 
     def apply_ghost_layout(self, layout) -> None:
         toolbar = layout.toolbar("main")
