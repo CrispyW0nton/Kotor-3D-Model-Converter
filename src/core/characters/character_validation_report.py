@@ -31,9 +31,82 @@ CHARACTER_BUILDER_MANUAL_CHECKLIST: tuple[str, ...] = (
     "Loading in both KOTOR 1 and KOTOR 2",
 )
 
+CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA = "ghostrigger.character_game_test.v1"
+REQUIRED_CHARACTER_BUILDER_GAME_TEST_GAMES: tuple[str, ...] = ("K1", "K2")
+
 CAPABILITY_STAGE_BLOCKED = "blocked"
 CAPABILITY_STAGE_EXPORT_CANDIDATE = "export_candidate"
 CAPABILITY_STAGE_GAME_TESTED = "game_tested"
+
+
+def build_character_game_test_evidence(
+    *,
+    tested_games: tuple[str, ...] | list[str],
+    checklist_results: dict[str, bool] | list[dict[str, Any]],
+    tester: str = "",
+    notes: str = "",
+    artifacts: tuple[str, ...] | list[str] = (),
+) -> dict[str, Any]:
+    """Build a JSON-friendly in-game evidence record for Character Builder.
+
+    This helper intentionally records only manual/visual game-test facts.  It
+    does not run the game, and it does not promote a candidate by itself.
+    """
+
+    return {
+        "schema": CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA,
+        "status": "passed",
+        "tested_games": [_normalize_game(game) for game in tested_games],
+        "checklist_results": _normalize_checklist_results(checklist_results),
+        "tester": str(tester or ""),
+        "notes": str(notes or ""),
+        "artifacts": [str(item or "") for item in artifacts if str(item or "").strip()],
+    }
+
+
+def character_game_test_evidence_passed(evidence: Any) -> bool:
+    """Return True when evidence proves the full K1/K2 in-game checklist."""
+
+    if not isinstance(evidence, dict):
+        return False
+    if evidence.get("schema") != CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA:
+        return False
+    if str(evidence.get("status") or "").strip().lower() != "passed":
+        return False
+    tested_games = {
+        _normalize_game(game)
+        for game in list(evidence.get("tested_games") or [])
+        if str(game or "").strip()
+    }
+    if not set(REQUIRED_CHARACTER_BUILDER_GAME_TEST_GAMES).issubset(tested_games):
+        return False
+    checklist = _normalize_checklist_results(evidence.get("checklist_results") or {})
+    if not checklist:
+        return False
+    return all(bool(checklist.get(item)) for item in CHARACTER_BUILDER_MANUAL_CHECKLIST)
+
+
+def _normalize_game(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    if text in {"1", "KOTOR1", "KOTOR 1", "KNIGHTS OF THE OLD REPUBLIC"}:
+        return "K1"
+    if text in {"2", "KOTOR2", "KOTOR 2", "TSL", "THE SITH LORDS"}:
+        return "K2"
+    return text
+
+
+def _normalize_checklist_results(value: Any) -> dict[str, bool]:
+    if isinstance(value, dict):
+        return {str(key): bool(item) for key, item in value.items()}
+    results: dict[str, bool] = {}
+    if isinstance(value, list):
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("item") or item.get("name") or "").strip()
+            if key:
+                results[key] = bool(item.get("passed"))
+    return results
 
 
 @dataclass(frozen=True)
@@ -51,6 +124,7 @@ class CharacterBuilderValidationReport:
     reload_report: ValidationReport | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     game_tested: bool = False
+    game_test_evidence: dict[str, Any] = field(default_factory=dict)
 
     @property
     def merged_report(self) -> ValidationReport:
@@ -63,7 +137,7 @@ class CharacterBuilderValidationReport:
     def capability_stage(self) -> str:
         """Return the strongest proven Character Builder export stage."""
 
-        if self.game_tested:
+        if self.game_tested and character_game_test_evidence_passed(self.game_test_evidence):
             return CAPABILITY_STAGE_GAME_TESTED
         if self.verified:
             return CAPABILITY_STAGE_EXPORT_CANDIDATE
@@ -71,16 +145,22 @@ class CharacterBuilderValidationReport:
 
     def to_dict(self) -> dict[str, Any]:
         merged = self.merged_report
+        game_evidence_complete = character_game_test_evidence_passed(self.game_test_evidence)
         data = {
             "schema": "ghostrigger.character_export_validation.v1",
             "status": self.status,
             "verified": bool(self.verified),
             "capability": {
                 "stage": self.capability_stage,
-                "game_tested": bool(self.game_tested),
+                "game_tested": bool(self.game_tested and game_evidence_complete),
+                "game_test_requested": bool(self.game_tested),
+                "game_test_evidence_complete": bool(game_evidence_complete),
                 "game_test_status": (
                     "manual_checklist_passed"
-                    if self.game_tested else "not_game_tested"
+                    if self.game_tested and game_evidence_complete else
+                    "game_test_evidence_incomplete"
+                    if self.game_tested else
+                    "not_game_tested"
                 ),
                 "honesty_note": (
                     "GhostRigger verification proves staged export and reload "
@@ -95,6 +175,7 @@ class CharacterBuilderValidationReport:
             "outputs": dict(self.outputs),
             "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
             "manual_in_game_checklist": list(CHARACTER_BUILDER_MANUAL_CHECKLIST),
+            "game_test_evidence": dict(self.game_test_evidence or {}),
             "preflight_report": validation_report_to_dict(self.preflight_report),
             "reload_report": validation_report_to_dict(self.reload_report)
             if self.reload_report is not None else None,

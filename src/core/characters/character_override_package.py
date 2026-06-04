@@ -29,7 +29,10 @@ from src.core.validation.validation_bus import (
     ValidationSubsystem,
 )
 
-from .character_validation_report import CHARACTER_BUILDER_MANUAL_CHECKLIST
+from .character_validation_report import (
+    CHARACTER_BUILDER_MANUAL_CHECKLIST,
+    character_game_test_evidence_passed,
+)
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_NATIVE_RESREF_MAX_LEN
 
 
@@ -274,6 +277,17 @@ def _validation_payload_issues(
             "Character Builder export is not at an install-package capable stage.",
             details={"stage": stage},
         ))
+    if stage == "game_tested" and not character_game_test_evidence_passed(
+        payload.get("game_test_evidence")
+    ):
+        issues.append(_issue(
+            "character.override_package.game_test_evidence_incomplete",
+            "Character Builder export claims game-tested status without complete K1/K2 checklist evidence.",
+            details={
+                "stage": stage,
+                "game_test_status": capability.get("game_test_status"),
+            },
+        ))
     game = str(payload.get("game") or "").upper()
     if game and game != request.game:
         issues.append(_issue(
@@ -352,6 +366,7 @@ def _build_manifest(
             validation_payload.get("manual_in_game_checklist")
             or CHARACTER_BUILDER_MANUAL_CHECKLIST
         ),
+        "game_test_evidence": dict(validation_payload.get("game_test_evidence") or {}),
         "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
         "character_builder_workflow": workflow,
         "metadata": dict(request.metadata or {}),

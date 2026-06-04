@@ -95,6 +95,13 @@ Headless workflow proof on 2026-06-04 confirmed:
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.
 
+As of 2026-06-04, GhostRigger requires structured in-game evidence before an
+export/package may claim `game_tested`. The evidence must use the
+`ghostrigger.character_game_test.v1` schema, cover both `K1` and `K2`, and mark
+every manual checklist item as passed. Without that evidence, Bendak remains an
+export candidate even when MDL/MDX reload verification and Override packaging
+both succeed.
+
 Treat `n_mandalorian` as the mandatory native base MDL that supplies the KOTOR
 node DAG for this fixture. If a packaging/export test targets
 `n_mandalorian03`, the Character Builder must keep both identities visible:

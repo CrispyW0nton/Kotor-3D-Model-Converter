@@ -22,6 +22,7 @@ from src.core.characters.character_rig_state import (
 from src.core.characters.character_validation_report import (
     CHARACTER_BUILDER_MANUAL_CHECKLIST,
     CharacterBuilderValidationReport,
+    build_character_game_test_evidence,
 )
 from src.core.characters.native_skeleton import native_skeleton_fingerprint
 from src.core.geometry.model_data import (
@@ -1129,6 +1130,60 @@ def test_character_builder_validation_report_has_full_manual_checklist() -> None
     assert "Game tested: False" in text
     assert "1. Load as player character without crash" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
+
+
+def test_character_builder_validation_report_requires_complete_game_test_evidence() -> None:
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(source="test.preflight"),
+        game_tested=True,
+    )
+
+    data = report.to_dict()
+
+    assert data["capability"]["stage"] == "export_candidate"
+    assert data["capability"]["game_tested"] is False
+    assert data["capability"]["game_test_requested"] is True
+    assert data["capability"]["game_test_evidence_complete"] is False
+    assert data["capability"]["game_test_status"] == "game_test_evidence_incomplete"
+
+
+def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_evidence() -> None:
+    evidence = build_character_game_test_evidence(
+        tested_games=["K1", "K2"],
+        checklist_results={item: True for item in CHARACTER_BUILDER_MANUAL_CHECKLIST},
+        tester="manual qa",
+        notes="Bendak replacement smoke passed.",
+        artifacts=["k1_screenshot.png", "k2_screenshot.png"],
+    )
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(source="test.preflight"),
+        game_tested=True,
+        game_test_evidence=evidence,
+    )
+
+    data = report.to_dict()
+
+    assert data["capability"]["stage"] == "game_tested"
+    assert data["capability"]["game_tested"] is True
+    assert data["capability"]["game_test_status"] == "manual_checklist_passed"
+    assert data["game_test_evidence"]["tested_games"] == ["K1", "K2"]
+    assert data["game_test_evidence"]["checklist_results"][
+        "Load as player character without crash"
+    ] is True
 
 
 def test_character_builder_validation_text_includes_actionable_issue_context() -> None:

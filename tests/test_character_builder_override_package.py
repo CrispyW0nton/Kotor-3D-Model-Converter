@@ -7,23 +7,44 @@ from src.core.characters.character_override_package import (
     CharacterBuilderOverridePackageRequest,
     package_character_override_candidate,
 )
+from src.core.characters.character_validation_report import (
+    CHARACTER_BUILDER_MANUAL_CHECKLIST,
+    build_character_game_test_evidence,
+)
 
 
-def _write_source_export(tmp_path: Path, *, verified: bool = True, game: str = "K1") -> Path:
+def _write_source_export(
+    tmp_path: Path,
+    *,
+    verified: bool = True,
+    game: str = "K1",
+    capability_stage: str | None = None,
+    game_test_evidence: dict | None = None,
+) -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
     mdl = tmp_path / "bendak.mdl"
     mdx = tmp_path / "bendak.mdx"
     mdl.write_bytes(b"mdl")
     mdx.write_bytes(b"mdx")
-    stage = "export_candidate" if verified else "blocked"
+    stage = capability_stage or ("export_candidate" if verified else "blocked")
+    game_tested = stage == "game_tested"
+    evidence_complete = bool(game_test_evidence)
     payload = {
         "schema": "ghostrigger.character_export_validation.v1",
         "status": "verified" if verified else "reload_failed",
         "verified": verified,
         "capability": {
             "stage": stage,
-            "game_tested": False,
-            "game_test_status": "not_game_tested",
+            "game_tested": game_tested and evidence_complete,
+            "game_test_requested": game_tested,
+            "game_test_evidence_complete": evidence_complete,
+            "game_test_status": (
+                "manual_checklist_passed"
+                if game_tested and evidence_complete else
+                "game_test_evidence_incomplete"
+                if game_tested else
+                "not_game_tested"
+            ),
         },
         "game": game,
         "resref": "bendak",
@@ -59,6 +80,7 @@ def _write_source_export(tmp_path: Path, *, verified: bool = True, game: str = "
                 },
             },
         },
+        "game_test_evidence": dict(game_test_evidence or {}),
     }
     mdl.with_name("bendak_validation_report.json").write_text(
         json.dumps(payload),
@@ -94,6 +116,7 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert manifest["game"] == "K1"
     assert manifest["capability"]["stage"] == "export_candidate"
     assert manifest["capability"]["game_tested"] is False
+    assert manifest["game_test_evidence"] == {}
     assert manifest["character_builder_workflow"]["native_skeleton_is_authority"] is True
     assert manifest["character_builder_workflow"]["imported_mesh_role"] == "payload_guest"
     assert "Do not overwrite a live game install" in readme_path.read_text(encoding="utf-8")
@@ -134,3 +157,56 @@ def test_character_override_package_rejects_unsafe_target_resref(tmp_path: Path)
     assert result.succeeded is False
     codes = {issue.code for issue in result.export_job_result.validation_report.issues}
     assert "character.override_package.resref_unsafe" in codes
+
+
+def test_character_override_package_rejects_incomplete_game_test_claim(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(
+        tmp_path / "source",
+        capability_stage="game_tested",
+        game_test_evidence={},
+    )
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+        )
+    )
+
+    assert result.succeeded is False
+    codes = {issue.code for issue in result.export_job_result.validation_report.issues}
+    assert "character.override_package.game_test_evidence_incomplete" in codes
+
+
+def test_character_override_package_preserves_complete_game_test_evidence(tmp_path: Path) -> None:
+    evidence = build_character_game_test_evidence(
+        tested_games=["K1", "K2"],
+        checklist_results={item: True for item in CHARACTER_BUILDER_MANUAL_CHECKLIST},
+        tester="manual qa",
+        artifacts=["k1.png", "k2.png"],
+    )
+    source_mdl = _write_source_export(
+        tmp_path / "source",
+        capability_stage="game_tested",
+        game_test_evidence=evidence,
+    )
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+        )
+    )
+
+    assert result.succeeded is True
+    manifest = result.manifest
+    assert manifest["capability"]["stage"] == "game_tested"
+    assert manifest["capability"]["game_tested"] is True
+    assert manifest["game_test_evidence"]["tester"] == "manual qa"
+    assert manifest["game_test_evidence"]["checklist_results"][
+        "Loading in both KOTOR 1 and KOTOR 2"
+    ] is True
