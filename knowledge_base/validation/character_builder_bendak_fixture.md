@@ -63,6 +63,11 @@ Headless workflow proof on 2026-06-04 confirmed:
   guarded local fixture test. It skips when the local FBX or configured game
   install is unavailable, but in the current fixture environment it passed for
   both K1 and K2.
+- The same guarded local fixture now packages the verified export under target
+  resref `n_mandalorian03` for both K1 and K2 using the staged Character Builder
+  Override-package readiness path. The package writes `n_mandalorian03.mdl`,
+  `n_mandalorian03.mdx`, an Override manifest, and a readme/checklist into a
+  temp package folder without touching a live game install.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

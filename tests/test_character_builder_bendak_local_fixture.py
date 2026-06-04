@@ -6,6 +6,10 @@ from pathlib import Path
 import pytest
 
 from src.core.characters import character_builder
+from src.core.characters.character_override_package import (
+    CharacterBuilderOverridePackageRequest,
+    package_character_override_candidate,
+)
 from src.core.characters.headless_body_workflow import (
     run_external_mesh_native_template_launch_workflow,
 )
@@ -61,3 +65,21 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert result.apply_result.get("replaced_native_render_nodes")
     assert result.motion_result is not None
     assert result.motion_result.supermodel == "S_Female02"
+
+    package = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=Path(result.mdl_path),
+            output_dir=tmp_path / f"{game.lower()}_override_package",
+            target_resref="n_mandalorian03",
+            game=game,
+        )
+    )
+
+    assert package.succeeded is True
+    assert package.mdl_path.exists()
+    assert package.mdx_path.exists()
+    assert package.manifest_path.exists()
+    assert package.manifest["target_resref"] == "n_mandalorian03"
+    assert package.manifest["game"] == game
+    assert package.manifest["capability"]["stage"] == "export_candidate"
+    assert package.manifest["capability"]["game_tested"] is False

@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder Override-package readiness: added a headless staged package path for reload-verified Character Builder MDL/MDX exports. It copies the verified pair under a requested replacement resref, writes an Override manifest plus readme/manual checklist, rejects unsafe or too-long resrefs, and blocks unverified exports before writing. The guarded Bendak local fixture now proves K1/K2 `Bendak.fbx` -> `n_mandalorian` export candidates can be packaged as `n_mandalorian03.mdl` / `n_mandalorian03.mdx` without touching a live game install. Roadmap task: `T1205` / `T2203`.
+  Affected areas: `src/core/characters/character_override_package.py`, `tests/test_character_builder_override_package.py`, `tests/test_character_builder_bendak_local_fixture.py`, `knowledge_base/validation/character_builder_bendak_fixture.md`, `.gitignore`.
+  Ground truth used: MCP `ghostrigger_model_info` refreshed K1/K2 `n_mandalorian` as 70-node, 52-mesh-node, 18-bone native KOTOR models with local `pause1`/`pause2` and `S_Female02`; local Bendak fixture proof provides verified K1/K2 export reports.
+  Verification: `python -m pytest tests/test_character_builder_override_package.py -q --basetemp .pytest_tmp_character_override_package`; `python -m pytest tests/test_character_builder_bendak_local_fixture.py -q --basetemp .pytest_tmp_bendak_local_fixture_package`; `python -m py_compile src/core/characters/character_override_package.py tests/test_character_builder_override_package.py tests/test_character_builder_bendak_local_fixture.py`.
+
 - Character Builder Bendak local fixture proof: added a guarded local pytest fixture that runs the real `Bendak.fbx` to `n_mandalorian` native-template launch workflow for both K1 and K2 when the local FBX and configured game installs are available. In the current fixture environment it produced reload-verified `bendak.mdl` / `bendak.mdx` candidates for both engines, preserving the proof that Bendak is the imported mesh payload and `n_mandalorian` is the KOTOR DAG authority. Roadmap task: `T1205` / `T2203`.
   Affected areas: `tests/test_character_builder_bendak_local_fixture.py`, `knowledge_base/validation/character_builder_bendak_fixture.md`.
   Ground truth used: local Bendak FBX fixture and configured K1/K2 game-library `n_mandalorian` models.
