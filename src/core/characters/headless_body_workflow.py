@@ -4674,9 +4674,11 @@ def export_scene(
     write_sidecar    : When True (default), write ``<resref>.ghostrig.json``
                        to the output directory via
                        :meth:`SceneIO.write_sidecar`.
-    skip_validation  : When True, bypass the strict-validation gate.
+    skip_validation  : When True, bypass the UI/workflow validation gate only.
                        Reserved for "Export anyway" UX after the user
-                       has acknowledged warnings.
+                       has acknowledged warnings.  The staged KOTOR
+                       transaction still runs Character Builder preflight,
+                       including the native-template-final rig-state gate.
 
     Notes
     -----

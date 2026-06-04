@@ -2234,6 +2234,38 @@ def test_t506_export_scene_skip_validation_bypasses_gate(monkeypatch, tmp_path):
     assert len(_FakeSceneIO.written) == 1
 
 
+def test_t1205_export_scene_skip_validation_keeps_native_template_gate(
+    monkeypatch, tmp_path,
+):
+    """``skip_validation=True`` bypasses UI validation only, not KOTOR preflight."""
+    from src.core.characters.character_rig_state import mark_imported_temporary_skeleton
+
+    _install_fake_scene_io(monkeypatch)
+    writers = _install_fake_exporters(monkeypatch)
+    _make_check_service(monkeypatch, issues=[])
+    scene, body = _scene_with_body()
+    mark_imported_temporary_skeleton(body, source="test_imported_payload")
+
+    result = wf.export_scene(
+        scene,
+        formats=["kotor"],
+        out_dir=str(tmp_path),
+        write_sidecar=False,
+        skip_validation=True,
+    )
+
+    assert result.ok is False
+    assert result.code == "all_failed"
+    row = result.formats[0]
+    assert row.key == "kotor"
+    assert row.ok is False
+    assert row.code == "failed"
+    assert "final native KOTOR template rig state" in row.message
+    assert writers["mdl"].calls == []
+    assert not (tmp_path / "pfbcm.mdl").exists()
+    assert not (tmp_path / "pfbcm.mdx").exists()
+
+
 def test_t506_export_scene_writes_sidecar_to_out_dir(monkeypatch, tmp_path):
     """Sidecar JSON path lives next to ``<resref>.mdl`` in the out_dir."""
     _install_fake_scene_io(monkeypatch)
