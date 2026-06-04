@@ -2148,6 +2148,7 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
         "left",
     ]
     fit_report["fit_transform"]["landmark_alignment"]["rms_error"] = 0.42
+    fit_report["fit_transform"]["landmark_alignment"]["max_error"] = 0.55
     fit_report["fit_transform"]["landmark_alignment"]["worst_pair_role"] = "left"
     fit_report["fit_transform"]["landmark_alignment"]["translation_basis"] = (
         "ground_snapped_native_fit_origin"
@@ -2224,6 +2225,13 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert paired["error_basis"] == "applied_fit_transform"
     assert paired["pair_errors"][0]["role"] == "left"
     assert paired["pair_errors"][0]["error"] == 0.42
+    quality = fit["quality_summary"]
+    assert quality["stage"] == "needs_review"
+    assert "too_few_paired_landmarks" in quality["reasons"]
+    assert "rms_error_high" in quality["reasons"]
+    assert "max_error_high" in quality["reasons"]
+    assert "Skeleton-driven Auto-Fit needs review" in quality["summary"]
+    assert "Fit quality: Skeleton-driven Auto-Fit needs review" in report.to_text()
     assert "Fit paired landmarks: 3 pairs, rms=0.42" in report.to_text()
     assert "worst=left" in report.to_text()
 

@@ -16,6 +16,7 @@ from src.core.validation.validation_bus import (
     validation_report_to_dict,
 )
 
+from .character_autofit_report import summarize_auto_fit_quality
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE
 
 
@@ -434,6 +435,14 @@ def character_builder_evidence_gates(
     fit_landmark_alignment = _fit_landmark_alignment_summary(fit_report)
     fit_toe_forward = _fit_toe_forward_summary(fit_report)
     fit_imported_armature = _fit_imported_armature_summary(fit_report)
+    fit_quality = summarize_auto_fit_quality(
+        fit_report,
+        min_confidence=0.60,
+        min_paired_landmarks=4,
+        max_rms_error=0.15,
+        max_pair_error=0.16,
+        min_toe_forward_alignment=0.50,
+    )
     fit_stage = _gate_stage(
         fit_codes,
         present=bool(fit_report),
@@ -459,6 +468,7 @@ def character_builder_evidence_gates(
         "source_imported_armature_names": fit_imported_armature["armature_names"],
         "paired_landmark_alignment": fit_landmark_alignment,
         "toe_forward_alignment": fit_toe_forward,
+        "quality_summary": fit_quality,
         "fit_transform_present": bool(_mapping(fit_report.get("fit_transform"))),
         "blocking_issue_codes": fit_codes["blocking"],
         "warning_issue_codes": fit_codes["warning"],
@@ -1098,6 +1108,18 @@ class CharacterBuilderValidationReport:
                     f"engine={_evidence_gate_stage(evidence_gates, 'engine')}"
                 )
                 fit_gate = dict(evidence_gates.get("fit") or {})
+                quality = dict(fit_gate.get("quality_summary") or {})
+                if quality.get("summary"):
+                    reason_text = ", ".join(
+                        str(item or "")
+                        for item in list(quality.get("reasons") or [])[:5]
+                        if str(item or "").strip()
+                    )
+                    lines.append(
+                        "- Fit quality: "
+                        f"{quality.get('summary')}"
+                        + (f" Reasons: {reason_text}." if reason_text else "")
+                    )
                 source_domain = str(fit_gate.get("source_landmark_domain") or "")
                 if source_domain:
                     source_counts = dict(fit_gate.get("source_landmark_source_counts") or {})

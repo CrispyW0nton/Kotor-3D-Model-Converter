@@ -48,6 +48,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from src.core.characters.character_autofit_report import summarize_auto_fit_quality
 from src.gui.qt_lib.assets.qt_theme import C, heading
 
 
@@ -2303,10 +2304,27 @@ class QtInspectorPanel(QtWidgets.QWidget):
                     pass
         warnings = [str(w) for w in (report.get("warnings") or []) if str(w)]
 
-        lines = [
+        quality = summarize_auto_fit_quality(report)
+        quality_summary = str(quality.get("summary") or "").strip()
+        quality_stage = str(quality.get("stage") or "").strip().lower()
+        quality_reasons = [
+            str(reason or "")
+            for reason in list(quality.get("reasons") or [])
+            if str(reason or "").strip()
+        ]
+
+        lines = []
+        if quality_summary:
+            lines.append(f"Fit readiness: {quality_summary}")
+            if quality_reasons:
+                shown_reasons = ", ".join(quality_reasons[:4])
+                suffix = "" if len(quality_reasons) <= 4 else f", +{len(quality_reasons) - 4} more"
+                lines.append(f"Review reasons: {shown_reasons}{suffix}.")
+
+        lines.extend([
             f"Auto-fit: {policy}, scale {scale_text}, {basis}.",
             f"Reference: {reference}.",
-        ]
+        ])
         if isinstance(auto_report, Mapping):
             source_forward = str(auto_report.get("source_forward_axis") or "unknown")
             source_up = str(auto_report.get("source_up_axis") or "unknown")
@@ -2406,7 +2424,12 @@ class QtInspectorPanel(QtWidgets.QWidget):
         if warnings:
             lines.append("Warning: " + warnings[0])
 
-        colour = "#ffd166" if warnings else "#7cd87c"
+        if quality_stage == "passed" and not warnings:
+            colour = "#7cd87c"
+        elif quality_stage in {"fallback", "needs_review"} or warnings:
+            colour = "#ffd166"
+        else:
+            colour = C.get("text2", "#888")
         label.setText("\n".join(lines))
         label.setStyleSheet(f"color:{colour}; font-size:8pt;")
 

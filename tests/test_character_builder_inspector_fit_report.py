@@ -74,6 +74,54 @@ def _base_report() -> dict:
     }
 
 
+def _clean_skeleton_quality_report() -> dict:
+    report = _base_report()
+    report["scale"] = 0.16
+    report["source_frame"] = {
+        "confidence": 0.92,
+        "toe_forward_alignment": 0.96,
+        "landmarks": {
+            "left_foot": "L_Foot",
+            "right_foot": "R_Foot",
+            "left_toe": "L_Foot_end",
+            "right_toe": "R_Foot_end",
+        },
+        "landmark_sources": {
+            "pelvis": "imported_skeleton",
+            "head": "imported_skeleton",
+            "left": "imported_skeleton",
+            "right": "imported_skeleton",
+            "left_foot": "imported_skeleton",
+            "right_foot": "imported_skeleton",
+            "left_toe": "imported_skeleton",
+            "right_toe": "imported_skeleton",
+        },
+    }
+    report["target_frame"] = {
+        "confidence": 0.95,
+        "toe_forward_alignment": 0.94,
+        "landmarks": {
+            "left_foot": "lfoot_g",
+            "right_foot": "rfoot_g",
+            "left_toe": "lfootT_g",
+            "right_toe": "rfootT_g",
+        },
+    }
+    report["fit_transform"]["landmark_alignment"].update({
+        "pair_count": 8,
+        "rms_error": 0.04,
+        "max_error": 0.08,
+        "worst_pair_role": "right_toe",
+    })
+    report["source_imported_armature"] = {
+        "source": "imported_fbx_armature",
+        "guide_joint_count": 65,
+        "scene_guide_joint_count": 65,
+        "armature_names": ["Armature"],
+    }
+    return report
+
+
 def test_import_fit_report_shows_labeled_fbx_armature_guides(inspector):
     report = _base_report()
     report["source_imported_armature"] = {
@@ -107,3 +155,12 @@ def test_import_fit_report_shows_unlabeled_imported_skeleton_guides(inspector):
     text = _fit_label(inspector).text()
     assert "Source skeleton guides: 67 imported skeleton guide nodes." in text
     assert "FBX armature" not in text
+
+
+def test_import_fit_report_shows_core_quality_summary(inspector):
+    inspector.set_import_fit_report(_clean_skeleton_quality_report())
+
+    text = _fit_label(inspector).text()
+    assert "Fit readiness: Skeleton-driven Auto-Fit passed" in text
+    assert "8 skeleton pairs, RMS 0.040, max 0.080" in text
+    assert "Final skeleton: selected KOTOR base" in text
