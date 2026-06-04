@@ -35,18 +35,24 @@ MCP checks on 2026-06-04 confirmed:
 - The local Bendak FBX path exists.
 - The configured K1/K2 game-library lookup currently lists `n_mandalorian`, but
   does not resolve `n_mandalorian03`.
+- K1 and K2 `n_mandalorian` both resolve as loadable MDLs with 70 nodes, 52 mesh
+  nodes, 18 bones, local `pause1`/`pause2`, and supermodel `S_Female02`.
 - K1 `pmbam` remains available and reports 61 nodes, 44 mesh nodes, 17 bones,
   and supermodel `S_KPMF0200`.
 - K1 Ghidra context is loaded for future engine-loader checks.
 
-Treat `n_mandalorian03` lookup failure as a program/library-indexing issue to
-resolve, not as permission to silently substitute a different target in this
-fixture.
+Treat `n_mandalorian03` as the intended replacement/variant target and
+`n_mandalorian` as the native base MDL that supplies the KOTOR node DAG. The
+Character Builder must keep both identities visible: loading `n_mandalorian` is
+allowed only as the explicit source MDL for the selected `n_mandalorian03`
+target, never as a silent target substitution.
 
 ## Required Workflow
 
 1. Open Character Builder.
 2. Select or resolve the KOTOR base skeleton/model target for `n_mandalorian03`.
+   The selected option should show that it loads base MDL `n_mandalorian` when
+   `n_mandalorian03.mdl` is not present as a separate resource.
 3. Import `Bendak.fbx`.
 4. Auto-fit the imported mesh to the KOTOR base:
    - correct front-facing direction,

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6 import QtWidgets
 
+from src.gui.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
 
 
@@ -86,6 +88,74 @@ def test_character_builder_base_picker_exact_typed_model_resolves_to_indexed_key
         )
     finally:
         inspector.deleteLater()
+
+
+def test_character_builder_typed_variant_uses_base_mdl_source_resref():
+    panel = SimpleNamespace(
+        scene=SimpleNamespace(game_version="K1"),
+        _skeleton_template_options=[],
+        _skeleton_template_options_by_key={},
+    )
+    panel._installed_skeleton_template_rows = (
+        lambda _game: [{"resref": "n_mandalorian", "source": "installation"}]
+    )
+
+    option = QtCharacterBuilderWindow._typed_skeleton_template_option(
+        panel,
+        "typed:n_mandalorian03",
+    )
+
+    assert option is not None
+    assert option["resref"] == "n_mandalorian03"
+    assert option["source_resref"] == "n_mandalorian"
+    assert option["path"] == "installation:n_mandalorian.mdl"
+    assert option["metadata"]["variant_resolution"] == "npc_numbered_variant_base"
+    assert "appearance/texture variant" in option["warnings"][0]
+
+
+def test_character_builder_loads_variant_base_source_resref(monkeypatch):
+    from src.core.characters import character_builder as character_builder_core
+    try:
+        from core.characters import character_builder as character_builder_core_alias
+    except ImportError:
+        character_builder_core_alias = character_builder_core
+
+    calls: list[tuple[str, str]] = []
+    sentinel = object()
+
+    def fake_load_game_skeleton_source(resref: str, *, game: str = "K1", game_dir=None):
+        calls.append((resref, game))
+        return sentinel
+
+    monkeypatch.setattr(
+        character_builder_core,
+        "load_game_skeleton_source",
+        fake_load_game_skeleton_source,
+    )
+    monkeypatch.setattr(
+        character_builder_core_alias,
+        "load_game_skeleton_source",
+        fake_load_game_skeleton_source,
+    )
+    panel = SimpleNamespace(
+        scene=SimpleNamespace(game_version="K1"),
+        _option_field=QtCharacterBuilderWindow._option_field,
+    )
+
+    model = QtCharacterBuilderWindow._load_skeleton_template_model(
+        panel,
+        {
+            "source": "installation",
+            "game": "K1",
+            "part": "body",
+            "resref": "n_mandalorian03",
+            "source_resref": "n_mandalorian",
+            "path": "installation:n_mandalorian.mdl",
+        },
+    )
+
+    assert model is sentinel
+    assert calls == [("n_mandalorian", "K1")]
 
 
 def test_character_builder_import_fit_report_is_visible_in_inspector():

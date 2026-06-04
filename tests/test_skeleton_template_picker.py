@@ -141,6 +141,56 @@ def test_t1201_installed_npc_models_are_body_skeleton_candidates():
     assert result.options[0].part == "body"
 
 
+def test_t1201_npc_numbered_variant_resolves_to_available_base_model():
+    assert (
+        picker.npc_numbered_variant_base_resref("n_mandalorian03")
+        == "n_mandalorian"
+    )
+    assert picker.npc_numbered_variant_base_resref("pmhc01") == ""
+    assert picker.npc_numbered_variant_base_resref("w_lghtsbr_009") == ""
+
+    assert (
+        picker.resolve_model_variant_source_resref(
+            "n_mandalorian03",
+            ["n_mandalorian"],
+        )
+        == "n_mandalorian"
+    )
+    assert (
+        picker.resolve_model_variant_source_resref(
+            "n_mandalorian03",
+            ["n_mandalorian03", "n_mandalorian"],
+        )
+        == "n_mandalorian03"
+    )
+
+
+def test_t1201_variant_option_preserves_target_and_loads_base_resref():
+    result = picker.list_skeleton_templates(
+        game="k1",
+        part="body",
+        include_canonical=False,
+        include_bundled=False,
+        game_models=[
+            {
+                "resref": "n_mandalorian03",
+                "source_resref": "n_mandalorian",
+                "source": "installation",
+                "node_count": 70,
+                "supermodel": "S_Female02",
+            },
+        ],
+    )
+
+    assert result.ok is True
+    opt = result.options[0]
+    assert opt.resref == "n_mandalorian03"
+    assert opt.source_resref == "n_mandalorian"
+    assert "n_mandalorian03" in picker.option_summary(opt)
+    assert "loads n_mandalorian" in picker.option_summary(opt)
+    assert any("Loads base MDL 'n_mandalorian'" in warning for warning in opt.warnings)
+
+
 def test_t1201_game_rows_warn_when_metadata_missing():
     result = picker.list_skeleton_templates(
         game="k1",

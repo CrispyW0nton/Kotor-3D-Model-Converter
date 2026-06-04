@@ -1848,9 +1848,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         game = str(self._option_field(option, "game", "") or
                    getattr(self.scene, "game_version", "K1"))
         part = str(self._option_field(option, "part", "body") or "body")
-        resref = str(self._option_field(option, "resref", "") or
-                     self._option_field(option, "source_resref", "") or
-                     self._option_field(option, "name", "") or "")
+        requested_resref = str(self._option_field(option, "resref", "") or
+                               self._option_field(option, "name", "") or "")
+        source_resref = str(self._option_field(option, "source_resref", "") or "")
+        resref = str(source_resref or requested_resref)
         path = str(self._option_field(option, "path", "") or "")
 
         if source == "bundled":
@@ -1878,6 +1879,28 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return None
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
+        source_resref = resref
+        warnings: list[str] = []
+        try:
+            try:
+                from core.animation_retargeting import skeleton_template_picker as _picker
+            except ImportError:                              # pragma: no cover
+                from src.core.animation_retargeting import skeleton_template_picker as _picker  # type: ignore
+            installed = [
+                str(row.get("resref") or "").strip().lower()
+                for row in self._installed_skeleton_template_rows(str(game or "K1"))
+            ]
+            source_resref = _picker.resolve_model_variant_source_resref(
+                resref,
+                installed,
+            )
+            if source_resref != resref:
+                warnings.append(
+                    f"'{resref}' is treated as an appearance/texture variant; "
+                    f"loading base MDL '{source_resref}' for the KOTOR node DAG."
+                )
+        except Exception:
+            log.debug("Could not resolve typed skeleton variant", exc_info=True)
         option = {
             "key": f"game:{str(game).lower()}:{resref}:typed",
             "source": "installation",
@@ -1885,10 +1908,19 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             "part": "body",
             "name": resref,
             "resref": resref,
-            "source_resref": resref,
-            "path": f"installation:{resref}.mdl",
+            "source_resref": source_resref,
+            "path": f"installation:{source_resref}.mdl",
             "description": "Typed KOTOR model resref from the configured installation.",
-            "warnings": [],
+            "warnings": warnings,
+            "metadata": {
+                "requested_resref": resref,
+                "source_resref": source_resref,
+                "variant_resolution": (
+                    "npc_numbered_variant_base"
+                    if source_resref != resref else
+                    "exact"
+                ),
+            },
         }
         self._skeleton_template_options_by_key[str(option["key"])] = option
         if not any(
@@ -2032,6 +2064,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 )
             return
         self._selected_skeleton_template_model = template_model
+        requested_resref = str(self._option_field(option, "resref", "") or "")
+        source_resref = str(self._option_field(option, "source_resref", "") or requested_resref)
+        if requested_resref:
+            setattr(template_model, "_gr_requested_resref", requested_resref)
+            setattr(template_model, "_gr_target_resref", requested_resref)
+        if source_resref and source_resref != requested_resref:
+            setattr(template_model, "_gr_source_resref", source_resref)
+            setattr(template_model, "_gr_variant_source_resref", source_resref)
+            setattr(template_model, "_gr_variant_resolution", "npc_numbered_variant_base")
 
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_external_skeleton"):
