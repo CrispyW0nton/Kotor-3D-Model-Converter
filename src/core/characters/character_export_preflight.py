@@ -538,11 +538,9 @@ def _socket_category_evidence_details(
         node.name for node in snapshot.nodes
         if node.socket_category == category
     )
-    refs = _engine_string_refs_for_names(snapshot.game, expected_nodes)
     return {
         "expected_native_socket_nodes": list(expected_nodes),
-        "engine_string_evidence_status": KOTOR_ENGINE_SOCKET_STRING_EVIDENCE_STATUS,
-        "engine_string_refs": refs,
+        **_socket_engine_evidence_details(snapshot.game, expected_nodes),
     }
 
 
@@ -552,11 +550,36 @@ def _native_socket_evidence_details(
 ) -> dict[str, Any]:
     if not node.socket_category:
         return {}
-    refs = _engine_string_refs_for_names(snapshot.game, (node.name,))
     return {
         "socket_category": node.socket_category,
+        **_socket_engine_evidence_details(snapshot.game, (node.name,)),
+    }
+
+
+def _socket_engine_evidence_details(game: str, names: tuple[str, ...]) -> dict[str, Any]:
+    refs = _engine_string_refs_for_names(game, names)
+    engine_verified = tuple(
+        str(entry.get("string", "") or "")
+        for entry in refs
+        if str(entry.get("string", "") or "")
+    )
+    pending = tuple(name for name in names if name not in set(engine_verified))
+    if engine_verified and pending:
+        tier = "mixed_engine_string_refs_and_fixture_only"
+    elif engine_verified:
+        tier = "engine_string_ref_verified"
+    elif names:
+        tier = "native_fixture_only_pending_engine_string_ref"
+    else:
+        tier = "no_native_socket_fixture_nodes"
+    return {
         "engine_string_evidence_status": KOTOR_ENGINE_SOCKET_STRING_EVIDENCE_STATUS,
         "engine_string_refs": refs,
+        "engine_verified_socket_nodes": list(engine_verified),
+        "pending_engine_string_ref_nodes": list(pending),
+        "engine_evidence_tier": tier,
+        "native_fixture_evidence_status": CHARACTER_EXPORT_EVIDENCE["status"],
+        "findings_doc": CHARACTER_EXPORT_EVIDENCE["findings_doc"],
     }
 
 

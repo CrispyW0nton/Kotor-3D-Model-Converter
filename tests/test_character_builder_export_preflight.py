@@ -277,7 +277,32 @@ def test_character_export_preflight_blocks_missing_required_socket() -> None:
     assert issue.details["engine_string_evidence_status"] == "selected_hook_string_refs_verified_parser_pending"
     assert issue.details["engine_string_refs"][0]["string"] == "lhand"
     assert "SwitchWeaponEvent@00610f40" in issue.details["engine_string_refs"][0]["representative_refs"]
+    assert issue.details["engine_evidence_tier"] == "engine_string_ref_verified"
+    assert issue.details["engine_verified_socket_nodes"] == ["lhand"]
+    assert issue.details["pending_engine_string_ref_nodes"] == []
     assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_marks_fixture_only_socket_evidence_pending() -> None:
+    result = _rigged_character()
+    lightsaber_hook = result["model"].find_node("LightsaberHook")
+    assert lightsaber_hook is not None
+    assert lightsaber_hook.parent is not None
+    lightsaber_hook.parent.children.remove(lightsaber_hook)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+    )
+
+    issue = _issue_by_code(preflight, "character.export.recommended_socket_missing")
+    assert issue.details["category"] == "lightsaber"
+    assert issue.details["expected_native_socket_nodes"] == ["LightsaberHook"]
+    assert issue.details["engine_string_refs"] == []
+    assert issue.details["engine_verified_socket_nodes"] == []
+    assert issue.details["pending_engine_string_ref_nodes"] == ["LightsaberHook"]
+    assert issue.details["engine_evidence_tier"] == "native_fixture_only_pending_engine_string_ref"
+    assert issue.details["findings_doc"] == "docs/ghidra_findings.md"
 
 
 def test_character_export_preflight_detects_exact_node_case_changes() -> None:
@@ -297,6 +322,8 @@ def test_character_export_preflight_detects_exact_node_case_changes() -> None:
     assert issue.details["socket_category"] == "right_hand"
     assert issue.details["engine_string_refs"][0]["string"] == "rhand"
     assert "SwitchWeaponEvent@00610f40" in issue.details["engine_string_refs"][0]["representative_refs"]
+    assert issue.details["engine_evidence_tier"] == "engine_string_ref_verified"
+    assert issue.details["pending_engine_string_ref_nodes"] == []
     assert preflight.report.has_blocking is True
 
 
