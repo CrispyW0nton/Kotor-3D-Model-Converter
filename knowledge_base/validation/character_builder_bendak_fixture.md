@@ -55,8 +55,16 @@ MCP checks on 2026-06-04 confirmed:
 Headless workflow proof on 2026-06-04 confirmed:
 
 - `Bendak.fbx` loads as the imported custom mesh payload.
+- The production Blender FBX mesh importer now preserves Bendak's imported
+  armature as 65 temporary non-rendering guide joints. These joints are
+  available only for Auto-Fit/orientation evidence; they are not final KOTOR
+  DAG authority.
 - K1 and K2 `n_mandalorian` load as selected native KOTOR base skeletons.
-- Auto-fit reports `Fit to n_mandalorian (0.331x)`.
+- Auto-fit reports `Fit to n_mandalorian (0.208x)` with
+  `fit_policy=bone_landmark_basis`,
+  `scale_basis=paired_skeleton_landmark_height`, and imported-skeleton source
+  landmarks `Pelvis`, `Head`, `L_Clavicle`, `R_Clavicle`, `L_Foot`, and
+  `R_Foot`.
 - `apply_template_rig` produces a `native_template_final` candidate with
   one skinned Bendak payload mesh, 55 KOTOR bone slots, and inherited
   `S_Female02` motion source.
@@ -131,6 +139,12 @@ Headless workflow proof on 2026-06-04 confirmed:
   This is the current proof that orientation and scale were driven by the
   imported rig's anatomy before the mesh payload was attached to the native
   KOTOR node hierarchy.
+- The FBX mesh importer now feeds that evidence directly by extracting armature
+  rest-pose bone positions from Blender and attaching them as temporary
+  `imported_skeleton` guide nodes. If an FBX has an armature, Character Builder
+  should prefer those guide joints over render mesh names or render bounds for
+  automatic orientation and scale. Mesh-only imports still remain possible, but
+  their fit evidence must stay review-needed rather than game-ready.
 - Export preflight now warns when native-template candidates lack recorded
   Auto-Fit landmark source provenance or when any source fit landmark came
   from the mesh payload instead of the imported skeleton/armature. These

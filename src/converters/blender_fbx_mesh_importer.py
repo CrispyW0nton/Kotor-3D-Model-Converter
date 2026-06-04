@@ -116,10 +116,27 @@ def model_from_blender_fbx_mesh_payload(
     )
     root = ModelNode(name=model.name, flags=int(NodeFlags.HEADER))
     model.root_node = root
+    armature_objects = list(payload.get("armature_objects") or [])
+    armature_bones = list(payload.get("armature_bones") or [])
+    armature_bone_count = len(armature_bones)
+    if not armature_bone_count:
+        armature_bone_count = sum(
+            len(list(armature.get("bones") or []))
+            for armature in armature_objects
+            if isinstance(armature, dict)
+        )
+
     setattr(model, "_gr_blender_fbx_mesh_preview", True)
     setattr(model, "_gr_fbx_mesh_count", len(meshes))
     setattr(model, "_gr_fbx_armatures", list(payload.get("armatures") or []))
+    setattr(model, "_gr_fbx_armature_bone_count", armature_bone_count)
     setattr(model, "_gr_fbx_actions", list(payload.get("actions") or []))
+
+    _attach_imported_armature_guides(
+        root,
+        armature_objects,
+        armature_bones,
+    )
 
     for index, mesh in enumerate(meshes):
         is_skin = bool(mesh.get("is_skin") and mesh.get("bone_map") and mesh.get("skin_data"))
@@ -155,6 +172,124 @@ def model_from_blender_fbx_mesh_payload(
     setattr(model, "_gr_bounds_prepared", True)
     setattr(model, "_gr_render_bounds", (model.bb_min, model.bb_max))
     return model
+
+
+def _attach_imported_armature_guides(
+    root: ModelNode,
+    armature_objects: list[Any],
+    flat_bones: list[Any],
+) -> None:
+    """Attach imported FBX rest-pose bones as non-rendering fit guides.
+
+    Character Builder uses these temporary nodes to orient and scale the
+    imported payload. They are deliberately not export authority; the native
+    KOTOR skeleton is cloned later and these helpers are stripped.
+    """
+
+    armatures = list(armature_objects or [])
+    if not armatures and flat_bones:
+        grouped: dict[str, list[Any]] = {}
+        for bone in flat_bones:
+            if not isinstance(bone, dict):
+                continue
+            grouped.setdefault(str(bone.get("armature") or "Armature"), []).append(bone)
+        armatures = [
+            {"name": name, "bones": bones}
+            for name, bones in grouped.items()
+        ]
+
+    for armature_index, armature in enumerate(armatures):
+        if not isinstance(armature, dict):
+            continue
+        armature_name = str(armature.get("name") or f"Armature_{armature_index}")
+        armature_node = ModelNode(
+            name=armature_name,
+            flags=int(NodeFlags.HEADER),
+            parent=root,
+        )
+        armature_node.render = False
+        armature_node._imported = True
+        armature_node._gr_imported_armature = True
+        root.children.append(armature_node)
+
+        bone_nodes: dict[str, ModelNode] = {}
+        pending = [
+            bone for bone in list(armature.get("bones") or [])
+            if isinstance(bone, dict)
+        ]
+        guard = 0
+        while pending and guard < len(pending) + 1024:
+            guard += 1
+            progress = False
+            for bone in list(pending):
+                name = str(bone.get("name") or "").strip()
+                if not name:
+                    pending.remove(bone)
+                    progress = True
+                    continue
+                parent_name = str(bone.get("parent") or "").strip()
+                if parent_name and parent_name not in bone_nodes:
+                    continue
+                parent = bone_nodes.get(parent_name) if parent_name else armature_node
+                node = ModelNode(
+                    name=name,
+                    flags=int(NodeFlags.HEADER),
+                    parent=parent,
+                )
+                node.render = False
+                node._imported = True
+                node._gr_imported_armature_joint = True
+                node._gr_imported_armature_name = armature_name
+                world = _optional_triple(bone.get("world_position"))
+                if world is None:
+                    world = _optional_triple(bone.get("head_world_position"))
+                if world is not None:
+                    node.external_world_position = world
+                head = _optional_triple(bone.get("head_world_position"))
+                if head is not None:
+                    node._gr_imported_bone_head_world = head
+                tail = _optional_triple(bone.get("tail_world_position"))
+                if tail is not None:
+                    node._gr_imported_bone_tail_world = tail
+                node._gr_imported_bone_use_deform = bool(bone.get("use_deform", True))
+                parent.children.append(node)
+                bone_nodes[name] = node
+                pending.remove(bone)
+                progress = True
+            if not progress:
+                for bone in list(pending):
+                    name = str(bone.get("name") or "").strip()
+                    if not name:
+                        pending.remove(bone)
+                        continue
+                    node = ModelNode(
+                        name=name,
+                        flags=int(NodeFlags.HEADER),
+                        parent=armature_node,
+                    )
+                    node.render = False
+                    node._imported = True
+                    node._gr_imported_armature_joint = True
+                    node._gr_imported_armature_name = armature_name
+                    world = _optional_triple(bone.get("world_position"))
+                    if world is not None:
+                        node.external_world_position = world
+                    armature_node.children.append(node)
+                    bone_nodes[name] = node
+                    pending.remove(bone)
+                break
+
+
+def _optional_triple(values: Any) -> tuple[float, float, float] | None:
+    if values is None:
+        return None
+    try:
+        raw = list(values)
+        if len(raw) < 3:
+            return None
+        return (float(raw[0]), float(raw[1]), float(raw[2]))
+    except Exception:
+        return None
 
 
 def _output_json_path(source: Path) -> Path:
