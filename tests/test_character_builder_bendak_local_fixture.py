@@ -77,16 +77,20 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
         "Removed" in warning and "imported armature/helper" in warning
         for warning in result.apply_result.get("warnings", [])
     )
-    source_landmark_sources = (
-        result.apply_result.get("model").metadata.get("kotor_fit_report", {})
-        .get("source_frame", {})
-        .get("landmark_sources", {})
-    )
+    fit_report = result.apply_result.get("model").metadata.get("kotor_fit_report", {})
+    source_frame = fit_report.get("source_frame", {})
+    target_frame = fit_report.get("target_frame", {})
+    source_landmark_sources = source_frame.get("landmark_sources", {})
     assert source_landmark_sources
     assert set(source_landmark_sources.values()) == {"imported_skeleton"}
+    assert source_frame.get("landmarks", {}).get("left_toe") == "L_Foot_end"
+    assert source_frame.get("landmarks", {}).get("right_toe") == "R_Foot_end"
+    assert target_frame.get("landmarks", {}).get("left_toe") == "lfootT_g"
+    assert target_frame.get("landmarks", {}).get("right_toe") == "rfootT_g"
+    assert source_frame.get("toe_forward_alignment") > 0.95
+    assert target_frame.get("toe_forward_alignment") > 0.90
     imported_armature = (
-        result.apply_result.get("model").metadata.get("kotor_fit_report", {})
-        .get("source_imported_armature", {})
+        fit_report.get("source_imported_armature", {})
     )
     assert imported_armature["source"] == "imported_fbx_armature"
     assert imported_armature["guide_joint_count"] == 65

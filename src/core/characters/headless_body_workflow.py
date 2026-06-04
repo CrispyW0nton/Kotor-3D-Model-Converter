@@ -177,11 +177,17 @@ def _bounds_as_lists(
 def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[str, Any]]:
     if frame is None:
         return None
+    toe_forward = _fit_frame_toe_forward(frame)
     return {
         "origin": _vec_as_list(frame.origin),
         "right": _vec_as_list(frame.right),
         "forward": _vec_as_list(frame.forward),
         "up": _vec_as_list(frame.up),
+        "toe_forward": _vec_as_list(toe_forward),
+        "toe_forward_alignment": (
+            float(_vec_dot(frame.forward, toe_forward))
+            if toe_forward is not None else None
+        ),
         "height": float(frame.height),
         "confidence": float(frame.confidence),
         "landmarks": dict(frame.landmarks),
@@ -191,6 +197,30 @@ def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[
             for role, position in (frame.landmark_positions or {}).items()
         },
     }
+
+
+def _fit_frame_toe_forward(frame: Optional[_HumanoidFitFrame]) -> Optional[Vec3]:
+    if frame is None:
+        return None
+    positions = frame.landmark_positions or {}
+    left_foot = positions.get("left_foot")
+    right_foot = positions.get("right_foot")
+    left_toe = positions.get("left_toe")
+    right_toe = positions.get("right_toe")
+    if (
+        left_foot is None
+        or right_foot is None
+        or left_toe is None
+        or right_toe is None
+    ):
+        return None
+    foot_center = _average_points([left_foot, right_foot])
+    toe_center = _average_points([left_toe, right_toe])
+    if foot_center is None or toe_center is None:
+        return None
+    raw = _vec_sub(toe_center, foot_center)
+    projected = _vec_sub(raw, _vec_scale(frame.up, _vec_dot(raw, frame.up)))
+    return _vec_normalize(projected)
 
 
 def _imported_armature_fit_evidence(model: Any) -> Dict[str, Any]:
@@ -836,8 +866,18 @@ _RIGHT_SIDE_ALIASES = (
     ("rthigh_g", "rthighg", "rthigh", "rightupleg", "rightleg", "thighr"),
     ("rfoot_g", "rfootg", "rfoot", "rfoot_t_g", "rfoottg", "rightfoot", "righttoe", "toer"),
 )
-_LEFT_FOOT_ALIASES = ("lfoot_g", "lfootg", "lfoot", "lfoot_t_g", "lfoottg", "leftfoot", "lefttoe")
-_RIGHT_FOOT_ALIASES = ("rfoot_g", "rfootg", "rfoot", "rfoot_t_g", "rfoottg", "rightfoot", "righttoe")
+_LEFT_FOOT_ALIASES = ("lfoot_g", "lfootg", "lfoot", "leftfoot")
+_RIGHT_FOOT_ALIASES = ("rfoot_g", "rfootg", "rfoot", "rightfoot")
+_LEFT_TOE_ALIASES = (
+    "lfoot_t_g", "lfoottg", "lfoot_t", "lfoott",
+    "lefttoebase", "lefttoe", "ltoe", "toel", "ball_l", "balll",
+    "lfoot_end", "lfootend", "leftfootend",
+)
+_RIGHT_TOE_ALIASES = (
+    "rfoot_t_g", "rfoottg", "rfoot_t", "rfoott",
+    "righttoebase", "righttoe", "rtoe", "toer", "ball_r", "ballr",
+    "rfoot_end", "rfootend", "rightfootend",
+)
 
 
 def _clean_landmark_name(name: str) -> str:
@@ -1085,6 +1125,8 @@ def _infer_humanoid_fit_frame(
     head = _find_landmark(positions, _HEAD_ALIASES)
     left_foot = _find_landmark(positions, _LEFT_FOOT_ALIASES)
     right_foot = _find_landmark(positions, _RIGHT_FOOT_ALIASES)
+    left_toe = _find_landmark(positions, _LEFT_TOE_ALIASES)
+    right_toe = _find_landmark(positions, _RIGHT_TOE_ALIASES)
 
     if side_pair is None or head is None:
         return None
@@ -1137,6 +1179,10 @@ def _infer_humanoid_fit_frame(
         landmarks["left_foot"] = left_foot[0]
     if right_foot is not None:
         landmarks["right_foot"] = right_foot[0]
+    if left_toe is not None:
+        landmarks["left_toe"] = left_toe[0]
+    if right_toe is not None:
+        landmarks["right_toe"] = right_toe[0]
     landmark_sources = {
         "left": left[2],
         "right": right[2],
@@ -1148,6 +1194,10 @@ def _infer_humanoid_fit_frame(
         landmark_sources["left_foot"] = left_foot[2]
     if right_foot is not None:
         landmark_sources["right_foot"] = right_foot[2]
+    if left_toe is not None:
+        landmark_sources["left_toe"] = left_toe[2]
+    if right_toe is not None:
+        landmark_sources["right_toe"] = right_toe[2]
     landmark_positions = {
         "left": left[1],
         "right": right[1],
@@ -1159,14 +1209,22 @@ def _infer_humanoid_fit_frame(
         landmark_positions["left_foot"] = left_foot[1]
     if right_foot is not None:
         landmark_positions["right_foot"] = right_foot[1]
+    if left_toe is not None:
+        landmark_positions["left_toe"] = left_toe[1]
+    if right_toe is not None:
+        landmark_positions["right_toe"] = right_toe[1]
     confidence = 0.65
     confidence += 0.1 if pelvis is not None else 0.0
     confidence += 0.1 if foot_center is not None else 0.0
+    confidence += 0.05 if left_toe is not None and right_toe is not None else 0.0
     confidence += 0.1 if side_kind == "shoulder" else 0.0
     if prefer_skeleton_landmarks:
         core_sources = {
             landmark_sources.get(role, "")
-            for role in ("left", "right", "head", "pelvis", "left_foot", "right_foot")
+            for role in (
+                "left", "right", "head", "pelvis",
+                "left_foot", "right_foot", "left_toe", "right_toe",
+            )
         }
         if any(source in {"imported_skeleton", "skeleton_node"} for source in core_sources):
             confidence += 0.05
@@ -1294,6 +1352,16 @@ def inspect_external_model_fit(
         warnings.append(
             f"Imported mesh landmark confidence is low ({source_frame.confidence:.2f})."
         )
+    if source_frame is not None:
+        source_toe_forward = _fit_frame_toe_forward(source_frame)
+        if source_toe_forward is not None:
+            source_toe_alignment = _vec_dot(source_frame.forward, source_toe_forward)
+            if source_toe_alignment < 0.5:
+                warnings.append(
+                    "Imported skeleton toe direction disagrees with the inferred "
+                    "facing axis; review the source mesh orientation before building "
+                    "the native KOTOR skeleton."
+                )
     if reference_model is not None and target_frame is None:
         warnings.append(
             "Could not detect a complete humanoid landmark frame on the selected KOTOR base; "
@@ -1303,6 +1371,16 @@ def inspect_external_model_fit(
         warnings.append(
             f"KOTOR base landmark confidence is low ({target_frame.confidence:.2f})."
         )
+    if target_frame is not None:
+        target_toe_forward = _fit_frame_toe_forward(target_frame)
+        if target_toe_forward is not None:
+            target_toe_alignment = _vec_dot(target_frame.forward, target_toe_forward)
+            if target_toe_alignment < 0.5:
+                warnings.append(
+                    "Selected KOTOR base toe direction disagrees with the inferred "
+                    "facing axis; verify the base skeleton before using it as the "
+                    "native rig authority."
+                )
 
     if manual_source_frame is not None and manual_target_frame is not None:
         target = float(target_height or reference_height or manual_target_frame.height)

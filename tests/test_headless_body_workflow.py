@@ -3637,6 +3637,84 @@ def test_external_fit_report_scales_rigged_payload_from_skeleton_not_render_boun
     assert report["reference_bounds"]["max"][2] == pytest.approx(3.2)
 
 
+def test_external_fit_report_records_imported_foot_end_guides_for_facing():
+    root = _fit_node("external_body")
+    mesh = _fit_node(
+        "Bendak",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [
+        (-1.0, -0.2, 0.0),
+        (1.0, 0.2, 0.0),
+        (0.0, 0.0, 10.0),
+    ]
+    mesh.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 5.2)),
+        ("Head", (0.0, 0.0, 10.0)),
+        ("LeftShoulder", (-1.0, 0.0, 8.0)),
+        ("RightShoulder", (1.0, 0.0, 8.0)),
+        ("L_Foot", (-0.4, 0.0, 0.0)),
+        ("R_Foot", (0.4, 0.0, 0.0)),
+        ("L_Foot_end", (-0.4, 1.0, 0.0)),
+        ("R_Foot_end", (0.4, 1.0, 0.0)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    target_root = _fit_node("n_mandalorian")
+    for name, pos in [
+        ("pelvis_g", (0.0, 0.0, 0.8)),
+        ("head_g", (0.0, 0.0, 1.6)),
+        ("lcollar_g", (-0.4, 0.0, 1.25)),
+        ("rcollar_g", (0.4, 0.0, 1.25)),
+        ("lfoot_g", (-0.2, 0.0, 0.0)),
+        ("rfoot_g", (0.2, 0.0, 0.0)),
+        ("lfootT_g", (-0.2, 0.2, 0.0)),
+        ("rfootT_g", (0.2, 0.2, 0.0)),
+    ]:
+        _fit_node(name, position=pos, parent=target_root)
+    target_mesh = _fit_node(
+        "n_mandalorian_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=target_root,
+    )
+    target_mesh.vertices = [(-0.4, 0.0, 0.0), (0.4, 0.0, 0.0), (0.0, 0.0, 1.6)]
+    target_mesh.faces = [(0, 1, 2)]
+
+    report = wf.inspect_external_model_fit(
+        md.KotorModel(name="bendak_payload", root_node=root),
+        game_version="K1",
+        reference_model=md.KotorModel(name="n_mandalorian", root_node=target_root),
+        reference_label="n_mandalorian",
+    )
+
+    alignment = report["fit_transform"]["landmark_alignment"]
+    assert report["source_frame"]["landmarks"]["left_foot"] == "L_Foot"
+    assert report["source_frame"]["landmarks"]["left_toe"] == "L_Foot_end"
+    assert report["target_frame"]["landmarks"]["left_toe"] == "lfootT_g"
+    assert report["source_frame"]["toe_forward_alignment"] > 0.99
+    assert report["target_frame"]["toe_forward_alignment"] > 0.99
+    assert alignment["pair_count"] == 6
+    assert set(alignment["paired_roles"]) == {
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+    }
+    assert any(
+        item["role"] == "left_toe"
+        and item["name"] == "L_Foot_end"
+        and item["source"] == "imported_skeleton"
+        for item in report["visual_overlay"]["source"]["landmarks"]
+    )
+
+
 def test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias():
     source = _fit_humanoid_model(
         "rootdummy",
