@@ -543,13 +543,16 @@ def character_builder_evidence_gates(
         "warning_issue_codes": material_codes["warning"],
     }
 
+    engine = _engine_evidence_gate()
+
     return {
         "schema": {
             "name": "ghostrigger.character_builder_evidence_gates.v1",
             "meaning": (
-                "Fit, bind, weight, animation, and material readiness are separate "
-                "Character Builder proof gates. A character can pass one gate "
-                "while another remains fallback-quality, review-needed, or blocked."
+                "Fit, bind, weight, animation, material readiness, and engine "
+                "reverse-engineering evidence are separate Character Builder proof "
+                "gates. A character can pass one gate while another remains "
+                "fallback-quality, review-needed, partial, or blocked."
             ),
         },
         "fit": fit,
@@ -557,11 +560,56 @@ def character_builder_evidence_gates(
         "weight": weight,
         "animation": animation,
         "material": material,
+        "engine": engine,
     }
 
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _engine_evidence_gate() -> dict[str, Any]:
+    evidence = CHARACTER_EXPORT_EVIDENCE
+    pending = [
+        str(item or "")
+        for item in list(evidence.get("pending_ghidra") or [])
+        if str(item or "").strip()
+    ]
+    verified_sources = [
+        str(item or "")
+        for item in list(evidence.get("verified_sources") or [])
+        if str(item or "").strip()
+    ]
+    native_contract = [
+        str(item or "")
+        for item in list(evidence.get("verified_native_contract") or [])
+        if str(item or "").strip()
+    ]
+    string_refs = list(evidence.get("engine_string_refs") or [])
+    function_evidence = list(evidence.get("function_disassembly_evidence") or [])
+    stage = "partial_reverse_engineering" if pending else "passed"
+    return {
+        "stage": stage,
+        "findings_doc": str(evidence.get("findings_doc") or ""),
+        "status": str(evidence.get("status") or ""),
+        "engine_string_evidence_status": str(
+            evidence.get("engine_string_evidence_status") or ""
+        ),
+        "verified_fixture": str(evidence.get("verified_fixture") or ""),
+        "verified_sources": verified_sources,
+        "verified_source_count": len(verified_sources),
+        "verified_native_contract": native_contract,
+        "engine_string_ref_count": len(string_refs),
+        "function_disassembly_evidence_count": len(function_evidence),
+        "pending_ghidra": pending,
+        "pending_ghidra_count": len(pending),
+        "blocking_issue_codes": [],
+        "warning_issue_codes": (
+            ["character.export.engine_reverse_engineering_pending"]
+            if pending else
+            []
+        ),
+    }
 
 
 def _fit_landmark_source_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
@@ -845,13 +893,13 @@ class CharacterBuilderValidationReport:
         for key, value in dict(payload.get("outputs") or {}).items():
             lines.append(f"- {key}: {value}")
 
+        evidence_gates = dict(payload.get("character_builder_evidence_gates") or {})
         workflow = dict(payload.get("metadata", {}).get("character_builder_workflow") or {})
         if workflow:
             rig_state = dict(workflow.get("rig_state") or {})
             fit_report = dict(workflow.get("fit_report") or {})
             fit_transform = dict(fit_report.get("fit_transform") or {})
             native_snapshot = dict(workflow.get("native_snapshot") or {})
-            evidence_gates = dict(payload.get("character_builder_evidence_gates") or {})
             lines.extend(["", "Character Builder workflow evidence:"])
             lines.append(
                 f"- Final DAG source: {workflow.get('final_dag_source')}"
@@ -883,7 +931,8 @@ class CharacterBuilderValidationReport:
                     f"bind={_evidence_gate_stage(evidence_gates, 'bind')}, "
                     f"weight={_evidence_gate_stage(evidence_gates, 'weight')}, "
                     f"animation={_evidence_gate_stage(evidence_gates, 'animation')}, "
-                    f"material={_evidence_gate_stage(evidence_gates, 'material')}"
+                    f"material={_evidence_gate_stage(evidence_gates, 'material')}, "
+                    f"engine={_evidence_gate_stage(evidence_gates, 'engine')}"
                 )
                 fit_gate = dict(evidence_gates.get("fit") or {})
                 source_domain = str(fit_gate.get("source_landmark_domain") or "")
@@ -898,6 +947,13 @@ class CharacterBuilderValidationReport:
                         f"{source_domain}"
                         + (f" ({count_text})" if count_text else "")
                     )
+                engine_gate = dict(evidence_gates.get("engine") or {})
+                if engine_gate:
+                    lines.append(
+                        "- Engine evidence: "
+                        f"{engine_gate.get('status')} "
+                        f"(pending Ghidra: {engine_gate.get('pending_ghidra_count')})"
+                    )
             animation_library = dict(workflow.get("animation_library") or {})
             if animation_library:
                 lines.append(
@@ -905,6 +961,19 @@ class CharacterBuilderValidationReport:
                     f"{animation_library.get('available_count', 0)} clip(s), "
                     f"source={animation_library.get('motion_source')}, "
                     f"supermodel={animation_library.get('effective_supermodel')}"
+                )
+        elif evidence_gates:
+            lines.extend(["", "Character Builder evidence gates:"])
+            lines.append(
+                "- Evidence gates: "
+                f"engine={_evidence_gate_stage(evidence_gates, 'engine')}"
+            )
+            engine_gate = dict(evidence_gates.get("engine") or {})
+            if engine_gate:
+                lines.append(
+                    "- Engine evidence: "
+                    f"{engine_gate.get('status')} "
+                    f"(pending Ghidra: {engine_gate.get('pending_ghidra_count')})"
                 )
 
         lines.extend(["", "Issues:"])

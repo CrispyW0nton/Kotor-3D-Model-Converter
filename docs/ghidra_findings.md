@@ -205,6 +205,12 @@ shape as an engine crash condition without deeper MDL/MDX loader evidence.
 
 ## Pending Ghidra Work
 
+Character Builder validation reports expose this section as the `engine`
+evidence gate.  As of 2026-06-04 that gate is
+`partial_reverse_engineering`: exports may still be staged, reload-verified,
+packaged, and manually game-tested, but GhostRigger must not claim the MDL/MDX
+engine contract is fully reverse-engineered until the items below are resolved.
+
 The following items are required before the Character Builder can claim
 engine-complete export hardening:
 

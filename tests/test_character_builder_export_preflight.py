@@ -1525,6 +1525,32 @@ def test_character_builder_validation_report_records_mesh_payload_fit_landmarks(
     assert "Fit landmark sources: mesh_payload_landmarks (mesh_payload=4)" in report.to_text()
 
 
+def test_character_builder_validation_report_records_engine_evidence_gate() -> None:
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(source="test.preflight"),
+    )
+
+    data = report.to_dict()
+
+    engine = data["character_builder_evidence_gates"]["engine"]
+    assert engine["stage"] == "partial_reverse_engineering"
+    assert engine["findings_doc"] == "docs/ghidra_findings.md"
+    assert engine["pending_ghidra_count"] >= 1
+    assert "mdl_loader_function_addresses" in engine["pending_ghidra"]
+    assert engine["warning_issue_codes"] == [
+        "character.export.engine_reverse_engineering_pending"
+    ]
+    assert "engine=partial_reverse_engineering" in report.to_text()
+    assert "Engine evidence: fixture_verified_function_addresses_pending" in report.to_text()
+
+
 def test_character_builder_validation_report_requires_complete_game_test_evidence() -> None:
     report = CharacterBuilderValidationReport(
         status="verified",
@@ -1752,7 +1778,11 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
         text_path.read_text(encoding="utf-8")
     )
     assert "material=needs_review" in text_path.read_text(encoding="utf-8")
+    assert "engine=partial_reverse_engineering" in text_path.read_text(encoding="utf-8")
     assert "Fit landmark sources: skeleton_landmarks (imported_skeleton=6)" in (
+        text_path.read_text(encoding="utf-8")
+    )
+    assert "Engine evidence: fixture_verified_function_addresses_pending" in (
         text_path.read_text(encoding="utf-8")
     )
     payload = json.loads(report_path.read_text(encoding="utf-8"))
@@ -1811,6 +1841,9 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
         "character.export.payload_texture_missing",
         "character.export.payload_uvs_missing",
     ]
+    assert gates["engine"]["stage"] == "partial_reverse_engineering"
+    assert gates["engine"]["pending_ghidra_count"] >= 1
+    assert "mdl_loader_function_addresses" in gates["engine"]["pending_ghidra"]
     assert workflow["rig_state"]["state"] == "native_template_final"
     assert workflow["rig_state"]["native_base_resref"] == "pmbam"
     assert workflow["rig_state"]["native_base_model_name"] == "pmbam"

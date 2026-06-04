@@ -140,6 +140,14 @@ Headless workflow proof on 2026-06-04 confirmed:
   export blockers, but staged reports mark the `material` gate as
   `needs_review` until a modder can prove the custom payload will appear with
   the intended texture mapping in-game.
+- Staged validation reports now also include an `engine` evidence gate derived
+  from `docs/ghidra_findings.md` and `CHARACTER_EXPORT_EVIDENCE`. This gate is
+  currently `partial_reverse_engineering`, not `passed`, because MDL loader
+  functions, skin-weight normalization behavior, complete socket semantics,
+  and selected helper-string refs remain pending Ghidra work. Treat this as an
+  explicit honesty marker: reload verification plus per-game manual testing can
+  prove a candidate was tested, but the engine reverse-engineering ledger is
+  still incomplete.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.
