@@ -432,6 +432,14 @@ def _validate_native_render_replacement_evidence(
                 "replacement": entry.get("replacement"),
             })
             continue
+        fact_mismatches = _replacement_fact_mismatches(entry, native_node)
+        if fact_mismatches:
+            invalid_replacements.append({
+                "reason": "native_fact_mismatch",
+                "path": list(path),
+                "mismatches": fact_mismatches,
+            })
+            continue
         replacement_by_path[path] = entry
 
     if invalid_replacements:
@@ -499,6 +507,45 @@ def _replacement_path(entry: dict[str, Any]) -> tuple[str, ...]:
         except Exception:
             parts = []
     return tuple(part for part in parts if part)
+
+
+def _replacement_fact_mismatches(
+    entry: dict[str, Any],
+    native_node: NativeNodeSnapshot,
+) -> dict[str, dict[str, Any]]:
+    """Return replacement record fields that disagree with the snapshot."""
+
+    expected = {
+        "name": native_node.name,
+        "is_mesh": native_node.is_mesh,
+        "is_skin": native_node.is_skin,
+        "vertex_count": native_node.vertex_count,
+        "face_count": native_node.face_count,
+        "texture": native_node.texture,
+    }
+    actual = {
+        "name": str(entry.get("name") or ""),
+        "is_mesh": bool(entry.get("is_mesh")),
+        "is_skin": bool(entry.get("is_skin")),
+        "vertex_count": _safe_int(entry.get("vertex_count")),
+        "face_count": _safe_int(entry.get("face_count")),
+        "texture": str(entry.get("texture") or ""),
+    }
+    mismatches: dict[str, dict[str, Any]] = {}
+    for key, expected_value in expected.items():
+        if actual.get(key) != expected_value:
+            mismatches[key] = {
+                "expected": expected_value,
+                "actual": actual.get(key),
+            }
+    return mismatches
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except Exception:
+        return None
 
 
 def _validate_resref(model: Any, report: ValidationReport) -> None:

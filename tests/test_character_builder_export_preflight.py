@@ -369,6 +369,38 @@ def test_character_export_preflight_blocks_invalid_render_replacement_evidence()
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_stale_render_replacement_facts() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind["native_base"]["replaced_render_payload_nodes"][0]["vertex_count"] = 99
+    bind["native_base"]["replaced_render_payload_nodes"][0]["name"] = "WrongTorso"
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.invalid_native_render_replacement_evidence",
+    )
+    invalid = issue.details["invalid_replacements"]
+    assert invalid == [
+        {
+            "reason": "native_fact_mismatch",
+            "path": ["PMBAM", "Torso"],
+            "mismatches": {
+                "name": {"expected": "Torso", "actual": "WrongTorso"},
+                "vertex_count": {"expected": 1, "actual": 99},
+            },
+        }
+    ]
+    assert "character.export.missing_native_render_replacement_evidence" in _codes(preflight)
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_missing_required_socket() -> None:
     result = _rigged_character()
     lhand = result["model"].find_node("lhand")
