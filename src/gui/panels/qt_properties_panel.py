@@ -897,12 +897,50 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                     if id(candidate) in node_ids:
                         item.setSelected(True)
                         tree.setCurrentItem(item)
+                        tree.scrollToItem(item, QtWidgets.QAbstractItemView.PositionAtCenter)
                         self.module_browser_tabs.setCurrentIndex(tab)
                         selected_any = True
             self.tabs.setCurrentWidget(self.module_tab)
             return selected_any
         finally:
             self._suppress_mesh_signal = False
+
+    def select_module_mesh_by_label(self, label: str):
+        if not self._module_browser_enabled or self.module_tab is None or self._suppress_mesh_signal:
+            return None
+        needle = str(label or "").strip().lower()
+        if not needle:
+            return None
+        self._suppress_mesh_signal = True
+        try:
+            self.module_mesh_tree.clearSelection()
+            self.module_wall_mesh_tree.clearSelection()
+            self.module_null_mesh_tree.clearSelection()
+            self.module_walkmesh_tree.clearSelection()
+            for tree, items, tab in (
+                (self.module_mesh_tree, self._mesh_items, 0),
+                (self.module_wall_mesh_tree, self._wall_items, 1),
+                (self.module_null_mesh_tree, self._null_mesh_items, 2),
+                (self.module_walkmesh_tree, self._walkmesh_items, 3),
+            ):
+                for item, node in items.items():
+                    labels = {
+                        item.text(0),
+                        self._mesh_label(node),
+                        str(getattr(node, "name", "") or ""),
+                        str(getattr(node, "node_name", "") or ""),
+                    }
+                    if needle not in {candidate.lower() for candidate in labels if candidate}:
+                        continue
+                    item.setSelected(True)
+                    tree.setCurrentItem(item)
+                    tree.scrollToItem(item, QtWidgets.QAbstractItemView.PositionAtCenter)
+                    self.module_browser_tabs.setCurrentIndex(tab)
+                    self.tabs.setCurrentWidget(self.module_tab)
+                    return node
+        finally:
+            self._suppress_mesh_signal = False
+        return None
 
     def select_all_module_meshes(self) -> None:
         if not self._module_browser_enabled:

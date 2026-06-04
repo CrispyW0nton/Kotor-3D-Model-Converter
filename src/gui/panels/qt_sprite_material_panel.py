@@ -33,6 +33,15 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
         "_gr_sprite_alpha_source",
         "_gr_sprite_glow",
     )
+    _CATEGORY_PRESETS = {
+        "hilt": {"mode": "opaque", "cutoff": 0.5, "opacity": 1.0, "decal": False, "alpha_source": "", "glow": 0.0},
+        "fur_hair": {"mode": "cutout", "cutoff": 0.5, "opacity": 1.0, "decal": False, "alpha_source": "", "glow": 0.0},
+        "foliage": {"mode": "cutout", "cutoff": 0.5, "opacity": 1.0, "decal": False, "alpha_source": "", "glow": 0.0},
+        "glass_window": {"mode": "blend", "cutoff": 0.5, "opacity": 0.55, "decal": False, "alpha_source": "", "glow": 0.0},
+        "glow_blade": {"mode": "lighten", "cutoff": 0.5, "opacity": 1.0, "decal": False, "alpha_source": "luminance", "glow": 1.6},
+        "decal": {"mode": "blend", "cutoff": 0.5, "opacity": 1.0, "decal": True, "alpha_source": "", "glow": 0.0},
+        "sprite": {"mode": "cutout", "cutoff": 0.5, "opacity": 1.0, "decal": False, "alpha_source": "", "glow": 0.0},
+    }
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -115,7 +124,7 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
             ("Other Sprite", "sprite"),
         ):
             self.category_combo.addItem(label, value)
-        self.category_combo.currentIndexChanged.connect(lambda _index=0: self._apply_editor())
+        self.category_combo.currentIndexChanged.connect(lambda _index=0: self._apply_editor(apply_category_preset=True))
         form.addRow("Class", self.category_combo)
 
         self.mode_combo = QtWidgets.QComboBox()
@@ -326,7 +335,7 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
         finally:
             self._updating = False
 
-    def _apply_editor(self) -> None:
+    def _apply_editor(self, *, apply_category_preset: bool = False) -> None:
         if self._updating:
             return
         nodes = self.selected_sprites()
@@ -340,6 +349,20 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
         decal = bool(self.decal_check.isChecked())
         alpha_source = "luminance" if self.key_matte_check.isChecked() else ""
         glow = float(self.glow_spin.value())
+        if apply_category_preset:
+            preset = self._CATEGORY_PRESETS.get(category)
+            if preset is None:
+                mode = "auto"
+                alpha_source = ""
+                glow = 0.0
+            else:
+                mode = str(preset["mode"])
+                cutoff = float(preset["cutoff"])
+                opacity = float(preset["opacity"])
+                decal = bool(preset["decal"])
+                alpha_source = str(preset["alpha_source"])
+                glow = float(preset["glow"])
+            self._sync_editor_preset(mode, cutoff, opacity, decal, alpha_source, glow)
         changed = []
         for node in nodes:
             self._remember_original(node)
@@ -401,6 +424,18 @@ class QtSpriteMaterialPanel(QtWidgets.QWidget):
         if changed:
             self.refresh()
             self._emit_changed(changed)
+
+    def _sync_editor_preset(self, mode: str, cutoff: float, opacity: float, decal: bool, alpha_source: str, glow: float) -> None:
+        self._updating = True
+        try:
+            self._set_combo_value(self.mode_combo, mode)
+            self.cutoff_spin.setValue(max(0.0, min(1.0, float(cutoff))))
+            self.opacity_spin.setValue(max(0.0, min(1.0, float(opacity))))
+            self.decal_check.setChecked(bool(decal))
+            self.key_matte_check.setChecked(bool(alpha_source))
+            self.glow_spin.setValue(max(0.0, min(4.0, float(glow))))
+        finally:
+            self._updating = False
 
     def _isolate_selected(self) -> None:
         keep = {id(node) for node in self.selected_sprites()}

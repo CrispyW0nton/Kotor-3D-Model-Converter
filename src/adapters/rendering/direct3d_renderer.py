@@ -10,16 +10,12 @@ from src.core.rendering.renderer_capabilities import RendererCapabilities
 
 
 class Direct3DRenderer(NullDiagnosticRenderer):
-    """Unavailable Direct3D adapter until a safe Qt/native binding is added."""
+    """Retired compatibility stub; Direct3D rendering is provided by WGPU D3D12."""
 
     def __init__(self, backend: RendererBackend = RendererBackend.DIRECT3D_HARDWARE):
         super().__init__()
         self._backend = backend
-        self.name = (
-            "Direct3D WARP Experimental"
-            if backend == RendererBackend.DIRECT3D_WARP
-            else "Direct3D Hardware Experimental"
-        )
+        self.name = "Retired Direct3D placeholder"
         self.backend_id = backend.value
 
     def is_available(self) -> bool:
@@ -28,7 +24,7 @@ class Direct3DRenderer(NullDiagnosticRenderer):
     def _reason(self) -> str:
         if platform.system().lower() != "windows":
             return "Direct3D is only available on Windows"
-        return "No safe Direct3D Qt surface/device binding is implemented yet; use WGPU_D3D12 for DirectX-backed routing"
+        return "Retired renderer placeholder; use Direct3D (WGPU)"
 
     def get_capabilities(self) -> RendererCapabilities:
         return RendererCapabilities(

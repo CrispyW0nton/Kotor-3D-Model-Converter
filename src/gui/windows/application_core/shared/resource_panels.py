@@ -119,8 +119,69 @@ class ResourcePanelsMixin:
             self._show_detachable_panel("2das")
             self.twoda_panel.game_combo.setCurrentText(str(row["game"]))
             self._load_twoda_table(str(row["game"]), str(row["resref"]))
+        elif str(row.get("type", "")).lower() in {"utc", "utp", "utd"} and row.get("resref"):
+            self._open_blueprint_resource_from_ipc(
+                str(row.get("type", "")).lower(),
+                str(row.get("resref", "")),
+                str(row.get("game", "")),
+                str(row.get("source", "")),
+            )
         else:
             self._log(f"No activation handler for {row.get('resref', 'resource')}", "warning")
+
+    def _open_blueprint_resource_from_ipc(
+        self,
+        resource_type: str,
+        resref: str,
+        game: str = "",
+        module_dir: str = "",
+    ) -> None:
+        resource_type = str(resource_type or "").lower().strip()
+        resref = str(resref or "").strip()
+        game = str(game or getattr(self, "_current_game", "") or "K2").upper()
+        if not resref:
+            self._log(f"IPC open_{resource_type}: missing resref", "warning")
+            return
+        try:
+            from src.core.assets import resource_manager as rm
+
+            type_map = {
+                "utc": rm.RES_UTC,
+                "utp": rm.RES_UTP,
+                "utd": rm.RES_UTD,
+            }
+            res_type = type_map.get(resource_type)
+            if res_type is None:
+                self._log(f"IPC open blueprint: unsupported type {resource_type}", "warning")
+                return
+            manager = self._resource_manager or self._get_resource_manager()
+            raw = None
+            if manager is not None:
+                try:
+                    raw = manager.get(resref, res_type, game)
+                except Exception as exc:
+                    self._log(f"IPC open_{resource_type} read warning: {exc}", "warning")
+            open_window = getattr(self, "_open_blueprint_editor_window", None)
+            if callable(open_window):
+                open_window()
+            window = getattr(self, "blueprint_window", None)
+            panel = getattr(window, "panel", None) or getattr(self, "blueprint_panel", None)
+            load_payload = getattr(panel, "load_ipc_resource_payload", None)
+            if callable(load_payload):
+                load_payload(
+                    resource_type=resource_type,
+                    resref=resref,
+                    game=game,
+                    module_dir=module_dir,
+                    raw=raw,
+                )
+            if window is not None:
+                window.show()
+                window.raise_()
+                window.activateWindow()
+            self._log(f"IPC open_{resource_type}: {game}:{resref}", "success")
+        except Exception as exc:
+            self._log(f"IPC open_{resource_type} error: {exc}", "error")
     def _refresh_twoda_panel(self, game: str):
         self.twoda_panel.listbox.clear()
         self.twoda_panel.table.clear()

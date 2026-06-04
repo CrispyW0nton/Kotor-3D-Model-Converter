@@ -304,7 +304,7 @@ class RendererService(QtCore.QObject):
             )
         return RendererCapabilities(
             backend_id=RendererBackend.MODERNGL_GL330.value,
-            name="ModernGL / OpenGL 3.3",
+            name="ModernGL",
             available=True,
             api="opengl",
             supports_scene_meshes=True,

@@ -82,6 +82,7 @@ from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_set
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
 from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
+from src.ipc.server import GhostRiggerIPCServer
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
 from src.core.rendering.hardware_info import collect_hardware_diagnostics
 from src.systems.bas.attachment_alignment import (
@@ -127,8 +128,6 @@ _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
 _WGPU_BACKEND_TYPES = {
     RendererBackend.WGPU_D3D12.value: "D3D12",
-    RendererBackend.WGPU_VULKAN.value: "Vulkan",
-    RendererBackend.WGPU_OPENGL.value: "OpenGL",
     RendererBackend.PYGFX_WGPU.value: "D3D12",
 }
 
@@ -330,6 +329,7 @@ class QtGhostRiggerMainWindow(
         self._resource_manager_dirs: tuple[str, str] = ("", "")
         self._progress_toast: Optional[QtProgressToast] = None
         self._gui_log_handler: Optional[QtLogPanelHandler] = None
+        self._ipc_server: Optional[GhostRiggerIPCServer] = None
         self._pending_gpu_upload_model_id = 0
         self._pending_gpu_upload_total = 0
         self._texture_dir = ""
@@ -378,6 +378,7 @@ class QtGhostRiggerMainWindow(
         self._update_scene_chrome()
         self._configure_theme_watcher()
         self._log("Qt host window ready.", "success")
+        self._start_ipc_server()
         QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
         if not self._preloaded_library.get("detection_attempted"):
@@ -388,6 +389,52 @@ class QtGhostRiggerMainWindow(
         if self._progress_toast is not None and self._progress_toast.isVisible():
             self._progress_toast._reposition()
         self._sync_reserved_top_rows()
+
+    def _start_ipc_server(self) -> None:
+        if self._ipc_server is not None:
+            return
+
+        def load_model_by_resref(game: str, resref: str) -> None:
+            self._load_resource_model_on_ui_thread(str(resref or ""), str(game or "K2"))
+
+        def open_mdl(resref: str, _module_dir: str = "") -> None:
+            game = str(getattr(self, "_current_game", "") or "K2")
+            self._load_resource_model_on_ui_thread(str(resref or ""), game)
+
+        def open_blueprint_resource(resource_type: str):
+            def _open(resref: str, module_dir: str = "") -> None:
+                game = str(getattr(self, "_current_game", "") or "K2")
+                self._open_blueprint_resource_from_ipc(resource_type, str(resref or ""), game, str(module_dir or ""))
+
+            return _open
+
+        def refresh_viewport() -> None:
+            self._refresh_all()
+
+        def show_panel(panel: str) -> None:
+            self._show_workspace_dock(str(panel or ""))
+
+        def select_module_mesh(mesh_name: str) -> None:
+            self._select_module_mesh_by_name_from_ipc(str(mesh_name or ""))
+
+        try:
+            self._ipc_server = GhostRiggerIPCServer(
+                {
+                    "open_utc": open_blueprint_resource("utc"),
+                    "open_utp": open_blueprint_resource("utp"),
+                    "open_utd": open_blueprint_resource("utd"),
+                    "open_mdl": open_mdl,
+                    "load_model_by_resref": load_model_by_resref,
+                    "refresh_viewport": refresh_viewport,
+                    "show_panel": show_panel,
+                    "select_module_mesh": select_module_mesh,
+                }
+            )
+            self._ipc_server.start()
+            self._log("IPC server starting on port 7001.", "info")
+        except Exception as exc:
+            self._ipc_server = None
+            self._log(f"IPC server failed to start: {exc}", "warning")
 
     def _enable_theme_progress_toasts(self) -> None:
         self._suppress_theme_progress_toast = False

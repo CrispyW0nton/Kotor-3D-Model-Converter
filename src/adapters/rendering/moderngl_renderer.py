@@ -10,7 +10,7 @@ from src.core.rendering.renderer_capabilities import MODERNGL_DISPLAY_MODES, Ren
 class ModernGLRenderer(GpuRenderer):
     """Adapter that keeps the existing ModernGL renderer behavior intact."""
 
-    name = "ModernGL / OpenGL 3.3"
+    name = "ModernGL"
     backend_id = RendererBackend.MODERNGL_GL330.value
 
     def is_available(self) -> bool:

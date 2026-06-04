@@ -110,7 +110,7 @@ def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
 
     class FakeViewport:
         def render_state_status_text(self) -> str:
-            return "Renderer: WGPU Direct3D 12 | Display: Textured"
+            return "Renderer: Direct3D (WGPU) | Display: Textured"
 
     class FakeThemeManager:
         def __init__(self):
@@ -145,7 +145,7 @@ def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
         assert dialog.minimumWidth() >= 900
         assert dialog.minimumHeight() >= 650
         assert version is not None and "6.1.0" in version.text()
-        assert renderer is not None and "WGPU Direct3D 12" in renderer.text()
+        assert renderer is not None and "Direct3D (WGPU)" in renderer.text()
         assert theme is not None and "default_matrix" in theme.text()
         assert "#00FF7A" in dialog.styleSheet()
         assert bioware is not None and bioware.property("creditUrl") == "https://www.bioware.com/"
@@ -158,7 +158,7 @@ def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
 
         dialog.copy_details()
         assert "GhostRigger-K1-K2" in app.clipboard().text()
-        assert "Renderer: WGPU Direct3D 12" in app.clipboard().text()
+        assert "Renderer: Direct3D (WGPU)" in app.clipboard().text()
     finally:
         dialog.deleteLater()
         parent.deleteLater()
@@ -405,6 +405,8 @@ def test_packaged_custom_themes_define_spinbox_stepper_tokens() -> None:
         assert required.issubset(theme.colors), theme_id
         stylesheet = QtStylesheetBuilder().build(theme)
         assert "QDoubleSpinBox::up-button" in stylesheet
+        assert "QTreeWidget::item:selected" in stylesheet
+        assert "QTreeWidget::item:selected:!active" in stylesheet
         assert theme.color("spinbox.buttonBorder") in stylesheet
         expected_arrow = "spin_up_light.svg" if theme.mode == "dark" else "spin_up_dark.svg"
         assert expected_arrow in stylesheet
@@ -814,7 +816,7 @@ def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
 
     theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_classic.xml")
     assert theme is not None
-    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer = WgpuRenderer(RendererBackend.WGPU_D3D12)
 
     renderer.set_theme_colors(theme)
 
@@ -833,7 +835,7 @@ def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.renderer_backend import RendererBackend
 
-    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer = WgpuRenderer(RendererBackend.WGPU_D3D12)
 
     renderer.set_native_palette_colors(
         base=(235, 238, 242),
@@ -855,7 +857,7 @@ def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.renderer_backend import RendererBackend
 
-    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer = WgpuRenderer(RendererBackend.WGPU_D3D12)
     renderer.format = "bgra8unorm-srgb"
     background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
 
@@ -902,7 +904,7 @@ def test_viewport_renderer_statistics_lines_include_active_renderer() -> None:
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
     class FakeRenderer:
-        name = "ModernGL / OpenGL 3.3"
+        name = "ModernGL"
         perf = {"tri_count": 1}
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -911,7 +913,7 @@ def test_viewport_renderer_statistics_lines_include_active_renderer() -> None:
         lines = viewport._renderer_statistics_lines(
             FakeRenderer(),
             {
-                "name": "ModernGL / OpenGL 3.3",
+                "name": "ModernGL",
                 "backend": "ModernGL",
                 "gpu": "NVIDIA Test GPU",
                 "triangle_count": 1234,
@@ -926,7 +928,7 @@ def test_viewport_renderer_statistics_lines_include_active_renderer() -> None:
             },
         )
 
-        assert lines[0] == "ModernGL / OpenGL 3.3"
+        assert lines[0] == "ModernGL"
         assert "Frame 16.2 ms" in lines[1]
         assert "Draw 3.5" in lines[1]
         assert "Tris 1,234" in lines[1]
@@ -988,8 +990,8 @@ def test_viewport_emits_persistent_render_state_status() -> None:
         assert "Renderer:" in seen[-1]
         assert "Display: Wireframe" in seen[-1]
 
-        viewport.set_renderer_settings(RendererSettings(backend=RendererBackend.WGPU_VULKAN))
-        assert "Renderer: WGPU Vulkan" in viewport.render_state_status_text()
+        viewport.set_renderer_settings(RendererSettings(backend=RendererBackend.WGPU_D3D12))
+        assert "Renderer: Direct3D (WGPU)" in viewport.render_state_status_text()
     finally:
         viewport.deleteLater()
         app.processEvents()
@@ -1016,7 +1018,7 @@ def test_viewport_renderer_settings_noop_does_not_recreate_wgpu_surface() -> Non
             return self
 
         def get_diagnostics(self):
-            return {"backend_id": self.backend_id, "name": "WGPU Direct3D 12"}
+            return {"backend_id": self.backend_id, "name": "Direct3D (WGPU)"}
 
         def create_surface_widget(self, parent=None):
             self.created_surfaces += 1

@@ -120,6 +120,10 @@ class GhostRiggerIPCServer:
         def _err(action: str, message: str):
             return jsonify({"status": "error", "action": action, "message": message}), 400
 
+        def _payload(body: dict) -> dict:
+            payload = body.get("payload", body)
+            return payload if isinstance(payload, dict) else {}
+
         def _handle(action: str):
             """Generic IPC endpoint handler."""
             try:
@@ -133,8 +137,8 @@ class GhostRiggerIPCServer:
             if cb is not None:
                 try:
                     if action in ("open_utc", "open_utp", "open_utd", "open_mdl"):
-                        # Payload can be top-level OR nested under "payload" key
-                        payload = body.get("payload", body)
+                        # Payload can be top-level OR nested under "payload" key.
+                        payload = _payload(body)
                         resref = payload.get("resref", body.get("resref", ""))
                         module_dir = payload.get("module_dir", body.get("module_dir", ""))
                         # Schedule callback on the main thread when Qt is active.
@@ -225,6 +229,34 @@ class GhostRiggerIPCServer:
             if cb is not None:
                 self._schedule_callback(cb, game, resref)
             return jsonify({"status": "ok", "loading": resref, "game": game})
+
+        @app.route("/api/show_panel", methods=["POST"])
+        def route_show_panel():
+            """Show a GhostRigger dock/panel in the running UI for visual QA."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            panel = str(payload.get("panel", body.get("panel", "")) or "").strip()
+            if not panel:
+                return jsonify({"error": "missing panel"}), 400
+
+            cb = self.callbacks.get("show_panel")
+            if cb is not None:
+                self._schedule_callback(cb, panel)
+            return jsonify({"status": "ok", "showing": panel})
+
+        @app.route("/api/select_module_mesh", methods=["POST"])
+        def route_select_module_mesh():
+            """Select a module mesh by display name in the running viewport/list."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            mesh = str(payload.get("mesh", body.get("mesh", "")) or "").strip()
+            if not mesh:
+                return jsonify({"error": "missing mesh"}), 400
+
+            cb = self.callbacks.get("select_module_mesh")
+            if cb is not None:
+                self._schedule_callback(cb, mesh)
+            return jsonify({"status": "ok", "selecting": mesh})
 
         @app.route("/api/health", methods=["GET"])
         def route_health():

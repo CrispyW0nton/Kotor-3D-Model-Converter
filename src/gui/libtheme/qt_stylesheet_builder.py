@@ -138,6 +138,14 @@ class QtStylesheetBuilder:
             background: {c('tree.background')};
             color: {c('tree.text')};
         }}
+        QTreeWidget::item:selected, QTreeView::item:selected {{
+            background: {c('selection.background')};
+            color: {c('selection.text')};
+        }}
+        QTreeWidget::item:selected:!active, QTreeView::item:selected:!active {{
+            background: {c('selection.background')};
+            color: {c('selection.text')};
+        }}
         QTableWidget, QTableView {{
             gridline-color: {c('table.grid')};
             alternate-background-color: {panel_alt};

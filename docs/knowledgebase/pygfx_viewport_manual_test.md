@@ -3,7 +3,7 @@
 Use this checklist after changing the optional pygfx viewport backend.
 
 1. Launch GhostRigger from the repository root with `python main.py`.
-2. Open Settings and switch the viewport renderer to `pygfx / WGPU`.
+2. Open Settings and switch the viewport renderer to `pygfx (WGPU)`.
 3. Confirm the status/log diagnostics report `pygfx_wgpu`, the WGPU backend preference, and adapter details when available.
 4. Load a model.
 5. Orbit the camera and confirm the scene remains responsive without mesh rebuild diagnostics increasing on camera-only frames.

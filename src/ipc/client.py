@@ -152,6 +152,26 @@ def refresh_gmodular_viewport() -> None:
 #  High-level GhostRigger → GhostScripter calls
 # ─────────────────────────────────────────────────────────────────────────────
 
+def show_ghostrigger_panel(panel: str) -> None:
+    """Ask a running GhostRigger instance to show a named dock/panel."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "show_panel",
+        payload={"panel": panel},
+        on_result=_log_result("show_panel -> GhostRigger"),
+    )
+
+
+def select_ghostrigger_module_mesh(mesh: str) -> None:
+    """Ask a running GhostRigger instance to select a module mesh by label."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "select_module_mesh",
+        payload={"mesh": mesh},
+        on_result=_log_result("select_module_mesh -> GhostRigger"),
+    )
+
+
 def open_script_in_scripter(
     resref: str,
     module_dir: str = "",

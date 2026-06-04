@@ -65,6 +65,7 @@ class _FakeMaterial:
         self.alpha_mode = "auto"
         self.alpha_test = 0.0
         self.thickness = kwargs.get("thickness", 1.0)
+        self.depth_write = True
 
 
 class MeshPhongMaterial(_FakeMaterial):
@@ -238,56 +239,47 @@ def test_pygfx_backend_id_alias_and_label() -> None:
     assert RendererBackend.PYGFX_WGPU.value == "pygfx_wgpu"
     assert normalize_renderer_backend("pygfx") is RendererBackend.PYGFX_WGPU
     assert normalize_renderer_backend("pygfx/wgpu") is RendererBackend.PYGFX_WGPU
-    assert renderer_backend_label(RendererBackend.PYGFX_WGPU) == "pygfx / WGPU"
+    assert renderer_backend_label(RendererBackend.PYGFX_WGPU) == "pygfx (WGPU)"
 
 
-def test_native_backend_id_alias_and_label() -> None:
+def test_legacy_native_aliases_migrate_to_direct3d_wgpu_mode() -> None:
     assert RendererBackend.NATIVE_D3D12.value == "native_d3d12"
-    assert normalize_renderer_backend("native") is RendererBackend.NATIVE_D3D12
-    assert normalize_renderer_backend("native/d3d12") is RendererBackend.NATIVE_D3D12
-    assert normalize_renderer_backend("ghostrigger_native") is RendererBackend.NATIVE_D3D12
-    assert renderer_backend_label(RendererBackend.NATIVE_D3D12) == "GhostRigger Native / D3D12"
+    assert normalize_renderer_backend("native") is RendererBackend.WGPU_D3D12
+    assert normalize_renderer_backend("native/d3d12") is RendererBackend.WGPU_D3D12
+    assert normalize_renderer_backend("ghostrigger_native") is RendererBackend.WGPU_D3D12
+    assert renderer_backend_label(RendererBackend.WGPU_D3D12) == "Direct3D (WGPU)"
 
 
 def test_pygfx_capability_snapshot_includes_optional_backend() -> None:
     by_id = {caps.backend_id: caps for caps in renderer_capabilities_snapshot()}
 
     assert RendererBackend.PYGFX_WGPU.value in by_id
-    assert by_id[RendererBackend.PYGFX_WGPU.value].name == "pygfx / WGPU"
+    assert by_id[RendererBackend.PYGFX_WGPU.value].name == "pygfx (WGPU)"
     assert by_id[RendererBackend.PYGFX_WGPU.value].api == "pygfx/WGPU"
 
 
-def test_native_capability_snapshot_includes_optional_backend() -> None:
+def test_capability_snapshot_excludes_native_placeholder_backend() -> None:
     by_id = {caps.backend_id: caps for caps in renderer_capabilities_snapshot()}
 
-    assert RendererBackend.NATIVE_D3D12.value in by_id
-    assert by_id[RendererBackend.NATIVE_D3D12.value].name == "GhostRigger Native Runtime"
-    assert by_id[RendererBackend.NATIVE_D3D12.value].api == "Native/D3D12"
+    assert RendererBackend.NATIVE_D3D12.value not in by_id
 
 
-def test_pygfx_windows_fallback_order_prefers_pygfx_then_wgpu(monkeypatch) -> None:
-    monkeypatch.setattr("src.adapters.rendering.renderer_factory.platform.system", lambda: "Windows")
-
+def test_pygfx_fallback_order_prefers_pygfx_then_direct3d_wgpu() -> None:
     order = fallback_order(RendererSettings(backend=RendererBackend.PYGFX_WGPU, allow_fallback=True))
 
     assert order == [
         RendererBackend.PYGFX_WGPU,
         RendererBackend.WGPU_D3D12,
-        RendererBackend.WGPU_VULKAN,
         RendererBackend.MODERNGL_GL330,
         RendererBackend.NULL_DIAGNOSTIC,
     ]
 
 
-def test_native_windows_fallback_order_prefers_native_then_wgpu(monkeypatch) -> None:
-    monkeypatch.setattr("src.adapters.rendering.renderer_factory.platform.system", lambda: "Windows")
-
+def test_legacy_native_fallback_order_uses_direct3d_wgpu() -> None:
     order = fallback_order(RendererSettings(backend=RendererBackend.NATIVE_D3D12, allow_fallback=True))
 
     assert order == [
-        RendererBackend.NATIVE_D3D12,
         RendererBackend.WGPU_D3D12,
-        RendererBackend.WGPU_VULKAN,
         RendererBackend.MODERNGL_GL330,
         RendererBackend.NULL_DIAGNOSTIC,
     ]
@@ -3144,10 +3136,10 @@ def test_pygfx_optional_scene_camera_light_cube_smoke() -> None:
     assert light in scene.children
 
 
-def test_existing_wgpu_viewport_backend_still_imports() -> None:
+def test_existing_wgpu_auto_request_uses_direct3d_wgpu_backend() -> None:
     renderer = WgpuRenderer(RendererBackend.WGPU_AUTO, settings=RendererSettings())
 
-    assert renderer.backend_id == RendererBackend.WGPU_AUTO.value
+    assert renderer.backend_id == RendererBackend.WGPU_D3D12.value
 
 
 def test_pygfx_diagnostics_request_native_surface_passthrough() -> None:
@@ -3501,6 +3493,37 @@ def test_pygfx_mesh_cache_uses_retained_texture_map_without_geometry_rebuild() -
     cache.apply_view_style(show_texture=True, show_diffuse=False)
     assert cache.geometry_updates_this_frame == 0
     assert record.material.map is None
+
+
+def test_pygfx_mesh_cache_bakes_sprite_luminance_matte_into_texture_alpha() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _mesh_data(material_revision=("texture",))
+    data.material.alpha_mode = "BLEND"
+    data.material.blend_mode = "LIGHTEN"
+    data.material.sprite_alpha_source = 1
+    data.material.sprite_glow = 1.6
+    source = Image.new("RGBA", (2, 1))
+    source.putdata([(0, 0, 0, 255), (200, 20, 20, 255)])
+    data.material.diffuse_texture_data = SimpleNamespace(
+        texture_id="sprite_diffuse",
+        name="sprite_diffuse",
+        source=source,
+        source_revision=(id(source), 2, 1),
+    )
+
+    record = cache.get_or_create(data, _FakeGfx, scene, selected=False)
+    pixels = record.material.map.texture.data
+
+    assert int(pixels[0, 0, 3]) == 0
+    assert int(pixels[0, 1, 3]) > 200
+    assert record.material.alpha_mode == "blend"
+    assert record.material.depth_write is False
+
+    cache.apply_view_style(show_solid=True, show_wireframe=False, show_texture=True, render_mode="realistic")
+    assert record.sprite_proxy_mesh is not None
+    assert record.sprite_proxy_mesh.visible is True
+    assert record.mesh.visible is False
 
 
 def test_pygfx_mesh_cache_uses_retained_lightmap_uv1_channel() -> None:

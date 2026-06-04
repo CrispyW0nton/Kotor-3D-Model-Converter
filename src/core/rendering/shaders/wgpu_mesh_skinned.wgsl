@@ -170,7 +170,8 @@ fn shader_complexity_color(complexity_id: i32, has_diffuse: f32, has_lightmap: f
 }
 
 fn sprite_keyed_alpha(sampled: vec4<f32>) -> f32 {
-    let keyed_alpha = clamp(max(max(sampled.r, sampled.g), sampled.b) * 1.35, 0.0, 1.0);
+    let peak = max(max(sampled.r, sampled.g), sampled.b);
+    let keyed_alpha = smoothstep(0.08, 0.40, peak);
     return select(keyed_alpha, min(sampled.a, keyed_alpha), sampled.a < 0.999);
 }
 

@@ -254,6 +254,12 @@ class WindowLifecycleMixin:
             self._matrix_engine.stop()
         except Exception:
             pass
+        try:
+            ipc_server = getattr(self, "_ipc_server", None)
+            if ipc_server is not None:
+                ipc_server.stop()
+        except Exception:
+            pass
         super().closeEvent(event)
     def _install_gui_log_handler(self) -> None:
         if self._gui_log_handler is not None or not hasattr(self, "log_panel"):

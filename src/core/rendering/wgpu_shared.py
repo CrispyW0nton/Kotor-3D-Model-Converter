@@ -18,8 +18,6 @@ _WGPU_BACKEND_ENV = "WGPU_BACKEND_TYPE"
 SELECTION_YELLOW = (1.0, 210 / 255.0, 63 / 255.0)
 _WGPU_BACKENDS = {
     RendererBackend.WGPU_D3D12: "D3D12",
-    RendererBackend.WGPU_VULKAN: "Vulkan",
-    RendererBackend.WGPU_OPENGL: "OpenGL",
 }
 
 

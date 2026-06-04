@@ -659,7 +659,7 @@ class ResourceLoadingMixin:
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "sprite_materials_panel"):
-            self.sprite_materials_panel.set_model(self._active_viewport_model())
+            self._refresh_sprite_materials_panel_context()
         if hasattr(self, "body_attachment_panel"):
             if hasattr(self.body_attachment_panel, "set_mode"):
                 self.body_attachment_panel.set_mode(self._bas_mode)
@@ -889,7 +889,7 @@ class ResourceLoadingMixin:
             if hasattr(self, "module_geometry_panel"):
                 self.module_geometry_panel.show_model(self._active_viewport_model())
             if hasattr(self, "sprite_materials_panel"):
-                self.sprite_materials_panel.set_model(self._active_viewport_model())
+                self._refresh_sprite_materials_panel_context()
             self._log(f"Walkmesh loaded: {label}", "success")
             return True
         except Exception as exc:
@@ -904,6 +904,97 @@ class ResourceLoadingMixin:
                 self.viewport.set_selected_meshes(selected, source="module mesh panel")
             except TypeError:
                 self.viewport.set_selected_meshes(selected)
+
+    def _select_module_mesh_by_name_from_ipc(self, mesh_name: str) -> bool:
+        mesh_name = str(mesh_name or "").strip()
+        if not mesh_name:
+            self._log("IPC select_module_mesh: missing mesh name", "warning")
+            return False
+        show_panel = getattr(self, "_show_workspace_dock", None) or getattr(self, "_show_detachable_panel", None)
+        if callable(show_panel):
+            show_panel("module_meshes")
+        panel = getattr(self, "module_geometry_panel", None)
+        label_for = getattr(panel, "_mesh_label", None)
+        model = self._active_viewport_model() if hasattr(self, "_active_viewport_model") else getattr(self, "_current_model", None)
+        if panel is not None and model is not None:
+            has_panel_rows = any(
+                getattr(panel, attr, {})
+                for attr in ("_mesh_items", "_wall_items", "_null_mesh_items", "_walkmesh_items")
+            )
+            if not has_panel_rows:
+                show_model = getattr(panel, "show_model", None)
+                if callable(show_model):
+                    show_model(model)
+        panel_candidates = []
+        viewport_candidates = []
+
+        if panel is not None:
+            panel_seen = set()
+            for items in (
+                getattr(panel, "_mesh_items", {}),
+                getattr(panel, "_wall_items", {}),
+                getattr(panel, "_null_mesh_items", {}),
+                getattr(panel, "_walkmesh_items", {}),
+            ):
+                for node in items.values():
+                    if node is None or id(node) in panel_seen:
+                        continue
+                    panel_seen.add(id(node))
+                    panel_candidates.append(node)
+
+        def _node_source(value):
+            if callable(value):
+                try:
+                    return value()
+                except TypeError:
+                    return []
+            return value or []
+
+        viewport_seen = set()
+        for source in (
+            _node_source(getattr(model, "mesh_nodes", [])) if model is not None else [],
+            _node_source(getattr(model, "all_nodes", [])) if model is not None else [],
+            _node_source(getattr(model, "_gr_extra_module_mesh_nodes", [])) if model is not None else [],
+        ):
+            for node in source or []:
+                if node is None or id(node) in viewport_seen:
+                    continue
+                viewport_seen.add(id(node))
+                viewport_candidates.append(node)
+        needle = mesh_name.lower()
+
+        def _matches(node) -> bool:
+            labels = {
+                str(getattr(node, "name", "") or ""),
+                str(getattr(node, "node_name", "") or ""),
+            }
+            if callable(label_for):
+                labels.add(str(label_for(node) or ""))
+            return needle in {label.lower() for label in labels if label}
+
+        panel_node = next((node for node in panel_candidates if _matches(node)), None)
+        viewport_node = next((node for node in viewport_candidates if _matches(node)), None)
+        selected_node = viewport_node or panel_node
+        if selected_node is not None:
+            viewport = getattr(self, "viewport", None)
+            if viewport is not None:
+                try:
+                    viewport.set_selected_meshes([selected_node], source="IPC select_module_mesh")
+                except TypeError:
+                    viewport.set_selected_meshes([selected_node])
+            properties_panel = getattr(self, "properties_panel", None)
+            if properties_panel is not None:
+                properties_panel.show_node(selected_node)
+            if panel is not None:
+                select_panel_label = getattr(panel, "select_module_mesh_by_label", None)
+                if callable(select_panel_label):
+                    select_panel_label(mesh_name)
+                else:
+                    panel.select_module_meshes([panel_node or selected_node])
+            self._log(f"IPC select_module_mesh: {mesh_name}", "success")
+            return True
+        self._log(f"IPC select_module_mesh: {mesh_name} not found", "warning")
+        return False
 
     def _refresh_mesh_visibility_render_state(self, reason: str) -> None:
         viewport = getattr(self, "viewport", None)
@@ -941,12 +1032,17 @@ class ResourceLoadingMixin:
             self.properties_panel.show_node(node)
     def _on_sprite_materials_changed(self, nodes: list) -> None:
         changed = [node for node in (nodes or []) if node is not None]
-        if changed:
+        scene_changed = self._sync_sprite_material_nodes_to_scene(changed) if changed else []
+        global_changed = [
+            node for node in changed
+            if not str(getattr(node, "_gr_scene_object_id", "") or "")
+        ]
+        if global_changed:
             data = self._load_sprite_material_overrides()
             model_key = self._sprite_model_key()
             models = data.setdefault("models", {})
             model_overrides = models.setdefault(model_key, {})
-            for node in changed:
+            for node in global_changed:
                 node_key = self._sprite_node_key(node)
                 if self._sprite_node_has_explicit_override(node):
                     model_overrides[node_key] = self._sprite_material_payload(node)
@@ -954,7 +1050,10 @@ class ResourceLoadingMixin:
                     model_overrides.pop(node_key, None)
             if not model_overrides:
                 models.pop(model_key, None)
-            self._save_sprite_material_overrides()
+            self._save_sprite_material_overrides(data)
+        if scene_changed and hasattr(self, "scene_manager"):
+            self.scene_manager.mark_dirty()
+            self._update_scene_chrome()
         if hasattr(self, "viewport"):
             renderer = getattr(self.viewport, "_renderer", None)
             if renderer is not None and hasattr(renderer, "invalidate_node_cache"):
@@ -968,7 +1067,15 @@ class ResourceLoadingMixin:
                 invalidate_cache = getattr(gpu_renderer, "invalidate_node_cache", None)
                 if callable(invalidate_cache):
                     invalidate_cache()
-            self.viewport.refresh_view()
+            self.viewport.refresh_view(
+                fast=True,
+                reason="sprite material render settings changed",
+                material=True,
+                resources=True,
+                visibility=True,
+                overlay=True,
+                hud=True,
+            )
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.refresh_module_mesh_rows()
         self._invalidate_renderer_resources("sprite material render settings changed")

@@ -14,8 +14,7 @@ def marshal_to_gui_thread(cb: Callable[..., Any], *args: Any) -> bool:
         app = QCoreApplication.instance()
         if app is None:
             return False
-        QTimer.singleShot(0, lambda: cb(*args))
+        QTimer.singleShot(0, app, lambda: cb(*args))
         return True
     except Exception:
         return False
-

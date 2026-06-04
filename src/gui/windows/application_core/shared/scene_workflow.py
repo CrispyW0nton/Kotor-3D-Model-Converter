@@ -81,6 +81,7 @@ class SceneWorkflowMixin:
         if not scene.path:
             return self._save_scene_as()
         try:
+            self._sync_active_scene_sprite_material_overrides()
             self.scene_manager.save_kmax(scene.path)
             self._add_recent_scene(scene.path)
             self._update_scene_chrome()
@@ -106,6 +107,7 @@ class SceneWorkflowMixin:
         if not path.lower().endswith(".kmax"):
             path = f"{path}.kmax"
         try:
+            self._sync_active_scene_sprite_material_overrides()
             self.scene_manager.save_kmax_as(path)
             self.settings_data["last_kmax_dir"] = str(Path(path).parent)
             self._add_recent_scene(path)
@@ -253,6 +255,7 @@ class SceneWorkflowMixin:
             model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
             if model is not None:
                 self._apply_sprite_material_overrides(model)
+                self._apply_scene_object_sprite_material_overrides(obj)
         if hasattr(self, "viewport"):
             self._configure_viewport_resources()
             self.viewport.load_scene_instances(
@@ -272,11 +275,40 @@ class SceneWorkflowMixin:
         self._refresh_scene_animation_entries()
         self._update_scene_chrome()
         self._refresh_adjust_pivot_panel()
+        self._refresh_sprite_materials_panel_context()
 
     def _active_viewport_model(self):
         viewport = getattr(self, "viewport", None)
         model = getattr(viewport, "model", None) if viewport is not None else None
         return model or getattr(self, "_current_model", None)
+
+    def _selected_scene_model_object(self):
+        scene_manager = getattr(self, "scene_manager", None)
+        if scene_manager is None:
+            return None
+        selected = []
+        try:
+            selected = list(scene_manager.get_selected_objects() or [])
+        except Exception:
+            selected = []
+        for obj in reversed(selected):
+            if getattr(obj, "object_type", "") != "model":
+                continue
+            if self._runtime_model_for_scene_object(obj) is not None:
+                return obj
+        return None
+
+    def _refresh_sprite_materials_panel_context(self) -> None:
+        panel = getattr(self, "sprite_materials_panel", None)
+        if panel is None:
+            return
+        obj = self._selected_scene_model_object()
+        model = self._runtime_model_for_scene_object(obj) if obj is not None else self._active_viewport_model()
+        if model is not None:
+            self._apply_sprite_material_overrides(model)
+            if obj is not None:
+                self._apply_scene_object_sprite_material_overrides(obj)
+        panel.set_model(model)
 
     def _sprite_persistence_path(self) -> Path:
         return self.app_root / "config" / "sprite_material_overrides.json"
@@ -298,8 +330,13 @@ class SceneWorkflowMixin:
         self._sprite_material_overrides = data
         return data
 
-    def _save_sprite_material_overrides(self) -> None:
-        data = self._load_sprite_material_overrides()
+    def _save_sprite_material_overrides(self, data: dict | None = None) -> None:
+        if data is None:
+            data = self._load_sprite_material_overrides()
+        else:
+            data.setdefault("version", 1)
+            data.setdefault("models", {})
+            self._sprite_material_overrides = data
         path = self._sprite_persistence_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -343,6 +380,28 @@ class SceneWorkflowMixin:
         }
 
     @staticmethod
+    def _apply_sprite_material_payload(node, payload: dict) -> None:
+        if not isinstance(payload, dict):
+            return
+        if not hasattr(node, "_gr_sprite_original_material"):
+            setattr(node, "_gr_sprite_original_material", {
+                name: getattr(node, name, None)
+                for name in ("txi_blending", "txi_alpha_test", "txi_wateralpha", "txi_decal", "transparency_hint", "alpha", "_gr_sprite_render_mode", "_gr_sprite_alpha_source", "_gr_sprite_glow")
+            })
+        setattr(node, "_gr_sprite_category", str(payload.get("category") or ""))
+        setattr(node, "_gr_hidden", bool(payload.get("hidden", False)))
+        setattr(node, "_gr_sprite_render_mode", str(payload.get("render_mode") or ""))
+        setattr(node, "txi_blending", int(payload.get("txi_blending", getattr(node, "txi_blending", 0)) or 0))
+        setattr(node, "txi_alpha_test", float(payload.get("txi_alpha_test", getattr(node, "txi_alpha_test", 0.0)) or 0.0))
+        setattr(node, "txi_wateralpha", float(payload.get("txi_wateralpha", getattr(node, "txi_wateralpha", 1.0)) or 1.0))
+        setattr(node, "txi_decal", bool(payload.get("txi_decal", getattr(node, "txi_decal", False))))
+        setattr(node, "transparency_hint", int(payload.get("transparency_hint", getattr(node, "transparency_hint", 0)) or 0))
+        setattr(node, "alpha", float(payload.get("alpha", getattr(node, "alpha", 1.0)) or 1.0))
+        setattr(node, "_gr_sprite_alpha_source", str(payload.get("sprite_alpha_source") or ""))
+        setattr(node, "_gr_sprite_glow", float(payload.get("sprite_glow", 0.0) or 0.0))
+        setattr(node, "_gr_revision", int(getattr(node, "_gr_revision", 0) or 0) + 1)
+
+    @staticmethod
     def _sprite_node_has_explicit_override(node) -> bool:
         if bool(getattr(node, "_gr_hidden", False)):
             return True
@@ -383,6 +442,61 @@ class SceneWorkflowMixin:
                 result.append(node)
         return result
 
+    def _scene_object_for_sprite_node(self, node):
+        object_id = str(getattr(node, "_gr_scene_object_id", "") or "")
+        if not object_id:
+            return None
+        return next(
+            (
+                obj for obj in getattr(self.scene_manager.active_scene, "objects", [])
+                if str(getattr(obj, "id", "") or "") == object_id
+            ),
+            None,
+        )
+
+    def _sync_sprite_material_nodes_to_scene(self, nodes: list) -> list:
+        changed = []
+        for node in nodes or []:
+            obj = self._scene_object_for_sprite_node(node)
+            if obj is None:
+                continue
+            overrides = dict(getattr(obj, "material_overrides", {}) or {})
+            sprite_overrides = dict(overrides.get("sprite_materials") or {})
+            node_key = self._sprite_node_key(node)
+            if self._sprite_node_has_explicit_override(node):
+                sprite_overrides[node_key] = self._sprite_material_payload(node)
+            else:
+                sprite_overrides.pop(node_key, None)
+            if sprite_overrides:
+                overrides["sprite_materials"] = sprite_overrides
+            else:
+                overrides.pop("sprite_materials", None)
+            if overrides != getattr(obj, "material_overrides", {}):
+                obj.material_overrides = overrides
+                changed.append(obj)
+        return changed
+
+    def _sync_active_scene_sprite_material_overrides(self) -> None:
+        viewport = getattr(self, "viewport", None)
+        model = getattr(viewport, "model", None) if viewport is not None else None
+        if model is None:
+            return
+        self._sync_sprite_material_nodes_to_scene(self._iter_sprite_mesh_nodes(model))
+
+    def _apply_scene_object_sprite_material_overrides(self, obj) -> int:
+        model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+        overrides = dict(getattr(obj, "material_overrides", {}) or {})
+        sprite_overrides = overrides.get("sprite_materials") or {}
+        if model is None or not isinstance(sprite_overrides, dict):
+            return 0
+        applied = 0
+        for node in self._iter_sprite_mesh_nodes(model):
+            payload = sprite_overrides.get(self._sprite_node_key(node))
+            if isinstance(payload, dict):
+                self._apply_sprite_material_payload(node, payload)
+                applied += 1
+        return applied
+
     def _apply_sprite_material_overrides(self, model) -> int:
         data = self._load_sprite_material_overrides()
         model_overrides = (data.get("models") or {}).get(self._sprite_model_key(model), {})
@@ -393,23 +507,7 @@ class SceneWorkflowMixin:
             payload = model_overrides.get(self._sprite_node_key(node))
             if not isinstance(payload, dict):
                 continue
-            if not hasattr(node, "_gr_sprite_original_material"):
-                setattr(node, "_gr_sprite_original_material", {
-                    name: getattr(node, name, None)
-                    for name in ("txi_blending", "txi_alpha_test", "txi_wateralpha", "txi_decal", "transparency_hint", "alpha", "_gr_sprite_render_mode", "_gr_sprite_alpha_source", "_gr_sprite_glow")
-                })
-            setattr(node, "_gr_sprite_category", str(payload.get("category") or ""))
-            setattr(node, "_gr_hidden", bool(payload.get("hidden", False)))
-            setattr(node, "_gr_sprite_render_mode", str(payload.get("render_mode") or ""))
-            setattr(node, "txi_blending", int(payload.get("txi_blending", getattr(node, "txi_blending", 0)) or 0))
-            setattr(node, "txi_alpha_test", float(payload.get("txi_alpha_test", getattr(node, "txi_alpha_test", 0.0)) or 0.0))
-            setattr(node, "txi_wateralpha", float(payload.get("txi_wateralpha", getattr(node, "txi_wateralpha", 1.0)) or 1.0))
-            setattr(node, "txi_decal", bool(payload.get("txi_decal", getattr(node, "txi_decal", False))))
-            setattr(node, "transparency_hint", int(payload.get("transparency_hint", getattr(node, "transparency_hint", 0)) or 0))
-            setattr(node, "alpha", float(payload.get("alpha", getattr(node, "alpha", 1.0)) or 1.0))
-            setattr(node, "_gr_sprite_alpha_source", str(payload.get("sprite_alpha_source") or ""))
-            setattr(node, "_gr_sprite_glow", float(payload.get("sprite_glow", 0.0) or 0.0))
-            setattr(node, "_gr_revision", int(getattr(node, "_gr_revision", 0) or 0) + 1)
+            self._apply_sprite_material_payload(node, payload)
             applied += 1
         return applied
 
@@ -518,6 +616,7 @@ class SceneWorkflowMixin:
         if obj is not None:
             self._activate_scene_object_model(obj)
             self._sync_skeleton_root_for_scene_object(obj)
+            self._refresh_sprite_materials_panel_context()
             if hasattr(self, "properties_panel"):
                 show_scene_object = getattr(self.properties_panel, "show_scene_object", None)
                 if callable(show_scene_object):
@@ -578,6 +677,7 @@ class SceneWorkflowMixin:
         obj = self._scene_object_for_runtime_node(node)
         if obj is not None:
             self._activate_scene_object_model(obj)
+            self._refresh_sprite_materials_panel_context()
         if hasattr(self, "viewport"):
             self.viewport.set_selected_node(node, source="scene outliner helper")
         if hasattr(self, "properties_panel"):
@@ -597,6 +697,7 @@ class SceneWorkflowMixin:
         obj = self._scene_object_for_runtime_node(node)
         if obj is not None:
             self._activate_scene_object_model(obj)
+            self._refresh_sprite_materials_panel_context()
         if hasattr(self, "viewport"):
             self.viewport.set_selected_node(node, source="scene outliner light")
         if hasattr(self, "lighting_panel"):
@@ -673,6 +774,7 @@ class SceneWorkflowMixin:
             if obj is not None:
                 self._activate_scene_object_model(obj)
                 self._sync_skeleton_root_for_scene_object(obj)
+                self._refresh_sprite_materials_panel_context()
                 if obj.object_type == "camera" and hasattr(self, "camera_panel"):
                     self.camera_panel.select_camera_object(node)
                 if obj.object_type == "light" and hasattr(self, "lighting_panel"):

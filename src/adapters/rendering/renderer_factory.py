@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import logging
-import platform
 import inspect
 from typing import Iterable
 
-from src.adapters.rendering.direct3d_renderer import Direct3DRenderer
 from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
-from src.adapters.rendering.native_core.renderer import NativeViewportRenderer
 from src.adapters.rendering.null_renderer import NullDiagnosticRenderer
 from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer
-from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.core.rendering.renderer_backend import (
+    RendererBackend,
+    SUPPORTED_RENDERER_BACKENDS,
+    renderer_backend_label,
+    supported_renderer_backend,
+)
 from src.core.rendering.renderer_capabilities import RendererCapabilities
 from src.core.rendering.renderer_settings import RendererSettings
 from src.core.ports import ViewportRendererPort
@@ -22,16 +24,13 @@ log = logging.getLogger(__name__)
 
 
 def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings | None = None) -> ViewportRendererPort:
+    backend = supported_renderer_backend(backend)
     if backend == RendererBackend.MODERNGL_GL330:
         return ModernGLRenderer()
-    if backend in {RendererBackend.WGPU_AUTO, RendererBackend.WGPU_D3D12, RendererBackend.WGPU_VULKAN, RendererBackend.WGPU_OPENGL}:
-        return WgpuRenderer(backend, settings=settings)
+    if backend == RendererBackend.WGPU_D3D12:
+        return WgpuRenderer(RendererBackend.WGPU_D3D12, settings=settings)
     if backend == RendererBackend.PYGFX_WGPU:
         return PygfxViewportRenderer(settings=settings)
-    if backend == RendererBackend.NATIVE_D3D12:
-        return NativeViewportRenderer()
-    if backend in {RendererBackend.DIRECT3D_HARDWARE, RendererBackend.DIRECT3D_WARP}:
-        return Direct3DRenderer(backend)
     if backend == RendererBackend.NULL_DIAGNOSTIC:
         return NullDiagnosticRenderer()
     return ModernGLRenderer()
@@ -65,9 +64,7 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     if settings.force_safe_mode:
         return [RendererBackend.MODERNGL_GL330, RendererBackend.NULL_DIAGNOSTIC]
 
-    requested = settings.backend
-    if requested == RendererBackend.AUTOMATIC:
-        requested = RendererBackend.MODERNGL_GL330
+    requested = supported_renderer_backend(settings.backend)
 
     if requested == RendererBackend.MODERNGL_GL330:
         return [RendererBackend.MODERNGL_GL330, RendererBackend.NULL_DIAGNOSTIC]
@@ -75,22 +72,11 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     if not settings.allow_fallback:
         return [requested, RendererBackend.NULL_DIAGNOSTIC]
 
-    if platform.system().lower() == "windows":
-        if requested == RendererBackend.PYGFX_WGPU:
-            return _dedupe(
-                [
-                    RendererBackend.PYGFX_WGPU,
-                    RendererBackend.WGPU_D3D12,
-                    RendererBackend.WGPU_VULKAN,
-                    RendererBackend.MODERNGL_GL330,
-                    RendererBackend.NULL_DIAGNOSTIC,
-                ]
-            )
+    if requested == RendererBackend.PYGFX_WGPU:
         return _dedupe(
             [
                 requested,
                 RendererBackend.WGPU_D3D12,
-                RendererBackend.WGPU_VULKAN,
                 RendererBackend.MODERNGL_GL330,
                 RendererBackend.NULL_DIAGNOSTIC,
             ]
@@ -98,7 +84,6 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
     return _dedupe(
         [
             requested,
-            RendererBackend.WGPU_AUTO,
             RendererBackend.MODERNGL_GL330,
             RendererBackend.NULL_DIAGNOSTIC,
         ]
@@ -106,31 +91,9 @@ def fallback_order(settings: RendererSettings) -> list[RendererBackend]:
 
 
 def renderer_capabilities_snapshot() -> list[RendererCapabilities]:
-    backends = [
-        RendererBackend.AUTOMATIC,
-        RendererBackend.MODERNGL_GL330,
-        RendererBackend.WGPU_AUTO,
-        RendererBackend.WGPU_D3D12,
-        RendererBackend.WGPU_VULKAN,
-        RendererBackend.WGPU_OPENGL,
-        RendererBackend.PYGFX_WGPU,
-        RendererBackend.NATIVE_D3D12,
-        RendererBackend.DIRECT3D_HARDWARE,
-        RendererBackend.NULL_DIAGNOSTIC,
-    ]
+    backends = list(SUPPORTED_RENDERER_BACKENDS)
     caps: list[RendererCapabilities] = []
     for backend in backends:
-        if backend == RendererBackend.AUTOMATIC:
-            caps.append(
-                RendererCapabilities(
-                    backend_id=backend.value,
-                    name=renderer_backend_label(backend),
-                    available=True,
-                    reason="Uses the configured fallback chain",
-                    supports_hot_switch=True,
-                )
-            )
-            continue
         caps.append(_renderer_for_backend(backend).get_capabilities())
     return caps
 

@@ -8,6 +8,14 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportSelectionMeshMixin:
+    def _sync_renderer_selected_meshes(self, active, mesh_nodes: list) -> None:
+        selected_meshes = list(mesh_nodes or [])
+        self._renderer.selected_node = active
+        self._renderer.selected_nodes = selected_meshes
+        if self._gpu_renderer is not None:
+            self._gpu_renderer.selected_node = active
+            self._gpu_renderer.selected_nodes = list(selected_meshes)
+
     def set_selected_node(self, node, orbit_bounds=None, *, source: str = "viewport") -> None:
         self._last_selection_source = str(source or "viewport")
         if node is not None and self._renderer.is_hidden_bone_name(getattr(node, "name", "")):
@@ -33,10 +41,7 @@ class ViewportSelectionMeshMixin:
         self._clear_mesh_selection_flags()
         self._selected_meshes = []
         self._set_selection_orbit_bounds(node, orbit_bounds)
-        self._renderer.selected_node = node
-        if self._gpu_renderer is not None:
-            self._gpu_renderer.selected_node = node
-            self._gpu_renderer.selected_nodes = []
+        self._sync_renderer_selected_meshes(node, [])
         if node is None:
             self._selected_joint_nodes = []
             self._renderer._ext_skel_selected_node = None
@@ -477,10 +482,7 @@ class ViewportSelectionMeshMixin:
             setattr(node, "_gr_selected", True)
         active = clean_nodes[0] if clean_nodes else None
         self._set_selection_orbit_bounds(active, orbit_bounds if len(clean_nodes) == 1 else None)
-        self._renderer.selected_node = active
-        if self._gpu_renderer is not None:
-            self._gpu_renderer.selected_node = active
-            self._gpu_renderer.selected_nodes = list(clean_nodes)
+        self._sync_renderer_selected_meshes(active, clean_nodes)
         if active is None:
             self._transform_gizmo.clear_selection()
         else:
@@ -564,10 +566,7 @@ class ViewportSelectionMeshMixin:
             except Exception:
                 pass
         self._set_selection_orbit_bounds(active, None)
-        self._renderer.selected_node = active
-        if self._gpu_renderer is not None:
-            self._gpu_renderer.selected_node = active
-            self._gpu_renderer.selected_nodes = list(mesh_nodes)
+        self._sync_renderer_selected_meshes(active, mesh_nodes)
         if active is None:
             self._selected_joint_nodes = []
             self._renderer._ext_skel_selected_node = None
@@ -739,11 +738,11 @@ class ViewportSelectionMeshMixin:
                 result.append(node)
         return result
 
-    def refresh_view(self) -> None:
+    def refresh_view(self, *, reason: str = "viewport refreshed", fast: bool = False, **dirty_flags: bool) -> None:
         self._renderer._wt_cache.clear()
         if self._gpu_renderer is not None:
             self._gpu_renderer.invalidate_node_cache()
-        self._request_render()
+        self._request_render(fast=fast, reason=reason, **(dirty_flags or {"scene": True}))
 
     def _set_selected_joint_nodes(self, nodes: list, *, primary=None) -> None:
         """Replace the current bone selection with an ordered de-duplicated list."""

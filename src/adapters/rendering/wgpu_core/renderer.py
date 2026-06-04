@@ -74,16 +74,16 @@ class WgpuRenderer(NullDiagnosticRenderer):
     _probe_cache: ClassVar[dict[RendererBackend, RendererCapabilities]] = {}
     _device_created: ClassVar[bool] = False
 
-    def __init__(self, backend: RendererBackend = RendererBackend.WGPU_AUTO, settings: RendererSettings | None = None):
+    def __init__(self, backend: RendererBackend = RendererBackend.WGPU_D3D12, settings: RendererSettings | None = None):
         super().__init__()
         settings = settings or RendererSettings()
+        if backend != RendererBackend.WGPU_D3D12:
+            backend = RendererBackend.WGPU_D3D12
         self._spec = _WgpuBackendSpec(
             backend=backend,
             name={
-                RendererBackend.WGPU_D3D12: "WGPU Direct3D 12",
-                RendererBackend.WGPU_VULKAN: "WGPU Vulkan",
-                RendererBackend.WGPU_OPENGL: "WGPU OpenGL",
-            }.get(backend, "WGPU Auto"),
+                RendererBackend.WGPU_D3D12: "Direct3D (WGPU)",
+            }.get(backend, "Direct3D (WGPU)"),
             wgpu_backend_type=_WGPU_BACKENDS.get(backend, ""),
         )
         self.name = self._spec.name
@@ -287,7 +287,9 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self.missing_texture_color_b = (0.0, 0.0, 0.0)
 
     @staticmethod
-    def probe_availability(backend: RendererBackend = RendererBackend.WGPU_AUTO) -> RendererCapabilities:
+    def probe_availability(backend: RendererBackend = RendererBackend.WGPU_D3D12) -> RendererCapabilities:
+        if backend != RendererBackend.WGPU_D3D12:
+            backend = RendererBackend.WGPU_D3D12
         cached = WgpuRenderer._probe_cache.get(backend)
         if cached is not None:
             return cached
@@ -295,10 +297,8 @@ class WgpuRenderer(NullDiagnosticRenderer):
         spec = _WgpuBackendSpec(
             backend=backend,
             name={
-                RendererBackend.WGPU_D3D12: "WGPU Direct3D 12",
-                RendererBackend.WGPU_VULKAN: "WGPU Vulkan",
-                RendererBackend.WGPU_OPENGL: "WGPU OpenGL",
-            }.get(backend, "WGPU Auto"),
+                RendererBackend.WGPU_D3D12: "Direct3D (WGPU)",
+            }.get(backend, "Direct3D (WGPU)"),
             wgpu_backend_type=_WGPU_BACKENDS.get(backend, ""),
         )
 
@@ -311,7 +311,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
             WgpuRenderer._probe_cache[backend] = caps
             return caps
         if backend == RendererBackend.WGPU_D3D12 and os.name != "nt":
-            caps = WgpuRenderer._capabilities_unavailable(spec, "WGPU Direct3D 12 is available on Windows only")
+            caps = WgpuRenderer._capabilities_unavailable(spec, "Direct3D (WGPU) is available on Windows only")
             WgpuRenderer._probe_cache[backend] = caps
             return caps
 

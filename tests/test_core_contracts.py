@@ -213,7 +213,69 @@ def test_ipc_callback_dispatch_uses_qt_adapter_boundary() -> None:
 
     adapter_source = (ROOT / "src/adapters/qt_ipc/threading.py").read_text(encoding="utf-8")
     assert "from PySide6.QtCore import QCoreApplication, QTimer" in adapter_source
-    assert "QTimer.singleShot(0, lambda: cb(*args))" in adapter_source
+    assert "QTimer.singleShot(0, app, lambda: cb(*args))" in adapter_source
+
+
+def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
+    source = (ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8")
+    lifecycle_source = (ROOT / "src/gui/windows/application_core/shared/window_lifecycle.py").read_text(encoding="utf-8")
+    server_source = (ROOT / "src/ipc/server.py").read_text(encoding="utf-8")
+
+    assert "from src.ipc.server import GhostRiggerIPCServer" in source
+    assert "self._ipc_server: Optional[GhostRiggerIPCServer] = None" in source
+    assert "def _start_ipc_server(self) -> None:" in source
+    assert '"open_utc": open_blueprint_resource("utc")' in source
+    assert '"open_utp": open_blueprint_resource("utp")' in source
+    assert '"open_utd": open_blueprint_resource("utd")' in source
+    assert '"open_mdl": open_mdl' in source
+    assert '"load_model_by_resref": load_model_by_resref' in source
+    assert '"refresh_viewport": refresh_viewport' in source
+    assert '"show_panel": show_panel' in source
+    assert '"select_module_mesh": select_module_mesh' in source
+    assert "self._start_ipc_server()" in source
+    assert "ipc_server.stop()" in lifecycle_source
+    assert '@app.route("/api/show_panel", methods=["POST"])' in server_source
+    assert '@app.route("/api/select_module_mesh", methods=["POST"])' in server_source
+
+
+def test_ipc_module_mesh_selector_uses_existing_panel_and_viewport_sync_paths() -> None:
+    from src.gui.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    viewport_mesh = SimpleNamespace(name="piece439", vertices=[1], faces=[1])
+    panel_mesh = SimpleNamespace(name="piece439", vertices=[1], faces=[1])
+    model = SimpleNamespace(mesh_nodes=[viewport_mesh], all_nodes=lambda: [viewport_mesh], _gr_extra_module_mesh_nodes=[])
+    shown = []
+    selected_panel = []
+    selected_viewport = []
+    shown_nodes = []
+    logs = []
+    call_order = []
+    window = SimpleNamespace(
+        _active_viewport_model=lambda: model,
+        _show_workspace_dock=lambda key: shown.append(key),
+        module_geometry_panel=SimpleNamespace(
+            _mesh_label=lambda node: getattr(node, "name", ""),
+            _mesh_items={object(): panel_mesh},
+            _wall_items={},
+            _null_mesh_items={},
+            _walkmesh_items={},
+            select_module_meshes=lambda nodes: selected_panel.append(list(nodes)),
+            select_module_mesh_by_label=lambda label: call_order.append(("panel", label)) or panel_mesh,
+        ),
+        viewport=SimpleNamespace(
+            set_selected_meshes=lambda nodes, source="": call_order.append(("viewport", source)) or selected_viewport.append((list(nodes), source))
+        ),
+        properties_panel=SimpleNamespace(show_node=lambda node: shown_nodes.append(node)),
+        _log=lambda message, level="info": logs.append((message, level)),
+    )
+
+    assert QtGhostRiggerMainWindow._select_module_mesh_by_name_from_ipc(window, "piece439") is True
+
+    assert shown == ["module_meshes"]
+    assert selected_panel == []
+    assert selected_viewport == [([viewport_mesh], "IPC select_module_mesh")]
+    assert shown_nodes == [viewport_mesh]
+    assert call_order == [("viewport", "IPC select_module_mesh"), ("panel", "piece439")]
 
 
 def test_tracked_non_contract_tests_use_backend_owners_not_gui_facades() -> None:
@@ -2706,11 +2768,13 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     assert qt_gpu_create_renderer is adapter_create_renderer
 
     adapter_source = (ROOT / "src/adapters/rendering/renderer_factory.py").read_text(encoding="utf-8")
-    assert "from src.adapters.rendering.direct3d_renderer import Direct3DRenderer" in adapter_source
     assert "from src.adapters.rendering.moderngl_renderer import ModernGLRenderer" in adapter_source
-    assert "from src.adapters.rendering.native_core.renderer import NativeViewportRenderer" in adapter_source
     assert "from src.adapters.rendering.null_renderer import NullDiagnosticRenderer" in adapter_source
+    assert "from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer" in adapter_source
     assert "from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer" in adapter_source
+    assert "from src.adapters.rendering.direct3d_renderer import Direct3DRenderer" not in adapter_source
+    assert "from src.adapters.rendering.native_core.renderer import NativeViewportRenderer" not in adapter_source
+    assert "SUPPORTED_RENDERER_BACKENDS" in adapter_source
     for forbidden in (
         "from src.gui.rendering.direct3d_renderer",
         "from src.gui.rendering.moderngl_renderer",
@@ -3907,6 +3971,8 @@ def test_module_mesh_panel_reports_when_node_exists_for_external_selection_sync(
     assert panel.has_module_mesh(helper) is False
     assert panel.select_module_meshes([mesh]) is True
     assert panel._selected_module_meshes() == [mesh]
+    assert panel.select_module_mesh_by_label("Object76") is mesh
+    assert panel._selected_module_meshes() == [mesh]
     assert panel.select_module_meshes([helper]) is False
     assert panel._selected_module_meshes() == []
 
@@ -4028,6 +4094,24 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
     assert getattr(blade, "_gr_revision", 0) > 0
     assert changed[-1] == [blade]
 
+    panel._set_combo_value(panel.category_combo, "hilt")
+    assert panel.mode_combo.currentData() == "opaque"
+    assert blade._gr_sprite_category == "hilt"
+    assert blade._gr_sprite_render_mode == "opaque"
+    assert blade.txi_blending == 0
+    assert blade.transparency_hint == 0
+    assert blade._gr_sprite_alpha_source == ""
+    assert blade._gr_sprite_glow == pytest.approx(0.0)
+
+    panel._set_combo_value(panel.category_combo, "glow_blade")
+    assert panel.mode_combo.currentData() == "lighten"
+    assert blade._gr_sprite_category == "glow_blade"
+    assert blade._gr_sprite_render_mode == "lighten"
+    assert blade.txi_blending == 3
+    assert blade.transparency_hint >= 1
+    assert blade._gr_sprite_alpha_source == "luminance"
+    assert blade._gr_sprite_glow == pytest.approx(1.6)
+
     panel.tree.topLevelItem(0).setCheckState(0, QtCore.Qt.Unchecked)
     assert blade._gr_hidden is True
     panel._reset_selected()
@@ -4090,6 +4174,29 @@ def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> Non
     assert hilt_material.sprite_alpha_source == 0
     assert hilt_material.sprite_glow == 0.0
 
+    blade_forced_hilt = SimpleNamespace(
+        name="plane241",
+        texture="w_lsabreblue01",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        _gr_sprite_category="hilt",
+        _gr_sprite_render_mode="opaque",
+        _gr_sprite_alpha_source="",
+        _gr_sprite_glow=0.0,
+        vertices=[],
+        faces=[],
+    )
+    forced_hilt_material = _material_data(blade_forced_hilt, {})
+    assert forced_hilt_material.alpha_mode == "OPAQUE"
+    assert forced_hilt_material.blend_mode == "ALPHA"
+    assert forced_hilt_material.sprite_alpha_source == 0
+    assert forced_hilt_material.sprite_glow == 0.0
+
 
 def test_moderngl_sprite_material_panel_state_reaches_renderer_shader() -> None:
     import inspect
@@ -4131,6 +4238,18 @@ def test_moderngl_sprite_material_panel_state_reaches_renderer_shader() -> None:
     assert renderer._sprite_glow(blade) == pytest.approx(1.6)
     assert renderer._sprite_alpha_source(hilt) == 0
     assert renderer._sprite_glow(hilt) == 0.0
+    blade_forced_hilt = SimpleNamespace(
+        name="plane241",
+        texture="w_lsabreblue01",
+        _gr_sprite_category="hilt",
+        _gr_sprite_render_mode="opaque",
+        _gr_sprite_alpha_source="",
+        _gr_sprite_glow=0.0,
+    )
+    assert renderer._has_sprite_material_override(blade_forced_hilt)
+    assert renderer._is_sprite_hilt(blade_forced_hilt)
+    assert renderer._sprite_alpha_source(blade_forced_hilt) == 0
+    assert renderer._sprite_glow(blade_forced_hilt) == 0.0
 
     before = renderer._node_classification_signature([blade])
     blade._gr_hidden = True
@@ -4153,8 +4272,52 @@ def test_moderngl_sprite_material_panel_state_reaches_renderer_shader() -> None:
     assert "spriteEmissionTint" in _FRAG_SRC
     assert "sprite_emissive" in _FRAG_SRC
     assert "self._sprite_alpha_source(nd)" in render_source
+    assert "not self._has_sprite_material_override(node)" in render_source
     assert "_node_classification_signature(nodes)" in render_source
     assert "_node_cache_signature" in invalidate_source
+
+
+def test_kmax_scene_object_sprite_material_overrides_round_trip() -> None:
+    from src.core.scene.kmax_scene import KMaxScene
+    from src.core.scene.kmax_serializer import KMaxSerializer
+    from src.core.scene.scene_object_instance import SceneObjectInstance
+    from src.core.scene.scene_resource_ref import SceneResourceRef
+
+    scene = KMaxScene.new()
+    scene.objects.append(
+        SceneObjectInstance(
+            id="obj-1",
+            name="Blue Saber",
+            object_type="model",
+            source_ref=SceneResourceRef(game="K1", resref="w_lghtsbr_001"),
+            material_overrides={
+                "sprite_materials": {
+                    "plane241|w_lsabreblue01": {
+                        "mesh": "plane241",
+                        "texture": "w_lsabreblue01",
+                        "category": "glow_blade",
+                        "hidden": False,
+                        "render_mode": "lighten",
+                        "txi_blending": 3,
+                        "txi_alpha_test": 0.5,
+                        "txi_wateralpha": 1.0,
+                        "txi_decal": False,
+                        "transparency_hint": 1,
+                        "alpha": 1.0,
+                        "sprite_alpha_source": "luminance",
+                        "sprite_glow": 1.6,
+                    }
+                }
+            },
+        )
+    )
+
+    loaded = KMaxSerializer.from_dict(KMaxSerializer.to_dict(scene))
+    payload = loaded.objects[0].material_overrides["sprite_materials"]["plane241|w_lsabreblue01"]
+
+    assert payload["render_mode"] == "lighten"
+    assert payload["sprite_alpha_source"] == "luminance"
+    assert payload["sprite_glow"] == pytest.approx(1.6)
 
 
 def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> None:
@@ -4718,6 +4881,45 @@ def test_qt_viewport_preserves_module_mesh_node_selection_under_scene_root_tags(
         assert viewport._gpu_renderer.selected_nodes == [mesh]
         assert viewport.get_selected_meshes() == [mesh]
         assert getattr(mesh, "_gr_selected", False) is True
+    finally:
+        viewport.deleteLater()
+
+
+def test_qt_viewport_mirrors_mesh_selection_to_renderer_lists() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh_a = ModelNode(
+        name="Object19",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    mesh_b = ModelNode(
+        name="piece439",
+        vertices=[(0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)],
+        faces=[(0, 1, 2)],
+    )
+    viewport = QtViewportWidget()
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[])
+    try:
+        viewport.set_selected_meshes([mesh_a, mesh_b], source="module mesh panel")
+
+        assert viewport._renderer.selected_node is mesh_a
+        assert viewport._renderer.selected_nodes == [mesh_a, mesh_b]
+        assert viewport._gpu_renderer.selected_node is mesh_a
+        assert viewport._gpu_renderer.selected_nodes == [mesh_a, mesh_b]
+
+        viewport.set_selected_node(None)
+
+        assert viewport._renderer.selected_node is None
+        assert viewport._renderer.selected_nodes == []
+        assert viewport._gpu_renderer.selected_node is None
+        assert viewport._gpu_renderer.selected_nodes == []
     finally:
         viewport.deleteLater()
 
@@ -8952,21 +9154,40 @@ def test_main_window_exposes_sprite_materials_as_rendering_dock() -> None:
     refresh_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_all)
     changed_source = inspect.getsource(QtGhostRiggerMainWindow._on_sprite_materials_changed)
     persistence_source = inspect.getsource(QtGhostRiggerMainWindow._apply_sprite_material_overrides)
+    payload_apply_source = inspect.getsource(QtGhostRiggerMainWindow._apply_sprite_material_payload)
     scene_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_scene_view)
+    selection_source = inspect.getsource(QtGhostRiggerMainWindow._select_scene_object_impl)
+    viewport_selection_source = inspect.getsource(QtGhostRiggerMainWindow._on_viewport_scene_node_selected)
+    panel_context_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_sprite_materials_panel_context)
+    scene_sync_source = inspect.getsource(QtGhostRiggerMainWindow._sync_sprite_material_nodes_to_scene)
+    scene_save_source = inspect.getsource(QtGhostRiggerMainWindow._save_scene)
 
     assert "self.sprite_materials_panel = QtSpriteMaterialPanel(self)" in layout_source
     assert '"sprite_materials"' in layout_source
     assert "self.sprite_materials_panel_action" in actions_source
     assert 'self._icon("sprite_materials")' in actions_source
     assert "modules_menu.addAction(self.sprite_materials_panel_action)" in menu_source
-    assert "self.sprite_materials_panel.set_model(self._active_viewport_model())" in refresh_source
+    assert "self._refresh_sprite_materials_panel_context()" in refresh_source
     assert "self.sprite_materials_panel.spriteRenderChanged.connect(self._on_sprite_materials_changed)" in layout_source
     assert "renderer.invalidate_node_cache()" in changed_source
-    assert "self.viewport.refresh_view()" in changed_source
-    assert "self._save_sprite_material_overrides()" in changed_source
+    assert "material=True" in changed_source
+    assert "resources=True" in changed_source
+    assert "visibility=True" in changed_source
+    assert "self._save_sprite_material_overrides(data)" in changed_source
+    assert "global_changed" in changed_source
+    assert "self._sync_sprite_material_nodes_to_scene(changed)" in changed_source
+    assert '"sprite_materials"' in scene_sync_source
+    assert "obj.material_overrides = overrides" in scene_sync_source
+    assert "self._sync_active_scene_sprite_material_overrides()" in scene_save_source
     assert "sprite_material_overrides.json" in inspect.getsource(QtGhostRiggerMainWindow._sprite_persistence_path)
-    assert "setattr(node, \"_gr_sprite_alpha_source\"" in persistence_source
+    assert "setattr(node, \"_gr_sprite_alpha_source\"" in payload_apply_source
     assert "self._apply_sprite_material_overrides(model)" in scene_source
+    assert "self._apply_scene_object_sprite_material_overrides(obj)" in scene_source
+    assert "self._refresh_sprite_materials_panel_context()" in scene_source
+    assert "self._refresh_sprite_materials_panel_context()" in selection_source
+    assert "self._refresh_sprite_materials_panel_context()" in viewport_selection_source
+    assert "self._selected_scene_model_object()" in panel_context_source
+    assert "panel.set_model(model)" in panel_context_source
     assert (Path("src/gui/icons/sprite_materials.svg")).exists()
     assert hasattr(QtSpriteMaterialPanel, "spriteRenderChanged")
 

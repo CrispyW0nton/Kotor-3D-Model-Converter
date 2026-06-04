@@ -47,6 +47,34 @@ class QtBlueprintEditorPanel(QtWidgets.QWidget):
         self._path = ""
         self.editor.setPlainText(json.dumps({"module": {}, "rooms": [], "resources": {}, "metadata": {}}, indent=2))
 
+    def load_ipc_resource_payload(
+        self,
+        *,
+        resource_type: str,
+        resref: str,
+        game: str = "",
+        module_dir: str = "",
+        raw: bytes | None = None,
+    ) -> None:
+        self._path = ""
+        preview = ""
+        if raw:
+            preview = raw[:4096].decode("latin-1", errors="replace")
+        payload = {
+            "resource": {
+                "type": resource_type,
+                "resref": resref,
+                "game": game,
+                "module_dir": module_dir,
+                "bytes": len(raw or b""),
+            },
+            "preview_latin1": preview,
+            "metadata": {
+                "source": "GhostRigger IPC",
+            },
+        }
+        self.editor.setPlainText(json.dumps(payload, indent=2))
+
     def open_blueprint(self) -> None:
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,

@@ -699,7 +699,10 @@ def _material_data(node, textures: dict) -> MaterialRenderData:
         sprite_alpha_source=sprite_alpha_source,
         sprite_glow=sprite_glow,
         double_sided=double_sided,
-        unlit=any(abs(float(c)) > 1e-6 for c in tuple(getattr(node, "selfillum", (0.0, 0.0, 0.0)) or ())[:3]),
+        unlit=(
+            any(abs(float(c)) > 1e-6 for c in tuple(getattr(node, "selfillum", (0.0, 0.0, 0.0)) or ())[:3])
+            or sprite_glow > 0.001
+        ),
         has_transparency=alpha_mode in {"MASK", "CUTOUT", "BLEND"} or base_color[3] < 0.999,
         source_revision=material_rev,
     )
@@ -779,6 +782,8 @@ def _sprite_alpha_source(node) -> int:
     source = str(getattr(node, "_gr_sprite_alpha_source", "") or "").lower()
     if source in {"luminance", "brightness", "matte", "black_key"}:
         return 1
+    if _has_sprite_material_override(node):
+        return 0
     if _is_saber_hilt(node):
         return 0
     text = f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')}".lower()
@@ -799,11 +804,22 @@ def _sprite_glow(node) -> float:
 
 
 def _is_saber_hilt(node) -> bool:
+    if str(getattr(node, "_gr_sprite_category", "") or "").lower() == "hilt":
+        return True
     name = str(getattr(node, "name", "") or "").lower()
     texture = str(getattr(node, "texture", "") or "").lower()
     if texture.startswith(("w_lghtsbr", "w_shortsbr", "w_dblsbr")):
         return True
     return name.startswith(("lghtsbr", "lshandle")) or "handle" in name
+
+
+def _has_sprite_material_override(node) -> bool:
+    return bool(
+        str(getattr(node, "_gr_sprite_category", "") or "").strip()
+        or str(getattr(node, "_gr_sprite_render_mode", "") or "").strip()
+        or getattr(node, "_gr_sprite_glow", None) is not None
+        or str(getattr(node, "_gr_sprite_alpha_source", "") or "").strip()
+    )
 
 
 def _node_world_transform(node, *, anim_pose=None) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:

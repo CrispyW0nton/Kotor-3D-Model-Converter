@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 class PygfxViewportRenderer(ViewportRendererPort):
     """ViewportRendererPort adapter around pygfx.WgpuRenderer."""
 
-    name = "pygfx / WGPU"
+    name = "pygfx (WGPU)"
     backend_id = RendererBackend.PYGFX_WGPU.value
     _probe_cache: ClassVar[RendererCapabilities | None] = None
     _device_created: ClassVar[bool] = False
@@ -94,7 +94,7 @@ class PygfxViewportRenderer(ViewportRendererPort):
         available = not missing
         cls._probe_cache = RendererCapabilities(
             backend_id=RendererBackend.PYGFX_WGPU.value,
-            name="pygfx / WGPU",
+            name="pygfx (WGPU)",
             available=available,
             reason="" if available else f"Missing optional dependency: {', '.join(missing)}",
             api="pygfx/WGPU",

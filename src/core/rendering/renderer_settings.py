@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from src.core.rendering.renderer_backend import RendererBackend, normalize_renderer_backend
+from src.core.rendering.renderer_backend import RendererBackend, supported_renderer_backend
 
 
 def _safe_bool(value: object, default: bool = False) -> bool:
@@ -37,8 +37,8 @@ def _safe_float(value: object, default: float, minimum: float = 0.0) -> float:
 
 @dataclass(frozen=True)
 class RendererSettings:
-    backend: RendererBackend = RendererBackend.AUTOMATIC
-    preferred_windows_backend: RendererBackend = RendererBackend.MODERNGL_GL330
+    backend: RendererBackend = RendererBackend.MODERNGL_GL330
+    preferred_windows_backend: RendererBackend = RendererBackend.WGPU_D3D12
     allow_fallback: bool = True
     show_renderer_diagnostics: bool = True
     force_safe_mode: bool = False
@@ -70,9 +70,9 @@ class RendererSettings:
         wgpu_values = dict(values.get("wgpu") or {})
         dynamic_quality = dict(values.get("dynamic_quality") or {})
         return cls(
-            backend=normalize_renderer_backend(values.get("backend", RendererBackend.AUTOMATIC.value)),
-            preferred_windows_backend=normalize_renderer_backend(
-                values.get("preferred_windows_backend", RendererBackend.MODERNGL_GL330.value)
+            backend=supported_renderer_backend(values.get("backend", RendererBackend.MODERNGL_GL330.value)),
+            preferred_windows_backend=supported_renderer_backend(
+                values.get("preferred_windows_backend", RendererBackend.WGPU_D3D12.value)
             ),
             allow_fallback=_safe_bool(values.get("allow_fallback", True), True),
             show_renderer_diagnostics=_safe_bool(values.get("show_renderer_diagnostics", True), True),
@@ -154,8 +154,8 @@ class RendererSettings:
         defaults = RendererSettings().to_settings_dict()
         for key, value in defaults.items():
             renderer.setdefault(key, value)
-        renderer["backend"] = normalize_renderer_backend(renderer.get("backend")).value
-        renderer["preferred_windows_backend"] = normalize_renderer_backend(
+        renderer["backend"] = supported_renderer_backend(renderer.get("backend")).value
+        renderer["preferred_windows_backend"] = supported_renderer_backend(
             renderer.get("preferred_windows_backend")
         ).value
         wgpu = renderer.setdefault("wgpu", {})

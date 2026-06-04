@@ -339,7 +339,8 @@ vec3 spriteEmissionTint(vec3 color) {
 }
 
 float spriteKeyedAlpha(vec4 sampled) {
-    float keyed_alpha = clamp(max(max(sampled.r, sampled.g), sampled.b) * 1.35, 0.0, 1.0);
+    float peak = max(max(sampled.r, sampled.g), sampled.b);
+    float keyed_alpha = smoothstep(0.08, 0.40, peak);
     return sampled.a < 0.999 ? min(sampled.a, keyed_alpha) : keyed_alpha;
 }
 

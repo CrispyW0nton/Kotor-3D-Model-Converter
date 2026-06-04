@@ -113,7 +113,7 @@ class GpuRenderer:
 
     #: Legacy diagnostic switch; the Qt viewport does not use CPU rendering.
     force_cpu: bool = False
-    name: str = "ModernGL / OpenGL 3.3"
+    name: str = "ModernGL"
     backend_id: str = "modern_gl"
 
     def __init__(self):
@@ -1609,7 +1609,7 @@ class GpuRenderer:
                     if tb == 0:
                         tb = 3
                     is_trans = True
-                if is_lightsaber_blade_node(node):
+                if is_lightsaber_blade_node(node) and not self._has_sprite_material_override(node):
                     tb = 1
                     is_trans = True
                 return na, tb, is_trans, has_env
@@ -1924,7 +1924,7 @@ class GpuRenderer:
                     _u['u_shininess'].value = 20.0   # global default
 
                 txi_blend = int(getattr(node, 'txi_blending', 0))
-                if _is_blade_node:
+                if _is_blade_node and not self._has_sprite_material_override(node):
                     txi_blend = 1
 
                 # FIX-ALPHATEST: Per-node punchthrough alpha-test threshold.
@@ -2637,8 +2637,19 @@ class GpuRenderer:
         first_name = str(names[0]) if names else ""
         return f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')} {first_name}".lower()
 
+    @staticmethod
+    def _has_sprite_material_override(node) -> bool:
+        return bool(
+            str(getattr(node, "_gr_sprite_category", "") or "").strip()
+            or str(getattr(node, "_gr_sprite_render_mode", "") or "").strip()
+            or getattr(node, "_gr_sprite_glow", None) is not None
+            or str(getattr(node, "_gr_sprite_alpha_source", "") or "").strip()
+        )
+
     @classmethod
     def _is_sprite_hilt(cls, node) -> bool:
+        if str(getattr(node, "_gr_sprite_category", "") or "").lower() == "hilt":
+            return True
         text = cls._sprite_text(node)
         return (
             "w_lghtsbr" in text
@@ -2655,6 +2666,8 @@ class GpuRenderer:
         source = str(getattr(node, "_gr_sprite_alpha_source", "") or "").lower()
         if source in {"luminance", "brightness", "matte", "black_key"}:
             return 1
+        if cls._has_sprite_material_override(node):
+            return 0
         if cls._is_sprite_hilt(node):
             return 0
         text = cls._sprite_text(node)

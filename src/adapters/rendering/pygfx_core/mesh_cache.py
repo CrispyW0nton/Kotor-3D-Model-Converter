@@ -28,12 +28,17 @@ class PygfxMeshRecord:
     double_sided: bool = False
     alpha_mode: str = "OPAQUE"
     alpha_cutoff: float = 0.5
+    blend_mode: str = "ALPHA"
+    sprite_alpha_source: int = 0
+    sprite_glow: float = 0.0
     unlit: bool = False
     is_skinned: bool = False
     skinning_cpu_fallback: bool = False
     skeleton: Any = None
     edge_mesh: Any = None
     edge_material: Any = None
+    sprite_proxy_mesh: Any = None
+    sprite_proxy_material: Any = None
     world_matrix_key: tuple[float, ...] = ()
     view_style_key: tuple[Any, ...] = ()
     selected: bool = False
@@ -214,6 +219,9 @@ class PygfxMeshCache:
                 double_sided=bool(getattr(mesh_data.material, "double_sided", False)),
                 alpha_mode=str(getattr(mesh_data.material, "alpha_mode", "OPAQUE") or "OPAQUE").upper(),
                 alpha_cutoff=float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5),
+                blend_mode=str(getattr(mesh_data.material, "blend_mode", "ALPHA") or "ALPHA").upper(),
+                sprite_alpha_source=int(getattr(mesh_data.material, "sprite_alpha_source", 0) or 0),
+                sprite_glow=float(getattr(mesh_data.material, "sprite_glow", 0.0) or 0.0),
                 unlit=bool(getattr(mesh_data.material, "unlit", False)),
                 is_skinned=bool(getattr(mesh_data, "is_skinned", False)),
                 skinning_cpu_fallback=bool(getattr(mesh_data, "skinning_cpu_fallback", False)),
@@ -266,6 +274,9 @@ class PygfxMeshCache:
             record.double_sided = bool(getattr(mesh_data.material, "double_sided", False))
             record.alpha_mode = str(getattr(mesh_data.material, "alpha_mode", "OPAQUE") or "OPAQUE").upper()
             record.alpha_cutoff = float(getattr(mesh_data.material, "alpha_cutoff", 0.5) or 0.5)
+            record.blend_mode = str(getattr(mesh_data.material, "blend_mode", "ALPHA") or "ALPHA").upper()
+            record.sprite_alpha_source = int(getattr(mesh_data.material, "sprite_alpha_source", 0) or 0)
+            record.sprite_glow = float(getattr(mesh_data.material, "sprite_glow", 0.0) or 0.0)
             record.unlit = bool(getattr(mesh_data.material, "unlit", False))
             record.is_skinned = bool(getattr(mesh_data, "is_skinned", False))
             record.skinning_cpu_fallback = bool(getattr(mesh_data, "skinning_cpu_fallback", False))
@@ -320,6 +331,11 @@ class PygfxMeshCache:
             if record.edge_mesh is not None:
                 try:
                     record.edge_mesh.visible = bool(visible and record.view_style_key and record.view_style_key[1])
+                except Exception:
+                    pass
+            if record.sprite_proxy_mesh is not None:
+                try:
+                    record.sprite_proxy_mesh.visible = bool(visible and self._use_sprite_proxy(record))
                 except Exception:
                     pass
 
@@ -550,8 +566,11 @@ class PygfxMeshCache:
         if source is None:
             return None
         texture_id = str(getattr(texture_data, "texture_id", "") or getattr(texture_data, "name", "") or id(source))
+        sprite_alpha_source = 0 if lightmap else int(
+            getattr(getattr(mesh_data, "material", None), "sprite_alpha_source", 0) or 0
+        )
         revision = tuple(getattr(texture_data, "source_revision", ()) or ())
-        key = (texture_id, revision, int(channel), bool(lightmap))
+        key = (texture_id, revision, int(channel), bool(lightmap), int(sprite_alpha_source))
         cached = self.texture_maps.get(key)
         if cached is not None:
             return cached
@@ -561,6 +580,15 @@ class PygfxMeshCache:
             if pixels.ndim != 3 or pixels.shape[2] < 4:
                 return None
             pixels = np.ascontiguousarray(pixels[:, :, :4])
+            if sprite_alpha_source:
+                rgb = pixels[:, :, :3].astype(np.float32) / 255.0
+                peak = np.max(rgb, axis=2)
+                keyed = np.clip((peak - 0.08) / (0.40 - 0.08), 0.0, 1.0)
+                keyed = keyed * keyed * (3.0 - 2.0 * keyed)
+                existing_alpha = pixels[:, :, 3].astype(np.float32) / 255.0
+                alpha = np.where(existing_alpha < 0.999, np.minimum(existing_alpha, keyed), keyed)
+                pixels = pixels.copy()
+                pixels[:, :, 3] = np.clip(alpha * 255.0, 0.0, 255.0).astype(np.uint8)
             texture = gfx.Texture(
                 pixels,
                 dim=2,
@@ -645,9 +673,11 @@ class PygfxMeshCache:
             pass
         self._set_material_attr(record.material, "wireframe", bool(show_wireframe) and not bool(show_solid))
         self._set_material_attr(record.material, "flat_shading", render_mode in {"flat", "shaded"})
+        use_sprite_proxy = self._use_sprite_proxy(record) and bool(show_solid)
+        self._set_sprite_proxy_visible(record, use_sprite_proxy, map_enabled)
         self._set_material_attr(record.mesh, "visible", self._source_visible(record.source) and (bool(show_solid) or bool(show_wireframe)))
         if bool(show_solid):
-            self._set_material_attr(record.mesh, "visible", self._source_visible(record.source))
+            self._set_material_attr(record.mesh, "visible", self._source_visible(record.source) and not use_sprite_proxy)
         else:
             self._set_material_attr(record.mesh, "visible", False)
         edge_visible = bool(show_wireframe) or bool(record.selected) or (bool(show_mesh_hover) and bool(record.hovered))
@@ -657,6 +687,73 @@ class PygfxMeshCache:
         elif record.hovered and bool(show_mesh_hover):
             edge_color = hover_color
         self._set_edge_overlay_visible(record, edge_visible, edge_color)
+
+    def _use_sprite_proxy(self, record: PygfxMeshRecord) -> bool:
+        return bool(
+            int(getattr(record, "sprite_alpha_source", 0) or 0) > 0
+            and str(getattr(record, "blend_mode", "") or "").upper() in {"ADDITIVE", "LIGHTEN"}
+        )
+
+    def _set_sprite_proxy_visible(self, record: PygfxMeshRecord, visible: bool, map_enabled: bool) -> None:
+        if not visible or not map_enabled:
+            if record.sprite_proxy_mesh is not None:
+                self._set_material_attr(record.sprite_proxy_mesh, "visible", False)
+            return
+        if record.sprite_proxy_mesh is None:
+            positions = self._sprite_proxy_positions(record)
+            if positions is None:
+                return
+            try:
+                geometry = record.gfx.Geometry(positions=positions)
+                color = self._sprite_proxy_color(record)
+                material = record.gfx.LineSegmentMaterial(
+                    color=color,
+                    thickness=7.5 + max(0.0, min(4.0, float(record.sprite_glow))) * 1.5,
+                    thickness_space="screen",
+                )
+                proxy = record.gfx.Line(geometry, material, render_order=2400, name=f"{getattr(record.mesh, 'name', record.mesh_id)}-sprite")
+                self._copy_local_transform(record.mesh, proxy)
+                record.scene.add(proxy)
+                record.sprite_proxy_mesh = proxy
+                record.sprite_proxy_material = material
+            except Exception:
+                return
+        self._copy_local_transform(record.mesh, record.sprite_proxy_mesh)
+        self._set_material_attr(record.sprite_proxy_mesh, "visible", self._source_visible(record.source))
+        if record.sprite_proxy_material is not None:
+            self._set_material_color(record.sprite_proxy_material, self._sprite_proxy_color(record))
+
+    def _sprite_proxy_positions(self, record: PygfxMeshRecord):
+        try:
+            points = np.asarray(record.geometry.positions.data, dtype=np.float32)
+        except Exception:
+            return None
+        if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] < 3:
+            return None
+        mins = np.min(points[:, :3], axis=0)
+        maxs = np.max(points[:, :3], axis=0)
+        axis = int(np.argmax(maxs - mins))
+        center = (mins + maxs) * 0.5
+        a = center.copy()
+        b = center.copy()
+        a[axis] = mins[axis]
+        b[axis] = maxs[axis]
+        return np.asarray([a, b], dtype=np.float32)
+
+    @staticmethod
+    def _sprite_proxy_color(record: PygfxMeshRecord) -> tuple[float, float, float, float]:
+        try:
+            pixels = np.asarray(record.diffuse_map.texture.data, dtype=np.uint8)
+            rgb = pixels[:, :, :3].astype(np.float32) / 255.0
+            alpha = pixels[:, :, 3].astype(np.float32) / 255.0
+            score = np.max(rgb, axis=2) * np.maximum(alpha, 0.05)
+            index = np.unravel_index(int(np.argmax(score)), score.shape)
+            color = rgb[index]
+            peak = max(float(color[0]), float(color[1]), float(color[2]), 1e-5)
+            color = np.clip(color / peak, 0.0, 1.0)
+            return (float(color[0]), float(color[1]), float(color[2]), 0.95)
+        except Exception:
+            return (0.45, 0.85, 1.0, 0.95)
 
     def _ensure_material_class(self, record: PygfxMeshRecord, render_mode: str) -> None:
         target_name = "MeshBasicMaterial" if render_mode == "flat" else "MeshPhongMaterial"
@@ -687,10 +784,13 @@ class PygfxMeshCache:
         if mode in {"MASK", "CUTOUT"}:
             self._set_material_attr(material, "alpha_mode", "auto")
             self._set_material_attr(material, "alpha_test", float(alpha_cutoff or 0.5))
+            self._set_material_attr(material, "depth_write", True)
         elif mode == "BLEND" or color[3] < 0.999:
             self._set_material_attr(material, "alpha_mode", "blend")
+            self._set_material_attr(material, "depth_write", False)
         else:
             self._set_material_attr(material, "alpha_mode", "solid")
+            self._set_material_attr(material, "depth_write", True)
         if bool(unlit):
             self._set_material_attr(material, "emissive", color[:3])
 

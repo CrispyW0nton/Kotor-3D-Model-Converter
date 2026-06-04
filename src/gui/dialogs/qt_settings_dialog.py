@@ -18,7 +18,12 @@ from src.core.rendering.viewport_navigation import (
     VIEWPORT_NAVIGATION_PROFILES,
     normalize_viewport_navigation_profile,
 )
-from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.core.rendering.renderer_backend import (
+    RendererBackend,
+    SUPPORTED_RENDERER_BACKENDS,
+    renderer_backend_label,
+    supported_renderer_backend,
+)
 from src.core.rendering.renderer_capabilities import RendererCapabilities
 from src.core.rendering.hardware_info import HardwareDiagnostics
 from src.core.rendering.renderer_settings import RendererSettings
@@ -29,8 +34,6 @@ from src.measurement.unit_system import CANONICAL_UNITS, UNIT_SYMBOLS
 
 _WGPU_BACKEND_TYPES = {
     RendererBackend.WGPU_D3D12.value: "D3D12",
-    RendererBackend.WGPU_VULKAN.value: "Vulkan",
-    RendererBackend.WGPU_OPENGL.value: "OpenGL",
     RendererBackend.PYGFX_WGPU.value: "D3D12",
 }
 
@@ -142,10 +145,11 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_backend_combo = QtWidgets.QComboBox()
         self._renderer_capability_text: dict[str, str] = {}
         for caps in self._renderer_capabilities:
-            label = renderer_backend_label(RendererBackend(caps.backend_id))
+            backend = supported_renderer_backend(caps.backend_id)
+            label = renderer_backend_label(backend)
             status = caps.status_text()
-            self._renderer_capability_text[caps.backend_id] = status
-            self.renderer_backend_combo.addItem(f"{label} - {status}", caps.backend_id)
+            self._renderer_capability_text[backend.value] = status
+            self.renderer_backend_combo.addItem(f"{label} - {status}", backend.value)
         self.renderer_fallback_check = QtWidgets.QCheckBox("Allow renderer fallback")
         self.renderer_diagnostics_check = QtWidgets.QCheckBox("Show renderer diagnostics")
         self.renderer_safe_mode_check = QtWidgets.QCheckBox("Force safe mode")
@@ -427,14 +431,35 @@ class QtSettingsDialog(QtWidgets.QDialog):
         value: list[dict] | list[RendererCapabilities] | None,
     ) -> list[RendererCapabilities]:
         if value:
-            caps: list[RendererCapabilities] = []
+            caps_by_backend: dict[RendererBackend, RendererCapabilities] = {}
             for entry in value:
                 if isinstance(entry, RendererCapabilities):
-                    caps.append(entry)
+                    caps = entry
                 elif isinstance(entry, dict):
-                    caps.append(RendererCapabilities.from_dict(entry))
-            if caps:
-                return caps
+                    caps = RendererCapabilities.from_dict(entry)
+                else:
+                    continue
+                try:
+                    backend = RendererBackend(caps.backend_id)
+                except ValueError:
+                    backend = supported_renderer_backend(caps.backend_id)
+                if backend in SUPPORTED_RENDERER_BACKENDS and backend not in caps_by_backend:
+                    caps_by_backend[backend] = RendererCapabilities(
+                        **{**caps.to_dict(), "backend_id": backend.value, "name": renderer_backend_label(backend)}
+                    )
+            if caps_by_backend:
+                for backend in SUPPORTED_RENDERER_BACKENDS:
+                    caps_by_backend.setdefault(
+                        backend,
+                        RendererCapabilities(
+                            backend_id=backend.value,
+                            name=renderer_backend_label(backend),
+                            available=True,
+                            reason="Cached renderer availability was not captured during startup",
+                            supports_hot_switch=True,
+                        ),
+                    )
+                return [caps_by_backend[backend] for backend in SUPPORTED_RENDERER_BACKENDS]
         return [
             RendererCapabilities(
                 backend_id=backend.value,
@@ -443,17 +468,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 reason="Cached renderer availability was not captured during startup",
                 supports_hot_switch=True,
             )
-            for backend in (
-                RendererBackend.AUTOMATIC,
-                RendererBackend.MODERNGL_GL330,
-                RendererBackend.WGPU_AUTO,
-                RendererBackend.WGPU_D3D12,
-                RendererBackend.WGPU_VULKAN,
-                RendererBackend.WGPU_OPENGL,
-                RendererBackend.PYGFX_WGPU,
-                RendererBackend.DIRECT3D_HARDWARE,
-                RendererBackend.NULL_DIAGNOSTIC,
-            )
+            for backend in SUPPORTED_RENDERER_BACKENDS
         ]
 
     def values(self) -> dict:
@@ -482,7 +497,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
             "autoscan": self.autoscan_check.isChecked(),
             "renderer": {
                 "backend": self.renderer_backend_combo.currentData(),
-                "preferred_windows_backend": RendererBackend.MODERNGL_GL330.value,
+                "preferred_windows_backend": RendererBackend.WGPU_D3D12.value,
                 "allow_fallback": self.renderer_fallback_check.isChecked(),
                 "show_renderer_diagnostics": self.renderer_diagnostics_check.isChecked(),
                 "force_safe_mode": self.renderer_safe_mode_check.isChecked(),
@@ -538,7 +553,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
         combo.setCurrentIndex(max(index, 0))
 
     def _update_renderer_status(self) -> None:
-        backend_id = str(self.renderer_backend_combo.currentData() or RendererBackend.AUTOMATIC.value)
+        backend_id = str(self.renderer_backend_combo.currentData() or RendererBackend.MODERNGL_GL330.value)
         status = self._renderer_capability_text.get(backend_id, "Available")
         current_settings = RendererSettings.from_settings(self.settings)
         candidate = self.values()
@@ -548,7 +563,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
         if restart_needed:
             suffix = " Restart required to apply this WGPU backend."
         else:
-            suffix = " Restart may be required for a real backend switch." if backend_id != RendererBackend.AUTOMATIC.value else ""
+            suffix = " Restart may be required for a real backend switch."
         self.renderer_status_label.setText(f"{status}.{suffix}")
 
     def _renderer_restart_required(self, old_settings: RendererSettings, new_settings: RendererSettings) -> bool:

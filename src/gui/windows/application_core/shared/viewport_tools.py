@@ -430,7 +430,7 @@ class ViewportToolsMixin:
         if hasattr(self, "module_geometry_panel"):
             self.module_geometry_panel.show_model(self._active_viewport_model())
         if hasattr(self, "sprite_materials_panel"):
-            self.sprite_materials_panel.set_model(self._active_viewport_model())
+            self._refresh_sprite_materials_panel_context()
         if hasattr(self, "body_attachment_panel"):
             self.body_attachment_panel.set_body_model(getattr(self, "_bas_body_model", None) or model)
         if hasattr(self, "animations_panel"):
