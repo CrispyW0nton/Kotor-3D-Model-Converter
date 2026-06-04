@@ -117,6 +117,10 @@ def export_character_mdl_mdx_transaction(
         "game": request.game,
         "resref": _model_resref(request.model, mdl_path),
         "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
+        "character_builder_workflow": _character_builder_workflow_evidence(
+            request.model,
+            native_snapshot,
+        ),
         **dict(request.metadata or {}),
     }
     job_request = ExportJobRequest(
@@ -276,6 +280,77 @@ def _validation_text_path(mdl_path: Path) -> Path:
 
 def _model_resref(model: Any, mdl_path: Path) -> str:
     return str(getattr(model, "name", "") or mdl_path.stem or "untitled").lower()
+
+
+def _character_builder_workflow_evidence(
+    model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+) -> dict[str, Any]:
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+    rig_state = getattr(model, "_gr_character_builder_rig_state", None)
+    if hasattr(rig_state, "to_dict"):
+        rig_state = rig_state.to_dict()
+    elif not isinstance(rig_state, dict):
+        rig_state = metadata.get("character_builder_rig_state")
+
+    normalization = metadata.get("kotor_normalization")
+    if isinstance(normalization, dict):
+        normalization_summary = {
+            key: normalization.get(key)
+            for key in (
+                "fit_policy",
+                "scale",
+                "scale_basis",
+                "source_height",
+                "target_height",
+                "reference",
+                "vertical_axis",
+                "target_center_xy",
+                "target_ground_z",
+                "external_world_positions_fit",
+                "fit_transform",
+            )
+            if key in normalization
+        }
+    else:
+        normalization_summary = None
+
+    snapshot_summary = None
+    if native_snapshot is not None:
+        snapshot_summary = {
+            "model_name": native_snapshot.model_name,
+            "game": native_snapshot.game,
+            "supermodel": native_snapshot.supermodel,
+            "node_count": native_snapshot.node_count,
+            "mesh_node_count": native_snapshot.mesh_node_count,
+            "skin_node_count": native_snapshot.skin_node_count,
+            "hook_names": list(native_snapshot.hook_names),
+            "metadata": dict(native_snapshot.metadata or {}),
+        }
+
+    return _json_safe({
+        "native_skeleton_is_authority": True,
+        "imported_mesh_role": "payload_guest",
+        "final_dag_source": "selected_kotor_base",
+        "rig_state": rig_state,
+        "fit_report": metadata.get("kotor_fit_report"),
+        "normalization": normalization_summary,
+        "native_snapshot": snapshot_summary,
+    })
+
+
+def _json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "to_dict"):
+        return _json_safe(value.to_dict())
+    return str(value)
 
 
 def _export_issue(

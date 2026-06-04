@@ -127,6 +127,37 @@ class CharacterBuilderValidationReport:
         for key, value in dict(payload.get("outputs") or {}).items():
             lines.append(f"- {key}: {value}")
 
+        workflow = dict(payload.get("metadata", {}).get("character_builder_workflow") or {})
+        if workflow:
+            rig_state = dict(workflow.get("rig_state") or {})
+            fit_report = dict(workflow.get("fit_report") or {})
+            fit_transform = dict(fit_report.get("fit_transform") or {})
+            native_snapshot = dict(workflow.get("native_snapshot") or {})
+            lines.extend(["", "Character Builder workflow evidence:"])
+            lines.append(
+                f"- Final DAG source: {workflow.get('final_dag_source')}"
+            )
+            lines.append(
+                f"- Rig state: {rig_state.get('state')} "
+                f"({rig_state.get('dag_authority')})"
+            )
+            if native_snapshot:
+                lines.append(
+                    f"- Native snapshot: {native_snapshot.get('game')} "
+                    f"{native_snapshot.get('model_name')} "
+                    f"supermodel {native_snapshot.get('supermodel')}"
+                )
+            if fit_report:
+                lines.append(
+                    f"- Auto-fit policy: {fit_report.get('fit_policy')} "
+                    f"confidence {fit_report.get('confidence')}"
+                )
+            if fit_transform:
+                lines.append(
+                    f"- Fit transform: scale {fit_transform.get('scale')} "
+                    f"translation {fit_transform.get('translation')}"
+                )
+
         lines.extend(["", "Issues:"])
         issue_count = 0
         reports = [

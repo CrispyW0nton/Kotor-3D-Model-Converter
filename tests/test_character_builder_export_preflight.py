@@ -439,6 +439,26 @@ class _FakeCharacterWriter:
 def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_path) -> None:
     _FakeCharacterWriter.calls = []
     result = _rigged_character()
+    result["model"].metadata["kotor_fit_report"] = {
+        "fit_policy": "bone_landmark_basis",
+        "confidence": 0.95,
+        "fit_transform": {
+            "formula": "kotor_point = linear_matrix * source_point + translation",
+            "scale": 0.8,
+            "translation": [0.0, 0.0, 0.0],
+        },
+        "kotor_contract": {
+            "native_skeleton_is_authority": True,
+            "imported_mesh_role": "payload_guest",
+            "final_dag_source": "selected_kotor_base",
+        },
+    }
+    result["model"].metadata["kotor_normalization"] = {
+        "fit_policy": "bone_landmark_basis",
+        "scale": 0.8,
+        "scale_basis": "bone_landmark_height",
+        "fit_transform": result["model"].metadata["kotor_fit_report"]["fit_transform"],
+    }
     output = tmp_path / "grbody.mdl"
 
     tx = export_character_mdl_mdx_transaction(
@@ -468,9 +488,23 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert payload["capability"]["game_test_status"] == "not_game_tested"
     assert payload["engine_evidence"]["findings_doc"] == "docs/ghidra_findings.md"
     assert len(payload["manual_in_game_checklist"]) == 12
+    workflow = payload["metadata"]["character_builder_workflow"]
+    assert workflow["native_skeleton_is_authority"] is True
+    assert workflow["imported_mesh_role"] == "payload_guest"
+    assert workflow["final_dag_source"] == "selected_kotor_base"
+    assert workflow["rig_state"]["state"] == "native_template_final"
+    assert workflow["fit_report"]["fit_policy"] == "bone_landmark_basis"
+    assert workflow["fit_report"]["fit_transform"]["scale"] == 0.8
+    assert workflow["normalization"]["fit_transform"]["translation"] == [0.0, 0.0, 0.0]
+    assert workflow["native_snapshot"]["model_name"] == "pmbam"
+    assert workflow["native_snapshot"]["game"] == "K1"
+    assert workflow["native_snapshot"]["supermodel"] == "S_KPMF0200"
     text = text_path.read_text(encoding="utf-8")
     assert "Capability stage: export_candidate" in text
     assert "Game tested: False" in text
+    assert "Character Builder workflow evidence" in text
+    assert "Rig state: native_template_final" in text
+    assert "Auto-fit policy: bone_landmark_basis" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
 
