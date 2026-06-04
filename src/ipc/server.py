@@ -270,6 +270,64 @@ class GhostRiggerIPCServer:
                 self._schedule_callback(cb, path)
             return jsonify({"status": "ok", "path": path})
 
+        @app.route("/api/create_scene_camera", methods=["POST"])
+        def route_create_scene_camera():
+            """Create a KMAX scene camera in the running application."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            camera_type = str(payload.get("type", payload.get("camera_type", body.get("type", "Cinematic Camera"))) or "Cinematic Camera").strip()
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+            make_active = bool(payload.get("make_active", body.get("make_active", False)))
+
+            cb = self.callbacks.get("create_scene_camera")
+            if cb is not None:
+                self._schedule_callback(cb, camera_type, name, make_active)
+            return jsonify({"status": "ok", "camera_type": camera_type, "name": name, "make_active": make_active})
+
+        @app.route("/api/create_scene_light", methods=["POST"])
+        def route_create_scene_light():
+            """Create a KMAX scene light in the running application."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            light_type = str(payload.get("type", payload.get("light_type", body.get("type", "point"))) or "point").strip()
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+
+            cb = self.callbacks.get("create_scene_light")
+            if cb is not None:
+                self._schedule_callback(cb, light_type, name)
+            return jsonify({"status": "ok", "light_type": light_type, "name": name})
+
+        @app.route("/api/select_scene_object", methods=["POST"])
+        def route_select_scene_object():
+            """Select a KMAX scene object by id or name."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            object_id = str(payload.get("id", payload.get("object_id", body.get("id", ""))) or "").strip()
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+            if not (object_id or name):
+                return jsonify({"error": "missing id or name"}), 400
+
+            cb = self.callbacks.get("select_scene_object")
+            if cb is not None:
+                self._schedule_callback(cb, object_id, name)
+            return jsonify({"status": "ok", "object_id": object_id, "name": name})
+
+        @app.route("/api/set_scene_object_visibility", methods=["POST"])
+        def route_set_scene_object_visibility():
+            """Show or hide a KMAX scene object by id or name."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            object_id = str(payload.get("id", payload.get("object_id", body.get("id", ""))) or "").strip()
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+            if not (object_id or name):
+                return jsonify({"error": "missing id or name"}), 400
+            visible = bool(payload.get("visible", body.get("visible", True)))
+
+            cb = self.callbacks.get("set_scene_object_visibility")
+            if cb is not None:
+                self._schedule_callback(cb, object_id, name, visible)
+            return jsonify({"status": "ok", "object_id": object_id, "name": name, "visible": visible})
+
         @app.route("/api/show_panel", methods=["POST"])
         def route_show_panel():
             """Show a GhostRigger dock/panel in the running UI for visual QA."""

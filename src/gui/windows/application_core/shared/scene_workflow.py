@@ -163,6 +163,56 @@ class SceneWorkflowMixin:
             self._log(f"IPC save_scene failed:\n{traceback.format_exc()}", "error")
             return False
 
+    def _find_scene_object_for_ipc(self, object_id: str = "", name: str = ""):
+        object_id = str(object_id or "").strip()
+        name = str(name or "").strip()
+        name_key = name.lower()
+        for obj in self.scene_manager.active_scene.objects:
+            if object_id and str(getattr(obj, "id", "") or "") == object_id:
+                return obj
+            if name_key and str(getattr(obj, "name", "") or "").lower() == name_key:
+                return obj
+        return None
+
+    def _create_scene_camera_from_ipc(self, camera_type: str = "Cinematic Camera", name: str = "", *, make_active: bool = False) -> bool:
+        obj = self._create_scene_camera_object(
+            str(camera_type or "Cinematic Camera"),
+            make_active=bool(make_active),
+            name=str(name or ""),
+        )
+        if obj is None:
+            self._log("IPC create_scene_camera failed.", "warning")
+            return False
+        self._log(f"IPC create_scene_camera: {obj.name}", "success")
+        return True
+
+    def _create_scene_light_from_ipc(self, light_type: str = "point", name: str = "") -> bool:
+        obj = self._create_scene_light_object(str(light_type or "point"), name=str(name or ""))
+        if obj is None:
+            self._log("IPC create_scene_light failed.", "warning")
+            return False
+        self._log(f"IPC create_scene_light: {obj.name}", "success")
+        return True
+
+    def _select_scene_object_from_ipc(self, object_id: str = "", name: str = "") -> bool:
+        obj = self._find_scene_object_for_ipc(object_id, name)
+        if obj is None:
+            self._log(f"IPC select_scene_object: not found {object_id or name or '<empty>'}", "warning")
+            return False
+        self._select_scene_object(str(obj.id))
+        self._log(f"IPC select_scene_object: {obj.name}", "success")
+        return True
+
+    def _set_scene_object_visibility_from_ipc(self, object_id: str = "", name: str = "", *, visible: bool = True) -> bool:
+        obj = self._find_scene_object_for_ipc(object_id, name)
+        if obj is None:
+            self._log(f"IPC set_scene_object_visibility: not found {object_id or name or '<empty>'}", "warning")
+            return False
+        self._set_scene_object_visible(str(obj.id), bool(visible))
+        state = "visible" if bool(visible) else "hidden"
+        self._log(f"IPC set_scene_object_visibility: {obj.name} {state}", "success")
+        return True
+
     def _export_scene(self):
         scene = self.scene_manager.active_scene
         if not scene.objects:

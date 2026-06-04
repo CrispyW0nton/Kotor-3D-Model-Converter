@@ -212,7 +212,7 @@ class ViewportToolsMixin:
         self.viewport.refresh_lighting()
         if hasattr(self, "scene_outliner_panel"):
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
-    def _create_scene_camera_object(self, camera_type: str = "Cinematic Camera", *, make_active: bool = False):
+    def _create_scene_camera_object(self, camera_type: str = "Cinematic Camera", *, make_active: bool = False, name: str = ""):
         from src.core.camera.camera_model import GhostRiggerCamera
         from src.core.scene.scene_object import Transform
 
@@ -230,6 +230,7 @@ class ViewportToolsMixin:
         obj = self.scene_manager.add_camera_object(
             camera_type,
             Transform(position=camera.position, rotation=rotation),
+            name=str(name or ""),
             properties=camera,
             select=True,
         )
@@ -258,7 +259,7 @@ class ViewportToolsMixin:
         if ok:
             self._refresh_scene_view()
         return ok
-    def _create_scene_light_object(self, light_type: str = "point"):
+    def _create_scene_light_object(self, light_type: str = "point", *, name: str = ""):
         from src.core.scene.scene_object import Transform
 
         position = (0.0, 0.0, 0.0)
@@ -269,7 +270,12 @@ class ViewportToolsMixin:
                 position = tuple(float(v) for v in target[:3])
             except Exception:
                 position = (0.0, 0.0, 0.0)
-        obj = self.scene_manager.add_light_object(light_type, Transform(position=position), select=True)
+        obj = self.scene_manager.add_light_object(
+            light_type,
+            Transform(position=position),
+            name=str(name or ""),
+            select=True,
+        )
         self._refresh_scene_view()
         self._select_scene_object(obj.id)
         return obj

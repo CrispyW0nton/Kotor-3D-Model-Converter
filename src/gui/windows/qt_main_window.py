@@ -413,6 +413,18 @@ class QtGhostRiggerMainWindow(
         def save_scene(path: str = "") -> None:
             self._save_scene_from_ipc(str(path or ""))
 
+        def create_scene_camera(camera_type: str = "Cinematic Camera", name: str = "", make_active: object = False) -> None:
+            self._create_scene_camera_from_ipc(str(camera_type or "Cinematic Camera"), str(name or ""), make_active=bool(make_active))
+
+        def create_scene_light(light_type: str = "point", name: str = "") -> None:
+            self._create_scene_light_from_ipc(str(light_type or "point"), str(name or ""))
+
+        def select_scene_object(object_id: str = "", name: str = "") -> None:
+            self._select_scene_object_from_ipc(str(object_id or ""), str(name or ""))
+
+        def set_scene_object_visibility(object_id: str = "", name: str = "", visible: object = True) -> None:
+            self._set_scene_object_visibility_from_ipc(str(object_id or ""), str(name or ""), visible=bool(visible))
+
         def open_blueprint_resource(resource_type: str):
             def _open(resref: str, module_dir: str = "") -> None:
                 game = str(getattr(self, "_current_game", "") or "K2")
@@ -560,6 +572,10 @@ class QtGhostRiggerMainWindow(
                     "new_scene": new_scene,
                     "open_scene": open_scene,
                     "save_scene": save_scene,
+                    "create_scene_camera": create_scene_camera,
+                    "create_scene_light": create_scene_light,
+                    "select_scene_object": select_scene_object,
+                    "set_scene_object_visibility": set_scene_object_visibility,
                     "refresh_viewport": refresh_viewport,
                     "show_panel": show_panel,
                     "open_tool": open_tool,

@@ -220,6 +220,7 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     source = (ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8")
     lifecycle_source = (ROOT / "src/gui/windows/application_core/shared/window_lifecycle.py").read_text(encoding="utf-8")
     server_source = (ROOT / "src/ipc/server.py").read_text(encoding="utf-8")
+    client_source = (ROOT / "src/ipc/client.py").read_text(encoding="utf-8")
 
     assert "from src.ipc.server import GhostRiggerIPCServer" in source
     assert "self._ipc_server: Optional[GhostRiggerIPCServer] = None" in source
@@ -232,6 +233,10 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '"new_scene": new_scene' in source
     assert '"open_scene": open_scene' in source
     assert '"save_scene": save_scene' in source
+    assert '"create_scene_camera": create_scene_camera' in source
+    assert '"create_scene_light": create_scene_light' in source
+    assert '"select_scene_object": select_scene_object' in source
+    assert '"set_scene_object_visibility": set_scene_object_visibility' in source
     assert '"refresh_viewport": refresh_viewport' in source
     assert '"show_panel": show_panel' in source
     assert '"open_tool": open_tool' in source
@@ -246,6 +251,10 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '@app.route("/api/new_scene", methods=["POST"])' in server_source
     assert '@app.route("/api/open_scene", methods=["POST"])' in server_source
     assert '@app.route("/api/save_scene", methods=["POST"])' in server_source
+    assert '@app.route("/api/create_scene_camera", methods=["POST"])' in server_source
+    assert '@app.route("/api/create_scene_light", methods=["POST"])' in server_source
+    assert '@app.route("/api/select_scene_object", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_scene_object_visibility", methods=["POST"])' in server_source
     assert '@app.route("/api/show_panel", methods=["POST"])' in server_source
     assert '@app.route("/api/open_tool", methods=["POST"])' in server_source
     assert '@app.route("/api/select_module_mesh", methods=["POST"])' in server_source
@@ -265,6 +274,14 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert "def _create_new_scene_from_ipc" in scene_source
     assert "def _open_scene_from_ipc" in scene_source
     assert "def _save_scene_from_ipc" in scene_source
+    assert "def _create_scene_camera_from_ipc" in scene_source
+    assert "def _create_scene_light_from_ipc" in scene_source
+    assert "def _select_scene_object_from_ipc" in scene_source
+    assert "def _set_scene_object_visibility_from_ipc" in scene_source
+    assert "def create_ghostrigger_scene_camera" in client_source
+    assert "def create_ghostrigger_scene_light" in client_source
+    assert "def select_ghostrigger_scene_object" in client_source
+    assert "def set_ghostrigger_scene_object_visibility" in client_source
 
 
 def test_ipc_module_mesh_selector_uses_existing_panel_and_viewport_sync_paths() -> None:

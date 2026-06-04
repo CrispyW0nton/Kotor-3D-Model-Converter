@@ -202,6 +202,51 @@ def save_ghostrigger_scene(path: str = "") -> None:
     )
 
 
+def create_ghostrigger_scene_camera(camera_type: str = "Cinematic Camera", name: str = "", *, make_active: bool = False) -> None:
+    """Ask a running GhostRigger instance to create a scene camera."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "create_scene_camera",
+        payload={"type": camera_type, "name": name, "make_active": bool(make_active)},
+        on_result=_log_result("create_scene_camera -> GhostRigger"),
+    )
+
+
+def create_ghostrigger_scene_light(light_type: str = "point", name: str = "") -> None:
+    """Ask a running GhostRigger instance to create a scene light."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "create_scene_light",
+        payload={"type": light_type, "name": name},
+        on_result=_log_result("create_scene_light -> GhostRigger"),
+    )
+
+
+def select_ghostrigger_scene_object(object_id: str = "", name: str = "") -> None:
+    """Ask a running GhostRigger instance to select a scene object."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "select_scene_object",
+        payload={"id": object_id, "name": name},
+        on_result=_log_result("select_scene_object -> GhostRigger"),
+    )
+
+
+def set_ghostrigger_scene_object_visibility(
+    object_id: str = "",
+    name: str = "",
+    *,
+    visible: bool = True,
+) -> None:
+    """Ask a running GhostRigger instance to show or hide a scene object."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "set_scene_object_visibility",
+        payload={"id": object_id, "name": name, "visible": bool(visible)},
+        on_result=_log_result("set_scene_object_visibility -> GhostRigger"),
+    )
+
+
 def select_ghostrigger_module_mesh(mesh: str) -> None:
     """Ask a running GhostRigger instance to select a module mesh by label."""
     ipc_call_async(
