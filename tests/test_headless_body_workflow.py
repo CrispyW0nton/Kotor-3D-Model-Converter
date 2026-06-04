@@ -2017,6 +2017,32 @@ def test_t506_validate_for_export_warnings_only_is_not_blocked(monkeypatch):
     assert result.blocking_codes == []
 
 
+def test_t1205_validate_for_export_keeps_optional_native_hooks_advisory() -> None:
+    """Vanilla native body bases may lack optional effect hooks such as chestconjure."""
+    from src.core.geometry import model_data as canonical_md
+
+    scene = canonical_md.CharacterScene(game_version="K1")
+    body = _FakeBodyModel("n_mandalorian")
+    scene.assign(
+        canonical_md.PartSlot.HEADLESS_BODY,
+        body,
+        resref="n_mandalorian",
+        source_path="/tmp/n_mandalorian.mdl",
+    )
+
+    result = wf.validate_for_export(scene, strict=True)
+
+    assert result.ok is True
+    assert result.code == "warnings_only"
+    missing_hooks = {
+        getattr(issue, "node", "")
+        for issue in result.issues
+        if getattr(issue, "code", "") == "HOOK_MISSING"
+    }
+    assert "chestconjure" in missing_hooks
+    assert "HOOK_MISSING" not in result.blocking_codes
+
+
 def test_t506_validate_for_export_errors_block_export(monkeypatch):
     """ERROR-severity issues MUST block export and surface their codes."""
     issues = [

@@ -47,6 +47,21 @@ MCP checks on 2026-06-04 confirmed:
   and supermodel `S_KPMF0200`.
 - K1 Ghidra context is loaded for future engine-loader checks.
 
+Headless workflow proof on 2026-06-04 confirmed:
+
+- `Bendak.fbx` loads as the imported custom mesh payload.
+- K1 `n_mandalorian` loads as the selected native KOTOR base skeleton.
+- Auto-fit reports `Fit to n_mandalorian (0.331x)`.
+- `apply_template_rig` produces a `native_template_final` candidate with
+  one skinned Bendak payload mesh, 55 KOTOR bone slots, and inherited
+  `S_Female02` motion source.
+- Staged KOTOR export writes `bendak.mdl` / `bendak.mdx` to a temp output
+  folder and reload verification passes with hooks `rhand`, `Lhand_g`, and
+  `headhook`, one mesh node, one skin node, and supermodel `S_Female02`.
+
+This proves a reload-verified export candidate, not an in-game-tested
+replacement.
+
 Treat `n_mandalorian` as the mandatory native base MDL that supplies the KOTOR
 node DAG for this fixture. If a packaging/export test targets
 `n_mandalorian03`, the Character Builder must keep both identities visible:

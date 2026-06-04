@@ -159,7 +159,9 @@ class ValidationService:
     Parameters
     ----------
     scene       : The CharacterScene to validate.
-    strict      : When True, some WARNINGs are promoted to ERRORs.
+    strict      : When True, structural blockers remain errors. Advisory
+                  expected hooks stay warnings because vanilla KOTOR models do
+                  not all include every optional attachment/effect hook.
     max_weight_errors : Cap on per-slot weight errors (to avoid flooding the
                         log for meshes with thousands of bad vertices).
     """
@@ -330,8 +332,7 @@ class ValidationService:
 
         for hook in expected:
             if hook.lower() not in names_lower:
-                severity = Severity.ERROR if self._strict else Severity.WARNING
-                self._add(severity, "HOOK_MISSING",
+                self._add(Severity.WARNING, "HOOK_MISSING",
                           f"Expected hook '{hook}' not found. "
                           "Cutscene / item-attachment may break.",
                           slot=slot, node=hook)
