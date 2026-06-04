@@ -1261,6 +1261,11 @@ def _validate_socket_categories(
         for node in snapshot.nodes
         if node.socket_category and _find_node_exact_path(current_nodes, tuple(node.full_path)) is not None
     }
+    native_categories = {
+        node.socket_category
+        for node in snapshot.nodes
+        if node.socket_category
+    }
     for category in opts.required_socket_categories:
         if category not in present_categories:
             category_evidence = _socket_category_evidence_details(snapshot, category)
@@ -1272,6 +1277,8 @@ def _validate_socket_categories(
                 details={"category": category, **category_evidence},
             ))
     for category in opts.recommended_socket_categories:
+        if category not in native_categories:
+            continue
         if category not in present_categories:
             category_evidence = _socket_category_evidence_details(snapshot, category)
             report.add(_issue(

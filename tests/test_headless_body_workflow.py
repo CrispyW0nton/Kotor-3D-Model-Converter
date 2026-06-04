@@ -1507,6 +1507,12 @@ def test_t505_preview_animations_constant_includes_idle_walk_talk():
     assert any(n.startswith("tlk") or n == "talk" for n in names)
 
 
+def test_t505_required_preview_animations_use_verified_kotor_slots():
+    names = {n for _, n in wf.REQUIRED_PREVIEW_ANIMATIONS}
+    assert names == {"pause1", "walk", "run", "tlknorm"}
+    assert "dodge" not in names
+
+
 def test_t505_available_preview_animations_no_body_returns_structured_error():
     scene = _make_scene("K1")
     result = wf.available_preview_animations(scene)
@@ -2798,6 +2804,7 @@ def test_t1205_launch_workflow_records_inherited_animation_library(monkeypatch, 
             super_model.animations = [
                 _FakeAnimation("pause1", 1.0),
                 _FakeAnimation("walk", 1.2),
+                _FakeAnimation("run", 0.9),
                 _FakeAnimation("tlknorm", 2.0),
             ]
             return super_model
@@ -2865,18 +2872,20 @@ def test_t1205_launch_workflow_records_inherited_animation_library(monkeypatch, 
     assert result.code == "launch_verified"
     assert result.animation_library_result is not None
     names = {name for _label, name in result.animation_library_result.available}
-    assert {"pause1", "walk", "tlknorm"}.issubset(names)
+    assert {"pause1", "walk", "run", "tlknorm"}.issubset(names)
     assert result.animation_library_result.details["resolved_supermodel"] == "S_Female02"
     animation_evidence = rigged_model.metadata["character_builder_animation_library"]
     assert animation_evidence["schema"] == "ghostrigger.character_animation_library_evidence.v1"
     assert animation_evidence["status"] == "resolved"
     assert animation_evidence["resolved_supermodel"] == "S_Female02"
-    assert animation_evidence["available_count"] == 3
+    assert animation_evidence["available_count"] == 4
     assert set(animation_evidence["sample_animation_names"]) == {
         "pause1",
         "walk",
+        "run",
         "tlknorm",
     }
+    assert animation_evidence["required_preview_missing"] == []
     motion_evidence = rigged_model.metadata["character_builder_motion_assignment"]
     assert motion_evidence["source"] == wf.MOTION_SOURCE_INHERITED
     assert motion_evidence["supermodel"] == "S_Female02"

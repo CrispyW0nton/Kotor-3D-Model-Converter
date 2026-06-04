@@ -3486,13 +3486,25 @@ def _read_masked_bones(acurig: Any) -> List[str]:
 
 # (Display label, actual animation name from _ANIM_SLOTS).
 # The order is intentional — these are the most-used preview slots when
-# QC-ing a freshly-rigged body.
+# QC-ing a freshly-rigged body. Some entries are optional convenience previews:
+# KOTOR combat reactions often use coded slots such as ``g*d*`` instead of a
+# plain ``dodge`` block, so export evidence uses the stricter proof set below.
 PREVIEW_ANIMATIONS: Tuple[Tuple[str, str], ...] = (
     ("Idle",  "pause1"),
     ("Walk",  "walk"),
     ("Run",   "run"),
     ("Talk",  "tlknorm"),
     ("Dodge", "dodge"),
+)
+
+# Preview clips that must resolve before the Character Builder animation gate
+# can claim the inherited supermodel path is proof-ready. Keep this tied to
+# verified Aurora slot names, not UI-friendly labels or gameplay categories.
+REQUIRED_PREVIEW_ANIMATIONS: Tuple[Tuple[str, str], ...] = (
+    ("Idle", "pause1"),
+    ("Walk", "walk"),
+    ("Run", "run"),
+    ("Talk", "tlknorm"),
 )
 
 MOTION_SOURCE_MODEL = "model"
@@ -4067,7 +4079,9 @@ def _stamp_animation_library_evidence(
     ]
     available_names = [name for _label, name in available]
     available_lower = {name.lower() for name in available_names}
-    required_preview_names = [name for _label, name in PREVIEW_ANIMATIONS]
+    required_preview_names = [
+        name for _label, name in REQUIRED_PREVIEW_ANIMATIONS
+    ]
     required_available = [
         name for name in required_preview_names
         if name.lower() in available_lower
@@ -5550,6 +5564,7 @@ __all__ = [
     "MotionAssignmentResult",
     "PC_SUPERMODEL_OPTIONS",
     "PREVIEW_ANIMATIONS",
+    "REQUIRED_PREVIEW_ANIMATIONS",
     "ValidateForExportResult",
     "apply_body_guide_positions",
     "apply_hand_masks",

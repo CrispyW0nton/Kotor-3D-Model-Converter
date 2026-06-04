@@ -254,7 +254,7 @@ def _stamp_animation_library_evidence(
         "supermodel": supermodel,
         "code": "inherited",
         "ok": True,
-        "available_preview_names": ["pause1", "walk", "run", "tlknorm", "dodge"],
+        "available_preview_names": ["pause1", "walk", "run", "tlknorm"],
         "missing_preview_names": [],
     }
     model.metadata["character_builder_animation_library"] = {
@@ -279,11 +279,10 @@ def _stamp_animation_library_evidence(
             "walk",
             "run",
             "tlknorm",
-            "dodge",
             "victory",
         ],
-        "required_preview_names": ["pause1", "walk", "run", "tlknorm", "dodge"],
-        "required_preview_available": ["pause1", "walk", "run", "tlknorm", "dodge"],
+        "required_preview_names": ["pause1", "walk", "run", "tlknorm"],
+        "required_preview_available": ["pause1", "walk", "run", "tlknorm"],
         "required_preview_missing": [],
         "diagnostics": [],
     }
@@ -1054,6 +1053,20 @@ def test_character_export_preflight_marks_fixture_only_socket_evidence_pending()
     assert issue.details["pending_engine_string_ref_nodes"] == ["LightsaberHook"]
     assert issue.details["engine_evidence_tier"] == "native_fixture_only_pending_engine_string_ref"
     assert issue.details["findings_doc"] == "docs/ghidra_findings.md"
+
+
+def test_character_export_preflight_skips_recommended_socket_absent_from_native_base() -> None:
+    result = _rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(
+            recommended_socket_categories=("headgear",),
+        ),
+    )
+
+    assert "character.export.recommended_socket_missing" not in _codes(preflight)
 
 
 def test_character_export_preflight_detects_exact_node_case_changes() -> None:
