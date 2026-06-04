@@ -170,6 +170,19 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
         "game": "K1",
         "supermodel": "S_Female02",
         "dag_authority": "native_kotor_base",
+        "replaced_render_payload_nodes": [
+            {
+                "name": "template_body_mesh",
+                "path": ["N_Mandalorian", "template_body_mesh"],
+                "is_mesh": True,
+                "is_skin": False,
+                "vertex_count": 0,
+                "face_count": 0,
+                "texture": "",
+                "replacement": "imported_mesh_payload",
+            }
+        ],
+        "replaced_render_payload_count": 1,
     }
     assert bind["imported_payload"]["model_name"] == "bendak"
     assert bind["imported_payload"]["mesh_role"] == "payload_guest"
@@ -186,6 +199,18 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert result["skinned_meshes"] == 1
     assert result["weighted_vertices"] == 1
     assert result["removed_import_nodes"] >= 3
+    assert result["replaced_native_render_nodes"] == [
+        {
+            "name": "template_body_mesh",
+            "path": ["N_Mandalorian", "template_body_mesh"],
+            "is_mesh": True,
+            "is_skin": False,
+            "vertex_count": 0,
+            "face_count": 0,
+            "texture": "",
+            "replacement": "imported_mesh_payload",
+        }
+    ]
 
 
 def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -> None:
@@ -243,6 +268,56 @@ def test_apply_template_rig_does_not_scale_native_template_in_manual_mode() -> N
         result["model"].metadata["character_builder_bind"]["skeleton_scale_applied"]
         == 1.0
     )
+
+
+def test_apply_template_rig_records_replaced_native_render_payload_nodes() -> None:
+    src_root = _node("import_root")
+    mesh = _node("bendak_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(0.0, 0.0, 0.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    native_torso = _node(
+        "Torso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    native_torso.vertices = [(0.0, 0.0, 0.0), (0.0, 0.1, 0.0), (0.1, 0.0, 0.0)]
+    native_torso.faces = [(0, 1, 2)]
+    native_torso.texture = "N_Mandalorian01"
+    native_helper = _node(
+        "torso_g",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        parent=rootdummy,
+    )
+    native_helper.vertices = [(0.0, 0.0, 1.0)]
+    native_helper.faces = [(0, 0, 0)]
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged = result["model"]
+    assert rigged.find_node("Torso") is None
+    assert rigged.find_node("torso_g") is not None
+    bind = rigged.metadata["character_builder_bind"]
+    replaced = bind["native_base"]["replaced_render_payload_nodes"]
+    assert replaced == [
+        {
+            "name": "Torso",
+            "path": ["N_Mandalorian", "Torso"],
+            "is_mesh": True,
+            "is_skin": True,
+            "vertex_count": 3,
+            "face_count": 1,
+            "texture": "N_Mandalorian01",
+            "replacement": "imported_mesh_payload",
+        }
+    ]
+    assert bind["native_base"]["replaced_render_payload_count"] == 1
+    assert result["replaced_native_render_nodes"] == replaced
 
 
 def test_apply_template_rig_preserves_kotor_helper_mesh_skeleton_hooks() -> None:

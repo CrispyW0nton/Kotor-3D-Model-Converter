@@ -900,6 +900,20 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["bind"]["status"] == "bound_to_native_kotor_skeleton"
     assert workflow["bind"]["native_base"]["source_resref"] == "pmbam"
     assert workflow["bind"]["native_base"]["dag_authority"] == "native_kotor_base"
+    replaced_render_nodes = workflow["bind"]["native_base"]["replaced_render_payload_nodes"]
+    assert replaced_render_nodes == [
+        {
+            "name": "Torso",
+            "path": ["PMBAM", "Torso"],
+            "is_mesh": True,
+            "is_skin": True,
+            "vertex_count": 1,
+            "face_count": 1,
+            "texture": "",
+            "replacement": "imported_mesh_payload",
+        }
+    ]
+    assert workflow["bind"]["native_base"]["replaced_render_payload_count"] == 1
     assert workflow["bind"]["imported_payload"]["model_name"] == "grbody"
     assert workflow["bind"]["imported_payload"]["mesh_role"] == "payload_guest"
     assert workflow["bind"]["imported_payload"]["mesh_names"] == ["custom_body"]

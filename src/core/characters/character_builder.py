@@ -901,7 +901,11 @@ def apply_template_rig(
         import copy
         skel_root = copy.deepcopy(tmpl_root)
 
-        removed_template_meshes = _strip_render_geometry_from_skeleton(skel_root)
+        replaced_native_render_nodes: List[dict] = []
+        removed_template_meshes = _strip_render_geometry_from_skeleton(
+            skel_root,
+            replaced_nodes=replaced_native_render_nodes,
+        )
         mesh_payloads = _extract_clean_mesh_payloads(mesh_model)
         if not mesh_payloads:
             return {"ok": False, "model": None,
@@ -995,6 +999,8 @@ def apply_template_rig(
                     "game": native_base_game,
                     "supermodel": sm or "NULL",
                     "dag_authority": "native_kotor_base",
+                    "replaced_render_payload_nodes": replaced_native_render_nodes,
+                    "replaced_render_payload_count": len(replaced_native_render_nodes),
                 },
                 "imported_payload": {
                     "model_name": imported_payload_name,
@@ -1059,6 +1065,7 @@ def apply_template_rig(
             "weighted_vertices": bind_report.weighted_vertices,
             "bone_slots": bind_report.bone_count,
             "removed_import_nodes": removed_import_nodes,
+            "replaced_native_render_nodes": replaced_native_render_nodes,
             "native_skeleton_snapshot": native_skeleton_snapshot,
         }
     except Exception as exc:
@@ -1111,7 +1118,11 @@ def _is_mesh_payload_node(node: Any) -> bool:
     )
 
 
-def _strip_render_geometry_from_skeleton(node: Any) -> int:
+def _strip_render_geometry_from_skeleton(
+    node: Any,
+    *,
+    replaced_nodes: List[dict] | None = None,
+) -> int:
     """Remove visible reference meshes from a copied template skeleton tree.
 
     KotOR character rigs are unusual: many deformation joints are stored as
@@ -1130,12 +1141,46 @@ def _strip_render_geometry_from_skeleton(node: Any) -> int:
                 _clear_template_render_payload(child)
             else:
                 removed += 1
+                if replaced_nodes is not None:
+                    replaced_nodes.append(_native_render_replacement_record(child))
                 continue
-        removed += _strip_render_geometry_from_skeleton(child)
+        removed += _strip_render_geometry_from_skeleton(
+            child,
+            replaced_nodes=replaced_nodes,
+        )
         child.parent = node
         kept.append(child)
     node.children = kept
     return removed
+
+
+def _native_render_replacement_record(node: Any) -> dict:
+    """Return audit metadata for a native render leaf replaced by payload mesh."""
+    return {
+        "name": str(getattr(node, "name", "") or ""),
+        "path": list(_node_path_for_record(node)),
+        "is_mesh": bool(getattr(node, "is_mesh", False)),
+        "is_skin": bool(getattr(node, "is_skin", False)),
+        "vertex_count": len(list(getattr(node, "vertices", []) or [])),
+        "face_count": len(list(getattr(node, "faces", []) or [])),
+        "texture": str(getattr(node, "texture_clean", getattr(node, "texture", "")) or ""),
+        "replacement": "imported_mesh_payload",
+    }
+
+
+def _node_path_for_record(node: Any) -> tuple[str, ...]:
+    names = []
+    current = node
+    visited: set[int] = set()
+    while current is not None:
+        current_id = id(current)
+        if current_id in visited:
+            break
+        visited.add(current_id)
+        names.append(str(getattr(current, "name", "") or ""))
+        current = getattr(current, "parent", None)
+    names.reverse()
+    return tuple(names)
 
 
 def _is_template_skeleton_helper(node: Any) -> bool:
