@@ -758,6 +758,8 @@ def _validate_paired_landmark_alignment(
             "rms_error": rms_error,
             "max_error": max_error,
             "max_rms_error": float(opts.max_auto_fit_landmark_rms_error),
+            "worst_pair_role": str(alignment.get("worst_pair_role") or ""),
+            "pair_errors": list(alignment.get("pair_errors") or []),
             "applied_scale": _safe_float(alignment.get("applied_scale")),
             "solved_scale": _safe_float(alignment.get("solved_scale")),
             "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),

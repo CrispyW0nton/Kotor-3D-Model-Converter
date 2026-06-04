@@ -1462,6 +1462,25 @@ def _landmark_similarity_alignment(
     errors = np.linalg.norm(mapped - target_points, axis=1)
     rms_error = float(np.sqrt(np.mean(errors * errors))) if errors.size else 0.0
     max_error = float(np.max(errors)) if errors.size else 0.0
+    pair_errors: List[Dict[str, Any]] = []
+    worst_pair_role = ""
+    worst_pair_error = -1.0
+    for index, (role, source_point, target_point) in enumerate(pairs):
+        try:
+            error = float(errors[index])
+            mapped_point = mapped[index]
+        except Exception:
+            continue
+        if error > worst_pair_error:
+            worst_pair_error = error
+            worst_pair_role = str(role)
+        pair_errors.append({
+            "role": str(role),
+            "source_position": [float(value) for value in source_point],
+            "target_position": [float(value) for value in target_point],
+            "mapped_position": [float(value) for value in mapped_point.tolist()],
+            "error": error,
+        })
     return {
         "method": "paired_skeleton_landmark_similarity",
         "rotation_matrix": tuple(
@@ -1473,6 +1492,8 @@ def _landmark_similarity_alignment(
         "pair_count": len(pairs),
         "rms_error": rms_error,
         "max_error": max_error,
+        "worst_pair_role": worst_pair_role,
+        "pair_errors": pair_errors,
         "translation_basis": "native_fit_origin",
     }
 
@@ -1599,6 +1620,10 @@ def _fit_transform_metadata(
             "paired_roles": list(landmark_alignment.get("paired_roles") or []),
             "rms_error": float(landmark_alignment.get("rms_error") or 0.0),
             "max_error": float(landmark_alignment.get("max_error") or 0.0),
+            "worst_pair_role": str(
+                landmark_alignment.get("worst_pair_role") or ""
+            ),
+            "pair_errors": list(landmark_alignment.get("pair_errors") or []),
             "translation_basis": str(
                 landmark_alignment.get("translation_basis") or ""
             ),

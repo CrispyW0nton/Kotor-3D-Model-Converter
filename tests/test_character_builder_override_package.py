@@ -79,6 +79,16 @@ def _write_source_export(
                     "paired_roles": ["pelvis", "head", "left"],
                     "rms_error": 0.42,
                     "max_error": 0.55,
+                    "worst_pair_role": "left",
+                    "pair_errors": [
+                        {
+                            "role": "left",
+                            "source_position": [-0.5, 0.0, 1.2],
+                            "target_position": [-0.4, 0.0, 0.96],
+                            "mapped_position": [-0.2, 0.0, 0.9],
+                            "error": 0.55,
+                        }
+                    ],
                     "applied_scale": 0.8,
                     "solved_scale": 0.79,
                 },
@@ -170,7 +180,7 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert manifest["character_builder_workflow"]["imported_mesh_role"] == "payload_guest"
     readme = readme_path.read_text(encoding="utf-8")
     assert "Evidence gates: fit=needs_review" in readme
-    assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55" in readme
+    assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55, worst=left" in readme
     assert "Engine evidence: partial_reverse_engineering (pending Ghidra: 2)" in readme
     assert "Do not overwrite a live game install" in readme
 

@@ -158,6 +158,23 @@ def _valid_fit_report(
                 ],
                 "rms_error": 0.04,
                 "max_error": 0.08,
+                "worst_pair_role": "right_foot",
+                "pair_errors": [
+                    {
+                        "role": "pelvis",
+                        "source_position": [0.0, 0.0, 0.8],
+                        "target_position": [0.0, 0.0, 0.64],
+                        "mapped_position": [0.0, 0.0, 0.64],
+                        "error": 0.0,
+                    },
+                    {
+                        "role": "right_foot",
+                        "source_position": [0.3, 0.0, 0.0],
+                        "target_position": [0.24, 0.0, 0.0],
+                        "mapped_position": [0.22, 0.0, 0.0],
+                        "error": 0.08,
+                    },
+                ],
                 "translation_basis": "native_fit_origin",
                 "solved_scale": 0.79,
                 "applied_scale": 0.8,
@@ -572,6 +589,16 @@ def test_character_export_preflight_warns_when_paired_landmark_alignment_is_weak
     alignment["pair_count"] = 3
     alignment["paired_roles"] = ["pelvis", "head", "left"]
     alignment["rms_error"] = 0.42
+    alignment["worst_pair_role"] = "left"
+    alignment["pair_errors"] = [
+        {
+            "role": "left",
+            "source_position": [-0.5, 0.0, 1.2],
+            "target_position": [-0.4, 0.0, 0.96],
+            "mapped_position": [-0.2, 0.0, 0.9],
+            "error": 0.42,
+        },
+    ]
     result["model"].metadata["kotor_fit_report"] = fit
 
     preflight = preflight_character_mdl_export(
@@ -590,6 +617,8 @@ def test_character_export_preflight_warns_when_paired_landmark_alignment_is_weak
     assert issue.details["rms_error"] == 0.42
     assert issue.details["max_rms_error"] == 0.15
     assert issue.details["paired_roles"] == ["pelvis", "head", "left"]
+    assert issue.details["worst_pair_role"] == "left"
+    assert issue.details["pair_errors"][0]["role"] == "left"
     assert preflight.export_allowed is True
 
 
@@ -1603,6 +1632,16 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
         "left",
     ]
     fit_report["fit_transform"]["landmark_alignment"]["rms_error"] = 0.42
+    fit_report["fit_transform"]["landmark_alignment"]["worst_pair_role"] = "left"
+    fit_report["fit_transform"]["landmark_alignment"]["pair_errors"] = [
+        {
+            "role": "left",
+            "source_position": [-0.5, 0.0, 1.2],
+            "target_position": [-0.4, 0.0, 0.96],
+            "mapped_position": [-0.2, 0.0, 0.9],
+            "error": 0.42,
+        },
+    ]
     report = CharacterBuilderValidationReport(
         status="verified",
         verified=True,
@@ -1658,7 +1697,11 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert paired["pair_count"] == 3
     assert paired["paired_roles"] == ["pelvis", "head", "left"]
     assert paired["rms_error"] == 0.42
+    assert paired["worst_pair_role"] == "left"
+    assert paired["pair_errors"][0]["role"] == "left"
+    assert paired["pair_errors"][0]["error"] == 0.42
     assert "Fit paired landmarks: 3 pairs, rms=0.42" in report.to_text()
+    assert "worst=left" in report.to_text()
 
 
 def test_character_builder_validation_report_records_engine_evidence_gate() -> None:

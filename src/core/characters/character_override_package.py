@@ -447,11 +447,13 @@ def _build_readme(manifest: dict[str, Any]) -> str:
         fit_gate = dict(evidence_gates.get("fit") or {})
         paired = dict(fit_gate.get("paired_landmark_alignment") or {})
         if paired.get("present"):
+            worst = str(paired.get("worst_pair_role") or "").strip()
             lines.append(
                 "Fit paired landmarks: "
                 f"{paired.get('pair_count')} pairs, "
                 f"rms={paired.get('rms_error')}, "
                 f"max={paired.get('max_error')}"
+                + (f", worst={worst}" if worst else "")
             )
         engine = dict(evidence_gates.get("engine") or {})
         if engine:

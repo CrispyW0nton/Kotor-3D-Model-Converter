@@ -672,6 +672,11 @@ def _fit_landmark_alignment_summary(fit_report: dict[str, Any]) -> dict[str, Any
         ],
         "rms_error": _safe_float(alignment.get("rms_error")),
         "max_error": _safe_float(alignment.get("max_error")),
+        "worst_pair_role": str(alignment.get("worst_pair_role") or ""),
+        "pair_errors": [
+            item for item in list(alignment.get("pair_errors") or [])
+            if isinstance(item, dict)
+        ],
         "applied_scale": _safe_float(alignment.get("applied_scale")),
         "solved_scale": _safe_float(alignment.get("solved_scale")),
         "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
@@ -974,11 +979,13 @@ class CharacterBuilderValidationReport:
                     )
                 paired = dict(fit_gate.get("paired_landmark_alignment") or {})
                 if paired.get("present"):
+                    worst = str(paired.get("worst_pair_role") or "").strip()
                     lines.append(
                         "- Fit paired landmarks: "
                         f"{paired.get('pair_count')} pairs, "
                         f"rms={paired.get('rms_error')}, "
                         f"max={paired.get('max_error')}"
+                        + (f", worst={worst}" if worst else "")
                     )
                 engine_gate = dict(evidence_gates.get("engine") or {})
                 if engine_gate:

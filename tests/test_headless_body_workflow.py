@@ -3410,6 +3410,25 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
         "reference_bounds_height",
         "bone_landmark_height",
     }
+    assert transform["landmark_alignment"]["worst_pair_role"] in {
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+    }
+    assert len(transform["landmark_alignment"]["pair_errors"]) == 6
+    pelvis_error = next(
+        item
+        for item in transform["landmark_alignment"]["pair_errors"]
+        if item["role"] == "pelvis"
+    )
+    assert pelvis_error["role"] == "pelvis"
+    assert pelvis_error["source_position"] == pytest.approx([0.0, 0.0, 1.04])
+    assert pelvis_error["target_position"] == pytest.approx([0.0, 0.0, 0.832])
+    assert pelvis_error["mapped_position"] == pytest.approx([0.0, 0.0, 0.832])
+    assert pelvis_error["error"] == pytest.approx(0.0)
     for row, expected in zip(transform["rotation_matrix"], [
         [1.0, 0.0, 0.0],
         [0.0, 1.0, 0.0],
