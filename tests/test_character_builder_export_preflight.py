@@ -258,6 +258,48 @@ def test_character_export_preflight_blocks_imported_temporary_skeleton_state() -
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_missing_bind_provenance() -> None:
+    result = _rigged_character()
+    result["model"].metadata.pop("character_builder_bind", None)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.missing_bind_provenance")
+    assert issue.severity.value == "blocking"
+    assert "character_builder_bind.status" in issue.details["missing_bind_fields"]
+    assert "character_builder_bind.native_base.source_resref" in issue.details["missing_bind_fields"]
+    assert "character_builder_bind.imported_payload.model_name" in issue.details["missing_bind_fields"]
+    assert issue.details["missing_rig_state_fields"] == []
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_bind_provenance_mismatch() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind["native_base"]["source_resref"] = "n_mandalorian03"
+    bind["imported_payload"]["model_name"] = "wrong_payload"
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.bind_provenance_mismatch")
+    assert issue.severity.value == "blocking"
+    mismatches = issue.details["mismatches"]
+    assert mismatches["native_base_resref"]["rig_state"] == "pmbam"
+    assert mismatches["native_base_resref"]["bind"] == "n_mandalorian03"
+    assert mismatches["imported_payload_name"]["rig_state"] == "grbody"
+    assert mismatches["imported_payload_name"]["bind"] == "wrong_payload"
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_missing_required_socket() -> None:
     result = _rigged_character()
     lhand = result["model"].find_node("lhand")
@@ -855,6 +897,12 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["rig_state"]["native_base_game"] == "K1"
     assert workflow["rig_state"]["imported_payload_name"] == "grbody"
     assert workflow["rig_state"]["payload_mesh_names"] == ["custom_body"]
+    assert workflow["bind"]["status"] == "bound_to_native_kotor_skeleton"
+    assert workflow["bind"]["native_base"]["source_resref"] == "pmbam"
+    assert workflow["bind"]["native_base"]["dag_authority"] == "native_kotor_base"
+    assert workflow["bind"]["imported_payload"]["model_name"] == "grbody"
+    assert workflow["bind"]["imported_payload"]["mesh_role"] == "payload_guest"
+    assert workflow["bind"]["imported_payload"]["mesh_names"] == ["custom_body"]
     assert workflow["fit_report"]["fit_policy"] == "bone_landmark_basis"
     assert workflow["fit_report"]["fit_transform"]["scale"] == 0.8
     assert workflow["normalization"]["fit_transform"]["translation"] == [0.0, 0.0, 0.0]

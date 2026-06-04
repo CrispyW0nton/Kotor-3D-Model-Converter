@@ -28,6 +28,8 @@ from .kotor_constants import (
     KOTOR_SKIN_WEIGHT_SUM_TOLERANCE,
 )
 from .character_rig_state import (
+    MESH_ROLE_PAYLOAD_GUEST,
+    RIG_DAG_AUTHORITY_NATIVE_KOTOR,
     RIG_STATE_NATIVE_TEMPLATE_FINAL,
     get_character_rig_state,
     is_native_template_final_rig,
@@ -129,7 +131,7 @@ def preflight_character_mdl_export(
             ))
 
     _validate_resref(model, report)
-    _validate_character_rig_state(model, opts, report)
+    _validate_character_rig_state(model, native_snapshot, opts, report)
 
     if native_snapshot is not None:
         _validate_native_snapshot_game(native_snapshot, opts, report)
@@ -147,14 +149,21 @@ def preflight_character_mdl_export(
 
 def _validate_character_rig_state(
     model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
     opts: CharacterExportPreflightOptions,
     report: ValidationReport,
 ) -> None:
     if not opts.require_native_template_final_rig:
         return
-    if is_native_template_final_rig(model):
-        return
     state = get_character_rig_state(model)
+    if is_native_template_final_rig(model):
+        _validate_native_template_rig_provenance(
+            model,
+            state,
+            native_snapshot,
+            report,
+        )
+        return
     state_data = state.to_dict() if state is not None else None
     report.add(_issue(
         "blocking",
@@ -167,6 +176,164 @@ def _validate_character_rig_state(
         details={
             "expected_state": RIG_STATE_NATIVE_TEMPLATE_FINAL,
             "actual_state": state_data,
+        },
+    ))
+
+
+def _validate_native_template_rig_provenance(
+    model: Any,
+    state: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+    report: ValidationReport,
+) -> None:
+    state_data = state.to_dict() if state is not None and hasattr(state, "to_dict") else {}
+    payload_mesh_names = [
+        str(name or "")
+        for name in getattr(state, "payload_mesh_names", ()) or ()
+        if str(name or "").strip()
+    ]
+    missing_state = [
+        key
+        for key, value in (
+            ("native_base_resref", getattr(state, "native_base_resref", "")),
+            ("native_base_model_name", getattr(state, "native_base_model_name", "")),
+            ("native_base_game", getattr(state, "native_base_game", "")),
+            ("imported_payload_name", getattr(state, "imported_payload_name", "")),
+        )
+        if not str(value or "").strip()
+    ]
+    if not payload_mesh_names:
+        missing_state.append("payload_mesh_names")
+
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    bind = metadata.get("character_builder_bind")
+    bind = bind if isinstance(bind, dict) else {}
+    native_base = bind.get("native_base")
+    native_base = native_base if isinstance(native_base, dict) else {}
+    imported_payload = bind.get("imported_payload")
+    imported_payload = imported_payload if isinstance(imported_payload, dict) else {}
+    bind_mesh_names = [
+        str(name or "")
+        for name in imported_payload.get("mesh_names", []) or []
+        if str(name or "").strip()
+    ]
+    missing_bind = []
+    if bind.get("status") != "bound_to_native_kotor_skeleton":
+        missing_bind.append("character_builder_bind.status")
+    if not str(native_base.get("source_resref") or "").strip():
+        missing_bind.append("character_builder_bind.native_base.source_resref")
+    if not str(native_base.get("model_name") or "").strip():
+        missing_bind.append("character_builder_bind.native_base.model_name")
+    if not str(native_base.get("game") or "").strip():
+        missing_bind.append("character_builder_bind.native_base.game")
+    if native_base.get("dag_authority") != RIG_DAG_AUTHORITY_NATIVE_KOTOR:
+        missing_bind.append("character_builder_bind.native_base.dag_authority")
+    if not str(imported_payload.get("model_name") or "").strip():
+        missing_bind.append("character_builder_bind.imported_payload.model_name")
+    if imported_payload.get("mesh_role") != MESH_ROLE_PAYLOAD_GUEST:
+        missing_bind.append("character_builder_bind.imported_payload.mesh_role")
+    if not bind_mesh_names:
+        missing_bind.append("character_builder_bind.imported_payload.mesh_names")
+
+    if missing_state or missing_bind:
+        report.add(_issue(
+            "blocking",
+            "character.export.missing_bind_provenance",
+            (
+                "Character Builder export requires explicit native-base and "
+                "imported-payload bind provenance."
+            ),
+            fix_hint=(
+                "Rebuild the KOTOR skeleton from a selected native base model "
+                "after importing the custom mesh, then export again."
+            ),
+            details={
+                "missing_rig_state_fields": missing_state,
+                "missing_bind_fields": missing_bind,
+                "actual_state": state_data,
+                "bind": bind,
+            },
+        ))
+        return
+
+    mismatches: dict[str, dict[str, Any]] = {}
+    if _casefold(native_base.get("source_resref")) != _casefold(getattr(state, "native_base_resref", "")):
+        mismatches["native_base_resref"] = {
+            "rig_state": getattr(state, "native_base_resref", ""),
+            "bind": native_base.get("source_resref"),
+        }
+    if str(native_base.get("model_name") or "") != str(getattr(state, "native_base_model_name", "") or ""):
+        mismatches["native_base_model_name"] = {
+            "rig_state": getattr(state, "native_base_model_name", ""),
+            "bind": native_base.get("model_name"),
+        }
+    if _normalize_kotor_game(native_base.get("game")) != _normalize_kotor_game(getattr(state, "native_base_game", "")):
+        mismatches["native_base_game"] = {
+            "rig_state": getattr(state, "native_base_game", ""),
+            "bind": native_base.get("game"),
+        }
+    if str(imported_payload.get("model_name") or "") != str(getattr(state, "imported_payload_name", "") or ""):
+        mismatches["imported_payload_name"] = {
+            "rig_state": getattr(state, "imported_payload_name", ""),
+            "bind": imported_payload.get("model_name"),
+        }
+    if bind_mesh_names != payload_mesh_names:
+        mismatches["payload_mesh_names"] = {
+            "rig_state": payload_mesh_names,
+            "bind": bind_mesh_names,
+        }
+
+    if native_snapshot is not None:
+        snapshot_metadata = dict(native_snapshot.metadata or {})
+        snapshot_resref = str(
+            snapshot_metadata.get("source_resref")
+            or native_snapshot.model_name
+            or ""
+        )
+        snapshot_game = str(
+            snapshot_metadata.get("source_game")
+            or native_snapshot.game
+            or ""
+        )
+        if snapshot_resref and _casefold(snapshot_resref) != _casefold(getattr(state, "native_base_resref", "")):
+            mismatches["native_snapshot_source_resref"] = {
+                "rig_state": getattr(state, "native_base_resref", ""),
+                "native_snapshot": snapshot_resref,
+            }
+        if snapshot_game and _normalize_kotor_game(snapshot_game) != _normalize_kotor_game(getattr(state, "native_base_game", "")):
+            mismatches["native_snapshot_game"] = {
+                "rig_state": getattr(state, "native_base_game", ""),
+                "native_snapshot": snapshot_game,
+            }
+
+    if not mismatches:
+        return
+
+    report.add(_issue(
+        "blocking",
+        "character.export.bind_provenance_mismatch",
+        (
+            "Character Builder bind provenance disagrees about which native "
+            "base skeleton or imported payload owns this export candidate."
+        ),
+        fix_hint=(
+            "Rebuild the KOTOR skeleton from the selected native base model so "
+            "rig state, bind metadata, and native snapshot evidence agree."
+        ),
+        details={
+            "mismatches": mismatches,
+            "actual_state": state_data,
+            "bind": bind,
+            "native_snapshot": (
+                {
+                    "model_name": native_snapshot.model_name,
+                    "game": native_snapshot.game,
+                    "metadata": dict(native_snapshot.metadata or {}),
+                }
+                if native_snapshot is not None else
+                None
+            ),
         },
     ))
 
@@ -1198,6 +1365,10 @@ def _normalize_kotor_game(value: Any) -> str:
     ):
         return "K1"
     return raw.upper()
+
+
+def _casefold(value: Any) -> str:
+    return str(value or "").strip().casefold()
 
 
 def _find_node_exact_name(nodes: list[Any], name: str) -> Any | None:

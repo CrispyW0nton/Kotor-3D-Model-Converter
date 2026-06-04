@@ -361,6 +361,7 @@ def _character_builder_workflow_evidence(
         "imported_mesh_role": "payload_guest",
         "final_dag_source": "selected_kotor_base",
         "rig_state": rig_state,
+        "bind": metadata.get("character_builder_bind"),
         "fit_report": metadata.get("kotor_fit_report"),
         "normalization": normalization_summary,
         "native_snapshot": snapshot_summary,
