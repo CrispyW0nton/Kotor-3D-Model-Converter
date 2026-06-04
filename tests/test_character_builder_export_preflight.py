@@ -446,6 +446,10 @@ def test_apply_template_rig_preserves_selected_native_supermodel() -> None:
     assert result["ok"] is True
     assert result["model"].supermodel == "S_KPMF0200"
     assert result["native_skeleton_snapshot"].supermodel == "S_KPMF0200"
+    bind_native = result["model"].metadata["character_builder_bind"]["native_base"]
+    expected_fingerprint = native_skeleton_fingerprint(result["native_skeleton_snapshot"])
+    assert bind_native["dag_fingerprint"] == expected_fingerprint
+    assert bind_native["dag_fingerprint_algorithm"] == "sha256"
     state = get_character_rig_state(result["model"])
     assert state is not None
     assert state.state == RIG_STATE_NATIVE_TEMPLATE_FINAL
@@ -1235,6 +1239,56 @@ def test_character_export_preflight_blocks_bind_provenance_mismatch() -> None:
     assert mismatches["native_base_resref"]["bind"] == "n_mandalorian03"
     assert mismatches["imported_payload_name"]["rig_state"] == "grbody"
     assert mismatches["imported_payload_name"]["bind"] == "wrong_payload"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_missing_bind_dag_fingerprint() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind["native_base"].pop("dag_fingerprint", None)
+    bind["native_base"].pop("dag_fingerprint_algorithm", None)
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.missing_bind_provenance")
+    assert issue.severity.value == "blocking"
+    assert (
+        "character_builder_bind.native_base.dag_fingerprint"
+        in issue.details["missing_bind_fields"]
+    )
+    assert (
+        "character_builder_bind.native_base.dag_fingerprint_algorithm"
+        in issue.details["missing_bind_fields"]
+    )
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_stale_bind_dag_fingerprint() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind["native_base"]["dag_fingerprint"] = "0" * 64
+    bind["native_base"]["dag_fingerprint_algorithm"] = "sha256"
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.bind_provenance_mismatch")
+    assert issue.severity.value == "blocking"
+    mismatch = issue.details["mismatches"]["native_snapshot_dag_fingerprint"]
+    assert mismatch["bind"] == "0" * 64
+    assert mismatch["native_snapshot"] == native_skeleton_fingerprint(
+        result["native_skeleton_snapshot"]
+    )
+    assert mismatch["algorithm"] == "sha256"
     assert preflight.report.has_blocking is True
 
 

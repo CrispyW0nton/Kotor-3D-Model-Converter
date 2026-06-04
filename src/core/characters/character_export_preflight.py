@@ -39,6 +39,7 @@ from .native_skeleton import (
     NativeNodeSnapshot,
     NativeSkeletonSnapshot,
     capture_native_skeleton_snapshot,
+    native_skeleton_fingerprint,
 )
 
 
@@ -255,6 +256,12 @@ def _validate_native_template_rig_provenance(
         missing_bind.append("character_builder_bind.native_base.game")
     if native_base.get("dag_authority") != RIG_DAG_AUTHORITY_NATIVE_KOTOR:
         missing_bind.append("character_builder_bind.native_base.dag_authority")
+    if not str(native_base.get("dag_fingerprint") or "").strip():
+        missing_bind.append("character_builder_bind.native_base.dag_fingerprint")
+    if str(native_base.get("dag_fingerprint_algorithm") or "") != "sha256":
+        missing_bind.append(
+            "character_builder_bind.native_base.dag_fingerprint_algorithm"
+        )
     if not str(imported_payload.get("model_name") or "").strip():
         missing_bind.append("character_builder_bind.imported_payload.model_name")
     if imported_payload.get("mesh_role") != MESH_ROLE_PAYLOAD_GUEST:
@@ -311,6 +318,13 @@ def _validate_native_template_rig_provenance(
         }
 
     if native_snapshot is not None:
+        snapshot_fingerprint = native_skeleton_fingerprint(native_snapshot)
+        if str(native_base.get("dag_fingerprint") or "") != snapshot_fingerprint:
+            mismatches["native_snapshot_dag_fingerprint"] = {
+                "bind": native_base.get("dag_fingerprint"),
+                "native_snapshot": snapshot_fingerprint,
+                "algorithm": "sha256",
+            }
         snapshot_metadata = dict(native_snapshot.metadata or {})
         snapshot_resref = str(
             snapshot_metadata.get("source_resref")

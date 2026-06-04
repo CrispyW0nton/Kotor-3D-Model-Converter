@@ -935,15 +935,27 @@ def apply_template_rig(
                     "warnings": warnings, "scale": applied_scale}
 
         native_skeleton_snapshot = None
+        native_dag_fingerprint = ""
+        native_dag_fingerprint_algorithm = ""
         try:
             try:
-                from .native_skeleton import capture_native_skeleton_snapshot
+                from .native_skeleton import (
+                    capture_native_skeleton_snapshot,
+                    native_skeleton_fingerprint,
+                )
             except ImportError:  # pragma: no cover
-                from src.core.characters.native_skeleton import capture_native_skeleton_snapshot  # type: ignore
+                from src.core.characters.native_skeleton import (  # type: ignore
+                    capture_native_skeleton_snapshot,
+                    native_skeleton_fingerprint,
+                )
             native_skeleton_snapshot = capture_native_skeleton_snapshot(
                 template_model,
                 game=game,
             )
+            native_dag_fingerprint = native_skeleton_fingerprint(
+                native_skeleton_snapshot
+            )
+            native_dag_fingerprint_algorithm = "sha256"
         except Exception as exc:
             log.debug("apply_template_rig native snapshot failed: %s", exc, exc_info=True)
             warnings.append(f"Native skeleton snapshot failed: {exc}")
@@ -1051,6 +1063,8 @@ def apply_template_rig(
                     "game": native_base_game,
                     "supermodel": sm or "NULL",
                     "dag_authority": "native_kotor_base",
+                    "dag_fingerprint": native_dag_fingerprint,
+                    "dag_fingerprint_algorithm": native_dag_fingerprint_algorithm,
                     "replaced_render_payload_nodes": replaced_native_render_nodes,
                     "replaced_render_payload_count": len(replaced_native_render_nodes),
                 },
