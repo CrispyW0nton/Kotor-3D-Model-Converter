@@ -65,6 +65,25 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert result.apply_result is not None
     assert result.apply_result.get("ok") is True
     assert result.apply_result.get("replaced_native_render_nodes")
+    built_model = result.apply_result.get("model")
+    assert built_model is not None
+    leaked_guides = [
+        node for node in built_model.all_nodes()
+        if getattr(node, "_gr_imported_armature_joint", False)
+        or getattr(node, "_gr_imported_armature", False)
+    ]
+    assert leaked_guides == []
+    assert any(
+        "Removed" in warning and "imported armature/helper" in warning
+        for warning in result.apply_result.get("warnings", [])
+    )
+    source_landmark_sources = (
+        result.apply_result.get("model").metadata.get("kotor_fit_report", {})
+        .get("source_frame", {})
+        .get("landmark_sources", {})
+    )
+    assert source_landmark_sources
+    assert set(source_landmark_sources.values()) == {"imported_skeleton"}
     assert result.motion_result is not None
     assert result.motion_result.supermodel == "S_Female02"
     assert result.animation_library_result is not None
