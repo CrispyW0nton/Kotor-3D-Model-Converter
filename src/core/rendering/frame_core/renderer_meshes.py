@@ -1353,6 +1353,13 @@ class RendererMeshMixin:
                         uv0 = (uv0[0], _clamp(uv0[1], 0.0, 1.0))
                         uv1 = (uv1[0], _clamp(uv1[1], 0.0, 1.0))
                         uv2 = (uv2[0], _clamp(uv2[1], 0.0, 1.0))
+                    if not bool(getattr(node, "uv_v_flip", True)):
+                        # _paste_textured_triangle always applies the KotOR
+                        # V flip. Imported DCC meshes keep bottom-left UVs,
+                        # so pre-flip here to cancel that renderer-level flip.
+                        uv0 = (uv0[0], 1.0 - uv0[1])
+                        uv1 = (uv1[0], 1.0 - uv1[1])
+                        uv2 = (uv2[0], 1.0 - uv2[1])
                     # ── TXI flipbook: remap UVs to the current frame cell ─────
                     # KotOR flipbook textures use proceduretype=cycle with numx/numy
                     # to divide the texture into a grid of animation frames.

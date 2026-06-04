@@ -250,9 +250,51 @@ def test_source_clip_preview_model_can_include_fbx_mesh_geometry() -> None:
     assert mesh_nodes[0].name == "Body"
     assert mesh_nodes[0].texture == "Body_D"
     assert getattr(mesh_nodes[0], "_external_imported", False) is True
+    assert getattr(mesh_nodes[0], "uv_v_flip", True) is False
     assert mesh_nodes[0].vertex_space == 1
     assert mesh_nodes[0].vertices
+    assert mesh_nodes[0].uvs == pytest.approx([(0, 0), (1, 0), (0.5, 1)])
     assert mesh_nodes[0].faces == [(0, 1, 2)]
+
+
+def test_blender_fbx_preview_meshes_keep_dcc_uv_convention_for_viewport() -> None:
+    from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
+    from src.core.geometry.model_data import GameVersion
+    from src.core.rendering.mesh_render_data import _node_uv_array
+
+    mesh_model = model_from_blender_fbx_mesh_payload(
+        {
+            "success": True,
+            "armatures": ["Armature"],
+            "meshes": [
+                {
+                    "name": "Bendak",
+                    "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+                    "normals": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+                    "uvs": [[0.125, 0.25], [0.875, 0.5], [0.25, 0.75]],
+                    "faces": [[0, 1, 2]],
+                    "materials": [
+                        {
+                            "name": "Bendak",
+                            "texture": "BendakStarkiller_basecolor",
+                            "diffuse": [0.8, 0.8, 0.8],
+                        }
+                    ],
+                }
+            ],
+        },
+        model_name="Bendak",
+        game_version=GameVersion.K1,
+    )
+
+    mesh_node = next(node for node in mesh_model.all_nodes() if getattr(node, "vertices", None))
+
+    assert getattr(mesh_node, "_external_imported", False) is True
+    assert getattr(mesh_node, "uv_v_flip", True) is False
+    assert mesh_node.uvs == pytest.approx([(0.125, 0.25), (0.875, 0.5), (0.25, 0.75)])
+    assert _node_uv_array(mesh_node, "uvs", 3).reshape(-1).tolist() == pytest.approx(
+        [0.125, 0.75, 0.875, 0.5, 0.25, 0.25]
+    )
 
 
 def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> None:

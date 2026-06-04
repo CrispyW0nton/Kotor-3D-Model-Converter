@@ -462,7 +462,14 @@ def _node_uv_array(node, attr: str, count: int):
         arr = arr[:, :2]
         if len(arr) < count:
             arr = np.vstack([arr, np.full((count - len(arr), 2), 0.5, dtype=np.float32)])
-        return arr[:count]
+        arr = arr[:count]
+        if attr == "uvs" and not bool(getattr(node, "uv_v_flip", True)):
+            # WGPU's current shader applies the KotOR/D3D V flip
+            # unconditionally. Imported DCC meshes keep bottom-left UVs, so
+            # pre-flip them here to make the net WGPU path match ModernGL.
+            arr = arr.copy()
+            arr[:, 1] = 1.0 - arr[:, 1]
+        return arr
     except Exception:
         return np.full((count, 2), 0.5, dtype=np.float32)
 

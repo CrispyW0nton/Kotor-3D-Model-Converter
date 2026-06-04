@@ -175,6 +175,7 @@ def model_from_blender_fbx_mesh_payload(
         node.render = True
         node._imported = True
         node._external_imported = True
+        node.uv_v_flip = False
         node.vertex_space = 1
         if is_skin:
             node.bone_map = [str(name) for name in (mesh.get("bone_map") or [])]

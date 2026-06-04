@@ -113,7 +113,10 @@ def _extract_mesh_object(obj, depsgraph):
                 normals.append([float(normal.x), float(normal.y), float(normal.z)])
                 if uv_layer is not None:
                     uv = uv_layer[loop_index].uv
-                    uvs.append([float(uv.x), 1.0 - float(uv.y)])
+                    # Blender FBX UVs are authored for DCC/OpenGL-style
+                    # bottom-left texture coordinates. Keep that convention
+                    # and mark imported GhostRigger nodes with uv_v_flip=False.
+                    uvs.append([float(uv.x), float(uv.y)])
                 else:
                     uvs.append([0.0, 0.0])
                 if is_skin:
