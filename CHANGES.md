@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder malformed geometry crash guard: skin-payload preflight now converts malformed vertex/normal component rows into blocking validation issues instead of raising Python exceptions. Bad imported mesh payloads now fail with actionable export-report details while the native KOTOR DAG gate remains intact. Roadmap task: `T1205` / Phase 4 export hardening.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight resilience change; this slice changes malformed imported-payload reporting only and introduces no new engine-loader assumptions.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_nonfinite_skin_geometry tests/test_character_builder_export_preflight.py::test_character_export_preflight_reports_malformed_geometry_without_crashing tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_invalid_bind_transform_metadata -q --basetemp .pytest_tmp_character_malformed_geometry_gate`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_malformed_geometry_gate_full`; `python -m py_compile src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder skin payload numeric integrity: MDL/MDX export preflight now blocks non-finite skin vertex coordinates, invalid normals, out-of-range face indices, and malformed qbone/tbone bind-transform metadata before the writer. This keeps imported mesh payload corruption from passing the native-template DAG gate as an export candidate. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; this slice validates GhostRigger payload numeric integrity and does not claim new MDL-loader semantics beyond the current writer-format evidence.

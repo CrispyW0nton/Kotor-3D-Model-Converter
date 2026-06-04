@@ -475,6 +475,28 @@ def test_character_export_preflight_blocks_nonfinite_skin_geometry() -> None:
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_reports_malformed_geometry_without_crashing() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.vertices[0] = "not-a-vertex"
+    mesh.normals[0] = "not-a-normal"
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    vertex = _issue_by_code(preflight, "character.export.vertex_malformed")
+    normal = _issue_by_code(preflight, "character.export.normal_nonfinite")
+    assert vertex.details["vertex_index"] == 0
+    assert vertex.details["component_count"] == 0
+    assert normal.details["normal_index"] == 0
+    assert normal.details["components"] == []
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_invalid_bind_transform_metadata() -> None:
     result = _rigged_character()
     mesh = result["model"].find_node("custom_body")

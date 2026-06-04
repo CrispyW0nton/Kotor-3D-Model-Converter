@@ -714,7 +714,10 @@ def _validate_skin_geometry_values(
 ) -> None:
     name = str(getattr(node, "name", "") or "")
     for vertex_index, vertex in enumerate(vertices):
-        components = _numeric_components(vertex)
+        try:
+            components = _numeric_components(vertex)
+        except (TypeError, ValueError, OverflowError):
+            components = []
         if len(components) < 3:
             report.add(_issue(
                 "blocking",
@@ -737,7 +740,10 @@ def _validate_skin_geometry_values(
 
     normals = list(getattr(node, "normals", []) or [])
     for normal_index, normal in enumerate(normals):
-        components = _numeric_components(normal)
+        try:
+            components = _numeric_components(normal)
+        except (TypeError, ValueError, OverflowError):
+            components = []
         if len(components) < 3 or not _all_finite(components[:3]):
             report.add(_issue(
                 "blocking",
