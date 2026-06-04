@@ -43,9 +43,11 @@ def build_character_game_test_evidence(
     *,
     tested_games: tuple[str, ...] | list[str],
     checklist_results: dict[str, bool] | list[dict[str, Any]],
+    per_game_checklist_results: dict[str, Any] | None = None,
     tester: str = "",
     notes: str = "",
     artifacts: tuple[str, ...] | list[str] = (),
+    per_game_artifacts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a JSON-friendly in-game evidence record for Character Builder.
 
@@ -53,37 +55,104 @@ def build_character_game_test_evidence(
     does not run the game, and it does not promote a candidate by itself.
     """
 
+    games = _normalize_games(tested_games)
+    checklist = _normalize_checklist_results(checklist_results)
+    per_game_checklists = _normalize_per_game_checklist_results(
+        per_game_checklist_results
+    )
+    if checklist:
+        for game in games:
+            per_game_checklists.setdefault(game, dict(checklist))
+    per_game_checklists = {
+        game: per_game_checklists.get(game, {})
+        for game in games
+        if game
+    }
+    per_game_artifact_payload = _normalize_per_game_artifacts(per_game_artifacts)
+
     return {
         "schema": CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA,
         "status": "passed",
-        "tested_games": [_normalize_game(game) for game in tested_games],
-        "checklist_results": _normalize_checklist_results(checklist_results),
+        "tested_games": games,
+        "checklist_results": _summarize_game_checklists(
+            per_game_checklists,
+            fallback=checklist,
+        ),
+        "per_game_checklist_results": per_game_checklists,
         "tester": str(tester or ""),
         "notes": str(notes or ""),
         "artifacts": [str(item or "") for item in artifacts if str(item or "").strip()],
+        "per_game_artifacts": per_game_artifact_payload,
     }
 
 
 def character_game_test_evidence_passed(evidence: Any) -> bool:
     """Return True when evidence proves the full K1/K2 in-game checklist."""
 
+    return not character_game_test_evidence_missing(evidence)
+
+
+def character_game_test_evidence_missing(evidence: Any) -> dict[str, Any]:
+    """Return missing/failed proof facts for Character Builder game testing."""
+
+    missing: dict[str, Any] = {}
     if not isinstance(evidence, dict):
-        return False
+        return {"evidence": "not_a_mapping"}
     if evidence.get("schema") != CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA:
-        return False
+        missing["schema"] = {
+            "expected": CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA,
+            "actual": evidence.get("schema"),
+        }
     if str(evidence.get("status") or "").strip().lower() != "passed":
-        return False
+        missing["status"] = {
+            "expected": "passed",
+            "actual": evidence.get("status"),
+        }
     tested_games = {
         _normalize_game(game)
         for game in list(evidence.get("tested_games") or [])
         if str(game or "").strip()
     }
-    if not set(REQUIRED_CHARACTER_BUILDER_GAME_TEST_GAMES).issubset(tested_games):
-        return False
-    checklist = _normalize_checklist_results(evidence.get("checklist_results") or {})
-    if not checklist:
-        return False
-    return all(bool(checklist.get(item)) for item in CHARACTER_BUILDER_MANUAL_CHECKLIST)
+    missing_games = [
+        game for game in REQUIRED_CHARACTER_BUILDER_GAME_TEST_GAMES
+        if game not in tested_games
+    ]
+    if missing_games:
+        missing["missing_games"] = missing_games
+
+    per_game = _normalize_per_game_checklist_results(
+        evidence.get("per_game_checklist_results")
+    )
+    missing_per_game: list[str] = []
+    failed_by_game: dict[str, list[str]] = {}
+    for game in REQUIRED_CHARACTER_BUILDER_GAME_TEST_GAMES:
+        checklist = per_game.get(game)
+        if not checklist:
+            missing_per_game.append(game)
+            continue
+        failed = [
+            item for item in CHARACTER_BUILDER_MANUAL_CHECKLIST
+            if not bool(checklist.get(item))
+        ]
+        if failed:
+            failed_by_game[game] = failed
+    if missing_per_game:
+        missing["missing_per_game_checklists"] = missing_per_game
+    if failed_by_game:
+        missing["failed_checklist_items_by_game"] = failed_by_game
+    return missing
+
+
+def _normalize_games(values: Any) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in list(values or []):
+        game = _normalize_game(value)
+        if not game or game in seen:
+            continue
+        seen.add(game)
+        result.append(game)
+    return result
 
 
 def _normalize_game(value: Any) -> str:
@@ -107,6 +176,60 @@ def _normalize_checklist_results(value: Any) -> dict[str, bool]:
             if key:
                 results[key] = bool(item.get("passed"))
     return results
+
+
+def _normalize_per_game_checklist_results(value: Any) -> dict[str, dict[str, bool]]:
+    if not isinstance(value, dict):
+        return {}
+    results: dict[str, dict[str, bool]] = {}
+    for game, checklist in value.items():
+        normalized_game = _normalize_game(game)
+        if not normalized_game:
+            continue
+        normalized_checklist = _normalize_checklist_results(checklist)
+        if normalized_checklist:
+            results[normalized_game] = normalized_checklist
+    return results
+
+
+def _normalize_per_game_artifacts(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    results: dict[str, list[str]] = {}
+    for game, artifacts in value.items():
+        normalized_game = _normalize_game(game)
+        if not normalized_game:
+            continue
+        if isinstance(artifacts, (str, bytes)):
+            raw_items = [artifacts]
+        else:
+            raw_items = list(artifacts or [])
+        normalized_items = [
+            str(item or "") for item in raw_items
+            if str(item or "").strip()
+        ]
+        if normalized_items:
+            results[normalized_game] = normalized_items
+    return results
+
+
+def _summarize_game_checklists(
+    per_game: dict[str, dict[str, bool]],
+    *,
+    fallback: dict[str, bool],
+) -> dict[str, bool]:
+    if not per_game:
+        return dict(fallback)
+    summary: dict[str, bool] = {}
+    for item in CHARACTER_BUILDER_MANUAL_CHECKLIST:
+        values = [
+            bool(checklist.get(item))
+            for checklist in per_game.values()
+        ]
+        summary[item] = bool(values and all(values))
+    for item, passed in fallback.items():
+        summary.setdefault(item, bool(passed))
+    return summary
 
 
 @dataclass(frozen=True)
@@ -146,6 +269,11 @@ class CharacterBuilderValidationReport:
     def to_dict(self) -> dict[str, Any]:
         merged = self.merged_report
         game_evidence_complete = character_game_test_evidence_passed(self.game_test_evidence)
+        game_evidence_missing = (
+            character_game_test_evidence_missing(self.game_test_evidence)
+            if self.game_tested or self.game_test_evidence else
+            {}
+        )
         data = {
             "schema": "ghostrigger.character_export_validation.v1",
             "status": self.status,
@@ -176,6 +304,7 @@ class CharacterBuilderValidationReport:
             "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
             "manual_in_game_checklist": list(CHARACTER_BUILDER_MANUAL_CHECKLIST),
             "game_test_evidence": dict(self.game_test_evidence or {}),
+            "game_test_evidence_missing": dict(game_evidence_missing or {}),
             "preflight_report": validation_report_to_dict(self.preflight_report),
             "reload_report": validation_report_to_dict(self.reload_report)
             if self.reload_report is not None else None,
@@ -265,6 +394,12 @@ class CharacterBuilderValidationReport:
                     lines.append(f"  Details: {details}")
         if issue_count == 0:
             lines.append("- none")
+
+        evidence_missing = payload.get("game_test_evidence_missing")
+        if isinstance(evidence_missing, dict) and evidence_missing:
+            lines.extend(["", "Game-test evidence gaps:"])
+            details = _format_issue_details(evidence_missing)
+            lines.append(details or str(evidence_missing))
 
         lines.extend(["", "Manual in-game checklist:"])
         for index, item in enumerate(CHARACTER_BUILDER_MANUAL_CHECKLIST, start=1):

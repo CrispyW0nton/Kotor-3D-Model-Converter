@@ -21,8 +21,10 @@ from src.core.characters.character_rig_state import (
 )
 from src.core.characters.character_validation_report import (
     CHARACTER_BUILDER_MANUAL_CHECKLIST,
+    CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA,
     CharacterBuilderValidationReport,
     build_character_game_test_evidence,
+    character_game_test_evidence_passed,
 )
 from src.core.characters.native_skeleton import native_skeleton_fingerprint
 from src.core.geometry.model_data import (
@@ -1175,6 +1177,44 @@ def test_character_builder_validation_report_requires_complete_game_test_evidenc
     assert data["capability"]["game_test_status"] == "game_test_evidence_incomplete"
 
 
+def test_character_builder_game_test_evidence_requires_per_game_checklists() -> None:
+    legacy_global_only_evidence = {
+        "schema": CHARACTER_BUILDER_GAME_TEST_EVIDENCE_SCHEMA,
+        "status": "passed",
+        "tested_games": ["K1", "K2"],
+        "checklist_results": {
+            item: True for item in CHARACTER_BUILDER_MANUAL_CHECKLIST
+        },
+    }
+
+    assert character_game_test_evidence_passed(legacy_global_only_evidence) is False
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(source="test.preflight"),
+        game_tested=True,
+        game_test_evidence=legacy_global_only_evidence,
+    )
+
+    data = report.to_dict()
+
+    assert data["capability"]["stage"] == "export_candidate"
+    assert data["capability"]["game_tested"] is False
+    assert data["capability"]["game_test_evidence_complete"] is False
+    assert data["game_test_evidence_missing"]["missing_per_game_checklists"] == [
+        "K1",
+        "K2",
+    ]
+    text = report.to_text()
+    assert "Game-test evidence gaps:" in text
+    assert "missing_per_game_checklists=[K1, K2]" in text
+
+
 def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_evidence() -> None:
     evidence = build_character_game_test_evidence(
         tested_games=["K1", "K2"],
@@ -1205,6 +1245,13 @@ def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_e
     assert data["game_test_evidence"]["checklist_results"][
         "Load as player character without crash"
     ] is True
+    assert data["game_test_evidence"]["per_game_checklist_results"]["K1"][
+        "Load as player character without crash"
+    ] is True
+    assert data["game_test_evidence"]["per_game_checklist_results"]["K2"][
+        "Loading in both KOTOR 1 and KOTOR 2"
+    ] is True
+    assert data["game_test_evidence_missing"] == {}
 
 
 def test_character_builder_validation_text_includes_actionable_issue_context() -> None:

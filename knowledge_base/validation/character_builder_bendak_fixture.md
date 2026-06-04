@@ -106,10 +106,11 @@ replacement.
 
 As of 2026-06-04, GhostRigger requires structured in-game evidence before an
 export/package may claim `game_tested`. The evidence must use the
-`ghostrigger.character_game_test.v1` schema, cover both `K1` and `K2`, and mark
-every manual checklist item as passed. Without that evidence, Bendak remains an
-export candidate even when MDL/MDX reload verification and Override packaging
-both succeed.
+`ghostrigger.character_game_test.v1` schema, cover both `K1` and `K2`, and
+mark every manual checklist item as passed separately for each game under
+`per_game_checklist_results`. A legacy/global checklist claim is not enough.
+Without per-engine evidence, Bendak remains an export candidate even when
+MDL/MDX reload verification and Override packaging both succeed.
 
 Treat `n_mandalorian` as the mandatory native base MDL that supplies the KOTOR
 node DAG for this fixture. If a packaging/export test targets
@@ -158,6 +159,8 @@ The fixture is not considered passing until all of these are true:
 - Reload verification records native snapshot/report evidence and blocks if
   staged readback loses or moves selected native KOTOR structural paths or
   truncates the imported payload mesh/skin binding counts.
+- Game-tested promotion requires a per-game manual checklist for K1 and K2;
+  one shared checklist result must not promote the candidate.
 
 ## Capability Honesty
 

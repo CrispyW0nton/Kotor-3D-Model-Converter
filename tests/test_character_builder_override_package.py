@@ -210,3 +210,9 @@ def test_character_override_package_preserves_complete_game_test_evidence(tmp_pa
     assert manifest["game_test_evidence"]["checklist_results"][
         "Loading in both KOTOR 1 and KOTOR 2"
     ] is True
+    assert manifest["game_test_evidence"]["per_game_checklist_results"]["K1"][
+        "Load as player character without crash"
+    ] is True
+    assert manifest["game_test_evidence"]["per_game_checklist_results"]["K2"][
+        "Loading in both KOTOR 1 and KOTOR 2"
+    ] is True
