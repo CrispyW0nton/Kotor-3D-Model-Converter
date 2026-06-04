@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder validation capability honesty: export validation artifacts now include a `capability` block and text summary that labels successful staged/reload-verified MDL/MDX outputs as `export_candidate` unless an in-game manual checklist has actually passed. Roadmap task: `T1205` / Phase 6 validation reporting.
+  Affected areas: `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: K1 installation and K1/K2 Ghidra binary contexts were refreshed through MCP before touching export-validation artifacts; this slice only clarifies verification scope and introduces no new MDL binary-format assumptions.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_builder_validation_report_has_full_manual_checklist tests/test_character_builder_export_preflight.py::test_character_export_transaction_stages_verifies_and_writes_reports -q --basetemp .pytest_tmp_character_capability_report`; `python -m py_compile src/core/characters/character_validation_report.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder rig-state contract: added a direct helper for identifying imported temporary skeleton payloads and locked the external FBX/glTF load path with a regression test proving those meshes are marked as non-authoritative before template binding. Roadmap task: `T1205` / Phase 1 rigging architecture consolidation.
   Affected areas: `src/core/characters/character_rig_state.py`, `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
   Ground truth used: K1 installation and K1/K2 Ghidra binary contexts were refreshed through MCP before touching model-pipeline workflow code; this slice enforces the existing native-template DAG authority rule and introduces no new MDL binary-format assumptions.

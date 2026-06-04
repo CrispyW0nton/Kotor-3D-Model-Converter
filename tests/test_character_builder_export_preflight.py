@@ -395,7 +395,12 @@ def test_character_builder_validation_report_has_full_manual_checklist() -> None
     assert len(data["manual_in_game_checklist"]) == 12
     assert "Two-handed weapon both hand sockets" in data["manual_in_game_checklist"]
     assert "Loading in both KOTOR 1 and KOTOR 2" in data["manual_in_game_checklist"]
+    assert data["capability"]["stage"] == "export_candidate"
+    assert data["capability"]["game_tested"] is False
+    assert data["capability"]["game_test_status"] == "not_game_tested"
     text = report.to_text()
+    assert "Capability stage: export_candidate" in text
+    assert "Game tested: False" in text
     assert "1. Load as player character without crash" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
 
@@ -439,9 +444,14 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert payload["schema"] == "ghostrigger.character_export_validation.v1"
     assert payload["verified"] is True
     assert payload["status"] == "verified"
+    assert payload["capability"]["stage"] == "export_candidate"
+    assert payload["capability"]["game_tested"] is False
+    assert payload["capability"]["game_test_status"] == "not_game_tested"
     assert payload["engine_evidence"]["findings_doc"] == "docs/ghidra_findings.md"
     assert len(payload["manual_in_game_checklist"]) == 12
     text = text_path.read_text(encoding="utf-8")
+    assert "Capability stage: export_candidate" in text
+    assert "Game tested: False" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
 

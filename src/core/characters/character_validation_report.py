@@ -31,6 +31,10 @@ CHARACTER_BUILDER_MANUAL_CHECKLIST: tuple[str, ...] = (
     "Loading in both KOTOR 1 and KOTOR 2",
 )
 
+CAPABILITY_STAGE_BLOCKED = "blocked"
+CAPABILITY_STAGE_EXPORT_CANDIDATE = "export_candidate"
+CAPABILITY_STAGE_GAME_TESTED = "game_tested"
+
 
 @dataclass(frozen=True)
 class CharacterBuilderValidationReport:
@@ -46,6 +50,7 @@ class CharacterBuilderValidationReport:
     preflight_report: ValidationReport
     reload_report: ValidationReport | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    game_tested: bool = False
 
     @property
     def merged_report(self) -> ValidationReport:
@@ -54,12 +59,35 @@ class CharacterBuilderValidationReport:
             self.reload_report or ValidationReport(source="character.export_transaction.verify"),
         )
 
+    @property
+    def capability_stage(self) -> str:
+        """Return the strongest proven Character Builder export stage."""
+
+        if self.game_tested:
+            return CAPABILITY_STAGE_GAME_TESTED
+        if self.verified:
+            return CAPABILITY_STAGE_EXPORT_CANDIDATE
+        return CAPABILITY_STAGE_BLOCKED
+
     def to_dict(self) -> dict[str, Any]:
         merged = self.merged_report
         data = {
             "schema": "ghostrigger.character_export_validation.v1",
             "status": self.status,
             "verified": bool(self.verified),
+            "capability": {
+                "stage": self.capability_stage,
+                "game_tested": bool(self.game_tested),
+                "game_test_status": (
+                    "manual_checklist_passed"
+                    if self.game_tested else "not_game_tested"
+                ),
+                "honesty_note": (
+                    "GhostRigger verification proves staged export and reload "
+                    "preflight only. Treat this as an export candidate until "
+                    "the manual in-game checklist passes in KOTOR."
+                ),
+            },
             "job_id": self.job_id,
             "export_kind": self.export_kind,
             "game": self.game,
@@ -89,6 +117,8 @@ class CharacterBuilderValidationReport:
             "GhostRigger Character Builder Export Validation",
             f"Status: {payload.get('status')}",
             f"Verified: {payload.get('verified')}",
+            f"Capability stage: {payload.get('capability', {}).get('stage')}",
+            f"Game tested: {payload.get('capability', {}).get('game_tested')}",
             f"Game: {payload.get('game')}",
             f"Resref: {payload.get('resref')}",
             "",
