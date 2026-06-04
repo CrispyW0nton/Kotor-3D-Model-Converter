@@ -1674,7 +1674,7 @@ def normalize_external_model_for_kotor(
 
 
 def _mark_external_import(model: Any, source_path: str) -> None:
-    """Tag external DCC meshes so the viewport treats their UV atlas plainly."""
+    """Tag external DCC meshes as temporary payloads, not export DAG authority."""
     metadata = getattr(model, "metadata", None)
     if not isinstance(metadata, dict):
         metadata = {}

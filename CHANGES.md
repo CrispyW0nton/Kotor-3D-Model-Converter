@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder rig-state contract: added a direct helper for identifying imported temporary skeleton payloads and locked the external FBX/glTF load path with a regression test proving those meshes are marked as non-authoritative before template binding. Roadmap task: `T1205` / Phase 1 rigging architecture consolidation.
+  Affected areas: `src/core/characters/character_rig_state.py`, `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: K1 installation and K1/K2 Ghidra binary contexts were refreshed through MCP before touching model-pipeline workflow code; this slice enforces the existing native-template DAG authority rule and introduces no new MDL binary-format assumptions.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_imported_temporary_skeleton_state tests/test_character_builder_template_rig.py::test_apply_template_rig_strips_imported_armature_and_clears_old_skin -q --basetemp .pytest_tmp_character_rig_state`; `python -m py_compile src/core/characters/character_rig_state.py src/core/characters/headless_body_workflow.py tests/test_headless_body_workflow.py`.
+
 - Character Builder inherited animation playback: the Step 3 animation library playback path now resolves inherited supermodel clips through `SuperModelResolver` before falling back to placeholder inherited-preview messaging, so any listed supermodel clip can dispatch to the viewport rather than only local body animations or the standard preview subset. Roadmap task: `T1204` / Phase 5 animation library reliability.
   Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
   Ground truth used: K1 installation and K1/K2 Ghidra binary contexts were refreshed through MCP before touching model-pipeline workflow code; this slice changes library/playback resolution only and introduces no new MDL binary-format assumptions.

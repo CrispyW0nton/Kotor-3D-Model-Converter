@@ -416,6 +416,11 @@ def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
     tmp_path,
     monkeypatch,
 ):
+    from src.core.characters.character_rig_state import (
+        get_character_rig_state,
+        is_imported_temporary_skeleton,
+    )
+
     fake = _FakeAmbiguousExternalModel("bendak")
     fbx = tmp_path / "Bendak.fbx"
     fbx.write_bytes(b"fbx stub")
@@ -429,6 +434,12 @@ def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
     assert result.detected_mode == md.CharacterMode.AMBIGUOUS
     assert "KOTOR base skeleton" in result.message
     assert scene.get(md.PartSlot.HEADLESS_BODY).resref == "bendak"
+    assert is_imported_temporary_skeleton(result.model) is True
+    rig_state = get_character_rig_state(result.model)
+    assert rig_state is not None
+    assert rig_state.state == "imported_temporary_skeleton"
+    assert rig_state.dag_authority == "imported_external_skeleton"
+    assert result.model.metadata["external_import"]["source_path"] == str(fbx)
 
 
 def test_t501_load_body_resref_is_lowercase_basename(tmp_path, monkeypatch):

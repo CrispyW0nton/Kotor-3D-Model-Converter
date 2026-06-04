@@ -109,6 +109,19 @@ def is_native_template_final_rig(model: Any) -> bool:
     )
 
 
+def is_imported_temporary_skeleton(model: Any) -> bool:
+    """Return True when the model is only imported fit/source skeleton data."""
+
+    state = get_character_rig_state(model)
+    if state is None:
+        return False
+    return (
+        state.state == RIG_STATE_IMPORTED_TEMPORARY
+        and state.dag_authority == RIG_DAG_AUTHORITY_IMPORTED
+        and state.mesh_role == MESH_ROLE_PAYLOAD_GUEST
+    )
+
+
 def _write_state(model: Any, state: CharacterRigState) -> None:
     if model is None:
         return
