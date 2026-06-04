@@ -2346,6 +2346,34 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 lines.append(f"Landmarks: {shown}{suffix}.")
         if confidence_parts:
             lines.append("Landmark confidence: " + ", ".join(confidence_parts) + ".")
+        imported_armature = (
+            report.get("source_imported_armature")
+            if isinstance(report.get("source_imported_armature"), Mapping)
+            else {}
+        )
+        guide_count = 0
+        if isinstance(imported_armature, Mapping):
+            try:
+                guide_count = int(imported_armature.get("guide_joint_count") or 0)
+            except Exception:
+                guide_count = 0
+        if guide_count:
+            source_kind = str(imported_armature.get("source") or "imported_skeleton_nodes")
+            names = [
+                str(name)
+                for name in list(imported_armature.get("armature_names") or [])
+                if str(name).strip()
+            ]
+            if source_kind == "imported_fbx_armature" and names:
+                lines.append(
+                    "Source skeleton guides: "
+                    f"FBX armature {', '.join(names[:3])}, {guide_count} guide joints."
+                )
+            else:
+                lines.append(
+                    "Source skeleton guides: "
+                    f"{guide_count} imported skeleton guide nodes."
+                )
         contract = report.get("kotor_contract")
         if isinstance(contract, Mapping) and contract.get("native_skeleton_is_authority"):
             lines.append("Final skeleton: selected KOTOR base; imported mesh is geometry payload.")
