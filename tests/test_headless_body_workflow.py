@@ -3426,6 +3426,62 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     )
 
 
+def test_external_fit_report_prefers_imported_skeleton_over_mesh_name_collision():
+    root = _fit_node("external_body")
+    mesh_head = _fit_node(
+        "Head",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh_head.vertices = [
+        (-0.2, 0.0, 99.0),
+        (0.2, 0.0, 100.0),
+        (0.0, 0.2, 101.0),
+    ]
+    mesh_head.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("mixamorig:Hips", (0.0, 0.0, 0.0)),
+        ("mixamorig:Head", (0.0, 10.0, 0.0)),
+        ("mixamorig:LeftShoulder", (-1.0, 8.0, 0.0)),
+        ("mixamorig:RightShoulder", (1.0, 8.0, 0.0)),
+        ("mixamorig:LeftFoot", (-0.4, 0.0, -0.1)),
+        ("mixamorig:RightFoot", (0.4, 0.0, -0.1)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    source = md.KotorModel(name="bendak_payload", root_node=root)
+    reference = _fit_humanoid_model(
+        "n_mandalorian",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_frame"]["landmarks"]["head"] == "mixamorig:Head"
+    assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
+    assert report["source_height"] == pytest.approx(10.0)
+    assert report["auto_fit_report"]["scale_factor"] == pytest.approx(0.16)
+    assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
+    assert any(
+        item["role"] == "head"
+        and item["name"] == "mixamorig:Head"
+        and item["source"] == "imported_skeleton"
+        for item in report["visual_overlay"]["source"]["landmarks"]
+    )
+
+
 def test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias():
     source = _fit_humanoid_model(
         "rootdummy",

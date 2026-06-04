@@ -155,6 +155,7 @@ class _HumanoidFitFrame:
     height: float
     confidence: float
     landmarks: Dict[str, str] = field(default_factory=dict)
+    landmark_sources: Dict[str, str] = field(default_factory=dict)
 
 
 def _vec_as_list(value: Optional[Vec3]) -> Optional[List[float]]:
@@ -183,6 +184,7 @@ def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[
         "height": float(frame.height),
         "confidence": float(frame.confidence),
         "landmarks": dict(frame.landmarks),
+        "landmark_sources": dict(frame.landmark_sources),
     }
 
 
@@ -194,6 +196,7 @@ def _fit_frame_visual_overlay(
     transform_point=None,
     transform_direction=None,
     axis_length_scale: float = 1.0,
+    prefer_skeleton_landmarks: bool = False,
 ) -> Dict[str, Any]:
     """Return viewport-friendly fit-frame evidence without mutating *model*."""
 
@@ -239,7 +242,10 @@ def _fit_frame_visual_overlay(
         }
     overlay["axes"] = axes
 
-    named = _named_positions(model)
+    named = _named_positions(
+        model,
+        prefer_skeleton_landmarks=prefer_skeleton_landmarks,
+    )
     landmarks: List[Dict[str, Any]] = []
     for role, node_name in sorted((frame.landmarks or {}).items()):
         if role == "side_pair":
@@ -256,6 +262,7 @@ def _fit_frame_visual_overlay(
         landmarks.append({
             "role": str(role),
             "name": str(hit[0]),
+            "source": str(hit[2]),
             "position": _vec_as_list(position),
         })
     overlay["landmarks"] = landmarks
@@ -475,6 +482,15 @@ def _make_auto_fit_report(
     if manual_used:
         manual_note = "Manual source axis/ground override used for this fit."
         notes = f"{manual_note} {notes}".strip()
+    elif (
+        source_frame is not None
+        and any(
+            source == "imported_skeleton"
+            for source in (source_frame.landmark_sources or {}).values()
+        )
+    ):
+        skeleton_note = "Imported skeleton landmarks drove orientation and scale."
+        notes = f"{skeleton_note} {notes}".strip()
     if fallback_used and not notes:
         notes = "Used bounds-based fitting because a complete landmark frame was unavailable."
     source_forward_axis = (
@@ -740,24 +756,100 @@ def _node_fit_position(node: Any) -> Optional[Vec3]:
     return None
 
 
-def _named_positions(model: Any) -> Dict[str, Tuple[str, Vec3]]:
-    result: Dict[str, Tuple[str, Vec3]] = {}
+def _node_fit_landmark_source(node: Any) -> str:
+    """Classify a node's usefulness for Character Builder Auto-Fit evidence.
+
+    Imported FBX/GLTF skeleton joints usually arrive as header nodes with an
+    ``external_world_position`` and no renderable vertices.  Mesh children can
+    carry similar names, but they should not override skeleton joints when the
+    user is fitting a custom mesh to a native KOTOR base.
+    """
+
+    try:
+        flags = int(getattr(node, "flags", 0) or 0)
+    except Exception:
+        flags = 0
+    vertices = list(getattr(node, "vertices", []) or [])
+    has_vertices = bool(vertices)
+    has_external_world = getattr(node, "external_world_position", None) is not None
+    has_mesh_flag = False
+    has_skin_flag = False
+    try:
+        md = _import_model_data()
+        has_mesh_flag = bool(flags & int(md.NodeFlags.MESH))
+        has_skin_flag = bool(flags & int(md.NodeFlags.SKIN))
+    except Exception:
+        has_mesh_flag = bool(flags & 0x20)
+        has_skin_flag = bool(flags & 0x40)
+
+    if has_vertices or has_skin_flag:
+        return "mesh_payload"
+    if has_external_world and not has_mesh_flag:
+        return "imported_skeleton"
+    if has_external_world and has_mesh_flag:
+        return "imported_helper"
+    if has_mesh_flag:
+        return "kotor_deform_helper"
+    return "skeleton_node"
+
+
+def _landmark_candidate_score(
+    node: Any,
+    *,
+    source: str,
+    prefer_skeleton_landmarks: bool,
+    order_index: int,
+) -> Tuple[int, int]:
+    if not prefer_skeleton_landmarks:
+        return (0, -order_index)
+    if source == "imported_skeleton":
+        priority = 100
+    elif source == "skeleton_node":
+        priority = 90
+    elif source == "imported_helper":
+        priority = 80
+    elif source == "kotor_deform_helper":
+        priority = 70
+    elif source == "mesh_payload":
+        priority = 20
+    else:
+        priority = 10
+    return (priority, -order_index)
+
+
+def _named_positions(
+    model: Any,
+    *,
+    prefer_skeleton_landmarks: bool = False,
+) -> Dict[str, Tuple[str, Vec3, str]]:
+    result: Dict[str, Tuple[str, Vec3, str]] = {}
+    scores: Dict[str, Tuple[int, int]] = {}
     if model is None:
         return result
-    for node in _iter_model_nodes(model):
+    for order_index, node in enumerate(_iter_model_nodes(model)):
         clean = _clean_landmark_name(getattr(node, "name", ""))
-        if not clean or clean in result:
+        if not clean:
             continue
         pos = _node_fit_position(node)
         if pos is not None:
-            result[clean] = (str(getattr(node, "name", "") or ""), pos)
+            source = _node_fit_landmark_source(node)
+            score = _landmark_candidate_score(
+                node,
+                source=source,
+                prefer_skeleton_landmarks=prefer_skeleton_landmarks,
+                order_index=order_index,
+            )
+            if clean in result and score <= scores.get(clean, (-1, -1)):
+                continue
+            result[clean] = (str(getattr(node, "name", "") or ""), pos, source)
+            scores[clean] = score
     return result
 
 
 def _find_landmark(
-    positions: Dict[str, Tuple[str, Vec3]],
+    positions: Dict[str, Tuple[str, Vec3, str]],
     aliases: Sequence[str] | set[str],
-) -> Tuple[str, Vec3] | None:
+) -> Tuple[str, Vec3, str] | None:
     clean_aliases = _ordered_clean_aliases(aliases)
     for alias in clean_aliases:
         hit = positions.get(alias)
@@ -787,8 +879,8 @@ def _ordered_clean_aliases(aliases: Sequence[str] | set[str]) -> Tuple[str, ...]
 
 
 def _find_side_pair(
-    positions: Dict[str, Tuple[str, Vec3]],
-) -> Tuple[Tuple[str, Vec3], Tuple[str, Vec3], str] | None:
+    positions: Dict[str, Tuple[str, Vec3, str]],
+) -> Tuple[Tuple[str, Vec3, str], Tuple[str, Vec3, str], str] | None:
     for index, (left_aliases, right_aliases) in enumerate(zip(_LEFT_SIDE_ALIASES, _RIGHT_SIDE_ALIASES)):
         left = _find_landmark(positions, left_aliases)
         right = _find_landmark(positions, right_aliases)
@@ -859,8 +951,12 @@ def _infer_humanoid_fit_frame(
     model: Any,
     *,
     bounds: Optional[Tuple[Vec3, Vec3]] = None,
+    prefer_skeleton_landmarks: bool = False,
 ) -> Optional[_HumanoidFitFrame]:
-    positions = _named_positions(model)
+    positions = _named_positions(
+        model,
+        prefer_skeleton_landmarks=prefer_skeleton_landmarks,
+    )
     side_pair = _find_side_pair(positions)
     pelvis = _find_landmark(positions, _PELVIS_ALIASES)
     head = _find_landmark(positions, _HEAD_ALIASES)
@@ -918,10 +1014,30 @@ def _infer_humanoid_fit_frame(
         landmarks["left_foot"] = left_foot[0]
     if right_foot is not None:
         landmarks["right_foot"] = right_foot[0]
+    landmark_sources = {
+        "left": left[2],
+        "right": right[2],
+        "head": head[2],
+    }
+    if pelvis is not None:
+        landmark_sources["pelvis"] = pelvis[2]
+    if left_foot is not None:
+        landmark_sources["left_foot"] = left_foot[2]
+    if right_foot is not None:
+        landmark_sources["right_foot"] = right_foot[2]
     confidence = 0.65
     confidence += 0.1 if pelvis is not None else 0.0
     confidence += 0.1 if foot_center is not None else 0.0
     confidence += 0.1 if side_kind == "shoulder" else 0.0
+    if prefer_skeleton_landmarks:
+        core_sources = {
+            landmark_sources.get(role, "")
+            for role in ("left", "right", "head", "pelvis", "left_foot", "right_foot")
+        }
+        if any(source in {"imported_skeleton", "skeleton_node"} for source in core_sources):
+            confidence += 0.05
+        if core_sources and all(source == "mesh_payload" for source in core_sources):
+            confidence -= 0.15
 
     return _HumanoidFitFrame(
         origin=origin,
@@ -931,6 +1047,7 @@ def _infer_humanoid_fit_frame(
         height=height,
         confidence=min(0.95, confidence),
         landmarks=landmarks,
+        landmark_sources=landmark_sources,
     )
 
 
@@ -998,7 +1115,11 @@ def inspect_external_model_fit(
         }
 
     reference_bounds = _reference_model_fit_bounds(reference_model)
-    source_frame = _infer_humanoid_fit_frame(model, bounds=bounds)
+    source_frame = _infer_humanoid_fit_frame(
+        model,
+        bounds=bounds,
+        prefer_skeleton_landmarks=True,
+    )
     target_frame = (
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
@@ -1166,6 +1287,7 @@ def inspect_external_model_fit(
                 model,
                 report_source_frame,
                 bounds,
+                prefer_skeleton_landmarks=True,
             ),
             "target": _fit_frame_visual_overlay(
                 reference_model,
@@ -1596,7 +1718,11 @@ def normalize_external_model_for_kotor(
 
     bb_min, bb_max = bounds
     reference_bounds = _reference_model_fit_bounds(reference_model)
-    source_frame = _infer_humanoid_fit_frame(model, bounds=bounds)
+    source_frame = _infer_humanoid_fit_frame(
+        model,
+        bounds=bounds,
+        prefer_skeleton_landmarks=True,
+    )
     target_frame = (
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
@@ -1665,6 +1791,7 @@ def normalize_external_model_for_kotor(
                 transform_point=transform_point,
                 transform_direction=transform_direction,
                 axis_length_scale=scale,
+                prefer_skeleton_landmarks=True,
             ),
             "target": _fit_frame_visual_overlay(
                 reference_model,
