@@ -58,6 +58,10 @@ _SKELETON_FIT_LANDMARK_SOURCES = frozenset({
     "skeleton_node",
 })
 _PAIRED_LANDMARK_ALIGNMENT_METHOD = "paired_skeleton_landmark_similarity"
+_AUTO_FIT_ROTATION_BASES = frozenset({
+    "bone_landmark_basis",
+    "paired_skeleton_similarity",
+})
 
 
 @dataclass(frozen=True)
@@ -786,6 +790,8 @@ def _validate_paired_landmark_alignment(
     pair_count = _safe_int(alignment.get("pair_count"))
     rms_error = _safe_float(alignment.get("rms_error"))
     max_error = _safe_float(alignment.get("max_error"))
+    rotation_basis = str(alignment.get("rotation_basis") or "")
+    similarity_accepted = alignment.get("similarity_transform_accepted")
     reasons: list[str] = []
     if method != _PAIRED_LANDMARK_ALIGNMENT_METHOD:
         reasons.append("unexpected_method")
@@ -799,6 +805,21 @@ def _validate_paired_landmark_alignment(
         reasons.append("missing_max_error")
     elif max_error > float(opts.max_auto_fit_landmark_pair_error):
         reasons.append("high_max_error")
+    if not isinstance(similarity_accepted, bool):
+        reasons.append("missing_similarity_transform_acceptance")
+    if not rotation_basis:
+        reasons.append("missing_rotation_basis")
+    elif rotation_basis not in _AUTO_FIT_ROTATION_BASES:
+        reasons.append("unexpected_rotation_basis")
+    if (
+        isinstance(similarity_accepted, bool)
+        and rotation_basis in _AUTO_FIT_ROTATION_BASES
+        and (
+            (similarity_accepted and rotation_basis != "paired_skeleton_similarity")
+            or (not similarity_accepted and rotation_basis == "paired_skeleton_similarity")
+        )
+    ):
+        reasons.append("rotation_acceptance_mismatch")
 
     if not reasons:
         return
@@ -828,6 +849,9 @@ def _validate_paired_landmark_alignment(
             "applied_scale": _safe_float(alignment.get("applied_scale")),
             "solved_scale": _safe_float(alignment.get("solved_scale")),
             "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
+            "similarity_transform_accepted": similarity_accepted,
+            "rotation_basis": rotation_basis,
+            "accepted_rotation_bases": sorted(_AUTO_FIT_ROTATION_BASES),
         },
     ))
 

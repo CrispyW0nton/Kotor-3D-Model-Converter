@@ -826,6 +826,38 @@ def test_character_export_preflight_warns_when_paired_landmark_alignment_is_weak
     assert preflight.export_allowed is True
 
 
+def test_character_export_preflight_warns_when_paired_landmark_rotation_provenance_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    alignment = fit["fit_transform"]["landmark_alignment"]
+    alignment.pop("similarity_transform_accepted", None)
+    alignment.pop("rotation_basis", None)
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_paired_landmarks_need_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == [
+        "missing_similarity_transform_acceptance",
+        "missing_rotation_basis",
+    ]
+    assert issue.details["similarity_transform_accepted"] is None
+    assert issue.details["rotation_basis"] == ""
+    assert issue.details["accepted_rotation_bases"] == [
+        "bone_landmark_basis",
+        "paired_skeleton_similarity",
+    ]
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_warns_when_single_fit_landmark_is_far() -> None:
     result = _rigged_character()
     fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
