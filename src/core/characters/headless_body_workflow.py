@@ -193,6 +193,47 @@ def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[
     }
 
 
+def _imported_armature_fit_evidence(model: Any) -> Dict[str, Any]:
+    """Return durable evidence for temporary imported FBX skeleton guides."""
+
+    names: set[str] = set()
+    raw_names = getattr(model, "_gr_fbx_armatures", None)
+    if isinstance(raw_names, (list, tuple, set)):
+        names.update(str(name).strip() for name in raw_names if str(name).strip())
+    elif raw_names:
+        names.add(str(raw_names).strip())
+
+    guide_nodes: List[Any] = []
+    imported_skeleton_nodes: List[Any] = []
+    for node in _iter_model_nodes(model):
+        if getattr(node, "_gr_imported_armature_joint", False):
+            guide_nodes.append(node)
+            armature_name = str(getattr(node, "_gr_imported_armature_name", "") or "").strip()
+            if armature_name:
+                names.add(armature_name)
+        if _node_fit_landmark_source(node) == "imported_skeleton":
+            imported_skeleton_nodes.append(node)
+
+    raw_count = getattr(model, "_gr_fbx_armature_bone_count", 0)
+    try:
+        recorded_count = int(raw_count or 0)
+    except (TypeError, ValueError):
+        recorded_count = 0
+    scene_count = max(len(guide_nodes), len(imported_skeleton_nodes))
+    guide_count = max(recorded_count, scene_count)
+
+    return {
+        "source": (
+            "imported_fbx_armature"
+            if names or recorded_count or guide_nodes
+            else ("imported_skeleton_nodes" if guide_count else "none")
+        ),
+        "guide_joint_count": guide_count,
+        "scene_guide_joint_count": scene_count,
+        "armature_names": sorted(names),
+    }
+
+
 def _fit_frame_visual_overlay(
     model: Any,
     frame: Optional[_HumanoidFitFrame],
@@ -1137,6 +1178,7 @@ def inspect_external_model_fit(
     rotated the way it did before committing the native KOTOR skeleton build.
     """
     bounds = _vertex_bounds(model)
+    imported_armature = _imported_armature_fit_evidence(model)
     if bounds is None:
         auto_fit_report = AutoFitReport(
             source_forward_axis="unknown",
@@ -1167,6 +1209,7 @@ def inspect_external_model_fit(
             "fallback_used": auto_fit_report["fallback_used"],
             "notes": auto_fit_report["notes"],
             "auto_fit_report": auto_fit_report,
+            "source_imported_armature": imported_armature,
             "fit_transform": None,
             "visual_overlay": {
                 "coordinate_space": "source_pre_fit_and_kotor_reference",
@@ -1394,6 +1437,7 @@ def inspect_external_model_fit(
         "fallback_used": auto_fit.fallback_used,
         "notes": auto_fit.notes,
         "auto_fit_report": auto_fit_report,
+        "source_imported_armature": imported_armature,
         "fit_transform": fit_transform,
         "visual_overlay": {
             "coordinate_space": "source_pre_fit_and_kotor_reference",

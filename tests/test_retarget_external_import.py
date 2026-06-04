@@ -330,6 +330,12 @@ def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> Non
     )
 
     assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_imported_armature"] == {
+        "source": "imported_fbx_armature",
+        "guide_joint_count": 6,
+        "scene_guide_joint_count": 6,
+        "armature_names": ["Armature"],
+    }
     assert report["source_frame"]["landmarks"]["head"] == "Head"
     assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
     assert report["source_frame"]["landmark_sources"]["pelvis"] == "imported_skeleton"

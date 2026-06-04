@@ -187,6 +187,12 @@ def _valid_fit_report(
             "imported_mesh_role": "payload_guest",
             "final_dag_source": "selected_kotor_base",
         },
+        "source_imported_armature": {
+            "source": "imported_fbx_armature",
+            "guide_joint_count": 6,
+            "scene_guide_joint_count": 6,
+            "armature_names": ["Armature"],
+        },
         "auto_fit_report": {
             "source_forward_axis": "+y",
             "source_up_axis": "+z",
@@ -2182,6 +2188,9 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert gates["fit"]["source_landmark_domain"] == "skeleton_landmarks"
     assert gates["fit"]["source_uses_imported_skeleton_landmarks"] is True
     assert gates["fit"]["source_landmark_source_counts"] == {"imported_skeleton": 6}
+    assert gates["fit"]["source_imported_armature_guide_count"] == 6
+    assert gates["fit"]["source_imported_armature_scene_guide_count"] == 6
+    assert gates["fit"]["source_imported_armature_names"] == ["Armature"]
     assert gates["fit"]["source_skeleton_landmark_roles"] == [
         "head",
         "left",

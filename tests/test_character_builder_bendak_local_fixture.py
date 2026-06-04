@@ -84,6 +84,14 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     )
     assert source_landmark_sources
     assert set(source_landmark_sources.values()) == {"imported_skeleton"}
+    imported_armature = (
+        result.apply_result.get("model").metadata.get("kotor_fit_report", {})
+        .get("source_imported_armature", {})
+    )
+    assert imported_armature["source"] == "imported_skeleton_nodes"
+    assert imported_armature["guide_joint_count"] == 67
+    assert imported_armature["scene_guide_joint_count"] == 67
+    assert imported_armature["armature_names"] == []
     assert result.motion_result is not None
     assert result.motion_result.supermodel == "S_Female02"
     assert result.animation_library_result is not None

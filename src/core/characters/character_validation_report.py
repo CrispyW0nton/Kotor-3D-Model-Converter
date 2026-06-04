@@ -429,6 +429,7 @@ def character_builder_evidence_gates(
     )
     fit_landmark_sources = _fit_landmark_source_summary(fit_report)
     fit_landmark_alignment = _fit_landmark_alignment_summary(fit_report)
+    fit_imported_armature = _fit_imported_armature_summary(fit_report)
     fit_stage = _gate_stage(
         fit_codes,
         present=bool(fit_report),
@@ -449,6 +450,9 @@ def character_builder_evidence_gates(
         "source_skeleton_landmark_roles": fit_landmark_sources["source_skeleton_landmark_roles"],
         "source_mesh_payload_landmark_roles": fit_landmark_sources["source_mesh_payload_landmark_roles"],
         "source_uses_imported_skeleton_landmarks": fit_landmark_sources["source_uses_imported_skeleton_landmarks"],
+        "source_imported_armature_guide_count": fit_imported_armature["guide_joint_count"],
+        "source_imported_armature_scene_guide_count": fit_imported_armature["scene_guide_joint_count"],
+        "source_imported_armature_names": fit_imported_armature["armature_names"],
         "paired_landmark_alignment": fit_landmark_alignment,
         "fit_transform_present": bool(_mapping(fit_report.get("fit_transform"))),
         "blocking_issue_codes": fit_codes["blocking"],
@@ -699,6 +703,19 @@ def _fit_landmark_source_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
         "source_uses_imported_skeleton_landmarks": any(
             source == "imported_skeleton" for source in sources.values()
         ),
+    }
+
+
+def _fit_imported_armature_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
+    imported = _mapping(fit_report.get("source_imported_armature"))
+    return {
+        "guide_joint_count": _safe_int(imported.get("guide_joint_count")),
+        "scene_guide_joint_count": _safe_int(imported.get("scene_guide_joint_count")),
+        "armature_names": [
+            str(name or "")
+            for name in list(imported.get("armature_names") or [])
+            if str(name or "").strip()
+        ],
     }
 
 
