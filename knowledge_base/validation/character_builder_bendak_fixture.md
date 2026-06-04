@@ -74,6 +74,13 @@ Headless workflow proof on 2026-06-04 confirmed:
   the selected native KOTOR template donor surface. In the Bendak local fixture,
   all 4,722 imported vertices transfer from 2,166 native donor vertices with no
   nearest-bone fallback vertices.
+- Donor/template weight transfer is no longer treated as trusted deformation
+  evidence unless Auto-Fit records a complete source and target landmark set
+  for `head`, `pelvis`, `side_pair`, `left_foot`, and `right_foot`. If donor
+  weights exist but those landmarks are incomplete, export may remain allowed,
+  but the validation report marks the weight gate as
+  `donor_transfer_landmarks_incomplete` so the modder knows the mesh still
+  needs fit/correspondence review before launch-quality claims.
 - Character Builder compacts the generated skin bone map to the used influence
   slots before MDL/MDX export, keeping `bone_map`, `qbone_list`, `tbone_list`,
   and per-vertex influence indices aligned through writer/readback validation.
@@ -163,6 +170,9 @@ The fixture is not considered passing until all of these are true:
 - Reload verification records native snapshot/report evidence and blocks if
   staged readback loses or moves selected native KOTOR structural paths or
   truncates the imported payload mesh/skin binding counts.
+- Donor/native-template weight transfer is only considered trusted when the
+  auto-fit report proves complete landmark correspondence for the selected
+  native base and imported payload.
 - Game-tested promotion requires a per-game manual checklist for K1 and K2;
   one shared checklist result must not promote the candidate.
 - Game-tested promotion and packaging must identify the exact tested MDL/MDX

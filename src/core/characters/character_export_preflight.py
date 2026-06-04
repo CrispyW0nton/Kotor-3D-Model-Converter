@@ -45,6 +45,13 @@ from .native_skeleton import (
 _NULL_SUPERMODELS = {"", "NULL", "NONE"}
 _STRUCTURAL_ROLES = {"socket", "helper", "deform_helper"}
 _REPLACEABLE_RENDER_ROLES = {"mesh", "skin_mesh"}
+_DONOR_WEIGHT_REQUIRED_FIT_LANDMARKS = frozenset({
+    "head",
+    "pelvis",
+    "side_pair",
+    "left_foot",
+    "right_foot",
+})
 
 
 @dataclass(frozen=True)
@@ -317,7 +324,11 @@ def _validate_native_template_rig_provenance(
             }
 
     if not mismatches:
-        _validate_skin_binding_evidence(bind, report)
+        _validate_skin_binding_evidence(
+            bind,
+            metadata.get("kotor_fit_report"),
+            report,
+        )
         if opts.require_native_render_replacement_evidence:
             _validate_native_render_replacement_evidence(
                 model,
@@ -365,6 +376,7 @@ def _validate_native_template_rig_provenance(
 
 def _validate_skin_binding_evidence(
     bind: dict[str, Any],
+    fit_report: Any,
     report: ValidationReport,
 ) -> None:
     skin_binding = bind.get("skin_binding")
@@ -384,6 +396,28 @@ def _validate_skin_binding_evidence(
     quality_stage = str(skin_binding.get("quality_stage") or "")
     donor_weight_transfer = bool(skin_binding.get("donor_weight_transfer"))
     mesh_reports = list(skin_binding.get("mesh_reports") or [])
+    if donor_weight_transfer:
+        landmark_gaps = _donor_weight_fit_landmark_gaps(fit_report)
+        if landmark_gaps:
+            report.add(_issue(
+                "warning",
+                "character.export.donor_skin_binding_landmarks_incomplete",
+                (
+                    "Character Builder donor weight transfer does not have "
+                    "complete fit landmark evidence."
+                ),
+                fix_hint=(
+                    "Re-run Auto-Fit with visible head, pelvis, shoulder/side, "
+                    "and both foot landmarks before treating donor weights as "
+                    "trusted deformation evidence."
+                ),
+                details={
+                    "weighting_method": weighting_method,
+                    "quality_stage": quality_stage,
+                    "donor_weight_transfer": donor_weight_transfer,
+                    **landmark_gaps,
+                },
+            ))
     if (
         weighting_method == "nearest_kotor_bone_segment"
         or quality_stage == "fallback_first_pass"
@@ -408,6 +442,48 @@ def _validate_skin_binding_evidence(
                 "mesh_reports": mesh_reports,
             },
         ))
+
+
+def _donor_weight_fit_landmark_gaps(fit_report: Any) -> dict[str, Any]:
+    fit = fit_report if isinstance(fit_report, dict) else {}
+    auto_fit = fit.get("auto_fit_report")
+    auto_fit = auto_fit if isinstance(auto_fit, dict) else {}
+    labels = [
+        str(label or "")
+        for label in (
+            list(fit.get("used_landmarks") or [])
+            + list(auto_fit.get("used_landmarks") or [])
+        )
+        if str(label or "").strip()
+    ]
+    roles_by_prefix: dict[str, set[str]] = {"source": set(), "target": set()}
+    for label in labels:
+        prefix, role = _parse_fit_landmark_label(label)
+        if prefix in roles_by_prefix and role:
+            roles_by_prefix[prefix].add(role)
+
+    required = set(_DONOR_WEIGHT_REQUIRED_FIT_LANDMARKS)
+    source_missing = sorted(required - roles_by_prefix["source"])
+    target_missing = sorted(required - roles_by_prefix["target"])
+    if not source_missing and not target_missing:
+        return {}
+    return {
+        "required_landmarks": sorted(required),
+        "source_landmarks": sorted(roles_by_prefix["source"]),
+        "target_landmarks": sorted(roles_by_prefix["target"]),
+        "missing_source_landmarks": source_missing,
+        "missing_target_landmarks": target_missing,
+        "used_landmarks": sorted(set(labels)),
+    }
+
+
+def _parse_fit_landmark_label(label: str) -> tuple[str, str]:
+    text = str(label or "").strip()
+    if ":" not in text:
+        return "", ""
+    prefix, rest = text.split(":", 1)
+    role = rest.split("=", 1)[0].strip()
+    return prefix.strip().lower(), role.lower()
 
 
 def _validate_auto_fit_evidence(

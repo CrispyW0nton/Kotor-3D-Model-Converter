@@ -80,6 +80,7 @@ _BIND_EVIDENCE_CODES = frozenset({
 _WEIGHT_EVIDENCE_CODES = frozenset({
     "character.export.missing_skin_binding_evidence",
     "character.export.fallback_skin_binding",
+    "character.export.donor_skin_binding_landmarks_incomplete",
     "character.export.no_skin_payload",
     "character.export.empty_skin_geometry",
     "character.export.empty_bonemap",
@@ -520,6 +521,11 @@ def _weight_gate_stage(
         return "blocked"
     if not skin_binding_present:
         return "missing"
+    if (
+        "character.export.donor_skin_binding_landmarks_incomplete"
+        in set(codes.get("warning") or [])
+    ):
+        return "donor_transfer_landmarks_incomplete"
     if (
         weighting_method == "nearest_kotor_bone_segment"
         or quality_stage in {"fallback_first_pass", "donor_transfer_partial"}

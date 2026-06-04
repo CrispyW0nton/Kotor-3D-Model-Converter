@@ -106,7 +106,24 @@ def _native_template(*, include_lhand: bool = True, game: str = "K1") -> KotorMo
     return model
 
 
-def _valid_fit_report(*, confidence: float = 0.95, fallback_used: bool = False) -> dict:
+def _valid_fit_report(
+    *,
+    confidence: float = 0.95,
+    fallback_used: bool = False,
+    used_landmarks: list[str] | None = None,
+) -> dict:
+    landmarks = list(used_landmarks or [
+        "source:head=Head",
+        "source:left_foot=LeftFoot",
+        "source:pelvis=Hips",
+        "source:right_foot=RightFoot",
+        "source:side_pair=shoulder",
+        "target:head=head_g",
+        "target:left_foot=lfoot_g",
+        "target:pelvis=pelvis_g",
+        "target:right_foot=rfoot_g",
+        "target:side_pair=shoulder",
+    ])
     return {
         "fit_policy": "bone_landmark_basis",
         "confidence": confidence,
@@ -133,14 +150,12 @@ def _valid_fit_report(*, confidence: float = 0.95, fallback_used: bool = False) 
             "scale_factor": 0.8,
             "height_source": "landmarks",
             "ground_origin_basis": "source_pelvis_ground",
-            "used_landmarks": [
-                "source:pelvis=Hips",
-                "target:pelvis=pelvis_g",
-            ],
+            "used_landmarks": landmarks,
             "confidence": confidence,
             "fallback_used": fallback_used,
             "notes": "",
         },
+        "used_landmarks": landmarks,
     }
 
 
@@ -384,6 +399,47 @@ def test_character_export_preflight_accepts_complete_donor_skin_binding_without_
     )
 
     assert result["model"].metadata["character_builder_bind"]["skin_binding"]["donor_weight_transfer"] is True
+    assert "character.export.fallback_skin_binding" not in _codes(preflight)
+    assert "character.export.donor_skin_binding_landmarks_incomplete" not in _codes(preflight)
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_donor_transfer_lacks_fit_landmarks() -> None:
+    result = _donor_weight_rigged_character()
+    result["model"].metadata["kotor_fit_report"] = _valid_fit_report(
+        used_landmarks=[
+            "source:pelvis=Hips",
+            "target:pelvis=pelvis_g",
+        ],
+    )
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(
+            required_socket_categories=(),
+            recommended_socket_categories=(),
+        ),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.donor_skin_binding_landmarks_incomplete",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["donor_weight_transfer"] is True
+    assert issue.details["missing_source_landmarks"] == [
+        "head",
+        "left_foot",
+        "right_foot",
+        "side_pair",
+    ]
+    assert issue.details["missing_target_landmarks"] == [
+        "head",
+        "left_foot",
+        "right_foot",
+        "side_pair",
+    ]
     assert "character.export.fallback_skin_binding" not in _codes(preflight)
     assert preflight.export_allowed is True
 
@@ -1161,6 +1217,67 @@ def test_character_builder_validation_report_has_full_manual_checklist() -> None
     assert "Game tested: False" in text
     assert "1. Load as player character without crash" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
+
+
+def test_character_builder_validation_report_downgrades_donor_weights_without_landmarks() -> None:
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(
+            source="test.preflight",
+            issues=[
+                ValidationIssue(
+                    severity=ValidationSeverity.WARNING,
+                    subsystem=ValidationSubsystem.CHARACTER,
+                    code="character.export.donor_skin_binding_landmarks_incomplete",
+                    message="Donor transfer lacks landmark evidence.",
+                )
+            ],
+        ),
+        metadata={
+            "character_builder_workflow": {
+                "fit_report": _valid_fit_report(
+                    used_landmarks=[
+                        "source:pelvis=Hips",
+                        "target:pelvis=pelvis_g",
+                    ],
+                ),
+                "bind": {
+                    "skin_binding": {
+                        "weighting_method": "native_template_nearest_vertex_donor",
+                        "quality_stage": "donor_transfer_first_pass",
+                        "donor_weight_transfer": True,
+                        "mesh_reports": [{"mesh_name": "custom_body"}],
+                    }
+                },
+                "rig_state": {
+                    "state": "native_template_final",
+                    "dag_authority": "native_kotor_base",
+                },
+                "native_snapshot": {
+                    "model_name": "pmbam",
+                    "game": "K1",
+                    "dag_fingerprint": "a" * 64,
+                },
+            }
+        },
+    )
+
+    data = report.to_dict()
+
+    gates = data["character_builder_evidence_gates"]
+    assert gates["fit"]["stage"] == "passed"
+    assert gates["bind"]["stage"] == "passed"
+    assert gates["weight"]["stage"] == "donor_transfer_landmarks_incomplete"
+    assert gates["weight"]["warning_issue_codes"] == [
+        "character.export.donor_skin_binding_landmarks_incomplete"
+    ]
+    assert "weight=donor_transfer_landmarks_incomplete" in report.to_text()
 
 
 def test_character_builder_validation_report_requires_complete_game_test_evidence() -> None:
