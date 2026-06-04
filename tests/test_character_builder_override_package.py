@@ -553,3 +553,12 @@ def test_character_override_package_preserves_complete_game_test_evidence(tmp_pa
         "Loading in both KOTOR 1 and KOTOR 2"
     ] is True
     assert manifest["game_test_evidence"]["tested_output_hashes"] == output_hashes
+    readme = (
+        tmp_path / "package" / "n_mandalorian03_override_readme.txt"
+    ).read_text(encoding="utf-8")
+    assert "Game-test evidence:" in readme
+    assert "- Tested games: K1, K2" in readme
+    assert "- Tester: manual qa" in readme
+    assert "- Per-game checklists: K1, K2" in readme
+    assert "- Artifacts recorded: 2" in readme
+    assert "- Tested output hashes: mdl, mdx" in readme

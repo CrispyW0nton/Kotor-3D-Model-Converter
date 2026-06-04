@@ -2487,6 +2487,14 @@ def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_e
     assert data["game_test_evidence"]["tested_output_hashes"] == output_hashes
     assert data["output_hashes"] == output_hashes
     assert data["game_test_evidence_missing"] == {}
+    text = report.to_text()
+    assert "Game-test evidence:" in text
+    assert "- Tested games: K1, K2" in text
+    assert "- Tester: manual qa" in text
+    assert "- Per-game checklists: K1, K2" in text
+    assert "- Artifacts recorded: 2" in text
+    assert "- Tested output hashes: mdl, mdx" in text
+    assert "- Notes: Bendak replacement smoke passed." in text
 
 
 def test_character_builder_validation_report_marks_game_ready_only_when_all_gates_pass(

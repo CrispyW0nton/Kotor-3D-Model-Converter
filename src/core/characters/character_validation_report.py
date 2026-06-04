@@ -291,6 +291,63 @@ def character_game_test_evidence_missing(
     return missing
 
 
+def character_game_test_evidence_text_summary_lines(
+    evidence: Any,
+) -> list[str]:
+    """Return concise human-readable summary lines for game-test evidence."""
+
+    if not isinstance(evidence, dict) or not evidence:
+        return []
+    tested_games = [
+        str(game or "")
+        for game in list(evidence.get("tested_games") or [])
+        if str(game or "").strip()
+    ]
+    per_game_checklists = _normalize_per_game_checklist_results(
+        evidence.get("per_game_checklist_results")
+    )
+    artifacts = [
+        str(item or "")
+        for item in list(evidence.get("artifacts") or [])
+        if str(item or "").strip()
+    ]
+    per_game_artifacts = _normalize_per_game_artifacts(
+        evidence.get("per_game_artifacts")
+    )
+    output_hashes = _normalize_output_hashes(evidence.get("tested_output_hashes"))
+
+    lines = ["Game-test evidence:"]
+    status = str(evidence.get("status") or "").strip()
+    if status:
+        lines.append(f"- Status: {status}")
+    lines.append(
+        "- Tested games: "
+        + (", ".join(tested_games) if tested_games else "not recorded")
+    )
+    tester = str(evidence.get("tester") or "").strip()
+    if tester:
+        lines.append(f"- Tester: {tester}")
+    if per_game_checklists:
+        lines.append(
+            "- Per-game checklists: "
+            + ", ".join(sorted(per_game_checklists))
+        )
+    artifact_count = len(artifacts) + sum(
+        len(items) for items in per_game_artifacts.values()
+    )
+    if artifact_count:
+        lines.append(f"- Artifacts recorded: {artifact_count}")
+    if output_hashes:
+        lines.append(
+            "- Tested output hashes: "
+            + ", ".join(sorted(output_hashes))
+        )
+    notes = str(evidence.get("notes") or "").strip()
+    if notes:
+        lines.append(f"- Notes: {notes}")
+    return lines
+
+
 def _normalize_games(values: Any) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -1238,6 +1295,12 @@ class CharacterBuilderValidationReport:
                     lines.append(f"  Details: {details}")
         if issue_count == 0:
             lines.append("- none")
+
+        game_test_lines = character_game_test_evidence_text_summary_lines(
+            payload.get("game_test_evidence")
+        )
+        if game_test_lines:
+            lines.extend(["", *game_test_lines])
 
         evidence_missing = payload.get("game_test_evidence_missing")
         if isinstance(evidence_missing, dict) and evidence_missing:

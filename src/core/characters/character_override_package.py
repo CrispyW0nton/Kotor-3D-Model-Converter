@@ -32,6 +32,7 @@ from src.core.validation.validation_bus import (
 
 from .character_validation_report import (
     CHARACTER_BUILDER_MANUAL_CHECKLIST,
+    character_game_test_evidence_text_summary_lines,
     character_game_test_evidence_passed,
 )
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_NATIVE_RESREF_MAX_LEN
@@ -786,6 +787,11 @@ def _build_readme(manifest: dict[str, Any]) -> str:
                 f"{engine.get('stage')} "
                 f"(pending Ghidra: {engine.get('pending_ghidra_count')})"
             )
+    game_test_lines = character_game_test_evidence_text_summary_lines(
+        manifest.get("game_test_evidence")
+    )
+    if game_test_lines:
+        lines.extend(["", *game_test_lines])
     lines.extend(["", "Install:"])
     for item in list(manifest.get("install_instructions") or []):
         lines.append(f"- {item}")
