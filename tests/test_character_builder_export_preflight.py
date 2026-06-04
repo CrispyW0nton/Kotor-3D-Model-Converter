@@ -171,6 +171,53 @@ def _stamp_valid_fit_evidence(result: dict, *, confidence: float = 0.95) -> dict
     return result
 
 
+def _stamp_animation_library_evidence(
+    model: KotorModel,
+    *,
+    supermodel: str = "S_KPMF0200",
+    game: str = "K1",
+) -> None:
+    model.metadata["character_builder_motion_assignment"] = {
+        "schema": "ghostrigger.character_motion_assignment.v1",
+        "source": "inherited_supermodel",
+        "supermodel": supermodel,
+        "code": "inherited",
+        "ok": True,
+        "available_preview_names": ["pause1", "walk", "run", "tlknorm", "dodge"],
+        "missing_preview_names": [],
+    }
+    model.metadata["character_builder_animation_library"] = {
+        "schema": "ghostrigger.character_animation_library_evidence.v1",
+        "status": "resolved",
+        "ok": True,
+        "code": "listed",
+        "message": "267 animation clip(s) available.",
+        "game": game,
+        "body": model.name,
+        "motion_source": "inherited_supermodel",
+        "selected_supermodel": supermodel,
+        "effective_supermodel": supermodel,
+        "resolved_supermodel": supermodel,
+        "resolver_configured": True,
+        "local_animation_count": 0,
+        "resolved_supermodel_local_animation_count": 43,
+        "available_count": 267,
+        "sample_animation_names": [
+            "pause1",
+            "pause2",
+            "walk",
+            "run",
+            "tlknorm",
+            "dodge",
+            "victory",
+        ],
+        "required_preview_names": ["pause1", "walk", "run", "tlknorm", "dodge"],
+        "required_preview_available": ["pause1", "walk", "run", "tlknorm", "dodge"],
+        "required_preview_missing": [],
+        "diagnostics": [],
+    }
+
+
 def _test_output_hashes() -> dict[str, dict[str, int | str]]:
     return {
         "mdl": {"sha256": hashlib.sha256(b"mdl").hexdigest(), "size": 3},
@@ -1492,6 +1539,7 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
         "scale_basis": "bone_landmark_height",
         "fit_transform": result["model"].metadata["kotor_fit_report"]["fit_transform"],
     }
+    _stamp_animation_library_evidence(result["model"])
     output = tmp_path / "grbody.mdl"
 
     tx = export_character_mdl_mdx_transaction(
@@ -1512,7 +1560,10 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     text_path = tmp_path / "grbody_validation_report.txt"
     assert report_path.exists()
     assert text_path.exists()
-    assert "Evidence gates: fit=passed, bind=passed, weight=fallback_first_pass" in (
+    assert (
+        "Evidence gates: fit=passed, bind=passed, "
+        "weight=fallback_first_pass, animation=passed"
+    ) in (
         text_path.read_text(encoding="utf-8")
     )
     payload = json.loads(report_path.read_text(encoding="utf-8"))
@@ -1550,6 +1601,11 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert gates["weight"]["warning_issue_codes"] == [
         "character.export.fallback_skin_binding"
     ]
+    assert gates["animation"]["stage"] == "passed"
+    assert gates["animation"]["motion_source"] == "inherited_supermodel"
+    assert gates["animation"]["assigned_supermodel"] == "S_KPMF0200"
+    assert gates["animation"]["available_count"] == 267
+    assert gates["animation"]["required_preview_missing"] == []
     assert workflow["rig_state"]["state"] == "native_template_final"
     assert workflow["rig_state"]["native_base_resref"] == "pmbam"
     assert workflow["rig_state"]["native_base_model_name"] == "pmbam"
@@ -1584,6 +1640,9 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["fit_report"]["fit_policy"] == "bone_landmark_basis"
     assert workflow["fit_report"]["fit_transform"]["scale"] == 0.8
     assert workflow["normalization"]["fit_transform"]["translation"] == [0.0, 0.0, 0.0]
+    assert workflow["motion_assignment"]["source"] == "inherited_supermodel"
+    assert workflow["animation_library"]["effective_supermodel"] == "S_KPMF0200"
+    assert workflow["animation_library"]["available_count"] == 267
     assert workflow["native_snapshot"]["model_name"] == "pmbam"
     assert workflow["native_snapshot"]["game"] == "K1"
     assert workflow["native_snapshot"]["supermodel"] == "S_KPMF0200"
@@ -1624,6 +1683,7 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert "Character Builder workflow evidence" in text
     assert "Rig state: native_template_final" in text
     assert "Auto-fit policy: bone_landmark_basis" in text
+    assert "Animation library: 267 clip(s)" in text
     assert "reloaded_model={model_name: grbody" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text

@@ -112,6 +112,12 @@ _GEOMETRY_EVIDENCE_CODES = frozenset({
     "character.export.face_index_out_of_range",
 })
 
+_ANIMATION_EVIDENCE_CODES = frozenset({
+    "character.export.missing_animation_library_evidence",
+    "character.export.empty_animation_library_evidence",
+    "character.export.animation_library_preview_incomplete",
+})
+
 
 def build_character_game_test_evidence(
     *,
@@ -373,7 +379,7 @@ def character_builder_evidence_gates(
     workflow: dict[str, Any],
     preflight_report: ValidationReport,
 ) -> dict[str, dict[str, Any]]:
-    """Summarize fit, bind, and weight proof as separate export gates."""
+    """Summarize Character Builder proof as separate export gates."""
 
     workflow = workflow if isinstance(workflow, dict) else {}
     issues = list(getattr(preflight_report, "issues", []) or [])
@@ -382,6 +388,8 @@ def character_builder_evidence_gates(
     rig_state = _mapping(workflow.get("rig_state"))
     native_snapshot = _mapping(workflow.get("native_snapshot"))
     skin_binding = _mapping(bind.get("skin_binding"))
+    motion_assignment = _mapping(workflow.get("motion_assignment"))
+    animation_library = _mapping(workflow.get("animation_library"))
 
     fit_codes = _gate_issue_codes(issues, _FIT_EVIDENCE_CODES)
     bind_codes = _gate_issue_codes(issues, _BIND_EVIDENCE_CODES)
@@ -389,6 +397,7 @@ def character_builder_evidence_gates(
         issues,
         _WEIGHT_EVIDENCE_CODES | _GEOMETRY_EVIDENCE_CODES,
     )
+    animation_codes = _gate_issue_codes(issues, _ANIMATION_EVIDENCE_CODES)
 
     fit_confidence = _safe_float(
         fit_report.get(
@@ -454,11 +463,61 @@ def character_builder_evidence_gates(
         "warning_issue_codes": weight_codes["warning"],
     }
 
+    available_count = _safe_int(animation_library.get("available_count"))
+    required_missing = [
+        str(item or "")
+        for item in list(animation_library.get("required_preview_missing") or [])
+        if str(item or "").strip()
+    ]
+    diagnostics = [
+        str(item or "")
+        for item in list(animation_library.get("diagnostics") or [])
+        if str(item or "").strip()
+    ]
+    animation = {
+        "stage": _animation_gate_stage(
+            animation_codes,
+            present=bool(animation_library),
+            available_count=available_count,
+            required_preview_missing=required_missing,
+            diagnostics=diagnostics,
+        ),
+        "present": bool(animation_library),
+        "motion_source": str(
+            animation_library.get("motion_source")
+            or motion_assignment.get("source")
+            or ""
+        ),
+        "assigned_supermodel": str(
+            animation_library.get("selected_supermodel")
+            or motion_assignment.get("supermodel")
+            or ""
+        ),
+        "effective_supermodel": str(animation_library.get("effective_supermodel") or ""),
+        "resolved_supermodel": str(animation_library.get("resolved_supermodel") or ""),
+        "game": str(animation_library.get("game") or ""),
+        "available_count": available_count,
+        "sample_animation_names": [
+            str(item or "")
+            for item in list(animation_library.get("sample_animation_names") or [])
+            if str(item or "").strip()
+        ][:16],
+        "required_preview_available": [
+            str(item or "")
+            for item in list(animation_library.get("required_preview_available") or [])
+            if str(item or "").strip()
+        ],
+        "required_preview_missing": required_missing,
+        "diagnostics": diagnostics,
+        "blocking_issue_codes": animation_codes["blocking"],
+        "warning_issue_codes": animation_codes["warning"],
+    }
+
     return {
         "schema": {
             "name": "ghostrigger.character_builder_evidence_gates.v1",
             "meaning": (
-                "Fit, bind, and weight are separate Character Builder proof "
+                "Fit, bind, weight, and animation are separate Character Builder proof "
                 "gates. A character can pass one gate while another remains "
                 "fallback-quality or blocked."
             ),
@@ -466,6 +525,7 @@ def character_builder_evidence_gates(
         "fit": fit,
         "bind": bind,
         "weight": weight,
+        "animation": animation,
     }
 
 
@@ -534,6 +594,36 @@ def _weight_gate_stage(
     ):
         return quality_stage or "fallback_first_pass"
     return "trusted_donor_transfer"
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _animation_gate_stage(
+    codes: dict[str, list[str]],
+    *,
+    present: bool,
+    available_count: int,
+    required_preview_missing: list[str],
+    diagnostics: list[str],
+) -> str:
+    if codes.get("blocking"):
+        return "blocked"
+    if not present:
+        return "missing"
+    if available_count <= 0:
+        return "empty"
+    if diagnostics:
+        return "resolved_with_diagnostics"
+    if required_preview_missing:
+        return "preview_incomplete"
+    if codes.get("warning"):
+        return "warning"
+    return "passed"
 
 
 def _evidence_gate_stage(
@@ -718,7 +808,16 @@ class CharacterBuilderValidationReport:
                     "- Evidence gates: "
                     f"fit={_evidence_gate_stage(evidence_gates, 'fit')}, "
                     f"bind={_evidence_gate_stage(evidence_gates, 'bind')}, "
-                    f"weight={_evidence_gate_stage(evidence_gates, 'weight')}"
+                    f"weight={_evidence_gate_stage(evidence_gates, 'weight')}, "
+                    f"animation={_evidence_gate_stage(evidence_gates, 'animation')}"
+                )
+            animation_library = dict(workflow.get("animation_library") or {})
+            if animation_library:
+                lines.append(
+                    "- Animation library: "
+                    f"{animation_library.get('available_count', 0)} clip(s), "
+                    f"source={animation_library.get('motion_source')}, "
+                    f"supermodel={animation_library.get('effective_supermodel')}"
                 )
 
         lines.extend(["", "Issues:"])

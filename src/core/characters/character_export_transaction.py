@@ -748,6 +748,8 @@ def _character_builder_workflow_evidence(
         "rig_state": rig_state,
         "bind": metadata.get("character_builder_bind"),
         "fit_report": metadata.get("kotor_fit_report"),
+        "motion_assignment": metadata.get("character_builder_motion_assignment"),
+        "animation_library": metadata.get("character_builder_animation_library"),
         "normalization": normalization_summary,
         "native_snapshot": snapshot_summary,
     })

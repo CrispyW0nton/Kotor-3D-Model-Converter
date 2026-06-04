@@ -111,6 +111,12 @@ Headless workflow proof on 2026-06-04 confirmed:
   Bendak fixture asserts that inherited/local names such as `pause1`, `pause2`,
   `walk`, and `tlknorm` are available before treating the export as a verified
   candidate.
+- Staged validation reports now keep this as a separate animation evidence
+  gate alongside fit, bind, and weight. The report records motion source,
+  assigned/effective/resolved supermodel, available clip count, sample
+  animation names, preview-slot coverage, and resolver diagnostics so a modder
+  can see whether the candidate is only reload-verified or also has inherited
+  animation-library proof.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

@@ -3585,6 +3585,98 @@ def available_animation_library(scene: Any) -> CheckActorResult:
     )
 
 
+def _stamp_animation_library_evidence(
+    model: Any,
+    *,
+    motion: Optional[MotionAssignmentResult],
+    library: Optional[CheckActorResult],
+) -> None:
+    """Persist inherited-animation proof on the built model.
+
+    The Qt Character Builder can ask for previews, but the export/report path
+    needs headless evidence attached to the model itself.  This keeps animation
+    readiness with the core workflow instead of with a particular UI panel.
+    """
+    if model is None:
+        return
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+
+    motion_payload = {
+        "schema": "ghostrigger.character_motion_assignment.v1",
+        "source": str(getattr(motion, "source", "") or ""),
+        "supermodel": str(getattr(motion, "supermodel", "") or ""),
+        "code": str(getattr(motion, "code", "") or ""),
+        "ok": bool(getattr(motion, "ok", False)),
+        "available_preview_names": [
+            str(name or "")
+            for _label, name in list(getattr(motion, "available", []) or [])
+            if str(name or "").strip()
+        ],
+        "missing_preview_names": [
+            str(name or "")
+            for _label, name in list(getattr(motion, "missing", []) or [])
+            if str(name or "").strip()
+        ],
+    }
+
+    available = [
+        (str(label or ""), str(name or ""))
+        for label, name in list(getattr(library, "available", []) or [])
+        if str(name or "").strip()
+    ]
+    available_names = [name for _label, name in available]
+    available_lower = {name.lower() for name in available_names}
+    required_preview_names = [name for _label, name in PREVIEW_ANIMATIONS]
+    required_available = [
+        name for name in required_preview_names
+        if name.lower() in available_lower
+    ]
+    required_missing = [
+        name for name in required_preview_names
+        if name.lower() not in available_lower
+    ]
+    library_details = dict(getattr(library, "details", {}) or {})
+    diagnostics = [
+        str(item or "")
+        for item in list(getattr(library, "diagnostics", []) or [])
+        if str(item or "").strip()
+    ]
+    status = "resolved" if available_names else "empty"
+    if diagnostics and not available_names:
+        status = "unresolved"
+    elif diagnostics:
+        status = "resolved_with_diagnostics"
+
+    metadata["character_builder_motion_assignment"] = motion_payload
+    metadata["character_builder_animation_library"] = {
+        "schema": "ghostrigger.character_animation_library_evidence.v1",
+        "status": status,
+        "ok": bool(getattr(library, "ok", False)),
+        "code": str(getattr(library, "code", "") or ""),
+        "message": str(getattr(library, "message", "") or ""),
+        "game": str(library_details.get("game") or ""),
+        "body": str(library_details.get("body") or ""),
+        "motion_source": str(library_details.get("motion_source") or motion_payload["source"]),
+        "selected_supermodel": str(library_details.get("selected_supermodel") or motion_payload["supermodel"]),
+        "effective_supermodel": str(library_details.get("effective_supermodel") or ""),
+        "resolved_supermodel": str(library_details.get("resolved_supermodel") or ""),
+        "resolver_configured": bool(library_details.get("resolver_configured", False)),
+        "local_animation_count": int(library_details.get("local_animation_count") or 0),
+        "resolved_supermodel_local_animation_count": int(
+            library_details.get("resolved_supermodel_local_animation_count") or 0
+        ),
+        "available_count": len(available_names),
+        "sample_animation_names": available_names[:48],
+        "required_preview_names": required_preview_names,
+        "required_preview_available": required_available,
+        "required_preview_missing": required_missing,
+        "diagnostics": diagnostics,
+    }
+
+
 def play_preview_animation(
     scene: Any,
     anim_name: str,
@@ -4454,6 +4546,11 @@ def run_external_mesh_launch_workflow(
     resource_manager = getattr(template, "_gr_supermodel_resource_manager", None)
     with _with_supermodel_resource_manager(resource_manager):
         animation_library = available_animation_library(scene)
+    _stamp_animation_library_evidence(
+        rigged_model,
+        motion=motion,
+        library=animation_library,
+    )
     if require_animation_library and not list(getattr(animation_library, "available", []) or []):
         return LaunchWorkflowResult(
             load_result=load,

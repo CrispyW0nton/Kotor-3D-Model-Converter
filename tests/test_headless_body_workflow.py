@@ -2867,6 +2867,19 @@ def test_t1205_launch_workflow_records_inherited_animation_library(monkeypatch, 
     names = {name for _label, name in result.animation_library_result.available}
     assert {"pause1", "walk", "tlknorm"}.issubset(names)
     assert result.animation_library_result.details["resolved_supermodel"] == "S_Female02"
+    animation_evidence = rigged_model.metadata["character_builder_animation_library"]
+    assert animation_evidence["schema"] == "ghostrigger.character_animation_library_evidence.v1"
+    assert animation_evidence["status"] == "resolved"
+    assert animation_evidence["resolved_supermodel"] == "S_Female02"
+    assert animation_evidence["available_count"] == 3
+    assert set(animation_evidence["sample_animation_names"]) == {
+        "pause1",
+        "walk",
+        "tlknorm",
+    }
+    motion_evidence = rigged_model.metadata["character_builder_motion_assignment"]
+    assert motion_evidence["source"] == wf.MOTION_SOURCE_INHERITED
+    assert motion_evidence["supermodel"] == "S_Female02"
     assert calls["export"] == 1
 
 
