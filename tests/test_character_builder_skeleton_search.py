@@ -29,6 +29,15 @@ def _sample_options():
             "path": "installation:pmbam.mdl",
         },
         {
+            "key": "game:k1:n_mandalorian:installation",
+            "source": "installation",
+            "game": "K1",
+            "part": "body",
+            "name": "n_mandalorian",
+            "resref": "n_mandalorian",
+            "path": "installation:n_mandalorian.mdl",
+        },
+        {
             "key": "game:k1:n_mandalorian03:installation",
             "source": "installation",
             "game": "K1",
@@ -66,6 +75,7 @@ def test_character_builder_base_picker_suggests_indexed_models_as_user_types():
         suggestions = [model.index(row, 0).data() for row in range(model.rowCount())]
 
         assert "n_mandalorian03" in suggestions
+        assert "n_mandalorian" in suggestions
         assert "n_sithsoldier" in suggestions
         assert "pmbam" not in suggestions
     finally:
@@ -88,6 +98,38 @@ def test_character_builder_base_picker_exact_typed_model_resolves_to_indexed_key
         )
     finally:
         inspector.deleteLater()
+
+
+def test_character_builder_direct_mandalorian_base_stays_skeleton_authority():
+    panel = SimpleNamespace(
+        _option_field=QtCharacterBuilderWindow._option_field,
+    )
+    panel._skeleton_template_requested_resref = (
+        lambda option: QtCharacterBuilderWindow._skeleton_template_requested_resref(
+            panel,
+            option,
+        )
+    )
+    panel._skeleton_template_source_resref = (
+        lambda option: QtCharacterBuilderWindow._skeleton_template_source_resref(
+            panel,
+            option,
+        )
+    )
+    option = {
+        "name": "n_mandalorian",
+        "resref": "n_mandalorian",
+        "path": "installation:n_mandalorian.mdl",
+    }
+
+    assert (
+        QtCharacterBuilderWindow._skeleton_template_status_label(panel, option)
+        == "n_mandalorian"
+    )
+    assert (
+        QtCharacterBuilderWindow._skeleton_template_source_resref(panel, option)
+        == "n_mandalorian"
+    )
 
 
 def test_character_builder_typed_variant_uses_base_mdl_source_resref():

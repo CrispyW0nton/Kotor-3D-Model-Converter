@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder Bendak fixture clarity: added regression coverage for the direct `n_mandalorian` base-skeleton path so the Bendak workflow remains distinct from optional numbered replacement targets. `Bendak.fbx` is the custom imported mesh payload; `n_mandalorian` is the native KOTOR skeleton/DAG authority; `n_mandalorian03` is only a requested variant/packaging target when used. Roadmap task: `T1205` / `T2203`.
+  Affected areas: `tests/test_character_builder_skeleton_search.py`.
+  Ground truth used: existing MCP evidence for K1/K2 `n_mandalorian` as the loadable 70-node native Mandalorian base with `S_Female02` supermodel and local `pause1`/`pause2`.
+  Verification: `python -m pytest tests/test_character_builder_skeleton_search.py::test_character_builder_base_picker_suggests_indexed_models_as_user_types tests/test_character_builder_skeleton_search.py::test_character_builder_direct_mandalorian_base_stays_skeleton_authority tests/test_character_builder_skeleton_search.py::test_character_builder_typed_variant_uses_base_mdl_source_resref tests/test_character_builder_skeleton_search.py::test_character_builder_variant_status_label_shows_source_and_requested_target -q --basetemp .pytest_tmp_bendak_base_clarity`; `python -m py_compile tests/test_character_builder_skeleton_search.py`.
+
 - Character Builder base-vs-target clarity: the Character Builder panel now prefers `source_resref` when labeling auto-fit/reference work and shows variant selections as `native_source (requested target variant)`, so typing a target like `n_mandalorian03` visibly loads/fits against `n_mandalorian` instead of implying the missing variant MDL is the skeleton authority. Roadmap task: `T1205` / `T2203`.
   Affected areas: `src/gui/panels/qt_character_builder_panel.py`, `tests/test_character_builder_skeleton_search.py`.
   Ground truth used: existing MCP evidence for K1/K2 `n_mandalorian` as the actual 70-node native Mandalorian base and prior variant-resolution checks showing `n_mandalorian03` resolves to that base in the configured install.
