@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder continual Bendak fixture: Documented `Bendak.fbx` as the primary external Character Builder QA model and `n_mandalorian03` as the intended replacement target, with explicit workflow, acceptance gates, capability-honesty notes, and current MCP lookup evidence. Roadmap task: `T1205` / `T2203`.
+  Affected areas: `knowledge_base/validation/character_builder_bendak_fixture.md`, `knowledge_base/roadmap/03_character_builder_native_kotor_pipeline.md`.
+  Ground truth used: verified the local Bendak FBX path exists; MCP `ghostrigger_list_game_models` currently exposes `n_mandalorian` but not `n_mandalorian03` in the configured K1/K2 lookup, and MCP `ghostrigger_model_info` refreshed K1 `pmbam` native-body availability as a control fixture.
+  Verification: `git diff --check`.
+
 - Character Builder face-index preflight: skin-payload face validation now blocks non-finite and non-integer face indices before converting them to integers, preventing imported mesh data such as `1.5` from being silently truncated into a different vertex reference. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; this slice validates GhostRigger payload integrity and does not add new KOTOR MDL-loader assumptions.
