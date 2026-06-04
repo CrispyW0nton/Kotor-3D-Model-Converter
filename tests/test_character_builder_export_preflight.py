@@ -47,7 +47,7 @@ def _mesh_model() -> KotorModel:
     return KotorModel(name="grbody", root_node=root)
 
 
-def _native_template(*, include_lhand: bool = True) -> KotorModel:
+def _native_template(*, include_lhand: bool = True, game: str = "K1") -> KotorModel:
     root = _node("PMBAM")
     cutscene = _node("cutscenedummy", parent=root)
     rootdummy = _node("rootdummy", parent=cutscene)
@@ -78,18 +78,20 @@ def _native_template(*, include_lhand: bool = True) -> KotorModel:
     render_skin = _node("Torso", flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN), parent=root)
     render_skin.vertices = [(0.0, 0.0, 0.0)]
     render_skin.faces = [(0, 0, 0)]
-    model = KotorModel(name="pmbam", root_node=root, supermodel="S_KPMF0200")
+    game = str(game or "K1").upper()
+    supermodel = "S_Female02" if game == "K2" else "S_KPMF0200"
+    model = KotorModel(name="pmbam", root_node=root, supermodel=supermodel)
     model._gr_source_resref = "pmbam"
-    model._gr_source_game = "K1"
+    model._gr_source_game = game
     model._gr_source_layer = "game_library"
     return model
 
 
-def _rigged_character(template: KotorModel | None = None) -> dict:
+def _rigged_character(template: KotorModel | None = None, *, game: str = "K1") -> dict:
     return apply_template_rig(
         _mesh_model(),
-        template or _native_template(),
-        game="K1",
+        template or _native_template(game=game),
+        game=game,
         scale_mode="manual",
     )
 
@@ -124,6 +126,26 @@ def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -
         result["model"],
         native_snapshot=result["native_skeleton_snapshot"],
         options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    assert preflight.export_allowed is True
+    assert preflight.report.has_blocking is False
+
+
+def test_character_export_preflight_accepts_k2_native_snapshot_and_supermodel() -> None:
+    result = _rigged_character(game="K2")
+
+    assert result["ok"] is True
+    assert result["model"].supermodel == "S_Female02"
+    assert result["native_skeleton_snapshot"].game == "K2"
+    assert result["native_skeleton_snapshot"].supermodel == "S_Female02"
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(
+            export_game="K2",
+            recommended_socket_categories=(),
+        ),
     )
 
     assert preflight.export_allowed is True
@@ -560,6 +582,37 @@ def test_character_export_transaction_blocks_wrong_game_before_writer(tmp_path) 
         "character.export.native_snapshot_game_mismatch",
     )
     assert issue.details["export_game"] == "K2"
+
+
+def test_character_export_transaction_accepts_k2_native_snapshot(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character(game="K2")
+    output = tmp_path / "grbody_k2.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            game="K2",
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: result["model"],
+        )
+    )
+
+    assert tx.succeeded is True
+    assert output.exists()
+    assert output.with_suffix(".mdx").exists()
+    payload = json.loads(
+        (tmp_path / "grbody_k2_validation_report.json").read_text(encoding="utf-8")
+    )
+    assert payload["game"] == "K2"
+    assert payload["metadata"]["game"] == "K2"
+    workflow = payload["metadata"]["character_builder_workflow"]
+    assert workflow["native_snapshot"]["game"] == "K2"
+    assert workflow["native_snapshot"]["supermodel"] == "S_Female02"
+    assert workflow["rig_state"]["state"] == "native_template_final"
+    assert payload["capability"]["stage"] == "export_candidate"
 
 
 def test_character_export_transaction_reload_failure_leaves_no_final_files(tmp_path) -> None:

@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder K2 native-template export coverage: export/preflight fixtures now model K2 `pmbam` with its K2-native `S_Female02` supermodel provenance, and positive K2 preflight plus staged transaction/report tests lock that path as an allowed native-template export candidate instead of only testing K1/K2 mismatch blocking. Roadmap task: `T1205` / Phase 4 export hardening and Phase 6 validation reporting.
+  Affected areas: `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the test-contract change; K2 `pmbam` reports 61 nodes, no local animations, and supermodel `S_Female02`.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_accepts_k2_native_snapshot_and_supermodel tests/test_character_builder_export_preflight.py::test_character_export_transaction_accepts_k2_native_snapshot -q --basetemp .pytest_tmp_character_k2_native_export`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_k2_native_export_full`; `python -m py_compile tests/test_character_builder_export_preflight.py`.
+
 - Character Builder export evidence artifacts: staged MDL/MDX validation reports now include a sanitized `character_builder_workflow` evidence block with rig state, native skeleton snapshot summary, auto-fit report, fit transform, and normalization summary. The text report also surfaces the final DAG source, rig state, native snapshot, and auto-fit transform summary so exported candidates can be audited without opening the UI. Roadmap task: `T1205` / Phase 2 inspectability and Phase 6 validation reporting.
   Affected areas: `src/core/characters/character_export_transaction.py`, `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts and K1 `n_mandalorian` native character facts before backend export-artifact changes; this slice records existing Character Builder workflow evidence and introduces no new MDL-loader assumptions.
