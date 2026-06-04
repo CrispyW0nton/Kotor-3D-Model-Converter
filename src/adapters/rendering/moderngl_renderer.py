@@ -73,6 +73,7 @@ class ModernGLRenderer(GpuRenderer):
 
     def get_diagnostics(self) -> dict:
         ctx = getattr(self, "_ctx", None)
+        perf = dict(getattr(self, "perf", {}) or {})
         return {
             "name": self.name,
             "backend_id": self.backend_id,
@@ -84,4 +85,13 @@ class ModernGLRenderer(GpuRenderer):
             "version_code": getattr(ctx, "version_code", None),
             "gpu": getattr(ctx, "info", {}).get("GL_RENDERER") if ctx is not None else None,
             "vendor": getattr(ctx, "info", {}).get("GL_VENDOR") if ctx is not None else None,
+            "performance": {
+                "frame_time_ms": round(float(perf.get("last_frame_ms", 0.0) or 0.0), 3),
+                "upload_ms": round(float(perf.get("gpu_upload_ms", 0.0) or 0.0), 3),
+                "draw_ms": round(float(perf.get("draw_ms", 0.0) or 0.0), 3),
+                "readback_ms": round(float(perf.get("readback_ms", 0.0) or 0.0), 3),
+            },
+            "triangle_count": int(perf.get("tri_count", 0) or 0),
+            "mesh_cache_size": len(getattr(self, "_mesh_cache", {}) or {}),
+            "texture_cache_size": len(getattr(getattr(self, "_tex_cache", None), "_cache", {}) or {}),
         }

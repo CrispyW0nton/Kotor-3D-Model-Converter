@@ -246,5 +246,5 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         width = min(max(180, size.width()), max(180, min(460, self.width() - margin * 2)))
         height = min(max(22, size.height()), max(22, self.height() - margin * 2))
         self._diagnostics_label.setFixedSize(width, height)
-        y = 64 if self._surface_live and self._overlay_label.isVisible() else margin
+        y = 96 if self._surface_live and self._overlay_label.isVisible() else margin
         self._diagnostics_label.move(margin, min(y, max(margin, self.height() - height - margin)))

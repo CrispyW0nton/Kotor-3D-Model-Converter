@@ -23,9 +23,11 @@ env/
 # ── Jupyter / IDE ─────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 .vscode/
+.vs/
 .idea/
 *.swp
 *~
+*.vcxproj.user
 
 # ── Game data (large extracted game files – not distributed) ──────────────────
 game_data/
@@ -269,3 +271,5 @@ TEXTBOOK_RESEARCH_REPORT.md
 knowledge_base/test_artifacts/*.zip
 /.vs
 *.user
+/tests
+/tests

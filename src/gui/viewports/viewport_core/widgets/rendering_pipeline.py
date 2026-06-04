@@ -35,6 +35,11 @@ class ViewportRenderingPipelineMixin:
             delay = min(delay, max(1, self._render_timer.remainingTime()))
         self._render_timer.start(delay)
 
+    def _clear_live_surface_diagnostics(self) -> None:
+        clear_text = getattr(getattr(self, "canvas", None), "clear_diagnostics_text", None)
+        if callable(clear_text):
+            clear_text()
+
     def _queue_post_load_gpu_refresh(self) -> None:
         self._post_load_refresh_model_id = id(self.model) if self.model is not None else 0
         self._post_load_refresh_timer.start(250)
@@ -150,6 +155,7 @@ class ViewportRenderingPipelineMixin:
                 return img
             img = self._draw_performance_overlay(img, w, h)
             return img
+        self._clear_live_surface_diagnostics()
         if self._can_skip_live_overlay_rebuild():
             self._skip_overlay_pixmap_update = True
             return img
@@ -261,12 +267,9 @@ class ViewportRenderingPipelineMixin:
             diagnostics = renderer.get_diagnostics() if hasattr(renderer, "get_diagnostics") else {}
         except Exception:
             diagnostics = {}
-        adapter = dict((diagnostics or {}).get("adapter") or {})
         bridge = diagnostics or {}
-        fps = self._fps_display
-        if fps <= 0.0 and self._last_render_ms > 0.0:
-            fps = 1000.0 / max(self._last_render_ms, 1.0)
-        backend = str(bridge.get("backend_id") or getattr(renderer, "backend_id", "") or "")
+        lines = self._renderer_statistics_lines(renderer, bridge)
+        adapter = dict((diagnostics or {}).get("adapter") or {})
         adapter_name = str(
             adapter.get("description")
             or adapter.get("device")
@@ -275,12 +278,21 @@ class ViewportRenderingPipelineMixin:
         )
         if len(adapter_name) > 48:
             adapter_name = adapter_name[:45] + "..."
-        lines = [
-            f"{str(bridge.get('name') or backend)}  {bridge.get('backend', 'unknown')}  D3D12 {bool(bridge.get('d3d12_requested', False))}",
-            f"{adapter_name or 'adapter unknown'}",
-            f"Cache {int(bridge.get('mesh_cache_size', 0) or 0)}  Tris {int(bridge.get('triangle_count', 0) or 0)}  Geo {int(bridge.get('geometry_updates_this_frame', 0) or 0)}  Dyn {int(bridge.get('dynamic_geometry_updates_this_frame', 0) or 0)}  Mat {int(bridge.get('material_updates_this_frame', 0) or 0)}",
-            f"Pick CPU  Lights {int(bridge.get('light_overlay_segments', 0) or 0)}  Bones {int(bridge.get('skeleton_overlay_segments', 0) or 0)}",
-        ]
+        if adapter_name:
+            lines.append(adapter_name)
+        counters = []
+        for label, key in (
+            ("Geo", "geometry_updates_this_frame"),
+            ("Dyn", "dynamic_geometry_updates_this_frame"),
+            ("Mat", "material_updates_this_frame"),
+            ("Lights", "light_overlay_segments"),
+            ("Bones", "skeleton_overlay_segments"),
+        ):
+            value = int(bridge.get(key, 0) or 0)
+            if value:
+                counters.append(f"{label} {value}")
+        if counters:
+            lines.append("  ".join(counters))
         reason = str(bridge.get("reason") or "")
         if reason:
             lines.append(f"Last: {reason[:72]}")
@@ -552,12 +564,99 @@ class ViewportRenderingPipelineMixin:
             self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
             self._renderer._draw_stats(draw, w, h)
+            self._draw_renderer_statistics_overlay(draw, w, h)
             self._draw_active_camera_overlays(draw, w, h)
             self._record_overlay_rebuild(time_module.perf_counter() - overlay_started)
             return img
         except Exception as exc:
             log.debug("Qt GPU overlay draw failed: %s", exc)
             return img
+
+    def _draw_renderer_statistics_overlay(self, draw, w: int, h: int) -> None:
+        if not bool(getattr(self._renderer_settings, "show_renderer_diagnostics", True)):
+            return
+        renderer = getattr(self, "_gpu_renderer", None)
+        if renderer is None:
+            return
+        try:
+            diagnostics = renderer.get_diagnostics() if hasattr(renderer, "get_diagnostics") else {}
+        except Exception:
+            diagnostics = {}
+        lines = self._renderer_statistics_lines(renderer, diagnostics or {})
+        if not lines:
+            return
+        hud_fill = getattr(self._renderer, "hud_fill", (30, 34, 40))
+        hud_text = getattr(self._renderer, "hud_text", (213, 220, 230))
+        hud_outline = getattr(self._renderer, "hud_outline", (78, 88, 102))
+        hud_muted = getattr(self._renderer, "hud_muted_text", (165, 176, 190))
+        max_width = max(120, min(520, w - 184))
+        y = 84
+        if getattr(self._renderer, "_anim_pose", None) is not None and getattr(self._renderer, "_anim_name", ""):
+            y += 22
+        for index, line in enumerate(lines[:3]):
+            self._renderer._draw_hud_pill(
+                draw,
+                12,
+                min(max(12, h - 84), y + index * 22),
+                line,
+                fill=hud_fill,
+                fg=hud_text if index == 0 else hud_muted,
+                outline=hud_outline,
+                max_width=max_width,
+            )
+
+    def _renderer_statistics_lines(self, renderer, diagnostics: dict) -> list[str]:
+        name = str(diagnostics.get("name") or getattr(renderer, "name", "") or diagnostics.get("backend_id") or "Renderer")
+        backend = str(diagnostics.get("backend") or diagnostics.get("api") or "")
+        gpu = str(diagnostics.get("gpu") or "")
+        if len(gpu) > 42:
+            gpu = gpu[:39] + "..."
+        perf = dict(diagnostics.get("performance") or {})
+        perf_summary = perf.get("summary") if isinstance(perf.get("summary"), dict) else {}
+
+        def _number(*keys: str) -> float:
+            for key in keys:
+                if key in perf:
+                    try:
+                        return float(perf.get(key) or 0.0)
+                    except Exception:
+                        pass
+                if isinstance(perf_summary, dict) and key in perf_summary:
+                    try:
+                        return float(perf_summary.get(key) or 0.0)
+                    except Exception:
+                        pass
+            return 0.0
+
+        frame_ms = _number("frame_time_ms", "last_frame_ms", "cpu_frame_ms")
+        draw_ms = _number("draw_ms")
+        upload_ms = _number("upload_ms", "gpu_upload_ms", "geometry_upload_ms")
+        readback_ms = _number("readback_ms")
+        renderer_perf = getattr(renderer, "perf", {})
+        renderer_tris = renderer_perf.get("tri_count", 0) if isinstance(renderer_perf, dict) else 0
+        tris = int(diagnostics.get("triangle_count") or diagnostics.get("tri_count") or renderer_tris or 0)
+        cache = int(diagnostics.get("mesh_cache_size") or 0)
+        lines = [f"{name}{(' / ' + backend) if backend and backend not in name else ''}"]
+        timing = f"Frame {frame_ms:.1f} ms"
+        if draw_ms > 0.0:
+            timing += f"  Draw {draw_ms:.1f}"
+        if upload_ms > 0.0:
+            timing += f"  Upload {upload_ms:.1f}"
+        if readback_ms > 0.0:
+            timing += f"  Read {readback_ms:.1f}"
+        timing += f"  Tris {tris:,}"
+        lines.append(timing)
+        details = []
+        if gpu:
+            details.append(gpu)
+        if cache:
+            details.append(f"Meshes {cache}")
+        texture_cache = int(diagnostics.get("texture_cache_size") or 0)
+        if texture_cache:
+            details.append(f"Textures {texture_cache}")
+        if details:
+            lines.append("  |  ".join(details))
+        return lines
 
     def _record_overlay_rebuild(self, elapsed_s: float = 0.0) -> None:
         self._overlay_rebuild_count += 1

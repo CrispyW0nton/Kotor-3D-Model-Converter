@@ -2603,6 +2603,7 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
 
     import src.adapters.rendering.direct3d_renderer as adapter_direct3d_module
     import src.adapters.rendering.moderngl_renderer as adapter_moderngl_module
+    import src.adapters.rendering.native_core.renderer as adapter_native_module
     import src.adapters.rendering.null_renderer as adapter_null_module
     import src.adapters.rendering.moderngl_resources as adapter_resources_module
     import src.adapters.rendering.moderngl_renderer_impl as adapter_gpu_impl_module
@@ -2646,6 +2647,7 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     from src.adapters.rendering.moderngl_resources import prebuild_static_gpu_mesh_data as adapter_prebuild_mesh
     from src.adapters.rendering.direct3d_renderer import Direct3DRenderer as AdapterDirect3DRenderer
     from src.adapters.rendering.moderngl_renderer import ModernGLRenderer as AdapterModernGLRenderer
+    from src.adapters.rendering.native_core.renderer import NativeViewportRenderer as AdapterNativeRenderer
     from src.adapters.rendering.null_renderer import NullDiagnosticRenderer as AdapterNullDiagnosticRenderer
     from src.adapters.rendering.renderer_factory import create_viewport_renderer as adapter_create_renderer
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer as AdapterWgpuRenderer
@@ -2669,9 +2671,11 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     assert gui_wgpu_renderer is adapter_wgpu_renderer
     assert GuiDirect3DRenderer is AdapterDirect3DRenderer
     assert GuiModernGLRenderer is AdapterModernGLRenderer
+    assert issubclass(AdapterNativeRenderer, AdapterNullDiagnosticRenderer)
     assert GuiNullDiagnosticRenderer is AdapterNullDiagnosticRenderer
     assert gui_direct3d_module is adapter_direct3d_module
     assert gui_moderngl_module is adapter_moderngl_module
+    assert adapter_native_module.NativeViewportRenderer is AdapterNativeRenderer
     assert gui_null_module is adapter_null_module
     assert gui_resources_module is adapter_resources_module
     assert gui_gpu_impl_module is adapter_gpu_impl_module
@@ -2704,6 +2708,7 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     adapter_source = (ROOT / "src/adapters/rendering/renderer_factory.py").read_text(encoding="utf-8")
     assert "from src.adapters.rendering.direct3d_renderer import Direct3DRenderer" in adapter_source
     assert "from src.adapters.rendering.moderngl_renderer import ModernGLRenderer" in adapter_source
+    assert "from src.adapters.rendering.native_core.renderer import NativeViewportRenderer" in adapter_source
     assert "from src.adapters.rendering.null_renderer import NullDiagnosticRenderer" in adapter_source
     assert "from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer" in adapter_source
     for forbidden in (
@@ -4084,6 +4089,72 @@ def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> Non
     assert hilt_material.blend_mode == "ALPHA"
     assert hilt_material.sprite_alpha_source == 0
     assert hilt_material.sprite_glow == 0.0
+
+
+def test_moderngl_sprite_material_panel_state_reaches_renderer_shader() -> None:
+    import inspect
+
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
+
+    renderer = GpuRenderer()
+    blade = SimpleNamespace(
+        name="plane241",
+        texture="w_lsabreblue01",
+        is_mesh=True,
+        _gr_sprite_alpha_source="luminance",
+        _gr_sprite_glow=1.6,
+        _gr_sprite_render_mode="lighten",
+        _gr_revision=1,
+        _gr_hidden=False,
+        render=True,
+        txi_blending=3,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        alpha=1.0,
+        transparency_hint=1,
+    )
+    hilt = SimpleNamespace(
+        name="LghtSbr09",
+        texture="w_shortsbr_001",
+        is_mesh=True,
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        alpha=1.0,
+        transparency_hint=0,
+    )
+
+    assert renderer._sprite_alpha_source(blade) == 1
+    assert renderer._sprite_glow(blade) == pytest.approx(1.6)
+    assert renderer._sprite_alpha_source(hilt) == 0
+    assert renderer._sprite_glow(hilt) == 0.0
+
+    before = renderer._node_classification_signature([blade])
+    blade._gr_hidden = True
+    hidden = renderer._node_classification_signature([blade])
+    blade._gr_hidden = False
+    blade._gr_revision += 1
+    revised = renderer._node_classification_signature([blade])
+
+    assert hidden != before
+    assert revised != before
+
+    init_source = inspect.getsource(GpuRenderer)
+    render_source = inspect.getsource(GpuRenderer._render_gpu)
+    invalidate_source = inspect.getsource(GpuRenderer.invalidate_node_cache)
+
+    assert "'u_sprite_alpha_source', 'u_sprite_glow'" in init_source
+    assert "u_sprite_alpha_source" in _FRAG_SRC
+    assert "u_sprite_glow" in _FRAG_SRC
+    assert "spriteKeyedAlpha" in _FRAG_SRC
+    assert "spriteEmissionTint" in _FRAG_SRC
+    assert "sprite_emissive" in _FRAG_SRC
+    assert "self._sprite_alpha_source(nd)" in render_source
+    assert "_node_classification_signature(nodes)" in render_source
+    assert "_node_cache_signature" in invalidate_source
 
 
 def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> None:

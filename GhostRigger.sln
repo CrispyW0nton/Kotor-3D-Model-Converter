@@ -4,6 +4,13 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRiggerNative", "native\GhostRiggerNative\GhostRiggerNative.vcxproj", "{4C39E3F7-FA50-451A-A8A7-1C38F3F79B7D}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRiggerRuntime", "native\GhostRiggerRuntime\GhostRiggerRuntime.vcxproj", "{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRiggerRuntimeSmoke", "native\GhostRiggerRuntimeSmoke\GhostRiggerRuntimeSmoke.vcxproj", "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}"
+	ProjectSection(ProjectDependencies) = postProject
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB} = {A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -20,6 +27,22 @@ Global
 		{4C39E3F7-FA50-451A-A8A7-1C38F3F79B7D}.Release|Win32.Build.0 = Release|Win32
 		{4C39E3F7-FA50-451A-A8A7-1C38F3F79B7D}.Release|x64.ActiveCfg = Release|x64
 		{4C39E3F7-FA50-451A-A8A7-1C38F3F79B7D}.Release|x64.Build.0 = Release|x64
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Debug|Win32.ActiveCfg = Debug|Win32
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Debug|Win32.Build.0 = Debug|Win32
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Debug|x64.ActiveCfg = Debug|x64
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Debug|x64.Build.0 = Debug|x64
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Release|Win32.ActiveCfg = Release|Win32
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Release|Win32.Build.0 = Release|Win32
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Release|x64.ActiveCfg = Release|x64
+		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}.Release|x64.Build.0 = Release|x64
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|Win32.Build.0 = Debug|Win32
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|x64.ActiveCfg = Debug|x64
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|x64.Build.0 = Debug|x64
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Release|Win32.ActiveCfg = Release|Win32
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Release|Win32.Build.0 = Release|Win32
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Release|x64.ActiveCfg = Release|x64
+		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

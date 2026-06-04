@@ -165,6 +165,7 @@ class GpuRenderer:
         self._node_cache_transparent: list = []
         self._node_cache_proxy_ids: set = set()
         self._node_cache_is_module: bool = False
+        self._node_cache_signature: tuple = ()
         # PERF: Interactive mode skips MSAA for faster frame times.
         # Keep the default scale at full resolution; lowering it is available
         # for emergency performance mode, but makes animated previews pixelated.
@@ -353,7 +354,7 @@ class GpuRenderer:
                 'u_saber_enabled', 'u_saber_displacement', 'u_saber_length',
                 'u_oit_enabled', 'u_tex', 'u_lm_tex', 'u_env_tex', 'u_spec_tex', 'u_bump_tex',
                 'u_debug_visualize', 'u_wireframe_enabled', 'u_wire_color',
-                'u_render_mode', 'u_selected',
+                'u_render_mode', 'u_selected', 'u_sprite_alpha_source', 'u_sprite_glow',
                 # Phase A: GPU Skinning uniforms
                 'u_skin_enabled', 'u_bone_count', 'u_bones',
             ):
@@ -1143,6 +1144,10 @@ class GpuRenderer:
                 _u['u_render_mode'].value = _render_mode_int
             if 'u_selected' in _u:
                 _u['u_selected'].value = 0
+            if 'u_sprite_alpha_source' in _u:
+                _u['u_sprite_alpha_source'].value = 0.0
+            if 'u_sprite_glow' in _u:
+                _u['u_sprite_glow'].value = 0.0
             _u['u_dangly_enabled'].value      = 0.0
             _u['u_dangly_displacement'].value = 0.0
             _u['u_dangly_time'].value         = 0.0
@@ -1600,6 +1605,10 @@ class GpuRenderer:
                             (wa < 0.999) or
                             decal or
                             (na < 0.999 and not has_env))
+                if self._sprite_alpha_source(nd) and self._sprite_glow(nd) > 0.001:
+                    if tb == 0:
+                        tb = 3
+                    is_trans = True
                 if is_lightsaber_blade_node(node):
                     tb = 1
                     is_trans = True
@@ -1610,7 +1619,11 @@ class GpuRenderer:
             # _is_deform_helper() and _classify_node() per node.  Cache the result
             # per model and reuse across frames.  Invalidate when the model changes.
             # For animated models, re-classify only when anim_pose changes alpha.
-            _need_reclassify = (_cur_model_id != self._node_cache_model_id)
+            _node_cache_signature = self._node_classification_signature(nodes)
+            _need_reclassify = (
+                _cur_model_id != self._node_cache_model_id
+                or _node_cache_signature != getattr(self, "_node_cache_signature", ())
+            )
             if _need_reclassify:
                 opaque_nodes      = []
                 cutout_nodes      = []
@@ -1645,6 +1658,7 @@ class GpuRenderer:
                 self._node_cache_transparent = transparent_nodes
                 self._node_cache_proxy_ids = _proxy_node_ids
                 self._node_cache_is_module = _gpu_is_module
+                self._node_cache_signature = _node_cache_signature
             else:
                 # Reuse cached classification
                 opaque_nodes = self._node_cache_opaque
@@ -1889,6 +1903,10 @@ class GpuRenderer:
                     _u['u_wire_color'].value = tuple(self.wire_color)
                 if 'u_selected' in _u:
                     _u['u_selected'].value = 1 if self._is_node_selected_for_render(node) else 0
+                if 'u_sprite_alpha_source' in _u:
+                    _u['u_sprite_alpha_source'].value = float(self._sprite_alpha_source(node))
+                if 'u_sprite_glow' in _u:
+                    _u['u_sprite_glow'].value = max(0.0, min(4.0, float(self._sprite_glow(node))))
                 _u['u_diffuse'].value = diff
                 _u['u_selfillum'].value = tuple(
                     max(0.0, min(2.0, float(c))) for c in selfillum[:3])
@@ -2611,6 +2629,73 @@ class GpuRenderer:
         self._node_cache_opaque = []
         self._node_cache_cutout = []
         self._node_cache_transparent = []
+        self._node_cache_signature = ()
+
+    @staticmethod
+    def _sprite_text(node) -> str:
+        names = getattr(node, "texture_names", None) or []
+        first_name = str(names[0]) if names else ""
+        return f"{getattr(node, 'name', '')} {getattr(node, 'texture', '')} {first_name}".lower()
+
+    @classmethod
+    def _is_sprite_hilt(cls, node) -> bool:
+        text = cls._sprite_text(node)
+        return (
+            "w_lghtsbr" in text
+            or "w_shortsbr" in text
+            or "w_dblsbr" in text
+            or text.startswith("lghtsbr")
+            or " lghtsbr" in text
+            or "lshandle" in text
+            or "handle" in text
+        )
+
+    @classmethod
+    def _sprite_alpha_source(cls, node) -> int:
+        source = str(getattr(node, "_gr_sprite_alpha_source", "") or "").lower()
+        if source in {"luminance", "brightness", "matte", "black_key"}:
+            return 1
+        if cls._is_sprite_hilt(node):
+            return 0
+        text = cls._sprite_text(node)
+        return 1 if any(token in text for token in ("saber", "sabre", "lsabre", "blade", "glow", "flare", "beam")) else 0
+
+    @classmethod
+    def _sprite_glow(cls, node) -> float:
+        explicit = getattr(node, "_gr_sprite_glow", None)
+        if explicit is not None:
+            try:
+                return max(0.0, min(4.0, float(explicit)))
+            except Exception:
+                return 0.0
+        if cls._is_sprite_hilt(node):
+            return 0.0
+        text = cls._sprite_text(node)
+        return 1.6 if any(token in text for token in ("saber", "sabre", "lsabre", "blade", "glow", "flare", "beam")) else 0.0
+
+    def _node_classification_signature(self, nodes) -> tuple:
+        signature = []
+        for node in nodes:
+            if node is None:
+                continue
+            signature.append(
+                (
+                    id(node),
+                    int(getattr(node, "_gr_revision", 0) or 0),
+                    bool(getattr(node, "_gr_hidden", False)),
+                    bool(getattr(node, "render", True)),
+                    int(getattr(node, "txi_blending", 0) or 0),
+                    round(float(getattr(node, "txi_alpha_test", 0.0) or 0.0), 4),
+                    round(float(getattr(node, "txi_wateralpha", 1.0) or 1.0), 4),
+                    bool(getattr(node, "txi_decal", False)),
+                    round(float(getattr(node, "alpha", 1.0) or 1.0), 4),
+                    int(getattr(node, "transparency_hint", 0) or 0),
+                    str(getattr(node, "_gr_sprite_render_mode", "") or ""),
+                    self._sprite_alpha_source(node),
+                    round(self._sprite_glow(node), 4),
+                )
+            )
+        return tuple(signature)
 
     # ── Performance info ──────────────────────────────────────────────────────
 

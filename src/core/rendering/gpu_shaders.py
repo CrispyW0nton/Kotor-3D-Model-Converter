@@ -256,6 +256,8 @@ uniform int   u_wireframe_enabled;
 uniform vec3  u_wire_color;
 uniform int   u_render_mode; // 0 realistic, 1 flat, 2 shaded
 uniform int   u_selected;
+uniform float u_sprite_alpha_source; // 1 = derive alpha from sprite luminance/black matte
+uniform float u_sprite_glow;         // emissive sprite boost from Sprite Materials panel
 
 // Inputs from vertex shader
 in vec3  v_world_pos;
@@ -328,6 +330,19 @@ vec3 perturbNormalFromMap(vec3 N, vec3 world_pos, vec2 uv) {
     return normalize(TBN * sampled);
 }
 
+vec3 spriteEmissionTint(vec3 color) {
+    float peak = max(max(color.r, color.g), color.b);
+    if (peak <= 0.001) {
+        return color;
+    }
+    return mix(color, color / peak, 0.35);
+}
+
+float spriteKeyedAlpha(vec4 sampled) {
+    float keyed_alpha = clamp(max(max(sampled.r, sampled.g), sampled.b) * 1.35, 0.0, 1.0);
+    return sampled.a < 0.999 ? min(sampled.a, keyed_alpha) : keyed_alpha;
+}
+
 void main() {
     if (u_wireframe_enabled == 1) {
         frag_color = vec4(u_wire_color, 1.0);
@@ -359,6 +374,10 @@ void main() {
         diffuse_samp = texture(u_tex, final_uv);
     } else {
         diffuse_samp = vec4(u_diffuse, 1.0);
+    }
+    bool sprite_emissive = u_sprite_alpha_source > 0.5 && u_sprite_glow > 0.001;
+    if (u_sprite_alpha_source > 0.5) {
+        diffuse_samp.a = spriteKeyedAlpha(diffuse_samp);
     }
 
     if (u_debug_visualize == 1) {
@@ -489,7 +508,9 @@ void main() {
         }
         float eff_shininess = max(u_shininess, 1.0);  // FIX-SHININESS: clamp to avoid pow(0,0)
         float spec = pow(max(dot(V, R), 0.0), eff_shininess) * spec_intensity;
-        if (u_scene_lighting == 2 && u_scene_light_count > 0) {
+        if (sprite_emissive) {
+            lit_color = diffuse_samp.rgb;
+        } else if (u_scene_lighting == 2 && u_scene_light_count > 0) {
             lit_color = diffuse_samp.rgb * sceneLightShade(N, V, v_world_pos, spec_intensity, eff_shininess);
         } else {
             float shade = u_ambient + ndotl * (1.0 - u_ambient) * 0.85
@@ -567,6 +588,12 @@ void main() {
 
     if (u_selected == 1) {
         lit_color = mix(lit_color, vec3(1.0, 0.78, 0.12), 0.45);
+    }
+
+    if (sprite_emissive && u_render_mode == 0) {
+        vec3 tint = spriteEmissionTint(diffuse_samp.rgb);
+        vec3 emission = max(diffuse_samp.rgb, tint * (0.45 + diffuse_samp.a * 0.55));
+        lit_color = max(lit_color, emission * (1.0 + clamp(u_sprite_glow, 0.0, 4.0)));
     }
 
     lit_color = clamp(lit_color, 0.0, 1.0);

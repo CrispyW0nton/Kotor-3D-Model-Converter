@@ -871,6 +871,99 @@ def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
     assert renderer._target_rgb(background) == pytest.approx(background)
 
 
+def test_moderngl_renderer_diagnostics_include_renderer_stats() -> None:
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    renderer = ModernGLRenderer()
+    renderer.perf.update(
+        {
+            "last_frame_ms": 12.25,
+            "gpu_upload_ms": 1.5,
+            "draw_ms": 4.75,
+            "readback_ms": 2.0,
+            "tri_count": 3456,
+        }
+    )
+
+    diagnostics = renderer.get_diagnostics()
+
+    assert diagnostics["performance"]["frame_time_ms"] == pytest.approx(12.25)
+    assert diagnostics["performance"]["upload_ms"] == pytest.approx(1.5)
+    assert diagnostics["performance"]["draw_ms"] == pytest.approx(4.75)
+    assert diagnostics["performance"]["readback_ms"] == pytest.approx(2.0)
+    assert diagnostics["triangle_count"] == 3456
+
+
+def test_viewport_renderer_statistics_lines_include_active_renderer() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class FakeRenderer:
+        name = "ModernGL / OpenGL 3.3"
+        perf = {"tri_count": 1}
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    try:
+        lines = viewport._renderer_statistics_lines(
+            FakeRenderer(),
+            {
+                "name": "ModernGL / OpenGL 3.3",
+                "backend": "ModernGL",
+                "gpu": "NVIDIA Test GPU",
+                "triangle_count": 1234,
+                "mesh_cache_size": 12,
+                "texture_cache_size": 5,
+                "performance": {
+                    "frame_time_ms": 16.25,
+                    "draw_ms": 3.5,
+                    "upload_ms": 1.25,
+                    "readback_ms": 0.75,
+                },
+            },
+        )
+
+        assert lines[0] == "ModernGL / OpenGL 3.3"
+        assert "Frame 16.2 ms" in lines[1]
+        assert "Draw 3.5" in lines[1]
+        assert "Tris 1,234" in lines[1]
+        assert "NVIDIA Test GPU" in lines[2]
+        assert "Meshes 12" in lines[2]
+        assert "Textures 5" in lines[2]
+    finally:
+        viewport.deleteLater()
+        app.processEvents()
+
+
+def test_live_surface_diagnostics_sit_below_overlay_hud() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    host = RendererSurfaceHost()
+    surface = QtWidgets.QLabel("surface")
+    try:
+        host.resize(640, 360)
+        host.show()
+        host.set_renderer_surface(surface, backend_id="pygfx_wgpu", live_surface=True)
+        host.set_overlay_pixmap(QtGui.QPixmap(64, 64))
+        host.set_diagnostics_text("Renderer\nFrame 16.0 ms\nTris 1")
+        app.processEvents()
+
+        label = host.findChild(QtWidgets.QLabel, "ViewportDiagnosticsOverlay")
+        assert label is not None
+        assert label.y() >= 90
+    finally:
+        host.deleteLater()
+        app.processEvents()
+
+
 def test_viewport_emits_persistent_render_state_status() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

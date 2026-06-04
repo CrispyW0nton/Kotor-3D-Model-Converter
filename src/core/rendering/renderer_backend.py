@@ -13,6 +13,7 @@ class RendererBackend(str, Enum):
     WGPU_VULKAN = "wgpu_vulkan"
     WGPU_OPENGL = "wgpu_opengl"
     PYGFX_WGPU = "pygfx_wgpu"
+    NATIVE_D3D12 = "native_d3d12"
     DIRECT3D_HARDWARE = "direct3d_hardware"
     DIRECT3D_WARP = "direct3d_warp"
     NULL_DIAGNOSTIC = "null_diagnostic"
@@ -36,6 +37,11 @@ _ALIASES = {
     "pygfx": RendererBackend.PYGFX_WGPU,
     "pygfx_wgpu": RendererBackend.PYGFX_WGPU,
     "pygfx/wgpu": RendererBackend.PYGFX_WGPU,
+    "native": RendererBackend.NATIVE_D3D12,
+    "native_d3d12": RendererBackend.NATIVE_D3D12,
+    "native/d3d12": RendererBackend.NATIVE_D3D12,
+    "ghostrigger_native": RendererBackend.NATIVE_D3D12,
+    "gr_native": RendererBackend.NATIVE_D3D12,
     "direct3d": RendererBackend.DIRECT3D_HARDWARE,
     "direct3d_hardware": RendererBackend.DIRECT3D_HARDWARE,
     "d3d_hardware": RendererBackend.DIRECT3D_HARDWARE,
@@ -60,6 +66,7 @@ def renderer_backend_label(backend: RendererBackend) -> str:
         RendererBackend.WGPU_VULKAN: "WGPU Vulkan",
         RendererBackend.WGPU_OPENGL: "WGPU OpenGL",
         RendererBackend.PYGFX_WGPU: "pygfx / WGPU",
+        RendererBackend.NATIVE_D3D12: "GhostRigger Native / D3D12",
         RendererBackend.DIRECT3D_HARDWARE: "Direct3D Hardware Experimental",
         RendererBackend.DIRECT3D_WARP: "Direct3D WARP Experimental",
         RendererBackend.NULL_DIAGNOSTIC: "Null Diagnostic",
