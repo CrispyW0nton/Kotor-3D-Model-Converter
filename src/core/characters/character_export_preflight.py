@@ -81,6 +81,7 @@ class CharacterExportPreflightOptions:
     max_auto_fit_landmark_rms_error: float = 0.15
     max_auto_fit_landmark_pair_error: float = 0.15
     min_auto_fit_toe_forward_alignment: float = 0.50
+    min_auto_fit_toe_forward_required_guide_count: int = 8
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -822,6 +823,36 @@ def _validate_toe_forward_alignment(
         return
 
     threshold = float(opts.min_auto_fit_toe_forward_alignment)
+    if _auto_fit_should_require_source_toe_forward(fit_report, opts):
+        source_frame = fit_report.get("source_frame")
+        source_frame = source_frame if isinstance(source_frame, dict) else {}
+        if not _auto_fit_frame_has_toe_landmarks(source_frame):
+            report.add(_issue(
+                "warning",
+                "character.export.auto_fit_toe_forward_needs_review",
+                "Character auto-fit toe-forward facing evidence is missing for a rigged source skeleton.",
+                fix_hint=(
+                    "Re-run Auto-Fit with the current Character Builder so imported "
+                    "FBX foot-end or toe guide landmarks are recorded before the "
+                    "native KOTOR rig strips temporary guide nodes."
+                ),
+                details={
+                    "reason": "source_toe_landmarks_not_recorded",
+                    "reasons": ["source_toe_landmarks_not_recorded"],
+                    "frame": "source_frame",
+                    "toe_forward_alignment": _safe_float(
+                        source_frame.get("toe_forward_alignment")
+                    ),
+                    "required_alignment": threshold,
+                    "landmarks": dict(source_frame.get("landmarks") or {}),
+                    "landmark_sources": dict(source_frame.get("landmark_sources") or {}),
+                    "source_imported_armature": dict(
+                        _auto_fit_imported_skeleton_guide_evidence(fit_report)
+                    ),
+                    "fit_policy": fit_policy,
+                },
+            ))
+
     for frame_name in ("source_frame", "target_frame"):
         frame = fit_report.get(frame_name)
         frame = frame if isinstance(frame, dict) else {}
@@ -866,6 +897,27 @@ def _auto_fit_frame_has_toe_landmarks(frame: dict[str, Any]) -> bool:
         and landmarks.get("left_toe")
         and landmarks.get("right_toe")
     )
+
+
+def _auto_fit_should_require_source_toe_forward(
+    fit_report: dict[str, Any],
+    opts: CharacterExportPreflightOptions,
+) -> bool:
+    source_frame = fit_report.get("source_frame")
+    source_frame = source_frame if isinstance(source_frame, dict) else {}
+    landmark_sources = _auto_fit_source_landmark_sources(fit_report)
+    if not any(source == "imported_skeleton" for source in landmark_sources.values()):
+        return False
+    if not (
+        landmark_sources.get("left_foot") == "imported_skeleton"
+        and landmark_sources.get("right_foot") == "imported_skeleton"
+    ):
+        return False
+    imported = _auto_fit_imported_skeleton_guide_evidence(fit_report)
+    guide_count = _safe_int(imported.get("guide_joint_count")) or 0
+    scene_count = _safe_int(imported.get("scene_guide_joint_count")) or 0
+    required = int(opts.min_auto_fit_toe_forward_required_guide_count)
+    return max(guide_count, scene_count) >= required
 
 
 def _auto_fit_source_landmark_sources(fit_report: dict[str, Any]) -> dict[str, str]:

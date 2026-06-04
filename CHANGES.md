@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder missing toe-forward evidence gate: export preflight now warns when a rigged skeleton-guided Auto-Fit has enough imported FBX guide joints to expect foot-end/toe landmarks but the source fit report does not record them. Small synthetic or mesh-only fits are not over-gated, while Bendak-style imports keep proving `L_Foot_end` / `R_Foot_end` evidence. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: validation over existing Character Builder fit metadata and the local Bendak continual fixture; this slice does not change MDL parser/writer semantics, native snapshots, vertex transforms, or final DAG export authority.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_warns_when_toe_forward_disagrees tests/test_character_builder_export_preflight.py::test_character_export_preflight_accepts_aligned_toe_forward_evidence tests/test_character_builder_export_preflight.py::test_character_export_preflight_warns_when_rigged_source_toe_evidence_missing tests/test_character_builder_export_preflight.py::test_character_export_preflight_accepts_small_source_without_toe_guides -q --basetemp .pytest_tmp_character_missing_toe_preflight`; `python -m pytest tests/test_character_builder_bendak_local_fixture.py -q --basetemp .pytest_tmp_bendak_missing_toe_gate`; `python -m py_compile src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder toe-forward report text: validation report text now includes source/target toe-forward alignment summaries, making Bendak-style facing evidence visible in logs and exported validation artifacts without requiring JSON inspection. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
   Affected areas: `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: report rendering over existing Character Builder fit metadata; this slice does not change MDL parser/writer semantics, native snapshots, vertex transforms, or final DAG export authority.

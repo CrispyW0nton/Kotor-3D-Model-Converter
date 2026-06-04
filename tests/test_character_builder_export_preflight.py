@@ -817,6 +817,44 @@ def test_character_export_preflight_accepts_aligned_toe_forward_evidence() -> No
     assert preflight.export_allowed is True
 
 
+def test_character_export_preflight_warns_when_rigged_source_toe_evidence_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["source_imported_armature"]["guide_joint_count"] = 65
+    fit["source_imported_armature"]["scene_guide_joint_count"] = 65
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_toe_forward_needs_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == ["source_toe_landmarks_not_recorded"]
+    assert issue.details["frame"] == "source_frame"
+    assert issue.details["source_imported_armature"]["guide_joint_count"] == 65
+    assert issue.details["landmarks"]["left_foot"] == "LeftFoot"
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_accepts_small_source_without_toe_guides() -> None:
+    result = _rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    assert "character.export.auto_fit_toe_forward_needs_review" not in _codes(preflight)
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_warns_on_fallback_skin_binding() -> None:
     result = _rigged_character()
 
