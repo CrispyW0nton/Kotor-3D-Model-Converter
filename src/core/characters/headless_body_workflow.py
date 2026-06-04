@@ -1594,6 +1594,8 @@ _SIMILARITY_LANDMARK_ROLES = (
     "right",
     "left_foot",
     "right_foot",
+    "left_toe",
+    "right_toe",
 )
 
 

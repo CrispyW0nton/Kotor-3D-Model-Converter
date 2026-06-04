@@ -3698,7 +3698,7 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
     assert report["target_frame"]["landmarks"]["left_toe"] == "lfootT_g"
     assert report["source_frame"]["toe_forward_alignment"] > 0.99
     assert report["target_frame"]["toe_forward_alignment"] > 0.99
-    assert alignment["pair_count"] == 6
+    assert alignment["pair_count"] == 8
     assert set(alignment["paired_roles"]) == {
         "pelvis",
         "head",
@@ -3706,7 +3706,11 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
         "right",
         "left_foot",
         "right_foot",
+        "left_toe",
+        "right_toe",
     }
+    assert any(item["role"] == "left_toe" for item in alignment["pair_errors"])
+    assert any(item["role"] == "right_toe" for item in alignment["pair_errors"])
     assert any(
         item["role"] == "left_toe"
         and item["name"] == "L_Foot_end"
