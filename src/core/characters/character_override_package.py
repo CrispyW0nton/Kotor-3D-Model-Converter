@@ -36,6 +36,15 @@ from .character_validation_report import (
 )
 from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_NATIVE_RESREF_MAX_LEN
 
+try:
+    from src.core.animation_retargeting.skeleton_template_picker import (
+        npc_numbered_variant_base_resref,
+    )
+except ImportError:  # pragma: no cover - package-relative fallback
+    from core.animation_retargeting.skeleton_template_picker import (  # type: ignore
+        npc_numbered_variant_base_resref,
+    )
+
 
 _RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 _PACKAGE_SCHEMA = "ghostrigger.character_override_package.v1"
@@ -375,8 +384,84 @@ def _validation_payload_issues(
             "Character Builder workflow evidence does not identify the selected KOTOR base as final DAG source.",
         ))
     if request.require_replacement_ready_fit:
+        issues.extend(_replacement_target_native_base_issues(workflow, request))
         issues.extend(_replacement_ready_fit_issues(payload, request))
     return issues
+
+
+def _replacement_target_native_base_issues(
+    workflow: dict[str, Any],
+    request: CharacterBuilderOverridePackageRequest,
+) -> list[ValidationIssue]:
+    """Verify replacement target identity matches the selected native base."""
+
+    summary = _replacement_target_native_base_summary(
+        workflow,
+        request.target_resref,
+    )
+    if summary["compatible"]:
+        return []
+
+    return [_issue(
+        "character.override_package.target_native_base_mismatch",
+        (
+            "Replacement packaging target resref does not match the selected "
+            "native KOTOR base skeleton used to build this character."
+        ),
+        details={
+            **summary,
+            "workflow": workflow,
+        },
+    )]
+
+
+def _replacement_target_native_base_summary(
+    workflow: dict[str, Any],
+    target_resref: Any,
+) -> dict[str, Any]:
+    target = _normalize_resref(target_resref)
+    native_base = _workflow_native_base_resref(workflow)
+    variant_base = _normalize_resref(npc_numbered_variant_base_resref(target))
+    compatible = bool(
+        native_base
+        and (
+            target == native_base
+            or (variant_base and variant_base == native_base)
+        )
+    )
+    return {
+        "target_resref": target,
+        "native_base_resref": native_base,
+        "target_numbered_variant_base": variant_base,
+        "compatible": compatible,
+        "accepted_native_base_resrefs": sorted({
+            value
+            for value in (native_base, variant_base, target)
+            if value
+        }),
+    }
+
+
+def _workflow_native_base_resref(workflow: dict[str, Any]) -> str:
+    rig_state = workflow.get("rig_state")
+    rig_state = rig_state if isinstance(rig_state, dict) else {}
+    bind = workflow.get("bind")
+    bind = bind if isinstance(bind, dict) else {}
+    native_base = bind.get("native_base")
+    native_base = native_base if isinstance(native_base, dict) else {}
+    for value in (
+        rig_state.get("native_base_resref"),
+        native_base.get("source_resref"),
+        native_base.get("model_name"),
+    ):
+        normalized = _normalize_resref(value)
+        if normalized:
+            return normalized
+    return ""
+
+
+def _normalize_resref(value: Any) -> str:
+    return str(value or "").strip().lower()
 
 
 def _replacement_ready_fit_issues(
@@ -573,6 +658,10 @@ def _build_manifest(
         "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
         "character_builder_evidence_gates": evidence_gates,
         "character_builder_workflow": workflow,
+        "replacement_target": _replacement_target_native_base_summary(
+            workflow,
+            request.target_resref,
+        ),
         "metadata": dict(request.metadata or {}),
     }
 

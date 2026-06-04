@@ -156,82 +156,7 @@ def _write_source_export(
     return mdl
 
 
-def test_character_override_package_copies_verified_pair_under_target_resref(tmp_path: Path) -> None:
-    source_mdl = _write_source_export(tmp_path / "source")
-    out_dir = tmp_path / "package"
-
-    result = package_character_override_candidate(
-        CharacterBuilderOverridePackageRequest(
-            source_mdl_path=source_mdl,
-            output_dir=out_dir,
-            target_resref="n_mandalorian03",
-            game="K1",
-        )
-    )
-
-    assert result.succeeded is True
-    assert (out_dir / "n_mandalorian03.mdl").read_bytes() == b"mdl"
-    assert (out_dir / "n_mandalorian03.mdx").read_bytes() == b"mdx"
-    manifest_path = out_dir / "n_mandalorian03_override_manifest.json"
-    readme_path = out_dir / "n_mandalorian03_override_readme.txt"
-    assert result.export_job_result.manifest_path == manifest_path
-    assert manifest_path.exists()
-    assert readme_path.exists()
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["schema"] == "ghostrigger.character_override_package.v1"
-    assert manifest["target_resref"] == "n_mandalorian03"
-    assert manifest["game"] == "K1"
-    assert manifest["capability"]["stage"] == "export_candidate"
-    assert manifest["capability"]["game_tested"] is False
-    assert manifest["capability"]["game_ready"] is False
-    assert "fit=needs_review" in manifest["capability"]["game_ready_blockers"]
-    assert manifest["game_test_evidence"] == {}
-    assert manifest["source_export"]["output_hashes"] == _test_output_hashes()
-    assert manifest["package_output_hashes"]["artifacts"] == _test_output_hashes()
-    gates = manifest["character_builder_evidence_gates"]
-    assert gates["fit"]["stage"] == "needs_review"
-    assert gates["fit"]["paired_landmark_alignment"]["pair_count"] == 3
-    assert gates["engine"]["stage"] == "partial_reverse_engineering"
-    assert manifest["character_builder_workflow"]["native_skeleton_is_authority"] is True
-    assert manifest["character_builder_workflow"]["imported_mesh_role"] == "payload_guest"
-    readme = readme_path.read_text(encoding="utf-8")
-    assert "Game ready: False" in readme
-    assert "Game-ready blockers:" in readme
-    assert "- fit=needs_review" in readme
-    assert "Evidence gates: fit=needs_review" in readme
-    assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55, worst=left" in readme
-    assert "Engine evidence: partial_reverse_engineering (pending Ghidra: 2)" in readme
-    assert "Do not overwrite a live game install" in readme
-
-
-def test_character_override_package_strict_fit_gate_blocks_needs_review(tmp_path: Path) -> None:
-    source_mdl = _write_source_export(tmp_path / "source")
-
-    result = package_character_override_candidate(
-        CharacterBuilderOverridePackageRequest(
-            source_mdl_path=source_mdl,
-            output_dir=tmp_path / "package",
-            target_resref="n_mandalorian03",
-            game="K1",
-            require_replacement_ready_fit=True,
-        )
-    )
-
-    assert result.succeeded is False
-    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
-    issue = next(
-        issue for issue in result.export_job_result.validation_report.issues
-        if issue.code == "character.override_package.replacement_fit_not_ready"
-    )
-    assert "fit_gate_not_passed" in issue.details["reasons"]
-    assert "source_not_skeleton_guided" in issue.details["reasons"]
-    assert "too_few_paired_landmarks" in issue.details["reasons"]
-    assert issue.details["required_pair_count"] == 8
-
-
-def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(tmp_path: Path) -> None:
-    source_mdl = _write_source_export(tmp_path / "source")
-    validation_path = source_mdl.with_name("bendak_validation_report.json")
+def _mark_clean_skeleton_fit(validation_path: Path) -> dict:
     payload = json.loads(validation_path.read_text(encoding="utf-8"))
     payload["capability"]["game_ready_blockers"] = [
         "material=needs_review",
@@ -271,6 +196,93 @@ def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(t
     paired["max_error"] = 0.08
     paired["worst_pair_role"] = "right_toe"
     validation_path.write_text(json.dumps(payload), encoding="utf-8")
+    return payload
+
+
+def test_character_override_package_copies_verified_pair_under_target_resref(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    out_dir = tmp_path / "package"
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=out_dir,
+            target_resref="n_mandalorian03",
+            game="K1",
+        )
+    )
+
+    assert result.succeeded is True
+    assert (out_dir / "n_mandalorian03.mdl").read_bytes() == b"mdl"
+    assert (out_dir / "n_mandalorian03.mdx").read_bytes() == b"mdx"
+    manifest_path = out_dir / "n_mandalorian03_override_manifest.json"
+    readme_path = out_dir / "n_mandalorian03_override_readme.txt"
+    assert result.export_job_result.manifest_path == manifest_path
+    assert manifest_path.exists()
+    assert readme_path.exists()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema"] == "ghostrigger.character_override_package.v1"
+    assert manifest["target_resref"] == "n_mandalorian03"
+    assert manifest["game"] == "K1"
+    assert manifest["capability"]["stage"] == "export_candidate"
+    assert manifest["capability"]["game_tested"] is False
+    assert manifest["capability"]["game_ready"] is False
+    assert "fit=needs_review" in manifest["capability"]["game_ready_blockers"]
+    assert manifest["game_test_evidence"] == {}
+    assert manifest["source_export"]["output_hashes"] == _test_output_hashes()
+    assert manifest["package_output_hashes"]["artifacts"] == _test_output_hashes()
+    gates = manifest["character_builder_evidence_gates"]
+    assert gates["fit"]["stage"] == "needs_review"
+    assert gates["fit"]["paired_landmark_alignment"]["pair_count"] == 3
+    assert gates["engine"]["stage"] == "partial_reverse_engineering"
+    assert manifest["character_builder_workflow"]["native_skeleton_is_authority"] is True
+    assert manifest["character_builder_workflow"]["imported_mesh_role"] == "payload_guest"
+    assert manifest["replacement_target"] == {
+        "target_resref": "n_mandalorian03",
+        "native_base_resref": "n_mandalorian",
+        "target_numbered_variant_base": "n_mandalorian",
+        "compatible": True,
+        "accepted_native_base_resrefs": ["n_mandalorian", "n_mandalorian03"],
+    }
+    readme = readme_path.read_text(encoding="utf-8")
+    assert "Game ready: False" in readme
+    assert "Game-ready blockers:" in readme
+    assert "- fit=needs_review" in readme
+    assert "Evidence gates: fit=needs_review" in readme
+    assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55, worst=left" in readme
+    assert "Engine evidence: partial_reverse_engineering (pending Ghidra: 2)" in readme
+    assert "Do not overwrite a live game install" in readme
+
+
+def test_character_override_package_strict_fit_gate_blocks_needs_review(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.replacement_fit_not_ready"
+    )
+    assert "fit_gate_not_passed" in issue.details["reasons"]
+    assert "source_not_skeleton_guided" in issue.details["reasons"]
+    assert "too_few_paired_landmarks" in issue.details["reasons"]
+    assert issue.details["required_pair_count"] == 8
+
+
+def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    _mark_clean_skeleton_fit(validation_path)
 
     result = package_character_override_candidate(
         CharacterBuilderOverridePackageRequest(
@@ -285,6 +297,36 @@ def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(t
     assert result.succeeded is True
     assert (tmp_path / "package" / "n_mandalorian03.mdl").exists()
     assert result.manifest["character_builder_evidence_gates"]["fit"]["stage"] == "passed"
+    assert result.manifest["replacement_target"]["compatible"] is True
+    assert (
+        result.manifest["replacement_target"]["target_numbered_variant_base"]
+        == "n_mandalorian"
+    )
+
+
+def test_character_override_package_strict_gate_blocks_target_native_base_mismatch(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    _mark_clean_skeleton_fit(source_mdl.with_name("bendak_validation_report.json"))
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_sithsoldier",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_sithsoldier.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.target_native_base_mismatch"
+    )
+    assert issue.details["target_resref"] == "n_sithsoldier"
+    assert issue.details["native_base_resref"] == "n_mandalorian"
+    assert issue.details["target_numbered_variant_base"] == ""
 
 
 def test_character_override_package_blocks_unverified_source_export(tmp_path: Path) -> None:

@@ -124,3 +124,10 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert package.manifest["game"] == game
     assert package.manifest["capability"]["stage"] == "export_candidate"
     assert package.manifest["capability"]["game_tested"] is False
+    assert package.manifest["replacement_target"] == {
+        "target_resref": "n_mandalorian03",
+        "native_base_resref": "n_mandalorian",
+        "target_numbered_variant_base": "n_mandalorian",
+        "compatible": True,
+        "accepted_native_base_resrefs": ["n_mandalorian", "n_mandalorian03"],
+    }
