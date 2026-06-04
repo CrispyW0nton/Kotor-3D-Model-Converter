@@ -40,6 +40,14 @@ from .kotor_constants import CHARACTER_EXPORT_EVIDENCE, KOTOR_NATIVE_RESREF_MAX_
 _RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 _PACKAGE_SCHEMA = "ghostrigger.character_override_package.v1"
 _VALIDATION_SCHEMA = "ghostrigger.character_export_validation.v1"
+_GAME_READY_GATE_ACCEPTED_STAGES: dict[str, frozenset[str]] = {
+    "fit": frozenset({"passed"}),
+    "bind": frozenset({"passed"}),
+    "weight": frozenset({"trusted_donor_transfer"}),
+    "animation": frozenset({"passed"}),
+    "material": frozenset({"passed"}),
+    "engine": frozenset({"passed"}),
+}
 
 
 @dataclass
@@ -329,6 +337,7 @@ def _validation_payload_issues(
                 "game_test_status": capability.get("game_test_status"),
             },
         ))
+    issues.extend(_game_ready_claim_issues(payload, capability, stage))
     game = str(payload.get("game") or "").upper()
     if game and game != request.game:
         issues.append(_issue(
@@ -358,6 +367,76 @@ def _validation_payload_issues(
             "Character Builder workflow evidence does not identify the selected KOTOR base as final DAG source.",
         ))
     return issues
+
+
+def _game_ready_claim_issues(
+    payload: dict[str, Any],
+    capability: dict[str, Any],
+    stage: Any,
+) -> list[ValidationIssue]:
+    if capability.get("game_ready") is not True:
+        return []
+
+    blockers = [
+        str(item or "")
+        for item in list(capability.get("game_ready_blockers") or [])
+        if str(item or "").strip()
+    ]
+    actual_stages = capability.get("game_ready_actual_gate_stages")
+    actual_stages = (
+        actual_stages if isinstance(actual_stages, dict)
+        else _gate_stages_from_payload(payload)
+    )
+    stage_mismatches = {
+        gate: str(actual_stages.get(gate) or "missing")
+        for gate, accepted in _GAME_READY_GATE_ACCEPTED_STAGES.items()
+        if str(actual_stages.get(gate) or "missing") not in accepted
+    }
+    reasons: list[str] = []
+    if stage != "game_tested":
+        reasons.append("stage_not_game_tested")
+    if capability.get("game_tested") is not True:
+        reasons.append("not_marked_game_tested")
+    if blockers:
+        reasons.append("blockers_present")
+    if stage_mismatches:
+        reasons.append("gate_stage_mismatch")
+    if not actual_stages:
+        reasons.append("gate_stages_missing")
+    if not reasons:
+        return []
+
+    return [_issue(
+        "character.override_package.game_ready_claim_invalid",
+        (
+            "Character Builder validation report claims game-ready status "
+            "without clean game-tested and evidence-gate proof."
+        ),
+        details={
+            "reasons": reasons,
+            "stage": stage,
+            "game_tested": capability.get("game_tested"),
+            "game_ready": capability.get("game_ready"),
+            "game_ready_blockers": blockers,
+            "actual_gate_stages": dict(actual_stages or {}),
+            "stage_mismatches": stage_mismatches,
+            "required_gate_stages": {
+                gate: sorted(stages)
+                for gate, stages in _GAME_READY_GATE_ACCEPTED_STAGES.items()
+            },
+        },
+    )]
+
+
+def _gate_stages_from_payload(payload: dict[str, Any]) -> dict[str, str]:
+    gates = payload.get("character_builder_evidence_gates")
+    gates = gates if isinstance(gates, dict) else {}
+    result: dict[str, str] = {}
+    for gate in _GAME_READY_GATE_ACCEPTED_STAGES:
+        gate_payload = gates.get(gate)
+        gate_payload = gate_payload if isinstance(gate_payload, dict) else {}
+        result[gate] = str(gate_payload.get("stage") or "missing")
+    return result
 
 
 def _build_manifest(

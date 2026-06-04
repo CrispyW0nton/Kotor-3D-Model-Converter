@@ -175,6 +175,9 @@ blocked, or partial. For the current Bendak fixture, the engine gate remains
 `partial_reverse_engineering` until the pending Ghidra findings are closed, so
 the honest state is export-candidate or game-tested-with-blockers rather than
 fully game-ready.
+Override packaging now validates that claim and blocks a stale or forged
+`game_ready=True` report if any game-ready blocker or non-clean evidence-gate
+stage remains.
 
 Treat `n_mandalorian` as the mandatory native base MDL that supplies the KOTOR
 node DAG for this fixture. If a packaging/export test targets

@@ -281,6 +281,44 @@ def test_character_override_package_rejects_incomplete_game_test_claim(tmp_path:
     assert "character.override_package.game_test_evidence_incomplete" in codes
 
 
+def test_character_override_package_rejects_invalid_game_ready_claim(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    payload = json.loads(validation_path.read_text(encoding="utf-8"))
+    payload["capability"]["game_ready"] = True
+    payload["capability"]["stage"] = "game_tested"
+    payload["capability"]["game_tested"] = True
+    payload["capability"]["game_ready_blockers"] = []
+    payload["capability"]["game_ready_actual_gate_stages"] = {
+        "fit": "needs_review",
+        "bind": "passed",
+        "weight": "donor_transfer_first_pass",
+        "animation": "passed",
+        "material": "needs_review",
+        "engine": "partial_reverse_engineering",
+    }
+    validation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.game_ready_claim_invalid"
+    )
+    assert "gate_stage_mismatch" in issue.details["reasons"]
+    assert issue.details["stage_mismatches"]["fit"] == "needs_review"
+    assert issue.details["stage_mismatches"]["engine"] == "partial_reverse_engineering"
+
+
 def test_character_override_package_preserves_complete_game_test_evidence(tmp_path: Path) -> None:
     output_hashes = _test_output_hashes()
     evidence = build_character_game_test_evidence(
