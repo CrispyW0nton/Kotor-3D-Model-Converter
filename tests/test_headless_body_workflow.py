@@ -3215,7 +3215,7 @@ def test_external_model_normalization_uses_bone_landmarks_for_front_axis():
     assert result["target_fit_landmarks"]["side_pair"] == "shoulder"
     assert result["scale"] == pytest.approx(0.2)
     assert model.bb_min[2] == pytest.approx(0.0)
-    assert model.bb_max[2] == pytest.approx(2.0)
+    assert model.bb_max[2] == pytest.approx(2.0, abs=0.01)
     assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
     assert model.bb_max[1] > -2.0
     assert model.bb_min[1] < -2.0
@@ -3395,6 +3395,21 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     assert transform["policy"] == "bone_landmark_basis"
     assert transform["formula"] == "kotor_point = linear_matrix * source_point + translation"
     assert transform["scale"] == pytest.approx(0.8)
+    assert transform["landmark_alignment"]["method"] == "paired_skeleton_landmark_similarity"
+    assert transform["landmark_alignment"]["pair_count"] == 6
+    assert set(transform["landmark_alignment"]["paired_roles"]) == {
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+    }
+    assert transform["landmark_alignment"]["applied_scale"] == pytest.approx(0.8)
+    assert transform["landmark_alignment"]["applied_scale_basis"] in {
+        "reference_bounds_height",
+        "bone_landmark_height",
+    }
     for row, expected in zip(transform["rotation_matrix"], [
         [1.0, 0.0, 0.0],
         [0.0, 1.0, 0.0],
@@ -3473,6 +3488,9 @@ def test_external_fit_report_prefers_imported_skeleton_over_mesh_name_collision(
     assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
     assert report["source_height"] == pytest.approx(10.0)
     assert report["auto_fit_report"]["scale_factor"] == pytest.approx(0.16)
+    assert report["fit_transform"]["landmark_alignment"]["method"] == "paired_skeleton_landmark_similarity"
+    assert abs(report["fit_transform"]["landmark_alignment"]["solved_scale"] - 0.16) > 1.0e-3
+    assert report["fit_transform"]["landmark_alignment"]["applied_scale"] == pytest.approx(0.16)
     assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
     assert any(
         item["role"] == "head"

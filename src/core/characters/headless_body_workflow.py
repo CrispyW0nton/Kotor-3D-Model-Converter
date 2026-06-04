@@ -156,6 +156,7 @@ class _HumanoidFitFrame:
     confidence: float
     landmarks: Dict[str, str] = field(default_factory=dict)
     landmark_sources: Dict[str, str] = field(default_factory=dict)
+    landmark_positions: Dict[str, Vec3] = field(default_factory=dict)
 
 
 def _vec_as_list(value: Optional[Vec3]) -> Optional[List[float]]:
@@ -185,6 +186,10 @@ def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[
         "confidence": float(frame.confidence),
         "landmarks": dict(frame.landmarks),
         "landmark_sources": dict(frame.landmark_sources),
+        "landmark_positions": {
+            str(role): _vec_as_list(position)
+            for role, position in (frame.landmark_positions or {}).items()
+        },
     }
 
 
@@ -1025,6 +1030,17 @@ def _infer_humanoid_fit_frame(
         landmark_sources["left_foot"] = left_foot[2]
     if right_foot is not None:
         landmark_sources["right_foot"] = right_foot[2]
+    landmark_positions = {
+        "left": left[1],
+        "right": right[1],
+        "head": head[1],
+    }
+    if pelvis is not None:
+        landmark_positions["pelvis"] = pelvis[1]
+    if left_foot is not None:
+        landmark_positions["left_foot"] = left_foot[1]
+    if right_foot is not None:
+        landmark_positions["right_foot"] = right_foot[1]
     confidence = 0.65
     confidence += 0.1 if pelvis is not None else 0.0
     confidence += 0.1 if foot_center is not None else 0.0
@@ -1048,6 +1064,7 @@ def _infer_humanoid_fit_frame(
         confidence=min(0.95, confidence),
         landmarks=landmarks,
         landmark_sources=landmark_sources,
+        landmark_positions=landmark_positions,
     )
 
 
@@ -1176,15 +1193,23 @@ def inspect_external_model_fit(
         vertical_axis = "manual_override"
         report_source_frame = manual_source_frame
         report_target_frame = manual_target_frame
+        report_landmark_alignment = None
     elif source_frame is not None and target_frame is not None:
         target = float(target_height or reference_height or target_frame.height)
+        similarity_alignment = _landmark_similarity_alignment(source_frame, target_frame)
         scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
+        scale_basis = "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height"
+        if similarity_alignment is not None:
+            similarity_alignment = dict(similarity_alignment)
+            similarity_alignment["solved_scale"] = float(similarity_alignment["scale"])
+            similarity_alignment["applied_scale"] = float(scale)
+            similarity_alignment["applied_scale_basis"] = scale_basis
         policy = "bone_landmark_basis"
         source_height = source_frame.height
-        scale_basis = "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height"
         vertical_axis = "bone_landmarks"
         report_source_frame = source_frame
         report_target_frame = target_frame
+        report_landmark_alignment = similarity_alignment
     else:
         scale = fallback_target_height / fallback_source_height
         policy = "selected_reference_bounds" if reference_bounds is not None else "origin_height"
@@ -1193,6 +1218,7 @@ def inspect_external_model_fit(
         vertical_axis = ("x", "y", "z")[vertical_axis_index]
         report_source_frame = source_frame
         report_target_frame = target_frame
+        report_landmark_alignment = None
 
     auto_fit = _make_auto_fit_report(
         policy=policy,
@@ -1206,12 +1232,27 @@ def inspect_external_model_fit(
     auto_fit_report = auto_fit.to_dict()
     fit_transform: Dict[str, Any] | None = None
     if report_source_frame is not None and report_target_frame is not None:
+        rotation = (
+            report_landmark_alignment["rotation_matrix"]
+            if report_landmark_alignment is not None
+            else _basis_rotation(report_source_frame, report_target_frame)
+        )
+        target_origin = _ground_snapped_target_origin(
+            bounds=bounds,
+            rotation_matrix=rotation,
+            scale=scale,
+            source_origin=report_source_frame.origin,
+            target_origin=report_target_frame.origin,
+            target_frame=report_target_frame,
+            reference_bounds=reference_bounds,
+        )
         fit_transform = _fit_transform_metadata(
             policy=policy,
             scale=scale,
-            rotation_matrix=_basis_rotation(report_source_frame, report_target_frame),
+            rotation_matrix=rotation,
             source_origin=report_source_frame.origin,
-            target_origin=report_target_frame.origin,
+            target_origin=target_origin,
+            landmark_alignment=report_landmark_alignment,
         )
     else:
         mapped_min = _axis_map_to_kotor_z(bb_min, vertical_axis_index)
@@ -1324,6 +1365,118 @@ def _basis_rotation(
     return tuple(rows)  # type: ignore[return-value]
 
 
+_SIMILARITY_LANDMARK_ROLES = (
+    "pelvis",
+    "head",
+    "left",
+    "right",
+    "left_foot",
+    "right_foot",
+)
+
+
+def _paired_landmark_positions(
+    source: _HumanoidFitFrame,
+    target: _HumanoidFitFrame,
+) -> List[Tuple[str, Vec3, Vec3]]:
+    pairs: List[Tuple[str, Vec3, Vec3]] = []
+    source_positions = source.landmark_positions or {}
+    target_positions = target.landmark_positions or {}
+    for role in _SIMILARITY_LANDMARK_ROLES:
+        source_point = source_positions.get(role)
+        target_point = target_positions.get(role)
+        if source_point is None or target_point is None:
+            continue
+        try:
+            pairs.append((
+                role,
+                (
+                    float(source_point[0]),
+                    float(source_point[1]),
+                    float(source_point[2]),
+                ),
+                (
+                    float(target_point[0]),
+                    float(target_point[1]),
+                    float(target_point[2]),
+                ),
+            ))
+        except Exception:
+            continue
+    return pairs
+
+
+def _landmark_similarity_alignment(
+    source: Optional[_HumanoidFitFrame],
+    target: Optional[_HumanoidFitFrame],
+) -> Optional[Dict[str, Any]]:
+    """Solve a uniform source-to-target fit from paired skeleton landmarks.
+
+    The native KOTOR target skeleton remains authoritative.  This helper only
+    derives a better imported-payload placement transform than a single
+    height/axis frame can provide.
+    """
+
+    if source is None or target is None:
+        return None
+    pairs = _paired_landmark_positions(source, target)
+    if len(pairs) < 3:
+        return None
+    try:
+        import numpy as np
+    except Exception:  # pragma: no cover - numpy is a project dependency.
+        return None
+
+    source_points = np.asarray([pair[1] for pair in pairs], dtype=np.float64)
+    target_points = np.asarray([pair[2] for pair in pairs], dtype=np.float64)
+    if source_points.shape[0] < 3 or target_points.shape[0] < 3:
+        return None
+    source_center = source_points.mean(axis=0)
+    target_center = target_points.mean(axis=0)
+    source_centered = source_points - source_center
+    target_centered = target_points - target_center
+    source_variance = float(np.sum(source_centered * source_centered))
+    if source_variance <= 1.0e-10:
+        return None
+
+    covariance = source_centered.T @ target_centered
+    try:
+        u, singular_values, vh = np.linalg.svd(covariance)
+    except Exception:
+        return None
+    correction = np.eye(3, dtype=np.float64)
+    if float(np.linalg.det(vh.T @ u.T)) < 0.0:
+        correction[-1, -1] = -1.0
+    rotation = vh.T @ correction @ u.T
+    scale = float(np.sum(singular_values * np.diag(correction)) / source_variance)
+    if not math.isfinite(scale) or scale <= 1.0e-8:
+        return None
+
+    linear = rotation * scale
+    # Snap the final transform to the KOTOR fit origin instead of the landmark
+    # centroid, so pelvis/feet grounding stays deterministic for modder edits.
+    source_origin = np.asarray(source.origin, dtype=np.float64)
+    target_origin = np.asarray(target.origin, dtype=np.float64)
+    translation = target_origin - linear @ source_origin
+    mapped = (source_points @ linear.T) + translation
+    errors = np.linalg.norm(mapped - target_points, axis=1)
+    rms_error = float(np.sqrt(np.mean(errors * errors))) if errors.size else 0.0
+    max_error = float(np.max(errors)) if errors.size else 0.0
+    return {
+        "method": "paired_skeleton_landmark_similarity",
+        "rotation_matrix": tuple(
+            tuple(float(value) for value in row)
+            for row in rotation.tolist()
+        ),
+        "scale": scale,
+        "paired_roles": [role for role, _source, _target in pairs],
+        "pair_count": len(pairs),
+        "rms_error": rms_error,
+        "max_error": max_error,
+        "translation_basis": "native_fit_origin",
+    }
+
+
 def _mat_vec(matrix: Tuple[Vec3, Vec3, Vec3], vector: Vec3) -> Vec3:
     return (
         matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
@@ -1350,6 +1503,47 @@ def _translation_for_affine(
 ) -> Vec3:
     mapped_origin = _mat_vec(matrix, source_origin)
     return _vec_sub(target_origin, mapped_origin)
+
+
+def _ground_snapped_target_origin(
+    *,
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    scale: float,
+    source_origin: Vec3,
+    target_origin: Vec3,
+    target_frame: Optional[_HumanoidFitFrame] = None,
+    reference_bounds: Optional[Tuple[Vec3, Vec3]] = None,
+) -> Vec3:
+    if bounds is None:
+        return target_origin
+    linear_matrix = _scale_matrix(rotation_matrix, scale)
+    translation = _translation_for_affine(
+        linear_matrix,
+        source_origin,
+        target_origin,
+    )
+
+    def _mapped(point: Vec3) -> Vec3:
+        return _vec_add(_mat_vec(linear_matrix, point), translation)
+
+    mapped_bounds = _transform_bounds(bounds, _mapped)
+    if mapped_bounds is None:
+        return target_origin
+    if reference_bounds is not None:
+        target_ground_z = float(reference_bounds[0][2])
+    elif target_frame is not None:
+        target_ground_z = float(target_frame.origin[2])
+    else:
+        target_ground_z = float(target_origin[2])
+    delta_z = target_ground_z - float(mapped_bounds[0][2])
+    if abs(delta_z) <= 1.0e-8:
+        return target_origin
+    return (
+        float(target_origin[0]),
+        float(target_origin[1]),
+        float(target_origin[2]) + delta_z,
+    )
 
 
 def _axis_map_matrix_to_kotor_z(vertical_axis: int) -> Tuple[Vec3, Vec3, Vec3]:
@@ -1379,6 +1573,7 @@ def _fit_transform_metadata(
     rotation_matrix: Tuple[Vec3, Vec3, Vec3],
     source_origin: Vec3,
     target_origin: Vec3,
+    landmark_alignment: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     linear_matrix = _scale_matrix(rotation_matrix, scale)
     translation = _translation_for_affine(
@@ -1386,7 +1581,7 @@ def _fit_transform_metadata(
         source_origin,
         target_origin,
     )
-    return {
+    result = {
         "coordinate_space": "source_model_to_kotor_world",
         "policy": str(policy),
         "formula": "kotor_point = linear_matrix * source_point + translation",
@@ -1397,6 +1592,27 @@ def _fit_transform_metadata(
         "source_origin": _vec_as_list(source_origin),
         "target_origin": _vec_as_list(target_origin),
     }
+    if landmark_alignment:
+        result["landmark_alignment"] = {
+            "method": str(landmark_alignment.get("method") or ""),
+            "pair_count": int(landmark_alignment.get("pair_count") or 0),
+            "paired_roles": list(landmark_alignment.get("paired_roles") or []),
+            "rms_error": float(landmark_alignment.get("rms_error") or 0.0),
+            "max_error": float(landmark_alignment.get("max_error") or 0.0),
+            "translation_basis": str(
+                landmark_alignment.get("translation_basis") or ""
+            ),
+            "solved_scale": float(
+                landmark_alignment.get("solved_scale")
+                or landmark_alignment.get("scale")
+                or 0.0
+            ),
+            "applied_scale": float(landmark_alignment.get("applied_scale") or 0.0),
+            "applied_scale_basis": str(
+                landmark_alignment.get("applied_scale_basis") or ""
+            ),
+        }
+    return result
 
 
 def _kotor_template_humanoid_height(game_version: str) -> float:
@@ -1760,19 +1976,50 @@ def normalize_external_model_for_kotor(
     if transform_source_frame is not None and transform_target_frame is not None:
         reference_height = _height_from_bounds(reference_bounds)
         target = float(target_height or reference_height or transform_target_frame.height)
+        landmark_alignment = (
+            None
+            if transform_policy == "manual_axis_override"
+            else _landmark_similarity_alignment(
+                transform_source_frame,
+                transform_target_frame,
+            )
+        )
         scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
-        rotation = _basis_rotation(transform_source_frame, transform_target_frame)
+        rotation = (
+            landmark_alignment["rotation_matrix"]
+            if landmark_alignment is not None
+            else _basis_rotation(transform_source_frame, transform_target_frame)
+        )
+        if landmark_alignment is not None:
+            landmark_alignment = dict(landmark_alignment)
+            landmark_alignment["solved_scale"] = float(landmark_alignment["scale"])
+            landmark_alignment["applied_scale"] = float(scale)
+            landmark_alignment["applied_scale_basis"] = (
+                transform_scale_basis
+                if transform_scale_basis
+                else ("reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height")
+            )
+        target_origin = _ground_snapped_target_origin(
+            bounds=bounds,
+            rotation_matrix=rotation,
+            scale=scale,
+            source_origin=transform_source_frame.origin,
+            target_origin=transform_target_frame.origin,
+            target_frame=transform_target_frame,
+            reference_bounds=reference_bounds,
+        )
         fit_transform = _fit_transform_metadata(
             policy=transform_policy,
             scale=scale,
             rotation_matrix=rotation,
             source_origin=transform_source_frame.origin,
-            target_origin=transform_target_frame.origin,
+            target_origin=target_origin,
+            landmark_alignment=landmark_alignment,
         )
 
         def transform_point(point: Vec3) -> Vec3:
             rel = _vec_scale(_vec_sub(point, transform_source_frame.origin), scale)
-            return _vec_add(transform_target_frame.origin, _mat_vec(rotation, rel))
+            return _vec_add(target_origin, _mat_vec(rotation, rel))
 
         def transform_direction(direction: Vec3) -> Vec3:
             rotated = _mat_vec(rotation, direction)
@@ -1824,9 +2071,12 @@ def normalize_external_model_for_kotor(
             "target_height": target,
             "reference": reference_label or getattr(reference_model, "name", "") or "",
             "vertical_axis": "manual_override" if transform_policy == "manual_axis_override" else "bone_landmarks",
-            "offset": _vec_sub(transform_target_frame.origin, _mat_vec(rotation, _vec_scale(transform_source_frame.origin, scale))),
-            "target_center_xy": (transform_target_frame.origin[0], transform_target_frame.origin[1]),
-            "target_ground_z": transform_target_frame.origin[2],
+            "offset": _vec_sub(
+                target_origin,
+                _mat_vec(rotation, _vec_scale(transform_source_frame.origin, scale)),
+            ),
+            "target_center_xy": (target_origin[0], target_origin[1]),
+            "target_ground_z": target_origin[2],
             "external_world_positions_fit": True,
             "fit_policy": transform_policy,
             "scale_basis": (
