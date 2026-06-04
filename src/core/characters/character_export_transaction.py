@@ -185,7 +185,7 @@ def export_character_mdl_mdx_transaction(
         reload_preflight = preflight_character_mdl_export(
             loaded,
             native_snapshot=native_snapshot,
-            options=preflight_options,
+            options=_reload_preflight_options(preflight_options),
         )
         issues.extend(reload_preflight.report.issues)
         if not reload_preflight.report.has_blocking:
@@ -232,6 +232,23 @@ def _preflight_options_for_request(
     if request.preflight_options is None:
         return CharacterExportPreflightOptions(export_game=request.game)
     return replace(request.preflight_options, export_game=request.game)
+
+
+def _reload_preflight_options(
+    preflight_options: CharacterExportPreflightOptions,
+) -> CharacterExportPreflightOptions:
+    """Return runtime checks for a reloaded MDL/MDX.
+
+    The pre-write pass must prove the model came from the Character Builder's
+    native-template workflow.  A real MDL reload cannot preserve those Python
+    workflow markers, so the verifier keeps structural/runtime checks while
+    disabling only workflow-only rig-state requirements.
+    """
+
+    return replace(
+        preflight_options,
+        require_native_template_final_rig=False,
+    )
 
 
 def _write_validation_artifacts(

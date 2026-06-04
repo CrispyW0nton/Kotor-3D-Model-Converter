@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import replace
 import json
 
@@ -659,6 +660,42 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert "Auto-fit policy: bone_landmark_basis" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
+
+
+def test_character_export_transaction_reload_verifies_without_workflow_markers(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    reloaded_model = copy.deepcopy(result["model"])
+    for attr in (
+        "_gr_character_builder_rig_state",
+        "_gr_character_builder_dag_authority",
+        "_gr_native_skeleton_snapshot",
+        "_gr_character_builder_bind_complete",
+    ):
+        if hasattr(reloaded_model, attr):
+            delattr(reloaded_model, attr)
+    reloaded_model.metadata.pop("character_builder_rig_state", None)
+    output = tmp_path / "grbody_reload_clean.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: reloaded_model,
+        )
+    )
+
+    assert tx.succeeded is True
+    assert output.exists()
+    assert output.with_suffix(".mdx").exists()
+    assert "character.export.not_native_template_final_rig" not in {
+        issue.code for issue in tx.export_job_result.validation_report.issues
+    }
+    assert "character.export.reload_verified" in {
+        issue.code for issue in tx.export_job_result.validation_report.issues
+    }
 
 
 def test_character_export_transaction_preflight_failure_never_calls_writer(tmp_path) -> None:
