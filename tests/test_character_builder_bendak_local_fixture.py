@@ -65,6 +65,13 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert result.apply_result.get("replaced_native_render_nodes")
     assert result.motion_result is not None
     assert result.motion_result.supermodel == "S_Female02"
+    assert result.animation_library_result is not None
+    assert result.animation_library_result.code == "listed"
+    animation_names = {
+        name for _label, name in result.animation_library_result.available
+    }
+    assert {"pause1", "pause2", "walk", "tlknorm"}.issubset(animation_names)
+    assert len(animation_names) >= 100
 
     package = package_character_override_candidate(
         CharacterBuilderOverridePackageRequest(

@@ -38,6 +38,49 @@ confidence for:
 - skin-weight completeness;
 - deformation quality during inherited animation preview.
 
+## 2026-06-04 Confirmation Pass
+
+The local PDFs were rechecked with a metadata and keyword pass so future agents
+know why these sources matter to the Character Builder roadmap:
+
+- *Rig it Right!* is directly relevant to guide placement because it repeatedly
+  covers joint orientation, bind pose, deformation testing, skinning, weights,
+  and geodesic/bind concepts. It supports treating front/up orientation,
+  root/pivot placement, symmetry, and freeze-transform actions as explicit
+  authoring steps rather than hidden viewport conveniences.
+- Pan et al. is directly relevant to GhostRigger's donor-weight path because
+  it focuses on automatic skinning, weight retargeting, deformation quality,
+  correspondence, geodesic distance, and bi-harmonic distance. It supports the
+  current choice to prefer native-template/donor weight transfer over
+  nearest-bone fallback for Bendak-style custom body imports.
+
+Do not use either source to override KOTOR facts. Use them to improve the
+tooling workflow around the real Odyssey contract confirmed by MCP, PyKotor,
+MDLOps, KotorBlender, xoreos, and Ghidra.
+
+## Character Builder Action Checklist
+
+For the Bendak-to-`n_mandalorian` fixture and similar character imports,
+Character Builder should make these stages visible and separately validated:
+
+1. **Fit evidence before bind**
+   Record the solved front axis, up axis, root/pivot placement, scale, and any
+   manual correction. A mesh that is merely visible beside the native skeleton
+   is not fitted.
+2. **Bind evidence before export**
+   Build/Confirm must create a named bind-pose snapshot and state whether the
+   imported payload is bound to the preserved native KOTOR DAG.
+3. **Weight evidence before launch claims**
+   Prefer donor/native-template weights when a comparable KOTOR body exists.
+   Report fallback weighting separately and keep it below launch-quality until
+   deformation preview proves otherwise.
+4. **Animation evidence before game-ready language**
+   Preview inherited supermodel clips from the selected base model's chain.
+   At minimum, record idle, walk/run if available, and one gesture/combat clip.
+5. **Correction evidence after manual edits**
+   Symmetry, guide movement, center-pivot, and freeze-transform operations must
+   be explicit, undoable, and captured in session/export reports.
+
 ## Applicable Rigging Principles
 
 ### Joint Placement And Orientation Are First-Class Gates

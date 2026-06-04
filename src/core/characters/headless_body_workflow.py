@@ -4041,6 +4041,7 @@ class LaunchWorkflowResult:
     guide_result:     Optional[BodyRigGuidesResult] = None
     generate_result:  Optional[BodyRigGenerateResult] = None
     motion_result:    Optional[MotionAssignmentResult] = None
+    animation_library_result: Optional[CheckActorResult] = None
     export_result:    Optional[ExportResult]      = None
     reloaded_model:   Optional[Any]               = None
     mdl_path:         str                         = ""
@@ -4060,6 +4061,38 @@ def _import_scene_io():                                     # pragma: no cover -
     except ImportError:
         from core.geometry.model_data import SceneIO      # type: ignore[import-untyped]
     return SceneIO
+
+
+def _with_supermodel_resource_manager(
+    resource_manager: Optional[Any],
+):
+    """Temporarily configure inherited-animation lookup for headless checks."""
+
+    class _ResolverContext:
+        def __init__(self, manager: Optional[Any]) -> None:
+            self.manager = manager
+            self.previous = None
+            self.changed = False
+
+        def __enter__(self):
+            try:
+                from src.core.animation.animation_engine import SuperModelResolver
+            except ImportError:                             # pragma: no cover
+                from core.animation.animation_engine import SuperModelResolver  # type: ignore
+            self.resolver = SuperModelResolver
+            self.previous = getattr(SuperModelResolver, "_resource_manager", None)
+            if self.manager is not None and self.previous is not self.manager:
+                SuperModelResolver.clear_cache()
+                SuperModelResolver.configure(self.manager)
+                self.changed = True
+            return SuperModelResolver
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            if self.changed:
+                self.resolver.clear_cache()
+                self.resolver.configure(self.previous)
+
+    return _ResolverContext(resource_manager)
 
 
 def _import_mdl_binary_writer():                            # pragma: no cover - import shim
@@ -4331,6 +4364,7 @@ def run_external_mesh_launch_workflow(
     template_label: str = "",
     motion_supermodel: str = "S_Female02",
     formats: Optional[List[str]] = None,
+    require_animation_library: bool = False,
 ) -> LaunchWorkflowResult:
     """M12/T1205: one-shot external mesh to reloadable KOTOR export.
 
@@ -4416,6 +4450,24 @@ def run_external_mesh_launch_workflow(
             code=motion.code or "motion_failed",
         )
 
+    animation_library = None
+    resource_manager = getattr(template, "_gr_supermodel_resource_manager", None)
+    with _with_supermodel_resource_manager(resource_manager):
+        animation_library = available_animation_library(scene)
+    if require_animation_library and not list(getattr(animation_library, "available", []) or []):
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            generate_result=generated,
+            motion_result=motion,
+            animation_library_result=animation_library,
+            message=(
+                "Launch workflow stopped at animation assignment: "
+                f"{animation_library.message}"
+            ),
+            code=animation_library.code or "animation_library_empty",
+        )
+
     exported = export_scene(
         scene,
         formats=list(formats or ["kotor"]),
@@ -4428,6 +4480,7 @@ def run_external_mesh_launch_workflow(
             apply_result=applied,
             generate_result=generated,
             motion_result=motion,
+            animation_library_result=animation_library,
             export_result=exported,
             message=f"Launch workflow stopped at export: {exported.message}",
             code=exported.code or "export_failed",
@@ -4444,6 +4497,7 @@ def run_external_mesh_launch_workflow(
             apply_result=applied,
             generate_result=generated,
             motion_result=motion,
+            animation_library_result=animation_library,
             export_result=exported,
             message="KOTOR export did not produce an MDL path.",
             code="no_mdl_export",
@@ -4458,6 +4512,7 @@ def run_external_mesh_launch_workflow(
             apply_result=applied,
             generate_result=generated,
             motion_result=motion,
+            animation_library_result=animation_library,
             export_result=exported,
             mdl_path=mdl_path,
             mdx_path=os.path.splitext(mdl_path)[0] + ".mdx",
@@ -4477,6 +4532,7 @@ def run_external_mesh_launch_workflow(
         apply_result=applied,
         generate_result=generated,
         motion_result=motion,
+        animation_library_result=animation_library,
         export_result=exported,
         reloaded_model=reloaded,
         mdl_path=mdl_path,
@@ -4562,6 +4618,7 @@ def run_external_mesh_native_template_launch_workflow(
             or "S_Female02"
         ),
         formats=formats,
+        require_animation_library=True,
     )
 
 

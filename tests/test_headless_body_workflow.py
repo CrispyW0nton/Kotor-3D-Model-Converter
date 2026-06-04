@@ -91,6 +91,47 @@ class _FakeNativeSkeletonSnapshot(SimpleNamespace):
         return tuple(str(getattr(node, "name", "") or "") for node in self.nodes)
 
 
+def _fake_native_snapshot_node(
+    name: str,
+    *,
+    parent_name: str | None = None,
+    full_path: tuple[str, ...] | None = None,
+    child_names: tuple[str, ...] = (),
+    export_role: str = "node",
+    socket_category: str | None = None,
+    is_mesh: bool = False,
+    is_skin: bool = False,
+    is_dummy: bool = False,
+    render: bool = True,
+    has_geometry: bool = False,
+    vertex_count: int = 0,
+    face_count: int = 0,
+    texture: str = "",
+) -> SimpleNamespace:
+    path = tuple(full_path or (name,))
+    return SimpleNamespace(
+        name=name,
+        parent_name=parent_name,
+        parent_path=path[:-1],
+        full_path=path,
+        child_names=child_names,
+        flags=None,
+        type_label="skin" if is_skin else "mesh" if is_mesh else "dummy" if is_dummy else "node",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        is_mesh=is_mesh,
+        is_skin=is_skin,
+        is_dummy=is_dummy,
+        render=render,
+        has_geometry=has_geometry,
+        vertex_count=vertex_count,
+        face_count=face_count,
+        texture=texture,
+        socket_category=socket_category,
+        export_role=export_role,
+    )
+
+
 class _FakeBodyModel:
     """A KotorModel-shaped object that detects as HEADLESS_BODY.
 
@@ -111,7 +152,41 @@ class _FakeBodyModel:
             "mesh_role": "payload_guest",
             "source": "test_fake_body",
             "native_snapshot_present": True,
+            "native_base_resref": name,
+            "native_base_model_name": name,
+            "native_base_game": "K1",
+            "imported_payload_name": "fake_external_payload",
+            "payload_mesh_names": ["custom_body"],
             "legacy_acurig": False,
+        }
+        self.metadata["character_builder_bind"] = {
+            "status": "bound_to_native_kotor_skeleton",
+            "native_base": {
+                "source_resref": name,
+                "model_name": name,
+                "game": "K1",
+                "dag_authority": "native_kotor_base",
+                "replaced_render_payload_nodes": [],
+                "replaced_render_payload_count": 0,
+            },
+            "imported_payload": {
+                "model_name": "fake_external_payload",
+                "mesh_role": "payload_guest",
+                "mesh_names": ["custom_body"],
+            },
+            "skin_binding": {
+                "weighting_method": "native_template_nearest_vertex_donor",
+                "quality_stage": "donor_transfer_first_pass",
+                "donor_weight_transfer": True,
+                "mesh_reports": [
+                    {
+                        "mesh_name": "custom_body",
+                        "vertices": 1,
+                        "weighted_vertices": 1,
+                        "fallback_vertices": 0,
+                    },
+                ],
+            },
         }
         self._gr_character_builder_rig_state = dict(self.metadata["character_builder_rig_state"])
         self.root_node = _FakeNode(name)
@@ -124,8 +199,8 @@ class _FakeBodyModel:
         skin.vertices = [(0.0, 0.0, 0.0)]
         skin.faces = [(0, 0, 0)]
         skin.bone_map = ["rootdummy"]
-        skin.qbone_list = [rootdummy]
-        skin.tbone_list = [rootdummy]
+        skin.qbone_list = [(0.0, 0.0, 0.0, 1.0)]
+        skin.tbone_list = [(0.0, 0.0, 0.0)]
         skin.skin_data = [
             SimpleNamespace(
                 influences=[
@@ -145,37 +220,62 @@ class _FakeBodyModel:
             model_name=name,
             game="K1",
             supermodel="S_Female02",
+            classification="CHARACTER",
+            model_type=int(md.ModelClassification.CHARACTER),
+            node_count=6,
+            mesh_node_count=1,
+            skin_node_count=1,
+            hook_names=("headhook", "rhand", "lhand"),
             metadata={"source_resref": name, "source_game": "K1"},
             nodes=[
-                SimpleNamespace(
+                _fake_native_snapshot_node(
                     name=name,
+                    child_names=("rootdummy", "custom_body"),
                     full_path=(name,),
                     export_role="helper",
-                    socket_category=None,
                 ),
-                SimpleNamespace(
+                _fake_native_snapshot_node(
                     name="rootdummy",
+                    parent_name=name,
                     full_path=(name, "rootdummy"),
+                    child_names=("headhook", "rhand", "lhand"),
+                    is_dummy=True,
                     export_role="helper",
-                    socket_category=None,
                 ),
-                SimpleNamespace(
+                _fake_native_snapshot_node(
                     name="headhook",
+                    parent_name="rootdummy",
                     full_path=(name, "rootdummy", "headhook"),
+                    is_dummy=True,
                     export_role="socket",
                     socket_category="head",
                 ),
-                SimpleNamespace(
+                _fake_native_snapshot_node(
                     name="rhand",
+                    parent_name="rootdummy",
                     full_path=(name, "rootdummy", "rhand"),
+                    is_dummy=True,
                     export_role="socket",
                     socket_category="right_hand",
                 ),
-                SimpleNamespace(
+                _fake_native_snapshot_node(
                     name="lhand",
+                    parent_name="rootdummy",
                     full_path=(name, "rootdummy", "lhand"),
+                    is_dummy=True,
                     export_role="socket",
                     socket_category="left_hand",
+                ),
+                _fake_native_snapshot_node(
+                    name="custom_body",
+                    parent_name=name,
+                    full_path=(name, "custom_body"),
+                    is_mesh=True,
+                    is_skin=True,
+                    has_geometry=True,
+                    vertex_count=1,
+                    face_count=1,
+                    export_role="skin",
                 ),
             ],
         )
@@ -2645,6 +2745,153 @@ def test_t1205_launch_workflow_uses_selected_native_template_for_fit_and_bind(mo
         "apply_template_rig": 1,
         "export": 1,
     }
+
+
+def test_t1205_launch_workflow_records_inherited_animation_library(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("bendak")
+    selected_template = _FakeBodyModel("n_mandalorian")
+    selected_template.supermodel = "S_Female02"
+    rigged_model = _FakeBodyModel("bendak_on_n_mandalorian")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"export": 0}
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            if str(resref).lower() != "s_female02":
+                return None
+            super_model = _FakeBodyModel("S_Female02")
+            super_model.supermodel = "NULL"
+            super_model.anim_scale = 1.0
+            super_model.animations = [
+                _FakeAnimation("pause1", 1.0),
+                _FakeAnimation("walk", 1.2),
+                _FakeAnimation("tlknorm", 2.0),
+            ]
+            return super_model
+
+    selected_template._gr_supermodel_resource_manager = _RM()
+
+    def _fake_load_body(*args, **kwargs):
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "Bendak.fbx"),
+            resref="bendak",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            raise AssertionError("selected native template should bypass generic template load")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            assert model is source_model
+            assert template is selected_template
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "Bendak payload bound to n_mandalorian",
+            }
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **kwargs):
+        calls["export"] += 1
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(tmp_path / "bendak.mdl"),
+                    message="exported",
+                )
+            ],
+            out_dir=str(tmp_path),
+            message="exported",
+        )
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+    monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: rigged_model)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        template_model=selected_template,
+        template_label="n_mandalorian",
+        motion_supermodel="S_Female02",
+        require_animation_library=True,
+    )
+
+    assert result.ok is True
+    assert result.code == "launch_verified"
+    assert result.animation_library_result is not None
+    names = {name for _label, name in result.animation_library_result.available}
+    assert {"pause1", "walk", "tlknorm"}.issubset(names)
+    assert result.animation_library_result.details["resolved_supermodel"] == "S_Female02"
+    assert calls["export"] == 1
+
+
+def test_t1205_launch_workflow_blocks_required_empty_animation_library(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("bendak")
+    selected_template = _FakeBodyModel("n_mandalorian")
+    selected_template.supermodel = "S_Female02"
+    rigged_model = _FakeBodyModel("bendak_on_n_mandalorian")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"export": 0}
+
+    def _fake_load_body(*args, **kwargs):
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "Bendak.fbx"),
+            resref="bendak",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            raise AssertionError("selected native template should bypass generic template load")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "Bendak payload bound to n_mandalorian",
+            }
+
+    def _fake_export_scene(*args, **kwargs):
+        calls["export"] += 1
+        raise AssertionError("export should not run without required animation library")
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        template_model=selected_template,
+        template_label="n_mandalorian",
+        motion_supermodel="S_Female02",
+        require_animation_library=True,
+    )
+
+    assert result.ok is False
+    assert result.code == "no_animations"
+    assert result.animation_library_result is not None
+    assert result.animation_library_result.available == []
+    assert "resolver_not_configured" in result.animation_library_result.diagnostics
+    assert calls["export"] == 0
 
 
 def test_t1205_native_template_launch_loads_selected_resref_before_fit(monkeypatch, tmp_path):

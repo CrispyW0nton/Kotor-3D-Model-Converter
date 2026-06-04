@@ -77,6 +77,15 @@ Headless workflow proof on 2026-06-04 confirmed:
 - Character Builder compacts the generated skin bone map to the used influence
   slots before MDL/MDX export, keeping `bone_map`, `qbone_list`, `tbone_list`,
   and per-vertex influence indices aligned through writer/readback validation.
+- The native-template launch proof now resolves inherited animation libraries
+  through the selected base model's real supermodel chain instead of trusting
+  only the stored `supermodel` string. In the current configured install,
+  K1 `n_mandalorian` resolves 267 available animations through
+  `N_Mandalorian -> S_Female02 -> S_Female01 -> S_Male02 -> S_Male01`, and K2
+  resolves 456 available animations through the same chain. The guarded
+  Bendak fixture asserts that inherited/local names such as `pause1`, `pause2`,
+  `walk`, and `tlknorm` are available before treating the export as a verified
+  candidate.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

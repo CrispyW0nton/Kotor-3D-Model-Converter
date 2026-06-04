@@ -214,6 +214,47 @@ def _detect_game_dir(game: str) -> Optional[str]:
         return None
 
 
+class _KotorInstallSupermodelResourceManager:
+    """Resource adapter used by Character Builder animation inheritance checks.
+
+    ``SuperModelResolver`` expects a ``load_model(resref, game)`` method.  The
+    native-base loader already has a real installed-game index in hand, so this
+    small adapter lets the Character Builder resolve inherited supermodel clips
+    from the same install that supplied the selected KOTOR DAG authority.
+    """
+
+    def __init__(self, install: Any, *, game: str) -> None:
+        self._install = install
+        self._game = "K2" if str(game).upper().endswith("2") else "K1"
+
+    def load_model(self, resref: str, game: str = "K1") -> Optional["KotorModel"]:
+        try:
+            try:
+                from core.game.kotor_loader import load_model_from_bytes  # type: ignore
+                from core.geometry.model_data import GameVersion  # type: ignore
+            except ImportError:
+                from src.core.game.kotor_loader import load_model_from_bytes  # type: ignore
+                from src.core.geometry.model_data import GameVersion  # type: ignore
+            name = str(resref or "").strip().lower()
+            if not name:
+                return None
+            mdl_bytes = self._install.get_mdl(name)
+            if not mdl_bytes:
+                return None
+            mdx_bytes = self._install.get_mdx(name) or b""
+            game_tag = "K2" if str(game or self._game).upper().endswith("2") else "K1"
+            gv = GameVersion.K2 if game_tag == "K2" else GameVersion.K1
+            model = load_model_from_bytes(mdl_bytes, mdx_bytes, game_version=gv)
+            if model is not None:
+                setattr(model, "_gr_source_resref", name)
+                setattr(model, "_gr_source_game", game_tag)
+                setattr(model, "_gr_source_layer", "game_library")
+            return model
+        except Exception as exc:  # pragma: no cover - defensive adapter
+            log.debug("supermodel resource load failed for %r: %s", resref, exc, exc_info=True)
+            return None
+
+
 def load_game_skeleton_source(
     resref: str,
     *,
@@ -262,6 +303,15 @@ def load_game_skeleton_source(
             setattr(model, "_gr_source_resref", name)
             setattr(model, "_gr_source_game", "K2" if gv == GameVersion.K2 else "K1")
             setattr(model, "_gr_source_layer", "game_library")
+            setattr(model, "_gr_source_game_dir", root)
+            setattr(
+                model,
+                "_gr_supermodel_resource_manager",
+                _KotorInstallSupermodelResourceManager(
+                    inst,
+                    game="K2" if gv == GameVersion.K2 else "K1",
+                ),
+            )
         return model
     except Exception as exc:
         log.error("load_game_skeleton_source: failed for %s/%s: %s", game, name, exc)
