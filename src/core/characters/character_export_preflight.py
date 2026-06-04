@@ -62,6 +62,9 @@ class CharacterExportPreflightOptions:
     require_required_sockets: bool = True
     require_native_template_final_rig: bool = True
     require_native_render_replacement_evidence: bool = True
+    require_auto_fit_evidence: bool = True
+    allow_fallback_auto_fit: bool = False
+    min_auto_fit_confidence: float = 0.60
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -142,6 +145,8 @@ def preflight_character_mdl_export(
         _validate_native_dag(model, native_snapshot, opts, report)
         _validate_no_non_native_skeleton_nodes(model, native_snapshot, opts, report)
         _validate_socket_categories(model, native_snapshot, opts, report)
+
+    _validate_auto_fit_evidence(model, opts, report)
 
     if opts.require_skin_payload:
         _validate_skin_payload(model, native_snapshot, opts, report)
@@ -402,6 +407,151 @@ def _validate_skin_binding_evidence(
                 "donor_weight_transfer": donor_weight_transfer,
                 "mesh_reports": mesh_reports,
             },
+        ))
+
+
+def _validate_auto_fit_evidence(
+    model: Any,
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    """Validate that an imported payload was fitted before native binding."""
+
+    if not opts.require_auto_fit_evidence or not is_native_template_final_rig(model):
+        return
+
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    fit_report = metadata.get("kotor_fit_report")
+    if not isinstance(fit_report, dict):
+        report.add(_issue(
+            "blocking",
+            "character.export.missing_auto_fit_evidence",
+            "Character export requires recorded auto-fit evidence.",
+            fix_hint=(
+                "Run Auto-Fit or confirm a manual fit against the selected KOTOR "
+                "base skeleton before building and exporting the character."
+            ),
+        ))
+        return
+
+    fit_policy = str(fit_report.get("fit_policy") or "").strip()
+    fit_transform = fit_report.get("fit_transform")
+    fit_transform = fit_transform if isinstance(fit_transform, dict) else {}
+    contract = fit_report.get("kotor_contract")
+    contract = contract if isinstance(contract, dict) else {}
+    auto_fit_report = fit_report.get("auto_fit_report")
+    auto_fit_report = auto_fit_report if isinstance(auto_fit_report, dict) else {}
+
+    missing_fields: list[str] = []
+    if not fit_policy:
+        missing_fields.append("fit_policy")
+    if not fit_transform:
+        missing_fields.append("fit_transform")
+    if not contract:
+        missing_fields.append("kotor_contract")
+
+    if missing_fields:
+        report.add(_issue(
+            "blocking",
+            "character.export.incomplete_auto_fit_evidence",
+            "Character auto-fit evidence is incomplete.",
+            fix_hint=(
+                "Re-run Auto-Fit so the report records fit policy, transform, "
+                "and KOTOR native-DAG contract evidence."
+            ),
+            details={"missing_fields": missing_fields, "fit_report": fit_report},
+        ))
+
+    scale = _safe_float(fit_transform.get("scale"))
+    if scale is None or not math.isfinite(scale) or scale <= 0.0:
+        report.add(_issue(
+            "blocking",
+            "character.export.invalid_auto_fit_scale",
+            "Character auto-fit evidence has an invalid scale.",
+            fix_hint="Re-run Auto-Fit; the fitted mesh scale must be finite and positive.",
+            details={"scale": fit_transform.get("scale")},
+        ))
+
+    try:
+        translation = _numeric_components(fit_transform.get("translation", ()))
+    except (TypeError, ValueError, OverflowError):
+        translation = []
+    if len(translation) != 3 or not _all_finite(translation):
+        report.add(_issue(
+            "blocking",
+            "character.export.invalid_auto_fit_translation",
+            "Character auto-fit evidence has an invalid translation.",
+            fix_hint="Re-run Auto-Fit; the fitted mesh translation must be a finite XYZ vector.",
+            details={
+                "translation": fit_transform.get("translation"),
+                "component_count": len(translation),
+            },
+        ))
+
+    confidence = _safe_float(
+        fit_report.get("confidence", auto_fit_report.get("confidence"))
+    )
+    if confidence is None or not math.isfinite(confidence):
+        report.add(_issue(
+            "blocking",
+            "character.export.missing_auto_fit_confidence",
+            "Character auto-fit evidence has no finite confidence score.",
+            fix_hint="Re-run Auto-Fit or confirm a manual fit so confidence is recorded.",
+        ))
+    elif confidence < float(opts.min_auto_fit_confidence):
+        report.add(_issue(
+            "blocking",
+            "character.export.low_auto_fit_confidence",
+            (
+                f"Character auto-fit confidence {confidence:.3f} is below the "
+                f"required {float(opts.min_auto_fit_confidence):.3f} threshold."
+            ),
+            fix_hint=(
+                "Improve the mesh fit with landmarks or manual axis/ground "
+                "overrides before exporting."
+            ),
+            details={
+                "confidence": confidence,
+                "required_confidence": float(opts.min_auto_fit_confidence),
+                "fit_policy": fit_policy,
+            },
+        ))
+
+    fallback_used = bool(
+        fit_report.get("fallback_used", auto_fit_report.get("fallback_used", False))
+    )
+    if fallback_used and not opts.allow_fallback_auto_fit:
+        report.add(_issue(
+            "blocking",
+            "character.export.fallback_auto_fit_used",
+            "Character export cannot rely on fallback bounds-only auto-fit evidence.",
+            fix_hint=(
+                "Use bone landmarks or an explicit manual axis/ground override "
+                "so the imported mesh is fitted to the KOTOR skeleton intentionally."
+            ),
+            details={"fit_policy": fit_policy, "fit_report": fit_report},
+        ))
+
+    contract_mismatches: dict[str, Any] = {}
+    if contract.get("native_skeleton_is_authority") is not True:
+        contract_mismatches["native_skeleton_is_authority"] = contract.get(
+            "native_skeleton_is_authority"
+        )
+    if contract.get("imported_mesh_role") != MESH_ROLE_PAYLOAD_GUEST:
+        contract_mismatches["imported_mesh_role"] = contract.get("imported_mesh_role")
+    if contract.get("final_dag_source") != "selected_kotor_base":
+        contract_mismatches["final_dag_source"] = contract.get("final_dag_source")
+    if contract_mismatches:
+        report.add(_issue(
+            "blocking",
+            "character.export.auto_fit_contract_mismatch",
+            "Character auto-fit evidence does not preserve the native KOTOR DAG contract.",
+            fix_hint=(
+                "Re-run Auto-Fit and Build KOTOR Skeleton from the selected native "
+                "base model; the imported mesh must remain a payload guest."
+            ),
+            details={"mismatches": contract_mismatches, "kotor_contract": contract},
         ))
 
 
@@ -1414,6 +1564,13 @@ def _numeric_components(value: Any) -> list[float]:
         else:
             components.append(float(item))
     return components
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def _all_finite(values: list[float]) -> bool:

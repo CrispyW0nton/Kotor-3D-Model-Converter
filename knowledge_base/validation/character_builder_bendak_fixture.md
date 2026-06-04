@@ -77,6 +77,11 @@ Headless workflow proof on 2026-06-04 confirmed:
 - Character Builder compacts the generated skin bone map to the used influence
   slots before MDL/MDX export, keeping `bone_map`, `qbone_list`, `tbone_list`,
   and per-vertex influence indices aligned through writer/readback validation.
+- Export preflight now requires recorded auto-fit evidence for native-template
+  final rigs. The report must prove a finite positive scale, finite XYZ
+  translation, sufficient confidence, non-fallback fit mode, and the KOTOR
+  contract that the native skeleton remains the final DAG authority while the
+  Bendak mesh remains the payload guest.
 - The native-template launch proof now resolves inherited animation libraries
   through the selected base model's real supermodel chain instead of trusting
   only the stored `supermodel` string. In the current configured install,

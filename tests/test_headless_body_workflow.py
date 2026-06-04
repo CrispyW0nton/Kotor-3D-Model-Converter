@@ -188,6 +188,39 @@ class _FakeBodyModel:
                 ],
             },
         }
+        self.metadata["kotor_fit_report"] = {
+            "fit_policy": "bone_landmark_basis",
+            "confidence": 0.95,
+            "fallback_used": False,
+            "source_forward_axis": "+y",
+            "source_up_axis": "+z",
+            "target_forward_axis": "+y",
+            "target_up_axis": "+z",
+            "fit_transform": {
+                "formula": "kotor_point = linear_matrix * source_point + translation",
+                "scale": 1.0,
+                "translation": [0.0, 0.0, 0.0],
+            },
+            "kotor_contract": {
+                "native_skeleton_is_authority": True,
+                "imported_mesh_role": "payload_guest",
+                "final_dag_source": "selected_kotor_base",
+            },
+            "auto_fit_report": {
+                "confidence": 0.95,
+                "fallback_used": False,
+                "scale_factor": 1.0,
+                "height_source": "landmarks",
+                "ground_origin_basis": "source_pelvis_ground",
+                "used_landmarks": ["source:pelvis=pelvis", "target:pelvis=rootdummy"],
+            },
+        }
+        self.metadata["kotor_normalization"] = {
+            "fit_policy": "bone_landmark_basis",
+            "scale": 1.0,
+            "scale_basis": "bone_landmark_height",
+            "fit_transform": self.metadata["kotor_fit_report"]["fit_transform"],
+        }
         self._gr_character_builder_rig_state = dict(self.metadata["character_builder_rig_state"])
         self.root_node = _FakeNode(name)
         rootdummy = _FakeNode("rootdummy", self.root_node)

@@ -102,12 +102,64 @@ def _native_template(*, include_lhand: bool = True, game: str = "K1") -> KotorMo
     return model
 
 
+def _valid_fit_report(*, confidence: float = 0.95, fallback_used: bool = False) -> dict:
+    return {
+        "fit_policy": "bone_landmark_basis",
+        "confidence": confidence,
+        "fallback_used": fallback_used,
+        "source_forward_axis": "+y",
+        "source_up_axis": "+z",
+        "target_forward_axis": "+y",
+        "target_up_axis": "+z",
+        "fit_transform": {
+            "formula": "kotor_point = linear_matrix * source_point + translation",
+            "scale": 0.8,
+            "translation": [0.0, 0.0, 0.0],
+        },
+        "kotor_contract": {
+            "native_skeleton_is_authority": True,
+            "imported_mesh_role": "payload_guest",
+            "final_dag_source": "selected_kotor_base",
+        },
+        "auto_fit_report": {
+            "source_forward_axis": "+y",
+            "source_up_axis": "+z",
+            "target_forward_axis": "+y",
+            "target_up_axis": "+z",
+            "scale_factor": 0.8,
+            "height_source": "landmarks",
+            "ground_origin_basis": "source_pelvis_ground",
+            "used_landmarks": [
+                "source:pelvis=Hips",
+                "target:pelvis=pelvis_g",
+            ],
+            "confidence": confidence,
+            "fallback_used": fallback_used,
+            "notes": "",
+        },
+    }
+
+
+def _stamp_valid_fit_evidence(result: dict, *, confidence: float = 0.95) -> dict:
+    model = result["model"]
+    model.metadata["kotor_fit_report"] = _valid_fit_report(confidence=confidence)
+    model.metadata["kotor_normalization"] = {
+        "fit_policy": "bone_landmark_basis",
+        "scale": 0.8,
+        "scale_basis": "bone_landmark_height",
+        "fit_transform": model.metadata["kotor_fit_report"]["fit_transform"],
+    }
+    return result
+
+
 def _rigged_character(template: KotorModel | None = None, *, game: str = "K1") -> dict:
-    return apply_template_rig(
-        _mesh_model(),
-        template or _native_template(game=game),
-        game=game,
-        scale_mode="manual",
+    return _stamp_valid_fit_evidence(
+        apply_template_rig(
+            _mesh_model(),
+            template or _native_template(game=game),
+            game=game,
+            scale_mode="manual",
+        )
     )
 
 
@@ -137,11 +189,13 @@ def _donor_weight_rigged_character() -> dict:
     template._gr_source_resref = "pmbam"
     template._gr_source_game = "K1"
     template._gr_source_layer = "game_library"
-    return apply_template_rig(
-        mesh_model,
-        template,
-        game="K1",
-        scale_mode="manual",
+    return _stamp_valid_fit_evidence(
+        apply_template_rig(
+            mesh_model,
+            template,
+            game="K1",
+            scale_mode="manual",
+        )
     )
 
 
@@ -180,6 +234,73 @@ def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -
     assert preflight.export_allowed is True
     assert preflight.report.has_blocking is False
     assert "character.export.non_native_skeleton_node" not in _codes(preflight)
+
+
+def test_character_export_preflight_blocks_missing_auto_fit_evidence() -> None:
+    result = _rigged_character()
+    result["model"].metadata.pop("kotor_fit_report", None)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.missing_auto_fit_evidence")
+    assert issue.severity.value == "blocking"
+    assert "Run Auto-Fit" in issue.fix_hint
+    assert preflight.export_allowed is False
+
+
+def test_character_export_preflight_blocks_low_confidence_auto_fit() -> None:
+    result = _rigged_character()
+    result["model"].metadata["kotor_fit_report"] = _valid_fit_report(confidence=0.35)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.low_auto_fit_confidence")
+    assert issue.details["confidence"] == 0.35
+    assert issue.details["required_confidence"] == 0.60
+    assert preflight.export_allowed is False
+
+
+def test_character_export_preflight_blocks_fallback_auto_fit() -> None:
+    result = _rigged_character()
+    result["model"].metadata["kotor_fit_report"] = _valid_fit_report(
+        confidence=0.75,
+        fallback_used=True,
+    )
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.fallback_auto_fit_used")
+    assert issue.details["fit_policy"] == "bone_landmark_basis"
+    assert preflight.export_allowed is False
+
+
+def test_character_export_preflight_blocks_auto_fit_contract_mismatch() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["kotor_contract"]["imported_mesh_role"] = "skeleton_authority"
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.auto_fit_contract_mismatch")
+    assert issue.details["mismatches"]["imported_mesh_role"] == "skeleton_authority"
+    assert preflight.export_allowed is False
 
 
 def test_character_export_preflight_warns_on_fallback_skin_binding() -> None:
