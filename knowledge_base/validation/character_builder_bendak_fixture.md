@@ -117,6 +117,12 @@ Headless workflow proof on 2026-06-04 confirmed:
   animation names, preview-slot coverage, and resolver diagnostics so a modder
   can see whether the candidate is only reload-verified or also has inherited
   animation-library proof.
+- Staged validation reports now also record Auto-Fit landmark source evidence.
+  The fit gate distinguishes imported skeleton/armature landmarks from mesh
+  payload landmarks, mixed landmark evidence, and unrecorded landmark sources.
+  This is the current proof that orientation and scale were driven by the
+  imported rig's anatomy before the mesh payload was attached to the native
+  KOTOR node hierarchy.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

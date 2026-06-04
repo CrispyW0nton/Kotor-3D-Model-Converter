@@ -111,6 +111,7 @@ def _valid_fit_report(
     confidence: float = 0.95,
     fallback_used: bool = False,
     used_landmarks: list[str] | None = None,
+    source_landmark_sources: dict[str, str] | None = None,
 ) -> dict:
     landmarks = list(used_landmarks or [
         "source:head=Head",
@@ -124,6 +125,14 @@ def _valid_fit_report(
         "target:right_foot=rfoot_g",
         "target:side_pair=shoulder",
     ])
+    source_sources = dict(source_landmark_sources or {
+        "head": "imported_skeleton",
+        "left_foot": "imported_skeleton",
+        "pelvis": "imported_skeleton",
+        "right_foot": "imported_skeleton",
+        "left": "imported_skeleton",
+        "right": "imported_skeleton",
+    })
     return {
         "fit_policy": "bone_landmark_basis",
         "confidence": confidence,
@@ -156,6 +165,33 @@ def _valid_fit_report(
             "notes": "",
         },
         "used_landmarks": landmarks,
+        "source_frame": {
+            "landmarks": {
+                "head": "Head",
+                "left_foot": "LeftFoot",
+                "pelvis": "Hips",
+                "right_foot": "RightFoot",
+                "side_pair": "shoulder",
+            },
+            "landmark_sources": source_sources,
+        },
+        "target_frame": {
+            "landmarks": {
+                "head": "head_g",
+                "left_foot": "lfoot_g",
+                "pelvis": "pelvis_g",
+                "right_foot": "rfoot_g",
+                "side_pair": "shoulder",
+            },
+            "landmark_sources": {
+                "head": "kotor_deform_helper",
+                "left_foot": "kotor_deform_helper",
+                "pelvis": "kotor_deform_helper",
+                "right_foot": "kotor_deform_helper",
+                "left": "kotor_deform_helper",
+                "right": "kotor_deform_helper",
+            },
+        },
     }
 
 
@@ -1327,6 +1363,63 @@ def test_character_builder_validation_report_downgrades_donor_weights_without_la
     assert "weight=donor_transfer_landmarks_incomplete" in report.to_text()
 
 
+def test_character_builder_validation_report_records_mesh_payload_fit_landmarks() -> None:
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(source="test.preflight"),
+        metadata={
+            "character_builder_workflow": {
+                "fit_report": _valid_fit_report(
+                    source_landmark_sources={
+                        "head": "mesh_payload",
+                        "left_foot": "mesh_payload",
+                        "pelvis": "mesh_payload",
+                        "right_foot": "mesh_payload",
+                    },
+                ),
+                "bind": {
+                    "skin_binding": {
+                        "weighting_method": "native_template_nearest_vertex_donor",
+                        "quality_stage": "donor_transfer_first_pass",
+                        "donor_weight_transfer": True,
+                        "mesh_reports": [{"mesh_name": "custom_body"}],
+                    }
+                },
+                "rig_state": {
+                    "state": "native_template_final",
+                    "dag_authority": "native_kotor_base",
+                },
+                "native_snapshot": {
+                    "model_name": "pmbam",
+                    "game": "K1",
+                    "dag_fingerprint": "a" * 64,
+                },
+            }
+        },
+    )
+
+    data = report.to_dict()
+
+    fit = data["character_builder_evidence_gates"]["fit"]
+    assert fit["stage"] == "passed"
+    assert fit["source_landmark_domain"] == "mesh_payload_landmarks"
+    assert fit["source_uses_imported_skeleton_landmarks"] is False
+    assert fit["source_landmark_source_counts"] == {"mesh_payload": 4}
+    assert fit["source_mesh_payload_landmark_roles"] == [
+        "head",
+        "left_foot",
+        "pelvis",
+        "right_foot",
+    ]
+    assert "Fit landmark sources: mesh_payload_landmarks (mesh_payload=4)" in report.to_text()
+
+
 def test_character_builder_validation_report_requires_complete_game_test_evidence() -> None:
     report = CharacterBuilderValidationReport(
         status="verified",
@@ -1519,20 +1612,7 @@ class _FakeCharacterWriter:
 def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_path) -> None:
     _FakeCharacterWriter.calls = []
     result = _rigged_character()
-    result["model"].metadata["kotor_fit_report"] = {
-        "fit_policy": "bone_landmark_basis",
-        "confidence": 0.95,
-        "fit_transform": {
-            "formula": "kotor_point = linear_matrix * source_point + translation",
-            "scale": 0.8,
-            "translation": [0.0, 0.0, 0.0],
-        },
-        "kotor_contract": {
-            "native_skeleton_is_authority": True,
-            "imported_mesh_role": "payload_guest",
-            "final_dag_source": "selected_kotor_base",
-        },
-    }
+    result["model"].metadata["kotor_fit_report"] = _valid_fit_report()
     result["model"].metadata["kotor_normalization"] = {
         "fit_policy": "bone_landmark_basis",
         "scale": 0.8,
@@ -1566,6 +1646,9 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     ) in (
         text_path.read_text(encoding="utf-8")
     )
+    assert "Fit landmark sources: skeleton_landmarks (imported_skeleton=6)" in (
+        text_path.read_text(encoding="utf-8")
+    )
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["schema"] == "ghostrigger.character_export_validation.v1"
     assert payload["verified"] is True
@@ -1592,6 +1675,17 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert gates["fit"]["stage"] == "passed"
     assert gates["fit"]["policy"] == "bone_landmark_basis"
     assert gates["fit"]["confidence"] == 0.95
+    assert gates["fit"]["source_landmark_domain"] == "skeleton_landmarks"
+    assert gates["fit"]["source_uses_imported_skeleton_landmarks"] is True
+    assert gates["fit"]["source_landmark_source_counts"] == {"imported_skeleton": 6}
+    assert gates["fit"]["source_skeleton_landmark_roles"] == [
+        "head",
+        "left",
+        "left_foot",
+        "pelvis",
+        "right",
+        "right_foot",
+    ]
     assert gates["bind"]["stage"] == "passed"
     assert gates["bind"]["rig_state"] == "native_template_final"
     assert gates["bind"]["dag_authority"] == "native_kotor_base"

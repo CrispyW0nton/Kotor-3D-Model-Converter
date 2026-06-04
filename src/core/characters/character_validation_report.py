@@ -405,6 +405,7 @@ def character_builder_evidence_gates(
             _mapping(fit_report.get("auto_fit_report")).get("confidence"),
         )
     )
+    fit_landmark_sources = _fit_landmark_source_summary(fit_report)
     fit_stage = _gate_stage(
         fit_codes,
         present=bool(fit_report),
@@ -419,6 +420,12 @@ def character_builder_evidence_gates(
             "fallback_used",
             _mapping(fit_report.get("auto_fit_report")).get("fallback_used", False),
         )),
+        "source_landmark_domain": fit_landmark_sources["source_landmark_domain"],
+        "source_landmark_sources": fit_landmark_sources["source_landmark_sources"],
+        "source_landmark_source_counts": fit_landmark_sources["source_landmark_source_counts"],
+        "source_skeleton_landmark_roles": fit_landmark_sources["source_skeleton_landmark_roles"],
+        "source_mesh_payload_landmark_roles": fit_landmark_sources["source_mesh_payload_landmark_roles"],
+        "source_uses_imported_skeleton_landmarks": fit_landmark_sources["source_uses_imported_skeleton_landmarks"],
         "fit_transform_present": bool(_mapping(fit_report.get("fit_transform"))),
         "blocking_issue_codes": fit_codes["blocking"],
         "warning_issue_codes": fit_codes["warning"],
@@ -531,6 +538,48 @@ def character_builder_evidence_gates(
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _fit_landmark_source_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
+    source_frame = _mapping(fit_report.get("source_frame"))
+    raw_sources = _mapping(source_frame.get("landmark_sources"))
+    sources: dict[str, str] = {
+        str(role or ""): str(source or "")
+        for role, source in raw_sources.items()
+        if str(role or "").strip()
+    }
+    counts: dict[str, int] = {}
+    for source in sources.values():
+        key = source or "unknown"
+        counts[key] = counts.get(key, 0) + 1
+    skeleton_roles = sorted(
+        role for role, source in sources.items()
+        if source in {"imported_skeleton", "skeleton_node"}
+    )
+    mesh_roles = sorted(
+        role for role, source in sources.items()
+        if source == "mesh_payload"
+    )
+    if not sources:
+        domain = "not_recorded"
+    elif skeleton_roles and not mesh_roles:
+        domain = "skeleton_landmarks"
+    elif skeleton_roles and mesh_roles:
+        domain = "mixed_skeleton_and_mesh_landmarks"
+    elif mesh_roles:
+        domain = "mesh_payload_landmarks"
+    else:
+        domain = "non_mesh_landmarks"
+    return {
+        "source_landmark_domain": domain,
+        "source_landmark_sources": sources,
+        "source_landmark_source_counts": counts,
+        "source_skeleton_landmark_roles": skeleton_roles,
+        "source_mesh_payload_landmark_roles": mesh_roles,
+        "source_uses_imported_skeleton_landmarks": any(
+            source == "imported_skeleton" for source in sources.values()
+        ),
+    }
 
 
 def _gate_issue_codes(
@@ -811,6 +860,19 @@ class CharacterBuilderValidationReport:
                     f"weight={_evidence_gate_stage(evidence_gates, 'weight')}, "
                     f"animation={_evidence_gate_stage(evidence_gates, 'animation')}"
                 )
+                fit_gate = dict(evidence_gates.get("fit") or {})
+                source_domain = str(fit_gate.get("source_landmark_domain") or "")
+                if source_domain:
+                    source_counts = dict(fit_gate.get("source_landmark_source_counts") or {})
+                    count_text = ", ".join(
+                        f"{key}={source_counts[key]}"
+                        for key in sorted(source_counts)
+                    )
+                    lines.append(
+                        "- Fit landmark sources: "
+                        f"{source_domain}"
+                        + (f" ({count_text})" if count_text else "")
+                    )
             animation_library = dict(workflow.get("animation_library") or {})
             if animation_library:
                 lines.append(
