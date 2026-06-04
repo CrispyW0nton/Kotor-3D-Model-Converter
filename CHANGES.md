@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder reload structural DAG verification: the external mesh launch workflow now verifies that reloaded MDL/MDX candidates preserve required left-hand attachment evidence and exact native structural socket/helper paths from the selected `NativeSkeletonSnapshot`. This catches writer/readback regressions where a candidate still has a mesh and supermodel but loses KOTOR-critical attachment/helper nodes after reload. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: existing native snapshot structural-role evidence, Ghidra string-reference findings for hand/camera/VFX helpers, and the local Bendak continual fixture; this slice does not change MDL parser/writer semantics, vertex transforms, or final DAG export authority.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_launch_reload_verifier_accepts_native_structural_paths tests/test_headless_body_workflow.py::test_launch_reload_verifier_blocks_missing_left_hand_structural_path -q --basetemp .pytest_tmp_character_reload_structural`; `python -m pytest tests/test_character_builder_bendak_local_fixture.py -q --basetemp .pytest_tmp_bendak_reload_structural`.
+
 - Character Builder native DAG bind fingerprint: `apply_template_rig()` now records the selected native KOTOR skeleton's SHA-256 DAG fingerprint in `character_builder_bind.native_base`, and export preflight blocks missing or stale bind fingerprints that disagree with the captured `NativeSkeletonSnapshot`. This strengthens the proof that the built custom payload is attached to the exact native KOTOR hierarchy chosen by the modder. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
   Affected areas: `src/core/characters/character_builder.py`, `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: native snapshot fingerprint evidence and the local Bendak continual fixture; this slice does not change MDL parser/writer semantics, vertex transforms, or final DAG export authority. MCP model comparison helpers were confirmed importable through `PYTHONPATH=src`, but this patch stayed on bind/export evidence.

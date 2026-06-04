@@ -317,6 +317,46 @@ class _FakeBodyModel:
         return list(self._nodes)
 
 
+def test_launch_reload_verifier_accepts_native_structural_paths():
+    body = _FakeBodyModel("pmbam")
+
+    ok, hooks, mesh_count, skin_count, supermodel, problems = (
+        wf._verify_launch_reloaded_model(
+            body,
+            expected_supermodel="S_Female02",
+            expected_native_snapshot=body._gr_native_skeleton_snapshot,
+        )
+    )
+
+    assert ok is True
+    assert set(hooks) == {"headhook", "rhand", "lhand"}
+    assert mesh_count >= 1
+    assert skin_count >= 1
+    assert supermodel == "S_Female02"
+    assert problems == ""
+
+
+def test_launch_reload_verifier_blocks_missing_left_hand_structural_path():
+    body = _FakeBodyModel("pmbam")
+    body._nodes = [node for node in body._nodes if node.name != "lhand"]
+
+    ok, hooks, _mesh_count, _skin_count, _supermodel, problems = (
+        wf._verify_launch_reloaded_model(
+            body,
+            expected_supermodel="S_Female02",
+            expected_native_snapshot=body._gr_native_skeleton_snapshot,
+        )
+    )
+
+    assert ok is False
+    assert "lhand" not in hooks
+    assert "Missing required hook/node: lhand" in problems
+    assert (
+        "Reloaded export is missing native structural path: "
+        "pmbam / rootdummy / lhand"
+    ) in problems
+
+
 class _FakeHeadModel:
     """KotorModel-shaped object that detects as HEAD."""
 

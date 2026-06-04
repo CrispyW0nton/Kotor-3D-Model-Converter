@@ -4977,7 +4977,47 @@ def _model_nodes(model: Any) -> List[Any]:
                 _walk(child)
 
         _walk(root)
-        return out
+    return out
+
+
+def _model_node_path(node: Any) -> Tuple[str, ...]:
+    parts: List[str] = []
+    seen: set[int] = set()
+    current = node
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = str(getattr(current, "name", "") or "")
+        if name:
+            parts.append(name)
+        current = getattr(current, "parent", None)
+    return tuple(reversed(parts))
+
+
+def _reload_structural_path_problems(
+    model: Any,
+    expected_native_snapshot: Optional[Any],
+) -> List[str]:
+    if expected_native_snapshot is None:
+        return []
+    structural_roles = {"socket", "helper", "deform_helper"}
+    expected_paths = [
+        tuple(getattr(node, "full_path", ()) or ())
+        for node in list(getattr(expected_native_snapshot, "nodes", ()) or ())
+        if str(getattr(node, "export_role", "") or "") in structural_roles
+    ]
+    expected_paths = [path for path in expected_paths if path]
+    if not expected_paths:
+        return []
+    reloaded_paths = {_model_node_path(node) for node in _model_nodes(model)}
+    missing = [
+        path for path in expected_paths
+        if path not in reloaded_paths
+    ]
+    return [
+        "Reloaded export is missing native structural path: "
+        + " / ".join(path)
+        for path in missing
+    ]
 
 
 def _native_template_build_summary(model: Any) -> BodyRigGenerateResult:
@@ -5149,6 +5189,7 @@ def _verify_launch_reloaded_model(
     model: Any,
     *,
     expected_supermodel: str = "",
+    expected_native_snapshot: Optional[Any] = None,
 ) -> Tuple[bool, List[str], int, int, str, str]:
     """Check the KOTOR-critical facts after reloading an exported body."""
     if model is None:
@@ -5157,7 +5198,7 @@ def _verify_launch_reloaded_model(
     nodes = _model_nodes(model)
     names = [str(getattr(n, "name", "") or "") for n in nodes]
     names_lower = {n.lower() for n in names}
-    hooks = [n for n in names if n.lower() in {"headhook", "rhand", "lhand_g"}]
+    hooks = [n for n in names if n.lower() in {"headhook", "rhand", "lhand"}]
     mesh_count = sum(
         1 for n in nodes
         if bool(getattr(n, "is_mesh", False))
@@ -5170,9 +5211,15 @@ def _verify_launch_reloaded_model(
     )
     supermodel = str(getattr(model, "supermodel", "") or "")
     problems: List[str] = []
-    for required in ("headhook", "rhand"):
+    for required in ("headhook", "rhand", "lhand"):
         if required not in names_lower:
             problems.append(f"Missing required hook/node: {required}")
+    problems.extend(
+        _reload_structural_path_problems(
+            model,
+            expected_native_snapshot,
+        )
+    )
     if mesh_count <= 0:
         problems.append("Reloaded export has no mesh nodes.")
     if skin_count <= 0:
@@ -5360,6 +5407,7 @@ def run_external_mesh_launch_workflow(
         _verify_launch_reloaded_model(
             reloaded,
             expected_supermodel=motion.supermodel or motion_supermodel,
+            expected_native_snapshot=getattr(rigged_model, "_gr_native_skeleton_snapshot", None),
         )
     )
     return LaunchWorkflowResult(
