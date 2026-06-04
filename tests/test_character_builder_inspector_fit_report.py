@@ -58,6 +58,14 @@ def _base_report() -> dict:
             ],
         },
         "warnings": [],
+        "fit_transform": {
+            "landmark_alignment": {
+                "pair_count": 6,
+                "rms_error": 0.05879,
+                "max_error": 0.12894,
+                "worst_pair_role": "pelvis",
+            },
+        },
         "kotor_contract": {
             "native_skeleton_is_authority": True,
             "imported_mesh_role": "payload_guest",
@@ -80,6 +88,7 @@ def test_import_fit_report_shows_labeled_fbx_armature_guides(inspector):
     text = _fit_label(inspector).text()
     assert "Auto-fit: bone_landmark_basis" in text
     assert "Reference: n_mandalorian." in text
+    assert "Fit quality: 6 paired landmarks, RMS 0.059, max 0.129, worst pelvis." in text
     assert "Source skeleton guides: FBX armature Armature, 65 guide joints." in text
     assert "Final skeleton: selected KOTOR base; imported mesh is geometry payload." in text
 

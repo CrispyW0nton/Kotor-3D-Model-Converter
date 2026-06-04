@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder Auto-Fit quality display: the Step 1 Import Fit report now includes paired landmark fit quality (`pair_count`, RMS error, max error, and worst landmark role) so a modder can tell whether Bendak-style skeleton-driven snapping is actually close enough before building the native KOTOR rig. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/gui/panels/qt_inspector_panel.py`, `tests/test_character_builder_inspector_fit_report.py`.
+  Ground truth used: UI/status formatting only; this slice surfaces existing headless Auto-Fit residual metadata and does not change MDL loading, writing, parsing, skinning, vertex transforms, native snapshots, or exporter behavior.
+  Verification: `python -m pytest tests/test_character_builder_inspector_fit_report.py -q --basetemp .pytest_tmp_character_fit_quality_ui`; `python -m pytest tests/test_head_inspector.py::test_t602_inspector_starts_with_launch_preview_layout -q --basetemp .pytest_tmp_character_fit_quality_inspector_smoke`; `python -m py_compile src/gui/panels/qt_inspector_panel.py tests/test_character_builder_inspector_fit_report.py`.
+
 - Character Builder Auto-Fit inspector evidence: the Step 1 Import Fit report now shows the imported skeleton guide source in modder-facing language, including labeled FBX armature names and guide-joint counts when available. This makes Bendak-style auto-fit inspectable before the modder builds the native KOTOR skeleton while preserving the native skeleton as final DAG authority. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
   Affected areas: `src/gui/panels/qt_inspector_panel.py`, `tests/test_character_builder_inspector_fit_report.py`.
   Ground truth used: UI/status formatting only; this slice does not change MDL loading, writing, parsing, skinning, vertex transforms, native snapshots, or exporter behavior.

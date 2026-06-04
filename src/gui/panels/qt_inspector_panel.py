@@ -2346,6 +2346,32 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 lines.append(f"Landmarks: {shown}{suffix}.")
         if confidence_parts:
             lines.append("Landmark confidence: " + ", ".join(confidence_parts) + ".")
+        fit_transform = (
+            report.get("fit_transform")
+            if isinstance(report.get("fit_transform"), Mapping)
+            else {}
+        )
+        alignment = (
+            fit_transform.get("landmark_alignment")
+            if isinstance(fit_transform.get("landmark_alignment"), Mapping)
+            else {}
+        )
+        if isinstance(alignment, Mapping) and alignment.get("pair_count"):
+            def fmt_error(value: Any) -> str:
+                try:
+                    return f"{float(value):.3f}"
+                except Exception:
+                    return "n/a"
+
+            pair_count = int(alignment.get("pair_count") or 0)
+            rms_error = fmt_error(alignment.get("rms_error"))
+            max_error = fmt_error(alignment.get("max_error"))
+            worst = str(alignment.get("worst_pair_role") or "").strip()
+            suffix = f", worst {worst}" if worst else ""
+            lines.append(
+                "Fit quality: "
+                f"{pair_count} paired landmarks, RMS {rms_error}, max {max_error}{suffix}."
+            )
         imported_armature = (
             report.get("source_imported_armature")
             if isinstance(report.get("source_imported_armature"), Mapping)
