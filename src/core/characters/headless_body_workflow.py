@@ -663,9 +663,36 @@ def _load_mdl(path: str, game_version: str) -> Optional[Any]:
     return load_model_from_file(path, mdx)
 
 
-def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
-    """Load a glTF/GLB/FBX/OBJ via the gltf_importer.auto_import dispatcher."""
+def _load_fbx_mesh_for_character_builder(path: str, game_version: str) -> Optional[Any]:
+    """Load an FBX custom character mesh with skeleton-aware guide metadata."""
+
     md = _import_model_data()
+    try:
+        from src.converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender
+    except ImportError:                                     # pragma: no cover
+        from converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender  # type: ignore
+    gv = (md.GameVersion.K2
+          if str(game_version).upper().endswith("2")
+          else md.GameVersion.K1)
+    model = import_fbx_mesh_with_blender(
+        path,
+        model_name=_resref_from_path(path),
+        game_version=gv,
+    )
+    setattr(model, "_gr_character_builder_fbx_importer", "blender_mesh")
+    return model
+
+
+def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
+    """Load an external custom mesh for Character Builder.
+
+    FBX files use the skeleton-aware Blender mesh extractor so Auto-Fit can
+    align the imported payload from armature landmarks. Other external mesh
+    formats keep using the generic ``gltf_importer.auto_import`` dispatcher.
+    """
+    md = _import_model_data()
+    if _ext_of(path) == ".fbx":
+        return _load_fbx_mesh_for_character_builder(path, game_version)
     try:
         from src.core.export.gltf_importer import auto_import
     except ImportError:                                     # pragma: no cover

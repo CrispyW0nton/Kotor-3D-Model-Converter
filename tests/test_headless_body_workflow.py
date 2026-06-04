@@ -550,6 +550,24 @@ def test_t501_load_body_dispatches_gltf_to_auto_importer(tmp_path, monkeypatch):
     assert result.ok is True
 
 
+def test_t501_character_builder_fbx_uses_skeleton_aware_mesh_importer(tmp_path, monkeypatch):
+    fake = _FakeAmbiguousExternalModel("bendak")
+    fbx = tmp_path / "Bendak.fbx"
+    fbx.write_bytes(b"fbx stub")
+    called: List[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        wf,
+        "_load_fbx_mesh_for_character_builder",
+        lambda path, gv: (called.append((path, gv)) or fake),
+    )
+
+    result = wf._load_gltf_or_mesh(str(fbx), "K2")
+
+    assert result is fake
+    assert called == [(str(fbx), "K2")]
+
+
 def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
     tmp_path,
     monkeypatch,
