@@ -56,6 +56,7 @@ _SKELETON_FIT_LANDMARK_SOURCES = frozenset({
     "imported_skeleton",
     "skeleton_node",
 })
+_PAIRED_LANDMARK_ALIGNMENT_METHOD = "paired_skeleton_landmark_similarity"
 
 
 @dataclass(frozen=True)
@@ -76,6 +77,8 @@ class CharacterExportPreflightOptions:
     require_auto_fit_evidence: bool = True
     allow_fallback_auto_fit: bool = False
     min_auto_fit_confidence: float = 0.60
+    min_auto_fit_paired_landmarks: int = 4
+    max_auto_fit_landmark_rms_error: float = 0.15
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -660,6 +663,13 @@ def _validate_auto_fit_evidence(
                 },
             ))
 
+    _validate_paired_landmark_alignment(
+        fit_policy=fit_policy,
+        fit_transform=fit_transform,
+        opts=opts,
+        report=report,
+    )
+
     contract_mismatches: dict[str, Any] = {}
     if contract.get("native_skeleton_is_authority") is not True:
         contract_mismatches["native_skeleton_is_authority"] = contract.get(
@@ -680,6 +690,79 @@ def _validate_auto_fit_evidence(
             ),
             details={"mismatches": contract_mismatches, "kotor_contract": contract},
         ))
+
+
+def _validate_paired_landmark_alignment(
+    *,
+    fit_policy: str,
+    fit_transform: dict[str, Any],
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    if fit_policy != "bone_landmark_basis":
+        return
+
+    alignment = fit_transform.get("landmark_alignment")
+    alignment = alignment if isinstance(alignment, dict) else {}
+    if not alignment:
+        report.add(_issue(
+            "warning",
+            "character.export.auto_fit_paired_landmarks_need_review",
+            "Character auto-fit evidence does not include paired skeleton-landmark alignment quality.",
+            fix_hint=(
+                "Re-run Auto-Fit with the current Character Builder so source and "
+                "KOTOR skeleton landmark pairs are recorded and scored."
+            ),
+            details={
+                "reason": "not_recorded",
+                "fit_policy": fit_policy,
+                "required_pair_count": int(opts.min_auto_fit_paired_landmarks),
+                "max_rms_error": float(opts.max_auto_fit_landmark_rms_error),
+            },
+        ))
+        return
+
+    method = str(alignment.get("method") or "")
+    pair_count = _safe_int(alignment.get("pair_count"))
+    rms_error = _safe_float(alignment.get("rms_error"))
+    max_error = _safe_float(alignment.get("max_error"))
+    reasons: list[str] = []
+    if method != _PAIRED_LANDMARK_ALIGNMENT_METHOD:
+        reasons.append("unexpected_method")
+    if pair_count is None or pair_count < int(opts.min_auto_fit_paired_landmarks):
+        reasons.append("too_few_pairs")
+    if rms_error is None or not math.isfinite(rms_error):
+        reasons.append("missing_rms_error")
+    elif rms_error > float(opts.max_auto_fit_landmark_rms_error):
+        reasons.append("high_rms_error")
+
+    if not reasons:
+        return
+
+    report.add(_issue(
+        "warning",
+        "character.export.auto_fit_paired_landmarks_need_review",
+        "Character auto-fit paired skeleton-landmark alignment needs review.",
+        fix_hint=(
+            "Review the fitted source/target landmarks before treating this "
+            "character as launch-quality. Re-run Auto-Fit or adjust the imported "
+            "mesh/skeleton if the source does not align with the KOTOR base."
+        ),
+        details={
+            "reason": ",".join(reasons),
+            "reasons": reasons,
+            "method": method,
+            "pair_count": pair_count,
+            "paired_roles": list(alignment.get("paired_roles") or []),
+            "required_pair_count": int(opts.min_auto_fit_paired_landmarks),
+            "rms_error": rms_error,
+            "max_error": max_error,
+            "max_rms_error": float(opts.max_auto_fit_landmark_rms_error),
+            "applied_scale": _safe_float(alignment.get("applied_scale")),
+            "solved_scale": _safe_float(alignment.get("solved_scale")),
+            "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
+        },
+    ))
 
 
 def _auto_fit_source_landmark_sources(fit_report: dict[str, Any]) -> dict[str, str]:

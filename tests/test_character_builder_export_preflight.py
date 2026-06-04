@@ -145,6 +145,24 @@ def _valid_fit_report(
             "formula": "kotor_point = linear_matrix * source_point + translation",
             "scale": 0.8,
             "translation": [0.0, 0.0, 0.0],
+            "landmark_alignment": {
+                "method": "paired_skeleton_landmark_similarity",
+                "pair_count": 6,
+                "paired_roles": [
+                    "pelvis",
+                    "head",
+                    "left",
+                    "right",
+                    "left_foot",
+                    "right_foot",
+                ],
+                "rms_error": 0.04,
+                "max_error": 0.08,
+                "translation_basis": "native_fit_origin",
+                "solved_scale": 0.79,
+                "applied_scale": 0.8,
+                "applied_scale_basis": "bone_landmark_height",
+            },
         },
         "kotor_contract": {
             "native_skeleton_is_authority": True,
@@ -521,6 +539,57 @@ def test_character_export_preflight_warns_when_auto_fit_uses_mesh_payload_landma
         "right_foot": "mesh_payload",
     }
     assert "mesh-only import" in issue.fix_hint
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_paired_landmark_alignment_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["fit_transform"].pop("landmark_alignment", None)
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_paired_landmarks_need_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reason"] == "not_recorded"
+    assert issue.details["required_pair_count"] == 4
+    assert "paired skeleton-landmark" in issue.message
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_paired_landmark_alignment_is_weak() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    alignment = fit["fit_transform"]["landmark_alignment"]
+    alignment["pair_count"] = 3
+    alignment["paired_roles"] = ["pelvis", "head", "left"]
+    alignment["rms_error"] = 0.42
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_paired_landmarks_need_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == ["too_few_pairs", "high_rms_error"]
+    assert issue.details["pair_count"] == 3
+    assert issue.details["rms_error"] == 0.42
+    assert issue.details["max_rms_error"] == 0.15
+    assert issue.details["paired_roles"] == ["pelvis", "head", "left"]
     assert preflight.export_allowed is True
 
 
@@ -1523,6 +1592,73 @@ def test_character_builder_validation_report_records_mesh_payload_fit_landmarks(
     ]
     assert "fit=needs_review" in report.to_text()
     assert "Fit landmark sources: mesh_payload_landmarks (mesh_payload=4)" in report.to_text()
+
+
+def test_character_builder_validation_report_records_paired_landmark_alignment_gate() -> None:
+    fit_report = _valid_fit_report()
+    fit_report["fit_transform"]["landmark_alignment"]["pair_count"] = 3
+    fit_report["fit_transform"]["landmark_alignment"]["paired_roles"] = [
+        "pelvis",
+        "head",
+        "left",
+    ]
+    fit_report["fit_transform"]["landmark_alignment"]["rms_error"] = 0.42
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(
+            source="test.preflight",
+            issues=[
+                ValidationIssue(
+                    severity=ValidationSeverity.WARNING,
+                    subsystem=ValidationSubsystem.CHARACTER,
+                    code="character.export.auto_fit_paired_landmarks_need_review",
+                    message="Paired landmark fit needs review.",
+                )
+            ],
+        ),
+        metadata={
+            "character_builder_workflow": {
+                "fit_report": fit_report,
+                "bind": {
+                    "skin_binding": {
+                        "weighting_method": "native_template_nearest_vertex_donor",
+                        "quality_stage": "donor_transfer_first_pass",
+                        "donor_weight_transfer": True,
+                        "mesh_reports": [{"mesh_name": "custom_body"}],
+                    }
+                },
+                "rig_state": {
+                    "state": "native_template_final",
+                    "dag_authority": "native_kotor_base",
+                },
+                "native_snapshot": {
+                    "model_name": "pmbam",
+                    "game": "K1",
+                    "dag_fingerprint": "a" * 64,
+                },
+            }
+        },
+    )
+
+    data = report.to_dict()
+
+    fit = data["character_builder_evidence_gates"]["fit"]
+    paired = fit["paired_landmark_alignment"]
+    assert fit["stage"] == "needs_review"
+    assert fit["warning_issue_codes"] == [
+        "character.export.auto_fit_paired_landmarks_need_review"
+    ]
+    assert paired["present"] is True
+    assert paired["pair_count"] == 3
+    assert paired["paired_roles"] == ["pelvis", "head", "left"]
+    assert paired["rms_error"] == 0.42
+    assert "Fit paired landmarks: 3 pairs, rms=0.42" in report.to_text()
 
 
 def test_character_builder_validation_report_records_engine_evidence_gate() -> None:

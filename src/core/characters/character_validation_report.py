@@ -51,6 +51,7 @@ _FIT_EVIDENCE_CODES = frozenset({
     "character.export.fallback_auto_fit_used",
     "character.export.auto_fit_landmark_sources_not_recorded",
     "character.export.auto_fit_source_landmarks_need_review",
+    "character.export.auto_fit_paired_landmarks_need_review",
     "character.export.auto_fit_contract_mismatch",
 })
 
@@ -418,6 +419,7 @@ def character_builder_evidence_gates(
         )
     )
     fit_landmark_sources = _fit_landmark_source_summary(fit_report)
+    fit_landmark_alignment = _fit_landmark_alignment_summary(fit_report)
     fit_stage = _gate_stage(
         fit_codes,
         present=bool(fit_report),
@@ -438,6 +440,7 @@ def character_builder_evidence_gates(
         "source_skeleton_landmark_roles": fit_landmark_sources["source_skeleton_landmark_roles"],
         "source_mesh_payload_landmark_roles": fit_landmark_sources["source_mesh_payload_landmark_roles"],
         "source_uses_imported_skeleton_landmarks": fit_landmark_sources["source_uses_imported_skeleton_landmarks"],
+        "paired_landmark_alignment": fit_landmark_alignment,
         "fit_transform_present": bool(_mapping(fit_report.get("fit_transform"))),
         "blocking_issue_codes": fit_codes["blocking"],
         "warning_issue_codes": fit_codes["warning"],
@@ -651,6 +654,28 @@ def _fit_landmark_source_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
         "source_uses_imported_skeleton_landmarks": any(
             source == "imported_skeleton" for source in sources.values()
         ),
+    }
+
+
+def _fit_landmark_alignment_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
+    fit_transform = _mapping(fit_report.get("fit_transform"))
+    alignment = _mapping(fit_transform.get("landmark_alignment"))
+    pair_count = _safe_int(alignment.get("pair_count")) if alignment else 0
+    return {
+        "present": bool(alignment),
+        "method": str(alignment.get("method") or ""),
+        "pair_count": int(pair_count or 0),
+        "paired_roles": [
+            str(role or "")
+            for role in list(alignment.get("paired_roles") or [])
+            if str(role or "").strip()
+        ],
+        "rms_error": _safe_float(alignment.get("rms_error")),
+        "max_error": _safe_float(alignment.get("max_error")),
+        "applied_scale": _safe_float(alignment.get("applied_scale")),
+        "solved_scale": _safe_float(alignment.get("solved_scale")),
+        "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
+        "translation_basis": str(alignment.get("translation_basis") or ""),
     }
 
 
@@ -946,6 +971,14 @@ class CharacterBuilderValidationReport:
                         "- Fit landmark sources: "
                         f"{source_domain}"
                         + (f" ({count_text})" if count_text else "")
+                    )
+                paired = dict(fit_gate.get("paired_landmark_alignment") or {})
+                if paired.get("present"):
+                    lines.append(
+                        "- Fit paired landmarks: "
+                        f"{paired.get('pair_count')} pairs, "
+                        f"rms={paired.get('rms_error')}, "
+                        f"max={paired.get('max_error')}"
                     )
                 engine_gate = dict(evidence_gates.get("engine") or {})
                 if engine_gate:
