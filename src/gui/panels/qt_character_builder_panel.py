@@ -1199,16 +1199,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
              getattr(self.scene, "game_version", "K1")
-        selected_option = self._skeleton_template_options_by_key.get(
-            str(self._selected_skeleton_template_key or "")
-        )
-        fit_label = ""
-        if selected_option is not None:
-            fit_label = str(
-                self._option_field(selected_option, "resref", "")
-                or self._option_field(selected_option, "name", "")
-                or ""
-            )
+        fit_label = self._selected_skeleton_template_fit_label()
         result = _wf.load_body(
             path,
             self.scene,
@@ -1461,10 +1452,32 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if selected_option is None:
             return ""
         return str(
-            self._option_field(selected_option, "resref", "")
+            self._option_field(selected_option, "source_resref", "")
+            or self._option_field(selected_option, "resref", "")
             or self._option_field(selected_option, "name", "")
             or ""
         )
+
+    def _skeleton_template_requested_resref(self, option: Any) -> str:
+        return str(
+            self._option_field(option, "resref", "")
+            or self._option_field(option, "name", "")
+            or ""
+        ).strip()
+
+    def _skeleton_template_source_resref(self, option: Any) -> str:
+        return str(
+            self._option_field(option, "source_resref", "")
+            or self._skeleton_template_requested_resref(option)
+            or ""
+        ).strip()
+
+    def _skeleton_template_status_label(self, option: Any) -> str:
+        requested = self._skeleton_template_requested_resref(option)
+        source = self._skeleton_template_source_resref(option)
+        if source and requested and source.lower() != requested.lower():
+            return f"{source} (requested target {requested})"
+        return source or requested or str(self._option_field(option, "name", "") or "")
 
     def _external_import_source_path(self, model: Any, entry: Any = None) -> str:
         metadata = getattr(model, "metadata", None)
@@ -2051,7 +2064,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if option is None:
             return
 
-        label = str(self._option_field(option, "name", "") or key)
+        label = self._skeleton_template_status_label(option) or str(
+            self._option_field(option, "name", "") or key
+        )
 
         template_model = self._load_skeleton_template_model(option)
         if template_model is None:

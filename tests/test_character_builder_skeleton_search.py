@@ -113,6 +113,57 @@ def test_character_builder_typed_variant_uses_base_mdl_source_resref():
     assert "appearance/texture variant" in option["warnings"][0]
 
 
+def test_character_builder_variant_fit_label_uses_loaded_base_source_resref():
+    panel = SimpleNamespace(
+        _selected_skeleton_template_key="game:k1:n_mandalorian03:typed",
+        _skeleton_template_options_by_key={
+            "game:k1:n_mandalorian03:typed": {
+                "source": "installation",
+                "game": "K1",
+                "part": "body",
+                "name": "n_mandalorian03",
+                "resref": "n_mandalorian03",
+                "source_resref": "n_mandalorian",
+                "path": "installation:n_mandalorian.mdl",
+            },
+        },
+        _option_field=QtCharacterBuilderWindow._option_field,
+    )
+
+    assert (
+        QtCharacterBuilderWindow._selected_skeleton_template_fit_label(panel)
+        == "n_mandalorian"
+    )
+
+
+def test_character_builder_variant_status_label_shows_source_and_requested_target():
+    panel = SimpleNamespace(
+        _option_field=QtCharacterBuilderWindow._option_field,
+    )
+    panel._skeleton_template_requested_resref = (
+        lambda option: QtCharacterBuilderWindow._skeleton_template_requested_resref(
+            panel,
+            option,
+        )
+    )
+    panel._skeleton_template_source_resref = (
+        lambda option: QtCharacterBuilderWindow._skeleton_template_source_resref(
+            panel,
+            option,
+        )
+    )
+    option = {
+        "name": "n_mandalorian03",
+        "resref": "n_mandalorian03",
+        "source_resref": "n_mandalorian",
+    }
+
+    assert (
+        QtCharacterBuilderWindow._skeleton_template_status_label(panel, option)
+        == "n_mandalorian (requested target n_mandalorian03)"
+    )
+
+
 def test_character_builder_loads_variant_base_source_resref(monkeypatch):
     from src.core.characters import character_builder as character_builder_core
     try:
