@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder rigging/skinning research notes: added a Character Builder-specific knowledge-base pass over Tina O'Hailey's *Rig it Right!* and Pan et al.'s automatic skinning/weight-retargeting paper. The note turns the sources into GhostRigger rules for auto-fit confidence, native-DAG authority, bind-pose evidence, symmetry behavior, donor weight transfer, deformation preview, and capability honesty for Bendak-style custom character exports. Roadmap task: `T1205` / `T2203`.
+  Affected areas: `knowledge_base/book_notes/character_builder_rigging_skinning_sources_2026_06_04.md`, `knowledge_base/book_notes/README.md`.
+  Verification: source metadata and targeted page anchors were extracted with `pypdf`; docs-only diff checked with `git diff --check`.
+
 - Character Builder Override-package readiness: added a headless staged package path for reload-verified Character Builder MDL/MDX exports. It copies the verified pair under a requested replacement resref, writes an Override manifest plus readme/manual checklist, rejects unsafe or too-long resrefs, and blocks unverified exports before writing. The guarded Bendak local fixture now proves K1/K2 `Bendak.fbx` -> `n_mandalorian` export candidates can be packaged as `n_mandalorian03.mdl` / `n_mandalorian03.mdx` without touching a live game install. Roadmap task: `T1205` / `T2203`.
   Affected areas: `src/core/characters/character_override_package.py`, `tests/test_character_builder_override_package.py`, `tests/test_character_builder_bendak_local_fixture.py`, `knowledge_base/validation/character_builder_bendak_fixture.md`, `.gitignore`.
   Ground truth used: MCP `ghostrigger_model_info` refreshed K1/K2 `n_mandalorian` as 70-node, 52-mesh-node, 18-bone native KOTOR models with local `pause1`/`pause2` and `S_Female02`; local Bendak fixture proof provides verified K1/K2 export reports.
