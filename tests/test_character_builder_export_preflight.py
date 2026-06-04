@@ -225,6 +225,13 @@ def _detach_node(model: KotorModel, name: str) -> None:
     raise AssertionError(f"missing node {name}")
 
 
+def _find_model_node(model: KotorModel, name: str) -> ModelNode:
+    for node in model.all_nodes():
+        if node.name == name:
+            return node
+    raise AssertionError(f"missing node {name}")
+
+
 def test_apply_template_rig_preserves_selected_native_supermodel() -> None:
     result = _rigged_character()
 
@@ -1359,6 +1366,12 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert reload_dag["details"]["checked_path_count"] >= 3
     assert ["PMBAM", "cutscenedummy"] in reload_dag["details"]["checked_paths"]
     assert ["PMBAM", "cutscenedummy", "rootdummy", "torso_g", "torsoUpr_g", "headhook"] in reload_dag["details"]["checked_paths"]
+    reload_payload = reload_issues["character.export.reload_payload_verified"]
+    assert reload_payload["details"]["payload_names"] == ["custom_body"]
+    assert reload_payload["details"]["checked_payload_count"] == 1
+    assert reload_payload["details"]["payloads"][0]["name"] == "custom_body"
+    assert reload_payload["details"]["payloads"][0]["vertices"] == 3
+    assert reload_payload["details"]["payloads"][0]["skin_rows"] == 3
     reload_summary = reload_issues["character.export.reload_verified"]["details"]["reloaded_model"]
     assert reload_summary["model_name"] == "grbody"
     assert reload_summary["supermodel"] == "S_KPMF0200"
@@ -1485,6 +1498,39 @@ def test_character_export_transaction_blocks_reloaded_native_dag_loss(tmp_path) 
     assert issue.details["native_snapshot"]["dag_fingerprint"] == (
         native_skeleton_fingerprint(result["native_skeleton_snapshot"])
     )
+
+
+def test_character_export_transaction_blocks_reloaded_payload_skin_row_loss(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    reloaded_model = copy.deepcopy(result["model"])
+    payload = _find_model_node(reloaded_model, "custom_body")
+    payload.skin_data = list(payload.skin_data)[:-1]
+    output = tmp_path / "grbody_reload_payload_loss.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: reloaded_model,
+        )
+    )
+
+    assert tx.succeeded is False
+    assert _FakeCharacterWriter.calls
+    assert not output.exists()
+    assert not output.with_suffix(".mdx").exists()
+    issue = next(
+        issue for issue in tx.export_job_result.validation_report.issues
+        if issue.code == "character.export.reload_payload_skin_rows_changed"
+    )
+    assert issue.navigation.node_name == "custom_body"
+    assert issue.details["payload_name"] == "custom_body"
+    assert issue.details["field"] == "skin_rows"
+    assert issue.details["expected"] == 3
+    assert issue.details["actual"] == 2
 
 
 def test_character_export_transaction_preflight_failure_never_calls_writer(tmp_path) -> None:

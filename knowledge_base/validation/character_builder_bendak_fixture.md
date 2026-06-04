@@ -87,6 +87,10 @@ Headless workflow proof on 2026-06-04 confirmed:
   helper, deform-helper, and socket paths still reload with exact casing and
   parent paths before ExportJob promotes final files. If a hook such as
   `headhook` is missing or moved after reload, promotion is blocked.
+- Reload verification also checks imported payload mesh integrity. The Bendak
+  mesh payload names from Character Builder bind evidence must reload with the
+  same vertex count, face count, skin-row count, and compact KOTOR bone-map
+  count before final MDL/MDX files are promoted.
 - The native-template launch proof now resolves inherited animation libraries
   through the selected base model's real supermodel chain instead of trusting
   only the stored `supermodel` string. In the current configured install,
@@ -152,7 +156,8 @@ The fixture is not considered passing until all of these are true:
 - Export writes MDL/MDX only through the staged Character Builder export
   transaction.
 - Reload verification records native snapshot/report evidence and blocks if
-  staged readback loses or moves selected native KOTOR structural paths.
+  staged readback loses or moves selected native KOTOR structural paths or
+  truncates the imported payload mesh/skin binding counts.
 
 ## Capability Honesty
 

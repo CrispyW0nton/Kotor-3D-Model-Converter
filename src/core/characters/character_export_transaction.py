@@ -197,7 +197,16 @@ def export_character_mdl_mdx_transaction(
             native_snapshot,
         )
         issues.extend(reload_dag_report.issues)
-        if not reload_preflight.report.has_blocking and not reload_dag_report.has_blocking:
+        reload_payload_report = _verify_reloaded_payload_contract(
+            request.model,
+            loaded,
+        )
+        issues.extend(reload_payload_report.issues)
+        if (
+            not reload_preflight.report.has_blocking
+            and not reload_dag_report.has_blocking
+            and not reload_payload_report.has_blocking
+        ):
             issues.append(
                 ValidationIssue(
                     severity=ValidationSeverity.INFO,
@@ -382,6 +391,106 @@ def _verify_reloaded_native_dag_contract(
     )
 
 
+def _verify_reloaded_payload_contract(
+    original_model: Any,
+    reloaded_model: Any,
+) -> ValidationReport:
+    """Return reload-specific proof that imported skin payload survived IO."""
+
+    issues: list[ValidationIssue] = []
+    payload_names = _character_payload_mesh_names(original_model)
+    if not payload_names:
+        issues.append(_export_issue(
+            "character.export.reload_payload_names_missing",
+            (
+                "Reload verification requires imported payload mesh names from "
+                "Character Builder bind evidence."
+            ),
+        ))
+        return ValidationReport(
+            source="character.export_transaction.verify.payload",
+            issues=issues,
+        )
+
+    original_payloads = _payload_summaries_by_name(original_model, payload_names)
+    reloaded_payloads = _payload_summaries_by_name(reloaded_model, payload_names)
+    for name in payload_names:
+        expected = original_payloads.get(name)
+        actual = reloaded_payloads.get(name)
+        if expected is None:
+            issues.append(_payload_issue(
+                "character.export.reload_payload_missing_from_source",
+                (
+                    f"Original Character Builder model no longer contains "
+                    f"payload mesh '{name}'."
+                ),
+                payload_name=name,
+                details={"payload_name": name},
+            ))
+            continue
+        if actual is None:
+            issues.append(_payload_issue(
+                "character.export.reload_payload_missing",
+                (
+                    f"Reloaded MDL/MDX is missing imported payload mesh "
+                    f"'{name}'."
+                ),
+                payload_name=name,
+                details={
+                    "payload_name": name,
+                    "expected": expected,
+                },
+            ))
+            continue
+
+        for key, code, label in (
+            ("vertices", "character.export.reload_payload_vertex_count_changed", "vertex count"),
+            ("faces", "character.export.reload_payload_face_count_changed", "face count"),
+            ("bone_map_count", "character.export.reload_payload_bone_map_count_changed", "bone-map count"),
+            ("skin_rows", "character.export.reload_payload_skin_rows_changed", "skin row count"),
+        ):
+            if expected.get(key) == actual.get(key):
+                continue
+            issues.append(_payload_issue(
+                code,
+                (
+                    f"Reloaded payload mesh '{name}' changed {label} "
+                    "during MDL/MDX writer/readback verification."
+                ),
+                payload_name=name,
+                details={
+                    "payload_name": name,
+                    "field": key,
+                    "expected": expected.get(key),
+                    "actual": actual.get(key),
+                    "expected_payload": expected,
+                    "actual_payload": actual,
+                },
+            ))
+
+    if not issues:
+        issues.append(ValidationIssue(
+            severity=ValidationSeverity.INFO,
+            subsystem=ValidationSubsystem.CHARACTER,
+            code="character.export.reload_payload_verified",
+            message=(
+                "Reloaded MDL/MDX preserved imported Character Builder payload "
+                "mesh geometry and skin binding counts."
+            ),
+            details=_json_safe({
+                "payload_names": payload_names,
+                "checked_payload_count": len(payload_names),
+                "payloads": [reloaded_payloads[name] for name in payload_names],
+            }),
+            source="character.export_transaction.verify.payload",
+        ))
+
+    return ValidationReport(
+        source="character.export_transaction.verify.payload",
+        issues=issues,
+    )
+
+
 def _reload_dag_issue(
     code: str,
     message: str,
@@ -421,6 +530,83 @@ def _native_snapshot_reload_evidence(
         "dag_fingerprint_algorithm": "sha256",
         "node_count": native_snapshot.node_count,
         "hook_names": list(native_snapshot.hook_names),
+    }
+
+
+def _payload_issue(
+    code: str,
+    message: str,
+    *,
+    payload_name: str,
+    details: dict[str, Any],
+) -> ValidationIssue:
+    payload = {
+        **dict(details or {}),
+        "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
+    }
+    return ValidationIssue(
+        severity=ValidationSeverity.BLOCKING,
+        subsystem=ValidationSubsystem.CHARACTER,
+        code=code,
+        message=message,
+        navigation=ValidationNavigationTarget(node_name=payload_name),
+        fix_hint=(
+            "Inspect the staged/reloaded MDL writer path and restore the "
+            "imported mesh payload geometry and skin data before promotion."
+        ),
+        details=_json_safe(payload),
+        source="character.export_transaction.verify.payload",
+    )
+
+
+def _character_payload_mesh_names(model: Any) -> list[str]:
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    bind = metadata.get("character_builder_bind")
+    bind = bind if isinstance(bind, dict) else {}
+    payload = bind.get("imported_payload")
+    payload = payload if isinstance(payload, dict) else {}
+    names = [
+        str(name or "").strip()
+        for name in payload.get("mesh_names", []) or []
+        if str(name or "").strip()
+    ]
+    if names:
+        return names
+
+    rig_state = getattr(model, "_gr_character_builder_rig_state", None)
+    if hasattr(rig_state, "payload_mesh_names"):
+        return [
+            str(name or "").strip()
+            for name in getattr(rig_state, "payload_mesh_names", ()) or ()
+            if str(name or "").strip()
+        ]
+    return []
+
+
+def _payload_summaries_by_name(
+    model: Any,
+    payload_names: list[str],
+) -> dict[str, dict[str, Any]]:
+    wanted = set(payload_names)
+    result: dict[str, dict[str, Any]] = {}
+    for node in _model_nodes(model):
+        name = str(getattr(node, "name", "") or "")
+        if name not in wanted:
+            continue
+        result[name] = _payload_summary(node)
+    return result
+
+
+def _payload_summary(node: Any) -> dict[str, Any]:
+    return {
+        "name": str(getattr(node, "name", "") or ""),
+        "is_mesh": bool(getattr(node, "is_mesh", False)),
+        "is_skin": bool(getattr(node, "is_skin", False)),
+        "vertices": len(list(getattr(node, "vertices", []) or [])),
+        "faces": len(list(getattr(node, "faces", []) or [])),
+        "bone_map_count": len(list(getattr(node, "bone_map", []) or [])),
+        "skin_rows": len(list(getattr(node, "skin_data", []) or [])),
     }
 
 
