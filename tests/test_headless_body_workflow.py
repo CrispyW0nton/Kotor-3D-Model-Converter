@@ -2621,6 +2621,82 @@ def test_t1205_launch_workflow_uses_selected_native_template_for_fit_and_bind(mo
     }
 
 
+def test_t1205_native_template_launch_loads_selected_resref_before_fit(monkeypatch, tmp_path):
+    selected_template = _FakeBodyModel("N_Mandalorian")
+    selected_template.supermodel = "S_Female02"
+    calls = {"load_game_skeleton_source": 0, "launch": 0}
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_game_skeleton_source(resref, *, game="K1", game_dir=None):
+            calls["load_game_skeleton_source"] += 1
+            assert resref == "n_mandalorian"
+            assert game == "K1"
+            assert game_dir == "C:/KOTOR"
+            return selected_template
+
+    def _fake_launch(mesh_path, **kwargs):
+        calls["launch"] += 1
+        assert pathlib.Path(mesh_path).name == "Bendak.fbx"
+        assert kwargs["template_model"] is selected_template
+        assert kwargs["template_label"] == "n_mandalorian"
+        assert kwargs["motion_supermodel"] == "S_Female02"
+        assert kwargs["formats"] == ["kotor"]
+        return wf.LaunchWorkflowResult(
+            ok=True,
+            code="launch_verified",
+            message="verified",
+        )
+
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "run_external_mesh_launch_workflow", _fake_launch)
+
+    result = wf.run_external_mesh_native_template_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        "N_Mandalorian",
+        game_version="K1",
+        game_dir="C:/KOTOR",
+        out_dir=str(tmp_path),
+        formats=["kotor"],
+    )
+
+    assert result.ok is True
+    assert result.code == "launch_verified"
+    assert calls == {"load_game_skeleton_source": 1, "launch": 1}
+
+
+def test_t1205_native_template_launch_blocks_missing_base_resref() -> None:
+    result = wf.run_external_mesh_native_template_launch_workflow(
+        "Bendak.fbx",
+        "",
+        out_dir="C:/out",
+    )
+
+    assert result.ok is False
+    assert result.code == "no_native_template_resref"
+    assert "No native KOTOR base skeleton resref" in result.message
+
+
+def test_t1205_native_template_launch_blocks_unresolved_game_model(monkeypatch, tmp_path):
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_game_skeleton_source(resref, *, game="K1", game_dir=None):
+            assert resref == "missing_base"
+            return None
+
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+
+    result = wf.run_external_mesh_native_template_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        "missing_base",
+        out_dir=str(tmp_path),
+    )
+
+    assert result.ok is False
+    assert result.code == "native_template_missing"
+    assert "missing_base" in result.message
+
+
 def test_t506_export_formats_constant_exposes_all_four_targets():
     """EXPORT_FORMATS must declare KOTOR + FBX + glTF + OBJ in that order."""
     keys = [k for k, _label, _exts in wf.EXPORT_FORMATS]

@@ -4494,6 +4494,77 @@ def run_external_mesh_launch_workflow(
     )
 
 
+def run_external_mesh_native_template_launch_workflow(
+    mesh_path: str,
+    native_template_resref: str,
+    *,
+    scene: Optional[Any] = None,
+    game_version: str = "K1",
+    game_dir: str = "",
+    out_dir: str = "",
+    motion_supermodel: str = "",
+    formats: Optional[List[str]] = None,
+) -> LaunchWorkflowResult:
+    """Load a custom mesh and bind it to a selected native KOTOR base resref.
+
+    This is the headless equivalent of the Character Builder path:
+
+    ``Choose KOTOR Base`` -> ``Load Custom Mesh`` -> ``Auto-Fit`` -> ``Build``
+    -> ``Export``.
+
+    The native base MDL loaded from ``native_template_resref`` is the authority
+    for the final DAG and the imported file is only a mesh payload. For the
+    Bendak fixture, call this with ``mesh_path=Bendak.fbx`` and
+    ``native_template_resref=n_mandalorian``.
+    """
+    resref = str(native_template_resref or "").strip().lower()
+    if not resref:
+        return LaunchWorkflowResult(
+            message="No native KOTOR base skeleton resref supplied.",
+            code="no_native_template_resref",
+        )
+
+    try:
+        cb = _import_character_builder()
+        template = cb.load_game_skeleton_source(
+            resref,
+            game=game_version,
+            game_dir=game_dir or None,
+        )
+    except Exception as exc:
+        log.exception(
+            "run_external_mesh_native_template_launch_workflow: native template load failed"
+        )
+        return LaunchWorkflowResult(
+            message=f"Native KOTOR base skeleton load failed: {exc}",
+            code="native_template_failed",
+        )
+
+    if template is None:
+        return LaunchWorkflowResult(
+            message=(
+                f"Could not load native KOTOR base skeleton '{resref}'. "
+                "Choose a resref that exists in the configured game library."
+            ),
+            code="native_template_missing",
+        )
+
+    return run_external_mesh_launch_workflow(
+        mesh_path,
+        scene=scene,
+        game_version=game_version,
+        out_dir=out_dir,
+        template_model=template,
+        template_label=resref,
+        motion_supermodel=(
+            str(motion_supermodel or "")
+            or str(getattr(template, "supermodel", "") or "")
+            or "S_Female02"
+        ),
+        formats=formats,
+    )
+
+
 def validate_for_export(
     scene: Any,
     *,
@@ -4911,6 +4982,7 @@ __all__ = [
     "record_body_guide_edit",
     "redo_body_guide_edit",
     "run_external_mesh_launch_workflow",
+    "run_external_mesh_native_template_launch_workflow",
     "run_rom_test",
     "stop_preview_animation",
     "undo_body_guide_edit",
