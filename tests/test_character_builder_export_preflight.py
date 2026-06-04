@@ -433,6 +433,61 @@ def test_character_export_preflight_blocks_auto_fit_contract_mismatch() -> None:
     assert preflight.export_allowed is False
 
 
+def test_character_export_preflight_warns_when_auto_fit_source_landmark_sources_are_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit.pop("source_frame", None)
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_landmark_sources_not_recorded",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["source_landmark_domain"] == "not_recorded"
+    assert "records whether imported skeleton" in issue.fix_hint
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_auto_fit_uses_mesh_payload_landmarks() -> None:
+    result = _rigged_character()
+    result["model"].metadata["kotor_fit_report"] = _valid_fit_report(
+        source_landmark_sources={
+            "head": "mesh_payload",
+            "left_foot": "mesh_payload",
+            "pelvis": "mesh_payload",
+            "right_foot": "mesh_payload",
+        },
+    )
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_source_landmarks_need_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["source_landmark_source_counts"] == {"mesh_payload": 4}
+    assert issue.details["non_skeleton_sources"] == {
+        "head": "mesh_payload",
+        "left_foot": "mesh_payload",
+        "pelvis": "mesh_payload",
+        "right_foot": "mesh_payload",
+    }
+    assert "mesh-only import" in issue.fix_hint
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_warns_on_fallback_skin_binding() -> None:
     result = _rigged_character()
 
@@ -1372,7 +1427,17 @@ def test_character_builder_validation_report_records_mesh_payload_fit_landmarks(
         game="K1",
         resref="grbody",
         outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
-        preflight_report=ValidationReport(source="test.preflight"),
+        preflight_report=ValidationReport(
+            source="test.preflight",
+            issues=[
+                ValidationIssue(
+                    severity=ValidationSeverity.WARNING,
+                    subsystem=ValidationSubsystem.CHARACTER,
+                    code="character.export.auto_fit_source_landmarks_need_review",
+                    message="Fit used mesh payload landmarks.",
+                )
+            ],
+        ),
         metadata={
             "character_builder_workflow": {
                 "fit_report": _valid_fit_report(
@@ -1407,7 +1472,10 @@ def test_character_builder_validation_report_records_mesh_payload_fit_landmarks(
     data = report.to_dict()
 
     fit = data["character_builder_evidence_gates"]["fit"]
-    assert fit["stage"] == "passed"
+    assert fit["stage"] == "needs_review"
+    assert fit["warning_issue_codes"] == [
+        "character.export.auto_fit_source_landmarks_need_review"
+    ]
     assert fit["source_landmark_domain"] == "mesh_payload_landmarks"
     assert fit["source_uses_imported_skeleton_landmarks"] is False
     assert fit["source_landmark_source_counts"] == {"mesh_payload": 4}
@@ -1417,6 +1485,7 @@ def test_character_builder_validation_report_records_mesh_payload_fit_landmarks(
         "pelvis",
         "right_foot",
     ]
+    assert "fit=needs_review" in report.to_text()
     assert "Fit landmark sources: mesh_payload_landmarks (mesh_payload=4)" in report.to_text()
 
 

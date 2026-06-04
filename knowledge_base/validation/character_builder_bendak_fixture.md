@@ -123,6 +123,12 @@ Headless workflow proof on 2026-06-04 confirmed:
   This is the current proof that orientation and scale were driven by the
   imported rig's anatomy before the mesh payload was attached to the native
   KOTOR node hierarchy.
+- Export preflight now warns when native-template candidates lack recorded
+  Auto-Fit landmark source provenance or when any source fit landmark came
+  from the mesh payload instead of the imported skeleton/armature. These
+  candidates can remain exportable, but the fit evidence gate becomes
+  `needs_review` in staged reports so mesh-only or weakly-proven alignment is
+  not mistaken for launch-quality rig evidence.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

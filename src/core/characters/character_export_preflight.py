@@ -52,6 +52,10 @@ _DONOR_WEIGHT_REQUIRED_FIT_LANDMARKS = frozenset({
     "left_foot",
     "right_foot",
 })
+_SKELETON_FIT_LANDMARK_SOURCES = frozenset({
+    "imported_skeleton",
+    "skeleton_node",
+})
 
 
 @dataclass(frozen=True)
@@ -609,6 +613,53 @@ def _validate_auto_fit_evidence(
             details={"fit_policy": fit_policy, "fit_report": fit_report},
         ))
 
+    landmark_sources = _auto_fit_source_landmark_sources(fit_report)
+    if not landmark_sources:
+        report.add(_issue(
+            "warning",
+            "character.export.auto_fit_landmark_sources_not_recorded",
+            "Character auto-fit evidence does not record which source landmarks drove orientation and scale.",
+            fix_hint=(
+                "Re-run Auto-Fit with the current Character Builder so the report "
+                "records whether imported skeleton or mesh payload landmarks drove the fit."
+            ),
+            details={
+                "fit_policy": fit_policy,
+                "source_landmark_domain": "not_recorded",
+            },
+        ))
+    else:
+        non_skeleton_sources = {
+            role: source
+            for role, source in landmark_sources.items()
+            if source not in _SKELETON_FIT_LANDMARK_SOURCES
+        }
+        if non_skeleton_sources:
+            counts: dict[str, int] = {}
+            for source in landmark_sources.values():
+                counts[source] = counts.get(source, 0) + 1
+            report.add(_issue(
+                "warning",
+                "character.export.auto_fit_source_landmarks_need_review",
+                (
+                    "Character auto-fit was not fully driven by imported skeleton "
+                    "or armature landmarks."
+                ),
+                fix_hint=(
+                    "For rigged FBX imports, re-run Auto-Fit so the imported "
+                    "skeleton drives orientation and scale. If this is a mesh-only "
+                    "import, manually review the fit before treating it as "
+                    "launch-quality evidence."
+                ),
+                details={
+                    "fit_policy": fit_policy,
+                    "source_landmark_sources": dict(landmark_sources),
+                    "source_landmark_source_counts": counts,
+                    "non_skeleton_sources": non_skeleton_sources,
+                    "accepted_skeleton_sources": sorted(_SKELETON_FIT_LANDMARK_SOURCES),
+                },
+            ))
+
     contract_mismatches: dict[str, Any] = {}
     if contract.get("native_skeleton_is_authority") is not True:
         contract_mismatches["native_skeleton_is_authority"] = contract.get(
@@ -629,6 +680,18 @@ def _validate_auto_fit_evidence(
             ),
             details={"mismatches": contract_mismatches, "kotor_contract": contract},
         ))
+
+
+def _auto_fit_source_landmark_sources(fit_report: dict[str, Any]) -> dict[str, str]:
+    source_frame = fit_report.get("source_frame")
+    source_frame = source_frame if isinstance(source_frame, dict) else {}
+    raw_sources = source_frame.get("landmark_sources")
+    raw_sources = raw_sources if isinstance(raw_sources, dict) else {}
+    return {
+        str(role or ""): str(source or "")
+        for role, source in raw_sources.items()
+        if str(role or "").strip()
+    }
 
 
 def _validate_native_render_replacement_evidence(
