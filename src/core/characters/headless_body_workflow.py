@@ -4327,6 +4327,8 @@ def run_external_mesh_launch_workflow(
     game_version: str = "K1",
     out_dir: str = "",
     template_part: str = "body",
+    template_model: Optional[Any] = None,
+    template_label: str = "",
     motion_supermodel: str = "S_Female02",
     formats: Optional[List[str]] = None,
 ) -> LaunchWorkflowResult:
@@ -4336,6 +4338,12 @@ def run_external_mesh_launch_workflow(
     expects: load external mesh, apply/bind a KOTOR native template,
     inherit PC motions, export MDL/MDX, then reload the result and verify
     hooks, supermodel, mesh count, and skin data.
+
+    When ``template_model`` is supplied, it is the selected native KOTOR
+    skeleton authority for both import fitting and final binding.  This is the
+    intended path for fixtures such as Bendak.fbx -> n_mandalorian; the
+    imported mesh remains a payload guest and the selected KOTOR model owns the
+    final node DAG.
     """
     md = _import_model_data()
     if scene is None:
@@ -4351,6 +4359,8 @@ def run_external_mesh_launch_workflow(
         scene,
         game_version=game_version,
         allow_mode_correction=True,
+        fit_reference_model=template_model,
+        fit_reference_label=template_label,
     )
     if not load.ok or load.model is None:
         return LaunchWorkflowResult(
@@ -4361,7 +4371,9 @@ def run_external_mesh_launch_workflow(
 
     try:
         cb = _import_character_builder()
-        template = cb.load_template(game=game_version, part=template_part)
+        template = template_model
+        if template is None:
+            template = cb.load_template(game=game_version, part=template_part)
         applied = cb.apply_template_rig(load.model, template, game=game_version)
     except Exception as exc:
         log.exception("run_external_mesh_launch_workflow: template apply failed")

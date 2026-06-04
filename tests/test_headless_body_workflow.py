@@ -2538,6 +2538,89 @@ def test_t1205_launch_workflow_uses_native_template_without_acurig(monkeypatch, 
     assert calls == {"load_template": 1, "apply_template_rig": 1, "export": 1}
 
 
+def test_t1205_launch_workflow_uses_selected_native_template_for_fit_and_bind(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("bendak")
+    selected_template = _FakeBodyModel("n_mandalorian")
+    selected_template.supermodel = "S_Female02"
+    rigged_model = _FakeBodyModel("bendak_on_n_mandalorian")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"load_body": 0, "load_template": 0, "apply_template_rig": 0, "export": 0}
+
+    def _fake_load_body(*args, **kwargs):
+        calls["load_body"] += 1
+        assert kwargs["fit_reference_model"] is selected_template
+        assert kwargs["fit_reference_label"] == "n_mandalorian"
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "Bendak.fbx"),
+            resref="bendak",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            calls["load_template"] += 1
+            raise AssertionError("selected native template should bypass generic template load")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            calls["apply_template_rig"] += 1
+            assert model is source_model
+            assert template is selected_template
+            assert getattr(template, "name", "") == "n_mandalorian"
+            assert game == "K1"
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "Bendak payload bound to n_mandalorian",
+            }
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **kwargs):
+        calls["export"] += 1
+        assert scene.get_model(md.PartSlot.HEADLESS_BODY) is rigged_model
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(tmp_path / "bendak.mdl"),
+                    message="exported",
+                )
+            ],
+            out_dir=str(tmp_path),
+            message="exported",
+        )
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+    monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: rigged_model)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        template_model=selected_template,
+        template_label="n_mandalorian",
+        motion_supermodel="S_Female02",
+    )
+
+    assert result.ok is True
+    assert result.code == "launch_verified"
+    assert result.reloaded_model is rigged_model
+    assert calls == {
+        "load_body": 1,
+        "load_template": 0,
+        "apply_template_rig": 1,
+        "export": 1,
+    }
+
+
 def test_t506_export_formats_constant_exposes_all_four_targets():
     """EXPORT_FORMATS must declare KOTOR + FBX + glTF + OBJ in that order."""
     keys = [k for k, _label, _exts in wf.EXPORT_FORMATS]
