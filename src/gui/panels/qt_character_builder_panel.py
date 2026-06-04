@@ -2660,7 +2660,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         Supermodel mode uses the composite exporter so FBX/glTF contain
         the head parented under the body's headhook.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
         try:
             from src.gui.qt_lib.dialogs.qt_export_dialog import QtExportDialog
         except Exception:                                   # pragma: no cover
@@ -2678,9 +2678,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # dialog's read-only hint label.
         md = None
         try:
-            from core.geometry import model_data as md  # noqa: WPS433 - lazy on purpose
+            from src.core.geometry import model_data as md  # noqa: WPS433 - lazy on purpose
         except Exception:                                   # pragma: no cover
-            md = None
+            try:
+                from core.geometry import model_data as md  # type: ignore  # noqa: WPS433
+            except Exception:
+                md = None
         initial_resref = ""
         if md is not None:
             entry = self.scene.get(md.PartSlot.HEADLESS_BODY)
@@ -2774,7 +2777,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not self._require_legacy_acurig_enabled("Place Body Guides"):
             return
 
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         result = _wf.place_body_guides(
             self.scene,
@@ -2836,7 +2839,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not self._require_legacy_acurig_enabled("Create New Skeleton"):
             return
 
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         result = _wf.generate_skeleton(
             self.scene,
@@ -2910,7 +2913,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not self._require_legacy_acurig_enabled("Rebuild Hand Guides"):
             return
 
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         result = _wf.place_hand_guides(
             self.scene,
@@ -2974,7 +2977,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not self._require_legacy_acurig_enabled("Hand weight mask edits"):
             return
 
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         if self._acurig is None:
             # User toggled a checkbox before clicking *Place Hand Guides*.
@@ -3031,12 +3034,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _refresh_motion_assignment_state(self) -> None:
         """Mirror workflow motion state into the inspector controls."""
         try:
-            from core.characters import headless_body_workflow as _wf
-        except ImportError:                                 # pragma: no cover
-            try:
-                from src.core.characters import headless_body_workflow as _wf  # type: ignore
-            except Exception:
-                return
+            _wf = self._workflow_module()
+        except Exception:
+            return
 
         result = _wf.motion_assignment_options(self.scene)
         if hasattr(self.inspector, "set_motion_assignment"):
@@ -3059,10 +3059,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     @QtCore.Slot()
     def _on_assign_motions_requested(self) -> None:
         """Apply the selected KOTOR motion source to the current body."""
-        try:
-            from core.characters import headless_body_workflow as _wf
-        except ImportError:                                 # pragma: no cover
-            from src.core.characters import headless_body_workflow as _wf  # type: ignore
+        _wf = self._workflow_module()
 
         source = "model"
         if hasattr(self.inspector, "selected_motion_source"):
@@ -3211,7 +3208,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         dropdown.  Also surfaces a status banner so the user knows
         whether the standard set (walk / idle / talk) is present.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         self._ensure_game_resource_manager()
         self._sync_motion_controls_to_scene(_wf)
@@ -3267,7 +3264,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         ``set_animation_pose`` is invoked on the chosen
         :class:`Animation`.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         self._ensure_game_resource_manager()
         self._sync_motion_controls_to_scene(_wf)
@@ -3308,7 +3305,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         which dispatches ``viewport.set_animation_pose(None)`` per the
         existing viewport contract.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         viewport = getattr(self, "viewport", None)
         timer = getattr(self, "_animation_timer", None)
@@ -3360,8 +3357,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 length=length,
             )
         self._animation_timer.start()
-        from core.characters.headless_body_workflow import CheckActorResult
-        return CheckActorResult(
+        _wf = self._workflow_module()
+        return _wf.CheckActorResult(
             ok=True,
             playing=str(getattr(anim, "name", anim_name) if anim else anim_name),
             length=length,

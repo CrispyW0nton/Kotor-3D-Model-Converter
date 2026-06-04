@@ -106,6 +106,18 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "scene.assign" in src
 
 
+def test_humanoid_mode_uses_five_step_character_builder_rail() -> None:
+    rail = _read("src/gui/panels/qt_workflow_rail.py")
+    humanoid_start = rail.index("_STEPS_HUMANOID")
+    humanoid_end = rail.index("_STEPS_CREATURE", humanoid_start)
+    humanoid_block = rail[humanoid_start:humanoid_end]
+
+    assert "*_STEPS_UNIFIED_CHARACTER_BUILDER" in humanoid_block
+    assert "Validate + Export" not in rail
+    assert "Load Humanoid" not in rail
+    assert "Add Motions" not in rail
+
+
 def test_template_selection_previews_external_skeleton_overlay() -> None:
     builder = _read("src/gui/panels/qt_character_builder_panel.py")
     viewport = _read("src/gui/viewports/qt_viewport.py")
