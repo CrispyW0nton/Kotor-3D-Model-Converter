@@ -66,6 +66,35 @@ def _write_source_export(
             "mdx": str(mdx),
         },
         "output_hashes": output_hashes,
+        "character_builder_evidence_gates": {
+            "schema": {
+                "name": "ghostrigger.character_builder_evidence_gates.v1",
+            },
+            "fit": {
+                "stage": "needs_review",
+                "paired_landmark_alignment": {
+                    "present": True,
+                    "method": "paired_skeleton_landmark_similarity",
+                    "pair_count": 3,
+                    "paired_roles": ["pelvis", "head", "left"],
+                    "rms_error": 0.42,
+                    "max_error": 0.55,
+                    "applied_scale": 0.8,
+                    "solved_scale": 0.79,
+                },
+                "warning_issue_codes": [
+                    "character.export.auto_fit_paired_landmarks_need_review",
+                ],
+            },
+            "bind": {"stage": "passed"},
+            "weight": {"stage": "donor_transfer_first_pass"},
+            "animation": {"stage": "passed"},
+            "material": {"stage": "needs_review"},
+            "engine": {
+                "stage": "partial_reverse_engineering",
+                "pending_ghidra_count": 2,
+            },
+        },
         "manual_in_game_checklist": [
             "Load as player character without crash",
             "Idle/pause animation plays correctly",
@@ -133,9 +162,17 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert manifest["game_test_evidence"] == {}
     assert manifest["source_export"]["output_hashes"] == _test_output_hashes()
     assert manifest["package_output_hashes"]["artifacts"] == _test_output_hashes()
+    gates = manifest["character_builder_evidence_gates"]
+    assert gates["fit"]["stage"] == "needs_review"
+    assert gates["fit"]["paired_landmark_alignment"]["pair_count"] == 3
+    assert gates["engine"]["stage"] == "partial_reverse_engineering"
     assert manifest["character_builder_workflow"]["native_skeleton_is_authority"] is True
     assert manifest["character_builder_workflow"]["imported_mesh_role"] == "payload_guest"
-    assert "Do not overwrite a live game install" in readme_path.read_text(encoding="utf-8")
+    readme = readme_path.read_text(encoding="utf-8")
+    assert "Evidence gates: fit=needs_review" in readme
+    assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55" in readme
+    assert "Engine evidence: partial_reverse_engineering (pending Ghidra: 2)" in readme
+    assert "Do not overwrite a live game install" in readme
 
 
 def test_character_override_package_blocks_unverified_source_export(tmp_path: Path) -> None:

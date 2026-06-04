@@ -375,6 +375,8 @@ def _build_manifest(
     if isinstance(metadata, dict):
         workflow = metadata.get("character_builder_workflow") or {}
         workflow = workflow if isinstance(workflow, dict) else {}
+    evidence_gates = validation_payload.get("character_builder_evidence_gates")
+    evidence_gates = evidence_gates if isinstance(evidence_gates, dict) else {}
     return {
         "schema": _PACKAGE_SCHEMA,
         "game": request.game,
@@ -416,6 +418,7 @@ def _build_manifest(
         ),
         "game_test_evidence": dict(validation_payload.get("game_test_evidence") or {}),
         "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
+        "character_builder_evidence_gates": evidence_gates,
         "character_builder_workflow": workflow,
         "metadata": dict(request.metadata or {}),
     }
@@ -423,21 +426,54 @@ def _build_manifest(
 
 def _build_readme(manifest: dict[str, Any]) -> str:
     capability = dict(manifest.get("capability") or {})
+    evidence_gates = dict(manifest.get("character_builder_evidence_gates") or {})
     lines = [
         "GhostRigger Character Builder Override Package",
         f"Game: {manifest.get('game')}",
         f"Target resref: {manifest.get('target_resref')}",
         f"Capability stage: {capability.get('stage')}",
         f"Game tested: {capability.get('game_tested')}",
-        "",
-        "Install:",
     ]
+    if evidence_gates:
+        lines.append(
+            "Evidence gates: "
+            f"fit={_evidence_gate_stage(evidence_gates, 'fit')}, "
+            f"bind={_evidence_gate_stage(evidence_gates, 'bind')}, "
+            f"weight={_evidence_gate_stage(evidence_gates, 'weight')}, "
+            f"animation={_evidence_gate_stage(evidence_gates, 'animation')}, "
+            f"material={_evidence_gate_stage(evidence_gates, 'material')}, "
+            f"engine={_evidence_gate_stage(evidence_gates, 'engine')}"
+        )
+        fit_gate = dict(evidence_gates.get("fit") or {})
+        paired = dict(fit_gate.get("paired_landmark_alignment") or {})
+        if paired.get("present"):
+            lines.append(
+                "Fit paired landmarks: "
+                f"{paired.get('pair_count')} pairs, "
+                f"rms={paired.get('rms_error')}, "
+                f"max={paired.get('max_error')}"
+            )
+        engine = dict(evidence_gates.get("engine") or {})
+        if engine:
+            lines.append(
+                "Engine evidence: "
+                f"{engine.get('stage')} "
+                f"(pending Ghidra: {engine.get('pending_ghidra_count')})"
+            )
+    lines.extend(["", "Install:"])
     for item in list(manifest.get("install_instructions") or []):
         lines.append(f"- {item}")
     lines.extend(["", "Manual in-game checklist:"])
     for index, item in enumerate(list(manifest.get("manual_in_game_checklist") or []), start=1):
         lines.append(f"{index}. {item}")
     return "\n".join(lines) + "\n"
+
+
+def _evidence_gate_stage(evidence_gates: dict[str, Any], gate: str) -> str:
+    value = evidence_gates.get(gate)
+    if not isinstance(value, dict):
+        return "missing"
+    return str(value.get("stage") or "missing")
 
 
 def _target_mdl_path(output_dir: Path, target_resref: str) -> Path:

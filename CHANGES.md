@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder override package evidence gates: Override-style packages now preserve `character_builder_evidence_gates` from the validation report and print a README summary for fit/bind/weight/animation/material/engine stages, paired landmark fit quality, and pending Ghidra engine evidence. This keeps install artifacts honest about review-needed Auto-Fit, material, and engine-proof status instead of hiding that context behind the raw validation JSON. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/core/characters/character_override_package.py`, `tests/test_character_builder_override_package.py`.
+  Ground truth used: this slice packages existing Character Builder validation-report evidence only and does not change MDL loader, writer, parser, skinning, or vertex transform semantics.
+  Verification: `python -m pytest tests/test_character_builder_override_package.py -q --basetemp .pytest_tmp_character_package_evidence`; `python -m pytest tests/test_character_builder_override_package.py tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_package_evidence_pair`; `python -m py_compile src/core/characters/character_override_package.py tests/test_character_builder_override_package.py`.
+
 - Character Builder paired-landmark Auto-Fit gate: export preflight now warns when a bone-landmark fit lacks paired source/target skeleton alignment evidence, has too few paired landmarks, or reports high RMS landmark error. Validation reports preserve the paired alignment method, pair count, roles, RMS/max error, and applied/solved scale details in the fit evidence gate, so modders can see when Bendak/Mixamo-style auto-fit still needs review before treating an export as launch-quality. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
   Affected areas: `src/core/characters/character_export_preflight.py`, `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: this slice validates/report existing Character Builder fit metadata and does not change MDL loader, writer, parser, skinning, or vertex transform semantics. The native KOTOR skeleton remains final DAG authority; the paired alignment is imported-payload fit evidence only.
