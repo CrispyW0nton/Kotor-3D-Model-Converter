@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder Bendak local fixture proof: added a guarded local pytest fixture that runs the real `Bendak.fbx` to `n_mandalorian` native-template launch workflow for both K1 and K2 when the local FBX and configured game installs are available. In the current fixture environment it produced reload-verified `bendak.mdl` / `bendak.mdx` candidates for both engines, preserving the proof that Bendak is the imported mesh payload and `n_mandalorian` is the KOTOR DAG authority. Roadmap task: `T1205` / `T2203`.
+  Affected areas: `tests/test_character_builder_bendak_local_fixture.py`, `knowledge_base/validation/character_builder_bendak_fixture.md`.
+  Ground truth used: local Bendak FBX fixture and configured K1/K2 game-library `n_mandalorian` models.
+  Verification: `python -m pytest tests/test_character_builder_bendak_local_fixture.py -q --basetemp .pytest_tmp_bendak_local_fixture`; `python -m py_compile tests/test_character_builder_bendak_local_fixture.py`.
+
 - Character Builder optional-hook export gate: expected/advisory hooks such as `chestconjure` now remain warnings even during strict export validation. This unblocks native-template Character Builder exports when the selected vanilla base model itself lacks optional effect hooks; required hooks such as `headhook` and `rhand` still block when absent. A real local Bendak smoke now reaches `launch_verified` for `Bendak.fbx` bound to K1 `n_mandalorian`, producing a reload-verified MDL/MDX export candidate. Roadmap task: `T1205` / `T2203`.
   Affected areas: `src/core/diagnostics/validation_service.py`, `tests/test_headless_body_workflow.py`, `knowledge_base/validation/character_builder_bendak_fixture.md`.
   Ground truth used: local headless Bendak workflow proof with `Bendak.fbx` as imported payload and K1 `n_mandalorian` as the selected native KOTOR base; the native base lacks optional `chestconjure`, so strict validation must not invent a stronger requirement than the vanilla model satisfies.

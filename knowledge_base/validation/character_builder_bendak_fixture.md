@@ -50,14 +50,19 @@ MCP checks on 2026-06-04 confirmed:
 Headless workflow proof on 2026-06-04 confirmed:
 
 - `Bendak.fbx` loads as the imported custom mesh payload.
-- K1 `n_mandalorian` loads as the selected native KOTOR base skeleton.
+- K1 and K2 `n_mandalorian` load as selected native KOTOR base skeletons.
 - Auto-fit reports `Fit to n_mandalorian (0.331x)`.
 - `apply_template_rig` produces a `native_template_final` candidate with
   one skinned Bendak payload mesh, 55 KOTOR bone slots, and inherited
   `S_Female02` motion source.
-- Staged KOTOR export writes `bendak.mdl` / `bendak.mdx` to a temp output
-  folder and reload verification passes with hooks `rhand`, `Lhand_g`, and
-  `headhook`, one mesh node, one skin node, and supermodel `S_Female02`.
+- Staged KOTOR export writes `bendak.mdl` / `bendak.mdx` to temp output
+  folders for both K1 and K2, and reload verification passes with hooks
+  `rhand`, `Lhand_g`, and `headhook`, one mesh node, one skin node, and
+  supermodel `S_Female02`.
+- `tests/test_character_builder_bendak_local_fixture.py` preserves this as a
+  guarded local fixture test. It skips when the local FBX or configured game
+  install is unavailable, but in the current fixture environment it passed for
+  both K1 and K2.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

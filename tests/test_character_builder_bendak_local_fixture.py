@@ -1,0 +1,63 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+
+from src.core.characters import character_builder
+from src.core.characters.headless_body_workflow import (
+    run_external_mesh_native_template_launch_workflow,
+)
+
+
+_DEFAULT_BENDAK_FBX = Path(
+    r"C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters"
+    r"\BendakStarkiller\Bendak.fbx"
+)
+
+
+def _bendak_fixture_path() -> Path:
+    return Path(os.environ.get("GHOSTRIGGER_BENDAK_FBX", str(_DEFAULT_BENDAK_FBX)))
+
+
+@pytest.mark.parametrize("game", ["K1", "K2"])
+def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
+    game: str,
+    tmp_path: Path,
+) -> None:
+    """Local continual fixture: Bendak.fbx payload bound to n_mandalorian."""
+    mesh_path = _bendak_fixture_path()
+    if not mesh_path.exists():
+        pytest.skip(f"Local Bendak fixture not present: {mesh_path}")
+
+    native_base = character_builder.load_game_skeleton_source(
+        "n_mandalorian",
+        game=game,
+    )
+    if native_base is None:
+        pytest.skip(f"Configured {game} install cannot load n_mandalorian")
+
+    result = run_external_mesh_native_template_launch_workflow(
+        str(mesh_path),
+        "n_mandalorian",
+        game_version=game,
+        out_dir=str(tmp_path),
+        formats=["kotor"],
+    )
+
+    assert result.ok is True
+    assert result.code == "launch_verified"
+    assert Path(result.mdl_path).exists()
+    assert Path(result.mdx_path).exists()
+    assert result.mesh_count == 1
+    assert result.skin_node_count == 1
+    assert result.supermodel == "S_Female02"
+    assert {"rhand", "headhook"}.issubset({name.lower() for name in result.hooks})
+    assert result.load_result is not None
+    assert "Fit to n_mandalorian" in result.load_result.message
+    assert result.apply_result is not None
+    assert result.apply_result.get("ok") is True
+    assert result.apply_result.get("replaced_native_render_nodes")
+    assert result.motion_result is not None
+    assert result.motion_result.supermodel == "S_Female02"
