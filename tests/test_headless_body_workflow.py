@@ -2695,7 +2695,9 @@ def test_t1205_launch_workflow_uses_native_template_without_acurig(monkeypatch, 
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert result.guide_result is None
     assert result.generate_result is not None
     assert result.generate_result.code == "native_template"
@@ -2776,7 +2778,9 @@ def test_t1205_launch_workflow_uses_selected_native_template_for_fit_and_bind(mo
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert result.reloaded_model is rigged_model
     assert calls == {
         "load_body": 1,
@@ -2869,7 +2873,9 @@ def test_t1205_launch_workflow_records_inherited_animation_library(monkeypatch, 
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert result.animation_library_result is not None
     names = {name for _label, name in result.animation_library_result.available}
     assert {"pause1", "walk", "run", "tlknorm"}.issubset(names)
@@ -2972,7 +2978,9 @@ def test_t1205_native_template_launch_loads_selected_resref_before_fit(monkeypat
         assert kwargs["formats"] == ["kotor"]
         return wf.LaunchWorkflowResult(
             ok=True,
-            code="launch_verified",
+            code="export_candidate_verified",
+            capability_stage="export_candidate",
+            game_tested=False,
             message="verified",
         )
 
@@ -2989,7 +2997,9 @@ def test_t1205_native_template_launch_loads_selected_resref_before_fit(monkeypat
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert calls == {"load_game_skeleton_source": 1, "launch": 1}
 
 

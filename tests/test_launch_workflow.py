@@ -205,7 +205,9 @@ def test_t1205_external_mesh_launch_workflow_exports_reloads_and_verifies(tmp_pa
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert pathlib.Path(result.mdl_path).is_file()
     assert pathlib.Path(result.mdx_path).is_file()
     assert pathlib.Path(result.export_result.sidecar_path).is_file()

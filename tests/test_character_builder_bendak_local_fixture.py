@@ -51,7 +51,9 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert Path(result.mdl_path).exists()
     assert Path(result.mdx_path).exists()
     assert result.mesh_count == 1

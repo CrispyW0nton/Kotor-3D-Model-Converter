@@ -4706,7 +4706,12 @@ class ExportResult:
 
 @dataclass
 class LaunchWorkflowResult:
-    """End-to-end external-mesh launch proof result (M12/T1205)."""
+    """End-to-end external-mesh export-candidate proof result (M12/T1205).
+
+    ``ok`` means the staged MDL/MDX candidate exported and reloaded through the
+    Character Builder gates. It does not mean the candidate has been tested in
+    KOTOR 1 or KOTOR 2.
+    """
 
     ok:               bool                       = False
     load_result:      Optional[LoadResult]        = None
@@ -4723,6 +4728,8 @@ class LaunchWorkflowResult:
     mesh_count:       int                         = 0
     skin_node_count:  int                         = 0
     supermodel:       str                         = ""
+    capability_stage: str                         = ""
+    game_tested:      bool                        = False
     message:          str                         = ""
     code:             str                         = "launch_workflow"
 
@@ -5219,12 +5226,14 @@ def run_external_mesh_launch_workflow(
         mesh_count=mesh_count,
         skin_node_count=skin_count,
         supermodel=supermodel,
+        capability_stage="export_candidate" if ok else "blocked",
+        game_tested=False,
         message=(
-            "Launch workflow proof passed."
+            "Export-candidate workflow proof passed; in-game testing is still required."
             if ok else
             f"Launch workflow reload verification failed: {problems}"
         ),
-        code="launch_verified" if ok else "verification_failed",
+        code="export_candidate_verified" if ok else "verification_failed",
     )
 
 

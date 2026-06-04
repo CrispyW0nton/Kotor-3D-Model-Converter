@@ -64,6 +64,9 @@ Headless workflow proof on 2026-06-04 confirmed:
   folders for both K1 and K2, and reload verification passes with hooks
   `rhand`, `Lhand_g`, and `headhook`, one mesh node, one skin node, and
   supermodel `S_Female02`.
+- The headless workflow result code for a successful reload proof is
+  `export_candidate_verified`, with `capability_stage=export_candidate` and
+  `game_tested=False`. Do not treat this as an in-game launch claim.
 - `tests/test_character_builder_bendak_local_fixture.py` preserves this as a
   guarded local fixture test. It skips when the local FBX or configured game
   install is unavailable, but in the current fixture environment it passed for
