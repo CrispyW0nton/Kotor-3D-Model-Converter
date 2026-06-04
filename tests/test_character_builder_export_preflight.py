@@ -577,6 +577,7 @@ def test_character_export_preflight_warns_when_paired_landmark_alignment_missing
     assert issue.severity.value == "warning"
     assert issue.details["reason"] == "not_recorded"
     assert issue.details["required_pair_count"] == 4
+    assert issue.details["max_pair_error"] == 0.15
     assert "paired skeleton-landmark" in issue.message
     assert preflight.export_allowed is True
 
@@ -618,6 +619,44 @@ def test_character_export_preflight_warns_when_paired_landmark_alignment_is_weak
     assert issue.details["paired_roles"] == ["pelvis", "head", "left"]
     assert issue.details["worst_pair_role"] == "left"
     assert issue.details["pair_errors"][0]["role"] == "left"
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_single_fit_landmark_is_far() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    alignment = fit["fit_transform"]["landmark_alignment"]
+    alignment["rms_error"] = 0.04
+    alignment["max_error"] = 0.22
+    alignment["worst_pair_role"] = "pelvis"
+    alignment["pair_errors"] = [
+        {
+            "role": "pelvis",
+            "source_position": [0.0, 0.0, 0.8],
+            "target_position": [0.0, 0.0, 0.64],
+            "mapped_position": [0.0, 0.18, 0.58],
+            "error": 0.22,
+        },
+    ]
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_paired_landmarks_need_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == ["high_max_error"]
+    assert issue.details["rms_error"] == 0.04
+    assert issue.details["max_error"] == 0.22
+    assert issue.details["max_pair_error"] == 0.15
+    assert issue.details["worst_pair_role"] == "pelvis"
+    assert issue.details["pair_errors"][0]["role"] == "pelvis"
     assert preflight.export_allowed is True
 
 

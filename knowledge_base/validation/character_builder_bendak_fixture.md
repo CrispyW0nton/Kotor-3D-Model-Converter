@@ -137,6 +137,11 @@ Headless workflow proof on 2026-06-04 confirmed:
   candidates can remain exportable, but the fit evidence gate becomes
   `needs_review` in staged reports so mesh-only or weakly-proven alignment is
   not mistaken for launch-quality rig evidence.
+- Export preflight also keeps the fit gate in `needs_review` when a single
+  paired fit landmark exceeds the max pair-error threshold, even if the overall
+  RMS is acceptable. The report names the `worst_pair_role` and preserves
+  per-pair residuals so pelvis, foot, hand, or head placement problems are not
+  hidden by a good average.
 - Export preflight now also treats imported payload material readiness as its
   own evidence gate. Missing texture/material names, missing UVs, UV-count
   mismatches, and invalid face-UV indices are warnings rather than structural

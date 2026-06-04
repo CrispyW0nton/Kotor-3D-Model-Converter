@@ -79,6 +79,7 @@ class CharacterExportPreflightOptions:
     min_auto_fit_confidence: float = 0.60
     min_auto_fit_paired_landmarks: int = 4
     max_auto_fit_landmark_rms_error: float = 0.15
+    max_auto_fit_landmark_pair_error: float = 0.15
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -718,6 +719,7 @@ def _validate_paired_landmark_alignment(
                 "fit_policy": fit_policy,
                 "required_pair_count": int(opts.min_auto_fit_paired_landmarks),
                 "max_rms_error": float(opts.max_auto_fit_landmark_rms_error),
+                "max_pair_error": float(opts.max_auto_fit_landmark_pair_error),
             },
         ))
         return
@@ -735,6 +737,10 @@ def _validate_paired_landmark_alignment(
         reasons.append("missing_rms_error")
     elif rms_error > float(opts.max_auto_fit_landmark_rms_error):
         reasons.append("high_rms_error")
+    if max_error is None or not math.isfinite(max_error):
+        reasons.append("missing_max_error")
+    elif max_error > float(opts.max_auto_fit_landmark_pair_error):
+        reasons.append("high_max_error")
 
     if not reasons:
         return
@@ -758,6 +764,7 @@ def _validate_paired_landmark_alignment(
             "rms_error": rms_error,
             "max_error": max_error,
             "max_rms_error": float(opts.max_auto_fit_landmark_rms_error),
+            "max_pair_error": float(opts.max_auto_fit_landmark_pair_error),
             "worst_pair_role": str(alignment.get("worst_pair_role") or ""),
             "pair_errors": list(alignment.get("pair_errors") or []),
             "applied_scale": _safe_float(alignment.get("applied_scale")),
