@@ -672,28 +672,33 @@ def _reference_model_fit_bounds(reference_model: Any) -> Optional[Tuple[Tuple[fl
     return None
 
 
-_PELVIS_ALIASES = {
-    "hips", "hip", "pelvis", "bip001pelvis", "root", "rootdummy",
-    "pelvisg", "auroraroot", "mixamorighips",
-}
-_HEAD_ALIASES = {
-    "head", "headg", "headhook", "neck", "neckg", "hturng",
+# Landmark aliases are ordered by fit quality.  Keep native KOTOR deform nodes
+# and DCC humanoid landmarks ahead of generic roots/hooks so a model containing
+# both ``pelvis_g`` and ``rootdummy`` does not pick the wrong fit origin.
+_PELVIS_ALIASES = (
+    "pelvis_g", "pelvisg", "pelvis",
+    "hips", "hip", "mixamorighips", "bip001pelvis",
+    "rootdummy", "auroraroot", "root",
+)
+_HEAD_ALIASES = (
+    "head_g", "headg", "head",
     "mixamorighead", "bip001head",
-}
+    "hturn_g", "hturng", "neck_g", "neckg", "neck", "headhook",
+)
 _LEFT_SIDE_ALIASES = (
-    {"leftshoulder", "leftarm", "lshoulder", "larm", "lcollardum", "lcollarg", "lclavicle"},
-    {"lefthand", "lhand", "lhandg", "lwrist", "handl", "mixamoriglefthand"},
-    {"leftupleg", "leftleg", "lthigh", "lthighg", "thighl"},
-    {"leftfoot", "lfoot", "lfootg", "lefttoe", "lfoottg", "toel"},
+    ("lcollar_g", "lcollarg", "lcollar_dum", "lcollardum", "leftshoulder", "lshoulder", "lclavicle", "leftarm", "larm"),
+    ("lhand", "lhand_g", "lhandg", "lefthand", "lwrist", "handl", "mixamoriglefthand"),
+    ("lthigh_g", "lthighg", "lthigh", "leftupleg", "leftleg", "thighl"),
+    ("lfoot_g", "lfootg", "lfoot", "lfoot_t_g", "lfoottg", "leftfoot", "lefttoe", "toel"),
 )
 _RIGHT_SIDE_ALIASES = (
-    {"rightshoulder", "rightarm", "rshoulder", "rarm", "rcollardum", "rcollarg", "rclavicle"},
-    {"righthand", "rhand", "rhandg", "rwrist", "handr", "mixamorigrighthand"},
-    {"rightupleg", "rightleg", "rthigh", "rthighg", "thighr"},
-    {"rightfoot", "rfoot", "rfootg", "righttoe", "rfoottg", "toer"},
+    ("rcollar_g", "rcollarg", "rcollar_dum", "rcollardum", "rightshoulder", "rshoulder", "rclavicle", "rightarm", "rarm"),
+    ("rhand", "rhand_g", "rhandg", "righthand", "rwrist", "handr", "mixamorigrighthand"),
+    ("rthigh_g", "rthighg", "rthigh", "rightupleg", "rightleg", "thighr"),
+    ("rfoot_g", "rfootg", "rfoot", "rfoot_t_g", "rfoottg", "rightfoot", "righttoe", "toer"),
 )
-_LEFT_FOOT_ALIASES = {"leftfoot", "lfoot", "lfootg", "lefttoe", "lfoottg"}
-_RIGHT_FOOT_ALIASES = {"rightfoot", "rfoot", "rfootg", "righttoe", "rfoottg"}
+_LEFT_FOOT_ALIASES = ("lfoot_g", "lfootg", "lfoot", "lfoot_t_g", "lfoottg", "leftfoot", "lefttoe")
+_RIGHT_FOOT_ALIASES = ("rfoot_g", "rfootg", "rfoot", "rfoot_t_g", "rfoottg", "rightfoot", "righttoe")
 
 
 def _clean_landmark_name(name: str) -> str:
@@ -753,15 +758,32 @@ def _find_landmark(
     positions: Dict[str, Tuple[str, Vec3]],
     aliases: Sequence[str] | set[str],
 ) -> Tuple[str, Vec3] | None:
-    clean_aliases = {_clean_landmark_name(alias) for alias in aliases}
+    clean_aliases = _ordered_clean_aliases(aliases)
     for alias in clean_aliases:
         hit = positions.get(alias)
         if hit is not None:
             return hit
-    for key, hit in positions.items():
-        if any(key.endswith(alias) for alias in clean_aliases if alias):
-            return hit
+    for alias in clean_aliases:
+        for key, hit in positions.items():
+            if alias and key.endswith(alias):
+                return hit
     return None
+
+
+def _ordered_clean_aliases(aliases: Sequence[str] | set[str]) -> Tuple[str, ...]:
+    if isinstance(aliases, set):
+        raw_aliases = sorted(aliases)
+    else:
+        raw_aliases = list(aliases)
+    cleaned: List[str] = []
+    seen: set[str] = set()
+    for alias in raw_aliases:
+        clean = _clean_landmark_name(alias)
+        if not clean or clean in seen:
+            continue
+        cleaned.append(clean)
+        seen.add(clean)
+    return tuple(cleaned)
 
 
 def _find_side_pair(

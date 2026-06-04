@@ -86,6 +86,11 @@ class _FakeNode:
             parent.children.append(self)
 
 
+class _FakeNativeSkeletonSnapshot(SimpleNamespace):
+    def node_names(self):
+        return tuple(str(getattr(node, "name", "") or "") for node in self.nodes)
+
+
 class _FakeBodyModel:
     """A KotorModel-shaped object that detects as HEADLESS_BODY.
 
@@ -118,7 +123,7 @@ class _FakeBodyModel:
         skin.is_skin = True
         skin.vertices = [(0.0, 0.0, 0.0)]
         skin.faces = [(0, 0, 0)]
-        skin.bone_map = [rootdummy]
+        skin.bone_map = ["rootdummy"]
         skin.qbone_list = [rootdummy]
         skin.tbone_list = [rootdummy]
         skin.skin_data = [
@@ -136,7 +141,7 @@ class _FakeBodyModel:
             lhand,
             skin,
         ]
-        self._gr_native_skeleton_snapshot = SimpleNamespace(
+        self._gr_native_skeleton_snapshot = _FakeNativeSkeletonSnapshot(
             model_name=name,
             game="K1",
             supermodel="S_Female02",
@@ -2881,6 +2886,35 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
         item["role"] == "left_foot" and item["name"] == "lfoot_g"
         for item in overlay["target"]["landmarks"]
     )
+
+
+def test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias():
+    source = _fit_humanoid_model(
+        "rootdummy",
+        height=2.0,
+        shoulder_width=1.0,
+        foot_width=0.5,
+    )
+    source.root_node.position = (0.0, 5.0, 0.0)
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_frame"]["landmarks"]["pelvis"] == "pelvis_g"
+    assert report["source_up_axis"] == "+z"
+    assert "source:pelvis=pelvis_g" in report["used_landmarks"]
 
 
 def test_normalization_persists_fit_report_in_model_metadata():

@@ -9,6 +9,13 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-04
+
+- Character Builder deterministic auto-fit landmarks: humanoid fit landmark aliases now use explicit priority ordering so specific native/DCC landmarks such as `pelvis_g`, `head_g`, side collars/hands/thighs/feet, and foot nodes win before generic roots, hooks, or suffix matches. This prevents `rootdummy`/generic root aliases from hijacking imported-mesh origin, orientation, or scale decisions during auto-fit. Roadmap task: `T1205` / Phase 2 deterministic auto-fit.
+  Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native model facts before backend fit changes; this slice only fixes deterministic fit selection and introduces no new MDL-loader assumptions.
+  Verification: `python -m pytest tests/test_headless_body_workflow.py::test_external_fit_report_uses_humanoid_landmarks_when_available tests/test_headless_body_workflow.py::test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias tests/test_headless_body_workflow.py::test_normalization_persists_fit_report_in_model_metadata -q --basetemp .pytest_tmp_character_fit_alias`; `python -m pytest tests/test_headless_body_workflow.py -q --basetemp .pytest_tmp_character_fit_alias_full`; `python -m py_compile src/core/characters/headless_body_workflow.py tests/test_headless_body_workflow.py`.
+
 ## 2026-06-03
 
 - Character Builder native-game export gate: MDL/MDX export preflight now compares the requested export game with the selected `NativeSkeletonSnapshot` game/provenance facts, and the staged Character Builder transaction injects its `request.game` into preflight automatically. A K1 native base can no longer silently produce a K2 export candidate, or vice versa. Roadmap task: `T1205` / Phase 4 export hardening.
