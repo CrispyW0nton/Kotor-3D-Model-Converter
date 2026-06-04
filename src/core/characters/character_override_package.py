@@ -389,9 +389,70 @@ def _validation_payload_issues(
             "Character Builder workflow evidence does not identify the selected KOTOR base as final DAG source.",
         ))
     if request.require_replacement_ready_fit:
+        issues.extend(_replacement_ready_native_snapshot_issues(workflow, request))
         issues.extend(_replacement_target_native_base_issues(workflow, request))
         issues.extend(_replacement_ready_fit_issues(payload, request))
     return issues
+
+
+def _replacement_ready_native_snapshot_issues(
+    workflow: dict[str, Any],
+    request: CharacterBuilderOverridePackageRequest,
+) -> list[ValidationIssue]:
+    """Require native KOTOR DAG snapshot proof for replacement packaging."""
+
+    snapshot = workflow.get("native_snapshot")
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    metadata = snapshot.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    summary = _replacement_target_native_base_summary(
+        workflow,
+        request.target_resref,
+    )
+    accepted = {
+        _normalize_resref(value)
+        for value in list(summary.get("accepted_native_base_resrefs") or [])
+        if _normalize_resref(value)
+    }
+    snapshot_model = _normalize_resref(
+        snapshot.get("model_name")
+        or metadata.get("source_resref")
+        or metadata.get("requested_resref")
+    )
+    reasons: list[str] = []
+    if not snapshot:
+        reasons.append("native_snapshot_missing")
+    if not snapshot_model:
+        reasons.append("native_snapshot_model_missing")
+    elif accepted and snapshot_model not in accepted:
+        reasons.append("native_snapshot_model_mismatch")
+    fingerprint = str(snapshot.get("dag_fingerprint") or "").strip()
+    if not fingerprint:
+        reasons.append("native_snapshot_fingerprint_missing")
+    if str(snapshot.get("dag_fingerprint_algorithm") or "").strip() != "sha256":
+        reasons.append("native_snapshot_fingerprint_algorithm_invalid")
+    node_count = _safe_int(snapshot.get("node_count"))
+    if node_count is None or node_count <= 0:
+        reasons.append("native_snapshot_node_count_invalid")
+    if "hook_names" not in snapshot:
+        reasons.append("native_snapshot_hooks_missing")
+    if not reasons:
+        return []
+
+    return [_issue(
+        "character.override_package.native_snapshot_invalid",
+        (
+            "Replacement packaging requires native KOTOR skeleton snapshot "
+            "evidence with a DAG fingerprint for the selected base model."
+        ),
+        details={
+            "reasons": reasons,
+            "target_resref": request.target_resref,
+            "native_base_resref": summary.get("native_base_resref"),
+            "accepted_native_base_resrefs": sorted(accepted),
+            "native_snapshot": snapshot,
+        },
+    )]
 
 
 def _replacement_target_native_base_issues(
@@ -733,6 +794,18 @@ def _build_readme(manifest: dict[str, Any]) -> str:
             f"imported_mesh_role={workflow.get('imported_mesh_role')}, "
             f"final_dag_source={workflow.get('final_dag_source')}"
         )
+        native_snapshot = workflow.get("native_snapshot")
+        native_snapshot = native_snapshot if isinstance(native_snapshot, dict) else {}
+        if native_snapshot:
+            fingerprint = str(native_snapshot.get("dag_fingerprint") or "").strip()
+            lines.append(
+                "Native skeleton: "
+                f"model={native_snapshot.get('model_name')}, "
+                f"game={native_snapshot.get('game')}, "
+                f"supermodel={native_snapshot.get('supermodel')}, "
+                f"nodes={native_snapshot.get('node_count')}, "
+                f"fingerprint={fingerprint[:12]}"
+            )
     blockers = [
         str(item or "")
         for item in list(capability.get("game_ready_blockers") or [])

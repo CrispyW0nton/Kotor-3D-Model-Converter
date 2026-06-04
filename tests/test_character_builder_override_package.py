@@ -150,6 +150,22 @@ def _write_source_export(
                         "mesh_names": ["Bendak"],
                     },
                 },
+                "native_snapshot": {
+                    "model_name": "n_mandalorian",
+                    "game": game,
+                    "supermodel": "S_Female02",
+                    "dag_fingerprint": "0123456789abcdef" * 4,
+                    "dag_fingerprint_algorithm": "sha256",
+                    "node_count": 70,
+                    "mesh_node_count": 52,
+                    "skin_node_count": 1,
+                    "hook_names": ["rhand", "lhand", "headhook"],
+                    "metadata": {
+                        "source_resref": "n_mandalorian",
+                        "requested_resref": "n_mandalorian",
+                        "captured_for": "character_builder_native_dag",
+                    },
+                },
             },
         },
         "game_test_evidence": dict(game_test_evidence or {}),
@@ -266,6 +282,10 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
         "Workflow: native_skeleton_is_authority=True, "
         "imported_mesh_role=payload_guest, final_dag_source=selected_kotor_base"
     ) in readme
+    assert (
+        "Native skeleton: model=n_mandalorian, game=K1, "
+        "supermodel=S_Female02, nodes=70, fingerprint=0123456789ab"
+    ) in readme
     assert "Game-ready blockers:" in readme
     assert "- fit=needs_review" in readme
     assert "Evidence gates: fit=needs_review" in readme
@@ -335,6 +355,66 @@ def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(t
         result.manifest["replacement_target"]["target_numbered_variant_base"]
         == "n_mandalorian"
     )
+
+
+def test_character_override_package_strict_gate_blocks_missing_native_snapshot(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    payload = _mark_clean_skeleton_fit(validation_path)
+    del payload["metadata"]["character_builder_workflow"]["native_snapshot"]
+    validation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.native_snapshot_invalid"
+    )
+    assert "native_snapshot_missing" in issue.details["reasons"]
+    assert "native_snapshot_fingerprint_missing" in issue.details["reasons"]
+    assert issue.details["native_base_resref"] == "n_mandalorian"
+    assert issue.details["accepted_native_base_resrefs"] == [
+        "n_mandalorian",
+        "n_mandalorian03",
+    ]
+
+
+def test_character_override_package_strict_gate_blocks_native_snapshot_base_mismatch(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    payload = _mark_clean_skeleton_fit(validation_path)
+    snapshot = payload["metadata"]["character_builder_workflow"]["native_snapshot"]
+    snapshot["model_name"] = "pmbam"
+    snapshot["metadata"]["source_resref"] = "pmbam"
+    validation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is False
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.native_snapshot_invalid"
+    )
+    assert issue.details["reasons"] == ["native_snapshot_model_mismatch"]
+    assert issue.details["native_snapshot"]["model_name"] == "pmbam"
 
 
 def test_character_override_package_strict_fit_gate_blocks_missing_rotation_provenance(tmp_path: Path) -> None:
