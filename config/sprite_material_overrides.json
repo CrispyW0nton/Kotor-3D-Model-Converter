@@ -1,36 +1,6 @@
 {
   "models": {
     "k1:untitled scene": {
-      "plane240|w_lsabreblue01": {
-        "alpha": 1.0,
-        "category": "",
-        "hidden": true,
-        "mesh": "plane240",
-        "render_mode": "",
-        "sprite_alpha_source": "",
-        "sprite_glow": 0.0,
-        "texture": "w_lsabreblue01",
-        "transparency_hint": 0,
-        "txi_alpha_test": 0.5,
-        "txi_blending": 0,
-        "txi_decal": false,
-        "txi_wateralpha": 1.0
-      },
-      "plane241|w_lsabreblue01": {
-        "alpha": 1.0,
-        "category": "",
-        "hidden": true,
-        "mesh": "plane241",
-        "render_mode": "",
-        "sprite_alpha_source": "",
-        "sprite_glow": 0.0,
-        "texture": "w_lsabreblue01",
-        "transparency_hint": 0,
-        "txi_alpha_test": 0.5,
-        "txi_blending": 0,
-        "txi_decal": false,
-        "txi_wateralpha": 1.0
-      },
       "rfoot_g|null": {
         "alpha": 1.0,
         "category": "",
