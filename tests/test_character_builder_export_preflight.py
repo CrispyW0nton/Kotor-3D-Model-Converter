@@ -2073,6 +2073,7 @@ def test_character_builder_validation_report_records_toe_forward_gate() -> None:
     assert toe["target"]["has_toe_landmarks"] is True
     assert toe["target"]["toe_forward_alignment"] == 0.91
     assert toe["target"]["landmarks"]["right_toe"] == "rfootT_g"
+    assert "Fit toe-forward: source=-0.200, target=0.910" in report.to_text()
 
 
 def test_character_builder_validation_report_records_engine_evidence_gate() -> None:

@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder toe-forward report text: validation report text now includes source/target toe-forward alignment summaries, making Bendak-style facing evidence visible in logs and exported validation artifacts without requiring JSON inspection. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: report rendering over existing Character Builder fit metadata; this slice does not change MDL parser/writer semantics, native snapshots, vertex transforms, or final DAG export authority.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_builder_validation_report_records_toe_forward_gate tests/test_character_builder_export_preflight.py::test_character_export_transaction_stages_verifies_and_writes_reports -q --basetemp .pytest_tmp_character_toe_text`; `python -m py_compile src/core/characters/character_validation_report.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder toe-forward preflight gate: export preflight and validation reports now mark Auto-Fit evidence as `needs_review` when source or target toe/foot-end guide direction disagrees with the inferred humanoid facing axis. This turns Bendak-style toe-forward evidence into an actionable export readiness gate instead of leaving it as raw fit metadata. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
   Affected areas: `src/core/characters/character_export_preflight.py`, `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: validation/reporting over existing Character Builder fit metadata; this slice does not change MDL parser/writer semantics, native snapshots, vertex transforms, or final DAG export authority. MCP model-pipeline comparison helpers were not exposed in this session.

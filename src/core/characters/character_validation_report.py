@@ -777,6 +777,21 @@ def _fit_toe_forward_frame_summary(frame: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _toe_forward_text_summary(toe_forward: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for label in ("source", "target"):
+        frame = _mapping(toe_forward.get(label))
+        has_landmarks = bool(frame.get("has_toe_landmarks"))
+        alignment = _safe_float(frame.get("toe_forward_alignment"))
+        if alignment is None:
+            if has_landmarks:
+                parts.append(f"{label}=not_recorded")
+            continue
+        suffix = "" if has_landmarks else " (no toe landmarks)"
+        parts.append(f"{label}={alignment:.3f}{suffix}")
+    return ", ".join(parts)
+
+
 def _gate_issue_codes(
     issues: list[ValidationIssue],
     relevant_codes: frozenset[str],
@@ -1104,6 +1119,10 @@ class CharacterBuilderValidationReport:
                         f"max={paired.get('max_error')}"
                         + (f", worst={worst}" if worst else "")
                     )
+                toe_forward = dict(fit_gate.get("toe_forward_alignment") or {})
+                toe_text = _toe_forward_text_summary(toe_forward)
+                if toe_text:
+                    lines.append(f"- Fit toe-forward: {toe_text}")
                 engine_gate = dict(evidence_gates.get("engine") or {})
                 if engine_gate:
                     lines.append(
