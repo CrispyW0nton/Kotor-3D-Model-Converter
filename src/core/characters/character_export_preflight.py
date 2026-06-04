@@ -9,6 +9,7 @@ helpers, supermodel inheritance, and skin payload requirements.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from src.core.validation.validation_bus import (
@@ -24,6 +25,7 @@ from .kotor_constants import (
     ENGINE_VERIFIED_SOCKET_STRING_REFS,
     KOTOR_ENGINE_SOCKET_STRING_EVIDENCE_STATUS,
     KOTOR_SKIN_MAX_INFLUENCES_PER_VERTEX,
+    KOTOR_SKIN_WEIGHT_SUM_TOLERANCE,
 )
 from .character_rig_state import (
     RIG_STATE_NATIVE_TEMPLATE_FINAL,
@@ -830,9 +832,47 @@ def _validate_skin_rows(node: Any, bone_map: list[Any], report: ValidationReport
                 },
             ))
         total = 0.0
+        has_malformed_weight = False
         for influence in influences:
-            bone_index = int(getattr(influence, "bone_index", -1))
-            weight = float(getattr(influence, "weight", 0.0) or 0.0)
+            try:
+                bone_index = int(getattr(influence, "bone_index", -1))
+            except (TypeError, ValueError, OverflowError):
+                bone_index = -1
+            try:
+                weight = float(getattr(influence, "weight", 0.0))
+            except (TypeError, ValueError, OverflowError):
+                weight = math.nan
+            if not math.isfinite(weight):
+                has_malformed_weight = True
+                report.add(_issue(
+                    "blocking",
+                    "character.export.vertex_weight_nonfinite",
+                    f"Skin mesh '{name}' has a non-finite vertex weight.",
+                    navigation=ValidationNavigationTarget(node_name=name),
+                    fix_hint="Rebuild skin weights before export; MDL/MDX skin weights must be finite numbers.",
+                    details={
+                        "vertex_index": row_index,
+                        "bone_index": bone_index,
+                        "weight": str(weight),
+                        "evidence_status": "writer_format_contract_verified_ghidra_pending",
+                    },
+                ))
+                continue
+            if weight < 0.0:
+                has_malformed_weight = True
+                report.add(_issue(
+                    "blocking",
+                    "character.export.vertex_weight_negative",
+                    f"Skin mesh '{name}' has a negative vertex weight.",
+                    navigation=ValidationNavigationTarget(node_name=name),
+                    fix_hint="Rebuild skin weights before export; KOTOR skin influences must not contain negative weights.",
+                    details={
+                        "vertex_index": row_index,
+                        "bone_index": bone_index,
+                        "weight": weight,
+                        "evidence_status": "writer_format_contract_verified_ghidra_pending",
+                    },
+                ))
             total += weight
             if bone_index < 0 or bone_index >= len(bone_map):
                 report.add(_issue(
@@ -847,14 +887,35 @@ def _validate_skin_rows(node: Any, bone_map: list[Any], report: ValidationReport
                         "bone_map_size": len(bone_map),
                     },
                 ))
-        if abs(total - 1.0) > 0.01:
+        if not has_malformed_weight and total <= 0.0:
+            report.add(_issue(
+                "blocking",
+                "character.export.vertex_weight_zero_sum",
+                f"Skin mesh '{name}' has a vertex whose weights sum to zero.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild skin weights before export; every vertex needs a positive normalized weight sum.",
+                details={
+                    "vertex_index": row_index,
+                    "weight_sum": total,
+                    "evidence_status": "writer_format_contract_verified_ghidra_pending",
+                },
+            ))
+        elif (
+            not has_malformed_weight
+            and abs(total - 1.0) > KOTOR_SKIN_WEIGHT_SUM_TOLERANCE
+        ):
             report.add(_issue(
                 "warning",
                 "character.export.vertex_weight_sum",
                 f"Skin mesh '{name}' has a vertex whose weights do not sum to 1.0.",
                 navigation=ValidationNavigationTarget(node_name=name),
                 fix_hint="Normalize skin weights before final export.",
-                details={"vertex_index": row_index, "weight_sum": total},
+                details={
+                    "vertex_index": row_index,
+                    "weight_sum": total,
+                    "tolerance": KOTOR_SKIN_WEIGHT_SUM_TOLERANCE,
+                    "pending_ghidra": "engine_weight_normalization_behavior",
+                },
             ))
 
 

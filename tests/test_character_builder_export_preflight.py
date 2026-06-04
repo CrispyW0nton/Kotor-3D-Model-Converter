@@ -474,6 +474,73 @@ def test_character_export_preflight_blocks_vertices_with_more_than_four_influenc
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_negative_and_nonfinite_skin_weights() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.skin_data[0].influences = [
+        type("Influence", (), {"bone_index": 0, "weight": -0.25})(),
+        type("Influence", (), {"bone_index": 0, "weight": float("inf")})(),
+    ]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    negative = _issue_by_code(preflight, "character.export.vertex_weight_negative")
+    nonfinite = _issue_by_code(preflight, "character.export.vertex_weight_nonfinite")
+    assert negative.severity.value == "blocking"
+    assert nonfinite.severity.value == "blocking"
+    assert negative.details["weight"] == -0.25
+    assert nonfinite.details["weight"] == "inf"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_zero_sum_skin_weights() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.skin_data[0].influences = [
+        type("Influence", (), {"bone_index": 0, "weight": 0.0})(),
+    ]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.vertex_weight_zero_sum")
+    assert issue.severity.value == "blocking"
+    assert issue.details["weight_sum"] == 0.0
+    assert issue.details["evidence_status"] == "writer_format_contract_verified_ghidra_pending"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_warns_on_positive_unnormalized_skin_weights() -> None:
+    result = _rigged_character()
+    mesh = result["model"].find_node("custom_body")
+    assert mesh is not None
+    mesh.skin_data[0].influences = [
+        type("Influence", (), {"bone_index": 0, "weight": 0.5})(),
+    ]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.vertex_weight_sum")
+    assert issue.severity.value == "warning"
+    assert issue.details["weight_sum"] == 0.5
+    assert issue.details["tolerance"] == 0.01
+    assert issue.details["pending_ghidra"] == "engine_weight_normalization_behavior"
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_blocks_missing_bonemap_target() -> None:
     result = _rigged_character()
     mesh = result["model"].find_node("custom_body")
