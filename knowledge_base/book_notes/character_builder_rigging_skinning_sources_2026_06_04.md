@@ -58,6 +58,105 @@ Do not use either source to override KOTOR facts. Use them to improve the
 tooling workflow around the real Odyssey contract confirmed by MCP, PyKotor,
 MDLOps, KotorBlender, xoreos, and Ghidra.
 
+## 2026-06-04 Direct PDF Anchor Pass
+
+The PDFs were scanned again with `pypdf` for outline entries, metadata, and
+keyword density. This pass did not copy book text into the repository; it
+identified source anchors that explain why specific Character Builder gates are
+worth building.
+
+### Rig It Right Anchors
+
+The rigging book is relevant to Character Builder because its structure keeps
+returning to the same practical rig-authoring checkpoints that GhostRigger
+needs:
+
+- **Props, pivot points, and hierarchies**: supports treating Center Pivot,
+  Freeze Transform, group/payload transforms, and parent-child attachment as
+  explicit authored state rather than hidden viewport conveniences.
+- **Joints and joint orientation**: supports exposing solved local axes,
+  rotational-axis checks, and bind-pose consistency before skinning/export.
+- **Biped leg, spine, arm, clavicle, hand, foot, and knee chapters**: maps to
+  the failure regions users have repeatedly seen in GhostRigger previews:
+  crossed legs, twisted ankles, wrist torsion, shoulder/collar deformation, and
+  root/waist drift.
+- **Skinning and mirror skin weights**: supports keeping symmetry as a guided,
+  undoable authoring helper, while still validating left/right naming and
+  influence safety separately.
+- **Master control and scalable rigs**: supports separating whole-payload
+  scale/placement from native KOTOR node transforms so an imported mesh can be
+  fitted without corrupting the final Odyssey DAG.
+- **Gimbal/flipping and advanced controls**: reinforces that visible pose
+  plausibility is not enough; export reports should record rotation/axis and
+  deformation-risk evidence.
+- **Parallel-world rig evaluation**: supports keeping heavy fit, bind, weight,
+  and deformation-preview steps as headless core jobs with timing/report output,
+  leaving Qt as the orchestrator.
+
+Character Builder decision:
+
+```text
+Auto-Fit, Build/Confirm, Symmetry, Center Pivot, and Freeze Transform are
+authoring operations. They must update session evidence, be undoable where
+interactive, and remain separate from the preserved native KOTOR DAG.
+```
+
+### Automatic Skinning Paper Anchors
+
+Pan et al. is useful because it separates two concepts that Character Builder
+must not blur:
+
+- **automatic skinning**: producing usable deformations for a mesh/skeleton
+  pair;
+- **weight retargeting**: transferring skinning information through geometric
+  or surface correspondence.
+
+The paper's sections on linear blend skinning, extended position-based dynamics,
+surface smoothing, bi-harmonic distance, and surface matching do not become an
+immediate implementation mandate. They do give GhostRigger a product rule:
+
+```text
+Nearest-bone weights are a fallback. Launch-quality custom characters need a
+correspondence-backed donor/native-template transfer and deformation preview.
+```
+
+Practical application for Bendak -> `n_mandalorian`:
+
+- The native KOTOR skeleton remains the only exported skeleton authority.
+- The selected native model or curated donor body should provide the preferred
+  skin-weight source.
+- The imported Bendak surface must first be normalized to the native front/up,
+  root height, scale, and side-pair landmarks.
+- Weight transfer should be constrained by body regions and landmarks so hands,
+  feet, shoulders, hips, and centerline vertices cannot borrow from the wrong
+  side.
+- If future research implements distance-field or smoothing methods, they
+  should run as a post-transfer deformation-quality improvement, not as a
+  replacement for KOTOR evidence gates.
+
+### New Character Builder Lessons From This Pass
+
+This pass strengthens five near-term Character Builder rules:
+
+1. **Auto-fit should produce a named fit solve**, not just viewport placement.
+   The solve should record front axis, up axis, side axis, root/pelvis, scale,
+   confidence, and which landmarks were used.
+2. **Build/Confirm must bind the payload to the native DAG**, not merely draw a
+   purple guide skeleton near the imported mesh. Translating the payload after
+   Build should either move the bound payload and skeleton as one authored unit
+   or clearly enter an edit mode that invalidates bind/export evidence.
+3. **Symmetry must be a toggleable authoring mode with pair evidence**. When on,
+   mirrored guide movement should happen in native body space; when off, only
+   the selected guide moves. Either path must preserve exact KOTOR node names.
+4. **Animation-library preview is part of validation**. A skeleton that looks
+   lined up in bind pose can still fail on inherited walk/idle/attack clips.
+   The supermodel animation dropdown should therefore be treated as export
+   evidence, not a decorative preview panel.
+5. **Donor-weight transfer should be reported by body region**. A single
+   "weights transferred" status is too vague. The report should name the donor,
+   transfer mode, fallback count, wrong-side risk, zero-weight count,
+   normalization range, and risky regions.
+
 ## Character Builder Action Checklist
 
 For the Bendak-to-`n_mandalorian` fixture and similar character imports,

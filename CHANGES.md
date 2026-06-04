@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder rigging/skinning knowledge-base anchor pass: rechecked Tina O'Hailey's *Rig it Right!* and Pan et al.'s automatic skinning/weight-retargeting paper directly with `pypdf` outline/keyword scans, then expanded the Character Builder note with source anchors for pivot/hierarchy state, joint orientation, biped failure regions, symmetry, scalable payload transforms, donor-weight correspondence, and animation-library validation. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `knowledge_base/book_notes/character_builder_rigging_skinning_sources_2026_06_04.md`.
+  Verification: local PDF metadata, outline, and keyword scan with `pypdf`; `git diff --check`.
+
 - Character Builder donor landmark evidence: donor/native-template skin transfer now requires complete source and target fit landmarks (`head`, `pelvis`, `side_pair`, `left_foot`, `right_foot`) before the weight gate can be treated as trusted. Missing landmarks produce a warning and downgrade validation-report weight evidence to `donor_transfer_landmarks_incomplete` while keeping export candidacy honest. Roadmap task: `T1803` / `T2102` / `T2203`.
   Affected areas: `src/core/characters/character_export_preflight.py`, `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`, `knowledge_base/validation/character_builder_bendak_fixture.md`.
   Ground truth used: MCP confirmed the configured K1 and K2 installs are visible and both expose `n_mandalorian` as the current Bendak native-base fixture; this slice validates existing fit/weight evidence and does not change MDL writer or loader semantics.
