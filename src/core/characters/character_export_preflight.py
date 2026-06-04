@@ -53,6 +53,7 @@ class CharacterExportPreflightOptions:
     require_supermodel: bool = True
     require_skin_payload: bool = True
     require_native_bone_map_targets: bool = True
+    require_no_non_native_skeleton_nodes: bool = True
     require_required_sockets: bool = True
     require_native_template_final_rig: bool = True
     strict_parent_paths: bool = True
@@ -133,6 +134,7 @@ def preflight_character_mdl_export(
         _validate_source_provenance(native_snapshot, opts, report)
         _validate_supermodel(model, native_snapshot, opts, report)
         _validate_native_dag(model, native_snapshot, opts, report)
+        _validate_no_non_native_skeleton_nodes(model, native_snapshot, opts, report)
         _validate_socket_categories(model, native_snapshot, opts, report)
 
     if opts.require_skin_payload:
@@ -438,6 +440,61 @@ def _validate_socket_categories(
                 fix_hint="Preview equipment, weapons, and cutscene hooks before treating this model as game-ready.",
                 details={"category": category, **category_evidence},
             ))
+
+
+def _validate_no_non_native_skeleton_nodes(
+    model: Any,
+    snapshot: NativeSkeletonSnapshot,
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    if not opts.require_no_non_native_skeleton_nodes:
+        return
+
+    native_paths = {tuple(node.full_path) for node in snapshot.nodes}
+    native_names = set(snapshot.node_names())
+    for node in _iter_nodes(model):
+        path = _node_path(node)
+        if path in native_paths:
+            continue
+        name = str(getattr(node, "name", "") or "")
+        if name in native_names:
+            # The exact-name/path mismatch is reported by _validate_native_dag.
+            continue
+        if _is_exportable_mesh_payload(node):
+            continue
+        report.add(_issue(
+            "blocking",
+            "character.export.non_native_skeleton_node",
+            (
+                f"Non-native node '{name or '<unnamed>'}' remains in the final "
+                "Character Builder DAG."
+            ),
+            navigation=ValidationNavigationTarget(node_name=name),
+            fix_hint=(
+                "Remove imported armature/helper nodes before export. Only the "
+                "selected KOTOR base skeleton may own the final DAG; imported "
+                "content must be mesh/skin payload."
+            ),
+            details={
+                "node_name": name,
+                "actual_path": list(path),
+                "native_snapshot_model": snapshot.model_name,
+                "native_snapshot_game": snapshot.game,
+                "allowed_non_native_role": "mesh_or_skin_payload",
+                "engine_evidence_status": CHARACTER_EXPORT_EVIDENCE["status"],
+            },
+        ))
+
+
+def _is_exportable_mesh_payload(node: Any) -> bool:
+    if bool(getattr(node, "is_skin", False)):
+        return True
+    if bool(getattr(node, "is_mesh", False)):
+        return True
+    if list(getattr(node, "vertices", []) or []) or list(getattr(node, "faces", []) or []):
+        return True
+    return False
 
 
 def _socket_category_evidence_details(

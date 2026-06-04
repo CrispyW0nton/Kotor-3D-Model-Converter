@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder payload-authority preflight: MDL/MDX export now blocks leftover non-native imported armature/helper nodes in the final DAG while still allowing non-native mesh/skin payload nodes. This closes a path where an FBX skeleton could remain in the export hierarchy even though the native KOTOR snapshot was supposed to own the final skeleton. Roadmap task: `T1205` / Phase 1 rigging architecture and Phase 4 export hardening.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; the final Character Builder skeleton contract remains selected native `pmbam` plus imported mesh payload.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_accepts_native_snapshot_and_skin_payload tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_leftover_imported_armature_node -q --basetemp .pytest_tmp_character_payload_authority`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_payload_authority_full`; `python -m py_compile src/core/characters/character_export_preflight.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder native-DAG path guard: export preflight now distinguishes a native helper/deform/socket node that still exists but has moved from its recorded parent path from a truly missing node, and blocks export with both expected and actual paths. This makes native-template hierarchy drift actionable before MDL/MDX writing. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; both games preserve the verified 17 structural/helper nodes while using different native supermodels.

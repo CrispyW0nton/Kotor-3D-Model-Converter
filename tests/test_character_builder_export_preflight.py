@@ -130,6 +130,7 @@ def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -
 
     assert preflight.export_allowed is True
     assert preflight.report.has_blocking is False
+    assert "character.export.non_native_skeleton_node" not in _codes(preflight)
 
 
 def test_character_export_preflight_accepts_k2_native_snapshot_and_supermodel() -> None:
@@ -447,6 +448,26 @@ def test_character_export_preflight_blocks_bonemap_target_outside_native_snapsho
     assert issue.details["bone_name"] == "custom_body"
     assert issue.details["native_snapshot_model"] == "pmbam"
     assert issue.details["engine_evidence_status"] == "fixture_verified_function_addresses_pending"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_leftover_imported_armature_node() -> None:
+    result = _rigged_character()
+    root = result["model"].root_node
+    assert root is not None
+    _node("mixamorig:Hips", parent=root)
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.non_native_skeleton_node")
+    assert issue.details["node_name"] == "mixamorig:Hips"
+    assert issue.details["actual_path"] == ["PMBAM", "mixamorig:Hips"]
+    assert issue.details["allowed_non_native_role"] == "mesh_or_skin_payload"
+    assert "imported armature/helper nodes" in issue.fix_hint
     assert preflight.report.has_blocking is True
 
 
