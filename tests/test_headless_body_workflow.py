@@ -3209,7 +3209,7 @@ def test_external_model_normalization_uses_bone_landmarks_for_front_axis():
 
     assert result["ok"] is True
     assert result["fit_policy"] == "bone_landmark_basis"
-    assert result["scale_basis"] == "reference_bounds_height"
+    assert result["scale_basis"] == "paired_skeleton_landmark_height"
     assert result["vertical_axis"] == "bone_landmarks"
     assert result["source_fit_landmarks"]["side_pair"] == "shoulder"
     assert result["target_fit_landmarks"]["side_pair"] == "shoulder"
@@ -3375,7 +3375,11 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
 
     assert report["ok"] is True
     assert report["fit_policy"] == "bone_landmark_basis"
-    assert report["scale_basis"] in {"reference_bounds_height", "bone_landmark_height"}
+    assert report["scale_basis"] in {
+        "reference_bounds_height",
+        "bone_landmark_height",
+        "paired_skeleton_landmark_height",
+    }
     assert report["reference"] == "pmbam"
     assert report["source_frame"]["landmarks"]["head"] == "head_g"
     assert report["target_frame"]["landmarks"]["head"] == "head_g"
@@ -3409,6 +3413,7 @@ def test_external_fit_report_uses_humanoid_landmarks_when_available():
     assert transform["landmark_alignment"]["applied_scale_basis"] in {
         "reference_bounds_height",
         "bone_landmark_height",
+        "paired_skeleton_landmark_height",
     }
     assert transform["landmark_alignment"]["worst_pair_role"] in {
         "pelvis",
@@ -3517,6 +3522,64 @@ def test_external_fit_report_prefers_imported_skeleton_over_mesh_name_collision(
         and item["source"] == "imported_skeleton"
         for item in report["visual_overlay"]["source"]["landmarks"]
     )
+
+
+def test_external_fit_report_scales_rigged_payload_from_skeleton_not_render_bounds():
+    root = _fit_node("external_body")
+    oversized_mesh = _fit_node(
+        "Bendak",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    oversized_mesh.vertices = [
+        (-1.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 0.0, 20.0),
+    ]
+    oversized_mesh.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 0.0)),
+        ("Head", (0.0, 0.0, 10.0)),
+        ("LeftShoulder", (-1.0, 0.0, 8.0)),
+        ("RightShoulder", (1.0, 0.0, 8.0)),
+        ("LeftFoot", (-0.4, 0.0, 0.0)),
+        ("RightFoot", (0.4, 0.0, 0.0)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    source = md.KotorModel(name="bendak_payload", root_node=root)
+    reference = _fit_humanoid_model(
+        "n_mandalorian",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+        mesh_height=3.2,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["scale_basis"] == "paired_skeleton_landmark_height"
+    assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
+    assert report["source_height"] == pytest.approx(10.0)
+    assert report["target_height"] == pytest.approx(1.6)
+    assert report["scale_factor"] == pytest.approx(0.16)
+    assert report["fit_transform"]["scale"] == pytest.approx(0.16)
+    assert report["fit_transform"]["landmark_alignment"]["applied_scale"] == pytest.approx(0.16)
+    assert (
+        report["fit_transform"]["landmark_alignment"]["applied_scale_basis"]
+        == "paired_skeleton_landmark_height"
+    )
+    assert report["reference_bounds"]["max"][2] == pytest.approx(3.2)
 
 
 def test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias():

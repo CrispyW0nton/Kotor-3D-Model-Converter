@@ -471,6 +471,33 @@ def _auto_fit_confidence(
     return 0.35
 
 
+def _fit_frame_uses_skeleton_landmarks(
+    frame: Optional[_HumanoidFitFrame],
+) -> bool:
+    if frame is None:
+        return False
+    return any(
+        source in {"imported_skeleton", "skeleton_node"}
+        for source in (frame.landmark_sources or {}).values()
+    )
+
+
+def _target_height_for_landmark_fit(
+    *,
+    explicit_target_height: Optional[float],
+    reference_height: float,
+    target_frame: _HumanoidFitFrame,
+    source_frame: _HumanoidFitFrame,
+) -> Tuple[float, str]:
+    if explicit_target_height is not None:
+        return float(explicit_target_height), "explicit_target_height"
+    if _fit_frame_uses_skeleton_landmarks(source_frame):
+        return float(target_frame.height), "paired_skeleton_landmark_height"
+    if reference_height > 0.01:
+        return float(reference_height), "reference_bounds_height"
+    return float(target_frame.height), "bone_landmark_height"
+
+
 def _make_auto_fit_report(
     *,
     policy: str,
@@ -1195,10 +1222,14 @@ def inspect_external_model_fit(
         report_target_frame = manual_target_frame
         report_landmark_alignment = None
     elif source_frame is not None and target_frame is not None:
-        target = float(target_height or reference_height or target_frame.height)
+        target, scale_basis = _target_height_for_landmark_fit(
+            explicit_target_height=target_height,
+            reference_height=reference_height,
+            target_frame=target_frame,
+            source_frame=source_frame,
+        )
         similarity_alignment = _landmark_similarity_alignment(source_frame, target_frame)
         scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
-        scale_basis = "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height"
         if similarity_alignment is not None:
             similarity_alignment = dict(similarity_alignment)
             similarity_alignment["solved_scale"] = float(similarity_alignment["scale"])
@@ -1211,6 +1242,7 @@ def inspect_external_model_fit(
         report_target_frame = target_frame
         report_landmark_alignment = similarity_alignment
     else:
+        target = fallback_target_height
         scale = fallback_target_height / fallback_source_height
         policy = "selected_reference_bounds" if reference_bounds is not None else "origin_height"
         source_height = fallback_source_height
@@ -1298,11 +1330,7 @@ def inspect_external_model_fit(
         "scale_basis": scale_basis,
         "scale": float(scale),
         "source_height": float(source_height),
-        "target_height": float(
-            target_height
-            or reference_height
-            or (target_frame.height if target_frame is not None else fallback_target_height)
-        ),
+        "target_height": float(target),
         "vertical_axis": vertical_axis,
         "reference": str(reference_label or getattr(reference_model, "name", "") or ""),
         "source_bounds": _bounds_as_lists(bounds),
@@ -2000,7 +2028,23 @@ def normalize_external_model_for_kotor(
 
     if transform_source_frame is not None and transform_target_frame is not None:
         reference_height = _height_from_bounds(reference_bounds)
-        target = float(target_height or reference_height or transform_target_frame.height)
+        if transform_policy == "manual_axis_override":
+            if target_height is not None:
+                target = float(target_height)
+                transform_scale_basis = "explicit_target_height"
+            elif reference_height > 0.01:
+                target = float(reference_height)
+                transform_scale_basis = "reference_bounds_height"
+            else:
+                target = float(transform_target_frame.height)
+                transform_scale_basis = "manual_override_height"
+        else:
+            target, transform_scale_basis = _target_height_for_landmark_fit(
+                explicit_target_height=target_height,
+                reference_height=reference_height,
+                target_frame=transform_target_frame,
+                source_frame=transform_source_frame,
+            )
         landmark_alignment = (
             None
             if transform_policy == "manual_axis_override"
@@ -2019,11 +2063,7 @@ def normalize_external_model_for_kotor(
             landmark_alignment = dict(landmark_alignment)
             landmark_alignment["solved_scale"] = float(landmark_alignment["scale"])
             landmark_alignment["applied_scale"] = float(scale)
-            landmark_alignment["applied_scale_basis"] = (
-                transform_scale_basis
-                if transform_scale_basis
-                else ("reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height")
-            )
+            landmark_alignment["applied_scale_basis"] = transform_scale_basis
         target_origin = _ground_snapped_target_origin(
             bounds=bounds,
             rotation_matrix=rotation,
@@ -2104,11 +2144,7 @@ def normalize_external_model_for_kotor(
             "target_ground_z": target_origin[2],
             "external_world_positions_fit": True,
             "fit_policy": transform_policy,
-            "scale_basis": (
-                transform_scale_basis
-                if transform_scale_basis
-                else ("reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height")
-            ),
+            "scale_basis": transform_scale_basis,
             "source_fit_landmarks": dict(transform_source_frame.landmarks),
             "target_fit_landmarks": dict(transform_target_frame.landmarks),
             "source_fit_confidence": transform_source_frame.confidence,
