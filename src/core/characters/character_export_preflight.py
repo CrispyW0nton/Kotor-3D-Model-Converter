@@ -44,6 +44,7 @@ from .native_skeleton import (
 
 _NULL_SUPERMODELS = {"", "NULL", "NONE"}
 _STRUCTURAL_ROLES = {"socket", "helper", "deform_helper"}
+_REPLACEABLE_RENDER_ROLES = {"mesh", "skin_mesh"}
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class CharacterExportPreflightOptions:
     require_no_non_native_skeleton_nodes: bool = True
     require_required_sockets: bool = True
     require_native_template_final_rig: bool = True
+    require_native_render_replacement_evidence: bool = True
     strict_parent_paths: bool = True
     required_socket_categories: tuple[str, ...] = (
         "head",
@@ -161,6 +163,7 @@ def _validate_character_rig_state(
             model,
             state,
             native_snapshot,
+            opts,
             report,
         )
         return
@@ -184,6 +187,7 @@ def _validate_native_template_rig_provenance(
     model: Any,
     state: Any,
     native_snapshot: NativeSkeletonSnapshot | None,
+    opts: CharacterExportPreflightOptions,
     report: ValidationReport,
 ) -> None:
     state_data = state.to_dict() if state is not None and hasattr(state, "to_dict") else {}
@@ -308,6 +312,13 @@ def _validate_native_template_rig_provenance(
             }
 
     if not mismatches:
+        if opts.require_native_render_replacement_evidence:
+            _validate_native_render_replacement_evidence(
+                model,
+                native_snapshot,
+                native_base,
+                report,
+            )
         return
 
     report.add(_issue(
@@ -336,6 +347,158 @@ def _validate_native_template_rig_provenance(
             ),
         },
     ))
+
+    if opts.require_native_render_replacement_evidence:
+        _validate_native_render_replacement_evidence(
+            model,
+            native_snapshot,
+            native_base,
+            report,
+        )
+
+
+def _validate_native_render_replacement_evidence(
+    model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+    native_base: dict[str, Any],
+    report: ValidationReport,
+) -> None:
+    """Require absent native render leaves to be explicitly replacement-audited."""
+
+    if native_snapshot is None:
+        return
+
+    replacements_raw = native_base.get("replaced_render_payload_nodes", [])
+    replacements = [
+        item for item in replacements_raw
+        if isinstance(item, dict)
+    ]
+    replacement_count = native_base.get("replaced_render_payload_count")
+    if replacement_count is not None:
+        try:
+            if int(replacement_count) != len(replacements):
+                report.add(_issue(
+                    "blocking",
+                    "character.export.render_replacement_count_mismatch",
+                    "Native render replacement evidence count does not match the replacement list.",
+                    fix_hint="Rebuild the KOTOR skeleton so bind evidence is regenerated.",
+                    details={
+                        "declared_count": replacement_count,
+                        "actual_count": len(replacements),
+                    },
+                ))
+        except Exception:
+            report.add(_issue(
+                "blocking",
+                "character.export.render_replacement_count_malformed",
+                "Native render replacement evidence has a malformed replacement count.",
+                fix_hint="Rebuild the KOTOR skeleton so bind evidence is regenerated.",
+                details={"declared_count": replacement_count},
+            ))
+
+    current_paths = {_node_path(node) for node in _iter_nodes(model)}
+    snapshot_by_path = {
+        tuple(node.full_path): node
+        for node in native_snapshot.nodes
+    }
+    replacement_by_path: dict[tuple[str, ...], dict[str, Any]] = {}
+    invalid_replacements: list[dict[str, Any]] = []
+    for entry in replacements:
+        path = _replacement_path(entry)
+        if not path:
+            invalid_replacements.append({
+                "reason": "missing_path",
+                "entry": entry,
+            })
+            continue
+        native_node = snapshot_by_path.get(path)
+        if native_node is None:
+            invalid_replacements.append({
+                "reason": "path_not_in_native_snapshot",
+                "path": list(path),
+            })
+            continue
+        if native_node.export_role not in _REPLACEABLE_RENDER_ROLES:
+            invalid_replacements.append({
+                "reason": "not_replaceable_render_payload",
+                "path": list(path),
+                "role": native_node.export_role,
+            })
+            continue
+        if str(entry.get("replacement") or "") != "imported_mesh_payload":
+            invalid_replacements.append({
+                "reason": "unexpected_replacement_role",
+                "path": list(path),
+                "replacement": entry.get("replacement"),
+            })
+            continue
+        replacement_by_path[path] = entry
+
+    if invalid_replacements:
+        report.add(_issue(
+            "blocking",
+            "character.export.invalid_native_render_replacement_evidence",
+            "Native render replacement evidence includes invalid or non-native nodes.",
+            fix_hint=(
+                "Rebuild the KOTOR skeleton from the selected native base; "
+                "only native render mesh/skin payload leaves may be recorded as replaced."
+            ),
+            details={
+                "invalid_replacements": invalid_replacements,
+                "native_snapshot_model": native_snapshot.model_name,
+                "native_snapshot_game": native_snapshot.game,
+            },
+        ))
+
+    missing_replacements: list[dict[str, Any]] = []
+    for native_node in native_snapshot.nodes:
+        if native_node.export_role not in _REPLACEABLE_RENDER_ROLES:
+            continue
+        path = tuple(native_node.full_path)
+        if path in current_paths:
+            continue
+        if path in replacement_by_path:
+            continue
+        missing_replacements.append({
+            "name": native_node.name,
+            "path": list(path),
+            "role": native_node.export_role,
+            "vertex_count": native_node.vertex_count,
+            "face_count": native_node.face_count,
+            "texture": native_node.texture,
+        })
+
+    if missing_replacements:
+        report.add(_issue(
+            "blocking",
+            "character.export.missing_native_render_replacement_evidence",
+            (
+                "One or more native KOTOR render payload nodes are absent from "
+                "the final DAG without explicit imported-payload replacement evidence."
+            ),
+            fix_hint=(
+                "Rebuild the KOTOR skeleton after importing the custom mesh so "
+                "GhostRigger records which native render skins were intentionally replaced."
+            ),
+            details={
+                "missing_replacements": missing_replacements,
+                "native_snapshot_model": native_snapshot.model_name,
+                "native_snapshot_game": native_snapshot.game,
+                "expected_replacement": "imported_mesh_payload",
+            },
+        ))
+
+
+def _replacement_path(entry: dict[str, Any]) -> tuple[str, ...]:
+    raw = entry.get("path", ())
+    if isinstance(raw, str):
+        parts = [part for part in raw.replace("\\", "/").split("/") if part]
+    else:
+        try:
+            parts = [str(part or "") for part in raw]
+        except Exception:
+            parts = []
+    return tuple(part for part in parts if part)
 
 
 def _validate_resref(model: Any, report: ValidationReport) -> None:

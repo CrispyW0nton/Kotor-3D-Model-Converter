@@ -300,6 +300,75 @@ def test_character_export_preflight_blocks_bind_provenance_mismatch() -> None:
     assert preflight.report.has_blocking is True
 
 
+def test_character_export_preflight_blocks_missing_render_replacement_evidence() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind["native_base"]["replaced_render_payload_nodes"] = []
+    bind["native_base"]["replaced_render_payload_count"] = 0
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.missing_native_render_replacement_evidence",
+    )
+    assert issue.severity.value == "blocking"
+    missing = issue.details["missing_replacements"]
+    assert missing == [
+        {
+            "name": "Torso",
+            "path": ["PMBAM", "Torso"],
+            "role": "skin_mesh",
+            "vertex_count": 1,
+            "face_count": 1,
+            "texture": "",
+        }
+    ]
+    assert issue.details["expected_replacement"] == "imported_mesh_payload"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_invalid_render_replacement_evidence() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind["native_base"]["replaced_render_payload_nodes"] = [
+        *bind["native_base"]["replaced_render_payload_nodes"],
+        {
+            "name": "rootdummy",
+            "path": ["PMBAM", "cutscenedummy", "rootdummy"],
+            "replacement": "imported_mesh_payload",
+        },
+    ]
+    bind["native_base"]["replaced_render_payload_count"] = 2
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.invalid_native_render_replacement_evidence",
+    )
+    assert issue.severity.value == "blocking"
+    invalid = issue.details["invalid_replacements"]
+    assert invalid == [
+        {
+            "reason": "not_replaceable_render_payload",
+            "path": ["PMBAM", "cutscenedummy", "rootdummy"],
+            "role": "helper",
+        }
+    ]
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_missing_required_socket() -> None:
     result = _rigged_character()
     lhand = result["model"].find_node("lhand")
