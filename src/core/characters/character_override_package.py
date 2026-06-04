@@ -701,6 +701,7 @@ def _build_readme(manifest: dict[str, Any]) -> str:
         f"Target resref: {manifest.get('target_resref')}",
         f"Capability stage: {capability.get('stage')}",
         f"Game tested: {capability.get('game_tested')}",
+        f"Game-test status: {capability.get('game_test_status')}",
         f"Game ready: {capability.get('game_ready')}",
     ]
     if replacement_target:
@@ -727,6 +728,9 @@ def _build_readme(manifest: dict[str, Any]) -> str:
         lines.append("Game-ready blockers:")
         for item in blockers:
             lines.append(f"- {item}")
+    honesty_note = str(capability.get("honesty_note") or "").strip()
+    if honesty_note:
+        lines.append(f"Capability note: {honesty_note}")
     if evidence_gates:
         lines.append(
             "Evidence gates: "

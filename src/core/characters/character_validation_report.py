@@ -1052,6 +1052,7 @@ class CharacterBuilderValidationReport:
             f"Verified: {payload.get('verified')}",
             f"Capability stage: {payload.get('capability', {}).get('stage')}",
             f"Game tested: {payload.get('capability', {}).get('game_tested')}",
+            f"Game-test status: {payload.get('capability', {}).get('game_test_status')}",
             f"Game ready: {payload.get('capability', {}).get('game_ready')}",
             f"Game: {payload.get('game')}",
             f"Resref: {payload.get('resref')}",
@@ -1071,6 +1072,9 @@ class CharacterBuilderValidationReport:
             lines.extend(["", "Game-ready blockers:"])
             for item in ready_blockers:
                 lines.append(f"- {item}")
+        honesty_note = str(capability.get("honesty_note") or "").strip()
+        if honesty_note:
+            lines.extend(["", f"Capability note: {honesty_note}"])
 
         evidence_gates = dict(payload.get("character_builder_evidence_gates") or {})
         workflow = dict(payload.get("metadata", {}).get("character_builder_workflow") or {})

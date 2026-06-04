@@ -1982,6 +1982,8 @@ def test_character_builder_validation_report_has_full_manual_checklist() -> None
     text = report.to_text()
     assert "Capability stage: export_candidate" in text
     assert "Game ready: False" in text
+    assert "Game-test status: not_game_tested" in text
+    assert "Capability note: GhostRigger verification proves staged export" in text
     assert "Game-ready blockers:" in text
     assert "Game tested: False" in text
     assert "1. Load as player character without crash" in text

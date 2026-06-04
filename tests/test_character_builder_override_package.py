@@ -253,6 +253,11 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     }
     readme = readme_path.read_text(encoding="utf-8")
     assert "Game ready: False" in readme
+    assert "Game-test status: not_game_tested" in readme
+    assert (
+        "Capability note: This package is install-ready only when MDL/MDX export "
+        "was reload verified."
+    ) in readme
     assert (
         "Replacement target: target=n_mandalorian03, native_base=n_mandalorian, "
         "variant_base=n_mandalorian, compatible=True"
