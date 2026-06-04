@@ -130,6 +130,25 @@ def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -
     assert preflight.report.has_blocking is False
 
 
+def test_character_export_preflight_blocks_native_snapshot_game_mismatch() -> None:
+    result = _rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(
+            export_game="K2",
+            recommended_socket_categories=(),
+        ),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.native_snapshot_game_mismatch")
+    assert issue.details["export_game"] == "K2"
+    assert issue.details["normalized_native_game_facts"]["snapshot_game"] == "K1"
+    assert issue.details["normalized_native_game_facts"]["metadata_source_game"] == "K1"
+    assert preflight.report.has_blocking is True
+
+
 def test_character_export_preflight_blocks_missing_native_snapshot() -> None:
     result = _rigged_character()
     delattr(result["model"], "_gr_native_skeleton_snapshot")
@@ -480,6 +499,33 @@ def test_character_export_transaction_preflight_failure_never_calls_writer(tmp_p
     assert "character.export.missing_native_snapshot" in {
         issue.code for issue in tx.export_job_result.validation_report.issues
     }
+
+
+def test_character_export_transaction_blocks_wrong_game_before_writer(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    output = tmp_path / "wrong_game.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            game="K2",
+            native_snapshot=result["native_skeleton_snapshot"],
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: result["model"],
+        )
+    )
+
+    assert tx.succeeded is False
+    assert _FakeCharacterWriter.calls == []
+    assert not output.exists()
+    assert not output.with_suffix(".mdx").exists()
+    issue = _issue_by_code(
+        tx.preflight_result,
+        "character.export.native_snapshot_game_mismatch",
+    )
+    assert issue.details["export_game"] == "K2"
 
 
 def test_character_export_transaction_reload_failure_leaves_no_final_files(tmp_path) -> None:

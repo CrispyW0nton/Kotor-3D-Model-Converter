@@ -8,7 +8,7 @@ engine-evidence-backed preflight report beside every successful export.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -103,11 +103,12 @@ def export_character_mdl_mdx_transaction(
     mdx_path = mdl_path.with_suffix(".mdx")
     json_path = _validation_json_path(mdl_path)
     txt_path = _validation_text_path(mdl_path)
+    preflight_options = _preflight_options_for_request(request)
 
     preflight = preflight_character_mdl_export(
         request.model,
         native_snapshot=request.native_snapshot,
-        options=request.preflight_options,
+        options=preflight_options,
     )
     native_snapshot = preflight.native_snapshot
 
@@ -180,7 +181,7 @@ def export_character_mdl_mdx_transaction(
         reload_preflight = preflight_character_mdl_export(
             loaded,
             native_snapshot=native_snapshot,
-            options=request.preflight_options,
+            options=preflight_options,
         )
         issues.extend(reload_preflight.report.issues)
         if not reload_preflight.report.has_blocking:
@@ -219,6 +220,14 @@ def export_character_mdl_mdx_transaction(
         preflight_result=preflight,
         reloaded_model=reloaded.get("model"),
     )
+
+
+def _preflight_options_for_request(
+    request: CharacterBuilderExportTransactionRequest,
+) -> CharacterExportPreflightOptions:
+    if request.preflight_options is None:
+        return CharacterExportPreflightOptions(export_game=request.game)
+    return replace(request.preflight_options, export_game=request.game)
 
 
 def _write_validation_artifacts(

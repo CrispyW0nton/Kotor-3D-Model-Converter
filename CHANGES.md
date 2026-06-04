@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-03
 
+- Character Builder native-game export gate: MDL/MDX export preflight now compares the requested export game with the selected `NativeSkeletonSnapshot` game/provenance facts, and the staged Character Builder transaction injects its `request.game` into preflight automatically. A K1 native base can no longer silently produce a K2 export candidate, or vice versa. Roadmap task: `T1205` / Phase 4 export hardening.
+  Affected areas: `src/core/characters/character_export_preflight.py`, `src/core/characters/character_export_transaction.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: `docs/ghidra_findings.md` records K1/K2 `pmbam` differences including distinct supermodel chains and animation-library counts; an MCP `kotor_search_symbols` pass for `super` timed out, so this slice relies only on recorded native snapshot provenance and introduces no new MDL-loader assumptions.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_native_snapshot_game_mismatch tests/test_character_builder_export_preflight.py::test_character_export_transaction_blocks_wrong_game_before_writer -q --basetemp .pytest_tmp_character_game_preflight`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_game_preflight_full`; `python -m py_compile src/core/characters/character_export_preflight.py src/core/characters/character_export_transaction.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder validation capability honesty: export validation artifacts now include a `capability` block and text summary that labels successful staged/reload-verified MDL/MDX outputs as `export_candidate` unless an in-game manual checklist has actually passed. Roadmap task: `T1205` / Phase 6 validation reporting.
   Affected areas: `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: K1 installation and K1/K2 Ghidra binary contexts were refreshed through MCP before touching export-validation artifacts; this slice only clarifies verification scope and introduces no new MDL binary-format assumptions.

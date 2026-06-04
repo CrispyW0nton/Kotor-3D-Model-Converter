@@ -46,8 +46,10 @@ _STRUCTURAL_ROLES = {"socket", "helper", "deform_helper"}
 class CharacterExportPreflightOptions:
     """Tunable checks for Character Builder MDL/MDX export readiness."""
 
+    export_game: str | None = None
     require_source_mdl: bool = True
     require_native_snapshot: bool = True
+    require_native_snapshot_game_match: bool = True
     require_supermodel: bool = True
     require_skin_payload: bool = True
     require_native_bone_map_targets: bool = True
@@ -127,6 +129,7 @@ def preflight_character_mdl_export(
     _validate_character_rig_state(model, opts, report)
 
     if native_snapshot is not None:
+        _validate_native_snapshot_game(native_snapshot, opts, report)
         _validate_source_provenance(native_snapshot, opts, report)
         _validate_supermodel(model, native_snapshot, opts, report)
         _validate_native_dag(model, native_snapshot, opts, report)
@@ -185,6 +188,56 @@ def _validate_resref(model: Any, report: ValidationReport) -> None:
             fix_hint="Use a KOTOR-safe resref of 16 characters or fewer.",
             details={"resref": name, "max_length": KOTOR_NATIVE_RESREF_MAX_LEN},
         ))
+
+
+def _validate_native_snapshot_game(
+    snapshot: NativeSkeletonSnapshot,
+    opts: CharacterExportPreflightOptions,
+    report: ValidationReport,
+) -> None:
+    if not opts.require_native_snapshot_game_match:
+        return
+    export_game = _normalize_kotor_game(opts.export_game)
+    if not export_game:
+        return
+
+    metadata = dict(snapshot.metadata or {})
+    game_facts = {
+        "snapshot_game": snapshot.game,
+        "metadata_source_game": metadata.get("source_game"),
+        "metadata_game": metadata.get("game"),
+    }
+    normalized_facts = {
+        key: _normalize_kotor_game(value)
+        for key, value in game_facts.items()
+        if str(value or "").strip()
+    }
+    mismatches = {
+        key: value
+        for key, value in normalized_facts.items()
+        if value and value != "UNKNOWN" and value != export_game
+    }
+    if not mismatches:
+        return
+
+    report.add(_issue(
+        "blocking",
+        "character.export.native_snapshot_game_mismatch",
+        (
+            f"Native skeleton snapshot is for {', '.join(sorted(set(mismatches.values())))} "
+            f"but the export request targets {export_game}."
+        ),
+        fix_hint=(
+            "Choose a base KOTOR model from the same game as the export target, "
+            "then rebuild the native template rig before exporting."
+        ),
+        details={
+            "export_game": export_game,
+            "native_game_facts": game_facts,
+            "normalized_native_game_facts": normalized_facts,
+            "mismatches": mismatches,
+        },
+    ))
 
 
 def _validate_source_provenance(
@@ -733,6 +786,33 @@ def _find_node_exact_path(nodes: list[Any], path: tuple[str, ...]) -> Any | None
         if _node_path(node) == path:
             return node
     return None
+
+
+def _normalize_kotor_game(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    compact = raw.lower().replace("_", " ").replace("-", " ")
+    compact = " ".join(compact.split())
+    if (
+        compact in {"2", "k2", "tsl", "kotor2", "kotor 2", "kotor ii"}
+        or "gameversion.k2" in compact
+        or "kotor ii" in compact
+        or "kotor 2" in compact
+        or "the sith lords" in compact
+        or "swkotor2" in compact
+    ):
+        return "K2"
+    if (
+        compact in {"1", "k1", "kotor1", "kotor 1", "kotor i"}
+        or "gameversion.k1" in compact
+        or "kotor i" in compact
+        or "kotor 1" in compact
+        or compact == "knights of the old republic"
+        or "swkotor" in compact
+    ):
+        return "K1"
+    return raw.upper()
 
 
 def _find_node_exact_name(nodes: list[Any], name: str) -> Any | None:
