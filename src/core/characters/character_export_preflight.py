@@ -214,11 +214,35 @@ def _validate_native_snapshot_game(
         for key, value in game_facts.items()
         if str(value or "").strip()
     }
+    matching_facts = {
+        key: value
+        for key, value in normalized_facts.items()
+        if value == export_game
+    }
     mismatches = {
         key: value
         for key, value in normalized_facts.items()
         if value and value != "UNKNOWN" and value != export_game
     }
+    if not matching_facts and not mismatches:
+        report.add(_issue(
+            "blocking",
+            "character.export.native_snapshot_game_unknown",
+            (
+                "Native skeleton snapshot does not prove which KOTOR game it "
+                f"came from, but the export request targets {export_game}."
+            ),
+            fix_hint=(
+                "Choose a base KOTOR model from the configured K1/K2 game "
+                "library, then rebuild the native template rig before exporting."
+            ),
+            details={
+                "export_game": export_game,
+                "native_game_facts": game_facts,
+                "normalized_native_game_facts": normalized_facts,
+            },
+        ))
+        return
     if not mismatches:
         return
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 
 from src.core.characters.character_builder import apply_template_rig
@@ -169,6 +170,36 @@ def test_character_export_preflight_blocks_native_snapshot_game_mismatch() -> No
     assert issue.details["export_game"] == "K2"
     assert issue.details["normalized_native_game_facts"]["snapshot_game"] == "K1"
     assert issue.details["normalized_native_game_facts"]["metadata_source_game"] == "K1"
+    assert preflight.report.has_blocking is True
+
+
+def test_character_export_preflight_blocks_unknown_native_snapshot_game() -> None:
+    result = _rigged_character()
+    snapshot = result["native_skeleton_snapshot"]
+    unknown_snapshot = replace(
+        snapshot,
+        game="unknown",
+        metadata={
+            **dict(snapshot.metadata or {}),
+            "source_game": "",
+            "game": "",
+        },
+    )
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=unknown_snapshot,
+        options=CharacterExportPreflightOptions(
+            export_game="K1",
+            recommended_socket_categories=(),
+        ),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.native_snapshot_game_unknown")
+    assert issue.details["export_game"] == "K1"
+    assert issue.details["normalized_native_game_facts"]["snapshot_game"] == "UNKNOWN"
+    assert issue.details["native_game_facts"]["metadata_source_game"] == ""
+    assert "configured K1/K2 game library" in issue.fix_hint
     assert preflight.report.has_blocking is True
 
 
@@ -635,6 +666,43 @@ def test_character_export_transaction_blocks_wrong_game_before_writer(tmp_path) 
         "character.export.native_snapshot_game_mismatch",
     )
     assert issue.details["export_game"] == "K2"
+
+
+def test_character_export_transaction_blocks_unknown_game_before_writer(tmp_path) -> None:
+    _FakeCharacterWriter.calls = []
+    result = _rigged_character()
+    snapshot = result["native_skeleton_snapshot"]
+    unknown_snapshot = replace(
+        snapshot,
+        game="unknown",
+        metadata={
+            **dict(snapshot.metadata or {}),
+            "source_game": "",
+            "game": "",
+        },
+    )
+    output = tmp_path / "unknown_game.mdl"
+
+    tx = export_character_mdl_mdx_transaction(
+        CharacterBuilderExportTransactionRequest(
+            model=result["model"],
+            output_mdl_path=output,
+            game="K1",
+            native_snapshot=unknown_snapshot,
+            writer_cls=_FakeCharacterWriter,
+            loader=lambda _mdl, _mdx: result["model"],
+        )
+    )
+
+    assert tx.succeeded is False
+    assert _FakeCharacterWriter.calls == []
+    assert not output.exists()
+    assert not output.with_suffix(".mdx").exists()
+    issue = _issue_by_code(
+        tx.preflight_result,
+        "character.export.native_snapshot_game_unknown",
+    )
+    assert issue.details["export_game"] == "K1"
 
 
 def test_character_export_transaction_accepts_k2_native_snapshot(tmp_path) -> None:
