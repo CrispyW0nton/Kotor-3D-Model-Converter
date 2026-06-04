@@ -948,6 +948,7 @@ def apply_template_rig(
             bind_report = bind_imported_meshes_to_skeleton(
                 result_model,
                 mesh_nodes=mesh_payloads,
+                donor_model=template_model,
             )
             if not bind_report.ok:
                 return {"ok": False, "model": None,
@@ -990,6 +991,7 @@ def apply_template_rig(
                 str(getattr(mesh_node, "name", "") or "")
                 for mesh_node in mesh_payloads
             )
+            donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
@@ -1023,9 +1025,13 @@ def apply_template_rig(
                         "quality_stage",
                         "fallback_first_pass",
                     ),
-                    "donor_weight_transfer": False,
+                    "donor_weight_transfer": donor_weight_transfer,
                     "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
                     "note": (
+                        "Native-template donor weights were transferred by nearest "
+                        "surface vertex. Preview inherited animations before "
+                        "claiming launch-quality deformation."
+                        if donor_weight_transfer else
                         "Nearest-bone fallback skinning is deterministic and "
                         "exportable, but donor/native-template weight transfer "
                         "is required before claiming launch-quality deformation."

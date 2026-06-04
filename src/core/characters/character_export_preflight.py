@@ -382,13 +382,14 @@ def _validate_skin_binding_evidence(
     if (
         weighting_method == "nearest_kotor_bone_segment"
         or quality_stage == "fallback_first_pass"
+        or quality_stage == "donor_transfer_partial"
         or not donor_weight_transfer
     ):
         report.add(_issue(
             "warning",
             "character.export.fallback_skin_binding",
             (
-                "Character Builder is using nearest-bone fallback skin weights. "
+                "Character Builder is using fallback or partial skin weights. "
                 "This is exportable but not launch-quality deformation evidence."
             ),
             fix_hint=(

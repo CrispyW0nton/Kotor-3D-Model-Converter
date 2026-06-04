@@ -69,11 +69,14 @@ Headless workflow proof on 2026-06-04 confirmed:
   `n_mandalorian03.mdx`, an Override manifest, and a readme/checklist into a
   temp package folder without touching a live game install.
 - Current skin binding evidence is now explicit: the generated payload is
-  recorded as `nearest_kotor_bone_segment` / `fallback_first_pass` until a
-  donor/native-template weight-transfer mode is implemented. That means the
-  candidate can be reload/export verified, but it must not be described as
-  launch-quality deformation until inherited animation preview and donor
-  weight-transfer evidence pass.
+  recorded as `native_template_nearest_vertex_donor` /
+  `donor_transfer_first_pass` when every imported vertex receives weights from
+  the selected native KOTOR template donor surface. In the Bendak local fixture,
+  all 4,722 imported vertices transfer from 2,166 native donor vertices with no
+  nearest-bone fallback vertices.
+- Character Builder compacts the generated skin bone map to the used influence
+  slots before MDL/MDX export, keeping `bone_map`, `qbone_list`, `tbone_list`,
+  and per-vertex influence indices aligned through writer/readback validation.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

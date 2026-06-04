@@ -278,6 +278,50 @@ def test_apply_template_rig_does_not_scale_native_template_in_manual_mode() -> N
     )
 
 
+def test_apply_template_rig_transfers_native_template_donor_weights_by_nearest_vertex() -> None:
+    src_root = _node("import_root")
+    mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(-1.1, 0.0, 0.0), (1.1, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = KotorModel(name="body", root_node=src_root)
+
+    kotor_root = _node("NativeRoot")
+    _node("left_g", parent=kotor_root)
+    _node("right_g", parent=kotor_root)
+    donor = _node(
+        "NativeTorso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    donor.vertices = [(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+    donor.faces = [(0, 1, 1)]
+    donor.bone_map = ["left_g", "right_g"]
+    donor.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    template = KotorModel(name="native_template", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("body_mesh")
+    assert rigged_mesh is not None
+    left_index = rigged_mesh.bone_map.index("left_g")
+    right_index = rigged_mesh.bone_map.index("right_g")
+    assert rigged_mesh.skin_data[0].influences[0].bone_index == left_index
+    assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
+    assert rigged_mesh.skin_data[1].influences[0].bone_index == right_index
+    assert math.isclose(rigged_mesh.skin_data[1].influences[0].weight, 1.0)
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "native_template_nearest_vertex_donor"
+    assert skin_binding["quality_stage"] == "donor_transfer_first_pass"
+    assert skin_binding["donor_weight_transfer"] is True
+    assert skin_binding["mesh_reports"][0]["donor_vertices"] == 2
+    assert skin_binding["mesh_reports"][0]["fallback_vertices"] == 0
+    assert skin_binding["mesh_reports"][0]["donor_vertex_count"] == 2
+
+
 def test_apply_template_rig_records_replaced_native_render_payload_nodes() -> None:
     src_root = _node("import_root")
     mesh = _node("bendak_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)

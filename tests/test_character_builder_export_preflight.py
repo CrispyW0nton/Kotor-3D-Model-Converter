@@ -24,7 +24,13 @@ from src.core.characters.character_validation_report import (
     CharacterBuilderValidationReport,
 )
 from src.core.characters.native_skeleton import native_skeleton_fingerprint
-from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+from src.core.geometry.model_data import (
+    BoneWeight,
+    KotorModel,
+    ModelNode,
+    NodeFlags,
+    VertexSkinData,
+)
 from src.core.validation.validation_bus import (
     ValidationIssue,
     ValidationNavigationTarget,
@@ -105,6 +111,40 @@ def _rigged_character(template: KotorModel | None = None, *, game: str = "K1") -
     )
 
 
+def _donor_weight_rigged_character() -> dict:
+    root = _node("import_root")
+    mesh = _node("custom_body", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=root)
+    mesh.vertices = [(-1.1, 0.0, 0.0), (1.1, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = KotorModel(name="grbody", root_node=root)
+
+    kotor_root = _node("PMBAM")
+    _node("left_g", parent=kotor_root)
+    _node("right_g", parent=kotor_root)
+    donor = _node(
+        "Torso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    donor.vertices = [(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+    donor.faces = [(0, 1, 1)]
+    donor.bone_map = ["left_g", "right_g"]
+    donor.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    template = KotorModel(name="pmbam", root_node=kotor_root, supermodel="S_KPMF0200")
+    template._gr_source_resref = "pmbam"
+    template._gr_source_game = "K1"
+    template._gr_source_layer = "game_library"
+    return apply_template_rig(
+        mesh_model,
+        template,
+        game="K1",
+        scale_mode="manual",
+    )
+
+
 def _codes(result) -> set[str]:
     return {issue.code for issue in result.report.issues}
 
@@ -175,6 +215,23 @@ def test_character_export_preflight_warns_when_skin_binding_evidence_is_missing(
 
     issue = _issue_by_code(preflight, "character.export.missing_skin_binding_evidence")
     assert issue.severity.value == "warning"
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_accepts_complete_donor_skin_binding_without_fallback_warning() -> None:
+    result = _donor_weight_rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(
+            required_socket_categories=(),
+            recommended_socket_categories=(),
+        ),
+    )
+
+    assert result["model"].metadata["character_builder_bind"]["skin_binding"]["donor_weight_transfer"] is True
+    assert "character.export.fallback_skin_binding" not in _codes(preflight)
     assert preflight.export_allowed is True
 
 
