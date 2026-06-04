@@ -693,6 +693,8 @@ def _build_manifest(
 def _build_readme(manifest: dict[str, Any]) -> str:
     capability = dict(manifest.get("capability") or {})
     evidence_gates = dict(manifest.get("character_builder_evidence_gates") or {})
+    replacement_target = dict(manifest.get("replacement_target") or {})
+    workflow = dict(manifest.get("character_builder_workflow") or {})
     lines = [
         "GhostRigger Character Builder Override Package",
         f"Game: {manifest.get('game')}",
@@ -701,6 +703,21 @@ def _build_readme(manifest: dict[str, Any]) -> str:
         f"Game tested: {capability.get('game_tested')}",
         f"Game ready: {capability.get('game_ready')}",
     ]
+    if replacement_target:
+        lines.append(
+            "Replacement target: "
+            f"target={replacement_target.get('target_resref')}, "
+            f"native_base={replacement_target.get('native_base_resref')}, "
+            f"variant_base={replacement_target.get('target_numbered_variant_base')}, "
+            f"compatible={replacement_target.get('compatible')}"
+        )
+    if workflow:
+        lines.append(
+            "Workflow: "
+            f"native_skeleton_is_authority={workflow.get('native_skeleton_is_authority')}, "
+            f"imported_mesh_role={workflow.get('imported_mesh_role')}, "
+            f"final_dag_source={workflow.get('final_dag_source')}"
+        )
     blockers = [
         str(item or "")
         for item in list(capability.get("game_ready_blockers") or [])

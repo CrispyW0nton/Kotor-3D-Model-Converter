@@ -253,6 +253,14 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     }
     readme = readme_path.read_text(encoding="utf-8")
     assert "Game ready: False" in readme
+    assert (
+        "Replacement target: target=n_mandalorian03, native_base=n_mandalorian, "
+        "variant_base=n_mandalorian, compatible=True"
+    ) in readme
+    assert (
+        "Workflow: native_skeleton_is_authority=True, "
+        "imported_mesh_role=payload_guest, final_dag_source=selected_kotor_base"
+    ) in readme
     assert "Game-ready blockers:" in readme
     assert "- fit=needs_review" in readme
     assert "Evidence gates: fit=needs_review" in readme
