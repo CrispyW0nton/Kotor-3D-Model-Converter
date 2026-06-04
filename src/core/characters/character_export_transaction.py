@@ -23,6 +23,7 @@ from src.core.export.export_job import (
 from src.core.validation.validation_bus import (
     ValidationBus,
     ValidationIssue,
+    ValidationNavigationTarget,
     ValidationReport,
     ValidationSeverity,
     ValidationSubsystem,
@@ -42,6 +43,9 @@ from .character_validation_report import (
 
 
 LoaderCallable = Callable[[Path, Path], Any]
+
+
+_RELOADED_NATIVE_DAG_ROLES = frozenset({"socket", "helper", "deform_helper"})
 
 
 @dataclass
@@ -188,7 +192,12 @@ def export_character_mdl_mdx_transaction(
             options=_reload_preflight_options(preflight_options),
         )
         issues.extend(reload_preflight.report.issues)
-        if not reload_preflight.report.has_blocking:
+        reload_dag_report = _verify_reloaded_native_dag_contract(
+            loaded,
+            native_snapshot,
+        )
+        issues.extend(reload_dag_report.issues)
+        if not reload_preflight.report.has_blocking and not reload_dag_report.has_blocking:
             issues.append(
                 ValidationIssue(
                     severity=ValidationSeverity.INFO,
@@ -255,6 +264,164 @@ def _reload_preflight_options(
         preflight_options,
         require_native_template_final_rig=False,
     )
+
+
+def _verify_reloaded_native_dag_contract(
+    model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+) -> ValidationReport:
+    """Return reload-specific proof that the selected native DAG survived IO."""
+
+    issues: list[ValidationIssue] = []
+    if native_snapshot is None:
+        issues.append(_export_issue(
+            "character.export.reload_missing_native_snapshot",
+            (
+                "Reload verification requires the selected native KOTOR "
+                "skeleton snapshot."
+            ),
+        ))
+        return ValidationReport(
+            source="character.export_transaction.verify.native_dag",
+            issues=issues,
+        )
+
+    current_nodes = _model_nodes(model)
+    current_paths = {_node_path(node): node for node in current_nodes}
+    current_paths_lower = {
+        tuple(part.lower() for part in _node_path(node)): node
+        for node in current_nodes
+    }
+    current_names: dict[str, Any] = {}
+    for node in current_nodes:
+        current_names.setdefault(str(getattr(node, "name", "") or ""), node)
+
+    checked_paths: list[tuple[str, ...]] = []
+    for native_node in native_snapshot.nodes:
+        if native_node.export_role not in _RELOADED_NATIVE_DAG_ROLES:
+            continue
+        expected_path = tuple(native_node.full_path)
+        checked_paths.append(expected_path)
+        if expected_path in current_paths:
+            continue
+
+        lower_match = current_paths_lower.get(
+            tuple(part.lower() for part in expected_path)
+        )
+        if lower_match is not None:
+            issues.append(_reload_dag_issue(
+                "character.export.reload_node_case_changed",
+                (
+                    f"Reloaded MDL changed native node casing for "
+                    f"'{native_node.name}'."
+                ),
+                native_snapshot=native_snapshot,
+                native_node=native_node,
+                details={
+                    "expected_path": list(expected_path),
+                    "actual_path": list(_node_path(lower_match)),
+                    "role": native_node.export_role,
+                },
+            ))
+            continue
+
+        exact_name_match = current_names.get(native_node.name)
+        if exact_name_match is not None:
+            issues.append(_reload_dag_issue(
+                "character.export.reload_node_path_changed",
+                (
+                    f"Reloaded MDL moved native {native_node.export_role} "
+                    f"node '{native_node.name}' away from its selected "
+                    "KOTOR template path."
+                ),
+                native_snapshot=native_snapshot,
+                native_node=native_node,
+                details={
+                    "expected_path": list(expected_path),
+                    "actual_path": list(_node_path(exact_name_match)),
+                    "role": native_node.export_role,
+                },
+            ))
+            continue
+
+        issues.append(_reload_dag_issue(
+            "character.export.reload_node_path_missing",
+            (
+                f"Reloaded MDL is missing native {native_node.export_role} "
+                f"node '{native_node.name}' at the selected KOTOR template path."
+            ),
+            native_snapshot=native_snapshot,
+            native_node=native_node,
+            details={
+                "expected_path": list(expected_path),
+                "role": native_node.export_role,
+            },
+        ))
+
+    if not issues:
+        issues.append(ValidationIssue(
+            severity=ValidationSeverity.INFO,
+            subsystem=ValidationSubsystem.CHARACTER,
+            code="character.export.reload_native_dag_verified",
+            message=(
+                "Reloaded MDL/MDX preserved the selected native KOTOR "
+                "structural DAG contract."
+            ),
+            details=_json_safe({
+                "native_snapshot": _native_snapshot_reload_evidence(native_snapshot),
+                "checked_roles": sorted(_RELOADED_NATIVE_DAG_ROLES),
+                "checked_path_count": len(checked_paths),
+                "checked_paths": [list(path) for path in checked_paths],
+            }),
+            source="character.export_transaction.verify.native_dag",
+        ))
+
+    return ValidationReport(
+        source="character.export_transaction.verify.native_dag",
+        issues=issues,
+    )
+
+
+def _reload_dag_issue(
+    code: str,
+    message: str,
+    *,
+    native_snapshot: NativeSkeletonSnapshot,
+    native_node: Any,
+    details: dict[str, Any],
+) -> ValidationIssue:
+    payload = {
+        **dict(details or {}),
+        "native_snapshot": _native_snapshot_reload_evidence(native_snapshot),
+        "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
+    }
+    return ValidationIssue(
+        severity=ValidationSeverity.BLOCKING,
+        subsystem=ValidationSubsystem.CHARACTER,
+        code=code,
+        message=message,
+        navigation=ValidationNavigationTarget(node_name=str(native_node.name or "")),
+        fix_hint=(
+            "Inspect the staged/reloaded MDL writer path and restore the exact "
+            "native KOTOR node path before promoting this Character Builder export."
+        ),
+        details=_json_safe(payload),
+        source="character.export_transaction.verify.native_dag",
+    )
+
+
+def _native_snapshot_reload_evidence(
+    native_snapshot: NativeSkeletonSnapshot,
+) -> dict[str, Any]:
+    return {
+        "model_name": native_snapshot.model_name,
+        "game": native_snapshot.game,
+        "supermodel": native_snapshot.supermodel,
+        "dag_fingerprint": native_skeleton_fingerprint(native_snapshot),
+        "dag_fingerprint_algorithm": "sha256",
+        "node_count": native_snapshot.node_count,
+        "hook_names": list(native_snapshot.hook_names),
+    }
 
 
 def _write_validation_artifacts(
@@ -426,6 +593,21 @@ def _model_nodes(model: Any) -> list[Any]:
         result.append(node)
         stack.extend(reversed(list(getattr(node, "children", []) or [])))
     return result
+
+
+def _node_path(node: Any) -> tuple[str, ...]:
+    names = [str(getattr(node, "name", "") or "")]
+    parent = getattr(node, "parent", None)
+    visited: set[int] = set()
+    while parent is not None:
+        parent_id = id(parent)
+        if parent_id in visited:
+            break
+        visited.add(parent_id)
+        names.append(str(getattr(parent, "name", "") or ""))
+        parent = getattr(parent, "parent", None)
+    names.reverse()
+    return tuple(names)
 
 
 def _json_safe(value: Any) -> Any:

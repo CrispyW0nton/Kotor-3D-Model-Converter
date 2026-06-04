@@ -82,6 +82,11 @@ Headless workflow proof on 2026-06-04 confirmed:
   translation, sufficient confidence, non-fallback fit mode, and the KOTOR
   contract that the native skeleton remains the final DAG authority while the
   Bendak mesh remains the payload guest.
+- Reload verification now emits a dedicated native-DAG proof after staged
+  MDL/MDX readback. It checks that the selected KOTOR template's structural,
+  helper, deform-helper, and socket paths still reload with exact casing and
+  parent paths before ExportJob promotes final files. If a hook such as
+  `headhook` is missing or moved after reload, promotion is blocked.
 - The native-template launch proof now resolves inherited animation libraries
   through the selected base model's real supermodel chain instead of trusting
   only the stored `supermodel` string. In the current configured install,
@@ -146,7 +151,8 @@ The fixture is not considered passing until all of these are true:
   `native_template_final`.
 - Export writes MDL/MDX only through the staged Character Builder export
   transaction.
-- Reload verification records native snapshot/report evidence.
+- Reload verification records native snapshot/report evidence and blocks if
+  staged readback loses or moves selected native KOTOR structural paths.
 
 ## Capability Honesty
 
