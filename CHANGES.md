@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder reload proof metadata: successful staged MDL/MDX verification now records a compact `reloaded_model` summary on the `character.export.reload_verified` issue, including model/supermodel, node and skin counts, skin payload rows, and the native snapshot checked. This makes export-candidate reports prove what was reloaded and structurally checked. Roadmap task: `T1205` / Phase 6 validation reporting.
+  Affected areas: `src/core/characters/character_export_transaction.py`, `tests/test_character_builder_export_preflight.py`.
+  Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the verifier metadata change; this slice records existing reload/preflight evidence and introduces no new MDL-loader assumptions.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_transaction_stages_verifies_and_writes_reports tests/test_character_builder_export_preflight.py::test_character_export_transaction_reload_verifies_without_workflow_markers -q --basetemp .pytest_tmp_character_reload_summary`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_reload_summary_full`; `python -m py_compile src/core/characters/character_export_transaction.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder reload verification: staged MDL/MDX export now uses a reload-specific preflight that keeps runtime/native DAG checks but does not require Python-only Character Builder rig-state markers on the reloaded file. The pre-write pass still requires `native_template_final`; the reload pass now reflects what a real MDL reload can prove. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_transaction.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the export-verifier change; this slice changes verification staging only and introduces no new MDL-loader assumptions.

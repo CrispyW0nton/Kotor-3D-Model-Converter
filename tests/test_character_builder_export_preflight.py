@@ -652,12 +652,26 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["native_snapshot"]["model_name"] == "pmbam"
     assert workflow["native_snapshot"]["game"] == "K1"
     assert workflow["native_snapshot"]["supermodel"] == "S_KPMF0200"
+    reload_issues = {
+        issue["code"]: issue
+        for issue in payload["reload_report"]["issues"]
+    }
+    reload_summary = reload_issues["character.export.reload_verified"]["details"]["reloaded_model"]
+    assert reload_summary["model_name"] == "grbody"
+    assert reload_summary["supermodel"] == "S_KPMF0200"
+    assert reload_summary["node_count"] >= result["native_skeleton_snapshot"].node_count
+    assert reload_summary["skin_node_count"] >= 1
+    assert reload_summary["skin_payloads"][0]["name"] == "custom_body"
+    assert reload_summary["skin_payloads"][0]["skin_rows"] == 3
+    assert reload_summary["native_snapshot_checked"]["game"] == "K1"
+    assert reload_summary["native_snapshot_checked"]["supermodel"] == "S_KPMF0200"
     text = text_path.read_text(encoding="utf-8")
     assert "Capability stage: export_candidate" in text
     assert "Game tested: False" in text
     assert "Character Builder workflow evidence" in text
     assert "Rig state: native_template_final" in text
     assert "Auto-fit policy: bone_landmark_basis" in text
+    assert "reloaded_model={model_name: grbody" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
 

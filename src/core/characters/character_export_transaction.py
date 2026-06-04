@@ -195,7 +195,13 @@ def export_character_mdl_mdx_transaction(
                     subsystem=ValidationSubsystem.CHARACTER,
                     code="character.export.reload_verified",
                     message="Exported MDL/MDX reloaded and passed Character Builder preflight.",
-                    details={"engine_evidence": CHARACTER_EXPORT_EVIDENCE},
+                    details={
+                        "engine_evidence": CHARACTER_EXPORT_EVIDENCE,
+                        "reloaded_model": _reloaded_model_summary(
+                            loaded,
+                            native_snapshot,
+                        ),
+                    },
                     source="character.export_transaction.verify",
                 )
             )
@@ -356,6 +362,63 @@ def _character_builder_workflow_evidence(
         "normalization": normalization_summary,
         "native_snapshot": snapshot_summary,
     })
+
+
+def _reloaded_model_summary(
+    model: Any,
+    native_snapshot: NativeSkeletonSnapshot | None,
+) -> dict[str, Any]:
+    nodes = _model_nodes(model)
+    skin_nodes = [node for node in nodes if bool(getattr(node, "is_skin", False))]
+    mesh_nodes = [node for node in nodes if bool(getattr(node, "is_mesh", False))]
+    skin_payloads = []
+    for node in skin_nodes:
+        skin_payloads.append({
+            "name": str(getattr(node, "name", "") or ""),
+            "vertices": len(list(getattr(node, "vertices", []) or [])),
+            "faces": len(list(getattr(node, "faces", []) or [])),
+            "bone_map_count": len(list(getattr(node, "bone_map", []) or [])),
+            "skin_rows": len(list(getattr(node, "skin_data", []) or [])),
+        })
+    snapshot = None
+    if native_snapshot is not None:
+        snapshot = {
+            "model_name": native_snapshot.model_name,
+            "game": native_snapshot.game,
+            "supermodel": native_snapshot.supermodel,
+            "node_count": native_snapshot.node_count,
+            "hook_names": list(native_snapshot.hook_names),
+        }
+    return _json_safe({
+        "model_name": str(getattr(model, "name", "") or ""),
+        "supermodel": str(getattr(model, "supermodel", "") or "NULL"),
+        "node_count": len(nodes),
+        "mesh_node_count": len(mesh_nodes),
+        "skin_node_count": len(skin_nodes),
+        "skin_payloads": skin_payloads,
+        "native_snapshot_checked": snapshot,
+    })
+
+
+def _model_nodes(model: Any) -> list[Any]:
+    all_nodes = getattr(model, "all_nodes", None)
+    if callable(all_nodes):
+        return list(all_nodes())
+    root = getattr(model, "root_node", None)
+    if root is None:
+        return []
+    result: list[Any] = []
+    stack = [root]
+    visited: set[int] = set()
+    while stack:
+        node = stack.pop()
+        node_id = id(node)
+        if node_id in visited:
+            continue
+        visited.add(node_id)
+        result.append(node)
+        stack.extend(reversed(list(getattr(node, "children", []) or [])))
+    return result
 
 
 def _json_safe(value: Any) -> Any:
