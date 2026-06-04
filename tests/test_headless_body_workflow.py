@@ -3759,6 +3759,61 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
     )
 
 
+def test_external_fit_report_uses_imported_toe_guides_for_front_facing_axis():
+    root = _fit_node("external_body")
+    mesh = _fit_node(
+        "Bendak",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [
+        (-1.0, -0.2, 0.0),
+        (1.0, 0.2, 0.0),
+        (0.0, 0.0, 10.0),
+    ]
+    mesh.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 5.2)),
+        ("Head", (0.0, 0.0, 10.0)),
+        ("LeftShoulder", (-1.0, -0.8, 8.0)),
+        ("RightShoulder", (1.0, 0.8, 8.0)),
+        ("L_Foot", (-0.4, 0.0, 0.0)),
+        ("R_Foot", (0.4, 0.0, 0.0)),
+        ("L_Foot_end", (-0.4, 1.0, 0.0)),
+        ("R_Foot_end", (0.4, 1.0, 0.0)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    reference = _fit_humanoid_model(
+        "n_mandalorian",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+    target_root = reference.root_node
+    _fit_node("lfootT_g", position=(-0.2, 0.2, 0.0), parent=target_root)
+    _fit_node("rfootT_g", position=(0.2, 0.2, 0.0), parent=target_root)
+
+    report = wf.inspect_external_model_fit(
+        md.KotorModel(name="bendak_payload", root_node=root),
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_forward_axis"] == "+y"
+    assert report["source_frame"]["forward"] == pytest.approx([0.0, 1.0, 0.0])
+    assert report["source_frame"]["right"] == pytest.approx([1.0, 0.0, 0.0])
+    assert report["source_frame"]["toe_forward_alignment"] > 0.99
+    assert report["source_frame"]["landmark_sources"]["left_toe"] == "imported_skeleton"
+    assert report["source_frame"]["landmark_sources"]["right_toe"] == "imported_skeleton"
+
+
 def test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias():
     source = _fit_humanoid_model(
         "rootdummy",

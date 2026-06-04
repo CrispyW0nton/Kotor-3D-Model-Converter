@@ -223,6 +223,77 @@ def _fit_frame_toe_forward(frame: Optional[_HumanoidFitFrame]) -> Optional[Vec3]
     return _vec_normalize(projected)
 
 
+def _toe_forward_from_landmarks(
+    *,
+    left_foot: Tuple[str, Vec3, str] | None,
+    right_foot: Tuple[str, Vec3, str] | None,
+    left_toe: Tuple[str, Vec3, str] | None,
+    right_toe: Tuple[str, Vec3, str] | None,
+    up: Vec3,
+) -> Optional[Vec3]:
+    if (
+        left_foot is None
+        or right_foot is None
+        or left_toe is None
+        or right_toe is None
+    ):
+        return None
+    foot_center = _average_points([left_foot[1], right_foot[1]])
+    toe_center = _average_points([left_toe[1], right_toe[1]])
+    if foot_center is None or toe_center is None:
+        return None
+    raw = _vec_sub(toe_center, foot_center)
+    projected = _vec_sub(raw, _vec_scale(up, _vec_dot(raw, up)))
+    return _vec_normalize(projected)
+
+
+def _front_axis_from_toes(
+    *,
+    provisional_forward: Vec3,
+    provisional_right: Vec3,
+    up: Vec3,
+    left_foot: Tuple[str, Vec3, str] | None,
+    right_foot: Tuple[str, Vec3, str] | None,
+    left_toe: Tuple[str, Vec3, str] | None,
+    right_toe: Tuple[str, Vec3, str] | None,
+) -> Tuple[Vec3, Vec3]:
+    """Use foot-end landmarks to stabilize humanoid facing when available.
+
+    Shoulder/collar pairs tell us left versus right, but they can be noisy on
+    imported meshes or slightly posed rigs.  Toe/foot-end guides provide a
+    stronger front-facing signal.  Keep the candidate that agrees with the
+    left/right body labels so an imported mesh cannot silently mirror itself.
+    """
+
+    toe_forward = _toe_forward_from_landmarks(
+        left_foot=left_foot,
+        right_foot=right_foot,
+        left_toe=left_toe,
+        right_toe=right_toe,
+        up=up,
+    )
+    if toe_forward is None:
+        return provisional_forward, provisional_right
+
+    candidates = (toe_forward, _vec_scale(toe_forward, -1.0))
+    best_forward = provisional_forward
+    best_right = provisional_right
+    best_score = -2.0
+    for candidate in candidates:
+        candidate_right = _vec_normalize(_vec_cross(candidate, up))
+        if candidate_right is None:
+            continue
+        score = _vec_dot(candidate_right, provisional_right)
+        if score > best_score:
+            best_score = score
+            best_forward = candidate
+            best_right = candidate_right
+
+    if best_score < 0.25:
+        return provisional_forward, provisional_right
+    return best_forward, best_right
+
+
 def _imported_armature_fit_evidence(model: Any) -> Dict[str, Any]:
     """Return durable evidence for temporary imported FBX skeleton guides."""
 
@@ -1158,6 +1229,15 @@ def _infer_humanoid_fit_frame(
     right_vec = _vec_normalize(_vec_cross(forward, up))
     if right_vec is None:
         return None
+    forward, right_vec = _front_axis_from_toes(
+        provisional_forward=forward,
+        provisional_right=right_vec,
+        up=up,
+        left_foot=left_foot,
+        right_foot=right_foot,
+        left_toe=left_toe,
+        right_toe=right_toe,
+    )
 
     height = abs(_vec_dot(_vec_sub(upper_anchor, lower_anchor), up))
     if height <= 1.0e-5 and bounds is not None:
