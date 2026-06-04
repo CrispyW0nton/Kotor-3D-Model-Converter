@@ -381,7 +381,9 @@ class RendererOverlayMixin:
         """
         self._acurig_guides_overlay = guides or {}
         self._acurig_selected_guide: str = ''
-        self.redraw()
+        redraw = getattr(self, "redraw", None)
+        if callable(redraw):
+            redraw()
 
     def _draw_acurig_guides(self, draw: 'ImageDraw.Draw', W: int, H: int):
         """Draw AcuRig guide handles as coloured circles with name labels.
@@ -720,7 +722,9 @@ class RendererOverlayMixin:
     def set_character_fit_overlay(self, overlay: dict | None):
         """Register Character Builder auto-fit evidence for viewport drawing."""
         self._character_fit_overlay = overlay if isinstance(overlay, dict) else None
-        self.redraw()
+        redraw = getattr(self, "redraw", None)
+        if callable(redraw):
+            redraw()
 
     def _draw_character_fit_overlay(self, draw, W: int, H: int):
         """Draw headless auto-fit axes and landmarks from core report metadata."""

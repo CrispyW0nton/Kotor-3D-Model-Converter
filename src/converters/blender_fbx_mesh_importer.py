@@ -85,13 +85,22 @@ def import_fbx_mesh_with_blender(
     if not payload.get("success"):
         errors = "; ".join(str(error) for error in payload.get("errors", []) if str(error).strip())
         raise BlenderFbxMeshImportError(errors or "Blender FBX mesh extraction failed.")
-    return model_from_blender_fbx_mesh_payload(
+    model = model_from_blender_fbx_mesh_payload(
         payload,
         model_name=model_name or source.stem[:32],
         game_version=game_version,
         supermodel=supermodel,
         classification=classification,
     )
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    external = dict(metadata.get("external_import") or {})
+    external.setdefault("disable_kotor_uv_seam_fix", True)
+    external["source_path"] = str(source)
+    metadata["external_import"] = external
+    return model
 
 
 def model_from_blender_fbx_mesh_payload(
@@ -131,6 +140,14 @@ def model_from_blender_fbx_mesh_payload(
     setattr(model, "_gr_fbx_armatures", list(payload.get("armatures") or []))
     setattr(model, "_gr_fbx_armature_bone_count", armature_bone_count)
     setattr(model, "_gr_fbx_actions", list(payload.get("actions") or []))
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    metadata.setdefault(
+        "external_import",
+        {"disable_kotor_uv_seam_fix": True},
+    )
 
     _attach_imported_armature_guides(
         root,
@@ -157,6 +174,7 @@ def model_from_blender_fbx_mesh_payload(
             node.diffuse = (float(diffuse[0]), float(diffuse[1]), float(diffuse[2]))
         node.render = True
         node._imported = True
+        node._external_imported = True
         node.vertex_space = 1
         if is_skin:
             node.bone_map = [str(name) for name in (mesh.get("bone_map") or [])]

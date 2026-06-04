@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import math
+from types import SimpleNamespace
 
 from src.core.characters.character_builder import apply_template_rig
 from src.core.characters.character_rig_state import get_character_rig_state
@@ -17,6 +18,9 @@ from src.core.geometry.model_data import (
 from src.core.diagnostics.validation_service import ValidationService
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.systems.bas.preview_composer import build_bas_preview_model
+from src.gui.viewports.viewport_core.widgets.drag_interactions import (
+    ViewportDragInteractionsMixin,
+)
 
 
 def _node(name: str, flags: int = int(NodeFlags.HEADER), parent: ModelNode | None = None) -> ModelNode:
@@ -96,6 +100,37 @@ def test_character_builder_inspector_labels_legacy_acurig_controls() -> None:
     assert "Legacy: Create New Skeleton" in source
     assert "Legacy / Experimental Hand AcuRig" in source
     assert "Legacy: Rebuild Hand Guides" in source
+
+
+def test_character_builder_gizmo_routes_promoted_root_to_model_fit_drag() -> None:
+    root = SimpleNamespace(name="bendak")
+
+    class _FakeCharacterBuilderDrag(ViewportDragInteractionsMixin):
+        def __init__(self):
+            self.model = SimpleNamespace(root_node=root)
+            self._mesh_transform_promotes_to_model_root = True
+
+        def _is_selected_model_root(self, node) -> bool:
+            return node is root
+
+    view = _FakeCharacterBuilderDrag()
+
+    assert view._should_use_model_fit_gizmo_drag(root) is True
+    view._mesh_transform_promotes_to_model_root = False
+    assert view._should_use_model_fit_gizmo_drag(root) is False
+
+
+def test_character_builder_overlay_setters_do_not_require_widget_redraw() -> None:
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    renderer = FrameRenderer(ArcBallCamera())
+
+    renderer.set_acurig_guides({})
+    renderer.set_character_fit_overlay({"source": {"origin": [0.0, 0.0, 0.0]}})
+
+    assert getattr(renderer, "_acurig_guides_overlay") == {}
+    assert getattr(renderer, "_character_fit_overlay") is not None
 
 
 def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> None:

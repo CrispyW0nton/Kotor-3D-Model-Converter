@@ -27,6 +27,8 @@ class ViewportDragInteractionsMixin:
         handle = self._transform_gizmo.hit_test((x, y), self.camera)
         if not handle:
             return False
+        if self._should_use_model_fit_gizmo_drag(node):
+            return self._begin_model_fit_gizmo_drag(handle, x, y, node)
         self._transform_gizmo_dragging = True
         self._gimbal_dragging = False
         self._clear_mesh_hover(reason="gizmo drag started")
@@ -35,6 +37,45 @@ class ViewportDragInteractionsMixin:
         self._renderer.is_interactive = True
         self._frame_governor.begin_interaction("gizmo drag")
         self._request_render(fast=True, reason="gizmo drag started", gizmo=True, overlay=True)
+        return True
+
+    def _should_use_model_fit_gizmo_drag(self, node) -> bool:
+        """Route Character Builder imported-mesh placement through fit edits.
+
+        Imported Character Builder meshes are vertex-baked into KOTOR space.
+        Moving the synthetic root with the generic transform gizmo does not
+        reliably move that baked payload or its temporary armature guides.  The
+        model-fit path edits the actual payload vertices and guide positions.
+        """
+
+        return bool(
+            getattr(self, "_mesh_transform_promotes_to_model_root", False)
+            and node is not None
+            and self._is_selected_model_root(node)
+            and self.model is not None
+        )
+
+    def _begin_model_fit_gizmo_drag(self, handle: str, x: int, y: int, node) -> bool:
+        axis = str(handle or "").rsplit("_", 1)[-1].upper()
+        if axis in {"VIEW", "SCREEN", "CENTER"}:
+            axis = "XY"
+        if not axis:
+            axis = "X"
+        self._gimbal_dragging = True
+        self._transform_gizmo_dragging = False
+        self._gimbal_axis = axis
+        self._gimbal_drag_start = (int(x), int(y))
+        self._gimbal_model_applied_translation = (0.0, 0.0, 0.0)
+        self._gimbal_model_applied_rotation = 0.0
+        self._gimbal_model_applied_scale = 1.0
+        self._gimbal_node_start_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+        self._gimbal_node_start_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        self._clear_mesh_hover(reason="model fit gizmo drag started")
+        self._transform_gizmo.active_handle = str(handle or "")
+        self._renderer.gimbal_active_axis = axis
+        self._renderer.is_interactive = True
+        self._frame_governor.begin_interaction("model fit gizmo drag")
+        self._request_render(fast=True, reason="model fit gizmo drag started", gizmo=True, overlay=True)
         return True
 
     def _cancel_transform_gizmo_drag(self) -> None:
@@ -274,10 +315,15 @@ class ViewportDragInteractionsMixin:
             self._renderer.gimbal_active_axis = None
             self._renderer.is_interactive = False
             self._renderer._wt_cache.clear()
+            self._frame_governor.end_interaction("model fit gizmo drag ended")
             node = self._renderer.selected_node
             if node is not None:
+                is_model_fit_drag = (
+                    self._is_selected_model_root(node)
+                    or self._promoted_model_root_for_mesh_transform(node) is not None
+                )
                 if (
-                    not self._is_selected_model_root(node)
+                    not is_model_fit_drag
                     and len(self._selected_joint_nodes) > 1
                     and any(n is node for n in self._selected_joint_nodes)
                     and self._renderer.gimbal_mode == 1
@@ -310,7 +356,7 @@ class ViewportDragInteractionsMixin:
                             "Gimbal Multi-Joint Translate (mirror)",
                         )
                         self._notify_node_moved(mirror_node)
-                elif not self._is_selected_model_root(node):
+                elif not is_model_fit_drag:
                     self._commit_node_transform(
                         node,
                         self._gimbal_node_start_pos,
@@ -334,6 +380,11 @@ class ViewportDragInteractionsMixin:
                             "Gimbal Transform (mirror)",
                         )
                         self._notify_node_moved(mirror_node)
+                elif self.model is not None:
+                    root_node = getattr(self.model, "root_node", None)
+                    if root_node is not None:
+                        self._notify_node_moved(root_node)
+            self._transform_gizmo.active_handle = None
             self._request_render()
             return
 

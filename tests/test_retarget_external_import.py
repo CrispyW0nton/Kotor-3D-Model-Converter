@@ -245,9 +245,11 @@ def test_source_clip_preview_model_can_include_fbx_mesh_geometry() -> None:
 
     assert getattr(model, "_gr_source_clip_preview") is True
     assert getattr(model, "_gr_source_clip_mesh_count") == 1
+    assert mesh_model.metadata["external_import"]["disable_kotor_uv_seam_fix"] is True
     assert len(mesh_nodes) == 1
     assert mesh_nodes[0].name == "Body"
     assert mesh_nodes[0].texture == "Body_D"
+    assert getattr(mesh_nodes[0], "_external_imported", False) is True
     assert mesh_nodes[0].vertex_space == 1
     assert mesh_nodes[0].vertices
     assert mesh_nodes[0].faces == [(0, 1, 2)]

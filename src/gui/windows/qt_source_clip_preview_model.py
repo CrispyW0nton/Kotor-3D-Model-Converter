@@ -256,6 +256,7 @@ def _append_mesh_preview_nodes(root: ModelNode, mesh_model: KotorModel | None) -
         node.ambient = tuple(getattr(source, "ambient", (0.2, 0.2, 0.2))[:3])  # type: ignore[assignment]
         node.render = True
         node._imported = True
+        node._external_imported = bool(getattr(source, "_external_imported", False))
         node.vertex_space = 1
         if is_skin:
             node.bone_map = [str(name) for name in (getattr(source, "bone_map", []) or [])]
