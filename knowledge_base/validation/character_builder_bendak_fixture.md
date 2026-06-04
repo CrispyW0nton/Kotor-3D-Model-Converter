@@ -168,6 +168,14 @@ mark every manual checklist item as passed separately for each game under
 Without per-engine evidence, Bendak remains an export candidate even when
 MDL/MDX reload verification and Override packaging both succeed.
 
+GhostRigger now also separates `game_tested` from `game_ready`. Even complete
+K1/K2 manual evidence is not enough to set `game_ready=True` if any Character
+Builder evidence gate remains review-needed, fallback-quality, missing,
+blocked, or partial. For the current Bendak fixture, the engine gate remains
+`partial_reverse_engineering` until the pending Ghidra findings are closed, so
+the honest state is export-candidate or game-tested-with-blockers rather than
+fully game-ready.
+
 Treat `n_mandalorian` as the mandatory native base MDL that supplies the KOTOR
 node DAG for this fixture. If a packaging/export test targets
 `n_mandalorian03`, the Character Builder must keep both identities visible:

@@ -41,6 +41,15 @@ CAPABILITY_STAGE_BLOCKED = "blocked"
 CAPABILITY_STAGE_EXPORT_CANDIDATE = "export_candidate"
 CAPABILITY_STAGE_GAME_TESTED = "game_tested"
 
+_GAME_READY_GATE_ACCEPTED_STAGES: dict[str, frozenset[str]] = {
+    "fit": frozenset({"passed"}),
+    "bind": frozenset({"passed"}),
+    "weight": frozenset({"trusted_donor_transfer"}),
+    "animation": frozenset({"passed"}),
+    "material": frozenset({"passed"}),
+    "engine": frozenset({"passed"}),
+}
+
 _FIT_EVIDENCE_CODES = frozenset({
     "character.export.missing_auto_fit_evidence",
     "character.export.incomplete_auto_fit_evidence",
@@ -615,6 +624,42 @@ def _engine_evidence_gate() -> dict[str, Any]:
     }
 
 
+def _character_builder_game_ready_status(
+    *,
+    verified: bool,
+    game_test_requested: bool,
+    game_evidence_complete: bool,
+    evidence_gates: dict[str, Any],
+) -> dict[str, Any]:
+    """Return strict game-ready status separate from export/game-test stages."""
+
+    actual: dict[str, str] = {}
+    blockers: list[str] = []
+    required = {
+        gate: sorted(stages)
+        for gate, stages in _GAME_READY_GATE_ACCEPTED_STAGES.items()
+    }
+    if not verified:
+        blockers.append("export=not_verified")
+    if not game_test_requested:
+        blockers.append("game_test=not_requested")
+    if not game_evidence_complete:
+        blockers.append("game_test=evidence_incomplete")
+
+    for gate, accepted in _GAME_READY_GATE_ACCEPTED_STAGES.items():
+        stage = _evidence_gate_stage(evidence_gates, gate)
+        actual[gate] = stage
+        if stage not in accepted:
+            blockers.append(f"{gate}={stage}")
+
+    return {
+        "game_ready": not blockers,
+        "blockers": blockers,
+        "required_gate_stages": required,
+        "actual_gate_stages": actual,
+    }
+
+
 def _fit_landmark_source_summary(fit_report: dict[str, Any]) -> dict[str, Any]:
     source_frame = _mapping(fit_report.get("source_frame"))
     raw_sources = _mapping(source_frame.get("landmark_sources"))
@@ -850,6 +895,12 @@ class CharacterBuilderValidationReport:
             normalized_output_hashes,
             require_output_hashes=bool(self.game_tested),
         )
+        game_ready = _character_builder_game_ready_status(
+            verified=bool(self.verified),
+            game_test_requested=bool(self.game_tested),
+            game_evidence_complete=bool(game_evidence_complete),
+            evidence_gates=evidence_gates,
+        )
         game_evidence_missing = (
             character_game_test_evidence_missing(
                 self.game_test_evidence,
@@ -875,10 +926,16 @@ class CharacterBuilderValidationReport:
                     if self.game_tested else
                     "not_game_tested"
                 ),
+                "game_ready": bool(game_ready["game_ready"]),
+                "game_ready_blockers": list(game_ready["blockers"]),
+                "game_ready_required_gate_stages": dict(game_ready["required_gate_stages"]),
+                "game_ready_actual_gate_stages": dict(game_ready["actual_gate_stages"]),
                 "honesty_note": (
                     "GhostRigger verification proves staged export and reload "
                     "preflight only. Treat this as an export candidate until "
-                    "the manual in-game checklist passes in KOTOR."
+                    "the manual in-game checklist passes in KOTOR; treat it as "
+                    "game-ready only when all Character Builder evidence gates "
+                    "are clean too."
                 ),
             },
             "job_id": self.job_id,
@@ -916,6 +973,7 @@ class CharacterBuilderValidationReport:
             f"Verified: {payload.get('verified')}",
             f"Capability stage: {payload.get('capability', {}).get('stage')}",
             f"Game tested: {payload.get('capability', {}).get('game_tested')}",
+            f"Game ready: {payload.get('capability', {}).get('game_ready')}",
             f"Game: {payload.get('game')}",
             f"Resref: {payload.get('resref')}",
             "",
@@ -923,6 +981,17 @@ class CharacterBuilderValidationReport:
         ]
         for key, value in dict(payload.get("outputs") or {}).items():
             lines.append(f"- {key}: {value}")
+
+        capability = dict(payload.get("capability") or {})
+        ready_blockers = [
+            str(item or "")
+            for item in list(capability.get("game_ready_blockers") or [])
+            if str(item or "").strip()
+        ]
+        if ready_blockers:
+            lines.extend(["", "Game-ready blockers:"])
+            for item in ready_blockers:
+                lines.append(f"- {item}")
 
         evidence_gates = dict(payload.get("character_builder_evidence_gates") or {})
         workflow = dict(payload.get("metadata", {}).get("character_builder_workflow") or {})

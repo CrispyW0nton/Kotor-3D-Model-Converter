@@ -401,9 +401,15 @@ def _build_manifest(
             "stage": capability.get("stage", "blocked"),
             "game_tested": bool(capability.get("game_tested", False)),
             "game_test_status": capability.get("game_test_status", "not_game_tested"),
+            "game_ready": bool(capability.get("game_ready", False)),
+            "game_ready_blockers": list(capability.get("game_ready_blockers") or []),
+            "game_ready_actual_gate_stages": dict(
+                capability.get("game_ready_actual_gate_stages") or {}
+            ),
             "honesty_note": (
                 "This package is install-ready only when MDL/MDX export was reload verified. "
-                "It is not game-tested until the manual checklist is completed in KOTOR."
+                "It is not game-tested until the manual checklist is completed in KOTOR, "
+                "and it is not game-ready until all Character Builder evidence gates are clean."
             ),
         },
         "install_instructions": [
@@ -433,7 +439,17 @@ def _build_readme(manifest: dict[str, Any]) -> str:
         f"Target resref: {manifest.get('target_resref')}",
         f"Capability stage: {capability.get('stage')}",
         f"Game tested: {capability.get('game_tested')}",
+        f"Game ready: {capability.get('game_ready')}",
     ]
+    blockers = [
+        str(item or "")
+        for item in list(capability.get("game_ready_blockers") or [])
+        if str(item or "").strip()
+    ]
+    if blockers:
+        lines.append("Game-ready blockers:")
+        for item in blockers:
+            lines.append(f"- {item}")
     if evidence_gates:
         lines.append(
             "Evidence gates: "

@@ -58,6 +58,20 @@ def _write_source_export(
                 if game_tested else
                 "not_game_tested"
             ),
+            "game_ready": False,
+            "game_ready_blockers": [
+                "fit=needs_review",
+                "material=needs_review",
+                "engine=partial_reverse_engineering",
+            ],
+            "game_ready_actual_gate_stages": {
+                "fit": "needs_review",
+                "bind": "passed",
+                "weight": "donor_transfer_first_pass",
+                "animation": "passed",
+                "material": "needs_review",
+                "engine": "partial_reverse_engineering",
+            },
         },
         "game": game,
         "resref": "bendak",
@@ -169,6 +183,8 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert manifest["game"] == "K1"
     assert manifest["capability"]["stage"] == "export_candidate"
     assert manifest["capability"]["game_tested"] is False
+    assert manifest["capability"]["game_ready"] is False
+    assert "fit=needs_review" in manifest["capability"]["game_ready_blockers"]
     assert manifest["game_test_evidence"] == {}
     assert manifest["source_export"]["output_hashes"] == _test_output_hashes()
     assert manifest["package_output_hashes"]["artifacts"] == _test_output_hashes()
@@ -179,6 +195,9 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert manifest["character_builder_workflow"]["native_skeleton_is_authority"] is True
     assert manifest["character_builder_workflow"]["imported_mesh_role"] == "payload_guest"
     readme = readme_path.read_text(encoding="utf-8")
+    assert "Game ready: False" in readme
+    assert "Game-ready blockers:" in readme
+    assert "- fit=needs_review" in readme
     assert "Evidence gates: fit=needs_review" in readme
     assert "Fit paired landmarks: 3 pairs, rms=0.42, max=0.55, worst=left" in readme
     assert "Engine evidence: partial_reverse_engineering (pending Ghidra: 2)" in readme
@@ -290,6 +309,8 @@ def test_character_override_package_preserves_complete_game_test_evidence(tmp_pa
     manifest = result.manifest
     assert manifest["capability"]["stage"] == "game_tested"
     assert manifest["capability"]["game_tested"] is True
+    assert manifest["capability"]["game_ready"] is False
+    assert "engine=partial_reverse_engineering" in manifest["capability"]["game_ready_blockers"]
     assert manifest["game_test_evidence"]["tester"] == "manual qa"
     assert manifest["game_test_evidence"]["checklist_results"][
         "Loading in both KOTOR 1 and KOTOR 2"

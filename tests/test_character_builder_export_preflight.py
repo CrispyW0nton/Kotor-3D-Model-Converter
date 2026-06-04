@@ -5,6 +5,7 @@ from dataclasses import replace
 import hashlib
 import json
 
+from src.core.characters import character_validation_report as cv_report
 from src.core.characters.character_builder import apply_template_rig
 from src.core.characters.character_export_transaction import (
     CharacterBuilderExportTransactionRequest,
@@ -292,6 +293,55 @@ def _test_output_hashes() -> dict[str, dict[str, int | str]]:
     return {
         "mdl": {"sha256": hashlib.sha256(b"mdl").hexdigest(), "size": 3},
         "mdx": {"sha256": hashlib.sha256(b"mdx").hexdigest(), "size": 3},
+    }
+
+
+def _game_ready_workflow() -> dict:
+    return {
+        "fit_report": _valid_fit_report(),
+        "rig_state": {
+            "state": RIG_STATE_NATIVE_TEMPLATE_FINAL,
+            "dag_authority": RIG_DAG_AUTHORITY_NATIVE_KOTOR,
+        },
+        "native_snapshot": {
+            "model_name": "pmbam",
+            "game": "K1",
+            "dag_fingerprint": "native-dag",
+        },
+        "bind": {
+            "status": "bound_to_native_kotor_skeleton",
+            "native_base": {
+                "source_resref": "pmbam",
+                "dag_authority": RIG_DAG_AUTHORITY_NATIVE_KOTOR,
+            },
+            "imported_payload": {
+                "mesh_role": "payload_guest",
+                "mesh_names": ["custom_body"],
+            },
+            "skin_binding": {
+                "weighting_method": "native_template_nearest_vertex_donor",
+                "quality_stage": "donor_transfer_verified",
+                "donor_weight_transfer": True,
+                "mesh_reports": [
+                    {
+                        "mesh_name": "custom_body",
+                        "weighted_vertices": 3,
+                    }
+                ],
+            },
+        },
+        "animation_library": {
+            "motion_source": "inherited_supermodel",
+            "selected_supermodel": "S_Female02",
+            "effective_supermodel": "S_Female02",
+            "resolved_supermodel": "S_Female02",
+            "game": "K1",
+            "available_count": 4,
+            "sample_animation_names": ["pause1", "walk", "run", "tlknorm"],
+            "required_preview_available": ["pause1", "walk", "run", "tlknorm"],
+            "required_preview_missing": [],
+            "diagnostics": [],
+        },
     }
 
 
@@ -1535,9 +1585,14 @@ def test_character_builder_validation_report_has_full_manual_checklist() -> None
     assert "Loading in both KOTOR 1 and KOTOR 2" in data["manual_in_game_checklist"]
     assert data["capability"]["stage"] == "export_candidate"
     assert data["capability"]["game_tested"] is False
+    assert data["capability"]["game_ready"] is False
+    assert "game_test=not_requested" in data["capability"]["game_ready_blockers"]
+    assert "fit=missing" in data["capability"]["game_ready_blockers"]
     assert data["capability"]["game_test_status"] == "not_game_tested"
     text = report.to_text()
     assert "Capability stage: export_candidate" in text
+    assert "Game ready: False" in text
+    assert "Game-ready blockers:" in text
     assert "Game tested: False" in text
     assert "1. Load as player character without crash" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
@@ -1878,6 +1933,9 @@ def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_e
 
     assert data["capability"]["stage"] == "game_tested"
     assert data["capability"]["game_tested"] is True
+    assert data["capability"]["game_ready"] is False
+    assert "fit=missing" in data["capability"]["game_ready_blockers"]
+    assert "engine=partial_reverse_engineering" in data["capability"]["game_ready_blockers"]
     assert data["capability"]["game_test_status"] == "manual_checklist_passed"
     assert data["game_test_evidence"]["tested_games"] == ["K1", "K2"]
     assert data["game_test_evidence"]["checklist_results"][
@@ -1892,6 +1950,53 @@ def test_character_builder_validation_report_promotes_complete_k1_k2_game_test_e
     assert data["game_test_evidence"]["tested_output_hashes"] == output_hashes
     assert data["output_hashes"] == output_hashes
     assert data["game_test_evidence_missing"] == {}
+
+
+def test_character_builder_validation_report_marks_game_ready_only_when_all_gates_pass(
+    monkeypatch,
+) -> None:
+    output_hashes = _test_output_hashes()
+    evidence = build_character_game_test_evidence(
+        tested_games=["K1", "K2"],
+        checklist_results={item: True for item in CHARACTER_BUILDER_MANUAL_CHECKLIST},
+        tested_output_hashes=output_hashes,
+        tester="manual qa",
+    )
+    engine_evidence = copy.deepcopy(cv_report.CHARACTER_EXPORT_EVIDENCE)
+    engine_evidence["pending_ghidra"] = ()
+    monkeypatch.setattr(cv_report, "CHARACTER_EXPORT_EVIDENCE", engine_evidence)
+    report = CharacterBuilderValidationReport(
+        status="verified",
+        verified=True,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        output_hashes=output_hashes,
+        preflight_report=ValidationReport(source="test.preflight"),
+        metadata={"character_builder_workflow": _game_ready_workflow()},
+        game_tested=True,
+        game_test_evidence=evidence,
+    )
+
+    data = report.to_dict()
+
+    assert data["capability"]["stage"] == "game_tested"
+    assert data["capability"]["game_tested"] is True
+    assert data["capability"]["game_ready"] is True
+    assert data["capability"]["game_ready_blockers"] == []
+    assert data["capability"]["game_ready_actual_gate_stages"] == {
+        "fit": "passed",
+        "bind": "passed",
+        "weight": "trusted_donor_transfer",
+        "animation": "passed",
+        "material": "passed",
+        "engine": "passed",
+    }
+    text = report.to_text()
+    assert "Game ready: True" in text
+    assert "Game-ready blockers:" not in text
 
 
 def test_character_builder_validation_report_blocks_game_test_hash_mismatch() -> None:
