@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{21a93a4f-4aae-4534-b9e7-53a70f2fd6f8}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Project Files">
+      <UniqueIdentifier>{67b91344-b321-4517-8f5e-cbdcf9e33841}</UniqueIdentifier>
+      <Extensions>py;toml;txt;md</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\main.py">
+      <Filter>Project Files</Filter>
+    </None>
+    <None Include="..\..\pyproject.toml">
+      <Filter>Project Files</Filter>
+    </None>
+    <None Include="..\..\requirements.txt">
+      <Filter>Project Files</Filter>
+    </None>
+    <None Include="..\..\README.md">
+      <Filter>Project Files</Filter>
+    </None>
+    <None Include="..\..\CHANGES.md">
+      <Filter>Project Files</Filter>
+    </None>
+    <None Include="..\README.md">
+      <Filter>Project Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

@@ -9,6 +9,12 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-04
+
+- Native Visual Studio wrapper scaffold: added a Visual Studio 2022 solution and native C++ launcher project so GhostRigger can be opened, built, and started from Visual Studio while the existing Python/Qt application remains intact. No roadmap task ID applies.
+  Affected areas: `GhostRigger.sln`, `native/GhostRiggerNative/GhostRiggerNative.vcxproj`, `native/GhostRiggerNative/GhostRiggerNative.vcxproj.filters`, `native/GhostRiggerNative/main.cpp`, `native/README.md`.
+  Verification: validated the solution/project XML/text scaffold with targeted PowerShell parsing checks; native compilation was not run because the Visual Studio C++ build tools were not invoked in this environment.
+
 ## 2026-06-02
 
 - PROTECTED PATCH - BAS head model resolution fix: BAS now normalizes head/attachment selections from UI labels, game-tagged names, paths, and suffix-bearing strings before loading resources, so values like `Player Male Head A 01 - pmha01` correctly load `pmha01`. The main BAS workflow, BAS recipe loader, and Character Builder preview path share the resolver. For head slots, explicit user choices win; when no usable explicit head is provided, BAS can resolve a body-derived head via `appearance.2da`/`heads.2da` or conservative body-name candidates such as `p_carthbbh`. Window-side BAS attachment copies now also retain `_gr_bas_attachment_source_model_ref`, matching the system composer path, so attached heads can reliably find their original source model for animation evaluation. Protected contract documented in `knowledge_base/protected_patches.md`. No roadmap task ID applies.
