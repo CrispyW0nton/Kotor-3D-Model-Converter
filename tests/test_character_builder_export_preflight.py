@@ -192,6 +192,8 @@ def _valid_fit_report(
                 "solved_scale": 0.79,
                 "applied_scale": 0.8,
                 "applied_scale_basis": "bone_landmark_height",
+                "similarity_transform_accepted": False,
+                "rotation_basis": "bone_landmark_basis",
             },
         },
         "kotor_contract": {
@@ -2230,6 +2232,8 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert paired["solved_scale"] == 0.79
     assert paired["applied_scale"] == 0.8
     assert paired["applied_scale_basis"] == "bone_landmark_height"
+    assert paired["similarity_transform_accepted"] is False
+    assert paired["rotation_basis"] == "bone_landmark_basis"
     assert paired["pair_errors"][0]["role"] == "left"
     assert paired["pair_errors"][0]["error"] == 0.42
     quality = fit["quality_summary"]
@@ -2244,6 +2248,7 @@ def test_character_builder_validation_report_records_paired_landmark_alignment_g
     assert "scale height=0.8 / solved=0.79 / applied=0.8 (bone_landmark_height)" in (
         report.to_text()
     )
+    assert "rotation bone_landmark_basis" in report.to_text()
 
 
 def test_character_builder_validation_report_records_toe_forward_gate() -> None:

@@ -759,6 +759,10 @@ def _fit_landmark_alignment_summary(fit_report: dict[str, Any]) -> dict[str, Any
         "applied_scale": _safe_float(alignment.get("applied_scale")),
         "solved_scale": _safe_float(alignment.get("solved_scale")),
         "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
+        "similarity_transform_accepted": bool(
+            alignment.get("similarity_transform_accepted")
+        ),
+        "rotation_basis": str(alignment.get("rotation_basis") or ""),
         "translation_basis": str(alignment.get("translation_basis") or ""),
         "error_basis": str(alignment.get("error_basis") or ""),
     }
@@ -1152,6 +1156,12 @@ class CharacterBuilderValidationReport:
                             f"{applied_scale}"
                             + (f" ({applied_basis})" if applied_basis else "")
                         )
+                    rotation_bits: list[str] = []
+                    rotation_basis = str(paired.get("rotation_basis") or "").strip()
+                    if rotation_basis:
+                        rotation_bits.append(rotation_basis)
+                    if paired.get("similarity_transform_accepted"):
+                        rotation_bits.append("accepted")
                     lines.append(
                         "- Fit paired landmarks: "
                         f"{paired.get('pair_count')} pairs, "
@@ -1159,6 +1169,11 @@ class CharacterBuilderValidationReport:
                         f"max={paired.get('max_error')}"
                         + (f", worst={worst}" if worst else "")
                         + (f", scale {' / '.join(scale_bits)}" if scale_bits else "")
+                        + (
+                            f", rotation {' / '.join(rotation_bits)}"
+                            if rotation_bits
+                            else ""
+                        )
                     )
                 toe_forward = dict(fit_gate.get("toe_forward_alignment") or {})
                 toe_text = _toe_forward_text_summary(toe_forward)
