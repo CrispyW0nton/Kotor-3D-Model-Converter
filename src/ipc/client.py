@@ -172,6 +172,62 @@ def select_ghostrigger_module_mesh(mesh: str) -> None:
     )
 
 
+def set_ghostrigger_renderer_backend(backend: str, allow_fallback: bool | None = None) -> None:
+    """Ask a running GhostRigger instance to switch viewport renderer backend."""
+    payload = {"backend": backend}
+    if allow_fallback is not None:
+        payload["allow_fallback"] = bool(allow_fallback)
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "set_renderer_backend",
+        payload=payload,
+        on_result=_log_result("set_renderer_backend -> GhostRigger"),
+    )
+
+
+def set_ghostrigger_dummy_helpers(visible: bool) -> None:
+    """Ask a running GhostRigger instance to show or hide dummy/helper markers."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "set_dummy_helpers",
+        payload={"visible": bool(visible)},
+        on_result=_log_result("set_dummy_helpers -> GhostRigger"),
+    )
+
+
+def set_ghostrigger_light_helpers(helpers: bool, volumes: bool | None = None) -> None:
+    """Ask a running GhostRigger instance to show or hide light helpers."""
+    payload = {"helpers": bool(helpers)}
+    if volumes is not None:
+        payload["volumes"] = bool(volumes)
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "set_light_helpers",
+        payload=payload,
+        on_result=_log_result("set_light_helpers -> GhostRigger"),
+    )
+
+
+def select_ghostrigger_helper(name: str = "") -> None:
+    """Ask a running GhostRigger instance to select a dummy/helper node."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "select_helper",
+        payload={"name": name},
+        on_result=_log_result("select_helper -> GhostRigger"),
+    )
+
+
+def capture_ghostrigger_viewport(path: str) -> None:
+    """Ask a running GhostRigger instance to capture the viewport canvas."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "capture_viewport",
+        payload={"path": path},
+        on_result=_log_result("capture_viewport -> GhostRigger"),
+    )
+
+
 def open_script_in_scripter(
     resref: str,
     module_dir: str = "",

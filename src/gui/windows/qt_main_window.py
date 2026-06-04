@@ -89,7 +89,7 @@ from src.systems.bas.attachment_alignment import (
     default_bas_attachment_transform,
     normalize_bas_transform,
 )
-from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label
+from src.core.rendering.renderer_backend import RendererBackend, renderer_backend_label, supported_renderer_backend
 from src.adapters.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.core.rendering.renderer_settings import RendererSettings
 from src.gui.qt_lib.integration.editor_services import (
@@ -417,6 +417,65 @@ class QtGhostRiggerMainWindow(
         def select_module_mesh(mesh_name: str) -> None:
             self._select_module_mesh_by_name_from_ipc(str(mesh_name or ""))
 
+        def set_renderer_backend(backend: str, allow_fallback: object = None) -> None:
+            renderer = self.settings_data.setdefault("renderer", {})
+            selected = supported_renderer_backend(str(backend or ""))
+            renderer["backend"] = selected.value
+            if allow_fallback is not None:
+                renderer["allow_fallback"] = bool(allow_fallback)
+            settings = RendererSettings.from_settings(self.settings_data)
+            self.viewport.set_renderer_settings(settings)
+            self._log(f"IPC renderer backend: {renderer_backend_label(settings.backend)}", "info")
+
+        def set_dummy_helpers(visible: object) -> None:
+            enabled = bool(visible)
+            self.viewport.set_dummy_helper_visibility(enabled)
+            self._log(f"IPC dummy helpers: {'visible' if enabled else 'hidden'}", "info")
+
+        def set_light_helpers(helpers: object, volumes: object = None) -> None:
+            helper_visible = bool(helpers)
+            volume_visible = helper_visible if volumes is None else bool(volumes)
+            self.viewport.set_light_helper_visibility(helper_visible, volume_visible)
+            self._log(
+                f"IPC light helpers: {'visible' if helper_visible else 'hidden'}"
+                f", volumes {'visible' if volume_visible else 'hidden'}",
+                "info",
+            )
+
+        def select_helper(name: str = "") -> None:
+            model = getattr(self.viewport, "model", None)
+            try:
+                nodes = list(model.all_nodes()) if model is not None and hasattr(model, "all_nodes") else []
+            except Exception:
+                nodes = []
+            needle = str(name or "").strip().lower()
+            selected = None
+            for node in nodes:
+                if not self.viewport._is_general_helper_node(node):
+                    continue
+                if bool(getattr(node, "_gr_hidden", False)):
+                    continue
+                if not needle or str(getattr(node, "name", "") or "").lower() == needle:
+                    selected = node
+                    break
+            if selected is None:
+                self._log(f"IPC select_helper: {name or '<first-helper>'} not found", "warning")
+                return
+            self.viewport.set_viewport_selection_mode("helpers")
+            self.viewport.set_selected_node(selected, source="IPC select_helper")
+            self._log(f"IPC select_helper: {getattr(selected, 'name', '<helper>')}", "success")
+
+        def capture_viewport(path: str) -> None:
+            target = Path(str(path or "")).expanduser()
+            if not target.is_absolute():
+                target = Path.cwd() / target
+            target.parent.mkdir(parents=True, exist_ok=True)
+            pixmap = self.viewport.canvas.grab()
+            if pixmap.save(str(target)):
+                self._log(f"IPC viewport capture: {target}", "info")
+            else:
+                self._log(f"IPC viewport capture failed: {target}", "warning")
+
         try:
             self._ipc_server = GhostRiggerIPCServer(
                 {
@@ -428,6 +487,11 @@ class QtGhostRiggerMainWindow(
                     "refresh_viewport": refresh_viewport,
                     "show_panel": show_panel,
                     "select_module_mesh": select_module_mesh,
+                    "set_renderer_backend": set_renderer_backend,
+                    "set_dummy_helpers": set_dummy_helpers,
+                    "set_light_helpers": set_light_helpers,
+                    "select_helper": select_helper,
+                    "capture_viewport": capture_viewport,
                 }
             )
             self._ipc_server.start()

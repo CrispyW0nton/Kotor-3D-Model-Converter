@@ -551,7 +551,7 @@ class ViewportPickingHoverMixin:
         return getattr(camera, "original_ref", None)
 
     def _helper_hit_test(self, sx: int, sy: int, radius: int = 12):
-        if self.model is None or not self._renderer_is_wgpu_like():
+        if self.model is None:
             return None
         if not bool(getattr(self._renderer, "show_dummy_helpers", getattr(self, "_dummy_helpers_visible", True))):
             return None

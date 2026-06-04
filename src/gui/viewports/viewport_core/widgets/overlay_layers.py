@@ -9,7 +9,7 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 class ViewportOverlayLayersMixin:
     def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
-        if not self._renderer_is_wgpu_like() or self.model is None:
+        if self.model is None:
             return
         try:
             if self.canvas.is_live_surface() and str(getattr(getattr(self, "_gpu_renderer", None), "backend_id", "") or "") == "pygfx_wgpu":

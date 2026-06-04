@@ -232,10 +232,20 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '"refresh_viewport": refresh_viewport' in source
     assert '"show_panel": show_panel' in source
     assert '"select_module_mesh": select_module_mesh' in source
+    assert '"set_renderer_backend": set_renderer_backend' in source
+    assert '"set_dummy_helpers": set_dummy_helpers' in source
+    assert '"set_light_helpers": set_light_helpers' in source
+    assert '"select_helper": select_helper' in source
+    assert '"capture_viewport": capture_viewport' in source
     assert "self._start_ipc_server()" in source
     assert "ipc_server.stop()" in lifecycle_source
     assert '@app.route("/api/show_panel", methods=["POST"])' in server_source
     assert '@app.route("/api/select_module_mesh", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_renderer_backend", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_dummy_helpers", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_light_helpers", methods=["POST"])' in server_source
+    assert '@app.route("/api/select_helper", methods=["POST"])' in server_source
+    assert '@app.route("/api/capture_viewport", methods=["POST"])' in server_source
 
 
 def test_ipc_module_mesh_selector_uses_existing_panel_and_viewport_sync_paths() -> None:
@@ -4970,7 +4980,7 @@ def test_wgpu_gpu_pick_miss_falls_back_to_cpu_mesh_picker() -> None:
         viewport.deleteLater()
 
 
-def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> None:
+def test_gpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from PySide6 import QtWidgets
@@ -4999,6 +5009,36 @@ def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> No
     try:
         assert viewport._helper_hit_test(104, 103) is helper
         assert viewport._helper_hit_test(150, 150) is None
+    finally:
+        viewport.deleteLater()
+
+
+def test_moderngl_helper_marker_overlay_draws_and_respects_toggle() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PIL import Image, ImageDraw
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy", position=(1.0, 2.0, 3.0))
+    mesh = SimpleNamespace(name="CM_Floor", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh, helper])
+    viewport._gpu_renderer = SimpleNamespace(backend_id="modern_gl")
+    viewport._renderer._node_world_transform = lambda node: (node.position, (0, 0, 0, 1), True)
+    viewport._renderer._proj = lambda _x, _y, _z, _w, _h: (30, 30, 1.0)
+    try:
+        img = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+        viewport.set_dummy_helper_visibility(True)
+        viewport._draw_wgpu_helper_markers(ImageDraw.Draw(img, "RGBA"), 80, 80)
+        assert img.getbbox() is not None
+
+        img_hidden = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+        viewport.set_dummy_helper_visibility(False)
+        viewport._draw_wgpu_helper_markers(ImageDraw.Draw(img_hidden, "RGBA"), 80, 80)
+        assert img_hidden.getbbox() is None
     finally:
         viewport.deleteLater()
 

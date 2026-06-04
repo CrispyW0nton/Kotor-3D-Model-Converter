@@ -258,6 +258,72 @@ class GhostRiggerIPCServer:
                 self._schedule_callback(cb, mesh)
             return jsonify({"status": "ok", "selecting": mesh})
 
+        @app.route("/api/set_renderer_backend", methods=["POST"])
+        def route_set_renderer_backend():
+            """Switch the running viewport renderer for visual QA."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            backend = str(payload.get("backend", body.get("backend", "")) or "").strip()
+            if not backend:
+                return jsonify({"error": "missing backend"}), 400
+            allow_fallback = payload.get("allow_fallback", body.get("allow_fallback", None))
+
+            cb = self.callbacks.get("set_renderer_backend")
+            if cb is not None:
+                self._schedule_callback(cb, backend, allow_fallback)
+            return jsonify({"status": "ok", "renderer_backend": backend})
+
+        @app.route("/api/set_dummy_helpers", methods=["POST"])
+        def route_set_dummy_helpers():
+            """Show or hide dummy/helper markers in the running viewport."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            visible = payload.get("visible", body.get("visible", True))
+
+            cb = self.callbacks.get("set_dummy_helpers")
+            if cb is not None:
+                self._schedule_callback(cb, visible)
+            return jsonify({"status": "ok", "visible": bool(visible)})
+
+        @app.route("/api/set_light_helpers", methods=["POST"])
+        def route_set_light_helpers():
+            """Show or hide light helper markers/volumes in the running viewport."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            helpers = payload.get("helpers", body.get("helpers", True))
+            volumes = payload.get("volumes", body.get("volumes", helpers))
+
+            cb = self.callbacks.get("set_light_helpers")
+            if cb is not None:
+                self._schedule_callback(cb, helpers, volumes)
+            return jsonify({"status": "ok", "helpers": bool(helpers), "volumes": bool(volumes)})
+
+        @app.route("/api/select_helper", methods=["POST"])
+        def route_select_helper():
+            """Select a dummy/helper node by name, or the first visible helper."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+
+            cb = self.callbacks.get("select_helper")
+            if cb is not None:
+                self._schedule_callback(cb, name)
+            return jsonify({"status": "ok", "selecting": name or "<first-helper>"})
+
+        @app.route("/api/capture_viewport", methods=["POST"])
+        def route_capture_viewport():
+            """Capture the running viewport canvas to a PNG path for visual QA."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            path = str(payload.get("path", body.get("path", "")) or "").strip()
+            if not path:
+                return jsonify({"error": "missing path"}), 400
+
+            cb = self.callbacks.get("capture_viewport")
+            if cb is not None:
+                self._schedule_callback(cb, path)
+            return jsonify({"status": "ok", "path": path})
+
         @app.route("/api/health", methods=["GET"])
         def route_health():
             return jsonify({"status": "ok", "program": _PROGRAM_NAME,
