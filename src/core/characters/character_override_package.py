@@ -60,6 +60,10 @@ class CharacterBuilderOverridePackageRequest:
     game: str = "K1"
     validation_report_path: Path | None = None
     overwrite: bool = False
+    require_replacement_ready_fit: bool = False
+    min_fit_paired_landmarks: int = 8
+    max_fit_landmark_rms_error: float = 0.15
+    max_fit_landmark_pair_error: float = 0.15
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -69,6 +73,10 @@ class CharacterBuilderOverridePackageRequest:
         self.game = str(self.game or "K1").upper()
         if self.validation_report_path is not None:
             self.validation_report_path = Path(self.validation_report_path)
+        self.require_replacement_ready_fit = bool(self.require_replacement_ready_fit)
+        self.min_fit_paired_landmarks = max(0, int(self.min_fit_paired_landmarks))
+        self.max_fit_landmark_rms_error = float(self.max_fit_landmark_rms_error)
+        self.max_fit_landmark_pair_error = float(self.max_fit_landmark_pair_error)
         self.metadata = dict(self.metadata or {})
 
 
@@ -366,6 +374,66 @@ def _validation_payload_issues(
             "character.override_package.final_dag_source_invalid",
             "Character Builder workflow evidence does not identify the selected KOTOR base as final DAG source.",
         ))
+    if request.require_replacement_ready_fit:
+        issues.extend(_replacement_ready_fit_issues(payload, request))
+    return issues
+
+
+def _replacement_ready_fit_issues(
+    payload: dict[str, Any],
+    request: CharacterBuilderOverridePackageRequest,
+) -> list[ValidationIssue]:
+    """Require clean skeleton-guided fit evidence for replacement packaging."""
+
+    issues: list[ValidationIssue] = []
+    gates = payload.get("character_builder_evidence_gates")
+    gates = gates if isinstance(gates, dict) else {}
+    fit = gates.get("fit")
+    fit = fit if isinstance(fit, dict) else {}
+    paired = fit.get("paired_landmark_alignment")
+    paired = paired if isinstance(paired, dict) else {}
+
+    reasons: list[str] = []
+    if fit.get("stage") != "passed":
+        reasons.append("fit_gate_not_passed")
+    if fit.get("source_uses_imported_skeleton_landmarks") is not True:
+        reasons.append("source_not_skeleton_guided")
+    if paired.get("present") is not True:
+        reasons.append("paired_alignment_missing")
+    if str(paired.get("method") or "") != "paired_skeleton_landmark_similarity":
+        reasons.append("unexpected_alignment_method")
+
+    pair_count = _safe_int(paired.get("pair_count"))
+    rms_error = _safe_float(paired.get("rms_error"))
+    max_error = _safe_float(paired.get("max_error"))
+    if pair_count is None or pair_count < request.min_fit_paired_landmarks:
+        reasons.append("too_few_paired_landmarks")
+    if rms_error is None or rms_error > request.max_fit_landmark_rms_error:
+        reasons.append("rms_error_too_high")
+    if max_error is None or max_error > request.max_fit_landmark_pair_error:
+        reasons.append("max_pair_error_too_high")
+
+    if not reasons:
+        return issues
+
+    issues.append(_issue(
+        "character.override_package.replacement_fit_not_ready",
+        (
+            "Replacement packaging requires clean skeleton-guided auto-fit "
+            "evidence for the imported payload and selected KOTOR base."
+        ),
+        details={
+            "reasons": reasons,
+            "fit_stage": fit.get("stage"),
+            "source_uses_imported_skeleton_landmarks": fit.get(
+                "source_uses_imported_skeleton_landmarks"
+            ),
+            "paired_landmark_alignment": paired,
+            "required_pair_count": request.min_fit_paired_landmarks,
+            "max_rms_error": request.max_fit_landmark_rms_error,
+            "max_pair_error": request.max_fit_landmark_pair_error,
+        },
+    ))
     return issues
 
 
@@ -631,6 +699,23 @@ def _normalize_output_hashes(value: Any) -> dict[str, dict[str, Any]]:
         except (TypeError, ValueError, OverflowError):
             pass
         result[artifact] = payload
+    return result
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if result != result:
+        return None
     return result
 
 

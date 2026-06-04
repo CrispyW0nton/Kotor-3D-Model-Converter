@@ -204,6 +204,89 @@ def test_character_override_package_copies_verified_pair_under_target_resref(tmp
     assert "Do not overwrite a live game install" in readme
 
 
+def test_character_override_package_strict_fit_gate_blocks_needs_review(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is False
+    assert not (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    issue = next(
+        issue for issue in result.export_job_result.validation_report.issues
+        if issue.code == "character.override_package.replacement_fit_not_ready"
+    )
+    assert "fit_gate_not_passed" in issue.details["reasons"]
+    assert "source_not_skeleton_guided" in issue.details["reasons"]
+    assert "too_few_paired_landmarks" in issue.details["reasons"]
+    assert issue.details["required_pair_count"] == 8
+
+
+def test_character_override_package_strict_fit_gate_accepts_clean_skeleton_fit(tmp_path: Path) -> None:
+    source_mdl = _write_source_export(tmp_path / "source")
+    validation_path = source_mdl.with_name("bendak_validation_report.json")
+    payload = json.loads(validation_path.read_text(encoding="utf-8"))
+    payload["capability"]["game_ready_blockers"] = [
+        "material=needs_review",
+        "engine=partial_reverse_engineering",
+    ]
+    payload["capability"]["game_ready_actual_gate_stages"]["fit"] = "passed"
+    fit_gate = payload["character_builder_evidence_gates"]["fit"]
+    fit_gate["stage"] = "passed"
+    fit_gate["source_landmark_domain"] = "skeleton_landmarks"
+    fit_gate["source_uses_imported_skeleton_landmarks"] = True
+    fit_gate["source_skeleton_landmark_roles"] = [
+        "head",
+        "left",
+        "left_foot",
+        "left_toe",
+        "pelvis",
+        "right",
+        "right_foot",
+        "right_toe",
+    ]
+    fit_gate["source_imported_armature_guide_count"] = 65
+    fit_gate["source_imported_armature_scene_guide_count"] = 65
+    fit_gate["warning_issue_codes"] = []
+    paired = fit_gate["paired_landmark_alignment"]
+    paired["pair_count"] = 8
+    paired["paired_roles"] = [
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+        "left_toe",
+        "right_toe",
+    ]
+    paired["rms_error"] = 0.04
+    paired["max_error"] = 0.08
+    paired["worst_pair_role"] = "right_toe"
+    validation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = package_character_override_candidate(
+        CharacterBuilderOverridePackageRequest(
+            source_mdl_path=source_mdl,
+            output_dir=tmp_path / "package",
+            target_resref="n_mandalorian03",
+            game="K1",
+            require_replacement_ready_fit=True,
+        )
+    )
+
+    assert result.succeeded is True
+    assert (tmp_path / "package" / "n_mandalorian03.mdl").exists()
+    assert result.manifest["character_builder_evidence_gates"]["fit"]["stage"] == "passed"
+
+
 def test_character_override_package_blocks_unverified_source_export(tmp_path: Path) -> None:
     source_mdl = _write_source_export(tmp_path / "source", verified=False)
     out_dir = tmp_path / "package"

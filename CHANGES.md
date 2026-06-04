@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder replacement-fit package gate: Override-style character packages now have an opt-in `require_replacement_ready_fit` policy that refuses replacement packaging unless the validation report proves a clean skeleton-guided Auto-Fit (`fit` gate passed, imported skeleton landmarks used, paired landmark similarity present, at least 8 landmark pairs, and low RMS/max residuals). Default export-candidate packages still work for iteration, but replacement-ready packaging can now distinguish Bendak-style clean imported-skeleton evidence from fits that still need review. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
+  Affected areas: `src/core/characters/character_override_package.py`, `tests/test_character_builder_override_package.py`.
+  Ground truth used: existing Character Builder validation-report evidence gates and the local Bendak continual fixture; this slice does not change MDL parser/writer semantics, skinning, vertex transforms, or final native KOTOR DAG authority.
+  Verification: `python -m pytest tests/test_character_builder_override_package.py -q --basetemp .pytest_tmp_character_override_package`; `python -m pytest tests/test_character_builder_bendak_local_fixture.py -q --basetemp .pytest_tmp_bendak_fixture`; `python -m py_compile src/core/characters/character_override_package.py tests/test_character_builder_override_package.py`.
+
 - Character Builder reload structural DAG verification: the external mesh launch workflow now verifies that reloaded MDL/MDX candidates preserve required left-hand attachment evidence and exact native structural socket/helper paths from the selected `NativeSkeletonSnapshot`. This catches writer/readback regressions where a candidate still has a mesh and supermodel but loses KOTOR-critical attachment/helper nodes after reload. Roadmap task: `T1205` / `T1803` / `T2102` / `T2203`.
   Affected areas: `src/core/characters/headless_body_workflow.py`, `tests/test_headless_body_workflow.py`.
   Ground truth used: existing native snapshot structural-role evidence, Ghidra string-reference findings for hand/camera/VFX helpers, and the local Bendak continual fixture; this slice does not change MDL parser/writer semantics, vertex transforms, or final DAG export authority.
