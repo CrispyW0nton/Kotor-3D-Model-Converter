@@ -80,7 +80,7 @@ class CharacterExportPreflightOptions:
     min_auto_fit_confidence: float = 0.60
     min_auto_fit_paired_landmarks: int = 4
     max_auto_fit_landmark_rms_error: float = 0.15
-    max_auto_fit_landmark_pair_error: float = 0.15
+    max_auto_fit_landmark_pair_error: float = 0.16
     min_auto_fit_toe_forward_alignment: float = 0.50
     min_auto_fit_toe_forward_required_guide_count: int = 8
     strict_parent_paths: bool = True

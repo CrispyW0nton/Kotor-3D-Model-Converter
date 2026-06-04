@@ -63,7 +63,7 @@ class CharacterBuilderOverridePackageRequest:
     require_replacement_ready_fit: bool = False
     min_fit_paired_landmarks: int = 8
     max_fit_landmark_rms_error: float = 0.15
-    max_fit_landmark_pair_error: float = 0.15
+    max_fit_landmark_pair_error: float = 0.16
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

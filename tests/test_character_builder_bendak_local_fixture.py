@@ -112,6 +112,7 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
             output_dir=tmp_path / f"{game.lower()}_override_package",
             target_resref="n_mandalorian03",
             game=game,
+            require_replacement_ready_fit=True,
         )
     )
 
