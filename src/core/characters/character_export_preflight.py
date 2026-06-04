@@ -1361,6 +1361,7 @@ def _validate_skin_payload(
             ))
         if vertices and faces:
             _validate_skin_geometry_values(node, vertices, faces, report)
+            _validate_skin_material_evidence(node, vertices, faces, report)
         if not bone_map:
             report.add(_issue(
                 "blocking",
@@ -1425,6 +1426,141 @@ def _validate_skin_payload(
         if bone_map:
             _validate_bone_map_targets(node, bone_map, model, native_snapshot, opts, report)
         _validate_skin_rows(node, bone_map, report)
+
+
+def _validate_skin_material_evidence(
+    node: Any,
+    vertices: list[Any],
+    faces: list[Any],
+    report: ValidationReport,
+) -> None:
+    """Warn when a payload can export structurally but lacks texture/UV proof."""
+
+    name = str(getattr(node, "name", "") or "")
+    uvs = list(getattr(node, "uvs", []) or [])
+    face_uvs = list(getattr(node, "face_uvs", []) or [])
+    texture_names = _payload_texture_names(node)
+    if not texture_names:
+        report.add(_issue(
+            "warning",
+            "character.export.payload_texture_missing",
+            f"Skin mesh '{name}' has no texture or material name recorded.",
+            navigation=ValidationNavigationTarget(node_name=name),
+            fix_hint=(
+                "Assign a KOTOR-safe texture name before treating this "
+                "character as game-ready."
+            ),
+            details={
+                "node_name": name,
+                "vertex_count": len(vertices),
+                "face_count": len(faces),
+                "uv_count": len(uvs),
+            },
+        ))
+    if not uvs:
+        report.add(_issue(
+            "warning",
+            "character.export.payload_uvs_missing",
+            f"Skin mesh '{name}' has no UV coordinates.",
+            navigation=ValidationNavigationTarget(node_name=name),
+            fix_hint=(
+                "Import or author UVs for the custom payload before treating "
+                "the character as game-ready."
+            ),
+            details={
+                "node_name": name,
+                "vertex_count": len(vertices),
+                "face_count": len(faces),
+                "texture_names": texture_names,
+            },
+        ))
+        return
+
+    if face_uvs:
+        if len(face_uvs) != len(faces):
+            report.add(_issue(
+                "warning",
+                "character.export.payload_face_uv_count_mismatch",
+                f"Skin mesh '{name}' has face UV rows that do not match its faces.",
+                navigation=ValidationNavigationTarget(node_name=name),
+                fix_hint="Rebuild face UV indices before treating the payload as game-ready.",
+                details={
+                    "node_name": name,
+                    "face_count": len(faces),
+                    "face_uv_count": len(face_uvs),
+                    "uv_count": len(uvs),
+                },
+            ))
+        for face_index, uv_face in enumerate(face_uvs):
+            try:
+                indices = [int(value) for value in list(uv_face)[:3]]
+            except Exception:
+                report.add(_issue(
+                    "warning",
+                    "character.export.payload_face_uv_malformed",
+                    f"Skin mesh '{name}' has malformed face UV indices.",
+                    navigation=ValidationNavigationTarget(node_name=name),
+                    fix_hint="Rebuild face UV indices before treating the payload as game-ready.",
+                    details={"node_name": name, "face_index": face_index},
+                ))
+                continue
+            bad_indices = [index for index in indices if index < 0 or index >= len(uvs)]
+            if bad_indices:
+                report.add(_issue(
+                    "warning",
+                    "character.export.payload_face_uv_index_out_of_range",
+                    f"Skin mesh '{name}' has a face UV index outside its UV table.",
+                    navigation=ValidationNavigationTarget(node_name=name),
+                    fix_hint="Rebuild face UV indices before treating the payload as game-ready.",
+                    details={
+                        "node_name": name,
+                        "face_index": face_index,
+                        "bad_indices": bad_indices,
+                        "uv_count": len(uvs),
+                    },
+                ))
+    elif len(uvs) != len(vertices):
+        report.add(_issue(
+            "warning",
+            "character.export.payload_uv_count_mismatch",
+            f"Skin mesh '{name}' UV count does not match its vertex count.",
+            navigation=ValidationNavigationTarget(node_name=name),
+            fix_hint=(
+                "Rebuild payload UVs or face UV indices before treating the "
+                "character as game-ready."
+            ),
+            details={
+                "node_name": name,
+                "vertex_count": len(vertices),
+                "uv_count": len(uvs),
+                "face_uv_count": 0,
+            },
+        ))
+
+
+def _payload_texture_names(node: Any) -> list[str]:
+    names: list[str] = []
+    for value in (
+        getattr(node, "texture_clean", ""),
+        getattr(node, "texture", ""),
+        getattr(node, "bitmap", ""),
+    ):
+        text = str(value or "").strip()
+        if text and text.upper() != "NULL":
+            names.append(text)
+    for value in list(getattr(node, "texture_names", []) or []):
+        text = str(value or "").strip()
+        if text and text.upper() != "NULL":
+            names.append(text)
+    result: list[str] = []
+    seen: set[str] = set()
+    for name in names:
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(name)
+    return result
 
 
 def _validate_skin_geometry_values(

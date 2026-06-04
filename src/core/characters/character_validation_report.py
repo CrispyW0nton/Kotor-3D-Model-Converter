@@ -114,6 +114,15 @@ _GEOMETRY_EVIDENCE_CODES = frozenset({
     "character.export.face_index_out_of_range",
 })
 
+_MATERIAL_EVIDENCE_CODES = frozenset({
+    "character.export.payload_texture_missing",
+    "character.export.payload_uvs_missing",
+    "character.export.payload_uv_count_mismatch",
+    "character.export.payload_face_uv_count_mismatch",
+    "character.export.payload_face_uv_malformed",
+    "character.export.payload_face_uv_index_out_of_range",
+})
+
 _ANIMATION_EVIDENCE_CODES = frozenset({
     "character.export.missing_animation_library_evidence",
     "character.export.empty_animation_library_evidence",
@@ -400,6 +409,7 @@ def character_builder_evidence_gates(
         _WEIGHT_EVIDENCE_CODES | _GEOMETRY_EVIDENCE_CODES,
     )
     animation_codes = _gate_issue_codes(issues, _ANIMATION_EVIDENCE_CODES)
+    material_codes = _gate_issue_codes(issues, _MATERIAL_EVIDENCE_CODES)
 
     fit_confidence = _safe_float(
         fit_report.get(
@@ -522,19 +532,31 @@ def character_builder_evidence_gates(
         "warning_issue_codes": animation_codes["warning"],
     }
 
+    material = {
+        "stage": _gate_stage(
+            material_codes,
+            present=bool(skin_binding),
+            warning_label="needs_review",
+        ),
+        "present": bool(skin_binding),
+        "blocking_issue_codes": material_codes["blocking"],
+        "warning_issue_codes": material_codes["warning"],
+    }
+
     return {
         "schema": {
             "name": "ghostrigger.character_builder_evidence_gates.v1",
             "meaning": (
-                "Fit, bind, weight, and animation are separate Character Builder proof "
-                "gates. A character can pass one gate while another remains "
-                "fallback-quality or blocked."
+                "Fit, bind, weight, animation, and material readiness are separate "
+                "Character Builder proof gates. A character can pass one gate "
+                "while another remains fallback-quality, review-needed, or blocked."
             ),
         },
         "fit": fit,
         "bind": bind,
         "weight": weight,
         "animation": animation,
+        "material": material,
     }
 
 
@@ -860,7 +882,8 @@ class CharacterBuilderValidationReport:
                     f"fit={_evidence_gate_stage(evidence_gates, 'fit')}, "
                     f"bind={_evidence_gate_stage(evidence_gates, 'bind')}, "
                     f"weight={_evidence_gate_stage(evidence_gates, 'weight')}, "
-                    f"animation={_evidence_gate_stage(evidence_gates, 'animation')}"
+                    f"animation={_evidence_gate_stage(evidence_gates, 'animation')}, "
+                    f"material={_evidence_gate_stage(evidence_gates, 'material')}"
                 )
                 fit_gate = dict(evidence_gates.get("fit") or {})
                 source_domain = str(fit_gate.get("source_landmark_domain") or "")

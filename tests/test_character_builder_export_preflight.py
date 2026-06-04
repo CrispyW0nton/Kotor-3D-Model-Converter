@@ -366,6 +366,42 @@ def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -
     assert "character.export.non_native_skeleton_node" not in _codes(preflight)
 
 
+def test_character_export_preflight_warns_when_payload_material_evidence_is_missing() -> None:
+    result = _rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    texture_issue = _issue_by_code(preflight, "character.export.payload_texture_missing")
+    uv_issue = _issue_by_code(preflight, "character.export.payload_uvs_missing")
+    assert texture_issue.severity.value == "warning"
+    assert uv_issue.severity.value == "warning"
+    assert texture_issue.details["node_name"] == "custom_body"
+    assert uv_issue.details["vertex_count"] == 3
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_accepts_payload_texture_and_uvs_without_material_warning() -> None:
+    result = _rigged_character()
+    mesh = _find_model_node(result["model"], "custom_body")
+    mesh.texture = "bendak_body"
+    mesh.uvs = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    assert "character.export.payload_texture_missing" not in _codes(preflight)
+    assert "character.export.payload_uvs_missing" not in _codes(preflight)
+    assert "character.export.payload_uv_count_mismatch" not in _codes(preflight)
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_blocks_missing_auto_fit_evidence() -> None:
     result = _rigged_character()
     result["model"].metadata.pop("kotor_fit_report", None)
@@ -1715,6 +1751,7 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     ) in (
         text_path.read_text(encoding="utf-8")
     )
+    assert "material=needs_review" in text_path.read_text(encoding="utf-8")
     assert "Fit landmark sources: skeleton_landmarks (imported_skeleton=6)" in (
         text_path.read_text(encoding="utf-8")
     )
@@ -1769,6 +1806,11 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert gates["animation"]["assigned_supermodel"] == "S_KPMF0200"
     assert gates["animation"]["available_count"] == 267
     assert gates["animation"]["required_preview_missing"] == []
+    assert gates["material"]["stage"] == "needs_review"
+    assert gates["material"]["warning_issue_codes"] == [
+        "character.export.payload_texture_missing",
+        "character.export.payload_uvs_missing",
+    ]
     assert workflow["rig_state"]["state"] == "native_template_final"
     assert workflow["rig_state"]["native_base_resref"] == "pmbam"
     assert workflow["rig_state"]["native_base_model_name"] == "pmbam"

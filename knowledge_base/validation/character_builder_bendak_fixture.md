@@ -43,6 +43,11 @@ MCP checks on 2026-06-04 confirmed:
   does not resolve `n_mandalorian03`.
 - K1 and K2 `n_mandalorian` both resolve as loadable MDLs with 70 nodes, 52 mesh
   nodes, 18 bones, local `pause1`/`pause2`, and supermodel `S_Female02`.
+- MCP audit of K1/K2 `n_mandalorian` reports valid bounds and the same
+  70-node / 52-mesh shape, while also surfacing current loader UV-count
+  mismatch reports on native mesh nodes. Treat those native UV audit messages
+  as loader/representation caveats, not as permission for imported Character
+  Builder payloads to omit texture and UV evidence silently.
 - K1 `pmbam` remains available and reports 61 nodes, 44 mesh nodes, 17 bones,
   and supermodel `S_KPMF0200`.
 - K1 Ghidra context is loaded for future engine-loader checks.
@@ -129,6 +134,12 @@ Headless workflow proof on 2026-06-04 confirmed:
   candidates can remain exportable, but the fit evidence gate becomes
   `needs_review` in staged reports so mesh-only or weakly-proven alignment is
   not mistaken for launch-quality rig evidence.
+- Export preflight now also treats imported payload material readiness as its
+  own evidence gate. Missing texture/material names, missing UVs, UV-count
+  mismatches, and invalid face-UV indices are warnings rather than structural
+  export blockers, but staged reports mark the `material` gate as
+  `needs_review` until a modder can prove the custom payload will appear with
+  the intended texture mapping in-game.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.
