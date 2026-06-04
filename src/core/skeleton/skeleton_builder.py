@@ -33,6 +33,9 @@ class SkinBindingReport:
     bone_count: int = 0
     message: str = ""
     warnings: List[str] | None = None
+    weighting_method: str = "nearest_kotor_bone_segment"
+    quality_stage: str = "fallback_first_pass"
+    mesh_reports: List[dict] | None = None
 
 
 def bind_imported_meshes_to_skeleton(
@@ -71,6 +74,7 @@ def bind_imported_meshes_to_skeleton(
         return SkinBindingReport(message="No valid bone-map slots could be built.", warnings=[])
 
     warnings: List[str] = []
+    mesh_reports: List[dict] = []
     skinned_meshes = 0
     weighted_vertices = 0
     for mesh in selected_meshes:
@@ -94,11 +98,24 @@ def bind_imported_meshes_to_skeleton(
             [bw.bone_index for bw in sd.influences]
             for sd in mesh.skin_data
         ]
+        mesh_report = _mesh_binding_report(
+            mesh,
+            weighting_method="nearest_kotor_bone_segment",
+            quality_stage="fallback_first_pass",
+            max_influences=max_influences,
+        )
+        mesh_reports.append(mesh_report)
+        setattr(mesh, "_gr_skin_binding_report", mesh_report)
         weighted_vertices += len(mesh.skin_data)
         skinned_meshes += 1
 
     if skinned_meshes == 0:
         warnings.append("Imported mesh payloads had no vertices to weight.")
+    else:
+        warnings.append(
+            "Using nearest KOTOR bone-segment fallback weights. "
+            "Use native-template/donor weight transfer for launch-quality deformation."
+        )
 
     return SkinBindingReport(
         ok=skinned_meshes > 0,
@@ -106,6 +123,9 @@ def bind_imported_meshes_to_skeleton(
         weighted_vertices=weighted_vertices,
         bone_count=len(bone_slots),
         warnings=warnings,
+        weighting_method="nearest_kotor_bone_segment",
+        quality_stage="fallback_first_pass",
+        mesh_reports=mesh_reports,
         message=(
             f"Skinned {skinned_meshes} mesh(es), {weighted_vertices} vertices, "
             f"{len(bone_slots)} KOTOR bone-map slots."
@@ -195,6 +215,54 @@ def _weights_for_vertex(vertex: Vec3, slots: Sequence[Any], *, max_influences: i
     sd = VertexSkinData(influences[:4])
     sd.normalize()
     return sd
+
+
+def _mesh_binding_report(
+    mesh: Any,
+    *,
+    weighting_method: str,
+    quality_stage: str,
+    max_influences: int,
+) -> dict:
+    skin_rows = list(getattr(mesh, "skin_data", []) or [])
+    influence_counts: List[int] = []
+    weight_sums: List[float] = []
+    zero_weight_vertices = 0
+    for row in skin_rows:
+        influences = list(getattr(row, "influences", []) or [])
+        influence_counts.append(len(influences))
+        total = 0.0
+        for influence in influences:
+            try:
+                total += float(getattr(influence, "weight", 0.0))
+            except (TypeError, ValueError, OverflowError):
+                total += 0.0
+        weight_sums.append(total)
+        if total <= 0.0:
+            zero_weight_vertices += 1
+    vertex_count = len(list(getattr(mesh, "vertices", []) or []))
+    average_count = (
+        sum(influence_counts) / len(influence_counts)
+        if influence_counts else
+        0.0
+    )
+    return {
+        "mesh_name": str(getattr(mesh, "name", "") or ""),
+        "weighting_method": weighting_method,
+        "quality_stage": quality_stage,
+        "vertex_count": vertex_count,
+        "skin_rows": len(skin_rows),
+        "weighted_vertices": max(0, len(skin_rows) - zero_weight_vertices),
+        "zero_weight_vertices": zero_weight_vertices,
+        "bone_map_count": len(list(getattr(mesh, "bone_map", []) or [])),
+        "max_influences_per_vertex": max(influence_counts, default=0),
+        "average_influences_per_vertex": average_count,
+        "weight_sum_min": min(weight_sums, default=0.0),
+        "weight_sum_max": max(weight_sums, default=0.0),
+        "normalization": "normalized_rows",
+        "max_influences_requested": max(1, min(4, int(max_influences or 4))),
+        "donor_weight_transfer": False,
+    }
 
 
 def _make_skin_node(node: Any) -> None:

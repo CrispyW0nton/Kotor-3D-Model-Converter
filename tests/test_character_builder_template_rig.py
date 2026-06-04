@@ -157,6 +157,14 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
     assert len(rigged_mesh.qbone_list) == len(rigged_mesh.bone_map)
     assert len(rigged_mesh.tbone_list) == len(rigged_mesh.bone_map)
+    skin_binding = rigged.metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "nearest_kotor_bone_segment"
+    assert skin_binding["quality_stage"] == "fallback_first_pass"
+    assert skin_binding["donor_weight_transfer"] is False
+    assert skin_binding["mesh_reports"][0]["mesh_name"] == "Bendak"
+    assert skin_binding["mesh_reports"][0]["weighted_vertices"] == 1
+    assert skin_binding["mesh_reports"][0]["bone_map_count"] == 1
+    assert rigged_mesh._gr_skin_binding_report == skin_binding["mesh_reports"][0]
     assert rigged_mesh._gr_bound_to_kotor_skeleton is True
     assert rigged_mesh._gr_kotor_skeleton_root == "N_Mandalorian"
     assert rigged_mesh.position == (0.0, 0.0, 0.0)

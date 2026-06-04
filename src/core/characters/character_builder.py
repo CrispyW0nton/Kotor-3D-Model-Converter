@@ -1012,6 +1012,25 @@ def apply_template_rig(
                 "skinned_meshes": bind_report.skinned_meshes,
                 "weighted_vertices": bind_report.weighted_vertices,
                 "bone_slots": bind_report.bone_count,
+                "skin_binding": {
+                    "weighting_method": getattr(
+                        bind_report,
+                        "weighting_method",
+                        "nearest_kotor_bone_segment",
+                    ),
+                    "quality_stage": getattr(
+                        bind_report,
+                        "quality_stage",
+                        "fallback_first_pass",
+                    ),
+                    "donor_weight_transfer": False,
+                    "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
+                    "note": (
+                        "Nearest-bone fallback skinning is deterministic and "
+                        "exportable, but donor/native-template weight transfer "
+                        "is required before claiming launch-quality deformation."
+                    ),
+                },
                 "source": "apply_template_rig",
                 "skeleton_scale_applied": applied_scale,
                 "requested_skeleton_scale": requested_scale,

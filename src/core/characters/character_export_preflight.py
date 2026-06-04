@@ -312,6 +312,7 @@ def _validate_native_template_rig_provenance(
             }
 
     if not mismatches:
+        _validate_skin_binding_evidence(bind, report)
         if opts.require_native_render_replacement_evidence:
             _validate_native_render_replacement_evidence(
                 model,
@@ -355,6 +356,52 @@ def _validate_native_template_rig_provenance(
             native_base,
             report,
         )
+
+
+def _validate_skin_binding_evidence(
+    bind: dict[str, Any],
+    report: ValidationReport,
+) -> None:
+    skin_binding = bind.get("skin_binding")
+    if not isinstance(skin_binding, dict):
+        report.add(_issue(
+            "warning",
+            "character.export.missing_skin_binding_evidence",
+            "Character export has no explicit skin-binding quality evidence.",
+            fix_hint=(
+                "Rebuild the KOTOR skeleton so Character Builder records whether "
+                "weights came from fallback nearest-bone skinning or donor/native-template transfer."
+            ),
+        ))
+        return
+
+    weighting_method = str(skin_binding.get("weighting_method") or "")
+    quality_stage = str(skin_binding.get("quality_stage") or "")
+    donor_weight_transfer = bool(skin_binding.get("donor_weight_transfer"))
+    mesh_reports = list(skin_binding.get("mesh_reports") or [])
+    if (
+        weighting_method == "nearest_kotor_bone_segment"
+        or quality_stage == "fallback_first_pass"
+        or not donor_weight_transfer
+    ):
+        report.add(_issue(
+            "warning",
+            "character.export.fallback_skin_binding",
+            (
+                "Character Builder is using nearest-bone fallback skin weights. "
+                "This is exportable but not launch-quality deformation evidence."
+            ),
+            fix_hint=(
+                "Use native-template/donor weight transfer and preview inherited "
+                "animations before treating this character as game-ready."
+            ),
+            details={
+                "weighting_method": weighting_method,
+                "quality_stage": quality_stage,
+                "donor_weight_transfer": donor_weight_transfer,
+                "mesh_reports": mesh_reports,
+            },
+        ))
 
 
 def _validate_native_render_replacement_evidence(

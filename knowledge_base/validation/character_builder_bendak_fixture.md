@@ -68,6 +68,12 @@ Headless workflow proof on 2026-06-04 confirmed:
   Override-package readiness path. The package writes `n_mandalorian03.mdl`,
   `n_mandalorian03.mdx`, an Override manifest, and a readme/checklist into a
   temp package folder without touching a live game install.
+- Current skin binding evidence is now explicit: the generated payload is
+  recorded as `nearest_kotor_bone_segment` / `fallback_first_pass` until a
+  donor/native-template weight-transfer mode is implemented. That means the
+  candidate can be reload/export verified, but it must not be described as
+  launch-quality deformation until inherited animation preview and donor
+  weight-transfer evidence pass.
 
 This proves a reload-verified export candidate, not an in-game-tested
 replacement.

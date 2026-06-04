@@ -142,6 +142,42 @@ def test_character_export_preflight_accepts_native_snapshot_and_skin_payload() -
     assert "character.export.non_native_skeleton_node" not in _codes(preflight)
 
 
+def test_character_export_preflight_warns_on_fallback_skin_binding() -> None:
+    result = _rigged_character()
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.fallback_skin_binding")
+    assert issue.severity.value == "warning"
+    assert issue.details["weighting_method"] == "nearest_kotor_bone_segment"
+    assert issue.details["quality_stage"] == "fallback_first_pass"
+    assert issue.details["donor_weight_transfer"] is False
+    assert issue.details["mesh_reports"][0]["mesh_name"] == "custom_body"
+    assert "donor weight transfer" in issue.fix_hint
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_skin_binding_evidence_is_missing() -> None:
+    result = _rigged_character()
+    bind = copy.deepcopy(result["model"].metadata["character_builder_bind"])
+    bind.pop("skin_binding", None)
+    result["model"].metadata["character_builder_bind"] = bind
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(preflight, "character.export.missing_skin_binding_evidence")
+    assert issue.severity.value == "warning"
+    assert preflight.export_allowed is True
+
+
 def test_character_export_preflight_accepts_k2_native_snapshot_and_supermodel() -> None:
     result = _rigged_character(game="K2")
 
@@ -1034,6 +1070,11 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert workflow["bind"]["status"] == "bound_to_native_kotor_skeleton"
     assert workflow["bind"]["native_base"]["source_resref"] == "pmbam"
     assert workflow["bind"]["native_base"]["dag_authority"] == "native_kotor_base"
+    assert workflow["bind"]["skin_binding"]["weighting_method"] == "nearest_kotor_bone_segment"
+    assert workflow["bind"]["skin_binding"]["quality_stage"] == "fallback_first_pass"
+    assert workflow["bind"]["skin_binding"]["donor_weight_transfer"] is False
+    assert workflow["bind"]["skin_binding"]["mesh_reports"][0]["mesh_name"] == "custom_body"
+    assert workflow["bind"]["skin_binding"]["mesh_reports"][0]["weighted_vertices"] == 3
     replaced_render_nodes = workflow["bind"]["native_base"]["replaced_render_payload_nodes"]
     assert replaced_render_nodes == [
         {
