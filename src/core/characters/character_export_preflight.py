@@ -604,6 +604,12 @@ def _validate_auto_fit_evidence(
             },
         ))
 
+    _validate_auto_fit_transform_matrices(
+        fit_transform=fit_transform,
+        scale=scale,
+        report=report,
+    )
+
     fallback_used = bool(
         fit_report.get("fallback_used", auto_fit_report.get("fallback_used", False))
     )
@@ -810,6 +816,121 @@ def _validate_paired_landmark_alignment(
             "applied_scale_basis": str(alignment.get("applied_scale_basis") or ""),
         },
     ))
+
+
+def _validate_auto_fit_transform_matrices(
+    *,
+    fit_transform: dict[str, Any],
+    scale: float | None,
+    report: ValidationReport,
+) -> None:
+    rotation, rotation_reason = _auto_fit_matrix3(
+        fit_transform.get("rotation_matrix")
+    )
+    linear, linear_reason = _auto_fit_matrix3(
+        fit_transform.get("linear_matrix")
+    )
+    reasons: list[str] = []
+    if rotation_reason:
+        reasons.append(f"rotation_matrix_{rotation_reason}")
+    if linear_reason:
+        reasons.append(f"linear_matrix_{linear_reason}")
+
+    rotation_det: float | None = None
+    linear_det: float | None = None
+    max_linear_delta: float | None = None
+    if rotation is not None:
+        rotation_det = _matrix3_determinant(rotation)
+        if not math.isfinite(rotation_det) or rotation_det <= 0.0:
+            reasons.append("rotation_matrix_reflected_or_degenerate")
+        orthonormal_error = _rotation_orthonormal_error(rotation)
+        if orthonormal_error > 0.05:
+            reasons.append("rotation_matrix_not_orthonormal")
+    else:
+        orthonormal_error = None
+    if linear is not None:
+        linear_det = _matrix3_determinant(linear)
+        if not math.isfinite(linear_det) or linear_det <= 0.0:
+            reasons.append("linear_matrix_reflected_or_degenerate")
+    if rotation is not None and linear is not None and scale is not None:
+        max_linear_delta = _max_scaled_matrix_delta(rotation, linear, scale)
+        if max_linear_delta > 1.0e-4:
+            reasons.append("linear_matrix_scale_mismatch")
+
+    if not reasons:
+        return
+
+    report.add(_issue(
+        "warning",
+        "character.export.auto_fit_transform_matrix_needs_review",
+        "Character auto-fit transform matrix evidence needs review.",
+        fix_hint=(
+            "Re-run Auto-Fit with the current Character Builder so the report "
+            "records a finite, non-reflected rotation matrix and a linear matrix "
+            "that matches the recorded scale."
+        ),
+        details={
+            "reasons": sorted(set(reasons)),
+            "scale": scale,
+            "rotation_determinant": rotation_det,
+            "linear_determinant": linear_det,
+            "rotation_orthonormal_error": orthonormal_error,
+            "max_linear_scale_delta": max_linear_delta,
+        },
+    ))
+
+
+def _auto_fit_matrix3(value: Any) -> tuple[tuple[tuple[float, float, float], ...] | None, str]:
+    if value is None:
+        return None, "not_recorded"
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None, "malformed"
+    rows: list[tuple[float, float, float]] = []
+    for row in value:
+        try:
+            components = _numeric_components(row)
+        except (TypeError, ValueError, OverflowError):
+            return None, "malformed"
+        if len(components) != 3 or not _all_finite(components):
+            return None, "malformed"
+        rows.append((float(components[0]), float(components[1]), float(components[2])))
+    return tuple(rows), ""
+
+
+def _matrix3_determinant(matrix: tuple[tuple[float, float, float], ...]) -> float:
+    a, b, c = matrix
+    return (
+        a[0] * (b[1] * c[2] - b[2] * c[1])
+        - a[1] * (b[0] * c[2] - b[2] * c[0])
+        + a[2] * (b[0] * c[1] - b[1] * c[0])
+    )
+
+
+def _rotation_orthonormal_error(
+    matrix: tuple[tuple[float, float, float], ...],
+) -> float:
+    max_error = 0.0
+    for row_index, row in enumerate(matrix):
+        row_len_sq = sum(component * component for component in row)
+        max_error = max(max_error, abs(row_len_sq - 1.0))
+        for other_index in range(row_index + 1, 3):
+            dot = sum(row[i] * matrix[other_index][i] for i in range(3))
+            max_error = max(max_error, abs(dot))
+    return float(max_error)
+
+
+def _max_scaled_matrix_delta(
+    rotation: tuple[tuple[float, float, float], ...],
+    linear: tuple[tuple[float, float, float], ...],
+    scale: float,
+) -> float:
+    max_delta = 0.0
+    for row_index in range(3):
+        for column_index in range(3):
+            expected = float(rotation[row_index][column_index]) * float(scale)
+            actual = float(linear[row_index][column_index])
+            max_delta = max(max_delta, abs(actual - expected))
+    return float(max_delta)
 
 
 def _validate_toe_forward_alignment(

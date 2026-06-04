@@ -145,6 +145,16 @@ def _valid_fit_report(
         "fit_transform": {
             "formula": "kotor_point = linear_matrix * source_point + translation",
             "scale": 0.8,
+            "rotation_matrix": [
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            "linear_matrix": [
+                [0.8, 0.0, 0.0],
+                [0.0, 0.8, 0.0],
+                [0.0, 0.0, 0.8],
+            ],
             "translation": [0.0, 0.0, 0.0],
             "landmark_alignment": {
                 "method": "paired_skeleton_landmark_similarity",
@@ -540,6 +550,93 @@ def test_character_export_preflight_blocks_fallback_auto_fit() -> None:
     issue = _issue_by_code(preflight, "character.export.fallback_auto_fit_used")
     assert issue.details["fit_policy"] == "bone_landmark_basis"
     assert preflight.export_allowed is False
+
+
+def test_character_export_preflight_warns_when_auto_fit_matrices_missing() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["fit_transform"].pop("rotation_matrix", None)
+    fit["fit_transform"].pop("linear_matrix", None)
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_transform_matrix_needs_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == [
+        "linear_matrix_not_recorded",
+        "rotation_matrix_not_recorded",
+    ]
+    assert issue.details["scale"] == 0.8
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_on_reflected_auto_fit_matrix() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["fit_transform"]["rotation_matrix"] = [
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+    fit["fit_transform"]["linear_matrix"] = [
+        [-0.8, 0.0, 0.0],
+        [0.0, 0.8, 0.0],
+        [0.0, 0.0, 0.8],
+    ]
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_transform_matrix_needs_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == [
+        "linear_matrix_reflected_or_degenerate",
+        "rotation_matrix_reflected_or_degenerate",
+    ]
+    assert issue.details["rotation_determinant"] == -1.0
+    assert abs(issue.details["linear_determinant"] + 0.512) < 1.0e-9
+    assert preflight.export_allowed is True
+
+
+def test_character_export_preflight_warns_when_linear_matrix_scale_mismatches() -> None:
+    result = _rigged_character()
+    fit = copy.deepcopy(result["model"].metadata["kotor_fit_report"])
+    fit["fit_transform"]["linear_matrix"] = [
+        [0.7, 0.0, 0.0],
+        [0.0, 0.8, 0.0],
+        [0.0, 0.0, 0.8],
+    ]
+    result["model"].metadata["kotor_fit_report"] = fit
+
+    preflight = preflight_character_mdl_export(
+        result["model"],
+        native_snapshot=result["native_skeleton_snapshot"],
+        options=CharacterExportPreflightOptions(recommended_socket_categories=()),
+    )
+
+    issue = _issue_by_code(
+        preflight,
+        "character.export.auto_fit_transform_matrix_needs_review",
+    )
+    assert issue.severity.value == "warning"
+    assert issue.details["reasons"] == ["linear_matrix_scale_mismatch"]
+    assert abs(issue.details["max_linear_scale_delta"] - 0.1) < 1.0e-9
+    assert preflight.export_allowed is True
 
 
 def test_character_export_preflight_blocks_auto_fit_contract_mismatch() -> None:
