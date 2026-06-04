@@ -11,6 +11,10 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-04
 
+- Character Builder validation text reports: human-readable export reports now include each issue's fix hint, navigation target, and compact details alongside severity/code/message. This makes blocked native-DAG, provenance, socket, and skin payload failures actionable without opening the JSON report. Roadmap task: `T1205` / Phase 6 validation reporting.
+  Affected areas: `src/core/characters/character_validation_report.py`, `tests/test_character_builder_export_preflight.py`.
+  Verification: `python -m pytest tests/test_character_builder_export_preflight.py::test_character_builder_validation_report_has_full_manual_checklist tests/test_character_builder_export_preflight.py::test_character_builder_validation_text_includes_actionable_issue_context -q --basetemp .pytest_tmp_character_validation_text`; `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_validation_text_full`; `python -m py_compile src/core/characters/character_validation_report.py tests/test_character_builder_export_preflight.py`.
+
 - Character Builder native-game provenance gate: MDL/MDX export preflight now requires positive K1/K2 provenance for the selected `NativeSkeletonSnapshot` whenever a target export game is specified. Snapshots with only unknown/blank game facts now block before the writer, instead of passing merely because they do not contradict the request. Roadmap task: `T1205` / Phase 4 export hardening.
   Affected areas: `src/core/characters/character_export_preflight.py`, `tests/test_character_builder_export_preflight.py`.
   Ground truth used: MCP model-info checks refreshed K1/K2 `pmbam` native body facts before the preflight change; K1 and K2 use the same native body fixture shape but distinct supermodel provenance, so export must know which game the selected base came from.

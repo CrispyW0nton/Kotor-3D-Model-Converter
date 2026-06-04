@@ -173,6 +173,15 @@ class CharacterBuilderValidationReport:
                     f"- [{report_name}] {issue.get('severity')} "
                     f"{issue.get('code')}: {issue.get('message')}"
                 )
+                fix_hint = str(issue.get("fix_hint") or "").strip()
+                if fix_hint:
+                    lines.append(f"  Fix: {fix_hint}")
+                navigation = _format_navigation(issue.get("navigation"))
+                if navigation:
+                    lines.append(f"  Navigate: {navigation}")
+                details = _format_issue_details(issue.get("details"))
+                if details:
+                    lines.append(f"  Details: {details}")
         if issue_count == 0:
             lines.append("- none")
 
@@ -190,3 +199,51 @@ def validation_report_paths(mdl_path: str | Path) -> tuple[Path, Path]:
         path.with_name(f"{path.stem}_validation_report.json"),
         path.with_name(f"{path.stem}_validation_report.txt"),
     )
+
+
+def _format_navigation(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    parts: list[str] = []
+    for key in ("route", "field_path", "node_name", "object_id", "camera_angle"):
+        item = value.get(key)
+        if item not in (None, ""):
+            parts.append(f"{key}={item}")
+    if value.get("time_seconds") is not None:
+        parts.append(f"time_seconds={value.get('time_seconds')}")
+    return ", ".join(parts)
+
+
+def _format_issue_details(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    skipped = {"engine_evidence"}
+    parts: list[str] = []
+    for key in sorted(value):
+        if key in skipped:
+            continue
+        item = value.get(key)
+        if item in (None, "", [], {}):
+            continue
+        parts.append(f"{key}={_compact_detail_value(item)}")
+        if len(parts) >= 6:
+            remaining = len([k for k in value if k not in skipped]) - len(parts)
+            if remaining > 0:
+                parts.append(f"... {remaining} more")
+            break
+    return "; ".join(parts)
+
+
+def _compact_detail_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return "{" + ", ".join(
+            f"{key}: {_compact_detail_value(item)}"
+            for key, item in list(value.items())[:4]
+        ) + ("..." if len(value) > 4 else "") + "}"
+    if isinstance(value, (list, tuple)):
+        items = list(value)
+        text = ", ".join(_compact_detail_value(item) for item in items[:6])
+        if len(items) > 6:
+            text += ", ..."
+        return "[" + text + "]"
+    return str(value)

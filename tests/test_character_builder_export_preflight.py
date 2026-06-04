@@ -23,7 +23,13 @@ from src.core.characters.character_validation_report import (
     CharacterBuilderValidationReport,
 )
 from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
-from src.core.validation.validation_bus import ValidationReport
+from src.core.validation.validation_bus import (
+    ValidationIssue,
+    ValidationNavigationTarget,
+    ValidationReport,
+    ValidationSeverity,
+    ValidationSubsystem,
+)
 
 
 def _node(
@@ -528,6 +534,46 @@ def test_character_builder_validation_report_has_full_manual_checklist() -> None
     assert "Game tested: False" in text
     assert "1. Load as player character without crash" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
+
+
+def test_character_builder_validation_text_includes_actionable_issue_context() -> None:
+    report = CharacterBuilderValidationReport(
+        status="blocked",
+        verified=False,
+        job_id="character_grbody",
+        export_kind="character_mdl_mdx",
+        game="K1",
+        resref="grbody",
+        outputs={"mdl": "grbody.mdl", "mdx": "grbody.mdx"},
+        preflight_report=ValidationReport(
+            source="test.preflight",
+            issues=[
+                ValidationIssue(
+                    severity=ValidationSeverity.BLOCKING,
+                    subsystem=ValidationSubsystem.CHARACTER,
+                    code="character.export.node_path_changed",
+                    message="Native node moved.",
+                    navigation=ValidationNavigationTarget(node_name="torsoUpr_g"),
+                    fix_hint="Restore the selected native skeleton hierarchy before export.",
+                    details={
+                        "expected_path": ["PMBAM", "rootdummy", "torsoUpr_g"],
+                        "actual_path": ["PMBAM", "torsoUpr_g"],
+                        "role": "deform_helper",
+                    },
+                )
+            ],
+        ),
+    )
+
+    text = report.to_text()
+
+    assert "Capability stage: blocked" in text
+    assert "character.export.node_path_changed: Native node moved." in text
+    assert "Fix: Restore the selected native skeleton hierarchy before export." in text
+    assert "Navigate: node_name=torsoUpr_g" in text
+    assert "actual_path=[PMBAM, torsoUpr_g]" in text
+    assert "expected_path=[PMBAM, rootdummy, torsoUpr_g]" in text
+    assert "role=deform_helper" in text
 
 
 class _FakeCharacterWriter:
