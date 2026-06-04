@@ -3739,6 +3739,13 @@ def test_external_fit_report_records_imported_foot_end_guides_for_facing():
     assert report["source_frame"]["toe_forward_alignment"] > 0.99
     assert report["target_frame"]["toe_forward_alignment"] > 0.99
     assert alignment["pair_count"] == 8
+    assert report["scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["height_scale"] == pytest.approx(0.16)
+    assert alignment["height_scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["solved_scale"] == pytest.approx(0.16343729497011864)
+    assert alignment["applied_scale"] == pytest.approx(0.16)
+    assert alignment["applied_scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["max_error"] > 0.16
     assert set(alignment["paired_roles"]) == {
         "pelvis",
         "head",

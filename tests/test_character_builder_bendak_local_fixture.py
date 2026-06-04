@@ -89,6 +89,20 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert target_frame.get("landmarks", {}).get("right_toe") == "rfootT_g"
     assert source_frame.get("toe_forward_alignment") > 0.95
     assert target_frame.get("toe_forward_alignment") > 0.90
+    fit_transform = fit_report.get("fit_transform", {})
+    alignment = fit_transform.get("landmark_alignment", {})
+    assert fit_report.get("scale_basis") == "paired_skeleton_similarity_scale"
+    assert fit_transform.get("scale") == pytest.approx(
+        alignment.get("solved_scale")
+    )
+    assert alignment.get("height_scale_basis") == "paired_skeleton_landmark_height"
+    assert alignment.get("applied_scale_basis") == "paired_skeleton_similarity_scale"
+    assert alignment.get("applied_scale") == pytest.approx(
+        alignment.get("solved_scale")
+    )
+    assert alignment.get("pair_count") == 8
+    assert alignment.get("rms_error") < 0.15
+    assert alignment.get("max_error") < 0.16
     imported_armature = (
         fit_report.get("source_imported_armature", {})
     )

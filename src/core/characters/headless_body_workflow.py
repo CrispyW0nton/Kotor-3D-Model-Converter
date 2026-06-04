@@ -663,6 +663,56 @@ def _target_height_for_landmark_fit(
     return float(target_frame.height), "bone_landmark_height"
 
 
+def _scale_for_landmark_fit(
+    *,
+    height_scale: float,
+    height_scale_basis: str,
+    landmark_alignment: Optional[Dict[str, Any]],
+    min_pair_count: int = 8,
+    max_similarity_height_ratio: float = 1.35,
+    max_rms_error: float = 0.15,
+    max_pair_error: float = 0.16,
+) -> Tuple[float, str]:
+    """Choose the applied landmark-fit scale.
+
+    Height matching is stable for fallback and manual workflows, but a rigged
+    FBX gives us stronger evidence: paired source/target skeleton landmarks.
+    When that solve is well-formed and close enough to the height-derived
+    scale, let it fine-tune the imported payload placement while the selected
+    native KOTOR skeleton remains the final DAG authority.
+    """
+
+    scale = float(height_scale) if math.isfinite(float(height_scale)) else 1.0
+    basis = str(height_scale_basis or "bone_landmark_height")
+    if landmark_alignment is None:
+        return scale, basis
+
+    try:
+        solved_scale = float(landmark_alignment.get("scale"))
+        pair_count = int(landmark_alignment.get("pair_count") or 0)
+        rms_error = float(landmark_alignment.get("rms_error") or 0.0)
+        max_error = float(landmark_alignment.get("max_error") or 0.0)
+    except Exception:
+        return scale, basis
+    if (
+        pair_count < int(min_pair_count)
+        or not math.isfinite(solved_scale)
+        or solved_scale <= 1.0e-8
+        or not math.isfinite(rms_error)
+        or rms_error > float(max_rms_error)
+        or not math.isfinite(max_error)
+        or max_error > float(max_pair_error)
+    ):
+        return scale, basis
+
+    if scale > 1.0e-8:
+        ratio = solved_scale / scale
+        if ratio < 1.0 / float(max_similarity_height_ratio) or ratio > float(max_similarity_height_ratio):
+            return scale, basis
+
+    return solved_scale, "paired_skeleton_similarity_scale"
+
+
 def _make_auto_fit_report(
     *,
     policy: str,
@@ -1480,10 +1530,18 @@ def inspect_external_model_fit(
             source_frame=source_frame,
         )
         similarity_alignment = _landmark_similarity_alignment(source_frame, target_frame)
-        scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
+        height_scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
+        height_scale_basis = scale_basis
+        scale, scale_basis = _scale_for_landmark_fit(
+            height_scale=height_scale,
+            height_scale_basis=height_scale_basis,
+            landmark_alignment=similarity_alignment,
+        )
         if similarity_alignment is not None:
             similarity_alignment = dict(similarity_alignment)
             similarity_alignment["solved_scale"] = float(similarity_alignment["scale"])
+            similarity_alignment["height_scale"] = float(height_scale)
+            similarity_alignment["height_scale_basis"] = height_scale_basis
             similarity_alignment["applied_scale"] = float(scale)
             similarity_alignment["applied_scale_basis"] = scale_basis
         policy = "bone_landmark_basis"
@@ -1998,6 +2056,10 @@ def _fit_transform_metadata(
                 or landmark_alignment.get("scale")
                 or 0.0
             ),
+            "height_scale": float(landmark_alignment.get("height_scale") or 0.0),
+            "height_scale_basis": str(
+                landmark_alignment.get("height_scale_basis") or ""
+            ),
             "applied_scale": float(landmark_alignment.get("applied_scale") or 0.0),
             "applied_scale_basis": str(
                 landmark_alignment.get("applied_scale_basis") or ""
@@ -2391,7 +2453,13 @@ def normalize_external_model_for_kotor(
                 transform_target_frame,
             )
         )
-        scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
+        height_scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
+        height_scale_basis = transform_scale_basis
+        scale, transform_scale_basis = _scale_for_landmark_fit(
+            height_scale=height_scale,
+            height_scale_basis=height_scale_basis,
+            landmark_alignment=landmark_alignment,
+        )
         rotation = (
             landmark_alignment["rotation_matrix"]
             if landmark_alignment is not None
@@ -2400,6 +2468,8 @@ def normalize_external_model_for_kotor(
         if landmark_alignment is not None:
             landmark_alignment = dict(landmark_alignment)
             landmark_alignment["solved_scale"] = float(landmark_alignment["scale"])
+            landmark_alignment["height_scale"] = float(height_scale)
+            landmark_alignment["height_scale_basis"] = height_scale_basis
             landmark_alignment["applied_scale"] = float(scale)
             landmark_alignment["applied_scale_basis"] = transform_scale_basis
         preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
