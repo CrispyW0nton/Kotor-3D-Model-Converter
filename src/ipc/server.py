@@ -350,6 +350,54 @@ class GhostRiggerIPCServer:
                 self._schedule_callback(cb, object_id, name, visible)
             return jsonify({"status": "ok", "object_id": object_id, "name": name, "visible": visible})
 
+        @app.route("/api/scene_object_command", methods=["POST"])
+        def route_scene_object_command():
+            """Run an outliner-style command against a KMAX scene object."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            command = str(payload.get("command", payload.get("cmd", body.get("command", ""))) or "").strip()
+            if not command:
+                return jsonify({"error": "missing command"}), 400
+            object_id = str(payload.get("id", payload.get("object_id", body.get("id", ""))) or "").strip()
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+            if not (object_id or name):
+                return jsonify({"error": "missing id or name"}), 400
+            value = payload.get("value", body.get("value", None))
+
+            cb = self.callbacks.get("scene_object_command")
+            if cb is None:
+                return jsonify({"status": "error", "message": "scene_object_command callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, command, object_id, name, value, timeout=30.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
+
+        @app.route("/api/scene_object_properties", methods=["POST"])
+        def route_scene_object_properties():
+            """Update transform or type-specific properties for a KMAX scene object."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            object_id = str(payload.get("id", payload.get("object_id", body.get("id", ""))) or "").strip()
+            name = str(payload.get("name", body.get("name", "")) or "").strip()
+            if not (object_id or name):
+                return jsonify({"error": "missing id or name"}), 400
+            properties = payload.get("properties", body.get("properties", {}))
+            if not isinstance(properties, dict):
+                properties = {}
+            for key, value in payload.items():
+                if key not in {"id", "object_id", "name", "properties"}:
+                    properties.setdefault(key, value)
+
+            cb = self.callbacks.get("scene_object_properties")
+            if cb is None:
+                return jsonify({"status": "error", "message": "scene_object_properties callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, object_id, name, properties, timeout=30.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
+
         @app.route("/api/show_panel", methods=["POST"])
         def route_show_panel():
             """Show a GhostRigger dock/panel in the running UI for visual QA."""
@@ -554,6 +602,48 @@ class GhostRiggerIPCServer:
             if cb is None:
                 return jsonify({"status": "error", "message": "library_select callback unavailable"}), 503
             ok, result = self._invoke_callback_sync(cb, query, filters, load, import_action, timeout=3.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "selection": payload_result})
+
+        @app.route("/api/resource_search", methods=["GET", "POST"])
+        def route_resource_search():
+            """Return searchable rows from the running app's Resource Browser index."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            query = str(payload.get("query", payload.get("q", body.get("query", ""))) or "").strip()
+            limit = payload.get("limit", body.get("limit", 50))
+            filters = dict(payload)
+            for key in ("query", "q", "limit"):
+                filters.pop(key, None)
+
+            cb = self.callbacks.get("resource_search")
+            if cb is None:
+                return jsonify({"status": "error", "message": "resource_search callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, query, limit, filters, timeout=4.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "resources": payload_result})
+
+        @app.route("/api/resource_select", methods=["POST"])
+        def route_resource_select():
+            """Select a Resource Browser row, optionally activating its normal UI handler."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            query = str(payload.get("query", payload.get("q", payload.get("resref", body.get("query", "")))) or "").strip()
+            if not query:
+                return jsonify({"error": "missing query or resref"}), 400
+            activate = bool(payload.get("activate", payload.get("open", body.get("activate", False))))
+            filters = dict(payload)
+            for key in ("query", "q", "resref", "activate", "open"):
+                filters.pop(key, None)
+
+            cb = self.callbacks.get("resource_select")
+            if cb is None:
+                return jsonify({"status": "error", "message": "resource_select callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, query, filters, activate, timeout=4.0)
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}

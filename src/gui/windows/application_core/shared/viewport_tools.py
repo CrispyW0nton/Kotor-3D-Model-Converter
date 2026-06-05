@@ -537,6 +537,7 @@ class ViewportToolsMixin:
             },
             "animation": self._animation_state_snapshot() if hasattr(self, "_animation_state_snapshot") else {},
             "library": self._ipc_library_state_snapshot() if hasattr(self, "_ipc_library_state_snapshot") else {},
+            "resources": self._ipc_resource_state_snapshot() if hasattr(self, "_ipc_resource_state_snapshot") else {},
             "docks": dock_visibility,
         }
     def _clear_model(self):

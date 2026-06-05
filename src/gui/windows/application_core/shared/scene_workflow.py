@@ -213,6 +213,184 @@ class SceneWorkflowMixin:
         self._log(f"IPC set_scene_object_visibility: {obj.name} {state}", "success")
         return True
 
+    def _ipc_scene_object_summary(self, obj) -> dict:
+        if obj is None:
+            return {}
+        transform = getattr(obj, "transform", None)
+        metadata = dict(getattr(obj, "metadata", {}) or {})
+        payload = dict(metadata.get(str(getattr(obj, "object_type", "") or "")) or {})
+        extra = {}
+        if getattr(obj, "object_type", "") == "camera":
+            for key in ("camera_type", "focal_length_mm", "field_of_view_degrees", "resolution_width", "resolution_height", "near_clip", "far_clip"):
+                if key in payload:
+                    extra[key] = payload[key]
+        elif getattr(obj, "object_type", "") == "light":
+            for key in ("type", "color", "radius", "intensity", "cone_angle", "enabled", "cast_shadows"):
+                if key in payload:
+                    extra[key] = payload[key]
+        return {
+            "id": str(getattr(obj, "id", "") or ""),
+            "name": str(getattr(obj, "name", "") or ""),
+            "type": str(getattr(obj, "object_type", "") or ""),
+            "visible": bool(getattr(obj, "visible", True)),
+            "locked": bool(getattr(obj, "locked", False)),
+            "selected": bool(getattr(obj, "selected", False)),
+            "position": list(getattr(transform, "position", ()) or ()),
+            "properties": extra,
+        }
+
+    def _ipc_vector3(self, value):
+        if not isinstance(value, (list, tuple)) or len(value) < 3:
+            return None
+        try:
+            return (float(value[0]), float(value[1]), float(value[2]))
+        except (TypeError, ValueError):
+            return None
+
+    def _apply_scene_object_properties_from_ipc(
+        self,
+        object_id: str = "",
+        name: str = "",
+        properties: dict | None = None,
+    ) -> dict:
+        obj = self._find_scene_object_for_ipc(object_id, name)
+        if obj is None:
+            self._log(f"IPC scene_object_properties: not found {object_id or name or '<empty>'}", "warning")
+            return {"ok": False, "object": {}}
+        payload = dict(properties or {})
+        transform_updates = {}
+        for key in ("position", "rotation", "scale"):
+            vector = self._ipc_vector3(payload.pop(key, None))
+            if vector is not None:
+                transform_updates[key] = vector
+        if transform_updates:
+            self.scene_manager.update_object_transform(str(obj.id), **transform_updates)
+        common = {}
+        for key in ("visible", "locked"):
+            if key in payload:
+                common[key] = bool(payload.pop(key))
+        if "name" in payload:
+            common["name"] = str(payload.pop("name") or "").strip()
+        object_type = str(getattr(obj, "object_type", "") or "")
+        changed = bool(transform_updates or common)
+        if object_type == "camera":
+            allowed = {
+                "camera_type",
+                "enabled",
+                "focal_length_mm",
+                "field_of_view_degrees",
+                "sensor_width_mm",
+                "sensor_height_mm",
+                "aperture_f_stop",
+                "near_clip",
+                "far_clip",
+                "resolution_width",
+                "resolution_height",
+                "aspect_ratio_width",
+                "aspect_ratio_height",
+                "show_safe_frame",
+                "show_letterbox",
+                "letterbox_ratio",
+                "focus_distance",
+                "target_enabled",
+                "target_position",
+            }
+            camera_changes = {key: value for key, value in payload.items() if key in allowed}
+            if common or camera_changes:
+                changed = self.scene_manager.update_camera_properties(str(obj.id), **common, **camera_changes) or changed
+        elif object_type == "light":
+            allowed = {
+                "type",
+                "enabled",
+                "color",
+                "radius",
+                "intensity",
+                "cone_angle",
+                "area_size",
+                "ambient_only",
+                "cast_shadows",
+                "affects_diffuse",
+                "affects_specular",
+                "affects_lightmap",
+                "affects_environment",
+                "group_id",
+            }
+            light_changes = {key: value for key, value in payload.items() if key in allowed}
+            if common or light_changes:
+                changed = self.scene_manager.update_light_properties(str(obj.id), **common, **light_changes) or changed
+        elif common:
+            if "name" in common:
+                self.scene_manager.rename_object(str(obj.id), common["name"])
+            if "visible" in common:
+                self.scene_manager.set_object_visibility(str(obj.id), common["visible"])
+            if "locked" in common:
+                self.scene_manager.set_object_locked(str(obj.id), common["locked"])
+            changed = True
+        self._refresh_scene_view()
+        result_obj = self._find_scene_object_for_ipc(str(obj.id), "")
+        if result_obj is not None:
+            self._select_scene_object(str(result_obj.id))
+        self._log(f"IPC scene_object_properties: {getattr(result_obj, 'name', getattr(obj, 'name', 'object'))}", "success" if changed else "info")
+        return {"ok": bool(changed), "object": self._ipc_scene_object_summary(result_obj or obj)}
+
+    def _apply_scene_object_command_from_ipc(
+        self,
+        command: str,
+        object_id: str = "",
+        name: str = "",
+        value: object = None,
+    ) -> dict:
+        key = str(command or "").strip().lower().replace("-", "_").replace(" ", "_")
+        obj = self._find_scene_object_for_ipc(object_id, name)
+        if obj is None:
+            self._log(f"IPC scene_object_command {key}: not found {object_id or name or '<empty>'}", "warning")
+            return {"ok": False, "command": key, "object": {}}
+
+        if key in {"select", "activate"}:
+            self._select_scene_object(str(obj.id))
+            result_obj = self._find_scene_object_for_ipc(str(obj.id), "")
+        elif key in {"focus", "frame", "frame_all"}:
+            self._focus_scene_object(str(obj.id))
+            result_obj = self._find_scene_object_for_ipc(str(obj.id), "")
+        elif key in {"rename", "set_name"}:
+            new_name = str(value or "").strip()
+            if not new_name:
+                self._log("IPC scene_object_command rename: missing value", "warning")
+                return {"ok": False, "command": key, "object": self._ipc_scene_object_summary(obj)}
+            self._rename_scene_object(str(obj.id), new_name)
+            result_obj = self._find_scene_object_for_ipc(str(obj.id), "")
+        elif key in {"duplicate", "copy"}:
+            before_ids = {str(item.id) for item in self.scene_manager.active_scene.objects}
+            self._duplicate_scene_object(str(obj.id))
+            created = next(
+                (
+                    item for item in self.scene_manager.active_scene.objects
+                    if str(getattr(item, "id", "") or "") not in before_ids
+                ),
+                None,
+            )
+            result_obj = created or self._find_scene_object_for_ipc(str(obj.id), "")
+        elif key in {"delete", "remove"}:
+            summary = self._ipc_scene_object_summary(obj)
+            self._delete_scene_object(str(obj.id))
+            self._log(f"IPC scene_object_command delete: {summary.get('name', '')}", "success")
+            return {"ok": True, "command": key, "object": summary, "deleted": True}
+        elif key in {"lock", "unlock", "set_locked"}:
+            locked = key == "lock" if key in {"lock", "unlock"} else bool(value)
+            self._set_scene_object_locked(str(obj.id), locked)
+            result_obj = self._find_scene_object_for_ipc(str(obj.id), "")
+        elif key in {"show", "hide", "visible", "set_visible"}:
+            visible = key == "show" if key in {"show", "hide"} else bool(value)
+            self._set_scene_object_visible(str(obj.id), visible)
+            result_obj = self._find_scene_object_for_ipc(str(obj.id), "")
+        else:
+            self._log(f"IPC scene_object_command: unknown command {command}", "warning")
+            return {"ok": False, "command": key, "object": self._ipc_scene_object_summary(obj)}
+
+        summary = self._ipc_scene_object_summary(result_obj)
+        self._log(f"IPC scene_object_command {key}: {summary.get('name', '')}", "success")
+        return {"ok": True, "command": key, "object": summary}
+
     def _export_scene(self):
         scene = self.scene_manager.active_scene
         if not scene.objects:

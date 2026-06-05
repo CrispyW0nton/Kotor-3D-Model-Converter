@@ -237,6 +237,8 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '"create_scene_light": create_scene_light' in source
     assert '"select_scene_object": select_scene_object' in source
     assert '"set_scene_object_visibility": set_scene_object_visibility' in source
+    assert '"scene_object_command": scene_object_command' in source
+    assert '"scene_object_properties": scene_object_properties' in source
     assert '"refresh_viewport": refresh_viewport' in source
     assert '"show_panel": show_panel' in source
     assert '"open_tool": open_tool' in source
@@ -246,6 +248,8 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '"get_state": get_state' in source
     assert '"library_search": library_search' in source
     assert '"library_select": library_select' in source
+    assert '"resource_search": resource_search' in source
+    assert '"resource_select": resource_select' in source
     assert '"select_module_mesh": select_module_mesh' in source
     assert '"set_renderer_backend": set_renderer_backend' in source
     assert '"set_dummy_helpers": set_dummy_helpers' in source
@@ -261,6 +265,8 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '@app.route("/api/create_scene_light", methods=["POST"])' in server_source
     assert '@app.route("/api/select_scene_object", methods=["POST"])' in server_source
     assert '@app.route("/api/set_scene_object_visibility", methods=["POST"])' in server_source
+    assert '@app.route("/api/scene_object_command", methods=["POST"])' in server_source
+    assert '@app.route("/api/scene_object_properties", methods=["POST"])' in server_source
     assert '@app.route("/api/show_panel", methods=["POST"])' in server_source
     assert '@app.route("/api/open_tool", methods=["POST"])' in server_source
     assert '@app.route("/api/viewport_command", methods=["POST"])' in server_source
@@ -268,6 +274,8 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '@app.route("/api/animation_command", methods=["POST"])' in server_source
     assert '@app.route("/api/library_search", methods=["GET", "POST"])' in server_source
     assert '@app.route("/api/library_select", methods=["POST"])' in server_source
+    assert '@app.route("/api/resource_search", methods=["GET", "POST"])' in server_source
+    assert '@app.route("/api/resource_select", methods=["POST"])' in server_source
     assert '@app.route("/api/state", methods=["GET", "POST"])' in server_source
     assert "def _invoke_callback_sync" in server_source
     assert '@app.route("/api/select_module_mesh", methods=["POST"])' in server_source
@@ -291,16 +299,21 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert "def _create_scene_light_from_ipc" in scene_source
     assert "def _select_scene_object_from_ipc" in scene_source
     assert "def _set_scene_object_visibility_from_ipc" in scene_source
+    assert "def _apply_scene_object_command_from_ipc" in scene_source
+    assert "def _apply_scene_object_properties_from_ipc" in scene_source
     assert "def create_ghostrigger_scene_camera" in client_source
     assert "def create_ghostrigger_scene_light" in client_source
     assert "def select_ghostrigger_scene_object" in client_source
     assert "def set_ghostrigger_scene_object_visibility" in client_source
+    assert "def run_ghostrigger_scene_object_command" in client_source
+    assert "def set_ghostrigger_scene_object_properties" in client_source
     viewport_source = (ROOT / "src/gui/windows/application_core/shared/viewport_tools.py").read_text(encoding="utf-8")
     assert "def _apply_viewport_command_from_ipc" in viewport_source
     assert "def _ipc_application_state_snapshot" in viewport_source
     assert '"appearance": {' in viewport_source
     assert '"animation": self._animation_state_snapshot()' in viewport_source
     assert '"library": self._ipc_library_state_snapshot()' in viewport_source
+    assert '"resources": self._ipc_resource_state_snapshot()' in viewport_source
     assert "set_shade_mode" in viewport_source
     assert "toggle_grid" in viewport_source
     assert "def run_ghostrigger_viewport_command" in client_source
@@ -317,10 +330,16 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert "def run_ghostrigger_animation_command" in client_source
     assert "def search_ghostrigger_library" in client_source
     assert "def select_ghostrigger_library_asset" in client_source
+    assert "def search_ghostrigger_resources" in client_source
+    assert "def select_ghostrigger_resource" in client_source
     resource_source = (ROOT / "src/gui/windows/application_core/shared/resource_loading.py").read_text(encoding="utf-8")
     assert "def _ipc_library_search" in resource_source
     assert "def _ipc_library_select" in resource_source
     assert "def _ipc_library_state_snapshot" in resource_source
+    resource_panel_source = (ROOT / "src/gui/windows/application_core/shared/resource_panels.py").read_text(encoding="utf-8")
+    assert "def _ipc_resource_search" in resource_panel_source
+    assert "def _ipc_resource_select" in resource_panel_source
+    assert "def _ipc_resource_state_snapshot" in resource_panel_source
 
 
 def test_ipc_module_mesh_selector_uses_existing_panel_and_viewport_sync_paths() -> None:

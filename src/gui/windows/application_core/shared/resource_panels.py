@@ -129,6 +129,153 @@ class ResourcePanelsMixin:
         else:
             self._log(f"No activation handler for {row.get('resref', 'resource')}", "warning")
 
+    def _ipc_resource_rows(self) -> list[dict]:
+        panel = getattr(self, "resource_panel", None)
+        rows = list(getattr(panel, "_rows", []) or []) if panel is not None else []
+        if not rows:
+            self._populate_resource_panel()
+            rows = list(getattr(panel, "_rows", []) or []) if panel is not None else []
+        return [dict(row) for row in rows]
+
+    def _ipc_resource_row_summary(self, row: dict) -> dict:
+        keys = ("resref", "name", "type", "ext", "game", "source", "res_type", "path", "module_dir")
+        summary = {}
+        for key in keys:
+            value = row.get(key)
+            if value not in (None, ""):
+                summary[key] = value if isinstance(value, int) else str(value)
+        if "type" not in summary and "ext" in summary:
+            summary["type"] = summary["ext"]
+        return summary
+
+    def _ipc_resource_row_matches(self, row: dict, query: str, filters: dict) -> bool:
+        game = str(filters.get("game") or "").strip().upper()
+        if game and game != "ALL" and str(row.get("game") or "").upper() != game:
+            return False
+        res_type = str(filters.get("type") or filters.get("ext") or "").strip().lower().lstrip(".")
+        row_type = str(row.get("type") or row.get("ext") or "").strip().lower().lstrip(".")
+        if res_type and res_type != "all" and row_type != res_type:
+            return False
+        if not query:
+            return True
+        haystack = " ".join(
+            str(row.get(key) or "")
+            for key in ("resref", "name", "type", "ext", "game", "source", "path", "module_dir")
+        ).lower()
+        return query.lower() in haystack
+
+    def _ipc_resource_search(self, query: str = "", limit: object = 50, filters: dict | None = None) -> dict:
+        try:
+            max_rows = max(1, min(1000, int(limit)))
+        except (TypeError, ValueError):
+            max_rows = 50
+        filter_data = dict(filters or {})
+        query_text = str(query or "").strip()
+        rows = self._ipc_resource_rows()
+        matches = [row for row in rows if self._ipc_resource_row_matches(row, query_text, filter_data)]
+        return {
+            "total": len(rows),
+            "count": min(len(matches), max_rows),
+            "query": query_text,
+            "rows": [self._ipc_resource_row_summary(row) for row in matches[:max_rows]],
+        }
+
+    def _ipc_find_resource_row(self, query: str = "", filters: dict | None = None) -> dict | None:
+        query_text = str(query or "").strip()
+        filter_data = dict(filters or {})
+        matches = [row for row in self._ipc_resource_rows() if self._ipc_resource_row_matches(row, query_text, filter_data)]
+        if not matches:
+            return None
+        exact = query_text.lower()
+        if exact:
+            for row in matches:
+                name = str(row.get("resref") or row.get("name") or "").lower()
+                if name == exact:
+                    return dict(row)
+        return dict(matches[0])
+
+    def _select_resource_browser_row(self, row: dict, query: str = "") -> bool:
+        panel = getattr(self, "resource_panel", None)
+        if panel is None:
+            return False
+        try:
+            game = str(row.get("game") or "").upper()
+            row_type = str(row.get("type") or row.get("ext") or "").upper()
+            if hasattr(panel, "game_combo"):
+                panel.game_combo.setCurrentText(game if game in {"K1", "K2"} else "All")
+            if hasattr(panel, "type_combo"):
+                panel.type_combo.setCurrentText(row_type if row_type else "All")
+            if hasattr(panel, "search_edit"):
+                panel.search_edit.setText(query or str(row.get("resref") or row.get("name") or ""))
+            if hasattr(panel, "_apply_filter"):
+                panel._apply_filter()
+            listbox = getattr(panel, "listbox", None)
+            if listbox is None:
+                return False
+            target_name = str(row.get("resref") or row.get("name") or "").lower()
+            target_type = str(row.get("type") or row.get("ext") or "").lower()
+            target_game = str(row.get("game") or "").upper()
+            for index in range(listbox.count()):
+                item = listbox.item(index)
+                item_row = item.data(QtCore.Qt.UserRole) or {}
+                if (
+                    str(item_row.get("resref") or item_row.get("name") or "").lower() == target_name
+                    and str(item_row.get("type") or item_row.get("ext") or "").lower() == target_type
+                    and str(item_row.get("game") or "").upper() == target_game
+                ):
+                    listbox.setCurrentItem(item)
+                    listbox.scrollToItem(item)
+                    setattr(self, "_ipc_selected_resource_row", dict(item_row))
+                    self._preview_resource_row(dict(item_row))
+                    return True
+        except Exception as exc:
+            self._log(f"IPC resource_select UI sync failed: {exc}", "warning")
+        return False
+
+    def _ipc_resource_select(
+        self,
+        query: str = "",
+        filters: dict | None = None,
+        activate: object = False,
+    ) -> dict:
+        row = self._ipc_find_resource_row(query, filters)
+        if row is None:
+            self._log(f"IPC resource_select: no match for {query}", "warning")
+            return {"selected": False, "query": str(query or ""), "row": {}}
+        ui_selected = self._select_resource_browser_row(row, str(query or ""))
+        if bool(activate):
+            self._activate_resource_row(row)
+        self._log(
+            f"IPC resource_select: {row.get('game', '')}:{row.get('resref', row.get('name', ''))}.{row.get('type', row.get('ext', ''))}",
+            "info",
+        )
+        return {
+            "selected": True,
+            "ui_selected": ui_selected,
+            "activated": bool(activate),
+            "query": str(query or ""),
+            "row": self._ipc_resource_row_summary(row),
+        }
+
+    def _ipc_resource_state_snapshot(self) -> dict:
+        panel = getattr(self, "resource_panel", None)
+        rows = list(getattr(panel, "_rows", []) or []) if panel is not None else []
+        selected = {}
+        visible_count = 0
+        if panel is not None:
+            try:
+                listbox = getattr(panel, "listbox", None)
+                visible_count = listbox.count() if listbox is not None else 0
+                item = listbox.currentItem() if listbox is not None else None
+                row = item.data(QtCore.Qt.UserRole) if item is not None else None
+                selected = self._ipc_resource_row_summary(row) if row else {}
+            except Exception:
+                selected = {}
+        if not selected:
+            fallback = getattr(self, "_ipc_selected_resource_row", None)
+            selected = self._ipc_resource_row_summary(fallback) if fallback else {}
+        return {"total": len(rows), "visible": visible_count, "selected": selected}
+
     def _open_blueprint_resource_from_ipc(
         self,
         resource_type: str,

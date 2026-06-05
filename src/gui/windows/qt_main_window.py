@@ -425,6 +425,18 @@ class QtGhostRiggerMainWindow(
         def set_scene_object_visibility(object_id: str = "", name: str = "", visible: object = True) -> None:
             self._set_scene_object_visibility_from_ipc(str(object_id or ""), str(name or ""), visible=bool(visible))
 
+        def scene_object_command(command: str = "", object_id: str = "", name: str = "", value: object = None) -> dict:
+            return self._apply_scene_object_command_from_ipc(
+                str(command or ""),
+                str(object_id or ""),
+                str(name or ""),
+                value,
+            )
+
+        def scene_object_properties(object_id: str = "", name: str = "", properties: object = None) -> dict:
+            payload = properties if isinstance(properties, dict) else {}
+            return self._apply_scene_object_properties_from_ipc(str(object_id or ""), str(name or ""), payload)
+
         def open_blueprint_resource(resource_type: str):
             def _open(resref: str, module_dir: str = "") -> None:
                 game = str(getattr(self, "_current_game", "") or "K2")
@@ -526,6 +538,14 @@ class QtGhostRiggerMainWindow(
             payload = filters if isinstance(filters, dict) else {}
             return self._ipc_library_select(str(query or ""), payload, load, str(import_action or "clear"))
 
+        def resource_search(query: str = "", limit: object = 50, filters: object = None) -> dict:
+            payload = filters if isinstance(filters, dict) else {}
+            return self._ipc_resource_search(str(query or ""), limit, payload)
+
+        def resource_select(query: str = "", filters: object = None, activate: object = False) -> dict:
+            payload = filters if isinstance(filters, dict) else {}
+            return self._ipc_resource_select(str(query or ""), payload, activate)
+
         def select_module_mesh(mesh_name: str) -> None:
             self._select_module_mesh_by_name_from_ipc(str(mesh_name or ""))
 
@@ -603,6 +623,8 @@ class QtGhostRiggerMainWindow(
                     "create_scene_light": create_scene_light,
                     "select_scene_object": select_scene_object,
                     "set_scene_object_visibility": set_scene_object_visibility,
+                    "scene_object_command": scene_object_command,
+                    "scene_object_properties": scene_object_properties,
                     "refresh_viewport": refresh_viewport,
                     "show_panel": show_panel,
                     "open_tool": open_tool,
@@ -612,6 +634,8 @@ class QtGhostRiggerMainWindow(
                     "get_state": get_state,
                     "library_search": library_search,
                     "library_select": library_select,
+                    "resource_search": resource_search,
+                    "resource_select": resource_select,
                     "select_module_mesh": select_module_mesh,
                     "set_renderer_backend": set_renderer_backend,
                     "set_dummy_helpers": set_dummy_helpers,

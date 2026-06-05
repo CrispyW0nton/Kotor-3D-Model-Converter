@@ -261,6 +261,41 @@ def select_ghostrigger_library_asset(
     return ipc_call(PORT_GHOSTRIGGER, "library_select", payload=payload, timeout=_IPC_TIMEOUT)
 
 
+def search_ghostrigger_resources(
+    query: str = "",
+    *,
+    limit: int = 50,
+    game: str = "",
+    resource_type: str = "",
+) -> Tuple[bool, Dict[str, Any]]:
+    """Return Resource Browser rows from a running GhostRigger instance."""
+    payload: Dict[str, Any] = {"query": query, "limit": int(limit)}
+    if game:
+        payload["game"] = game
+    if resource_type:
+        payload["type"] = resource_type
+    return ipc_call(PORT_GHOSTRIGGER, "resource_search", payload=payload, timeout=_IPC_TIMEOUT)
+
+
+def select_ghostrigger_resource(
+    query: str = "",
+    *,
+    resref: str = "",
+    game: str = "",
+    resource_type: str = "",
+    activate: bool = False,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Select a Resource Browser row, optionally activating its normal UI handler."""
+    payload: Dict[str, Any] = {"query": query or resref, "activate": bool(activate)}
+    if resref:
+        payload["resref"] = resref
+    if game:
+        payload["game"] = game
+    if resource_type:
+        payload["type"] = resource_type
+    return ipc_call(PORT_GHOSTRIGGER, "resource_select", payload=payload, timeout=_IPC_TIMEOUT)
+
+
 def new_ghostrigger_scene(game: str = "", *, force: bool = False) -> None:
     """Ask a running GhostRigger instance to create a new KMAX scene."""
     ipc_call_async(
@@ -334,6 +369,33 @@ def set_ghostrigger_scene_object_visibility(
         payload={"id": object_id, "name": name, "visible": bool(visible)},
         on_result=_log_result("set_scene_object_visibility -> GhostRigger"),
     )
+
+
+def run_ghostrigger_scene_object_command(
+    command: str,
+    *,
+    object_id: str = "",
+    name: str = "",
+    value: Any = None,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Run an outliner-style command against a KMAX scene object."""
+    payload: Dict[str, Any] = {"command": command, "id": object_id, "name": name}
+    if value is not None:
+        payload["value"] = value
+    return ipc_call(PORT_GHOSTRIGGER, "scene_object_command", payload=payload, timeout=30.0)
+
+
+def set_ghostrigger_scene_object_properties(
+    *,
+    object_id: str = "",
+    name: str = "",
+    properties: Optional[Dict[str, Any]] = None,
+    **changes: Any,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Update transform or camera/light properties for a KMAX scene object."""
+    payload: Dict[str, Any] = {"id": object_id, "name": name, "properties": dict(properties or {})}
+    payload["properties"].update(changes)
+    return ipc_call(PORT_GHOSTRIGGER, "scene_object_properties", payload=payload, timeout=30.0)
 
 
 def select_ghostrigger_module_mesh(mesh: str) -> None:
