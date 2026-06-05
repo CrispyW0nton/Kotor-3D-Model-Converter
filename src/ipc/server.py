@@ -86,6 +86,28 @@ class GhostRiggerIPCServer:
     def is_running(self) -> bool:
         return self._running
 
+    def _invoke_callback_sync(self, cb: Callable, *args: Any, timeout: float = 2.0) -> tuple[bool, Any]:
+        """Invoke a callback on the GUI thread and wait briefly for its result."""
+        done = threading.Event()
+        result: dict[str, Any] = {}
+
+        def _runner() -> None:
+            try:
+                result["value"] = cb(*args)
+                result["ok"] = True
+            except Exception as exc:
+                result["value"] = str(exc)
+                result["ok"] = False
+                log.exception("IPC synchronous callback failed")
+            finally:
+                done.set()
+
+        if not marshal_to_gui_thread(_runner):
+            _runner()
+        if not done.wait(max(0.1, float(timeout))):
+            return False, "callback timeout"
+        return bool(result.get("ok", False)), result.get("value")
+
     # ── Server thread ─────────────────────────────────────────────────────
 
     def _run_server(self):
@@ -356,6 +378,64 @@ class GhostRiggerIPCServer:
                 self._schedule_callback(cb, tool)
             return jsonify({"status": "ok", "opening": tool})
 
+        @app.route("/api/viewport_command", methods=["POST"])
+        def route_viewport_command():
+            """Run a whitelisted viewport workflow command in the running UI."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            command = str(payload.get("command", payload.get("cmd", body.get("command", ""))) or "").strip()
+            if not command:
+                return jsonify({"error": "missing command"}), 400
+            options = dict(payload)
+            options.pop("command", None)
+            options.pop("cmd", None)
+
+            cb = self.callbacks.get("viewport_command")
+            if cb is not None:
+                self._schedule_callback(cb, command, options)
+            return jsonify({"status": "ok", "command": command, "options": options})
+
+        @app.route("/api/appearance", methods=["POST"])
+        def route_appearance():
+            """Apply a GhostRigger theme and/or layout in the running UI."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            theme = str(payload.get("theme", payload.get("theme_id", body.get("theme", ""))) or "").strip()
+            layout = str(payload.get("layout", payload.get("layout_id", body.get("layout", ""))) or "").strip()
+            persist = bool(payload.get("persist", body.get("persist", True)))
+            if not (theme or layout):
+                return jsonify({"error": "missing theme or layout"}), 400
+
+            cb = self.callbacks.get("appearance")
+            if cb is not None:
+                self._schedule_callback(cb, theme, layout, persist)
+            return jsonify({"status": "ok", "theme": theme, "layout": layout, "persist": persist})
+
+        @app.route("/api/animation_command", methods=["POST"])
+        def route_animation_command():
+            """Select, play, stop, loop, or seek a current-model animation."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            command = str(payload.get("command", payload.get("cmd", body.get("command", ""))) or "").strip()
+            if not command:
+                return jsonify({"error": "missing command"}), 400
+            animation = str(payload.get("animation", payload.get("anim", body.get("animation", ""))) or "").strip()
+            source = str(payload.get("source", body.get("source", "")) or "").strip()
+            loop = payload.get("loop", body.get("loop", None))
+            seek = payload.get("seek", payload.get("percent", body.get("seek", None)))
+
+            cb = self.callbacks.get("animation_command")
+            if cb is not None:
+                self._schedule_callback(cb, command, animation, loop, seek, source)
+            return jsonify({
+                "status": "ok",
+                "command": command,
+                "animation": animation,
+                "source": source,
+                "loop": None if loop is None else bool(loop),
+                "seek": seek,
+            })
+
         @app.route("/api/select_module_mesh", methods=["POST"])
         def route_select_module_mesh():
             """Select a module mesh by display name in the running viewport/list."""
@@ -435,6 +515,61 @@ class GhostRiggerIPCServer:
             if cb is not None:
                 self._schedule_callback(cb, path)
             return jsonify({"status": "ok", "path": path})
+
+        @app.route("/api/library_search", methods=["GET", "POST"])
+        def route_library_search():
+            """Return searchable rows from the running app's indexed Content Browser library."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            query = str(payload.get("query", payload.get("q", body.get("query", ""))) or "").strip()
+            limit = payload.get("limit", body.get("limit", 50))
+            filters = dict(payload)
+            for key in ("query", "q", "limit"):
+                filters.pop(key, None)
+
+            cb = self.callbacks.get("library_search")
+            if cb is None:
+                return jsonify({"status": "error", "message": "library_search callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, query, limit, filters, timeout=3.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "library": payload_result})
+
+        @app.route("/api/library_select", methods=["POST"])
+        def route_library_select():
+            """Select a Content Browser library row, optionally loading it into the scene."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            query = str(payload.get("query", payload.get("q", payload.get("resref", body.get("query", "")))) or "").strip()
+            if not query:
+                return jsonify({"error": "missing query or resref"}), 400
+            load = bool(payload.get("load", body.get("load", False)))
+            import_action = str(payload.get("import_action", payload.get("action", body.get("import_action", "clear"))) or "clear")
+            filters = dict(payload)
+            for key in ("query", "q", "resref", "load", "import_action", "action"):
+                filters.pop(key, None)
+
+            cb = self.callbacks.get("library_select")
+            if cb is None:
+                return jsonify({"status": "error", "message": "library_select callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, query, filters, load, import_action, timeout=3.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "selection": payload_result})
+
+        @app.route("/api/state", methods=["GET", "POST"])
+        def route_state():
+            """Return a synchronous snapshot of the running GhostRigger UI state."""
+            cb = self.callbacks.get("get_state")
+            if cb is None:
+                return jsonify({"status": "error", "message": "state callback unavailable"}), 503
+            ok, state = self._invoke_callback_sync(cb)
+            if not ok:
+                return jsonify({"status": "error", "message": str(state)}), 504
+            payload = state if isinstance(state, dict) else {"value": state}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "state": payload})
 
         @app.route("/api/health", methods=["GET"])
         def route_health():

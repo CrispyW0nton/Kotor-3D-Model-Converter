@@ -172,6 +172,95 @@ def open_ghostrigger_tool(tool: str) -> None:
     )
 
 
+def run_ghostrigger_viewport_command(command: str, **options: Any) -> None:
+    """Ask a running GhostRigger instance to run a whitelisted viewport command."""
+    payload = {"command": command}
+    payload.update(options)
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "viewport_command",
+        payload=payload,
+        on_result=_log_result("viewport_command -> GhostRigger"),
+    )
+
+
+def get_ghostrigger_state() -> Tuple[bool, Dict[str, Any]]:
+    """Return the synchronous state snapshot from a running GhostRigger instance."""
+    return ipc_call(PORT_GHOSTRIGGER, "state", payload={}, timeout=_IPC_TIMEOUT)
+
+
+def set_ghostrigger_appearance(theme: str = "", layout: str = "", *, persist: bool = True) -> None:
+    """Ask a running GhostRigger instance to apply a theme and/or layout."""
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "appearance",
+        payload={"theme": theme, "layout": layout, "persist": bool(persist)},
+        on_result=_log_result("appearance -> GhostRigger"),
+    )
+
+
+def run_ghostrigger_animation_command(
+    command: str,
+    animation: str = "",
+    *,
+    loop: bool | None = None,
+    seek: int | float | None = None,
+    source: str = "",
+) -> None:
+    """Ask a running GhostRigger instance to select/play/stop/seek an animation."""
+    payload: Dict[str, Any] = {"command": command, "animation": animation, "source": source}
+    if loop is not None:
+        payload["loop"] = bool(loop)
+    if seek is not None:
+        payload["seek"] = seek
+    ipc_call_async(
+        PORT_GHOSTRIGGER,
+        "animation_command",
+        payload=payload,
+        on_result=_log_result("animation_command -> GhostRigger"),
+    )
+
+
+def search_ghostrigger_library(
+    query: str = "",
+    *,
+    limit: int = 50,
+    game: str = "",
+    category: str = "",
+    source: str = "",
+) -> Tuple[bool, Dict[str, Any]]:
+    """Return Content Browser library rows from a running GhostRigger instance."""
+    payload: Dict[str, Any] = {"query": query, "limit": int(limit)}
+    if game:
+        payload["game"] = game
+    if category:
+        payload["category"] = category
+    if source:
+        payload["source"] = source
+    return ipc_call(PORT_GHOSTRIGGER, "library_search", payload=payload, timeout=_IPC_TIMEOUT)
+
+
+def select_ghostrigger_library_asset(
+    query: str = "",
+    *,
+    resref: str = "",
+    game: str = "",
+    load: bool = False,
+    import_action: str = "clear",
+) -> Tuple[bool, Dict[str, Any]]:
+    """Select a Content Browser library asset, optionally loading it into the scene."""
+    payload: Dict[str, Any] = {
+        "query": query or resref,
+        "load": bool(load),
+        "import_action": import_action,
+    }
+    if resref:
+        payload["resref"] = resref
+    if game:
+        payload["game"] = game
+    return ipc_call(PORT_GHOSTRIGGER, "library_select", payload=payload, timeout=_IPC_TIMEOUT)
+
+
 def new_ghostrigger_scene(game: str = "", *, force: bool = False) -> None:
     """Ask a running GhostRigger instance to create a new KMAX scene."""
     ipc_call_async(

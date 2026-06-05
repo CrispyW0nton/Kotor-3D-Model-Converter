@@ -387,6 +387,158 @@ class ViewportToolsMixin:
             self._not_migrated(button_name)
             return
         button.click()
+    def _apply_viewport_command_from_ipc(self, command: str, options: dict | None = None) -> bool:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            self._log("IPC viewport_command: viewport unavailable.", "warning")
+            return False
+        payload = dict(options or {})
+        key = str(command or "").strip().lower().replace("-", "_").replace(" ", "_")
+        simple_methods = {
+            "frame": "frame_all",
+            "frame_all": "frame_all",
+            "reset": "reset_camera",
+            "reset_camera": "reset_camera",
+            "undo": "undo",
+            "redo": "redo",
+        }
+        method_name = simple_methods.get(key)
+        if method_name:
+            method = getattr(viewport, method_name, None)
+            if callable(method):
+                method()
+                self._log(f"IPC viewport_command: {key}", "info")
+                return True
+            self._log(f"IPC viewport_command unavailable: {key}", "warning")
+            return False
+        if key in {"refresh", "refresh_all"}:
+            self._refresh_all()
+            self._log("IPC viewport_command: refresh", "info")
+            return True
+        if key in {"shade", "shade_mode", "display", "display_mode", "wire", "wireframe", "solid", "solid_wire"}:
+            mode = str(payload.get("mode", payload.get("value", command)) or command)
+            if key in {"wire", "wireframe"}:
+                mode = "wire"
+            elif key == "solid":
+                mode = "solid"
+            elif key == "solid_wire":
+                mode = "both"
+            setter = getattr(viewport, "set_shade_mode", None)
+            if callable(setter):
+                setter(mode)
+                self._log(f"IPC viewport_command shade: {mode}", "info")
+                return True
+        if key in {"render", "render_mode", "lighting_render_mode"}:
+            mode = str(payload.get("mode", payload.get("value", "realistic")) or "realistic")
+            setter = getattr(viewport, "set_render_mode", None)
+            if callable(setter):
+                setter(mode)
+                self._log(f"IPC viewport_command render_mode: {mode}", "info")
+                return True
+        toggles = {
+            "grid": "toggle_grid",
+            "texture": "toggle_texture",
+            "textures": "toggle_texture",
+            "bones": "toggle_bones",
+        }
+        toggle = toggles.get(key)
+        if toggle:
+            value = payload.get("enabled", payload.get("visible", payload.get("value", None)))
+            method = getattr(viewport, toggle, None)
+            if callable(method):
+                method(None if value is None else bool(value))
+                state = "toggle" if value is None else ("on" if bool(value) else "off")
+                self._log(f"IPC viewport_command {key}: {state}", "info")
+                return True
+        if key in {"lighting", "lighting_mode"}:
+            mode = str(payload.get("mode", payload.get("value", "scene")) or "scene")
+            setter = getattr(viewport, "set_lighting_mode", None)
+            if callable(setter):
+                setter(mode)
+                self._log(f"IPC viewport_command lighting_mode: {mode}", "info")
+                return True
+        if key in {"shader_complexity", "complexity"}:
+            mode = str(payload.get("mode", payload.get("value", "off")) or "off")
+            setter = getattr(viewport, "set_shader_complexity_mode", None)
+            if callable(setter):
+                setter(mode)
+                self._log(f"IPC viewport_command shader_complexity: {mode}", "info")
+                return True
+        self._log(f"IPC viewport_command: unknown command {command}", "warning")
+        return False
+    def _ipc_application_state_snapshot(self) -> dict:
+        scene_manager = getattr(self, "scene_manager", None)
+        scene = getattr(scene_manager, "active_scene", None)
+        objects = list(getattr(scene, "objects", []) or [])
+        selected = [obj for obj in objects if bool(getattr(obj, "selected", False))]
+        counts = {"model": 0, "light": 0, "camera": 0, "helper": 0}
+        for obj in objects:
+            kind = str(getattr(obj, "object_type", "") or "helper")
+            counts[kind if kind in counts else "helper"] += 1
+        viewport = getattr(self, "viewport", None)
+        renderer_text = ""
+        display_options = {}
+        if viewport is not None:
+            render_state = getattr(viewport, "render_state_status_text", None)
+            if callable(render_state):
+                try:
+                    renderer_text = str(render_state() or "")
+                except Exception:
+                    renderer_text = ""
+            options = getattr(viewport, "display_options", None)
+            if options is not None:
+                display_options = {
+                    "mode": str(getattr(getattr(options, "display_mode", ""), "value", getattr(options, "display_mode", "")) or ""),
+                    "show_grid": bool(getattr(options, "show_grid", False)),
+                    "show_textures": bool(getattr(options, "show_textures", False)),
+                    "show_lightmaps": bool(getattr(options, "show_lightmaps", False)),
+                    "show_wire_overlay": bool(getattr(options, "show_wire_overlay", False)),
+                    "xray": bool(getattr(options, "xray", False)),
+                }
+        model = self._active_viewport_model() if hasattr(self, "_active_viewport_model") else getattr(self, "_current_model", None)
+        dock_visibility = {}
+        for key, dock in getattr(self, "_dock_widgets", {}).items() if isinstance(getattr(self, "_dock_widgets", {}), dict) else []:
+            try:
+                dock_visibility[str(key)] = bool(dock.isVisible())
+            except Exception:
+                pass
+        theme_manager = getattr(self, "theme_manager", None)
+        layout_manager = getattr(self, "layout_manager", None)
+        current_theme = getattr(theme_manager, "current_theme", None) or (theme_manager.get_theme() if theme_manager is not None else None)
+        current_layout = getattr(layout_manager, "current_layout", None) or (layout_manager.get_layout() if layout_manager is not None else None)
+        return {
+            "scene": {
+                "name": str(getattr(scene, "display_name", getattr(scene, "name", "")) or ""),
+                "path": str(getattr(scene, "path", "") or ""),
+                "game": str(getattr(scene, "game", "") or ""),
+                "dirty": bool(getattr(scene, "dirty", False)),
+                "object_count": len(objects),
+                "counts": counts,
+            },
+            "selection": [
+                {
+                    "id": str(getattr(obj, "id", "") or ""),
+                    "name": str(getattr(obj, "name", "") or ""),
+                    "type": str(getattr(obj, "object_type", "") or ""),
+                    "visible": bool(getattr(obj, "visible", True)),
+                }
+                for obj in selected
+            ],
+            "viewport": {
+                "renderer": renderer_text,
+                "display": display_options,
+                "model": str(getattr(model, "name", "") or getattr(model, "resref", "") or ""),
+            },
+            "appearance": {
+                "theme": str(getattr(current_theme, "id", "") or ""),
+                "theme_name": str(getattr(current_theme, "name", "") or ""),
+                "layout": str(getattr(current_layout, "id", "") or ""),
+                "layout_name": str(getattr(current_layout, "name", "") or ""),
+            },
+            "animation": self._animation_state_snapshot() if hasattr(self, "_animation_state_snapshot") else {},
+            "library": self._ipc_library_state_snapshot() if hasattr(self, "_ipc_library_state_snapshot") else {},
+            "docks": dock_visibility,
+        }
     def _clear_model(self):
         if not self._prompt_save_dirty_scene():
             return

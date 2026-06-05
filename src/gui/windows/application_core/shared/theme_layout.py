@@ -10,6 +10,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.gui.qt_lib.assets.qt_theme import update_legacy_palette
+from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
 from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
 from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
 
@@ -315,6 +316,44 @@ class ThemeLayoutMixin:
             if key in theme_values:
                 merged[key] = theme_values[key]
         return merged
+
+    def _apply_appearance_from_ipc(self, theme_id: str = "", layout_id: str = "", *, persist: bool = True) -> dict:
+        """Apply theme/layout choices through the active managers for IPC callers."""
+        requested_theme = str(theme_id or "").strip()
+        requested_layout = str(layout_id or "").strip()
+        theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+        layout = self.layout_manager.current_layout or self.layout_manager.get_layout()
+        if requested_theme:
+            theme = self.theme_manager.select_theme(requested_theme, apply=True, target=self)
+            update_legacy_palette(theme)
+            self._refresh_theme_sensitive_icons()
+        if requested_layout:
+            layout = self.layout_manager.select_layout(requested_layout, apply=True, window=self)
+            combo = getattr(self, "visual_profile_combo", None)
+            if combo is not None:
+                combo.blockSignals(True)
+                try:
+                    index = combo.findData(getattr(layout, "id", "default"))
+                    combo.setCurrentIndex(max(index, 0))
+                finally:
+                    combo.blockSignals(False)
+            QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
+        self._sync_theme_layout_settings()
+        if persist:
+            try:
+                save_settings(self.settings_path, self.settings_data)
+            except Exception as exc:
+                self._log(f"IPC appearance settings save failed: {exc}", "warning")
+        self._log(
+            f"IPC appearance: theme={getattr(theme, 'id', '') or '<unchanged>'}, "
+            f"layout={getattr(layout, 'id', '') or '<unchanged>'}",
+            "info",
+        )
+        return {
+            "theme": getattr(theme, "id", ""),
+            "layout": getattr(layout, "id", ""),
+            "persisted": bool(persist),
+        }
 
     def _refresh_theme_sensitive_icons(self) -> None:
         for name, action in (

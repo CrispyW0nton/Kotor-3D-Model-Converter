@@ -147,6 +147,182 @@ class ResourceLoadingMixin:
         game = str(row.get("game") or "")
         if resref:
             self._start_resource_load(resref, game, import_action="add")
+
+    def _ipc_library_row_summary(self, row: dict) -> dict:
+        keys = (
+            "resref",
+            "game",
+            "source",
+            "category",
+            "subcategory",
+            "location",
+            "module_code",
+            "area_name",
+            "area_label",
+            "model_class",
+            "path",
+            "module_dir",
+            "metadata_source",
+        )
+        summary = {key: str(row.get(key) or "") for key in keys if row.get(key) not in (None, "")}
+        metadata_values = [
+            row.get("item_template_resref"),
+            row.get("item_tag"),
+            row.get("placeable_template_resref"),
+            row.get("placeable_tag"),
+            row.get("door_template_resref"),
+            row.get("door_tag"),
+        ]
+        metadata = [str(value) for value in metadata_values if value]
+        if metadata:
+            summary["metadata"] = metadata
+        return summary
+
+    def _ipc_library_row_matches(self, row: dict, query: str, filters: dict) -> bool:
+        game = str(filters.get("game") or "").strip().upper()
+        if game and str(row.get("game") or "").upper() != game:
+            return False
+        category = str(filters.get("category") or filters.get("asset_type") or "").strip().lower()
+        if category and category not in {"all", "model"}:
+            row_category = str(row.get("category") or "").lower()
+            if category not in row_category:
+                return False
+        source = str(filters.get("source") or "").strip().lower()
+        if source and source not in str(row.get("source") or "").lower():
+            return False
+        if not query:
+            return True
+        haystack = " ".join(
+            str(row.get(key) or "")
+            for key in (
+                "resref",
+                "game",
+                "source",
+                "category",
+                "subcategory",
+                "location",
+                "module_code",
+                "area_name",
+                "area_label",
+                "model_class",
+                "item_template_resref",
+                "item_tag",
+                "placeable_template_resref",
+                "placeable_tag",
+                "door_template_resref",
+                "door_tag",
+            )
+        ).lower()
+        return query.lower() in haystack
+
+    def _ipc_find_library_row(self, query: str = "", filters: Optional[dict] = None) -> Optional[dict]:
+        query_text = str(query or "").strip()
+        filter_data = dict(filters or {})
+        rows = list(getattr(self, "_library_rows", []) or [])
+        matches = [row for row in rows if self._ipc_library_row_matches(row, query_text, filter_data)]
+        if not matches:
+            return None
+        exact = query_text.lower()
+        if exact:
+            for row in matches:
+                if str(row.get("resref") or "").lower() == exact:
+                    return dict(row)
+        return dict(matches[0])
+
+    def _ipc_library_search(self, query: str = "", limit: object = 50, filters: Optional[dict] = None) -> dict:
+        try:
+            max_rows = max(1, min(500, int(limit)))
+        except (TypeError, ValueError):
+            max_rows = 50
+        filter_data = dict(filters or {})
+        query_text = str(query or "").strip()
+        rows = list(getattr(self, "_library_rows", []) or [])
+        matches = [row for row in rows if self._ipc_library_row_matches(row, query_text, filter_data)]
+        return {
+            "total": len(rows),
+            "count": min(len(matches), max_rows),
+            "query": query_text,
+            "rows": [self._ipc_library_row_summary(row) for row in matches[:max_rows]],
+        }
+
+    def _select_content_browser_library_row(self, row: dict, query: str = "") -> bool:
+        panel = getattr(self, "content_browser_panel", getattr(self, "library_panel", None))
+        if panel is None:
+            return False
+        try:
+            if hasattr(panel, "type_filter"):
+                panel.type_filter.setCurrentText("All")
+            if hasattr(panel, "_active_nav"):
+                panel._active_nav = ("type", "All")
+            if hasattr(panel, "_select_navigation"):
+                panel._select_navigation("type", "All")
+            if hasattr(panel, "game_filter"):
+                game = str(row.get("game") or "")
+                panel.game_filter.setCurrentText(game if game in {"K1", "K2"} else "All")
+            if hasattr(panel, "search_edit"):
+                panel.search_edit.setText(query or str(row.get("resref") or ""))
+            if hasattr(panel, "_apply_filter"):
+                panel._apply_filter()
+            view = getattr(panel, "asset_view", None)
+            if view is None:
+                return False
+            target_resref = str(row.get("resref") or "").lower()
+            target_game = str(row.get("game") or "").upper()
+            for index in range(view.topLevelItemCount()):
+                item = view.topLevelItem(index)
+                asset = getattr(item, "asset", None)
+                asset_row = getattr(asset, "row", {}) if asset is not None else {}
+                row_resref = str(asset_row.get("resref") or "").lower()
+                row_game = str(asset_row.get("game") or "").upper()
+                if row_resref == target_resref and (not target_game or row_game == target_game):
+                    view.clearSelection()
+                    view.setCurrentItem(item)
+                    item.setSelected(True)
+                    view.scrollToItem(item)
+                    setattr(self, "_ipc_selected_library_row", dict(asset_row or row))
+                    return True
+        except Exception:
+            self._log(f"IPC library_select UI sync failed:\n{traceback.format_exc()}", "warning")
+        return False
+
+    def _ipc_library_select(self, query: str = "", filters: Optional[dict] = None, load: object = False, import_action: str = "clear") -> dict:
+        row = self._ipc_find_library_row(query, filters)
+        if row is None:
+            self._log(f"IPC library_select: no match for {query}", "warning")
+            return {"selected": False, "query": str(query or ""), "row": {}}
+        ui_selected = self._select_content_browser_library_row(row, str(query or ""))
+        if bool(load):
+            action = str(import_action or "clear").strip().lower()
+            if action in {"add", "add_to_scene"}:
+                self._add_content_browser_model_to_current_scene(row)
+            else:
+                self._load_content_browser_primary_scene_model(row)
+        self._log(f"IPC library_select: {row.get('game', '')}:{row.get('resref', '')}", "info")
+        return {"selected": True, "ui_selected": ui_selected, "query": str(query or ""), "row": self._ipc_library_row_summary(row)}
+
+    def _ipc_library_state_snapshot(self) -> dict:
+        panel = getattr(self, "content_browser_panel", getattr(self, "library_panel", None))
+        selected = {}
+        visible_count = 0
+        if panel is not None:
+            try:
+                row = panel.selected_row() if hasattr(panel, "selected_row") else None
+                selected = self._ipc_library_row_summary(row) if row else {}
+            except Exception:
+                selected = {}
+        if not selected:
+            fallback = getattr(self, "_ipc_selected_library_row", None)
+            selected = self._ipc_library_row_summary(fallback) if fallback else {}
+            try:
+                visible_count = len(panel.visible_rows()) if hasattr(panel, "visible_rows") else 0
+            except Exception:
+                visible_count = 0
+        return {
+            "total": len(getattr(self, "_library_rows", []) or []),
+            "visible": visible_count,
+            "selected": selected,
+        }
+
     def _start_resource_load(self, resref: str, game: str, import_action: str = ""):
         if self._model_worker_is_running():
             self._log("A model is already loading.", "warning")

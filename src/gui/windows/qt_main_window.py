@@ -499,6 +499,33 @@ class QtGhostRiggerMainWindow(
             action()
             self._log(f"IPC open_tool: {tool}", "info")
 
+        def viewport_command(command: str, options: object = None) -> None:
+            payload = options if isinstance(options, dict) else {}
+            self._apply_viewport_command_from_ipc(str(command or ""), payload)
+
+        def appearance(theme: str = "", layout: str = "", persist: object = True) -> None:
+            self._apply_appearance_from_ipc(str(theme or ""), str(layout or ""), persist=bool(persist))
+
+        def animation_command(command: str, animation: str = "", loop: object = None, seek: object = None, source: str = "") -> None:
+            self._apply_animation_command_from_ipc(
+                str(command or ""),
+                str(animation or ""),
+                loop=loop,
+                seek=seek,
+                source=str(source or ""),
+            )
+
+        def get_state() -> dict:
+            return self._ipc_application_state_snapshot()
+
+        def library_search(query: str = "", limit: object = 50, filters: object = None) -> dict:
+            payload = filters if isinstance(filters, dict) else {}
+            return self._ipc_library_search(str(query or ""), limit, payload)
+
+        def library_select(query: str = "", filters: object = None, load: object = False, import_action: str = "clear") -> dict:
+            payload = filters if isinstance(filters, dict) else {}
+            return self._ipc_library_select(str(query or ""), payload, load, str(import_action or "clear"))
+
         def select_module_mesh(mesh_name: str) -> None:
             self._select_module_mesh_by_name_from_ipc(str(mesh_name or ""))
 
@@ -579,6 +606,12 @@ class QtGhostRiggerMainWindow(
                     "refresh_viewport": refresh_viewport,
                     "show_panel": show_panel,
                     "open_tool": open_tool,
+                    "viewport_command": viewport_command,
+                    "appearance": appearance,
+                    "animation_command": animation_command,
+                    "get_state": get_state,
+                    "library_search": library_search,
+                    "library_select": library_select,
                     "select_module_mesh": select_module_mesh,
                     "set_renderer_backend": set_renderer_backend,
                     "set_dummy_helpers": set_dummy_helpers,

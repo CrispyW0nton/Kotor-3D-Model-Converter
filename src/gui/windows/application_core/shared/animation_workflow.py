@@ -600,6 +600,69 @@ class AnimationWorkflowMixin:
                 self._animation_engine.stop()
         except Exception as exc:
             self._log(f"Animation seek error: {exc}", "error")
+    def _apply_animation_command_from_ipc(self, command: str, anim_name: str = "", *, loop: object = None, seek: object = None, source: str = "") -> bool:
+        key = str(command or "").strip().lower().replace("-", "_").replace(" ", "_")
+        panel = getattr(self, "animations_panel", None)
+        if panel is None:
+            self._log("IPC animation_command: animations panel unavailable.", "warning")
+            return False
+        if source and hasattr(panel, "set_animation_source"):
+            panel.set_animation_source(str(source or "body"))
+        if loop is not None:
+            self._animation_loop = bool(loop)
+        selected = str(anim_name or "").strip() or panel.selected_animation()
+        if selected and key in {"select", "play", "preview", "seek"}:
+            if not panel.select_animation(selected):
+                self._log(f"IPC animation_command: animation not found {selected}", "warning")
+                return False
+            selected = panel.selected_animation()
+        if key in {"select", "preview_first_frame"}:
+            self._handle_animation_selected(selected)
+            self._log(f"IPC animation_command select: {selected}", "info")
+            return True
+        if key in {"play", "preview"}:
+            self._handle_animation_action("Play", selected)
+            return True
+        if key in {"stop", "clear"}:
+            self._handle_animation_action("Stop", "")
+            self._log("IPC animation_command stop", "info")
+            return True
+        if key == "loop":
+            self._animation_loop = bool(loop) if loop is not None else not bool(getattr(self, "_animation_loop", False))
+            engine = getattr(self, "_animation_engine", None)
+            if engine is not None:
+                try:
+                    engine._loop = self._animation_loop
+                except Exception:
+                    pass
+            panel.info.setPlainText(f"Loop {'on' if self._animation_loop else 'off'}.")
+            self._log(f"IPC animation_command loop: {'on' if self._animation_loop else 'off'}", "info")
+            return True
+        if key == "seek":
+            value = seek if seek is not None else 0
+            try:
+                percent = int(float(value))
+            except (TypeError, ValueError):
+                percent = 0
+            self._handle_animation_seek(max(0, min(100, percent)))
+            self._log(f"IPC animation_command seek: {percent}", "info")
+            return True
+        self._log(f"IPC animation_command: unknown command {command}", "warning")
+        return False
+
+    def _animation_state_snapshot(self) -> dict:
+        panel = getattr(self, "animations_panel", None)
+        engine = getattr(self, "_animation_engine", None)
+        current = getattr(engine, "current_animation", None) if engine is not None else None
+        return {
+            "selected": panel.selected_animation() if panel is not None and hasattr(panel, "selected_animation") else "",
+            "source": panel.selected_animation_source() if panel is not None and hasattr(panel, "selected_animation_source") else "body",
+            "loop": bool(getattr(self, "_animation_loop", False)),
+            "playing": bool(getattr(engine, "is_playing", False)) if engine is not None else False,
+            "current": str(getattr(current, "name", "") or ""),
+            "time": float(getattr(engine, "current_time", 0.0) or 0.0) if engine is not None else 0.0,
+            "available_count": int(panel.listbox.count()) if panel is not None and hasattr(panel, "listbox") else 0,
+        }
     def _tick_animation(self):
         engine = self._animation_engine
         if engine is None or not engine.is_playing:
