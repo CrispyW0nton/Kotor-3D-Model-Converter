@@ -177,6 +177,9 @@ chssiss*.png
 screenshot*.png
 
 # ── Temp / scratch directories ────────────────────────────────────────────────
+.tmp*/
+.tmp_*
+*.tmp
 lava_exercise/
 KotorModTools/
 /screenshots/

@@ -9,6 +9,12 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-05
+
+- Repository generated-output cleanup: removed ignored pytest basetemps, `.tmp` scratch exports, root temporary MDL/MDX files, build/dist folders, local export artifacts, nested Python caches, logs, audit/diagnostic dumps, and test artifact folders. Removed tracked generated `artifacts/**/report.json` files so the ignored `artifacts/` folder no longer ships repo output, added explicit `.tmp` ignore guards, and documented the Windows-locked temp directories that still require elevated cleanup or reboot. Roadmap task: `T000`.
+  Affected areas: `.gitignore`, `knowledge_base/maintenance/repo_generated_cleanup_2026_06_05.md`, `artifacts/` tracked generated reports, local generated workspace output.
+  Verification: cleanup targets were path-checked before deletion; `git status --short --ignored` was reviewed after cleanup; remaining access-denied temp dirs were documented. No tests were run because this was repository hygiene only.
+
 ## 2026-06-04
 
 - Character Builder humanoid workflow routing and motion/export button repair: Humanoid mode now uses the same five-step modder workflow as the other Character Builder modes, so the left rail and right inspector pages stay aligned instead of exposing an orphaned legacy `Validate + Export` step. Character Builder motion assignment, animation-library refresh, preview play/stop, body/hand guide, and export handlers now route through the panel's runtime-safe workflow import helper, preventing packaged/Qt launches from crashing with `No module named 'core'` when loading preview animations or opening export. Roadmap task: `T1205`.
