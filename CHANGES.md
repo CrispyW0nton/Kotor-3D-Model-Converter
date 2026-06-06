@@ -9,6 +9,12 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-06
+
+- Repository generated-output cleanup follow-up: removed tracked Blender extraction log files left under retarget export scratch folders and rechecked temporary-file patterns. The remaining root `.pytest_cache` / `.pytest_tmp*` folders are Windows ACL-locked and could not be removed even after an elevated ownership/permission repair attempt, so they remain local-only ignored artifacts rather than tracked project content. Roadmap task: `T000`.
+  Affected areas: `exports/r3_idle_test/`, `exports/r3_idle_test_v2/`, local ignored pytest scratch directories.
+  Verification: cleanup targets were path-checked before deletion; `rg --files` found no remaining reachable `.tmp`, `.pyc`, `.bak`, `.orig`, `.rej`, or `.log` files; `git status --short` was reviewed after cleanup.
+
 ## 2026-06-05
 
 - Repository generated-output cleanup: removed ignored pytest basetemps, `.tmp` scratch exports, root temporary MDL/MDX files, build/dist folders, local export artifacts, nested Python caches, logs, audit/diagnostic dumps, and test artifact folders. Removed tracked generated `artifacts/**/report.json` files so the ignored `artifacts/` folder no longer ships repo output, added explicit `.tmp` ignore guards, and documented the Windows-locked temp directories that still require elevated cleanup or reboot. Roadmap task: `T000`.
