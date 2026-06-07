@@ -139,6 +139,7 @@ struct DiagnosticContext {
     bool guarded_present_called = false;
     bool guarded_present_succeeded = false;
     bool post_present_frame_accounting_ready = false;
+    bool draw_list_readiness_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1197,6 +1198,43 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_post_present_frame_accountin
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_draw_list_readiness_metadata_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_draw_list_readiness_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"draw_list_ready":false,"mesh_handle_count":0,"material_handle_count":0,"draw_command_count":0,"draw_calls_recorded":0,"triangles_submitted":0,"draw_submission_enabled":false})";
+    }
+
+    target->draw_list_readiness_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_draw_list_readiness_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"retained_command_queue":)";
+    payload += target->command_queue ? "true" : "false";
+    payload += R"(,"renderer_contract_ready":true,"draw_list_ready":false,)"
+               R"("draw_list_source":"future_native_payload",)"
+               R"("requires_mesh_handles":true,"requires_material_handles":true,)"
+               R"("requires_transform_packets":true,"requires_resource_residency":true,)"
+               R"("mesh_handle_count":0,"material_handle_count":0,)"
+               R"("transform_packet_count":0,"resource_residency_packet_count":0,)"
+               R"("draw_command_count":0,"indexed_draw_command_count":0,)"
+               R"("instanced_draw_command_count":0,"skinned_draw_command_count":0,)"
+               R"("draw_calls_recorded":0,"triangles_submitted":0,)"
+               R"("resource_uploads":0,"command_list_recorded_for_draws":false,)"
+               R"("command_list_executed_for_draws":false,"present_after_draws_enabled":false,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["draw_list_missing","mesh_handles_missing",)"
+               R"("material_handles_missing","transform_packets_missing",)"
+               R"("resource_residency_missing","draw_submission_disabled"],)"
+               R"("phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1210,7 +1248,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("guarded_swap_chain_creation","guarded_back_buffer_rtv",)"
         R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence",)"
         R"("post_clear_present_readiness","guarded_present_call",)"
-        R"("post_present_frame_accounting"],)"
+        R"("post_present_frame_accounting","draw_list_readiness_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1405,6 +1443,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_present_succeeded ? "true" : "false";
     payload += R"(,"post_present_frame_accounting_ready":)";
     payload += target->post_present_frame_accounting_ready ? "true" : "false";
+    payload += R"(,"draw_list_readiness_metadata_ready":)";
+    payload += target->draw_list_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"diagnostic_frame_index":)";
     payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
     payload += R"(,"diagnostic_presented_frame_count":)";

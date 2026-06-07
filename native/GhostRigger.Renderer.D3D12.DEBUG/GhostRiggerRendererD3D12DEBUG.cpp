@@ -606,6 +606,46 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 108;
     }
+    const char* draw_list_readiness_json =
+        gr_renderer_d3d12_draw_list_readiness_metadata_json(context);
+    if (std::strstr(
+            draw_list_readiness_json,
+            R"("schema":"renderer_d3d12_draw_list_readiness_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 109;
+    }
+    if (std::strstr(draw_list_readiness_json, R"("draw_list_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 110;
+    }
+    if (std::strstr(draw_list_readiness_json, R"("mesh_handle_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness counted mesh handles" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 111;
+    }
+    if (std::strstr(draw_list_readiness_json, R"("material_handle_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness counted material handles" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 112;
+    }
+    if (std::strstr(draw_list_readiness_json, R"("draw_command_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness counted draw commands" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 113;
+    }
+    if (std::strstr(draw_list_readiness_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 114;
+    }
+    if (std::strstr(draw_list_readiness_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw-list readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 115;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
