@@ -63,6 +63,7 @@ struct DiagnosticContext {
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
     Microsoft::WRL::ComPtr<ID3D12Fence> no_draw_fence;
+    Microsoft::WRL::ComPtr<IDXGISwapChain3> guarded_swap_chain;
     std::string adapter_description;
     HRESULT device_hr = E_FAIL;
     HRESULT queue_hr = E_FAIL;
@@ -78,6 +79,9 @@ struct DiagnosticContext {
     HRESULT no_draw_fence_hr = E_FAIL;
     HRESULT no_draw_signal_hr = E_FAIL;
     HRESULT no_draw_set_event_hr = E_FAIL;
+    HRESULT guarded_swap_chain_factory_hr = E_FAIL;
+    HRESULT guarded_swap_chain_create_hr = E_FAIL;
+    HRESULT guarded_swap_chain_query_hr = E_FAIL;
     DWORD no_draw_wait_result = WAIT_FAILED;
     UINT64 no_draw_fence_value = 1;
     bool device_ready = false;
@@ -100,6 +104,9 @@ struct DiagnosticContext {
     bool no_draw_fence_completed = false;
     bool no_draw_fence_waited = false;
     bool present_readiness_metadata_ready = false;
+    bool guarded_swap_chain_native_window_handle_ready = false;
+    bool guarded_swap_chain_create_attempted = false;
+    bool guarded_swap_chain_created = false;
     bool draw_submission_enabled = false;
 };
 
@@ -669,6 +676,96 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_present_readiness_metadata_j
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_swap_chain_creation_diagnostics_json(
+    void* context,
+    void* native_window_handle
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_swap_chain_creation_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"native_window_handle_ready":false,"retained_device":false,"retained_command_queue":false,"swap_chain_create_attempted":false,"swap_chain_created":false,"back_buffers_acquired":false,"render_target_views_created":false,"present_called":false,"present_enabled":false,"draw_submission_enabled":false})";
+    }
+
+    target->guarded_swap_chain_native_window_handle_ready = native_window_handle != nullptr;
+    const bool prerequisites_ready =
+        target->device != nullptr &&
+        target->command_queue != nullptr &&
+        target->guarded_swap_chain_native_window_handle_ready;
+
+    if (prerequisites_ready && !target->guarded_swap_chain_created) {
+        Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
+        HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+        target->guarded_swap_chain_factory_hr = hr;
+
+        if (SUCCEEDED(hr)) {
+            DXGI_SWAP_CHAIN_DESC1 swap_chain_desc{};
+            swap_chain_desc.Width = 0;
+            swap_chain_desc.Height = 0;
+            swap_chain_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            swap_chain_desc.Stereo = FALSE;
+            swap_chain_desc.SampleDesc.Count = 1;
+            swap_chain_desc.SampleDesc.Quality = 0;
+            swap_chain_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+            swap_chain_desc.BufferCount = 2;
+            swap_chain_desc.Scaling = DXGI_SCALING_STRETCH;
+            swap_chain_desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+            swap_chain_desc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+            swap_chain_desc.Flags = 0;
+
+            Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain;
+            target->guarded_swap_chain_create_attempted = true;
+            hr = factory->CreateSwapChainForHwnd(
+                target->command_queue.Get(),
+                static_cast<HWND>(native_window_handle),
+                &swap_chain_desc,
+                nullptr,
+                nullptr,
+                &swap_chain
+            );
+            target->guarded_swap_chain_create_hr = hr;
+
+            if (SUCCEEDED(hr)) {
+                hr = swap_chain.As(&target->guarded_swap_chain);
+                target->guarded_swap_chain_query_hr = hr;
+                target->guarded_swap_chain_created = SUCCEEDED(hr);
+                target->swap_chain_ready = target->guarded_swap_chain_created;
+            }
+        }
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_swap_chain_creation_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"native_window_handle_ready":)";
+    payload += target->guarded_swap_chain_native_window_handle_ready ? "true" : "false";
+    payload += R"(,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"retained_command_queue":)";
+    payload += target->command_queue ? "true" : "false";
+    payload += R"(,"prerequisites_ready":)";
+    payload += prerequisites_ready ? "true" : "false";
+    payload += R"(,"swap_chain_create_attempted":)";
+    payload += target->guarded_swap_chain_create_attempted ? "true" : "false";
+    payload += R"(,"swap_chain_created":)";
+    payload += target->guarded_swap_chain_created ? "true" : "false";
+    payload += R"(,"swap_chain_ready":)";
+    payload += target->swap_chain_ready ? "true" : "false";
+    payload += R"(,"swap_chain_desc":{"buffer_count":2,)"
+               R"("format":"DXGI_FORMAT_R8G8B8A8_UNORM",)"
+               R"("swap_effect":"DXGI_SWAP_EFFECT_FLIP_DISCARD",)"
+               R"("sample_count":1,"usage":"DXGI_USAGE_RENDER_TARGET_OUTPUT"},)"
+               R"("back_buffers_acquired":false,"render_target_views_created":false,)"
+               R"("present_called":false,"present_enabled":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"factory_hresult":")";
+    payload += hresult_hex(target->guarded_swap_chain_factory_hr);
+    payload += R"(","swap_chain_create_hresult":")";
+    payload += hresult_hex(target->guarded_swap_chain_create_hr);
+    payload += R"(","swap_chain_query_hresult":")";
+    payload += hresult_hex(target->guarded_swap_chain_query_hr);
+    payload += R"(","phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -678,7 +775,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("device_creation","command_queue","native_window_handle","swap_chain",)"
         R"("render_target_metadata","barrier_clear_pass_metadata",)"
         R"("command_recording_dry_run","guarded_command_recording",)"
-        R"("no_draw_execution_fence","present_readiness_metadata"],)"
+        R"("no_draw_execution_fence","present_readiness_metadata",)"
+        R"("guarded_swap_chain_creation"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -849,6 +947,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->no_draw_fence_completed ? "true" : "false";
     payload += R"(,"present_readiness_metadata_ready":)";
     payload += target->present_readiness_metadata_ready ? "true" : "false";
+    payload += R"(,"guarded_swap_chain_created":)";
+    payload += target->guarded_swap_chain_created ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
@@ -877,6 +977,12 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += hresult_hex(target->no_draw_signal_hr);
     payload += R"(","no_draw_set_event_hresult":")";
     payload += hresult_hex(target->no_draw_set_event_hr);
+    payload += R"(","guarded_swap_chain_factory_hresult":")";
+    payload += hresult_hex(target->guarded_swap_chain_factory_hr);
+    payload += R"(","guarded_swap_chain_create_hresult":")";
+    payload += hresult_hex(target->guarded_swap_chain_create_hr);
+    payload += R"(","guarded_swap_chain_query_hresult":")";
+    payload += hresult_hex(target->guarded_swap_chain_query_hr);
     payload += R"("})";
     return payload.c_str();
 }

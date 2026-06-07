@@ -320,6 +320,53 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 58;
     }
+    const char* guarded_swap_chain_json = gr_renderer_d3d12_guarded_swap_chain_creation_diagnostics_json(
+        context,
+        nullptr
+    );
+    if (std::strstr(
+            guarded_swap_chain_json,
+            R"("schema":"renderer_d3d12_guarded_swap_chain_creation_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 59;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("native_window_handle_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics accepted a null HWND" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 60;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("swap_chain_create_attempted":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics attempted without HWND" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 61;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("swap_chain_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics created without HWND" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 62;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("back_buffers_acquired":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics acquired back buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 63;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("render_target_views_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics created RTVs" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 64;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics called present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 65;
+    }
+    if (std::strstr(guarded_swap_chain_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded swap-chain diagnostics enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 66;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

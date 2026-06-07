@@ -608,6 +608,42 @@ def test_renderer_d3d12_exports_present_readiness_metadata_boundary() -> None:
     assert "gr_renderer_d3d12_present_readiness_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_guarded_swap_chain_creation_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_guarded_swap_chain_creation_diagnostics_json" in header
+    assert "renderer_d3d12_guarded_swap_chain_creation_diagnostics.v1" in implementation
+    assert "CreateSwapChainForHwnd" in implementation
+    assert "static_cast<HWND>(native_window_handle)" in implementation
+    assert '"native_window_handle_ready":false' in implementation
+    assert '"swap_chain_create_attempted":false' in implementation
+    assert '"swap_chain_created":false' in implementation
+    assert '"back_buffers_acquired":false' in implementation
+    assert '"render_target_views_created":false' in implementation
+    assert '"present_called":false' in implementation
+    assert '"present_enabled":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "Present(" not in implementation
+    assert "gr_renderer_d3d12_guarded_swap_chain_creation_diagnostics_json" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 
