@@ -74,6 +74,14 @@ RENDERER_CONTRACTS_PACKAGE = NativePackageSpec(
     capabilities_export="gr_renderer_contracts_capabilities_json",
 )
 
+RENDERER_NULL_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Renderer.Null",
+    dll_name="GhostRigger.Renderer.Null.dll",
+    env_var="GHOSTRIGGER_RENDERER_NULL",
+    version_export="gr_renderer_null_version",
+    capabilities_export="gr_renderer_null_capabilities_json",
+)
+
 NATIVE_CORE_DIAGNOSTICS_PACKAGE = NativePackageSpec(
     name="GhostRigger.Native.NativeCore.Diagnostics",
     dll_name="GhostRigger.Native.NativeCore.Diagnostics.dll",
@@ -209,3 +217,9 @@ def query_renderer_contracts_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(RENDERER_CONTRACTS_PACKAGE, search_paths)
+
+
+def query_renderer_null_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(RENDERER_NULL_PACKAGE, search_paths)

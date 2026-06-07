@@ -92,6 +92,11 @@ renderer packages should use `GhostRigger.Renderer.{Backend}` names, such as
 `GhostRigger.Renderer.D3D12`, and depend on this package before adding real
 native draw submission.
 
+`GhostRigger.Renderer.Null` is the first concrete renderer backend package. It
+is diagnostic-only, depends on `GhostRigger.Renderer.Contracts`, and proves the
+backend DLL/DEBUG-validator pattern before a hardware renderer such as
+`GhostRigger.Renderer.D3D12` owns a real device.
+
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
 construction it opens the startup log console by default before Python starts,
@@ -225,3 +230,13 @@ build\vs\x64\Debug\GhostRigger.Renderer.Contracts.DEBUG.exe
 
 Python can query the renderer contract package through
 `src.adapters.native_core.package_registry.query_renderer_contracts_status()`.
+
+Build and run `GhostRigger.Renderer.Null.DEBUG` to verify the diagnostic
+renderer backend ABI without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Renderer.Null.DEBUG.exe
+```
+
+Python can query the diagnostic renderer backend package through
+`src.adapters.native_core.package_registry.query_renderer_null_status()`.

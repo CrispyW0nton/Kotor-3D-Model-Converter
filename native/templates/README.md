@@ -27,7 +27,7 @@ window consumes still belongs in `GhostRigger.Native.NativeCore.*` or
 
 Renderer contract packages use `GhostRigger.Renderer.Contracts`. Concrete
 renderer backend packages use `GhostRigger.Renderer.{Backend}`, for example
-`GhostRigger.Renderer.D3D12`.
+`GhostRigger.Renderer.D3D12` or the diagnostic `GhostRigger.Renderer.Null`.
 
 Do not copy an existing feature project and then strip it down. Start from the
 matching template and replace every `{{TOKEN}}`.

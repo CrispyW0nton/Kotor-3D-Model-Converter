@@ -59,6 +59,11 @@ a launcher and native workspace first, not a rewrite of the application.
   packages must share before D3D12/WGPU draw submission moves native.
 - `native/GhostRigger.Renderer.Contracts.DEBUG/` verifies the renderer contract
   ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.Null/` owns the first concrete renderer backend
+  package behind the renderer contract boundary. It is diagnostic-only and does
+  not own GPU devices or draw submission.
+- `native/GhostRigger.Renderer.Null.DEBUG/` verifies the diagnostic renderer
+  backend ABI from Visual Studio without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package
