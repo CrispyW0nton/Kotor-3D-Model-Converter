@@ -129,5 +129,10 @@ GR_NATIVE_CORE_MATH_API double gr_native_core_math_frame_compute_screen_size_rat
     const double* view_origin_xyz,
     double fov_vertical_rad,
     int viewport_height);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_module_anchor_relative_position(
+    const double* room_lyt_xyz,
+    const double* anchor_lyt_xyz,
+    const double* anchor_scene_xyz,
+    double* out_xyz);
 
 }

@@ -12,6 +12,7 @@ constexpr const char* kCapabilities =
     R"("phase":"P1 foundation","bounds_helpers":true,"matrix_helpers":true,)"
     R"("camera_math_native":true,"camera_math_schema":"camera_math.v1",)"
     R"("frame_math_native":true,"frame_math_schema":"frame_math.v1",)"
+    R"("module_layout_math_native":true,"module_layout_math_schema":"module_layout_math.v1",)"
     R"("python_fallback_secondary":true,"renderer_neutral":true})";
 
 bool valid_vec3(float* xyz) {
