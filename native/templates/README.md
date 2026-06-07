@@ -17,6 +17,14 @@ and `GhostRigger.Runtime`. Shared follow-on packages should use
 `GhostRigger.Native.NativeCore.{System}` for core foundations and `GhostRigger.Runtime.Shared.{System}` for
 runtime contracts consumed by multiple renderer/toolbox packages.
 
+Toolbox and window migrations must use product-surface namespaces rather than
+being folded into the host or runtime projects. Native toolbox packages use
+`GhostRigger.Tools.{Toolname}`, for example `GhostRigger.Tools.Retargeting` or
+`GhostRigger.Tools.Export`. Native window packages use
+`GhostRigger.Windows.{WindowName}`, for example `GhostRigger.Windows.MainWindow`.
+Shared logic that more than one tool or window consumes still belongs in
+`GhostRigger.Native.NativeCore.*` or `GhostRigger.Runtime.Shared.*` first.
+
 Do not copy an existing feature project and then strip it down. Start from the
 matching template and replace every `{{TOKEN}}`.
 
@@ -24,7 +32,7 @@ matching template and replace every `{{TOKEN}}`.
 
 | Token | Meaning |
 |-------|---------|
-| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRiggerRendererD3D12`. |
+| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRigger.Tools.Retargeting`, `GhostRigger.Windows.MainWindow`, or `GhostRigger.Renderer.D3D12`. |
 | `{{PROJECT_GUID}}` | New project GUID in braces. |
 | `{{ROOT_NAMESPACE}}` | C++ root namespace or project namespace. |
 | `{{EXPORT_DEFINE}}` | DLL export preprocessor define, such as `GHOSTRIGGER_RENDERER_D3D12_EXPORTS`. |

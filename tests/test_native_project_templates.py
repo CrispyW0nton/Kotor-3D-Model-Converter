@@ -44,6 +44,8 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     assert "GhostRigger.Runtime" in readme
     assert "GhostRigger.Native.NativeCore.{System}" in readme
     assert "GhostRigger.Runtime.Shared.{System}" in readme
+    assert "GhostRigger.Tools.{Toolname}" in readme
+    assert "GhostRigger.Windows.{WindowName}" in readme
     assert "GhostRigger.Runtime.Shared.Descriptors" in (ROOT / "native" / "README.md").read_text(
         encoding="utf-8"
     )
@@ -55,6 +57,21 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     assert "Bridge method" in readme
     assert "Owner: LordVaderCW" in readme
     assert "Intersects:" in readme
+
+
+def test_native_docs_define_toolbox_and_window_project_naming() -> None:
+    docs = "\n".join(
+        [
+            (ROOT / "native" / "README.md").read_text(encoding="utf-8"),
+            (ROOT / "knowledge_base" / "cpp_integration_phases.md").read_text(encoding="utf-8"),
+            (ROOT / "knowledge_base" / "native_migration_plan.md").read_text(encoding="utf-8"),
+        ]
+    )
+
+    assert "GhostRigger.Tools.{Toolname}" in docs
+    assert "GhostRigger.Tools.Retargeting" in docs
+    assert "GhostRigger.Windows.{WindowName}" in docs
+    assert "GhostRigger.Windows.MainWindow" in docs
 
 
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:

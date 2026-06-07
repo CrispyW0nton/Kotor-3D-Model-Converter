@@ -61,6 +61,15 @@ The anchor C++ projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore
 so output folders, warning levels, dependency shape, ownership metadata, and
 DEBUG executable expectations stay consistent.
 
+Native toolbox migrations from Python must be named
+`GhostRigger.Tools.{Toolname}` and should stay focused on one product tool, such
+as `GhostRigger.Tools.Retargeting`, `GhostRigger.Tools.Export`, or
+`GhostRigger.Tools.CharacterBuilder`. Native window projects must be named
+`GhostRigger.Windows.{WindowName}`, such as `GhostRigger.Windows.MainWindow`.
+Reusable logic shared by multiple tools, windows, renderers, or runtime packages
+belongs in `GhostRigger.Native.NativeCore.*` or `GhostRigger.Runtime.Shared.*`
+before those product-surface packages consume it.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes

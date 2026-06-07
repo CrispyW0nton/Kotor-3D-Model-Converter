@@ -11,6 +11,12 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-07
 
+- Phase 1 native toolbox/window naming convention: documented and tested the product-surface naming rule for future Python-to-C++ migrations: toolbox packages must use `GhostRigger.Tools.{Toolname}` and native window packages must use `GhostRigger.Windows.{WindowName}`. Updated the native templates and Phase 1 docs so shared code still lands in `GhostRigger.Native.NativeCore.*` or `GhostRigger.Runtime.Shared.*` before product-surface packages consume it. No roadmap task ID applies.
+  Owner: LordVaderCW.
+  Intersects: upstream/qt-ghostrigger Phase 1 native project naming, toolbox migration planning, window migration planning, and native project templates.
+  Affected areas: `native/templates/README.md`, `native/README.md`, `knowledge_base/cpp_integration_phases.md`, `knowledge_base/native_migration_plan.md`, `tests/test_native_project_templates.py`, `CHANGES.md`.
+  Verification: `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m py_compile tests/test_native_project_templates.py tests/test_native_core_package_registry.py src/adapters/native_core/__init__.py src/adapters/native_core/package_registry.py` passed. `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m pytest tests/test_native_project_templates.py tests/test_native_core_package_registry.py -q` passed (`26 passed`). Naming scan confirmed `GhostRigger.Tools.{Toolname}`, `GhostRigger.Tools.Retargeting`, `GhostRigger.Windows.{WindowName}`, and `GhostRigger.Windows.MainWindow` are present in the native README, template README, Phase 1 knowledgebase, migration plan, and template tests as applicable.
+
 - Phase 1 shared runtime resources package: added `GhostRigger.Runtime.Shared.Resources.dll` as a `GhostRigger.Runtime.Shared.*` package for renderer-neutral resource identifier, residency, upload-packet, and transition-packet schema metadata, plus `GhostRigger.Runtime.Shared.Resources.DEBUG.exe` for ABI validation without Python or the GUI. Exposed the package through the Python native package registry and updated Phase 1 docs/tests so future D3D12/WGPU renderer and runtime DLLs can share resource-state payload shapes instead of redefining queue schemas locally. No roadmap task ID applies.
   Owner: LordVaderCW.
   Intersects: upstream/qt-ghostrigger Phase 1 native shared-runtime package layout, resource residency contracts, and Visual Studio solution packaging.
