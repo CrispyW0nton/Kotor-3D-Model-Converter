@@ -63,6 +63,13 @@ state the touched subsystem, for example `Intersects: upstream/qt-ghostrigger
 Character Builder export changes`. This keeps concurrent changelog edits
 attributable and easier to merge.
 
+Before merging an upstream or long-lived branch, create a temporary pre-merge
+safety branch from the current HEAD, for example
+`codex/pre-merge-<branch>-<YYYYMMDD>`. After the merge is committed and the
+post-merge checks pass, delete that temporary safety branch so it does not remain
+as stale branch clutter. Keep the merge commit and changelog entry; the temporary
+branch is only a rollback handle during the merge.
+
 ## Python terminal cheatsheet
 
 When adding, changing, or discovering useful commands for the embedded Python

@@ -11,6 +11,12 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-07
 
+- Pre-merge safety branch cleanup instruction: updated `AGENTS.md` so future agents create a temporary pre-merge branch before upstream/long-lived branch merges, then delete that temporary branch after the merge commit and checks pass. No roadmap task ID applies.
+  Owner: LordVaderCW.
+  Intersects: upstream/qt-ghostrigger merge workflow cleanup.
+  Affected areas: `AGENTS.md`, `CHANGES.md`.
+  Verification: instruction-only change; reviewed the updated Change log section in `AGENTS.md`.
+
 - Changelog ownership/intersection instruction: updated `AGENTS.md` so future agents add `Owner: LordVaderCW` to every new `CHANGES.md` entry and mark intersecting contributor/branch work with an `Intersects:` line when applicable. This should make future upstream merges less ambiguous when multiple agents edit the same dated changelog section. No roadmap task ID applies.
   Owner: LordVaderCW.
   Intersects: upstream/qt-ghostrigger changelog merge-conflict prevention.
