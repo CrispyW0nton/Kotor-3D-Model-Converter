@@ -122,7 +122,8 @@ a launcher and native workspace first, not a rewrite of the application.
   availability and capability metadata without starting the GUI. It now exposes
   a reusable package spec so future `GhostRigger.Native.NativeCore.*`,
   `GhostRigger.Runtime.Shared.*`, and `GhostRigger.Renderer.*` packages can be
-  added consistently.
+  added consistently. The D3D12 registry entry reports the complete guarded
+  Phase 1 D3D12 metadata capability set advertised by the native DLL.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental

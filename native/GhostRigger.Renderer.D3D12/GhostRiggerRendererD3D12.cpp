@@ -175,7 +175,34 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_capabilities_json() {
     payload += gr_renderer_contracts_version();
     payload += R"(","supports_hardware_rasterization":true,)"
                R"("supports_texture_arrays":true,"supports_skinned_meshes":true,)"
-               R"("supports_pick_pass":true})";
+               R"("supports_pick_pass":true,"draw_submission_enabled":false,)"
+               R"("guarded_metadata_capabilities":[)"
+               R"("descriptor_allocator_readiness",)"
+               R"("command_list_readiness",)"
+               R"("surface_swap_chain_readiness",)"
+               R"("render_target_metadata",)"
+               R"("barrier_clear_pass_metadata",)"
+               R"("command_recording_dry_run_frame",)"
+               R"("guarded_command_recording_diagnostics",)"
+               R"("no_draw_execution_fence_diagnostics",)"
+               R"("present_readiness_metadata",)"
+               R"("guarded_swap_chain_creation_diagnostics",)"
+               R"("guarded_back_buffer_rtv_diagnostics",)"
+               R"("guarded_barrier_clear_recording_diagnostics",)"
+               R"("guarded_clear_pass_execution_fence_diagnostics",)"
+               R"("post_clear_present_readiness_diagnostics",)"
+               R"("guarded_present_call_diagnostics",)"
+               R"("post_present_frame_accounting_diagnostics",)"
+               R"("draw_list_readiness_metadata",)"
+               R"("resource_binding_readiness_metadata",)"
+               R"("pipeline_state_readiness_metadata",)"
+               R"("guarded_shader_bytecode_metadata",)"
+               R"("shader_reflection_input_layout_metadata",)"
+               R"("guarded_root_signature_metadata",)"
+               R"("guarded_pipeline_state_object_metadata",)"
+               R"("guarded_draw_command_recording_metadata",)"
+               R"("guarded_draw_submission_readiness_metadata",)"
+               R"("guarded_post_draw_frame_accounting_readiness_metadata"]})";
     return payload.c_str();
 }
 

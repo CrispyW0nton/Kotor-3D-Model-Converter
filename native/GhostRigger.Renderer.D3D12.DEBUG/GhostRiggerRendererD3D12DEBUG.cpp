@@ -20,6 +20,22 @@ int main()
         std::cerr << "GhostRigger.Renderer.D3D12 capabilities missing renderer contract version" << std::endl;
         return 3;
     }
+    if (std::strstr(capabilities, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 capabilities enabled draw submission" << std::endl;
+        return 4;
+    }
+    if (std::strstr(capabilities, R"("guarded_metadata_capabilities":[)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 capabilities missing guarded metadata list" << std::endl;
+        return 5;
+    }
+    if (std::strstr(capabilities, R"("guarded_draw_submission_readiness_metadata")") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 capabilities missing draw-submission readiness metadata" << std::endl;
+        return 6;
+    }
+    if (std::strstr(capabilities, R"("guarded_post_draw_frame_accounting_readiness_metadata")") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 capabilities missing post-draw accounting metadata" << std::endl;
+        return 7;
+    }
     if (std::strstr(gr_renderer_d3d12_backend_info_json(), R"("api":"d3d12")") == nullptr) {
         std::cerr << "GhostRigger.Renderer.D3D12 backend info mismatch" << std::endl;
         return 4;

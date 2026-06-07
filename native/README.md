@@ -288,3 +288,6 @@ build\vs\x64\Debug\GhostRigger.Renderer.D3D12.DEBUG.exe
 
 Python can query the D3D12 renderer package through
 `src.adapters.native_core.package_registry.query_renderer_d3d12_status()`.
+Use `renderer_d3d12_guarded_metadata_capabilities(status)` to read the complete
+guarded Phase 1 metadata surface advertised by the native DLL without starting
+Python GUI code.

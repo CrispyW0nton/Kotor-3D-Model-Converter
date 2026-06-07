@@ -359,6 +359,45 @@ def test_renderer_d3d12_exports_descriptor_allocator_readiness_boundary() -> Non
     assert "gr_renderer_d3d12_descriptor_allocator_readiness_json(context)" in validator
 
 
+def test_renderer_d3d12_capabilities_report_complete_guarded_metadata_surface() -> None:
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert '"draw_submission_enabled":false' in implementation
+    assert '"guarded_metadata_capabilities":[' in implementation
+    assert '"descriptor_allocator_readiness"' in implementation
+    assert '"command_list_readiness"' in implementation
+    assert '"surface_swap_chain_readiness"' in implementation
+    assert '"guarded_command_recording_diagnostics"' in implementation
+    assert '"no_draw_execution_fence_diagnostics"' in implementation
+    assert '"guarded_swap_chain_creation_diagnostics"' in implementation
+    assert '"guarded_back_buffer_rtv_diagnostics"' in implementation
+    assert '"guarded_barrier_clear_recording_diagnostics"' in implementation
+    assert '"guarded_clear_pass_execution_fence_diagnostics"' in implementation
+    assert '"post_present_frame_accounting_diagnostics"' in implementation
+    assert '"guarded_shader_bytecode_metadata"' in implementation
+    assert '"shader_reflection_input_layout_metadata"' in implementation
+    assert '"guarded_root_signature_metadata"' in implementation
+    assert '"guarded_pipeline_state_object_metadata"' in implementation
+    assert '"guarded_draw_command_recording_metadata"' in implementation
+    assert '"guarded_draw_submission_readiness_metadata"' in implementation
+    assert '"guarded_post_draw_frame_accounting_readiness_metadata"' in implementation
+    assert '"guarded_post_draw_frame_accounting_readiness_metadata"]})' in implementation
+    assert '"guarded_post_draw_frame_accounting_readiness_metadata"])})' not in implementation
+    assert '"guarded_metadata_capabilities":[' in validator
+    assert '"guarded_post_draw_frame_accounting_readiness_metadata"' in validator
+
+
 def test_renderer_d3d12_exports_command_list_readiness_boundary() -> None:
     header = (
         ROOT

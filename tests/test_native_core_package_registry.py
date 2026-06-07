@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import src.adapters.native_core.package_registry as package_registry
 from src.adapters.native_core.package_registry import (
     NATIVE_CORE_DIAGNOSTICS_PACKAGE,
     NATIVE_CORE_MATH_PACKAGE,
     NATIVE_CORE_PACKAGE,
     RENDERER_CONTRACTS_PACKAGE,
+    RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES,
     RENDERER_D3D12_PACKAGE,
     RENDERER_NULL_PACKAGE,
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
@@ -24,7 +26,54 @@ from src.adapters.native_core.package_registry import (
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
+    renderer_d3d12_guarded_metadata_capabilities,
 )
+
+
+class _FakeNativeExport:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.restype = None
+
+    def __call__(self) -> bytes:
+        return self.payload
+
+
+class _FakeRendererD3D12Dll:
+    gr_renderer_d3d12_version = _FakeNativeExport(b"0.1.0")
+    gr_renderer_d3d12_capabilities_json = _FakeNativeExport(
+        (
+            b'{"name":"GhostRigger.Renderer.D3D12","version":"0.1.0",'
+            b'"draw_submission_enabled":false,'
+            b'"guarded_metadata_capabilities":['
+            b'"descriptor_allocator_readiness",'
+            b'"command_list_readiness",'
+            b'"surface_swap_chain_readiness",'
+            b'"render_target_metadata",'
+            b'"barrier_clear_pass_metadata",'
+            b'"command_recording_dry_run_frame",'
+            b'"guarded_command_recording_diagnostics",'
+            b'"no_draw_execution_fence_diagnostics",'
+            b'"present_readiness_metadata",'
+            b'"guarded_swap_chain_creation_diagnostics",'
+            b'"guarded_back_buffer_rtv_diagnostics",'
+            b'"guarded_barrier_clear_recording_diagnostics",'
+            b'"guarded_clear_pass_execution_fence_diagnostics",'
+            b'"post_clear_present_readiness_diagnostics",'
+            b'"guarded_present_call_diagnostics",'
+            b'"post_present_frame_accounting_diagnostics",'
+            b'"draw_list_readiness_metadata",'
+            b'"resource_binding_readiness_metadata",'
+            b'"pipeline_state_readiness_metadata",'
+            b'"guarded_shader_bytecode_metadata",'
+            b'"shader_reflection_input_layout_metadata",'
+            b'"guarded_root_signature_metadata",'
+            b'"guarded_pipeline_state_object_metadata",'
+            b'"guarded_draw_command_recording_metadata",'
+            b'"guarded_draw_submission_readiness_metadata",'
+            b'"guarded_post_draw_frame_accounting_readiness_metadata"]}'
+        )
+    )
 
 
 def test_native_core_status_reports_missing_package(tmp_path: Path) -> None:
@@ -239,3 +288,60 @@ def test_renderer_d3d12_package_spec_names_current_contract() -> None:
     assert RENDERER_D3D12_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_D3D12"
     assert RENDERER_D3D12_PACKAGE.version_export == "gr_renderer_d3d12_version"
     assert RENDERER_D3D12_PACKAGE.capabilities_export == "gr_renderer_d3d12_capabilities_json"
+
+
+def test_renderer_d3d12_guarded_metadata_capabilities_name_complete_phase_1_surface() -> None:
+    assert RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES == (
+        "descriptor_allocator_readiness",
+        "command_list_readiness",
+        "surface_swap_chain_readiness",
+        "render_target_metadata",
+        "barrier_clear_pass_metadata",
+        "command_recording_dry_run_frame",
+        "guarded_command_recording_diagnostics",
+        "no_draw_execution_fence_diagnostics",
+        "present_readiness_metadata",
+        "guarded_swap_chain_creation_diagnostics",
+        "guarded_back_buffer_rtv_diagnostics",
+        "guarded_barrier_clear_recording_diagnostics",
+        "guarded_clear_pass_execution_fence_diagnostics",
+        "post_clear_present_readiness_diagnostics",
+        "guarded_present_call_diagnostics",
+        "post_present_frame_accounting_diagnostics",
+        "draw_list_readiness_metadata",
+        "resource_binding_readiness_metadata",
+        "pipeline_state_readiness_metadata",
+        "guarded_shader_bytecode_metadata",
+        "shader_reflection_input_layout_metadata",
+        "guarded_root_signature_metadata",
+        "guarded_pipeline_state_object_metadata",
+        "guarded_draw_command_recording_metadata",
+        "guarded_draw_submission_readiness_metadata",
+        "guarded_post_draw_frame_accounting_readiness_metadata",
+    )
+
+
+def test_renderer_d3d12_status_reports_guarded_metadata_capabilities(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dll_path = tmp_path / "GhostRigger.Renderer.D3D12.dll"
+    dll_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        package_registry,
+        "_load_library",
+        lambda path: _FakeRendererD3D12Dll(),
+    )
+
+    status = query_renderer_d3d12_status([tmp_path])
+
+    assert status.available is True
+    assert status.version == "0.1.0"
+    assert status.capabilities is not None
+    assert status.capabilities["draw_submission_enabled"] is False
+    assert (
+        renderer_d3d12_guarded_metadata_capabilities(status)
+        == RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES
+    )

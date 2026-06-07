@@ -282,7 +282,8 @@ Current completed foundation:
   `GhostRigger.Runtime.Shared.Resources.dll`, and
   `GhostRigger.Renderer.Contracts.dll`, and `GhostRigger.Renderer.Null.dll`,
   and `GhostRigger.Renderer.D3D12.dll` availability and capabilities from
-  Python without starting the GUI.
+  Python without starting the GUI. The D3D12 registry entry exposes the complete
+  guarded Phase 1 metadata capability set advertised by the native DLL.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -478,9 +479,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend the Python-side native package registry entry for
-   `GhostRigger.Renderer.D3D12` so Python can report the complete guarded
-   Phase 1 D3D12 metadata capability set without starting the GUI.
+5. Choose the next Phase 1 slice from either a shared native-core extraction or
+   the first `GhostRigger.Tools.{Toolname}` DLL candidate documented in
+   `knowledge_base/native_toolbox_window_migration_candidates.md`.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
