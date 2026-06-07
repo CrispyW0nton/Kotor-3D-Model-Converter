@@ -3271,7 +3271,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         result = self._start_preview_animation(anim_name)
         if result is None:
             result = _wf.play_preview_animation(
-                self.scene, anim_name, viewport=None,
+                self.scene, anim_name, viewport=getattr(self, "viewport", None),
             )
 
         if hasattr(self.inspector, "set_preview_status"):
@@ -3347,9 +3347,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._animation_last_tick = None
         anim = engine.current_animation
         length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
-        pose = engine.evaluate(0.0)
+        base_pose = engine.evaluate(0.0)
+        pose = base_pose
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_animation_pose"):
+            if hasattr(viewport, "set_anim_base_pose"):
+                viewport.set_anim_base_pose(base_pose)
             viewport.set_animation_pose(
                 pose,
                 name=str(getattr(anim, "name", anim_name) if anim else anim_name),
