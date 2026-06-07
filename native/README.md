@@ -119,8 +119,8 @@ pipeline-state/root-signature readiness metadata, and guarded shader-bytecode
 metadata, and shader reflection/input-layout metadata, and guarded
 root-signature metadata, guarded pipeline-state object metadata, and guarded
 draw-command recording metadata, and guarded draw-submission readiness
-metadata, but it does not record draws or create a real draw submission path
-yet.
+metadata, and guarded post-draw frame/accounting readiness metadata, but it
+does not record draws or create a real draw submission path yet.
 `Present` is only reachable through the guarded present-call diagnostic after
 prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
 
@@ -278,6 +278,7 @@ command-recording dry-run frame metadata export, guarded command-list
 reset/close diagnostics export, guarded root-signature metadata export,
 guarded pipeline-state object metadata export, guarded draw-command recording
 metadata export, guarded draw-submission readiness metadata export,
+guarded post-draw frame/accounting readiness metadata export,
 failure-diagnostic export, and device-requirement metadata without starting
 Python or the GUI:
 

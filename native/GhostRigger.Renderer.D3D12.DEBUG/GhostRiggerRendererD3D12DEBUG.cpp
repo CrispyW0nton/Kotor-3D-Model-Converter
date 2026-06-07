@@ -1006,6 +1006,46 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 179;
     }
+    const char* post_draw_accounting_json =
+        gr_renderer_d3d12_guarded_post_draw_frame_accounting_readiness_metadata_json(context);
+    if (std::strstr(
+            post_draw_accounting_json,
+            R"("schema":"renderer_d3d12_guarded_post_draw_frame_accounting_readiness_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded post-draw accounting metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 180;
+    }
+    if (std::strstr(post_draw_accounting_json, R"("post_draw_frame_accounting_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 reported post-draw accounting ready" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 181;
+    }
+    if (std::strstr(post_draw_accounting_json, R"("post_draw_frame_accounting_recorded":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 recorded post-draw accounting" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 182;
+    }
+    if (std::strstr(post_draw_accounting_json, R"("frame_presented_after_draws":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 presented a post-draw frame" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 183;
+    }
+    if (std::strstr(post_draw_accounting_json, R"("presented_frame_count_after_draws":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 counted post-draw frames" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 184;
+    }
+    if (std::strstr(post_draw_accounting_json, R"("gpu_frame_time_microseconds":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 reported GPU frame timing" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 185;
+    }
+    if (std::strstr(post_draw_accounting_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 enabled draw submission in post-draw accounting" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 186;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
