@@ -63,6 +63,7 @@ struct DiagnosticContext {
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
     Microsoft::WRL::ComPtr<ID3D12Fence> no_draw_fence;
+    Microsoft::WRL::ComPtr<ID3D12Fence> guarded_clear_pass_fence;
     Microsoft::WRL::ComPtr<IDXGISwapChain3> guarded_swap_chain;
     Microsoft::WRL::ComPtr<ID3D12Resource> guarded_back_buffer_0;
     Microsoft::WRL::ComPtr<ID3D12Resource> guarded_back_buffer_1;
@@ -89,8 +90,13 @@ struct DiagnosticContext {
     HRESULT guarded_barrier_clear_allocator_reset_hr = E_FAIL;
     HRESULT guarded_barrier_clear_command_list_reset_hr = E_FAIL;
     HRESULT guarded_barrier_clear_command_list_close_hr = E_FAIL;
+    HRESULT guarded_clear_pass_fence_hr = E_FAIL;
+    HRESULT guarded_clear_pass_signal_hr = E_FAIL;
+    HRESULT guarded_clear_pass_set_event_hr = E_FAIL;
     DWORD no_draw_wait_result = WAIT_FAILED;
+    DWORD guarded_clear_pass_wait_result = WAIT_FAILED;
     UINT64 no_draw_fence_value = 1;
+    UINT64 guarded_clear_pass_fence_value = 1;
     bool device_ready = false;
     bool command_queue_ready = false;
     bool descriptor_heaps_ready = false;
@@ -120,6 +126,11 @@ struct DiagnosticContext {
     bool guarded_resource_barriers_recorded = false;
     bool guarded_clear_recorded = false;
     bool guarded_barrier_clear_command_list_closed = false;
+    bool guarded_clear_pass_command_list_executed = false;
+    bool guarded_clear_pass_fence_ready = false;
+    bool guarded_clear_pass_fence_signaled = false;
+    bool guarded_clear_pass_fence_completed = false;
+    bool guarded_clear_pass_fence_waited = false;
     bool draw_submission_enabled = false;
 };
 
@@ -941,6 +952,108 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_barrier_clear_record
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_clear_pass_execution_fence_diagnostics_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_clear_pass_execution_fence_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_command_queue":false,"recorded_clear_pass_ready":false,"clear_pass_command_list_executed":false,"command_lists_submitted":0,"draw_calls_recorded":0,"fence_created":false,"fence_signaled":false,"fence_completed":false,"present_called":false,"present_enabled":false,"draw_submission_enabled":false})";
+    }
+
+    const bool recorded_clear_pass_ready =
+        target->command_queue != nullptr &&
+        target->command_list != nullptr &&
+        target->guarded_barrier_clear_command_list_closed &&
+        target->guarded_resource_barriers_recorded &&
+        target->guarded_clear_recorded;
+
+    if (recorded_clear_pass_ready && !target->guarded_clear_pass_fence_completed) {
+        ID3D12CommandList* command_lists[] = { target->command_list.Get() };
+        target->command_queue->ExecuteCommandLists(1, command_lists);
+        target->guarded_clear_pass_command_list_executed = true;
+
+        HRESULT hr = target->device
+            ? target->device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&target->guarded_clear_pass_fence))
+            : E_FAIL;
+        target->guarded_clear_pass_fence_hr = hr;
+        target->guarded_clear_pass_fence_ready = SUCCEEDED(hr);
+
+        if (target->guarded_clear_pass_fence_ready) {
+            hr = target->command_queue->Signal(
+                target->guarded_clear_pass_fence.Get(),
+                target->guarded_clear_pass_fence_value
+            );
+            target->guarded_clear_pass_signal_hr = hr;
+            target->guarded_clear_pass_fence_signaled = SUCCEEDED(hr);
+        }
+
+        if (
+            target->guarded_clear_pass_fence_signaled &&
+            target->guarded_clear_pass_fence->GetCompletedValue() < target->guarded_clear_pass_fence_value
+        ) {
+            HANDLE fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+            if (fence_event != nullptr) {
+                hr = target->guarded_clear_pass_fence->SetEventOnCompletion(
+                    target->guarded_clear_pass_fence_value,
+                    fence_event
+                );
+                target->guarded_clear_pass_set_event_hr = hr;
+                if (SUCCEEDED(hr)) {
+                    target->guarded_clear_pass_wait_result = WaitForSingleObject(fence_event, 2000);
+                    target->guarded_clear_pass_fence_waited =
+                        target->guarded_clear_pass_wait_result == WAIT_OBJECT_0;
+                }
+                CloseHandle(fence_event);
+            } else {
+                target->guarded_clear_pass_set_event_hr = HRESULT_FROM_WIN32(GetLastError());
+            }
+        } else if (target->guarded_clear_pass_fence_signaled) {
+            target->guarded_clear_pass_set_event_hr = S_OK;
+            target->guarded_clear_pass_wait_result = WAIT_OBJECT_0;
+        }
+
+        target->guarded_clear_pass_fence_completed =
+            target->guarded_clear_pass_fence_signaled &&
+            target->guarded_clear_pass_fence->GetCompletedValue() >= target->guarded_clear_pass_fence_value;
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_clear_pass_execution_fence_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_command_queue":)";
+    payload += target->command_queue ? "true" : "false";
+    payload += R"(,"recorded_clear_pass_ready":)";
+    payload += recorded_clear_pass_ready ? "true" : "false";
+    payload += R"(,"resource_barriers_recorded":)";
+    payload += target->guarded_resource_barriers_recorded ? "true" : "false";
+    payload += R"(,"clear_recorded":)";
+    payload += target->guarded_clear_recorded ? "true" : "false";
+    payload += R"(,"clear_pass_command_list_executed":)";
+    payload += target->guarded_clear_pass_command_list_executed ? "true" : "false";
+    payload += R"(,"command_lists_submitted":)";
+    payload += target->guarded_clear_pass_command_list_executed ? "1" : "0";
+    payload += R"(,"draw_calls_recorded":0,"fence_created":)";
+    payload += target->guarded_clear_pass_fence_ready ? "true" : "false";
+    payload += R"(,"fence_signaled":)";
+    payload += target->guarded_clear_pass_fence_signaled ? "true" : "false";
+    payload += R"(,"fence_completed":)";
+    payload += target->guarded_clear_pass_fence_completed ? "true" : "false";
+    payload += R"(,"fence_waited":)";
+    payload += target->guarded_clear_pass_fence_waited ? "true" : "false";
+    payload += R"(,"present_called":false,"present_enabled":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"wait_result":)";
+    payload += std::to_string(static_cast<unsigned long>(target->guarded_clear_pass_wait_result));
+    payload += R"(,"fence_hresult":")";
+    payload += hresult_hex(target->guarded_clear_pass_fence_hr);
+    payload += R"(","signal_hresult":")";
+    payload += hresult_hex(target->guarded_clear_pass_signal_hr);
+    payload += R"(","set_event_hresult":")";
+    payload += hresult_hex(target->guarded_clear_pass_set_event_hr);
+    payload += R"(","phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -952,7 +1065,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("command_recording_dry_run","guarded_command_recording",)"
         R"("no_draw_execution_fence","present_readiness_metadata",)"
         R"("guarded_swap_chain_creation","guarded_back_buffer_rtv",)"
-        R"("guarded_barrier_clear_recording"],)"
+        R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1133,6 +1246,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_resource_barriers_recorded ? "true" : "false";
     payload += R"(,"guarded_clear_recorded":)";
     payload += target->guarded_clear_recorded ? "true" : "false";
+    payload += R"(,"guarded_clear_pass_command_list_executed":)";
+    payload += target->guarded_clear_pass_command_list_executed ? "true" : "false";
+    payload += R"(,"guarded_clear_pass_fence_completed":)";
+    payload += target->guarded_clear_pass_fence_completed ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
@@ -1177,6 +1294,12 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += hresult_hex(target->guarded_barrier_clear_command_list_reset_hr);
     payload += R"(","guarded_barrier_clear_command_list_close_hresult":")";
     payload += hresult_hex(target->guarded_barrier_clear_command_list_close_hr);
+    payload += R"(","guarded_clear_pass_fence_hresult":")";
+    payload += hresult_hex(target->guarded_clear_pass_fence_hr);
+    payload += R"(","guarded_clear_pass_signal_hresult":")";
+    payload += hresult_hex(target->guarded_clear_pass_signal_hr);
+    payload += R"(","guarded_clear_pass_set_event_hresult":")";
+    payload += hresult_hex(target->guarded_clear_pass_set_event_hr);
     payload += R"("})";
     return payload.c_str();
 }

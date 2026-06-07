@@ -451,6 +451,51 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 81;
     }
+    const char* guarded_clear_pass_execution_json =
+        gr_renderer_d3d12_guarded_clear_pass_execution_fence_diagnostics_json(context);
+    if (std::strstr(
+            guarded_clear_pass_execution_json,
+            R"("schema":"renderer_d3d12_guarded_clear_pass_execution_fence_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 82;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("recorded_clear_pass_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution expected a recorded pass" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 83;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("clear_pass_command_list_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution submitted too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 84;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("command_lists_submitted":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution submitted command lists" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 85;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 86;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("fence_signaled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution signaled a fence" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 87;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution called present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 88;
+    }
+    if (std::strstr(guarded_clear_pass_execution_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded clear-pass execution enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 89;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

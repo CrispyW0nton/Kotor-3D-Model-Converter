@@ -218,9 +218,9 @@ Current completed foundation:
   guarded swap-chain creation diagnostics behind an explicit native window
   handle, run guarded back-buffer acquisition and RTV creation diagnostics, and
   run guarded render-target barrier/clear recording diagnostics, and report
+  guarded clear-pass command execution/fence diagnostics, and report
   failure-diagnostic schema metadata, but it is still diagnostic-only in Phase 1
-  and does not execute the recorded clear pass, record draws, present, or enable
-  real draw submission.
+  and does not record draws, present, or enable real draw submission.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -247,8 +247,9 @@ Current completed foundation:
   reset/close diagnostics export, no-draw execution/fence diagnostics export,
   present-readiness metadata export, guarded swap-chain creation diagnostics
   export, guarded back-buffer/RTV diagnostics export, failure-diagnostic export,
-  guarded barrier/clear recording diagnostics export, and device-requirement
-  metadata without Python or the GUI.
+  guarded barrier/clear recording diagnostics export, guarded clear-pass
+  execution/fence diagnostics export, and device-requirement metadata without
+  Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -457,9 +458,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from guarded render-target barrier/clear
-   recording diagnostics into guarded clear-pass command execution/fence
-   diagnostics before enabling real present or draw submission.
+5. Extend `GhostRigger.Renderer.D3D12` from guarded clear-pass command
+   execution/fence diagnostics into post-clear present-readiness diagnostics
+   before enabling real present or draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
