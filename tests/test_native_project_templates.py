@@ -420,6 +420,97 @@ def test_browser_tool_project_scaffolds_match_phase_one_boundaries() -> None:
         assert "query_attempted" in validator
 
 
+def test_scene_workbench_tool_project_scaffolds_match_phase_one_boundaries() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    cases = (
+        (
+            "GhostRigger.Tools.SceneInformation",
+            "GHOSTRIGGER_TOOLS_SCENE_INFORMATION_EXPORTS",
+            "GhostRiggerToolsSceneInformation.h",
+            "GhostRiggerToolsSceneInformation.cpp",
+            "GhostRiggerToolsSceneInformationDEBUG.cpp",
+            "Scene Information",
+            "scene_summary_schema",
+            "native_scene_query_enabled",
+        ),
+        (
+            "GhostRigger.Tools.Properties",
+            "GHOSTRIGGER_TOOLS_PROPERTIES_EXPORTS",
+            "GhostRiggerToolsProperties.h",
+            "GhostRiggerToolsProperties.cpp",
+            "GhostRiggerToolsPropertiesDEBUG.cpp",
+            "Properties",
+            "property_packet_schema",
+            "native_property_edit_enabled",
+        ),
+        (
+            "GhostRigger.Tools.Lighting",
+            "GHOSTRIGGER_TOOLS_LIGHTING_EXPORTS",
+            "GhostRiggerToolsLighting.h",
+            "GhostRiggerToolsLighting.cpp",
+            "GhostRiggerToolsLightingDEBUG.cpp",
+            "Lighting",
+            "light_packet_schema",
+            "native_light_eval_enabled",
+        ),
+        (
+            "GhostRigger.Tools.Camera",
+            "GHOSTRIGGER_TOOLS_CAMERA_EXPORTS",
+            "GhostRiggerToolsCamera.h",
+            "GhostRiggerToolsCamera.cpp",
+            "GhostRiggerToolsCameraDEBUG.cpp",
+            "Camera",
+            "camera_packet_schema",
+            "native_camera_eval_enabled",
+        ),
+        (
+            "GhostRigger.Tools.ModuleMeshes",
+            "GHOSTRIGGER_TOOLS_MODULE_MESHES_EXPORTS",
+            "GhostRiggerToolsModuleMeshes.h",
+            "GhostRiggerToolsModuleMeshes.cpp",
+            "GhostRiggerToolsModuleMeshesDEBUG.cpp",
+            "Module Meshes",
+            "mesh_packet_schema",
+            "native_mesh_index_enabled",
+        ),
+    )
+
+    for (
+        project_name,
+        export_define,
+        header_name,
+        implementation_name,
+        validator_name,
+        owner,
+        schema,
+        disabled_flag,
+    ) in cases:
+        project_dir = ROOT / "native" / project_name
+        debug_dir = ROOT / "native" / f"{project_name}.DEBUG"
+        project = (project_dir / f"{project_name}.vcxproj").read_text(encoding="utf-8")
+        debug_project = (debug_dir / f"{project_name}.DEBUG.vcxproj").read_text(encoding="utf-8")
+        readme = (project_dir / "README.md").read_text(encoding="utf-8")
+        header = (project_dir / header_name).read_text(encoding="utf-8")
+        implementation = (project_dir / implementation_name).read_text(encoding="utf-8")
+        validator = (debug_dir / validator_name).read_text(encoding="utf-8")
+
+        assert project_name in solution
+        assert f"{project_name}.DEBUG" in solution
+        assert f"<TargetName>{project_name}</TargetName>" in project
+        assert export_define in project
+        assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
+        assert f"Owner surface: {owner}" in readme
+        assert "Bridge method: C ABI DLL" in readme
+        assert "_version" in header
+        assert "_capabilities_json" in header
+        assert '"tool_package":true' in implementation
+        assert f'"owner_surface":"{owner}"' in implementation
+        assert f'"{disabled_flag}":false' in implementation
+        assert '"python_fallback_required":true' in implementation
+        assert schema in implementation
+        assert "query_attempted" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1827,6 +1918,11 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{CEA01257-352B-449F-8024-27125D68C18A}",
         "{59D2C00B-ECC7-4017-936E-CB654727A04C}",
         "{B4AE1578-33D7-4A66-BCA6-43EAAD741D4E}",
+        "{AAF30470-4105-4496-9F0C-615B20A2C675}",
+        "{3152EEB3-6653-4D56-8BEE-12D685A98211}",
+        "{EF469D65-8BE2-4CDC-8B6B-07067092CD18}",
+        "{7624BF79-3A6D-4EF6-9BD1-7D234A998AEC}",
+        "{EC869962-CD4E-4010-8A84-1297540E5C67}",
         "{87E36993-4B11-402F-9882-B2D4C0CAE704}",
     }
 

@@ -99,6 +99,15 @@ capabilities, owner-boundary metadata, and catalogue/table schema placeholders
 while keeping native indexing and table queries disabled and requiring Python
 fallback.
 
+`GhostRigger.Tools.SceneInformation`, `GhostRigger.Tools.Properties`,
+`GhostRigger.Tools.Lighting`, `GhostRigger.Tools.Camera`, and
+`GhostRigger.Tools.ModuleMeshes` are Phase 1 native toolbox package boundaries
+for scene/workbench inspection and editing workflows. They are diagnostic-only:
+they report package capabilities, owner-boundary metadata, and scene/property/
+lighting/camera/module-mesh packet schema placeholders while keeping native
+scene querying, property edits, light/camera evaluation, and module-mesh
+indexing disabled and requiring Python fallback.
+
 `GhostRigger.Windows.MainWindow` is the Phase 1 native window package boundary
 for main-window host services. It is diagnostic-only: it reports package
 capabilities, owner-boundary metadata, and a host-service schema placeholder

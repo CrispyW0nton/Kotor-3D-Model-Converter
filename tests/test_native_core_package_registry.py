@@ -17,10 +17,15 @@ from src.adapters.native_core.package_registry import (
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     RUNTIME_SHARED_RESOURCES_PACKAGE,
     TOOLS_CHARACTER_BUILDER_PACKAGE,
+    TOOLS_CAMERA_PACKAGE,
     TOOLS_CONTENT_BROWSER_PACKAGE,
     TOOLS_EXPORT_PACKAGE,
+    TOOLS_LIGHTING_PACKAGE,
+    TOOLS_MODULE_MESHES_PACKAGE,
+    TOOLS_PROPERTIES_PACKAGE,
     TOOLS_RETARGETING_PACKAGE,
     TOOLS_RESOURCE_BROWSER_PACKAGE,
+    TOOLS_SCENE_INFORMATION_PACKAGE,
     TOOLS_TWO_DA_BROWSER_PACKAGE,
     WINDOWS_MAIN_WINDOW_PACKAGE,
     NativePackageSpec,
@@ -37,11 +42,16 @@ from src.adapters.native_core.package_registry import (
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
+    query_tools_camera_status,
     query_tools_character_builder_status,
     query_tools_content_browser_status,
     query_tools_export_status,
+    query_tools_lighting_status,
+    query_tools_module_meshes_status,
+    query_tools_properties_status,
     query_tools_resource_browser_status,
     query_tools_retargeting_status,
+    query_tools_scene_information_status,
     query_tools_two_da_browser_status,
     query_windows_main_window_status,
     renderer_d3d12_guarded_metadata_capabilities,
@@ -327,6 +337,22 @@ def test_browser_tool_statuses_use_shared_registry_path(tmp_path: Path) -> None:
         assert f"{package_name}.dll was not found." in status.reason or "Windows native package" in status.reason
 
 
+def test_scene_workbench_tool_statuses_use_shared_registry_path(tmp_path: Path) -> None:
+    cases = (
+        (query_tools_scene_information_status, "GhostRigger.Tools.SceneInformation"),
+        (query_tools_properties_status, "GhostRigger.Tools.Properties"),
+        (query_tools_lighting_status, "GhostRigger.Tools.Lighting"),
+        (query_tools_camera_status, "GhostRigger.Tools.Camera"),
+        (query_tools_module_meshes_status, "GhostRigger.Tools.ModuleMeshes"),
+    )
+
+    for query_status, package_name in cases:
+        status = query_status([tmp_path])
+        assert status.name == package_name
+        assert status.available is False
+        assert f"{package_name}.dll was not found." in status.reason or "Windows native package" in status.reason
+
+
 def test_windows_main_window_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_windows_main_window_status([tmp_path])
 
@@ -525,6 +551,53 @@ def test_browser_tool_package_specs_name_current_contracts() -> None:
             "GHOSTRIGGER_TOOLS_TWO_DA_BROWSER",
             "gr_tools_two_da_browser_version",
             "gr_tools_two_da_browser_capabilities_json",
+        ),
+    )
+
+    for spec, name, env_var, version_export, capabilities_export in cases:
+        assert spec.name == name
+        assert spec.dll_name == f"{name}.dll"
+        assert spec.env_var == env_var
+        assert spec.version_export == version_export
+        assert spec.capabilities_export == capabilities_export
+
+
+def test_scene_workbench_tool_package_specs_name_current_contracts() -> None:
+    cases = (
+        (
+            TOOLS_SCENE_INFORMATION_PACKAGE,
+            "GhostRigger.Tools.SceneInformation",
+            "GHOSTRIGGER_TOOLS_SCENE_INFORMATION",
+            "gr_tools_scene_information_version",
+            "gr_tools_scene_information_capabilities_json",
+        ),
+        (
+            TOOLS_PROPERTIES_PACKAGE,
+            "GhostRigger.Tools.Properties",
+            "GHOSTRIGGER_TOOLS_PROPERTIES",
+            "gr_tools_properties_version",
+            "gr_tools_properties_capabilities_json",
+        ),
+        (
+            TOOLS_LIGHTING_PACKAGE,
+            "GhostRigger.Tools.Lighting",
+            "GHOSTRIGGER_TOOLS_LIGHTING",
+            "gr_tools_lighting_version",
+            "gr_tools_lighting_capabilities_json",
+        ),
+        (
+            TOOLS_CAMERA_PACKAGE,
+            "GhostRigger.Tools.Camera",
+            "GHOSTRIGGER_TOOLS_CAMERA",
+            "gr_tools_camera_version",
+            "gr_tools_camera_capabilities_json",
+        ),
+        (
+            TOOLS_MODULE_MESHES_PACKAGE,
+            "GhostRigger.Tools.ModuleMeshes",
+            "GHOSTRIGGER_TOOLS_MODULE_MESHES",
+            "gr_tools_module_meshes_version",
+            "gr_tools_module_meshes_capabilities_json",
         ),
     )
 

@@ -328,6 +328,17 @@ Current completed foundation:
 - Their `.DEBUG.exe` validators verify the browser/catalogue package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders without
   Python or the GUI.
+- `GhostRigger.Tools.SceneInformation.dll`,
+  `GhostRigger.Tools.Properties.dll`, `GhostRigger.Tools.Lighting.dll`,
+  `GhostRigger.Tools.Camera.dll`, and `GhostRigger.Tools.ModuleMeshes.dll` exist
+  as Phase 1 scene/workbench tool package boundaries. They report package
+  capabilities, owner-boundary metadata, and scene/property/lighting/camera/
+  module-mesh packet schema placeholders while keeping native scene querying,
+  property edits, light/camera evaluation, and module-mesh indexing disabled and
+  requiring Python fallback.
+- Their `.DEBUG.exe` validators verify the scene/workbench package ABIs,
+  capabilities exports, owner-boundary metadata, and schema placeholders without
+  Python or the GUI.
 - `GhostRigger.Windows.MainWindow.dll` exists as the Phase 1 native window
   package boundary for main-window host services. It reports main-window owner
   metadata, package capabilities, and a host-service schema placeholder while

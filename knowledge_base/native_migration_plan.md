@@ -166,6 +166,17 @@ a launcher and native workspace first, not a rewrite of the application.
 - Their `.DEBUG` projects verify the browser/catalogue package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders from
   Visual Studio without requiring Python.
+- `native/GhostRigger.Tools.SceneInformation/`,
+  `native/GhostRigger.Tools.Properties/`,
+  `native/GhostRigger.Tools.Lighting/`, `native/GhostRigger.Tools.Camera/`,
+  and `native/GhostRigger.Tools.ModuleMeshes/` own Phase 1 scene/workbench tool
+  package boundaries. They report package capabilities, owner-boundary metadata,
+  and scene/property/lighting/camera/module-mesh packet schema placeholders
+  while keeping native scene querying, property edits, light/camera evaluation,
+  and module-mesh indexing disabled and requiring Python fallback.
+- Their `.DEBUG` projects verify the scene/workbench package ABIs, capabilities
+  exports, owner-boundary metadata, and schema placeholders from Visual Studio
+  without requiring Python.
 - `native/GhostRigger.Windows.MainWindow/` owns the Phase 1 native window
   package boundary for main-window host services. It reports package
   capabilities, owner-boundary metadata, and a host-service schema placeholder

@@ -154,6 +154,46 @@ TOOLS_TWO_DA_BROWSER_PACKAGE = NativePackageSpec(
     capabilities_export="gr_tools_two_da_browser_capabilities_json",
 )
 
+TOOLS_SCENE_INFORMATION_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.SceneInformation",
+    dll_name="GhostRigger.Tools.SceneInformation.dll",
+    env_var="GHOSTRIGGER_TOOLS_SCENE_INFORMATION",
+    version_export="gr_tools_scene_information_version",
+    capabilities_export="gr_tools_scene_information_capabilities_json",
+)
+
+TOOLS_PROPERTIES_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.Properties",
+    dll_name="GhostRigger.Tools.Properties.dll",
+    env_var="GHOSTRIGGER_TOOLS_PROPERTIES",
+    version_export="gr_tools_properties_version",
+    capabilities_export="gr_tools_properties_capabilities_json",
+)
+
+TOOLS_LIGHTING_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.Lighting",
+    dll_name="GhostRigger.Tools.Lighting.dll",
+    env_var="GHOSTRIGGER_TOOLS_LIGHTING",
+    version_export="gr_tools_lighting_version",
+    capabilities_export="gr_tools_lighting_capabilities_json",
+)
+
+TOOLS_CAMERA_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.Camera",
+    dll_name="GhostRigger.Tools.Camera.dll",
+    env_var="GHOSTRIGGER_TOOLS_CAMERA",
+    version_export="gr_tools_camera_version",
+    capabilities_export="gr_tools_camera_capabilities_json",
+)
+
+TOOLS_MODULE_MESHES_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.ModuleMeshes",
+    dll_name="GhostRigger.Tools.ModuleMeshes.dll",
+    env_var="GHOSTRIGGER_TOOLS_MODULE_MESHES",
+    version_export="gr_tools_module_meshes_version",
+    capabilities_export="gr_tools_module_meshes_capabilities_json",
+)
+
 WINDOWS_MAIN_WINDOW_PACKAGE = NativePackageSpec(
     name="GhostRigger.Windows.MainWindow",
     dll_name="GhostRigger.Windows.MainWindow.dll",
@@ -386,6 +426,36 @@ def query_tools_two_da_browser_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(TOOLS_TWO_DA_BROWSER_PACKAGE, search_paths)
+
+
+def query_tools_scene_information_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_SCENE_INFORMATION_PACKAGE, search_paths)
+
+
+def query_tools_properties_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_PROPERTIES_PACKAGE, search_paths)
+
+
+def query_tools_lighting_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_LIGHTING_PACKAGE, search_paths)
+
+
+def query_tools_camera_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_CAMERA_PACKAGE, search_paths)
+
+
+def query_tools_module_meshes_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_MODULE_MESHES_PACKAGE, search_paths)
 
 
 def query_windows_main_window_status(
