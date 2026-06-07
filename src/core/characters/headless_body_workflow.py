@@ -37,6 +37,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+try:
+    from src.core.characters.character_autofit_report import AutoFitOverride, AutoFitReport
+except ImportError:  # pragma: no cover - package-relative fallback
+    from core.characters.character_autofit_report import AutoFitOverride, AutoFitReport  # type: ignore
+
 log = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────
@@ -150,6 +155,663 @@ class _HumanoidFitFrame:
     height: float
     confidence: float
     landmarks: Dict[str, str] = field(default_factory=dict)
+    landmark_sources: Dict[str, str] = field(default_factory=dict)
+    landmark_positions: Dict[str, Vec3] = field(default_factory=dict)
+
+
+def _vec_as_list(value: Optional[Vec3]) -> Optional[List[float]]:
+    if value is None:
+        return None
+    return [float(value[0]), float(value[1]), float(value[2])]
+
+
+def _bounds_as_lists(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[Dict[str, List[float]]]:
+    if bounds is None:
+        return None
+    bb_min, bb_max = bounds
+    return {"min": _vec_as_list(bb_min) or [], "max": _vec_as_list(bb_max) or []}
+
+
+def _fit_frame_as_metadata(frame: Optional[_HumanoidFitFrame]) -> Optional[Dict[str, Any]]:
+    if frame is None:
+        return None
+    toe_forward = _fit_frame_toe_forward(frame)
+    return {
+        "origin": _vec_as_list(frame.origin),
+        "right": _vec_as_list(frame.right),
+        "forward": _vec_as_list(frame.forward),
+        "up": _vec_as_list(frame.up),
+        "toe_forward": _vec_as_list(toe_forward),
+        "toe_forward_alignment": (
+            float(_vec_dot(frame.forward, toe_forward))
+            if toe_forward is not None else None
+        ),
+        "height": float(frame.height),
+        "confidence": float(frame.confidence),
+        "landmarks": dict(frame.landmarks),
+        "landmark_sources": dict(frame.landmark_sources),
+        "landmark_positions": {
+            str(role): _vec_as_list(position)
+            for role, position in (frame.landmark_positions or {}).items()
+        },
+    }
+
+
+def _fit_frame_toe_forward(frame: Optional[_HumanoidFitFrame]) -> Optional[Vec3]:
+    if frame is None:
+        return None
+    positions = frame.landmark_positions or {}
+    left_foot = positions.get("left_foot")
+    right_foot = positions.get("right_foot")
+    left_toe = positions.get("left_toe")
+    right_toe = positions.get("right_toe")
+    if (
+        left_foot is None
+        or right_foot is None
+        or left_toe is None
+        or right_toe is None
+    ):
+        return None
+    foot_center = _average_points([left_foot, right_foot])
+    toe_center = _average_points([left_toe, right_toe])
+    if foot_center is None or toe_center is None:
+        return None
+    raw = _vec_sub(toe_center, foot_center)
+    projected = _vec_sub(raw, _vec_scale(frame.up, _vec_dot(raw, frame.up)))
+    return _vec_normalize(projected)
+
+
+def _toe_forward_from_landmarks(
+    *,
+    left_foot: Tuple[str, Vec3, str] | None,
+    right_foot: Tuple[str, Vec3, str] | None,
+    left_toe: Tuple[str, Vec3, str] | None,
+    right_toe: Tuple[str, Vec3, str] | None,
+    up: Vec3,
+) -> Optional[Vec3]:
+    if (
+        left_foot is None
+        or right_foot is None
+        or left_toe is None
+        or right_toe is None
+    ):
+        return None
+    foot_center = _average_points([left_foot[1], right_foot[1]])
+    toe_center = _average_points([left_toe[1], right_toe[1]])
+    if foot_center is None or toe_center is None:
+        return None
+    raw = _vec_sub(toe_center, foot_center)
+    projected = _vec_sub(raw, _vec_scale(up, _vec_dot(raw, up)))
+    return _vec_normalize(projected)
+
+
+def _front_axis_from_toes(
+    *,
+    provisional_forward: Vec3,
+    provisional_right: Vec3,
+    up: Vec3,
+    left_foot: Tuple[str, Vec3, str] | None,
+    right_foot: Tuple[str, Vec3, str] | None,
+    left_toe: Tuple[str, Vec3, str] | None,
+    right_toe: Tuple[str, Vec3, str] | None,
+) -> Tuple[Vec3, Vec3]:
+    """Use foot-end landmarks to stabilize humanoid facing when available.
+
+    Shoulder/collar pairs tell us left versus right, but they can be noisy on
+    imported meshes or slightly posed rigs.  Toe/foot-end guides provide a
+    stronger front-facing signal.  Keep the candidate that agrees with the
+    left/right body labels so an imported mesh cannot silently mirror itself.
+    """
+
+    toe_forward = _toe_forward_from_landmarks(
+        left_foot=left_foot,
+        right_foot=right_foot,
+        left_toe=left_toe,
+        right_toe=right_toe,
+        up=up,
+    )
+    if toe_forward is None:
+        return provisional_forward, provisional_right
+
+    candidates = (toe_forward, _vec_scale(toe_forward, -1.0))
+    best_forward = provisional_forward
+    best_right = provisional_right
+    best_score = -2.0
+    for candidate in candidates:
+        candidate_right = _vec_normalize(_vec_cross(candidate, up))
+        if candidate_right is None:
+            continue
+        score = _vec_dot(candidate_right, provisional_right)
+        if score > best_score:
+            best_score = score
+            best_forward = candidate
+            best_right = candidate_right
+
+    if best_score < 0.25:
+        return provisional_forward, provisional_right
+    return best_forward, best_right
+
+
+def _imported_armature_fit_evidence(model: Any) -> Dict[str, Any]:
+    """Return durable evidence for temporary imported FBX skeleton guides."""
+
+    names: set[str] = set()
+    raw_names = getattr(model, "_gr_fbx_armatures", None)
+    if isinstance(raw_names, (list, tuple, set)):
+        names.update(str(name).strip() for name in raw_names if str(name).strip())
+    elif raw_names:
+        names.add(str(raw_names).strip())
+
+    guide_nodes: List[Any] = []
+    imported_skeleton_nodes: List[Any] = []
+    for node in _iter_model_nodes(model):
+        if getattr(node, "_gr_imported_armature_joint", False):
+            guide_nodes.append(node)
+            armature_name = str(getattr(node, "_gr_imported_armature_name", "") or "").strip()
+            if armature_name:
+                names.add(armature_name)
+        if _node_fit_landmark_source(node) == "imported_skeleton":
+            imported_skeleton_nodes.append(node)
+
+    raw_count = getattr(model, "_gr_fbx_armature_bone_count", 0)
+    try:
+        recorded_count = int(raw_count or 0)
+    except (TypeError, ValueError):
+        recorded_count = 0
+    scene_count = max(len(guide_nodes), len(imported_skeleton_nodes))
+    guide_count = max(recorded_count, scene_count)
+
+    return {
+        "source": (
+            "imported_fbx_armature"
+            if names or recorded_count or guide_nodes
+            else ("imported_skeleton_nodes" if guide_count else "none")
+        ),
+        "guide_joint_count": guide_count,
+        "scene_guide_joint_count": scene_count,
+        "armature_names": sorted(names),
+    }
+
+
+def _fit_frame_visual_overlay(
+    model: Any,
+    frame: Optional[_HumanoidFitFrame],
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    *,
+    transform_point=None,
+    transform_direction=None,
+    axis_length_scale: float = 1.0,
+    prefer_skeleton_landmarks: bool = False,
+) -> Dict[str, Any]:
+    """Return viewport-friendly fit-frame evidence without mutating *model*."""
+
+    overlay: Dict[str, Any] = {
+        "bounds": (
+            _bounds_as_lists(_transform_bounds(bounds, transform_point))
+            if transform_point is not None
+            else _bounds_as_lists(bounds)
+        ),
+        "origin": (
+            _vec_as_list(transform_point(frame.origin))
+            if frame is not None and transform_point is not None
+            else (_vec_as_list(frame.origin) if frame is not None else None)
+        ),
+        "axes": {},
+        "landmarks": [],
+    }
+    if frame is None:
+        return overlay
+
+    axis_length = max(float(frame.height) * float(axis_length_scale) * 0.25, 0.05)
+    axes: Dict[str, Dict[str, Any]] = {}
+    for name, vector in (
+        ("right", frame.right),
+        ("forward", frame.forward),
+        ("up", frame.up),
+    ):
+        axis_vector = (
+            transform_direction(vector)
+            if transform_direction is not None
+            else vector
+        )
+        origin = (
+            transform_point(frame.origin)
+            if transform_point is not None
+            else frame.origin
+        )
+        end = _vec_add(origin, _vec_scale(axis_vector, axis_length))
+        axes[name] = {
+            "axis_label": _axis_label_from_vector(axis_vector),
+            "vector": _vec_as_list(axis_vector),
+            "end": _vec_as_list(end),
+        }
+    overlay["axes"] = axes
+
+    named = _named_positions(
+        model,
+        prefer_skeleton_landmarks=prefer_skeleton_landmarks,
+    )
+    landmarks: List[Dict[str, Any]] = []
+    for role, node_name in sorted((frame.landmarks or {}).items()):
+        if role == "side_pair":
+            continue
+        clean = _clean_landmark_name(node_name)
+        hit = named.get(clean)
+        if hit is None:
+            continue
+        position = (
+            transform_point(hit[1])
+            if transform_point is not None
+            else hit[1]
+        )
+        landmarks.append({
+            "role": str(role),
+            "name": str(hit[0]),
+            "source": str(hit[2]),
+            "position": _vec_as_list(position),
+        })
+    overlay["landmarks"] = landmarks
+    return overlay
+
+
+def _transform_bounds(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    transform_point,
+) -> Optional[Tuple[Vec3, Vec3]]:
+    if bounds is None or transform_point is None:
+        return bounds
+    bb_min, bb_max = bounds
+    points: List[Vec3] = []
+    for x in (bb_min[0], bb_max[0]):
+        for y in (bb_min[1], bb_max[1]):
+            for z in (bb_min[2], bb_max[2]):
+                points.append(transform_point((float(x), float(y), float(z))))
+    if not points:
+        return None
+    return (
+        tuple(min(point[i] for point in points) for i in range(3)),  # type: ignore[return-value]
+        tuple(max(point[i] for point in points) for i in range(3)),  # type: ignore[return-value]
+    )
+
+
+def _axis_label_from_vector(value: Optional[Vec3]) -> str:
+    """Return the signed dominant world axis for a unit-ish vector."""
+    if value is None:
+        return "unknown"
+    try:
+        components = (float(value[0]), float(value[1]), float(value[2]))
+    except Exception:
+        return "unknown"
+    magnitudes = [abs(v) for v in components]
+    axis_index = max(range(3), key=lambda i: magnitudes[i])
+    if magnitudes[axis_index] <= 1.0e-8:
+        return "unknown"
+    sign = "+" if components[axis_index] >= 0.0 else "-"
+    return f"{sign}{('x', 'y', 'z')[axis_index]}"
+
+
+def _axis_label_from_index(index: int) -> str:
+    try:
+        return f"+{('x', 'y', 'z')[int(index)]}"
+    except Exception:
+        return "unknown"
+
+
+def _axis_vector_from_label(label: Any) -> Optional[Vec3]:
+    raw = str(label or "").strip().lower()
+    if raw in {"", "auto", "unknown"}:
+        return None
+    sign = -1.0 if raw.startswith("-") else 1.0
+    axis = raw[-1:] if raw[-1:] in {"x", "y", "z"} else raw
+    if axis == "x":
+        return (sign, 0.0, 0.0)
+    if axis == "y":
+        return (0.0, sign, 0.0)
+    if axis == "z":
+        return (0.0, 0.0, sign)
+    return None
+
+
+def _bounds_extent_along_axis(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    axis: Vec3,
+) -> float:
+    if bounds is None:
+        return 0.0
+    bb_min, bb_max = bounds
+    values: List[float] = []
+    for x in (bb_min[0], bb_max[0]):
+        for y in (bb_min[1], bb_max[1]):
+            for z in (bb_min[2], bb_max[2]):
+                values.append(_vec_dot((float(x), float(y), float(z)), axis))
+    if not values:
+        return 0.0
+    return max(values) - min(values)
+
+
+def _coerce_auto_fit_override(value: Any) -> AutoFitOverride:
+    if isinstance(value, AutoFitOverride):
+        return value
+    return AutoFitOverride.from_mapping(value)
+
+
+def _ground_origin_basis(frame: Optional[_HumanoidFitFrame]) -> str:
+    if frame is None:
+        return "bounds_bottom"
+    landmarks = frame.landmarks or {}
+    if landmarks.get("left_foot") and landmarks.get("right_foot"):
+        return "feet"
+    if landmarks.get("pelvis"):
+        return "hips"
+    return "bounds_bottom"
+
+
+def _default_target_fit_frame(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[_HumanoidFitFrame]:
+    if bounds is None:
+        return None
+    height = _height_from_bounds(bounds)
+    if height <= 1.0e-6:
+        return None
+    return _HumanoidFitFrame(
+        origin=_bounds_ground_center(bounds),
+        right=(1.0, 0.0, 0.0),
+        forward=(0.0, 1.0, 0.0),
+        up=(0.0, 0.0, 1.0),
+        height=height,
+        confidence=0.55,
+        landmarks={},
+    )
+
+
+def _manual_override_frame(
+    model: Any,
+    *,
+    bounds: Tuple[Vec3, Vec3],
+    source_frame: Optional[_HumanoidFitFrame],
+    override: AutoFitOverride,
+) -> Optional[_HumanoidFitFrame]:
+    forward = _axis_vector_from_label(override.source_forward_axis)
+    up = _axis_vector_from_label(override.source_up_axis)
+    if forward is None or up is None:
+        return None
+    if abs(_vec_dot(forward, up)) > 1.0e-6:
+        return None
+    right = _vec_normalize(_vec_cross(forward, up))
+    if right is None:
+        return None
+    forward = _vec_normalize(_vec_cross(up, right))
+    if forward is None:
+        return None
+
+    ground_basis = str(override.ground_origin_basis or "auto").strip().lower()
+    if ground_basis == "auto":
+        ground_basis = _ground_origin_basis(source_frame)
+    origin = _bounds_ground_center(bounds)
+    if ground_basis == "feet" and source_frame is not None:
+        origin = source_frame.origin
+    elif ground_basis == "hips":
+        pelvis = _find_landmark(_named_positions(model), _PELVIS_ALIASES)
+        if pelvis is not None:
+            origin = pelvis[1]
+        elif source_frame is not None:
+            origin = source_frame.origin
+
+    height_source = str(override.height_source or "auto").strip().lower()
+    if height_source == "auto":
+        height_source = "landmarks" if source_frame is not None else "bounds"
+    if height_source == "landmarks" and source_frame is not None:
+        height = source_frame.height
+    else:
+        height = _bounds_extent_along_axis(bounds, up)
+    if height <= 1.0e-6:
+        return None
+    landmarks = dict(source_frame.landmarks) if source_frame is not None else {}
+    landmarks["manual_source_forward_axis"] = str(override.source_forward_axis or "")
+    landmarks["manual_source_up_axis"] = str(override.source_up_axis or "")
+    return _HumanoidFitFrame(
+        origin=origin,
+        right=right,
+        forward=forward,
+        up=up,
+        height=height,
+        confidence=0.9 if source_frame is not None else 0.65,
+        landmarks=landmarks,
+    )
+
+
+def _used_landmark_labels(
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+) -> Tuple[str, ...]:
+    labels: List[str] = []
+    for prefix, frame in (("source", source_frame), ("target", target_frame)):
+        if frame is None:
+            continue
+        for role, name in sorted((frame.landmarks or {}).items()):
+            labels.append(f"{prefix}:{role}={name}")
+    return tuple(labels)
+
+
+def _auto_fit_confidence(
+    *,
+    policy: str,
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+) -> float:
+    if policy == "bone_landmark_basis" and source_frame is not None and target_frame is not None:
+        return min(float(source_frame.confidence), float(target_frame.confidence))
+    if policy == "manual_axis_override" and source_frame is not None:
+        if target_frame is not None:
+            return min(float(source_frame.confidence), float(target_frame.confidence))
+        return float(source_frame.confidence)
+    if source_frame is not None:
+        return min(0.5, max(0.0, float(source_frame.confidence) * 0.5))
+    return 0.35
+
+
+def _fit_frame_uses_skeleton_landmarks(
+    frame: Optional[_HumanoidFitFrame],
+) -> bool:
+    if frame is None:
+        return False
+    return any(
+        source in {"imported_skeleton", "skeleton_node"}
+        for source in (frame.landmark_sources or {}).values()
+    )
+
+
+def _has_fit_landmarks(
+    frame: Optional[_HumanoidFitFrame],
+    *roles: str,
+) -> bool:
+    if frame is None:
+        return False
+    positions = frame.landmark_positions or {}
+    return all(role in positions for role in roles)
+
+
+def _preserve_skeleton_landmark_origin_for_fit(
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+) -> bool:
+    """Prefer skeleton feet/origin over render bounds for rigged payloads."""
+
+    return (
+        _fit_frame_uses_skeleton_landmarks(source_frame)
+        and _has_fit_landmarks(source_frame, "left_foot", "right_foot")
+        and _has_fit_landmarks(target_frame, "left_foot", "right_foot")
+    )
+
+
+def _target_height_for_landmark_fit(
+    *,
+    explicit_target_height: Optional[float],
+    reference_height: float,
+    target_frame: _HumanoidFitFrame,
+    source_frame: _HumanoidFitFrame,
+) -> Tuple[float, str]:
+    if explicit_target_height is not None:
+        return float(explicit_target_height), "explicit_target_height"
+    if _fit_frame_uses_skeleton_landmarks(source_frame):
+        return float(target_frame.height), "paired_skeleton_landmark_height"
+    if reference_height > 0.01:
+        return float(reference_height), "reference_bounds_height"
+    return float(target_frame.height), "bone_landmark_height"
+
+
+def _scale_for_landmark_fit(
+    *,
+    height_scale: float,
+    height_scale_basis: str,
+    landmark_alignment: Optional[Dict[str, Any]],
+    min_pair_count: int = 8,
+    max_similarity_height_ratio: float = 1.35,
+    max_rms_error: float = 0.15,
+    max_pair_error: float = 0.16,
+) -> Tuple[float, str]:
+    """Choose the applied landmark-fit scale.
+
+    Height matching is stable for fallback and manual workflows, but a rigged
+    FBX gives us stronger evidence: paired source/target skeleton landmarks.
+    When that solve is well-formed and close enough to the height-derived
+    scale, let it fine-tune the imported payload placement while the selected
+    native KOTOR skeleton remains the final DAG authority.
+    """
+
+    scale = float(height_scale) if math.isfinite(float(height_scale)) else 1.0
+    basis = str(height_scale_basis or "bone_landmark_height")
+    if not _landmark_similarity_alignment_is_usable(
+        height_scale=scale,
+        landmark_alignment=landmark_alignment,
+        min_pair_count=min_pair_count,
+        max_similarity_height_ratio=max_similarity_height_ratio,
+        max_rms_error=max_rms_error,
+        max_pair_error=max_pair_error,
+    ):
+        return scale, basis
+    try:
+        solved_scale = float(landmark_alignment.get("scale"))
+    except Exception:
+        return scale, basis
+    return solved_scale, "paired_skeleton_similarity_scale"
+
+
+def _landmark_similarity_alignment_is_usable(
+    *,
+    height_scale: float,
+    landmark_alignment: Optional[Dict[str, Any]],
+    min_pair_count: int = 8,
+    max_similarity_height_ratio: float = 1.35,
+    max_rms_error: float = 0.15,
+    max_pair_error: float = 0.16,
+) -> bool:
+    """Return True when a paired-landmark solve may drive transform choices."""
+
+    if landmark_alignment is None:
+        return False
+    try:
+        solved_scale = float(landmark_alignment.get("scale"))
+        pair_count = int(landmark_alignment.get("pair_count") or 0)
+        rms_error = float(landmark_alignment.get("rms_error") or 0.0)
+        max_error = float(landmark_alignment.get("max_error") or 0.0)
+        base_scale = float(height_scale)
+    except Exception:
+        return False
+    if (
+        pair_count < int(min_pair_count)
+        or not math.isfinite(solved_scale)
+        or solved_scale <= 1.0e-8
+        or not math.isfinite(rms_error)
+        or rms_error > float(max_rms_error)
+        or not math.isfinite(max_error)
+        or max_error > float(max_pair_error)
+    ):
+        return False
+
+    if math.isfinite(base_scale) and base_scale > 1.0e-8:
+        ratio = solved_scale / base_scale
+        if ratio < 1.0 / float(max_similarity_height_ratio) or ratio > float(max_similarity_height_ratio):
+            return False
+    return True
+
+
+def _make_auto_fit_report(
+    *,
+    policy: str,
+    scale: float,
+    source_frame: Optional[_HumanoidFitFrame],
+    target_frame: Optional[_HumanoidFitFrame],
+    vertical_axis_index: int,
+    warnings: Sequence[str],
+    override: Optional[AutoFitOverride] = None,
+) -> AutoFitReport:
+    manual_used = policy == "manual_axis_override"
+    fallback_used = policy not in {"bone_landmark_basis", "manual_axis_override"}
+    notes = "; ".join(str(w) for w in warnings if str(w))
+    if manual_used:
+        manual_note = "Manual source axis/ground override used for this fit."
+        notes = f"{manual_note} {notes}".strip()
+    elif (
+        source_frame is not None
+        and any(
+            source == "imported_skeleton"
+            for source in (source_frame.landmark_sources or {}).values()
+        )
+    ):
+        skeleton_note = "Imported skeleton landmarks drove orientation and scale."
+        notes = f"{skeleton_note} {notes}".strip()
+    if fallback_used and not notes:
+        notes = "Used bounds-based fitting because a complete landmark frame was unavailable."
+    source_forward_axis = (
+        _axis_label_from_vector(source_frame.forward)
+        if source_frame is not None and not fallback_used
+        else "unknown"
+    )
+    source_up_axis = (
+        _axis_label_from_vector(source_frame.up)
+        if source_frame is not None and not fallback_used
+        else _axis_label_from_index(vertical_axis_index)
+    )
+    target_forward_axis = (
+        _axis_label_from_vector(target_frame.forward)
+        if target_frame is not None
+        else "+y"
+    )
+    target_up_axis = (
+        _axis_label_from_vector(target_frame.up)
+        if target_frame is not None
+        else "+z"
+    )
+    height_source = "bounds" if fallback_used else "landmarks"
+    ground_basis = _ground_origin_basis(None if fallback_used else source_frame)
+    if manual_used and override is not None:
+        override_height = str(override.height_source or "auto").strip().lower()
+        override_ground = str(override.ground_origin_basis or "auto").strip().lower()
+        if override_height not in {"", "auto"}:
+            height_source = override_height
+        if override_ground not in {"", "auto"}:
+            ground_basis = override_ground
+    return AutoFitReport(
+        source_forward_axis=source_forward_axis,
+        source_up_axis=source_up_axis,
+        target_forward_axis=target_forward_axis,
+        target_up_axis=target_up_axis,
+        scale_factor=float(scale),
+        height_source=height_source,
+        ground_origin_basis=ground_basis,
+        used_landmarks=_used_landmark_labels(source_frame, target_frame),
+        confidence=_auto_fit_confidence(
+            policy=policy,
+            source_frame=source_frame,
+            target_frame=target_frame,
+        ),
+        fallback_used=fallback_used,
+        notes=notes,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -178,9 +840,36 @@ def _load_mdl(path: str, game_version: str) -> Optional[Any]:
     return load_model_from_file(path, mdx)
 
 
-def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
-    """Load a glTF/GLB/FBX/OBJ via the gltf_importer.auto_import dispatcher."""
+def _load_fbx_mesh_for_character_builder(path: str, game_version: str) -> Optional[Any]:
+    """Load an FBX custom character mesh with skeleton-aware guide metadata."""
+
     md = _import_model_data()
+    try:
+        from src.converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender
+    except ImportError:                                     # pragma: no cover
+        from converters.blender_fbx_mesh_importer import import_fbx_mesh_with_blender  # type: ignore
+    gv = (md.GameVersion.K2
+          if str(game_version).upper().endswith("2")
+          else md.GameVersion.K1)
+    model = import_fbx_mesh_with_blender(
+        path,
+        model_name=_resref_from_path(path),
+        game_version=gv,
+    )
+    setattr(model, "_gr_character_builder_fbx_importer", "blender_mesh")
+    return model
+
+
+def _load_gltf_or_mesh(path: str, game_version: str) -> Optional[Any]:
+    """Load an external custom mesh for Character Builder.
+
+    FBX files use the skeleton-aware Blender mesh extractor so Auto-Fit can
+    align the imported payload from armature landmarks. Other external mesh
+    formats keep using the generic ``gltf_importer.auto_import`` dispatcher.
+    """
+    md = _import_model_data()
+    if _ext_of(path) == ".fbx":
+        return _load_fbx_mesh_for_character_builder(path, game_version)
     try:
         from src.core.export.gltf_importer import auto_import
     except ImportError:                                     # pragma: no cover
@@ -299,28 +988,43 @@ def _reference_model_fit_bounds(reference_model: Any) -> Optional[Tuple[Tuple[fl
     return None
 
 
-_PELVIS_ALIASES = {
-    "hips", "hip", "pelvis", "bip001pelvis", "root", "rootdummy",
-    "pelvisg", "auroraroot", "mixamorighips",
-}
-_HEAD_ALIASES = {
-    "head", "headg", "headhook", "neck", "neckg", "hturng",
+# Landmark aliases are ordered by fit quality.  Keep native KOTOR deform nodes
+# and DCC humanoid landmarks ahead of generic roots/hooks so a model containing
+# both ``pelvis_g`` and ``rootdummy`` does not pick the wrong fit origin.
+_PELVIS_ALIASES = (
+    "pelvis_g", "pelvisg", "pelvis",
+    "hips", "hip", "mixamorighips", "bip001pelvis",
+    "rootdummy", "auroraroot", "root",
+)
+_HEAD_ALIASES = (
+    "head_g", "headg", "head",
     "mixamorighead", "bip001head",
-}
+    "hturn_g", "hturng", "neck_g", "neckg", "neck", "headhook",
+)
 _LEFT_SIDE_ALIASES = (
-    {"leftshoulder", "leftarm", "lshoulder", "larm", "lcollardum", "lcollarg", "lclavicle"},
-    {"lefthand", "lhand", "lhandg", "lwrist", "handl", "mixamoriglefthand"},
-    {"leftupleg", "leftleg", "lthigh", "lthighg", "thighl"},
-    {"leftfoot", "lfoot", "lfootg", "lefttoe", "lfoottg", "toel"},
+    ("lcollar_g", "lcollarg", "lcollar_dum", "lcollardum", "leftshoulder", "lshoulder", "lclavicle", "leftarm", "larm"),
+    ("lhand", "lhand_g", "lhandg", "lefthand", "lwrist", "handl", "mixamoriglefthand"),
+    ("lthigh_g", "lthighg", "lthigh", "leftupleg", "leftleg", "thighl"),
+    ("lfoot_g", "lfootg", "lfoot", "lfoot_t_g", "lfoottg", "leftfoot", "lefttoe", "toel"),
 )
 _RIGHT_SIDE_ALIASES = (
-    {"rightshoulder", "rightarm", "rshoulder", "rarm", "rcollardum", "rcollarg", "rclavicle"},
-    {"righthand", "rhand", "rhandg", "rwrist", "handr", "mixamorigrighthand"},
-    {"rightupleg", "rightleg", "rthigh", "rthighg", "thighr"},
-    {"rightfoot", "rfoot", "rfootg", "righttoe", "rfoottg", "toer"},
+    ("rcollar_g", "rcollarg", "rcollar_dum", "rcollardum", "rightshoulder", "rshoulder", "rclavicle", "rightarm", "rarm"),
+    ("rhand", "rhand_g", "rhandg", "righthand", "rwrist", "handr", "mixamorigrighthand"),
+    ("rthigh_g", "rthighg", "rthigh", "rightupleg", "rightleg", "thighr"),
+    ("rfoot_g", "rfootg", "rfoot", "rfoot_t_g", "rfoottg", "rightfoot", "righttoe", "toer"),
 )
-_LEFT_FOOT_ALIASES = {"leftfoot", "lfoot", "lfootg", "lefttoe", "lfoottg"}
-_RIGHT_FOOT_ALIASES = {"rightfoot", "rfoot", "rfootg", "righttoe", "rfoottg"}
+_LEFT_FOOT_ALIASES = ("lfoot_g", "lfootg", "lfoot", "leftfoot")
+_RIGHT_FOOT_ALIASES = ("rfoot_g", "rfootg", "rfoot", "rightfoot")
+_LEFT_TOE_ALIASES = (
+    "lfoot_t_g", "lfoottg", "lfoot_t", "lfoott",
+    "lefttoebase", "lefttoe", "ltoe", "toel", "ball_l", "balll",
+    "lfoot_end", "lfootend", "leftfootend",
+)
+_RIGHT_TOE_ALIASES = (
+    "rfoot_t_g", "rfoottg", "rfoot_t", "rfoott",
+    "righttoebase", "righttoe", "rtoe", "toer", "ball_r", "ballr",
+    "rfoot_end", "rfootend", "rightfootend",
+)
 
 
 def _clean_landmark_name(name: str) -> str:
@@ -362,38 +1066,131 @@ def _node_fit_position(node: Any) -> Optional[Vec3]:
     return None
 
 
-def _named_positions(model: Any) -> Dict[str, Tuple[str, Vec3]]:
-    result: Dict[str, Tuple[str, Vec3]] = {}
+def _node_fit_landmark_source(node: Any) -> str:
+    """Classify a node's usefulness for Character Builder Auto-Fit evidence.
+
+    Imported FBX/GLTF skeleton joints usually arrive as header nodes with an
+    ``external_world_position`` and no renderable vertices.  Mesh children can
+    carry similar names, but they should not override skeleton joints when the
+    user is fitting a custom mesh to a native KOTOR base.
+    """
+
+    try:
+        flags = int(getattr(node, "flags", 0) or 0)
+    except Exception:
+        flags = 0
+    vertices = list(getattr(node, "vertices", []) or [])
+    has_vertices = bool(vertices)
+    has_external_world = getattr(node, "external_world_position", None) is not None
+    has_mesh_flag = False
+    has_skin_flag = False
+    try:
+        md = _import_model_data()
+        has_mesh_flag = bool(flags & int(md.NodeFlags.MESH))
+        has_skin_flag = bool(flags & int(md.NodeFlags.SKIN))
+    except Exception:
+        has_mesh_flag = bool(flags & 0x20)
+        has_skin_flag = bool(flags & 0x40)
+
+    if has_vertices or has_skin_flag:
+        return "mesh_payload"
+    if has_external_world and not has_mesh_flag:
+        return "imported_skeleton"
+    if has_external_world and has_mesh_flag:
+        return "imported_helper"
+    if has_mesh_flag:
+        return "kotor_deform_helper"
+    return "skeleton_node"
+
+
+def _landmark_candidate_score(
+    node: Any,
+    *,
+    source: str,
+    prefer_skeleton_landmarks: bool,
+    order_index: int,
+) -> Tuple[int, int]:
+    if not prefer_skeleton_landmarks:
+        return (0, -order_index)
+    if source == "imported_skeleton":
+        priority = 100
+    elif source == "skeleton_node":
+        priority = 90
+    elif source == "imported_helper":
+        priority = 80
+    elif source == "kotor_deform_helper":
+        priority = 70
+    elif source == "mesh_payload":
+        priority = 20
+    else:
+        priority = 10
+    return (priority, -order_index)
+
+
+def _named_positions(
+    model: Any,
+    *,
+    prefer_skeleton_landmarks: bool = False,
+) -> Dict[str, Tuple[str, Vec3, str]]:
+    result: Dict[str, Tuple[str, Vec3, str]] = {}
+    scores: Dict[str, Tuple[int, int]] = {}
     if model is None:
         return result
-    for node in _iter_model_nodes(model):
+    for order_index, node in enumerate(_iter_model_nodes(model)):
         clean = _clean_landmark_name(getattr(node, "name", ""))
-        if not clean or clean in result:
+        if not clean:
             continue
         pos = _node_fit_position(node)
         if pos is not None:
-            result[clean] = (str(getattr(node, "name", "") or ""), pos)
+            source = _node_fit_landmark_source(node)
+            score = _landmark_candidate_score(
+                node,
+                source=source,
+                prefer_skeleton_landmarks=prefer_skeleton_landmarks,
+                order_index=order_index,
+            )
+            if clean in result and score <= scores.get(clean, (-1, -1)):
+                continue
+            result[clean] = (str(getattr(node, "name", "") or ""), pos, source)
+            scores[clean] = score
     return result
 
 
 def _find_landmark(
-    positions: Dict[str, Tuple[str, Vec3]],
+    positions: Dict[str, Tuple[str, Vec3, str]],
     aliases: Sequence[str] | set[str],
-) -> Tuple[str, Vec3] | None:
-    clean_aliases = {_clean_landmark_name(alias) for alias in aliases}
+) -> Tuple[str, Vec3, str] | None:
+    clean_aliases = _ordered_clean_aliases(aliases)
     for alias in clean_aliases:
         hit = positions.get(alias)
         if hit is not None:
             return hit
-    for key, hit in positions.items():
-        if any(key.endswith(alias) for alias in clean_aliases if alias):
-            return hit
+    for alias in clean_aliases:
+        for key, hit in positions.items():
+            if alias and key.endswith(alias):
+                return hit
     return None
 
 
+def _ordered_clean_aliases(aliases: Sequence[str] | set[str]) -> Tuple[str, ...]:
+    if isinstance(aliases, set):
+        raw_aliases = sorted(aliases)
+    else:
+        raw_aliases = list(aliases)
+    cleaned: List[str] = []
+    seen: set[str] = set()
+    for alias in raw_aliases:
+        clean = _clean_landmark_name(alias)
+        if not clean or clean in seen:
+            continue
+        cleaned.append(clean)
+        seen.add(clean)
+    return tuple(cleaned)
+
+
 def _find_side_pair(
-    positions: Dict[str, Tuple[str, Vec3]],
-) -> Tuple[Tuple[str, Vec3], Tuple[str, Vec3], str] | None:
+    positions: Dict[str, Tuple[str, Vec3, str]],
+) -> Tuple[Tuple[str, Vec3, str], Tuple[str, Vec3, str], str] | None:
     for index, (left_aliases, right_aliases) in enumerate(zip(_LEFT_SIDE_ALIASES, _RIGHT_SIDE_ALIASES)):
         left = _find_landmark(positions, left_aliases)
         right = _find_landmark(positions, right_aliases)
@@ -464,13 +1261,19 @@ def _infer_humanoid_fit_frame(
     model: Any,
     *,
     bounds: Optional[Tuple[Vec3, Vec3]] = None,
+    prefer_skeleton_landmarks: bool = False,
 ) -> Optional[_HumanoidFitFrame]:
-    positions = _named_positions(model)
+    positions = _named_positions(
+        model,
+        prefer_skeleton_landmarks=prefer_skeleton_landmarks,
+    )
     side_pair = _find_side_pair(positions)
     pelvis = _find_landmark(positions, _PELVIS_ALIASES)
     head = _find_landmark(positions, _HEAD_ALIASES)
     left_foot = _find_landmark(positions, _LEFT_FOOT_ALIASES)
     right_foot = _find_landmark(positions, _RIGHT_FOOT_ALIASES)
+    left_toe = _find_landmark(positions, _LEFT_TOE_ALIASES)
+    right_toe = _find_landmark(positions, _RIGHT_TOE_ALIASES)
 
     if side_pair is None or head is None:
         return None
@@ -502,6 +1305,15 @@ def _infer_humanoid_fit_frame(
     right_vec = _vec_normalize(_vec_cross(forward, up))
     if right_vec is None:
         return None
+    forward, right_vec = _front_axis_from_toes(
+        provisional_forward=forward,
+        provisional_right=right_vec,
+        up=up,
+        left_foot=left_foot,
+        right_foot=right_foot,
+        left_toe=left_toe,
+        right_toe=right_toe,
+    )
 
     height = abs(_vec_dot(_vec_sub(upper_anchor, lower_anchor), up))
     if height <= 1.0e-5 and bounds is not None:
@@ -523,10 +1335,57 @@ def _infer_humanoid_fit_frame(
         landmarks["left_foot"] = left_foot[0]
     if right_foot is not None:
         landmarks["right_foot"] = right_foot[0]
+    if left_toe is not None:
+        landmarks["left_toe"] = left_toe[0]
+    if right_toe is not None:
+        landmarks["right_toe"] = right_toe[0]
+    landmark_sources = {
+        "left": left[2],
+        "right": right[2],
+        "head": head[2],
+    }
+    if pelvis is not None:
+        landmark_sources["pelvis"] = pelvis[2]
+    if left_foot is not None:
+        landmark_sources["left_foot"] = left_foot[2]
+    if right_foot is not None:
+        landmark_sources["right_foot"] = right_foot[2]
+    if left_toe is not None:
+        landmark_sources["left_toe"] = left_toe[2]
+    if right_toe is not None:
+        landmark_sources["right_toe"] = right_toe[2]
+    landmark_positions = {
+        "left": left[1],
+        "right": right[1],
+        "head": head[1],
+    }
+    if pelvis is not None:
+        landmark_positions["pelvis"] = pelvis[1]
+    if left_foot is not None:
+        landmark_positions["left_foot"] = left_foot[1]
+    if right_foot is not None:
+        landmark_positions["right_foot"] = right_foot[1]
+    if left_toe is not None:
+        landmark_positions["left_toe"] = left_toe[1]
+    if right_toe is not None:
+        landmark_positions["right_toe"] = right_toe[1]
     confidence = 0.65
     confidence += 0.1 if pelvis is not None else 0.0
     confidence += 0.1 if foot_center is not None else 0.0
+    confidence += 0.05 if left_toe is not None and right_toe is not None else 0.0
     confidence += 0.1 if side_kind == "shoulder" else 0.0
+    if prefer_skeleton_landmarks:
+        core_sources = {
+            landmark_sources.get(role, "")
+            for role in (
+                "left", "right", "head", "pelvis",
+                "left_foot", "right_foot", "left_toe", "right_toe",
+            )
+        }
+        if any(source in {"imported_skeleton", "skeleton_node"} for source in core_sources):
+            confidence += 0.05
+        if core_sources and all(source == "mesh_payload" for source in core_sources):
+            confidence -= 0.15
 
     return _HumanoidFitFrame(
         origin=origin,
@@ -536,7 +1395,356 @@ def _infer_humanoid_fit_frame(
         height=height,
         confidence=min(0.95, confidence),
         landmarks=landmarks,
+        landmark_sources=landmark_sources,
+        landmark_positions=landmark_positions,
     )
+
+
+def inspect_external_model_fit(
+    model: Any,
+    *,
+    game_version: str = "K1",
+    target_height: Optional[float] = None,
+    reference_model: Optional[Any] = None,
+    reference_label: str = "",
+    fit_override: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """Return the deterministic auto-fit facts for an external character mesh.
+
+    This function does not mutate *model*.  It exposes the same evidence used by
+    :func:`normalize_external_model_for_kotor`: source bounds, selected KOTOR
+    reference bounds, detected humanoid landmark frames, fallback axis choice,
+    confidence, scale basis, and actionable warnings.  The Character Builder UI
+    can display this report so a modder can understand why an import snapped or
+    rotated the way it did before committing the native KOTOR skeleton build.
+    """
+    bounds = _vertex_bounds(model)
+    imported_armature = _imported_armature_fit_evidence(model)
+    if bounds is None:
+        auto_fit_report = AutoFitReport(
+            source_forward_axis="unknown",
+            source_up_axis="unknown",
+            target_forward_axis="+y",
+            target_up_axis="+z",
+            scale_factor=1.0,
+            height_source="bounds",
+            ground_origin_basis="bounds_bottom",
+            confidence=0.0,
+            fallback_used=True,
+            notes="Import contains no renderable vertices to fit.",
+        ).to_dict()
+        return {
+            "ok": False,
+            "code": "no_vertices",
+            "message": "No vertex bounds were found on the imported mesh.",
+            "fit_policy": "none",
+            "source_forward_axis": auto_fit_report["source_forward_axis"],
+            "source_up_axis": auto_fit_report["source_up_axis"],
+            "target_forward_axis": auto_fit_report["target_forward_axis"],
+            "target_up_axis": auto_fit_report["target_up_axis"],
+            "scale_factor": auto_fit_report["scale_factor"],
+            "height_source": auto_fit_report["height_source"],
+            "ground_origin_basis": auto_fit_report["ground_origin_basis"],
+            "used_landmarks": auto_fit_report["used_landmarks"],
+            "confidence": auto_fit_report["confidence"],
+            "fallback_used": auto_fit_report["fallback_used"],
+            "notes": auto_fit_report["notes"],
+            "auto_fit_report": auto_fit_report,
+            "source_imported_armature": imported_armature,
+            "fit_transform": None,
+            "visual_overlay": {
+                "coordinate_space": "source_pre_fit_and_kotor_reference",
+                "source": {
+                    "bounds": None,
+                    "origin": None,
+                    "axes": {},
+                    "landmarks": [],
+                },
+                "target": None,
+            },
+            "warnings": ["Import contains no renderable vertices to fit."],
+        }
+
+    reference_bounds = _reference_model_fit_bounds(reference_model)
+    source_frame = _infer_humanoid_fit_frame(
+        model,
+        bounds=bounds,
+        prefer_skeleton_landmarks=True,
+    )
+    target_frame = (
+        _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
+        if reference_model is not None else None
+    )
+    override = _coerce_auto_fit_override(fit_override)
+    manual_source_frame = (
+        _manual_override_frame(
+            model,
+            bounds=bounds,
+            source_frame=source_frame,
+            override=override,
+        )
+        if override.is_active() else None
+    )
+    manual_target_frame = target_frame or _default_target_fit_frame(reference_bounds)
+    reference_height = _height_from_bounds(reference_bounds)
+
+    bb_min, bb_max = bounds
+    extents = tuple(max(0.0, bb_max[i] - bb_min[i]) for i in range(3))
+    vertical_axis_index = max(range(3), key=lambda i: extents[i])
+    fallback_source_height = max(extents[vertical_axis_index], 1.0e-6)
+    fallback_target_height = float(
+        target_height
+        or reference_height
+        or _kotor_template_humanoid_height(game_version)
+    )
+
+    warnings: List[str] = []
+    if source_frame is None:
+        warnings.append(
+            "Could not detect a complete humanoid landmark frame on the imported mesh; "
+            "falling back to bounds-based axis fitting."
+        )
+    elif source_frame.confidence < 0.75:
+        warnings.append(
+            f"Imported mesh landmark confidence is low ({source_frame.confidence:.2f})."
+        )
+    if source_frame is not None:
+        source_toe_forward = _fit_frame_toe_forward(source_frame)
+        if source_toe_forward is not None:
+            source_toe_alignment = _vec_dot(source_frame.forward, source_toe_forward)
+            if source_toe_alignment < 0.5:
+                warnings.append(
+                    "Imported skeleton toe direction disagrees with the inferred "
+                    "facing axis; review the source mesh orientation before building "
+                    "the native KOTOR skeleton."
+                )
+    if reference_model is not None and target_frame is None:
+        warnings.append(
+            "Could not detect a complete humanoid landmark frame on the selected KOTOR base; "
+            "falling back to its bounds."
+        )
+    elif target_frame is not None and target_frame.confidence < 0.75:
+        warnings.append(
+            f"KOTOR base landmark confidence is low ({target_frame.confidence:.2f})."
+        )
+    if target_frame is not None:
+        target_toe_forward = _fit_frame_toe_forward(target_frame)
+        if target_toe_forward is not None:
+            target_toe_alignment = _vec_dot(target_frame.forward, target_toe_forward)
+            if target_toe_alignment < 0.5:
+                warnings.append(
+                    "Selected KOTOR base toe direction disagrees with the inferred "
+                    "facing axis; verify the base skeleton before using it as the "
+                    "native rig authority."
+                )
+
+    if manual_source_frame is not None and manual_target_frame is not None:
+        target = float(target_height or reference_height or manual_target_frame.height)
+        scale = target / manual_source_frame.height if manual_source_frame.height > 1.0e-6 else 1.0
+        policy = "manual_axis_override"
+        source_height = manual_source_frame.height
+        scale_basis = "manual_override_height"
+        vertical_axis = "manual_override"
+        report_source_frame = manual_source_frame
+        report_target_frame = manual_target_frame
+        report_landmark_alignment = None
+    elif source_frame is not None and target_frame is not None:
+        target, scale_basis = _target_height_for_landmark_fit(
+            explicit_target_height=target_height,
+            reference_height=reference_height,
+            target_frame=target_frame,
+            source_frame=source_frame,
+        )
+        similarity_alignment = _landmark_similarity_alignment(source_frame, target_frame)
+        height_scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
+        height_scale_basis = scale_basis
+        use_similarity_transform = _landmark_similarity_alignment_is_usable(
+            height_scale=height_scale,
+            landmark_alignment=similarity_alignment,
+        )
+        scale, scale_basis = _scale_for_landmark_fit(
+            height_scale=height_scale,
+            height_scale_basis=height_scale_basis,
+            landmark_alignment=similarity_alignment,
+        )
+        if similarity_alignment is not None:
+            similarity_alignment = dict(similarity_alignment)
+            similarity_alignment["solved_scale"] = float(similarity_alignment["scale"])
+            similarity_alignment["height_scale"] = float(height_scale)
+            similarity_alignment["height_scale_basis"] = height_scale_basis
+            similarity_alignment["applied_scale"] = float(scale)
+            similarity_alignment["applied_scale_basis"] = scale_basis
+            similarity_alignment["similarity_transform_accepted"] = bool(
+                use_similarity_transform
+            )
+            similarity_alignment["rotation_basis"] = (
+                "paired_skeleton_similarity"
+                if use_similarity_transform else
+                "bone_landmark_basis"
+            )
+        policy = "bone_landmark_basis"
+        source_height = source_frame.height
+        vertical_axis = "bone_landmarks"
+        report_source_frame = source_frame
+        report_target_frame = target_frame
+        report_landmark_alignment = similarity_alignment
+    else:
+        target = fallback_target_height
+        scale = fallback_target_height / fallback_source_height
+        policy = "selected_reference_bounds" if reference_bounds is not None else "origin_height"
+        source_height = fallback_source_height
+        scale_basis = "bounds_height"
+        vertical_axis = ("x", "y", "z")[vertical_axis_index]
+        report_source_frame = source_frame
+        report_target_frame = target_frame
+        report_landmark_alignment = None
+
+    auto_fit = _make_auto_fit_report(
+        policy=policy,
+        scale=scale,
+        source_frame=report_source_frame,
+        target_frame=report_target_frame,
+        vertical_axis_index=vertical_axis_index,
+        warnings=warnings,
+        override=override,
+    )
+    auto_fit_report = auto_fit.to_dict()
+    fit_transform: Dict[str, Any] | None = None
+    if report_source_frame is not None and report_target_frame is not None:
+        use_similarity_transform = bool(
+            report_landmark_alignment
+            and report_landmark_alignment.get("similarity_transform_accepted")
+        )
+        rotation = (
+            report_landmark_alignment["rotation_matrix"]
+            if report_landmark_alignment is not None and use_similarity_transform
+            else _basis_rotation(report_source_frame, report_target_frame)
+        )
+        preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
+            report_source_frame,
+            report_target_frame,
+        )
+        translation_basis = (
+            "skeleton_landmark_native_fit_origin"
+            if preserve_skeleton_origin else
+            "ground_snapped_native_fit_origin"
+        )
+        target_origin = _ground_snapped_target_origin(
+            bounds=bounds,
+            rotation_matrix=rotation,
+            scale=scale,
+            source_origin=report_source_frame.origin,
+            target_origin=report_target_frame.origin,
+            target_frame=report_target_frame,
+            reference_bounds=reference_bounds,
+            preserve_target_origin=preserve_skeleton_origin,
+        )
+        if report_landmark_alignment is not None:
+            report_landmark_alignment = _landmark_alignment_for_applied_transform(
+                report_landmark_alignment,
+                report_source_frame,
+                report_target_frame,
+                rotation_matrix=rotation,
+                applied_scale=scale,
+                source_origin=report_source_frame.origin,
+                target_origin=target_origin,
+                applied_scale_basis=scale_basis,
+                translation_basis=translation_basis,
+            )
+        fit_transform = _fit_transform_metadata(
+            policy=policy,
+            scale=scale,
+            rotation_matrix=rotation,
+            source_origin=report_source_frame.origin,
+            target_origin=target_origin,
+            landmark_alignment=report_landmark_alignment,
+        )
+    else:
+        mapped_min = _axis_map_to_kotor_z(bb_min, vertical_axis_index)
+        mapped_max = _axis_map_to_kotor_z(bb_max, vertical_axis_index)
+        norm_min = tuple(min(mapped_min[i], mapped_max[i]) for i in range(3))
+        norm_max = tuple(max(mapped_min[i], mapped_max[i]) for i in range(3))
+        center_x = (norm_min[0] + norm_max[0]) * 0.5
+        center_y = (norm_min[1] + norm_max[1]) * 0.5
+        if reference_bounds is not None:
+            ref_min, ref_max = reference_bounds
+            target_center_x = (float(ref_min[0]) + float(ref_max[0])) * 0.5
+            target_center_y = (float(ref_min[1]) + float(ref_max[1])) * 0.5
+            target_ground_z = float(ref_min[2])
+        else:
+            target_center_x = 0.0
+            target_center_y = 0.0
+            target_ground_z = 0.0
+        offset = (
+            target_center_x - center_x * scale,
+            target_center_y - center_y * scale,
+            target_ground_z - norm_min[2] * scale,
+        )
+        source_origin = _bounds_ground_center(bounds)
+        target_origin = _transform_point_for_kotor(
+            source_origin,
+            vertical_axis=vertical_axis_index,
+            scale=scale,
+            offset=offset,
+        )
+        fit_transform = _fit_transform_metadata(
+            policy=policy,
+            scale=scale,
+            rotation_matrix=_axis_map_matrix_to_kotor_z(vertical_axis_index),
+            source_origin=source_origin,
+            target_origin=target_origin,
+        )
+
+    return {
+        "ok": True,
+        "code": "fit_inspected",
+        "message": f"External mesh fit inspected using {policy}.",
+        "fit_policy": policy,
+        "scale_basis": scale_basis,
+        "scale": float(scale),
+        "source_height": float(source_height),
+        "target_height": float(target),
+        "vertical_axis": vertical_axis,
+        "reference": str(reference_label or getattr(reference_model, "name", "") or ""),
+        "source_bounds": _bounds_as_lists(bounds),
+        "reference_bounds": _bounds_as_lists(reference_bounds),
+        "source_frame": _fit_frame_as_metadata(report_source_frame),
+        "target_frame": _fit_frame_as_metadata(report_target_frame),
+        "source_forward_axis": auto_fit.source_forward_axis,
+        "source_up_axis": auto_fit.source_up_axis,
+        "target_forward_axis": auto_fit.target_forward_axis,
+        "target_up_axis": auto_fit.target_up_axis,
+        "scale_factor": auto_fit.scale_factor,
+        "height_source": auto_fit.height_source,
+        "ground_origin_basis": auto_fit.ground_origin_basis,
+        "used_landmarks": auto_fit_report["used_landmarks"],
+        "confidence": auto_fit.confidence,
+        "fallback_used": auto_fit.fallback_used,
+        "notes": auto_fit.notes,
+        "auto_fit_report": auto_fit_report,
+        "source_imported_armature": imported_armature,
+        "fit_transform": fit_transform,
+        "visual_overlay": {
+            "coordinate_space": "source_pre_fit_and_kotor_reference",
+            "source": _fit_frame_visual_overlay(
+                model,
+                report_source_frame,
+                bounds,
+                prefer_skeleton_landmarks=True,
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                report_target_frame,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        },
+        "warnings": warnings,
+        "kotor_contract": {
+            "native_skeleton_is_authority": True,
+            "imported_mesh_role": "payload_guest",
+            "final_dag_source": "selected_kotor_base",
+        },
+    }
 
 
 def _basis_matrix(frame: _HumanoidFitFrame) -> Tuple[Vec3, Vec3, Vec3]:
@@ -559,12 +1767,353 @@ def _basis_rotation(
     return tuple(rows)  # type: ignore[return-value]
 
 
+_SIMILARITY_LANDMARK_ROLES = (
+    "pelvis",
+    "head",
+    "left",
+    "right",
+    "left_foot",
+    "right_foot",
+    "left_toe",
+    "right_toe",
+)
+
+
+def _paired_landmark_positions(
+    source: _HumanoidFitFrame,
+    target: _HumanoidFitFrame,
+) -> List[Tuple[str, Vec3, Vec3]]:
+    pairs: List[Tuple[str, Vec3, Vec3]] = []
+    source_positions = source.landmark_positions or {}
+    target_positions = target.landmark_positions or {}
+    for role in _SIMILARITY_LANDMARK_ROLES:
+        source_point = source_positions.get(role)
+        target_point = target_positions.get(role)
+        if source_point is None or target_point is None:
+            continue
+        try:
+            pairs.append((
+                role,
+                (
+                    float(source_point[0]),
+                    float(source_point[1]),
+                    float(source_point[2]),
+                ),
+                (
+                    float(target_point[0]),
+                    float(target_point[1]),
+                    float(target_point[2]),
+                ),
+            ))
+        except Exception:
+            continue
+    return pairs
+
+
+def _landmark_similarity_alignment(
+    source: Optional[_HumanoidFitFrame],
+    target: Optional[_HumanoidFitFrame],
+) -> Optional[Dict[str, Any]]:
+    """Solve a uniform source-to-target fit from paired skeleton landmarks.
+
+    The native KOTOR target skeleton remains authoritative.  This helper only
+    derives a better imported-payload placement transform than a single
+    height/axis frame can provide.
+    """
+
+    if source is None or target is None:
+        return None
+    pairs = _paired_landmark_positions(source, target)
+    if len(pairs) < 3:
+        return None
+    try:
+        import numpy as np
+    except Exception:  # pragma: no cover - numpy is a project dependency.
+        return None
+
+    source_points = np.asarray([pair[1] for pair in pairs], dtype=np.float64)
+    target_points = np.asarray([pair[2] for pair in pairs], dtype=np.float64)
+    if source_points.shape[0] < 3 or target_points.shape[0] < 3:
+        return None
+    source_center = source_points.mean(axis=0)
+    target_center = target_points.mean(axis=0)
+    source_centered = source_points - source_center
+    target_centered = target_points - target_center
+    source_variance = float(np.sum(source_centered * source_centered))
+    if source_variance <= 1.0e-10:
+        return None
+
+    covariance = source_centered.T @ target_centered
+    try:
+        u, singular_values, vh = np.linalg.svd(covariance)
+    except Exception:
+        return None
+    correction = np.eye(3, dtype=np.float64)
+    if float(np.linalg.det(vh.T @ u.T)) < 0.0:
+        correction[-1, -1] = -1.0
+    rotation = vh.T @ correction @ u.T
+    scale = float(np.sum(singular_values * np.diag(correction)) / source_variance)
+    if not math.isfinite(scale) or scale <= 1.0e-8:
+        return None
+
+    linear = rotation * scale
+    # Snap the final transform to the KOTOR fit origin instead of the landmark
+    # centroid, so pelvis/feet grounding stays deterministic for modder edits.
+    source_origin = np.asarray(source.origin, dtype=np.float64)
+    target_origin = np.asarray(target.origin, dtype=np.float64)
+    translation = target_origin - linear @ source_origin
+    mapped = (source_points @ linear.T) + translation
+    errors = np.linalg.norm(mapped - target_points, axis=1)
+    rms_error = float(np.sqrt(np.mean(errors * errors))) if errors.size else 0.0
+    max_error = float(np.max(errors)) if errors.size else 0.0
+    pair_errors: List[Dict[str, Any]] = []
+    worst_pair_role = ""
+    worst_pair_error = -1.0
+    for index, (role, source_point, target_point) in enumerate(pairs):
+        try:
+            error = float(errors[index])
+            mapped_point = mapped[index]
+        except Exception:
+            continue
+        if error > worst_pair_error:
+            worst_pair_error = error
+            worst_pair_role = str(role)
+        pair_errors.append({
+            "role": str(role),
+            "source_position": [float(value) for value in source_point],
+            "target_position": [float(value) for value in target_point],
+            "mapped_position": [float(value) for value in mapped_point.tolist()],
+            "error": error,
+        })
+    return {
+        "method": "paired_skeleton_landmark_similarity",
+        "rotation_matrix": tuple(
+            tuple(float(value) for value in row)
+            for row in rotation.tolist()
+        ),
+        "scale": scale,
+        "paired_roles": [role for role, _source, _target in pairs],
+        "pair_count": len(pairs),
+        "rms_error": rms_error,
+        "max_error": max_error,
+        "worst_pair_role": worst_pair_role,
+        "pair_errors": pair_errors,
+        "translation_basis": "native_fit_origin",
+    }
+
+
+def _landmark_alignment_for_applied_transform(
+    alignment: Optional[Dict[str, Any]],
+    source: _HumanoidFitFrame,
+    target: _HumanoidFitFrame,
+    *,
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    applied_scale: float,
+    source_origin: Vec3,
+    target_origin: Vec3,
+    applied_scale_basis: str,
+    translation_basis: str,
+) -> Optional[Dict[str, Any]]:
+    """Recompute pair residuals for the exact transform applied to the model."""
+
+    if alignment is None:
+        return None
+    pairs = _paired_landmark_positions(source, target)
+    if not pairs:
+        return dict(alignment)
+    linear_matrix = _scale_matrix(rotation_matrix, applied_scale)
+    translation = _translation_for_affine(
+        linear_matrix,
+        source_origin,
+        target_origin,
+    )
+    pair_errors: List[Dict[str, Any]] = []
+    squared_total = 0.0
+    max_error = 0.0
+    worst_pair_role = ""
+    for role, source_point, target_point in pairs:
+        mapped_point = _vec_add(_mat_vec(linear_matrix, source_point), translation)
+        delta = _vec_sub(mapped_point, target_point)
+        error = _vec_len(delta)
+        squared_total += error * error
+        if error > max_error:
+            max_error = error
+            worst_pair_role = str(role)
+        pair_errors.append({
+            "role": str(role),
+            "source_position": [float(value) for value in source_point],
+            "target_position": [float(value) for value in target_point],
+            "mapped_position": [float(value) for value in mapped_point],
+            "error": float(error),
+        })
+    result = dict(alignment)
+    result["pair_errors"] = pair_errors
+    result["rms_error"] = math.sqrt(squared_total / float(len(pair_errors)))
+    result["max_error"] = float(max_error)
+    result["worst_pair_role"] = worst_pair_role
+    result["applied_scale"] = float(applied_scale)
+    result["applied_scale_basis"] = str(applied_scale_basis or "")
+    result["translation_basis"] = str(translation_basis or "")
+    result["error_basis"] = "applied_fit_transform"
+    return result
+
+
 def _mat_vec(matrix: Tuple[Vec3, Vec3, Vec3], vector: Vec3) -> Vec3:
     return (
         matrix[0][0] * vector[0] + matrix[0][1] * vector[1] + matrix[0][2] * vector[2],
         matrix[1][0] * vector[0] + matrix[1][1] * vector[1] + matrix[1][2] * vector[2],
         matrix[2][0] * vector[0] + matrix[2][1] * vector[1] + matrix[2][2] * vector[2],
     )
+
+
+def _matrix_as_lists(matrix: Tuple[Vec3, Vec3, Vec3]) -> List[List[float]]:
+    return [[float(value) for value in row] for row in matrix]
+
+
+def _scale_matrix(matrix: Tuple[Vec3, Vec3, Vec3], scale: float) -> Tuple[Vec3, Vec3, Vec3]:
+    return tuple(
+        tuple(float(value) * float(scale) for value in row)
+        for row in matrix
+    )  # type: ignore[return-value]
+
+
+def _translation_for_affine(
+    matrix: Tuple[Vec3, Vec3, Vec3],
+    source_origin: Vec3,
+    target_origin: Vec3,
+) -> Vec3:
+    mapped_origin = _mat_vec(matrix, source_origin)
+    return _vec_sub(target_origin, mapped_origin)
+
+
+def _ground_snapped_target_origin(
+    *,
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    scale: float,
+    source_origin: Vec3,
+    target_origin: Vec3,
+    target_frame: Optional[_HumanoidFitFrame] = None,
+    reference_bounds: Optional[Tuple[Vec3, Vec3]] = None,
+    preserve_target_origin: bool = False,
+) -> Vec3:
+    if preserve_target_origin:
+        return target_origin
+    if bounds is None:
+        return target_origin
+    linear_matrix = _scale_matrix(rotation_matrix, scale)
+    translation = _translation_for_affine(
+        linear_matrix,
+        source_origin,
+        target_origin,
+    )
+
+    def _mapped(point: Vec3) -> Vec3:
+        return _vec_add(_mat_vec(linear_matrix, point), translation)
+
+    mapped_bounds = _transform_bounds(bounds, _mapped)
+    if mapped_bounds is None:
+        return target_origin
+    if reference_bounds is not None:
+        target_ground_z = float(reference_bounds[0][2])
+    elif target_frame is not None:
+        target_ground_z = float(target_frame.origin[2])
+    else:
+        target_ground_z = float(target_origin[2])
+    delta_z = target_ground_z - float(mapped_bounds[0][2])
+    if abs(delta_z) <= 1.0e-8:
+        return target_origin
+    return (
+        float(target_origin[0]),
+        float(target_origin[1]),
+        float(target_origin[2]) + delta_z,
+    )
+
+
+def _axis_map_matrix_to_kotor_z(vertical_axis: int) -> Tuple[Vec3, Vec3, Vec3]:
+    if vertical_axis == 1:  # Y-up external model -> KOTOR Z-up
+        return (
+            (1.0, 0.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 1.0, 0.0),
+        )
+    if vertical_axis == 0:  # X-up external model -> KOTOR Z-up
+        return (
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 0.0),
+        )
+    return (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+
+
+def _fit_transform_metadata(
+    *,
+    policy: str,
+    scale: float,
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    source_origin: Vec3,
+    target_origin: Vec3,
+    landmark_alignment: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    linear_matrix = _scale_matrix(rotation_matrix, scale)
+    translation = _translation_for_affine(
+        linear_matrix,
+        source_origin,
+        target_origin,
+    )
+    result = {
+        "coordinate_space": "source_model_to_kotor_world",
+        "policy": str(policy),
+        "formula": "kotor_point = linear_matrix * source_point + translation",
+        "scale": float(scale),
+        "rotation_matrix": _matrix_as_lists(rotation_matrix),
+        "linear_matrix": _matrix_as_lists(linear_matrix),
+        "translation": _vec_as_list(translation),
+        "source_origin": _vec_as_list(source_origin),
+        "target_origin": _vec_as_list(target_origin),
+    }
+    if landmark_alignment:
+        result["landmark_alignment"] = {
+            "method": str(landmark_alignment.get("method") or ""),
+            "pair_count": int(landmark_alignment.get("pair_count") or 0),
+            "paired_roles": list(landmark_alignment.get("paired_roles") or []),
+            "rms_error": float(landmark_alignment.get("rms_error") or 0.0),
+            "max_error": float(landmark_alignment.get("max_error") or 0.0),
+            "worst_pair_role": str(
+                landmark_alignment.get("worst_pair_role") or ""
+            ),
+            "pair_errors": list(landmark_alignment.get("pair_errors") or []),
+            "translation_basis": str(
+                landmark_alignment.get("translation_basis") or ""
+            ),
+            "error_basis": str(
+                landmark_alignment.get("error_basis") or ""
+            ),
+            "similarity_transform_accepted": bool(
+                landmark_alignment.get("similarity_transform_accepted")
+            ),
+            "rotation_basis": str(
+                landmark_alignment.get("rotation_basis") or ""
+            ),
+            "solved_scale": float(
+                landmark_alignment.get("solved_scale")
+                or landmark_alignment.get("scale")
+                or 0.0
+            ),
+            "height_scale": float(landmark_alignment.get("height_scale") or 0.0),
+            "height_scale_basis": str(
+                landmark_alignment.get("height_scale_basis") or ""
+            ),
+            "applied_scale": float(landmark_alignment.get("applied_scale") or 0.0),
+            "applied_scale_basis": str(
+                landmark_alignment.get("applied_scale_basis") or ""
+            ),
+        }
+    return result
 
 
 def _kotor_template_humanoid_height(game_version: str) -> float:
@@ -871,6 +2420,7 @@ def normalize_external_model_for_kotor(
     target_height: Optional[float] = None,
     reference_model: Optional[Any] = None,
     reference_label: str = "",
+    fit_override: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Scale and orient an imported external mesh into KOTOR humanoid space.
 
@@ -885,21 +2435,146 @@ def normalize_external_model_for_kotor(
 
     bb_min, bb_max = bounds
     reference_bounds = _reference_model_fit_bounds(reference_model)
-    source_frame = _infer_humanoid_fit_frame(model, bounds=bounds)
+    source_frame = _infer_humanoid_fit_frame(
+        model,
+        bounds=bounds,
+        prefer_skeleton_landmarks=True,
+    )
     target_frame = (
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
     )
+    override = _coerce_auto_fit_override(fit_override)
+    manual_source_frame = (
+        _manual_override_frame(
+            model,
+            bounds=bounds,
+            source_frame=source_frame,
+            override=override,
+        )
+        if override.is_active() else None
+    )
+    manual_target_frame = target_frame or _default_target_fit_frame(reference_bounds)
+    fit_report = inspect_external_model_fit(
+        model,
+        game_version=game_version,
+        target_height=target_height,
+        reference_model=reference_model,
+        reference_label=reference_label,
+        fit_override=override,
+    )
 
-    if source_frame is not None and target_frame is not None:
+    transform_source_frame = manual_source_frame
+    transform_target_frame = manual_target_frame
+    transform_policy = "manual_axis_override"
+    transform_scale_basis = "manual_override_height"
+    if transform_source_frame is None or transform_target_frame is None:
+        transform_source_frame = source_frame
+        transform_target_frame = target_frame
+        transform_policy = "bone_landmark_basis"
+        transform_scale_basis = ""
+
+    if transform_source_frame is not None and transform_target_frame is not None:
         reference_height = _height_from_bounds(reference_bounds)
-        target = float(target_height or reference_height or target_frame.height)
-        scale = target / source_frame.height if source_frame.height > 1.0e-6 else 1.0
-        rotation = _basis_rotation(source_frame, target_frame)
+        if transform_policy == "manual_axis_override":
+            if target_height is not None:
+                target = float(target_height)
+                transform_scale_basis = "explicit_target_height"
+            elif reference_height > 0.01:
+                target = float(reference_height)
+                transform_scale_basis = "reference_bounds_height"
+            else:
+                target = float(transform_target_frame.height)
+                transform_scale_basis = "manual_override_height"
+        else:
+            target, transform_scale_basis = _target_height_for_landmark_fit(
+                explicit_target_height=target_height,
+                reference_height=reference_height,
+                target_frame=transform_target_frame,
+                source_frame=transform_source_frame,
+            )
+        landmark_alignment = (
+            None
+            if transform_policy == "manual_axis_override"
+            else _landmark_similarity_alignment(
+                transform_source_frame,
+                transform_target_frame,
+            )
+        )
+        height_scale = target / transform_source_frame.height if transform_source_frame.height > 1.0e-6 else 1.0
+        height_scale_basis = transform_scale_basis
+        use_similarity_transform = _landmark_similarity_alignment_is_usable(
+            height_scale=height_scale,
+            landmark_alignment=landmark_alignment,
+        )
+        scale, transform_scale_basis = _scale_for_landmark_fit(
+            height_scale=height_scale,
+            height_scale_basis=height_scale_basis,
+            landmark_alignment=landmark_alignment,
+        )
+        rotation = (
+            landmark_alignment["rotation_matrix"]
+            if landmark_alignment is not None and use_similarity_transform
+            else _basis_rotation(transform_source_frame, transform_target_frame)
+        )
+        if landmark_alignment is not None:
+            landmark_alignment = dict(landmark_alignment)
+            landmark_alignment["solved_scale"] = float(landmark_alignment["scale"])
+            landmark_alignment["height_scale"] = float(height_scale)
+            landmark_alignment["height_scale_basis"] = height_scale_basis
+            landmark_alignment["applied_scale"] = float(scale)
+            landmark_alignment["applied_scale_basis"] = transform_scale_basis
+            landmark_alignment["similarity_transform_accepted"] = bool(
+                use_similarity_transform
+            )
+            landmark_alignment["rotation_basis"] = (
+                "paired_skeleton_similarity"
+                if use_similarity_transform else
+                "bone_landmark_basis"
+            )
+        preserve_skeleton_origin = _preserve_skeleton_landmark_origin_for_fit(
+            transform_source_frame,
+            transform_target_frame,
+        )
+        translation_basis = (
+            "skeleton_landmark_native_fit_origin"
+            if preserve_skeleton_origin else
+            "ground_snapped_native_fit_origin"
+        )
+        target_origin = _ground_snapped_target_origin(
+            bounds=bounds,
+            rotation_matrix=rotation,
+            scale=scale,
+            source_origin=transform_source_frame.origin,
+            target_origin=transform_target_frame.origin,
+            target_frame=transform_target_frame,
+            reference_bounds=reference_bounds,
+            preserve_target_origin=preserve_skeleton_origin,
+        )
+        if landmark_alignment is not None:
+            landmark_alignment = _landmark_alignment_for_applied_transform(
+                landmark_alignment,
+                transform_source_frame,
+                transform_target_frame,
+                rotation_matrix=rotation,
+                applied_scale=scale,
+                source_origin=transform_source_frame.origin,
+                target_origin=target_origin,
+                applied_scale_basis=transform_scale_basis,
+                translation_basis=translation_basis,
+            )
+        fit_transform = _fit_transform_metadata(
+            policy=transform_policy,
+            scale=scale,
+            rotation_matrix=rotation,
+            source_origin=transform_source_frame.origin,
+            target_origin=target_origin,
+            landmark_alignment=landmark_alignment,
+        )
 
         def transform_point(point: Vec3) -> Vec3:
-            rel = _vec_scale(_vec_sub(point, source_frame.origin), scale)
-            return _vec_add(target_frame.origin, _mat_vec(rotation, rel))
+            rel = _vec_scale(_vec_sub(point, transform_source_frame.origin), scale)
+            return _vec_add(target_origin, _mat_vec(rotation, rel))
 
         def transform_direction(direction: Vec3) -> Vec3:
             rotated = _mat_vec(rotation, direction)
@@ -908,6 +2583,28 @@ def normalize_external_model_for_kotor(
         def transform_node_position(point: Vec3) -> Vec3:
             rel = _vec_scale(point, scale)
             return _mat_vec(rotation, rel)
+
+        fitted_visual_overlay = {
+            "coordinate_space": "kotor_world_after_fit",
+            "source": _fit_frame_visual_overlay(
+                model,
+                transform_source_frame,
+                bounds,
+                transform_point=transform_point,
+                transform_direction=transform_direction,
+                axis_length_scale=scale,
+                prefer_skeleton_landmarks=True,
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                transform_target_frame,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        }
+        if isinstance(fit_report, dict):
+            fit_report = dict(fit_report)
+            fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+            fit_report["fit_transform"] = fit_transform
 
         _apply_point_transform_to_model(
             model,
@@ -925,22 +2622,29 @@ def normalize_external_model_for_kotor(
             "ok": True,
             "code": "normalized",
             "scale": scale,
-            "source_height": source_frame.height,
+            "source_height": transform_source_frame.height,
             "target_height": target,
             "reference": reference_label or getattr(reference_model, "name", "") or "",
-            "vertical_axis": "bone_landmarks",
-            "offset": _vec_sub(target_frame.origin, _mat_vec(rotation, _vec_scale(source_frame.origin, scale))),
-            "target_center_xy": (target_frame.origin[0], target_frame.origin[1]),
-            "target_ground_z": target_frame.origin[2],
+            "vertical_axis": "manual_override" if transform_policy == "manual_axis_override" else "bone_landmarks",
+            "offset": _vec_sub(
+                target_origin,
+                _mat_vec(rotation, _vec_scale(transform_source_frame.origin, scale)),
+            ),
+            "target_center_xy": (target_origin[0], target_origin[1]),
+            "target_ground_z": target_origin[2],
             "external_world_positions_fit": True,
-            "fit_policy": "bone_landmark_basis",
-            "scale_basis": "reference_bounds_height" if reference_height > 0.01 else "bone_landmark_height",
-            "source_fit_landmarks": dict(source_frame.landmarks),
-            "target_fit_landmarks": dict(target_frame.landmarks),
-            "source_fit_confidence": source_frame.confidence,
-            "target_fit_confidence": target_frame.confidence,
+            "fit_policy": transform_policy,
+            "scale_basis": transform_scale_basis,
+            "source_fit_landmarks": dict(transform_source_frame.landmarks),
+            "target_fit_landmarks": dict(transform_target_frame.landmarks),
+            "source_fit_confidence": transform_source_frame.confidence,
+            "target_fit_confidence": transform_target_frame.confidence,
+            "fit_transform": fit_transform,
+            "fit_report": fit_report,
+            "fitted_visual_overlay": fitted_visual_overlay,
         }
         metadata["kotor_normalization"] = result
+        metadata["kotor_fit_report"] = fit_report
         return result
 
     extents = tuple(max(0.0, bb_max[i] - bb_min[i]) for i in range(3))
@@ -970,6 +2674,20 @@ def normalize_external_model_for_kotor(
         target_center_y - center_y * scale,
         target_ground_z - norm_min[2] * scale,
     )
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = _transform_point_for_kotor(
+        source_origin,
+        vertical_axis=vertical_axis,
+        scale=scale,
+        offset=offset,
+    )
+    fit_transform = _fit_transform_metadata(
+        policy="selected_reference_bounds" if reference_bounds is not None else "origin_height",
+        scale=scale,
+        rotation_matrix=_axis_map_matrix_to_kotor_z(vertical_axis),
+        source_origin=source_origin,
+        target_origin=target_origin,
+    )
 
     def transform_point(point: Vec3) -> Vec3:
         return _transform_point_for_kotor(
@@ -992,6 +2710,22 @@ def normalize_external_model_for_kotor(
             scale=scale,
             offset=(0.0, 0.0, 0.0),
         )
+
+    fitted_visual_overlay = {
+        "coordinate_space": "kotor_world_after_fit",
+        "source": _fit_frame_visual_overlay(
+            model,
+            None,
+            bounds,
+            transform_point=transform_point,
+            axis_length_scale=scale,
+        ),
+        "target": None,
+    }
+    if isinstance(fit_report, dict):
+        fit_report = dict(fit_report)
+        fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+        fit_report["fit_transform"] = fit_transform
 
     _apply_point_transform_to_model(
         model,
@@ -1018,17 +2752,29 @@ def normalize_external_model_for_kotor(
         "target_ground_z": target_ground_z,
         "external_world_positions_fit": True,
         "fit_policy": "selected_reference_bounds" if reference_bounds is not None else "origin_height",
+        "fit_transform": fit_transform,
+        "fit_report": fit_report,
+        "fitted_visual_overlay": fitted_visual_overlay,
     }
     metadata["kotor_normalization"] = result
+    metadata["kotor_fit_report"] = fit_report
     return result
 
 
 def _mark_external_import(model: Any, source_path: str) -> None:
-    """Tag external DCC meshes so the viewport treats their UV atlas plainly."""
+    """Tag external DCC meshes as temporary payloads, not export DAG authority."""
     metadata = getattr(model, "metadata", None)
     if not isinstance(metadata, dict):
         metadata = {}
         setattr(model, "metadata", metadata)
+    try:
+        from src.core.characters.character_rig_state import mark_imported_temporary_skeleton
+    except ImportError:                                     # pragma: no cover
+        from core.characters.character_rig_state import mark_imported_temporary_skeleton  # type: ignore
+    mark_imported_temporary_skeleton(
+        model,
+        source="headless_body_workflow._mark_external_import",
+    )
     metadata["external_import"] = {
         "source_path": str(source_path or ""),
         "disable_kotor_uv_seam_fix": True,
@@ -1079,6 +2825,7 @@ def load_body(
     allow_mode_correction: bool = False,
     fit_reference_model: Optional[Any] = None,
     fit_reference_label: str = "",
+    fit_override: Optional[Any] = None,
 ) -> LoadResult:
     """Load a body model from *path* and assign it to *scene*.
 
@@ -1171,6 +2918,7 @@ def load_body(
             game_version=gv,
             reference_model=fit_reference_model,
             reference_label=fit_reference_label,
+            fit_override=fit_override,
         )
 
     # ── Detect mode ─────────────────────────────────────────────────
@@ -2228,13 +3976,25 @@ def _read_masked_bones(acurig: Any) -> List[str]:
 
 # (Display label, actual animation name from _ANIM_SLOTS).
 # The order is intentional — these are the most-used preview slots when
-# QC-ing a freshly-rigged body.
+# QC-ing a freshly-rigged body. Some entries are optional convenience previews:
+# KOTOR combat reactions often use coded slots such as ``g*d*`` instead of a
+# plain ``dodge`` block, so export evidence uses the stricter proof set below.
 PREVIEW_ANIMATIONS: Tuple[Tuple[str, str], ...] = (
     ("Idle",  "pause1"),
     ("Walk",  "walk"),
     ("Run",   "run"),
     ("Talk",  "tlknorm"),
     ("Dodge", "dodge"),
+)
+
+# Preview clips that must resolve before the Character Builder animation gate
+# can claim the inherited supermodel path is proof-ready. Keep this tied to
+# verified Aurora slot names, not UI-friendly labels or gameplay categories.
+REQUIRED_PREVIEW_ANIMATIONS: Tuple[Tuple[str, str], ...] = (
+    ("Idle", "pause1"),
+    ("Walk", "walk"),
+    ("Run", "run"),
+    ("Talk", "tlknorm"),
 )
 
 MOTION_SOURCE_MODEL = "model"
@@ -2295,6 +4055,8 @@ class CheckActorResult:
     message          : Human-readable summary.
     code             : Stable tag — ``"listed" / "playing" / "stopped" /
                        "no_body" / "no_animations" / "anim_missing"``.
+    diagnostics      : Stable reason codes for empty/fallback states.
+    details          : JSON-friendly context for UI/debug displays.
     """
     ok:         bool                              = False
     available:  List[Tuple[str, str]]             = field(default_factory=list)
@@ -2303,6 +4065,8 @@ class CheckActorResult:
     length:     float                             = 0.0
     message:    str                               = ""
     code:       str                               = "listed"
+    diagnostics: List[str]                         = field(default_factory=list)
+    details:    Dict[str, Any]                     = field(default_factory=dict)
 
 
 def _motion_assignment_state(scene: Any) -> Dict[str, Any]:
@@ -2322,6 +4086,49 @@ def _write_motion_assignment_state(scene: Any, state: Dict[str, Any]) -> None:
 
 def _is_null_supermodel(value: str) -> bool:
     return (value or "").strip().upper() in {"", "NULL", "NONE"}
+
+
+def normalize_kotor_game_tag(game: Any) -> str:
+    """Return the canonical KOTOR game tag used for installed resources."""
+    if game is None:
+        return "K1"
+
+    name = str(getattr(game, "name", "") or "").strip().upper()
+    if name in {"K1", "K2"}:
+        return name
+
+    value = getattr(game, "value", None)
+    if value in {1, "1"}:
+        return "K1"
+    if value in {2, "2"}:
+        return "K2"
+
+    text = str(game or "").strip().upper().replace("_", " ")
+    if not text:
+        return "K1"
+    if text in {"K1", "1", "GAMEVERSION.K1", "GAMEVERSION K1", "KOTOR I", "KOTOR 1"}:
+        return "K1"
+    if text in {
+        "K2",
+        "2",
+        "GAMEVERSION.K2",
+        "GAMEVERSION K2",
+        "KOTOR II",
+        "KOTOR 2",
+        "TSL",
+        "THE SITH LORDS",
+    }:
+        return "K2"
+    if (
+        "KOTOR2" in text
+        or "KOTOR 2" in text
+        or "KOTOR II" in text
+        or "OLD REPUBLIC II" in text
+        or "SITH LORDS" in text
+        or "TSL" in text
+    ):
+        return "K2"
+    return "K1"
 
 
 def _body_supermodel(body: Any) -> str:
@@ -2480,7 +4287,8 @@ def available_preview_animations(scene: Any) -> CheckActorResult:
     if motion_source == MOTION_SOURCE_INHERITED:
         supermodel = str(motion_state.get("supermodel") or _body_supermodel(body))
         if not _is_null_supermodel(supermodel):
-            game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
+            raw_game = getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1"
+            game_tag = normalize_kotor_game_tag(raw_game)
             available: List[Tuple[str, str]] = []
             missing: List[Tuple[str, str]] = []
             try:
@@ -2608,9 +4416,11 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         return CheckActorResult(
             message="No body model loaded. Load and build the character first.",
             code="no_body",
+            diagnostics=["no_body"],
         )
 
-    game_tag = str(getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1")
+    raw_game = getattr(scene, "game_version", "") or getattr(body, "game_version", "") or "K1"
+    game_tag = normalize_kotor_game_tag(raw_game)
     try:
         from src.core.animation.animation_engine import SuperModelResolver
     except ImportError:                                     # pragma: no cover
@@ -2618,8 +4428,9 @@ def available_animation_library(scene: Any) -> CheckActorResult:
 
     motion_state = _motion_assignment_state(scene)
     selected_supermodel = str(motion_state.get("supermodel") or "").strip()
+    effective_supermodel = selected_supermodel or _body_supermodel(body)
     list_model = body
-    if selected_supermodel and not _is_null_supermodel(selected_supermodel):
+    if effective_supermodel and not _is_null_supermodel(effective_supermodel):
         class _AnimationLibraryProxy:
             pass
 
@@ -2627,15 +4438,55 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         proxy.name = getattr(body, "name", "character")
         proxy.animations = list(_iter_model_animations(body))
         proxy.anim_scale = float(getattr(body, "anim_scale", 1.0) or 1.0)
-        proxy.supermodel = selected_supermodel
+        proxy.supermodel = effective_supermodel
         list_model = proxy
 
     entries: List[Tuple[str, str]] = []
+    diagnostics: List[str] = []
+    details: Dict[str, Any] = {
+        "game": game_tag,
+        "body": str(getattr(body, "name", "") or ""),
+        "motion_source": str(motion_state.get("source") or ""),
+        "selected_supermodel": selected_supermodel,
+        "effective_supermodel": effective_supermodel,
+        "local_animation_count": len(_iter_model_animations(body)),
+        "resolver_configured": getattr(SuperModelResolver, "_resource_manager", None) is not None,
+    }
+    raw_game_label = str(raw_game or "")
+    if raw_game_label and raw_game_label.upper() != game_tag:
+        details["raw_game"] = raw_game_label
+    if effective_supermodel and not _is_null_supermodel(effective_supermodel):
+        if not details["resolver_configured"]:
+            diagnostics.append("resolver_not_configured")
+        else:
+            try:
+                loaded_super = SuperModelResolver.load_supermodel(
+                    effective_supermodel,
+                    game_tag,
+                )
+            except Exception as exc:                       # pragma: no cover - defensive
+                loaded_super = None
+                diagnostics.append("supermodel_probe_exception")
+                details["supermodel_probe_error"] = str(exc)
+            if loaded_super is None:
+                diagnostics.append(f"supermodel_not_found:{effective_supermodel}")
+            else:
+                details["resolved_supermodel"] = str(
+                    getattr(loaded_super, "name", "") or effective_supermodel
+                )
+                details["resolved_supermodel_local_animation_count"] = len(
+                    _iter_model_animations(loaded_super)
+                )
+    else:
+        diagnostics.append("no_supermodel_selected")
+
     try:
         for name, source_model, _scale in SuperModelResolver.list_all_animations(list_model, game_tag):
             label = f"{name} [{source_model}]"
             entries.append((label, name))
-    except Exception:
+    except Exception as exc:
+        diagnostics.append("resolver_exception")
+        details["resolver_error"] = str(exc)
         entries = []
 
     if not entries:
@@ -2643,14 +4494,24 @@ def available_animation_library(scene: Any) -> CheckActorResult:
             name = str(getattr(anim, "name", "") or "")
             if name:
                 entries.append((f"{name} [{getattr(body, 'name', 'model')}]", name))
+        if entries:
+            diagnostics.append("local_fallback_used")
 
     if not entries:
+        if not diagnostics:
+            diagnostics.append("empty_chain")
+        reason_text = "; ".join(diagnostics)
         return CheckActorResult(
             ok=True,
             available=[],
             missing=[],
-            message="No animations are available from the body or its supermodel chain.",
+            message=(
+                "No animations are available from the body or its supermodel chain. "
+                f"Diagnostics: {reason_text}."
+            ),
             code="no_animations",
+            diagnostics=diagnostics,
+            details=details,
         )
 
     return CheckActorResult(
@@ -2659,7 +4520,103 @@ def available_animation_library(scene: Any) -> CheckActorResult:
         missing=[],
         message=f"{len(entries)} animation clip(s) available.",
         code="listed",
+        diagnostics=diagnostics,
+        details=details,
     )
+
+
+def _stamp_animation_library_evidence(
+    model: Any,
+    *,
+    motion: Optional[MotionAssignmentResult],
+    library: Optional[CheckActorResult],
+) -> None:
+    """Persist inherited-animation proof on the built model.
+
+    The Qt Character Builder can ask for previews, but the export/report path
+    needs headless evidence attached to the model itself.  This keeps animation
+    readiness with the core workflow instead of with a particular UI panel.
+    """
+    if model is None:
+        return
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+
+    motion_payload = {
+        "schema": "ghostrigger.character_motion_assignment.v1",
+        "source": str(getattr(motion, "source", "") or ""),
+        "supermodel": str(getattr(motion, "supermodel", "") or ""),
+        "code": str(getattr(motion, "code", "") or ""),
+        "ok": bool(getattr(motion, "ok", False)),
+        "available_preview_names": [
+            str(name or "")
+            for _label, name in list(getattr(motion, "available", []) or [])
+            if str(name or "").strip()
+        ],
+        "missing_preview_names": [
+            str(name or "")
+            for _label, name in list(getattr(motion, "missing", []) or [])
+            if str(name or "").strip()
+        ],
+    }
+
+    available = [
+        (str(label or ""), str(name or ""))
+        for label, name in list(getattr(library, "available", []) or [])
+        if str(name or "").strip()
+    ]
+    available_names = [name for _label, name in available]
+    available_lower = {name.lower() for name in available_names}
+    required_preview_names = [
+        name for _label, name in REQUIRED_PREVIEW_ANIMATIONS
+    ]
+    required_available = [
+        name for name in required_preview_names
+        if name.lower() in available_lower
+    ]
+    required_missing = [
+        name for name in required_preview_names
+        if name.lower() not in available_lower
+    ]
+    library_details = dict(getattr(library, "details", {}) or {})
+    diagnostics = [
+        str(item or "")
+        for item in list(getattr(library, "diagnostics", []) or [])
+        if str(item or "").strip()
+    ]
+    status = "resolved" if available_names else "empty"
+    if diagnostics and not available_names:
+        status = "unresolved"
+    elif diagnostics:
+        status = "resolved_with_diagnostics"
+
+    metadata["character_builder_motion_assignment"] = motion_payload
+    metadata["character_builder_animation_library"] = {
+        "schema": "ghostrigger.character_animation_library_evidence.v1",
+        "status": status,
+        "ok": bool(getattr(library, "ok", False)),
+        "code": str(getattr(library, "code", "") or ""),
+        "message": str(getattr(library, "message", "") or ""),
+        "game": str(library_details.get("game") or ""),
+        "body": str(library_details.get("body") or ""),
+        "motion_source": str(library_details.get("motion_source") or motion_payload["source"]),
+        "selected_supermodel": str(library_details.get("selected_supermodel") or motion_payload["supermodel"]),
+        "effective_supermodel": str(library_details.get("effective_supermodel") or ""),
+        "resolved_supermodel": str(library_details.get("resolved_supermodel") or ""),
+        "resolver_configured": bool(library_details.get("resolver_configured", False)),
+        "local_animation_count": int(library_details.get("local_animation_count") or 0),
+        "resolved_supermodel_local_animation_count": int(
+            library_details.get("resolved_supermodel_local_animation_count") or 0
+        ),
+        "available_count": len(available_names),
+        "sample_animation_names": available_names[:48],
+        "required_preview_names": required_preview_names,
+        "required_preview_available": required_available,
+        "required_preview_missing": required_missing,
+        "diagnostics": diagnostics,
+    }
 
 
 def play_preview_animation(
@@ -2700,10 +4657,49 @@ def play_preview_animation(
         )
 
     chosen = None
+    source_model_name = str(getattr(body, "name", "") or "model")
+    anim_scale = 1.0
+    source_scope = "local"
     for a in _iter_model_animations(body):
         if getattr(a, "name", "").lower() == target:
             chosen = a
             break
+
+    if chosen is None:
+        raw_game = (
+            getattr(scene, "game_version", "")
+            or getattr(body, "game_version", "")
+            or "K1"
+        )
+        game_tag = normalize_kotor_game_tag(raw_game)
+        try:
+            from src.core.animation.animation_engine import SuperModelResolver
+        except ImportError:                                 # pragma: no cover
+            from core.animation.animation_engine import SuperModelResolver  # type: ignore
+        try:
+            resolved, resolved_scale = SuperModelResolver.resolve_animation(
+                body,
+                anim_name,
+                game_tag,
+            )
+        except Exception:
+            resolved, resolved_scale = None, 1.0
+        if resolved is not None:
+            chosen = resolved
+            anim_scale = float(resolved_scale or 1.0)
+            source_scope = "inherited"
+            try:
+                for (
+                    entry_name,
+                    entry_source,
+                    entry_scale,
+                ) in SuperModelResolver.list_all_animations(body, game_tag):
+                    if str(entry_name or "").lower() == target:
+                        source_model_name = str(entry_source or source_model_name)
+                        anim_scale = float(entry_scale or anim_scale)
+                        break
+            except Exception:
+                source_model_name = str(getattr(resolved, "source", "") or source_model_name)
 
     if chosen is None:
         motion_state = _motion_assignment_state(scene)
@@ -2768,6 +4764,11 @@ def play_preview_animation(
         length=length,
         message=f"Playing '{anim_name}' ({length:.2f}s).",
         code="playing",
+        details={
+            "source_model": source_model_name,
+            "source_scope": source_scope,
+            "anim_scale": anim_scale,
+        },
     )
 
 
@@ -3066,7 +5067,12 @@ class ExportResult:
 
 @dataclass
 class LaunchWorkflowResult:
-    """End-to-end external-mesh launch proof result (M12/T1205)."""
+    """End-to-end external-mesh export-candidate proof result (M12/T1205).
+
+    ``ok`` means the staged MDL/MDX candidate exported and reloaded through the
+    Character Builder gates. It does not mean the candidate has been tested in
+    KOTOR 1 or KOTOR 2.
+    """
 
     ok:               bool                       = False
     load_result:      Optional[LoadResult]        = None
@@ -3074,6 +5080,7 @@ class LaunchWorkflowResult:
     guide_result:     Optional[BodyRigGuidesResult] = None
     generate_result:  Optional[BodyRigGenerateResult] = None
     motion_result:    Optional[MotionAssignmentResult] = None
+    animation_library_result: Optional[CheckActorResult] = None
     export_result:    Optional[ExportResult]      = None
     reloaded_model:   Optional[Any]               = None
     mdl_path:         str                         = ""
@@ -3082,6 +5089,8 @@ class LaunchWorkflowResult:
     mesh_count:       int                         = 0
     skin_node_count:  int                         = 0
     supermodel:       str                         = ""
+    capability_stage: str                         = ""
+    game_tested:      bool                        = False
     message:          str                         = ""
     code:             str                         = "launch_workflow"
 
@@ -3093,6 +5102,38 @@ def _import_scene_io():                                     # pragma: no cover -
     except ImportError:
         from core.geometry.model_data import SceneIO      # type: ignore[import-untyped]
     return SceneIO
+
+
+def _with_supermodel_resource_manager(
+    resource_manager: Optional[Any],
+):
+    """Temporarily configure inherited-animation lookup for headless checks."""
+
+    class _ResolverContext:
+        def __init__(self, manager: Optional[Any]) -> None:
+            self.manager = manager
+            self.previous = None
+            self.changed = False
+
+        def __enter__(self):
+            try:
+                from src.core.animation.animation_engine import SuperModelResolver
+            except ImportError:                             # pragma: no cover
+                from core.animation.animation_engine import SuperModelResolver  # type: ignore
+            self.resolver = SuperModelResolver
+            self.previous = getattr(SuperModelResolver, "_resource_manager", None)
+            if self.manager is not None and self.previous is not self.manager:
+                SuperModelResolver.clear_cache()
+                SuperModelResolver.configure(self.manager)
+                self.changed = True
+            return SuperModelResolver
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            if self.changed:
+                self.resolver.clear_cache()
+                self.resolver.configure(self.previous)
+
+    return _ResolverContext(resource_manager)
 
 
 def _import_mdl_binary_writer():                            # pragma: no cover - import shim
@@ -3146,7 +5187,69 @@ def _model_nodes(model: Any) -> List[Any]:
                 _walk(child)
 
         _walk(root)
-        return out
+    return out
+
+
+def _model_node_path(node: Any) -> Tuple[str, ...]:
+    parts: List[str] = []
+    seen: set[int] = set()
+    current = node
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        name = str(getattr(current, "name", "") or "")
+        if name:
+            parts.append(name)
+        current = getattr(current, "parent", None)
+    return tuple(reversed(parts))
+
+
+def _reload_structural_path_problems(
+    model: Any,
+    expected_native_snapshot: Optional[Any],
+) -> List[str]:
+    if expected_native_snapshot is None:
+        return []
+    structural_roles = {"socket", "helper", "deform_helper"}
+    expected_paths = [
+        tuple(getattr(node, "full_path", ()) or ())
+        for node in list(getattr(expected_native_snapshot, "nodes", ()) or ())
+        if str(getattr(node, "export_role", "") or "") in structural_roles
+    ]
+    expected_paths = [path for path in expected_paths if path]
+    if not expected_paths:
+        return []
+    reloaded_paths = {_model_node_path(node) for node in _model_nodes(model)}
+    missing = [
+        path for path in expected_paths
+        if path not in reloaded_paths
+    ]
+    return [
+        "Reloaded export is missing native structural path: "
+        + " / ".join(path)
+        for path in missing
+    ]
+
+
+def _native_template_build_summary(model: Any) -> BodyRigGenerateResult:
+    """Summarize the native-template rig path without invoking legacy AcuRig."""
+    nodes = _model_nodes(model)
+    skin_vertices = 0
+    for node in nodes:
+        if bool(getattr(node, "is_skin", False)) or bool(getattr(node, "skin_data", None)):
+            try:
+                skin_vertices += len(list(getattr(node, "skin_data", []) or []))
+            except Exception:
+                skin_vertices += 0
+    return BodyRigGenerateResult(
+        ok=True,
+        bone_count=len(nodes),
+        vertices_skinned=skin_vertices,
+        message=(
+            "Native KOTOR template rig applied; legacy AcuRig skeleton "
+            "generation skipped for export."
+        ),
+        code="native_template",
+    )
 
 
 def model_texture_names(model: Any) -> List[str]:
@@ -3296,6 +5399,7 @@ def _verify_launch_reloaded_model(
     model: Any,
     *,
     expected_supermodel: str = "",
+    expected_native_snapshot: Optional[Any] = None,
 ) -> Tuple[bool, List[str], int, int, str, str]:
     """Check the KOTOR-critical facts after reloading an exported body."""
     if model is None:
@@ -3304,7 +5408,7 @@ def _verify_launch_reloaded_model(
     nodes = _model_nodes(model)
     names = [str(getattr(n, "name", "") or "") for n in nodes]
     names_lower = {n.lower() for n in names}
-    hooks = [n for n in names if n.lower() in {"headhook", "rhand", "lhand_g"}]
+    hooks = [n for n in names if n.lower() in {"headhook", "rhand", "lhand"}]
     mesh_count = sum(
         1 for n in nodes
         if bool(getattr(n, "is_mesh", False))
@@ -3317,9 +5421,15 @@ def _verify_launch_reloaded_model(
     )
     supermodel = str(getattr(model, "supermodel", "") or "")
     problems: List[str] = []
-    for required in ("headhook", "rhand"):
+    for required in ("headhook", "rhand", "lhand"):
         if required not in names_lower:
             problems.append(f"Missing required hook/node: {required}")
+    problems.extend(
+        _reload_structural_path_problems(
+            model,
+            expected_native_snapshot,
+        )
+    )
     if mesh_count <= 0:
         problems.append("Reloaded export has no mesh nodes.")
     if skin_count <= 0:
@@ -3338,15 +5448,24 @@ def run_external_mesh_launch_workflow(
     game_version: str = "K1",
     out_dir: str = "",
     template_part: str = "body",
+    template_model: Optional[Any] = None,
+    template_label: str = "",
     motion_supermodel: str = "S_Female02",
     formats: Optional[List[str]] = None,
+    require_animation_library: bool = False,
 ) -> LaunchWorkflowResult:
     """M12/T1205: one-shot external mesh to reloadable KOTOR export.
 
     This is the automation equivalent of the launch workflow a modder
-    expects: load external mesh, apply a KOTOR template, generate/bind,
+    expects: load external mesh, apply/bind a KOTOR native template,
     inherit PC motions, export MDL/MDX, then reload the result and verify
     hooks, supermodel, mesh count, and skin data.
+
+    When ``template_model`` is supplied, it is the selected native KOTOR
+    skeleton authority for both import fitting and final binding.  This is the
+    intended path for fixtures such as Bendak.fbx -> n_mandalorian; the
+    imported mesh remains a payload guest and the selected KOTOR model owns the
+    final node DAG.
     """
     md = _import_model_data()
     if scene is None:
@@ -3362,6 +5481,8 @@ def run_external_mesh_launch_workflow(
         scene,
         game_version=game_version,
         allow_mode_correction=True,
+        fit_reference_model=template_model,
+        fit_reference_label=template_label,
     )
     if not load.ok or load.model is None:
         return LaunchWorkflowResult(
@@ -3372,7 +5493,9 @@ def run_external_mesh_launch_workflow(
 
     try:
         cb = _import_character_builder()
-        template = cb.load_template(game=game_version, part=template_part)
+        template = template_model
+        if template is None:
+            template = cb.load_template(game=game_version, part=template_part)
         applied = cb.apply_template_rig(load.model, template, game=game_version)
     except Exception as exc:
         log.exception("run_external_mesh_launch_workflow: template apply failed")
@@ -3398,30 +5521,7 @@ def run_external_mesh_launch_workflow(
         source_path=mesh_path,
     )
 
-    guides = place_body_guides(scene)
-    if not guides.ok:
-        return LaunchWorkflowResult(
-            load_result=load,
-            apply_result=applied,
-            guide_result=guides,
-            message=f"Launch workflow stopped at guide placement: {guides.message}",
-            code=getattr(guides, "code", "") or "guides_failed",
-        )
-
-    generated = generate_skeleton(
-        scene,
-        acurig=guides.acurig,
-        guides=guides.guides,
-    )
-    if not generated.ok:
-        return LaunchWorkflowResult(
-            load_result=load,
-            apply_result=applied,
-            guide_result=guides,
-            generate_result=generated,
-            message=f"Launch workflow stopped at skeleton generation: {generated.message}",
-            code=generated.code or "generate_failed",
-        )
+    generated = _native_template_build_summary(rigged_model)
 
     motion = assign_motion_source(
         scene,
@@ -3432,11 +5532,33 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
             message=f"Launch workflow stopped at motion assignment: {motion.message}",
             code=motion.code or "motion_failed",
+        )
+
+    animation_library = None
+    resource_manager = getattr(template, "_gr_supermodel_resource_manager", None)
+    with _with_supermodel_resource_manager(resource_manager):
+        animation_library = available_animation_library(scene)
+    _stamp_animation_library_evidence(
+        rigged_model,
+        motion=motion,
+        library=animation_library,
+    )
+    if require_animation_library and not list(getattr(animation_library, "available", []) or []):
+        return LaunchWorkflowResult(
+            load_result=load,
+            apply_result=applied,
+            generate_result=generated,
+            motion_result=motion,
+            animation_library_result=animation_library,
+            message=(
+                "Launch workflow stopped at animation assignment: "
+                f"{animation_library.message}"
+            ),
+            code=animation_library.code or "animation_library_empty",
         )
 
     exported = export_scene(
@@ -3449,9 +5571,9 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
+            animation_library_result=animation_library,
             export_result=exported,
             message=f"Launch workflow stopped at export: {exported.message}",
             code=exported.code or "export_failed",
@@ -3466,9 +5588,9 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
+            animation_library_result=animation_library,
             export_result=exported,
             message="KOTOR export did not produce an MDL path.",
             code="no_mdl_export",
@@ -3481,9 +5603,9 @@ def run_external_mesh_launch_workflow(
         return LaunchWorkflowResult(
             load_result=load,
             apply_result=applied,
-            guide_result=guides,
             generate_result=generated,
             motion_result=motion,
+            animation_library_result=animation_library,
             export_result=exported,
             mdl_path=mdl_path,
             mdx_path=os.path.splitext(mdl_path)[0] + ".mdx",
@@ -3495,15 +5617,16 @@ def run_external_mesh_launch_workflow(
         _verify_launch_reloaded_model(
             reloaded,
             expected_supermodel=motion.supermodel or motion_supermodel,
+            expected_native_snapshot=getattr(rigged_model, "_gr_native_skeleton_snapshot", None),
         )
     )
     return LaunchWorkflowResult(
         ok=ok,
         load_result=load,
         apply_result=applied,
-        guide_result=guides,
         generate_result=generated,
         motion_result=motion,
+        animation_library_result=animation_library,
         export_result=exported,
         reloaded_model=reloaded,
         mdl_path=mdl_path,
@@ -3512,12 +5635,86 @@ def run_external_mesh_launch_workflow(
         mesh_count=mesh_count,
         skin_node_count=skin_count,
         supermodel=supermodel,
+        capability_stage="export_candidate" if ok else "blocked",
+        game_tested=False,
         message=(
-            "Launch workflow proof passed."
+            "Export-candidate workflow proof passed; in-game testing is still required."
             if ok else
             f"Launch workflow reload verification failed: {problems}"
         ),
-        code="launch_verified" if ok else "verification_failed",
+        code="export_candidate_verified" if ok else "verification_failed",
+    )
+
+
+def run_external_mesh_native_template_launch_workflow(
+    mesh_path: str,
+    native_template_resref: str,
+    *,
+    scene: Optional[Any] = None,
+    game_version: str = "K1",
+    game_dir: str = "",
+    out_dir: str = "",
+    motion_supermodel: str = "",
+    formats: Optional[List[str]] = None,
+) -> LaunchWorkflowResult:
+    """Load a custom mesh and bind it to a selected native KOTOR base resref.
+
+    This is the headless equivalent of the Character Builder path:
+
+    ``Choose KOTOR Base`` -> ``Load Custom Mesh`` -> ``Auto-Fit`` -> ``Build``
+    -> ``Export``.
+
+    The native base MDL loaded from ``native_template_resref`` is the authority
+    for the final DAG and the imported file is only a mesh payload. For the
+    Bendak fixture, call this with ``mesh_path=Bendak.fbx`` and
+    ``native_template_resref=n_mandalorian``.
+    """
+    resref = str(native_template_resref or "").strip().lower()
+    if not resref:
+        return LaunchWorkflowResult(
+            message="No native KOTOR base skeleton resref supplied.",
+            code="no_native_template_resref",
+        )
+
+    try:
+        cb = _import_character_builder()
+        template = cb.load_game_skeleton_source(
+            resref,
+            game=game_version,
+            game_dir=game_dir or None,
+        )
+    except Exception as exc:
+        log.exception(
+            "run_external_mesh_native_template_launch_workflow: native template load failed"
+        )
+        return LaunchWorkflowResult(
+            message=f"Native KOTOR base skeleton load failed: {exc}",
+            code="native_template_failed",
+        )
+
+    if template is None:
+        return LaunchWorkflowResult(
+            message=(
+                f"Could not load native KOTOR base skeleton '{resref}'. "
+                "Choose a resref that exists in the configured game library."
+            ),
+            code="native_template_missing",
+        )
+
+    return run_external_mesh_launch_workflow(
+        mesh_path,
+        scene=scene,
+        game_version=game_version,
+        out_dir=out_dir,
+        template_model=template,
+        template_label=resref,
+        motion_supermodel=(
+            str(motion_supermodel or "")
+            or str(getattr(template, "supermodel", "") or "")
+            or "S_Female02"
+        ),
+        formats=formats,
+        require_animation_library=True,
     )
 
 
@@ -3630,8 +5827,39 @@ def _export_single_format(
 
     try:
         if fmt_key == "kotor":
-            writer_cls = _import_mdl_binary_writer()
-            writer_cls().write_files(body, out_path)
+            try:
+                from src.core.characters.character_export_transaction import (
+                    CharacterBuilderExportTransactionRequest,
+                    export_character_mdl_mdx_transaction,
+                )
+            except ImportError:  # pragma: no cover
+                from core.characters.character_export_transaction import (  # type: ignore
+                    CharacterBuilderExportTransactionRequest,
+                    export_character_mdl_mdx_transaction,
+                )
+
+            def _reload_exported(mdl_path, _mdx_path):
+                return _load_exported_kotor_model(str(mdl_path))
+
+            tx = export_character_mdl_mdx_transaction(
+                CharacterBuilderExportTransactionRequest(
+                    model=body,
+                    output_mdl_path=out_path,
+                    game=str(getattr(scene, "game_version", "") or "K1"),
+                    native_snapshot=getattr(body, "_gr_native_skeleton_snapshot", None),
+                    overwrite=True,
+                    metadata={"workflow": "headless_body_workflow.export_scene"},
+                    writer_cls=_import_mdl_binary_writer(),
+                    loader=_reload_exported,
+                )
+            )
+            if not tx.succeeded:
+                messages = [
+                    issue.message
+                    for issue in tx.export_job_result.validation_report.issues
+                    if getattr(issue, "message", "")
+                ]
+                raise RuntimeError("; ".join(messages) or "Character export transaction failed")
         elif fmt_key == "fbx":
             fbx_cls, _gltf_cls, _obj_cls = _import_mesh_exporters()
             ok = fbx_cls().export(body, out_path)
@@ -3682,9 +5910,11 @@ def export_scene(
     write_sidecar    : When True (default), write ``<resref>.ghostrig.json``
                        to the output directory via
                        :meth:`SceneIO.write_sidecar`.
-    skip_validation  : When True, bypass the strict-validation gate.
+    skip_validation  : When True, bypass the UI/workflow validation gate only.
                        Reserved for "Export anyway" UX after the user
-                       has acknowledged warnings.
+                       has acknowledged warnings.  The staged KOTOR
+                       transaction still runs Character Builder preflight,
+                       including the native-template-final rig-state gate.
 
     Notes
     -----
@@ -3881,6 +6111,7 @@ __all__ = [
     "MotionAssignmentResult",
     "PC_SUPERMODEL_OPTIONS",
     "PREVIEW_ANIMATIONS",
+    "REQUIRED_PREVIEW_ANIMATIONS",
     "ValidateForExportResult",
     "apply_body_guide_positions",
     "apply_hand_masks",
@@ -3892,9 +6123,11 @@ __all__ = [
     "default_export_formats_for_mode",
     "export_scene",
     "generate_skeleton",
+    "inspect_external_model_fit",
     "load_body",
     "load_file_filter",
     "motion_assignment_options",
+    "normalize_kotor_game_tag",
     "normalize_external_model_for_kotor",
     "place_body_guides",
     "place_hand_guides",
@@ -3903,6 +6136,7 @@ __all__ = [
     "record_body_guide_edit",
     "redo_body_guide_edit",
     "run_external_mesh_launch_workflow",
+    "run_external_mesh_native_template_launch_workflow",
     "run_rom_test",
     "stop_preview_animation",
     "undo_body_guide_edit",

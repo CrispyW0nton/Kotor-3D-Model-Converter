@@ -43,10 +43,12 @@ Spec:    knowledge_base/roadmap/01_qt_branch_audit.md §4.3.
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Mapping
+from typing import Any, Dict, Iterable, List, Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from src.core.characters.character_autofit_report import summarize_auto_fit_quality
 from src.gui.qt_lib.assets.qt_theme import C, heading
 
 
@@ -111,6 +113,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
     loadRequested             = QtCore.Signal()
     fitAdjustmentChanged      = QtCore.Signal(float, float, float, float, float, float, float)
     fitAdjustmentResetRequested = QtCore.Signal()
+    refitToSelectedBaseRequested = QtCore.Signal()
     validateRequested         = QtCore.Signal()
     checkModelRequested       = QtCore.Signal()
     romTestRequested          = QtCore.Signal()
@@ -179,11 +182,17 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_pos_y_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_pos_z_spin: Optional[QtWidgets.QDoubleSpinBox] = None
         self._fit_adjust_status: Optional[QtWidgets.QLabel] = None
+        self._fit_report_label: Optional[QtWidgets.QLabel] = None
+        self._fit_source_forward_combo: Optional[QtWidgets.QComboBox] = None
+        self._fit_source_up_combo: Optional[QtWidgets.QComboBox] = None
+        self._fit_height_source_combo: Optional[QtWidgets.QComboBox] = None
+        self._fit_ground_basis_combo: Optional[QtWidgets.QComboBox] = None
         # M12 / T1204 — mode-aware motion assignment.
         self._motion_source_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_supermodel_combo: Optional[QtWidgets.QComboBox] = None
         self._motion_assignment_status: Optional[QtWidgets.QLabel] = None
         self._animation_library_combo: Optional[QtWidgets.QComboBox] = None
+        self._animation_library_status: Optional[QtWidgets.QLabel] = None
         self._preview_attachment_resref_combo: Optional[QtWidgets.QComboBox] = None
         self._preview_attachment_path: str = ""
         self._preview_attachment_status: Optional[QtWidgets.QLabel] = None
@@ -330,16 +339,60 @@ class QtInspectorPanel(QtWidgets.QWidget):
             fit_layout.addWidget(QtWidgets.QLabel(label), row, 0)
             fit_layout.addWidget(spin, row, 1, 1, 3)
 
+        axis_options = ["Auto", "+X", "-X", "+Y", "-Y", "+Z", "-Z"]
+        self._fit_source_forward_combo = QtWidgets.QComboBox()
+        self._fit_source_forward_combo.addItems(axis_options)
+        self._fit_source_forward_combo.setToolTip("Override the imported mesh's forward axis before re-fit.")
+        fit_layout.addWidget(QtWidgets.QLabel("Source Forward"), 7, 0)
+        fit_layout.addWidget(self._fit_source_forward_combo, 7, 1)
+
+        self._fit_source_up_combo = QtWidgets.QComboBox()
+        self._fit_source_up_combo.addItems(axis_options)
+        self._fit_source_up_combo.setToolTip("Override the imported mesh's up axis before re-fit.")
+        fit_layout.addWidget(QtWidgets.QLabel("Source Up"), 7, 2)
+        fit_layout.addWidget(self._fit_source_up_combo, 7, 3)
+
+        self._fit_height_source_combo = QtWidgets.QComboBox()
+        self._fit_height_source_combo.addItems(["Auto", "Landmarks", "Bounds"])
+        self._fit_height_source_combo.setToolTip("Choose whether re-fit height comes from detected landmarks or mesh bounds.")
+        fit_layout.addWidget(QtWidgets.QLabel("Height"), 8, 0)
+        fit_layout.addWidget(self._fit_height_source_combo, 8, 1)
+
+        self._fit_ground_basis_combo = QtWidgets.QComboBox()
+        self._fit_ground_basis_combo.addItems(["Auto", "Feet", "Hips", "Bounds Bottom"])
+        self._fit_ground_basis_combo.setToolTip("Choose the origin used to snap the imported mesh to the KOTOR base.")
+        fit_layout.addWidget(QtWidgets.QLabel("Ground"), 8, 2)
+        fit_layout.addWidget(self._fit_ground_basis_combo, 8, 3)
+
         reset_btn = QtWidgets.QPushButton("Reset Fit")
         reset_btn.clicked.connect(self.fitAdjustmentResetRequested.emit)
-        fit_layout.addWidget(reset_btn, 7, 0, 1, 2)
+        fit_layout.addWidget(reset_btn, 9, 0, 1, 2)
+
+        refit_btn = QtWidgets.QPushButton("Re-fit to Selected Base")
+        refit_btn.setObjectName("CharacterBuilderRefitToSelectedBaseButton")
+        refit_btn.setToolTip(
+            "Reload the original external mesh and run auto-fit again against "
+            "the currently selected KOTOR base skeleton."
+        )
+        refit_btn.clicked.connect(self.refitToSelectedBaseRequested.emit)
+        fit_layout.addWidget(refit_btn, 9, 2, 1, 2)
 
         self._fit_adjust_status = QtWidgets.QLabel("Auto-fit can be fine-tuned after import.")
         self._fit_adjust_status.setWordWrap(True)
         self._fit_adjust_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_adjust_status, 7, 2, 1, 2)
+        fit_layout.addWidget(self._fit_adjust_status, 10, 0, 1, 4)
+
+        self._fit_report_label = QtWidgets.QLabel(
+            "Auto-fit report will appear after loading a custom mesh."
+        )
+        self._fit_report_label.setObjectName("CharacterBuilderImportFitReportLabel")
+        self._fit_report_label.setWordWrap(True)
+        self._fit_report_label.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        fit_layout.addWidget(self._fit_report_label, 11, 0, 1, 4)
 
         for spin in (
             self._fit_scale_spin,
@@ -777,24 +830,25 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T503 — Body-rig action buttons (body step only) ─────
         if step == _STEP_RIG_BODY:
-            actions = QtWidgets.QGroupBox("Create Skeleton")
+            actions = QtWidgets.QGroupBox("Legacy / Experimental AcuRig")
             actions_layout = QtWidgets.QVBoxLayout(actions)
             actions_layout.setSpacing(4)
 
-            self._place_guides_btn = QtWidgets.QPushButton("Place Body Guides")
+            self._place_guides_btn = QtWidgets.QPushButton("Legacy: Place Body Guides")
             self._place_guides_btn.setToolTip(
-                "Snap AcuRig humanoid guide pins onto the body model.\n"
-                "Use the joint-dot HUD to fine-tune positions; drag with\n"
-                "Symmetry enabled to mirror across the X axis."
+                "Legacy/experimental AcuRig diagnostic path. Disabled by\n"
+                "default for game export. The normal Character Builder path\n"
+                "uses Build KOTOR Skeleton from the selected native template."
             )
             self._place_guides_btn.clicked.connect(self.placeGuidesRequested.emit)
             actions_layout.addWidget(self._place_guides_btn)
 
-            self._generate_skeleton_btn = QtWidgets.QPushButton("Create New Skeleton")
+            self._generate_skeleton_btn = QtWidgets.QPushButton("Legacy: Create New Skeleton")
             self._generate_skeleton_btn.setProperty("accent", True)
             self._generate_skeleton_btn.setToolTip(
-                "Build bones from the current guides + run heat-map\n"
-                "skinning (accurig.build_skeleton + auto_skin)."
+                "Legacy/experimental AcuRig skeleton generation. Use only\n"
+                "for diagnostics; game exports should use the native KOTOR\n"
+                "template skeleton as the final DAG authority."
             )
             self._generate_skeleton_btn.clicked.connect(
                 self.generateSkeletonRequested.emit
@@ -812,15 +866,15 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
         # ── M5 / T504 — Hand-rig action group (hands step only) ──────
         if step == _STEP_RIG_HANDS:
-            hand_actions = QtWidgets.QGroupBox("Align Bones")
+            hand_actions = QtWidgets.QGroupBox("Legacy / Experimental Hand AcuRig")
             hand_layout = QtWidgets.QVBoxLayout(hand_actions)
             hand_layout.setSpacing(4)
 
-            self._place_hand_guides_btn = QtWidgets.QPushButton("Rebuild Hand Guides")
+            self._place_hand_guides_btn = QtWidgets.QPushButton("Legacy: Rebuild Hand Guides")
             self._place_hand_guides_btn.setToolTip(
-                "Re-snap wrist + finger guide pins onto the body model.\n"
-                "Run this *after* Generate Skeleton so AcuRig knows the\n"
-                "final bone positions."
+                "Legacy/experimental AcuRig hand diagnostic path. Disabled\n"
+                "by default because game exports should keep the selected\n"
+                "native KOTOR skeleton hierarchy."
             )
             self._place_hand_guides_btn.clicked.connect(
                 self.placeHandGuidesRequested.emit
@@ -1355,6 +1409,17 @@ class QtInspectorPanel(QtWidgets.QWidget):
         library_buttons.addWidget(stop_library_btn)
         library_buttons.addStretch(1)
         library_layout.addLayout(library_buttons)
+        self._animation_library_status = QtWidgets.QLabel(
+            "Load the selected supermodel library to preview inherited animations."
+        )
+        self._animation_library_status.setObjectName(
+            "CharacterBuilderAnimationLibraryStatusLabel"
+        )
+        self._animation_library_status.setWordWrap(True)
+        self._animation_library_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        library_layout.addWidget(self._animation_library_status)
         layout.addWidget(library_group)
 
     def selected_motion_source(self) -> str:
@@ -1403,7 +1468,14 @@ class QtInspectorPanel(QtWidgets.QWidget):
                     return
             sm_combo.setEditText(supermodel)
 
-    def set_animation_library(self, available, missing=None) -> None:
+    def set_animation_library(
+        self,
+        available,
+        missing=None,
+        *,
+        message: str = "",
+        diagnostics=None,
+    ) -> None:
         combo = getattr(self, "_animation_library_combo", None)
         if combo is None:
             return
@@ -1415,6 +1487,20 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 combo.addItem(f"{label} ({name}) - missing", userData="")
         if available:
             combo.setCurrentIndex(0)
+        status = getattr(self, "_animation_library_status", None)
+        if status is not None:
+            reason_text = ", ".join(str(item) for item in (diagnostics or []) if str(item))
+            if available:
+                text = message or f"{len(available)} animation clip(s) available."
+                colour = "#7cd87c"
+            elif reason_text:
+                text = (message or "No animations available.") + f"\nDiagnostics: {reason_text}"
+                colour = "#ffd166"
+            else:
+                text = message or "No animations available."
+                colour = "#ffd166"
+            status.setText(text)
+            status.setStyleSheet(f"color:{colour}; font-size:8pt;")
 
     def set_preview_attachment_source(self, *, resref: str = "", path: str = "") -> None:
         self._preview_attachment_path = str(path or "")
@@ -2105,6 +2191,23 @@ class QtInspectorPanel(QtWidgets.QWidget):
             return True
         return bool(self._symmetry_checkboxes[0].isChecked())
 
+    def selected_fit_override(self) -> Dict[str, str]:
+        """Return manual auto-fit override choices for a re-fit operation."""
+        def combo_value(combo: Optional[QtWidgets.QComboBox]) -> str:
+            if combo is None:
+                return "auto"
+            text = str(combo.currentText() or "").strip().lower()
+            if not text:
+                return "auto"
+            return text.replace(" ", "_")
+
+        return {
+            "source_forward_axis": combo_value(self._fit_source_forward_combo),
+            "source_up_axis": combo_value(self._fit_source_up_combo),
+            "height_source": combo_value(self._fit_height_source_combo),
+            "ground_origin_basis": combo_value(self._fit_ground_basis_combo),
+        }
+
     def set_fit_adjustment(
         self,
         *,
@@ -2158,6 +2261,176 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "error": "#ff6b6b",
         }.get(str(kind).lower(), C.get("text2", "#888"))
         label.setText(str(message))
+        label.setStyleSheet(f"color:{colour}; font-size:8pt;")
+
+    def set_import_fit_report(self, report: Optional[Mapping[str, Any]]) -> None:
+        """Show the headless auto-fit evidence for the imported mesh.
+
+        The Character Builder keeps the native KOTOR template as the final DAG
+        authority.  This label only explains how the external mesh was scaled
+        and oriented before the user applies that template skeleton.
+        """
+        label = getattr(self, "_fit_report_label", None)
+        if label is None:
+            return
+        if not report:
+            label.setText("Auto-fit report will appear after loading a custom mesh.")
+            label.setStyleSheet(f"color:{C.get('text2', '#888')}; font-size:8pt;")
+            return
+
+        policy = str(report.get("fit_policy") or "unknown")
+        scale = report.get("scale")
+        try:
+            scale_text = f"{float(scale) * 100.0:.1f}%"
+        except Exception:
+            scale_text = "unknown scale"
+        basis = str(report.get("scale_basis") or report.get("vertical_axis") or "unknown basis")
+        reference = str(report.get("reference") or "selected KOTOR base")
+        source_frame = report.get("source_frame") if isinstance(report.get("source_frame"), Mapping) else {}
+        target_frame = report.get("target_frame") if isinstance(report.get("target_frame"), Mapping) else {}
+        auto_report = (
+            report.get("auto_fit_report")
+            if isinstance(report.get("auto_fit_report"), Mapping)
+            else report
+        )
+
+        confidence_parts: List[str] = []
+        for label_name, frame in (("source", source_frame), ("target", target_frame)):
+            value = frame.get("confidence") if isinstance(frame, Mapping) else None
+            if value is not None:
+                try:
+                    confidence_parts.append(f"{label_name} {float(value):.2f}")
+                except Exception:
+                    pass
+        warnings = [str(w) for w in (report.get("warnings") or []) if str(w)]
+
+        quality = summarize_auto_fit_quality(report)
+        quality_summary = str(quality.get("summary") or "").strip()
+        quality_stage = str(quality.get("stage") or "").strip().lower()
+        quality_reasons = [
+            str(reason or "")
+            for reason in list(quality.get("reasons") or [])
+            if str(reason or "").strip()
+        ]
+
+        lines = []
+        if quality_summary:
+            lines.append(f"Fit readiness: {quality_summary}")
+            if quality_reasons:
+                shown_reasons = ", ".join(quality_reasons[:4])
+                suffix = "" if len(quality_reasons) <= 4 else f", +{len(quality_reasons) - 4} more"
+                lines.append(f"Review reasons: {shown_reasons}{suffix}.")
+
+        lines.extend([
+            f"Auto-fit: {policy}, scale {scale_text}, {basis}.",
+            f"Reference: {reference}.",
+        ])
+        if isinstance(auto_report, Mapping):
+            source_forward = str(auto_report.get("source_forward_axis") or "unknown")
+            source_up = str(auto_report.get("source_up_axis") or "unknown")
+            target_forward = str(auto_report.get("target_forward_axis") or "unknown")
+            target_up = str(auto_report.get("target_up_axis") or "unknown")
+            lines.append(
+                "Axes: "
+                f"source fwd {source_forward}, up {source_up}; "
+                f"target fwd {target_forward}, up {target_up}."
+            )
+            confidence = auto_report.get("confidence")
+            if confidence is not None:
+                try:
+                    lines.append(f"Auto-fit confidence: {float(confidence):.2f}.")
+                except Exception:
+                    pass
+            fallback_used = bool(auto_report.get("fallback_used"))
+            if fallback_used:
+                note = str(auto_report.get("notes") or auto_report.get("ground_origin_basis") or "bounds fallback")
+                lines.append(f"Fallback fit used: {note}")
+            height_source = str(auto_report.get("height_source") or "")
+            ground_basis = str(auto_report.get("ground_origin_basis") or "")
+            if height_source or ground_basis:
+                lines.append(
+                    "Height/ground: "
+                    f"{height_source or 'unknown height'}, "
+                    f"{ground_basis or 'unknown ground'}."
+                )
+            landmarks = [
+                str(value)
+                for value in (auto_report.get("used_landmarks") or [])
+                if str(value)
+            ]
+            if landmarks:
+                shown = ", ".join(landmarks[:6])
+                suffix = "" if len(landmarks) <= 6 else f", +{len(landmarks) - 6} more"
+                lines.append(f"Landmarks: {shown}{suffix}.")
+        if confidence_parts:
+            lines.append("Landmark confidence: " + ", ".join(confidence_parts) + ".")
+        fit_transform = (
+            report.get("fit_transform")
+            if isinstance(report.get("fit_transform"), Mapping)
+            else {}
+        )
+        alignment = (
+            fit_transform.get("landmark_alignment")
+            if isinstance(fit_transform.get("landmark_alignment"), Mapping)
+            else {}
+        )
+        if isinstance(alignment, Mapping) and alignment.get("pair_count"):
+            def fmt_error(value: Any) -> str:
+                try:
+                    return f"{float(value):.3f}"
+                except Exception:
+                    return "n/a"
+
+            pair_count = int(alignment.get("pair_count") or 0)
+            rms_error = fmt_error(alignment.get("rms_error"))
+            max_error = fmt_error(alignment.get("max_error"))
+            worst = str(alignment.get("worst_pair_role") or "").strip()
+            suffix = f", worst {worst}" if worst else ""
+            lines.append(
+                "Fit quality: "
+                f"{pair_count} paired landmarks, RMS {rms_error}, max {max_error}{suffix}."
+            )
+        imported_armature = (
+            report.get("source_imported_armature")
+            if isinstance(report.get("source_imported_armature"), Mapping)
+            else {}
+        )
+        guide_count = 0
+        if isinstance(imported_armature, Mapping):
+            try:
+                guide_count = int(imported_armature.get("guide_joint_count") or 0)
+            except Exception:
+                guide_count = 0
+        if guide_count:
+            source_kind = str(imported_armature.get("source") or "imported_skeleton_nodes")
+            names = [
+                str(name)
+                for name in list(imported_armature.get("armature_names") or [])
+                if str(name).strip()
+            ]
+            if source_kind == "imported_fbx_armature" and names:
+                lines.append(
+                    "Source skeleton guides: "
+                    f"FBX armature {', '.join(names[:3])}, {guide_count} guide joints."
+                )
+            else:
+                lines.append(
+                    "Source skeleton guides: "
+                    f"{guide_count} imported skeleton guide nodes."
+                )
+        contract = report.get("kotor_contract")
+        if isinstance(contract, Mapping) and contract.get("native_skeleton_is_authority"):
+            lines.append("Final skeleton: selected KOTOR base; imported mesh is geometry payload.")
+        if warnings:
+            lines.append("Warning: " + warnings[0])
+
+        if quality_stage == "passed" and not warnings:
+            colour = "#7cd87c"
+        elif quality_stage in {"fallback", "needs_review"} or warnings:
+            colour = "#ffd166"
+        else:
+            colour = C.get("text2", "#888")
+        label.setText("\n".join(lines))
         label.setStyleSheet(f"color:{colour}; font-size:8pt;")
 
     def populate_joints(self, names: Iterable[str]) -> None:

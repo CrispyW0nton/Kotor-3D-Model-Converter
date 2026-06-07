@@ -219,6 +219,9 @@ class RendererRenderLoopMixin:
             if self._ext_skeleton:
                 self._draw_ext_skeleton(draw, W, H)
 
+            if getattr(self, "_character_fit_overlay", None):
+                self._draw_character_fit_overlay(draw, W, H)
+
             # Gimbal transform overlay for selected node
             if self.show_gimbal and self.selected_node and not self.is_interactive:
                 self._draw_gimbal(draw, W, H)

@@ -250,6 +250,60 @@ def _infer_part(resref: str, metadata: Mapping[str, Any]) -> str:
     return "unknown"
 
 
+def npc_numbered_variant_base_resref(resref: str) -> str:
+    """Return the loadable NPC base MDL resref for a numbered appearance variant.
+
+    KOTOR creature/NPC appearance targets can be named like ``n_mandalorian03``
+    while the actual model resource in the BIF is ``n_mandalorian``.  The
+    Character Builder must preserve the requested replacement identity, but the
+    skeleton authority still has to come from the real MDL resref.
+
+    The rule is intentionally conservative: only ``n_`` NPC-style resrefs with a
+    two-or-more digit suffix are folded. Player heads such as ``pmhc01`` and item
+    models such as ``w_lghtsbr_009`` are not variants for this workflow.
+    """
+
+    value = str(resref or "").strip().lower()
+    if not value.startswith("n_"):
+        return ""
+    idx = len(value)
+    while idx > 0 and value[idx - 1].isdigit():
+        idx -= 1
+    digits = value[idx:]
+    base = value[:idx]
+    if len(digits) < 2 or len(base) <= 2:
+        return ""
+    return base
+
+
+def resolve_model_variant_source_resref(
+    requested_resref: str,
+    available_resrefs: Iterable[str],
+) -> str:
+    """Resolve a requested Character Builder target to the MDL resref to load.
+
+    Exact installed MDLs always win.  If the requested resref is missing and it
+    is a conservative NPC numbered variant, return the available base model
+    resref instead.  Otherwise return the requested resref unchanged so callers
+    can still surface a normal "model not found" message.
+    """
+
+    requested = str(requested_resref or "").strip().lower()
+    available = {
+        str(value or "").strip().lower()
+        for value in available_resrefs
+        if str(value or "").strip()
+    }
+    if not requested:
+        return ""
+    if requested in available:
+        return requested
+    base = npc_numbered_variant_base_resref(requested)
+    if base and base in available:
+        return base
+    return requested
+
+
 def _matches_query(option: SkeletonTemplateOption, query: str) -> bool:
     q = (query or "").strip().lower()
     if not q:
@@ -412,11 +466,16 @@ def build_game_template_options(
             continue
         meta = dict(metadata_by_resref.get(resref, {}))
         meta.update({k: v for k, v in raw.items() if k not in meta})
+        source_resref = str(meta.get("source_resref") or resref).lower()
         inferred_part = _infer_part(resref, meta)
         if part_filter and inferred_part != part_filter:
             continue
 
         warnings: List[str] = []
+        if source_resref != resref:
+            warnings.append(
+                f"Loads base MDL '{source_resref}' while preserving target '{resref}'."
+            )
         if inferred_part == "unknown":
             warnings.append("Could not infer whether this is a body, head, supermodel, or creature skeleton.")
         if not meta.get("node_count"):
@@ -434,7 +493,7 @@ def build_game_template_options(
             path=str(raw.get("path") or f"installation:{resref}.mdl"),
             exists=True,
             size=int(raw.get("size") or meta.get("size") or 0),
-            source_resref=resref,
+            source_resref=source_resref,
             supermodel=str(meta.get("supermodel") or ""),
             classification=str(meta.get("classification") or ""),
             node_count=int(meta.get("node_count") or 0),
@@ -533,6 +592,8 @@ def option_summary(option: SkeletonTemplateOption) -> str:
     """Compact human-readable label for inspector/dropdown surfaces."""
 
     bits = [option.game, option.part, option.name]
+    if option.source_resref and option.source_resref != option.resref:
+        bits.append(f"loads {option.source_resref}")
     if option.supermodel:
         bits.append(f"super={option.supermodel}")
     if option.node_count:
@@ -547,5 +608,7 @@ __all__ = [
     "list_canonical_skeleton_sources",
     "list_bundled_templates",
     "list_skeleton_templates",
+    "npc_numbered_variant_base_resref",
     "option_summary",
+    "resolve_model_variant_source_resref",
 ]

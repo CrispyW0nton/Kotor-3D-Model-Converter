@@ -17,6 +17,15 @@ from .theme_settings import ThemeLayoutSettings, user_config_root
 log = logging.getLogger(__name__)
 
 
+_LEGACY_THEME_ID_ALIASES = {
+    "classic": "default_classic",
+    "dark": "default_dark",
+    "droid": "default_droid",
+    "light": "default_light",
+    "matrix": "default_matrix",
+}
+
+
 class ThemeManager(QtCore.QObject):
     themeChanged = QtCore.Signal(object)
 
@@ -66,11 +75,12 @@ class ThemeManager(QtCore.QObject):
         if self.settings.theme_mode == "follow_os":
             os_mode = self.os_detector.current_mode()
             self.settings.last_known_os_theme = os_mode
-            return self.settings.os_light_theme if os_mode == "light" else self.settings.os_dark_theme
-        return self.settings.selected_theme
+            requested = self.settings.os_light_theme if os_mode == "light" else self.settings.os_dark_theme
+            return self._canonical_theme_id(requested)
+        return self._canonical_theme_id(self.settings.selected_theme)
 
     def get_theme(self, theme_id: str | None = None) -> Theme:
-        requested = theme_id or self.resolve_theme_id()
+        requested = self._canonical_theme_id(theme_id or self.resolve_theme_id())
         return (
             self.themes.get(requested)
             or self.themes.get("default")
@@ -87,7 +97,8 @@ class ThemeManager(QtCore.QObject):
 
     def select_theme(self, theme_id: str, *, apply: bool = True, target: QtWidgets.QWidget | None = None) -> Theme:
         self.settings.theme_mode = "manual"
-        self.settings.selected_theme = theme_id if theme_id in self.themes else "default"
+        requested = self._canonical_theme_id(theme_id)
+        self.settings.selected_theme = requested if requested in self.themes else "default"
         theme = self.get_theme(self.settings.selected_theme)
         if apply:
             if self.current_theme is not None and self.current_theme.id == theme.id and self.current_theme.version == theme.version:
@@ -114,3 +125,12 @@ class ThemeManager(QtCore.QObject):
 
     def icon(self, name: str, size: int = 16):
         return self.icons.icon(name, self.current_theme or self.get_theme(), size)
+
+    def _canonical_theme_id(self, theme_id: str | None) -> str:
+        requested = str(theme_id or "default")
+        if requested in self.themes:
+            return requested
+        alias = _LEGACY_THEME_ID_ALIASES.get(requested)
+        if alias in self.themes:
+            return alias
+        return requested

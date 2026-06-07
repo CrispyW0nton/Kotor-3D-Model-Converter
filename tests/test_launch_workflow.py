@@ -140,27 +140,46 @@ def _install_launch_fakes(monkeypatch, *, reloaded_model):
 
     monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
     monkeypatch.setattr(wf, "_import_validation_service", lambda: _FakeValidationModule)
-    monkeypatch.setattr(wf, "_import_mdl_binary_writer", lambda: _FakeWriter)
-    monkeypatch.setattr(wf, "_import_scene_io", lambda: _FakeSceneIO)
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **_kw):
+        out = pathlib.Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        mdl_path = out / "custom_body.mdl"
+        mdx_path = out / "custom_body.mdx"
+        sidecar_path = out / "custom_body.ghostrig.json"
+        mdl_path.write_bytes(b"fake launch mdl")
+        mdx_path.write_bytes(b"fake launch mdx")
+        if write_sidecar:
+            sidecar_path.write_text("{}", encoding="utf-8")
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(mdl_path),
+                    message="fake export",
+                )
+            ],
+            sidecar_path=str(sidecar_path) if write_sidecar else "",
+            out_dir=str(out),
+            message="fake export",
+        )
+
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
     monkeypatch.setattr(
         wf,
         "place_body_guides",
-        lambda scene: wf.BodyRigGuidesResult(
-            ok=True,
-            guides={"pelvis": object(), "headhook": object()},
-            acurig=object(),
-            message="Placed guides.",
+        lambda *_args, **_kw: (_ for _ in ()).throw(
+            AssertionError("legacy AcuRig guide placement must not run")
         ),
     )
     monkeypatch.setattr(
         wf,
         "generate_skeleton",
-        lambda scene, **_kw: wf.BodyRigGenerateResult(
-            ok=True,
-            bone_count=2,
-            vertices_skinned=3,
-            message="Generated skeleton.",
-            code="generated",
+        lambda *_args, **_kw: (_ for _ in ()).throw(
+            AssertionError("legacy AcuRig skeleton generation must not run")
         ),
     )
     monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: reloaded_model)
@@ -186,7 +205,9 @@ def test_t1205_external_mesh_launch_workflow_exports_reloads_and_verifies(tmp_pa
     )
 
     assert result.ok is True
-    assert result.code == "launch_verified"
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
     assert pathlib.Path(result.mdl_path).is_file()
     assert pathlib.Path(result.mdx_path).is_file()
     assert pathlib.Path(result.export_result.sidecar_path).is_file()

@@ -15,6 +15,7 @@ import importlib.util as _il_util
 import os
 import pathlib
 import sys
+from types import SimpleNamespace
 from typing import Any, List
 
 import pytest
@@ -69,8 +70,66 @@ except Exception as exc:                                    # pragma: no cover
 class _FakeNode:
     """Minimal stand-in for a ``ModelNode``."""
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, parent=None):
         self.name = name
+        self.parent = parent
+        self.children = []
+        self.is_skin = False
+        self.is_mesh = False
+        self.vertices = []
+        self.faces = []
+        self.skin_data = []
+        self.bone_map = []
+        self.qbone_list = []
+        self.tbone_list = []
+        if parent is not None:
+            parent.children.append(self)
+
+
+class _FakeNativeSkeletonSnapshot(SimpleNamespace):
+    def node_names(self):
+        return tuple(str(getattr(node, "name", "") or "") for node in self.nodes)
+
+
+def _fake_native_snapshot_node(
+    name: str,
+    *,
+    parent_name: str | None = None,
+    full_path: tuple[str, ...] | None = None,
+    child_names: tuple[str, ...] = (),
+    export_role: str = "node",
+    socket_category: str | None = None,
+    is_mesh: bool = False,
+    is_skin: bool = False,
+    is_dummy: bool = False,
+    render: bool = True,
+    has_geometry: bool = False,
+    vertex_count: int = 0,
+    face_count: int = 0,
+    texture: str = "",
+) -> SimpleNamespace:
+    path = tuple(full_path or (name,))
+    return SimpleNamespace(
+        name=name,
+        parent_name=parent_name,
+        parent_path=path[:-1],
+        full_path=path,
+        child_names=child_names,
+        flags=None,
+        type_label="skin" if is_skin else "mesh" if is_mesh else "dummy" if is_dummy else "node",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        is_mesh=is_mesh,
+        is_skin=is_skin,
+        is_dummy=is_dummy,
+        render=render,
+        has_geometry=has_geometry,
+        vertex_count=vertex_count,
+        face_count=face_count,
+        texture=texture,
+        socket_category=socket_category,
+        export_role=export_role,
+    )
 
 
 class _FakeBodyModel:
@@ -86,14 +145,216 @@ class _FakeBodyModel:
         self.name = name
         self.supermodel = "S_Female02"
         self.model_type = int(md.ModelClassification.CHARACTER)
-        self._nodes = [
-            _FakeNode("rootdummy"),
-            _FakeNode("headhook"),
-            _FakeNode("rhand"),
+        self.metadata = {}
+        self.metadata["character_builder_rig_state"] = {
+            "state": "native_template_final",
+            "dag_authority": "native_kotor_base",
+            "mesh_role": "payload_guest",
+            "source": "test_fake_body",
+            "native_snapshot_present": True,
+            "native_base_resref": name,
+            "native_base_model_name": name,
+            "native_base_game": "K1",
+            "imported_payload_name": "fake_external_payload",
+            "payload_mesh_names": ["custom_body"],
+            "legacy_acurig": False,
+        }
+        self.metadata["character_builder_bind"] = {
+            "status": "bound_to_native_kotor_skeleton",
+            "native_base": {
+                "source_resref": name,
+                "model_name": name,
+                "game": "K1",
+                "dag_authority": "native_kotor_base",
+                "replaced_render_payload_nodes": [],
+                "replaced_render_payload_count": 0,
+            },
+            "imported_payload": {
+                "model_name": "fake_external_payload",
+                "mesh_role": "payload_guest",
+                "mesh_names": ["custom_body"],
+            },
+            "skin_binding": {
+                "weighting_method": "native_template_nearest_vertex_donor",
+                "quality_stage": "donor_transfer_first_pass",
+                "donor_weight_transfer": True,
+                "mesh_reports": [
+                    {
+                        "mesh_name": "custom_body",
+                        "vertices": 1,
+                        "weighted_vertices": 1,
+                        "fallback_vertices": 0,
+                    },
+                ],
+            },
+        }
+        self.metadata["kotor_fit_report"] = {
+            "fit_policy": "bone_landmark_basis",
+            "confidence": 0.95,
+            "fallback_used": False,
+            "source_forward_axis": "+y",
+            "source_up_axis": "+z",
+            "target_forward_axis": "+y",
+            "target_up_axis": "+z",
+            "fit_transform": {
+                "formula": "kotor_point = linear_matrix * source_point + translation",
+                "scale": 1.0,
+                "translation": [0.0, 0.0, 0.0],
+            },
+            "kotor_contract": {
+                "native_skeleton_is_authority": True,
+                "imported_mesh_role": "payload_guest",
+                "final_dag_source": "selected_kotor_base",
+            },
+            "auto_fit_report": {
+                "confidence": 0.95,
+                "fallback_used": False,
+                "scale_factor": 1.0,
+                "height_source": "landmarks",
+                "ground_origin_basis": "source_pelvis_ground",
+                "used_landmarks": ["source:pelvis=pelvis", "target:pelvis=rootdummy"],
+            },
+        }
+        self.metadata["kotor_normalization"] = {
+            "fit_policy": "bone_landmark_basis",
+            "scale": 1.0,
+            "scale_basis": "bone_landmark_height",
+            "fit_transform": self.metadata["kotor_fit_report"]["fit_transform"],
+        }
+        self._gr_character_builder_rig_state = dict(self.metadata["character_builder_rig_state"])
+        self.root_node = _FakeNode(name)
+        rootdummy = _FakeNode("rootdummy", self.root_node)
+        headhook = _FakeNode("headhook", rootdummy)
+        rhand = _FakeNode("rhand", rootdummy)
+        lhand = _FakeNode("lhand", rootdummy)
+        skin = _FakeNode("custom_body", self.root_node)
+        skin.is_skin = True
+        skin.vertices = [(0.0, 0.0, 0.0)]
+        skin.faces = [(0, 0, 0)]
+        skin.bone_map = ["rootdummy"]
+        skin.qbone_list = [(0.0, 0.0, 0.0, 1.0)]
+        skin.tbone_list = [(0.0, 0.0, 0.0)]
+        skin.skin_data = [
+            SimpleNamespace(
+                influences=[
+                    SimpleNamespace(bone_index=0, weight=1.0),
+                ]
+            )
         ]
+        self._nodes = [
+            self.root_node,
+            rootdummy,
+            headhook,
+            rhand,
+            lhand,
+            skin,
+        ]
+        self._gr_native_skeleton_snapshot = _FakeNativeSkeletonSnapshot(
+            model_name=name,
+            game="K1",
+            supermodel="S_Female02",
+            classification="CHARACTER",
+            model_type=int(md.ModelClassification.CHARACTER),
+            node_count=6,
+            mesh_node_count=1,
+            skin_node_count=1,
+            hook_names=("headhook", "rhand", "lhand"),
+            metadata={"source_resref": name, "source_game": "K1"},
+            nodes=[
+                _fake_native_snapshot_node(
+                    name=name,
+                    child_names=("rootdummy", "custom_body"),
+                    full_path=(name,),
+                    export_role="helper",
+                ),
+                _fake_native_snapshot_node(
+                    name="rootdummy",
+                    parent_name=name,
+                    full_path=(name, "rootdummy"),
+                    child_names=("headhook", "rhand", "lhand"),
+                    is_dummy=True,
+                    export_role="helper",
+                ),
+                _fake_native_snapshot_node(
+                    name="headhook",
+                    parent_name="rootdummy",
+                    full_path=(name, "rootdummy", "headhook"),
+                    is_dummy=True,
+                    export_role="socket",
+                    socket_category="head",
+                ),
+                _fake_native_snapshot_node(
+                    name="rhand",
+                    parent_name="rootdummy",
+                    full_path=(name, "rootdummy", "rhand"),
+                    is_dummy=True,
+                    export_role="socket",
+                    socket_category="right_hand",
+                ),
+                _fake_native_snapshot_node(
+                    name="lhand",
+                    parent_name="rootdummy",
+                    full_path=(name, "rootdummy", "lhand"),
+                    is_dummy=True,
+                    export_role="socket",
+                    socket_category="left_hand",
+                ),
+                _fake_native_snapshot_node(
+                    name="custom_body",
+                    parent_name=name,
+                    full_path=(name, "custom_body"),
+                    is_mesh=True,
+                    is_skin=True,
+                    has_geometry=True,
+                    vertex_count=1,
+                    face_count=1,
+                    export_role="skin",
+                ),
+            ],
+        )
 
     def all_nodes(self):
         return list(self._nodes)
+
+
+def test_launch_reload_verifier_accepts_native_structural_paths():
+    body = _FakeBodyModel("pmbam")
+
+    ok, hooks, mesh_count, skin_count, supermodel, problems = (
+        wf._verify_launch_reloaded_model(
+            body,
+            expected_supermodel="S_Female02",
+            expected_native_snapshot=body._gr_native_skeleton_snapshot,
+        )
+    )
+
+    assert ok is True
+    assert set(hooks) == {"headhook", "rhand", "lhand"}
+    assert mesh_count >= 1
+    assert skin_count >= 1
+    assert supermodel == "S_Female02"
+    assert problems == ""
+
+
+def test_launch_reload_verifier_blocks_missing_left_hand_structural_path():
+    body = _FakeBodyModel("pmbam")
+    body._nodes = [node for node in body._nodes if node.name != "lhand"]
+
+    ok, hooks, _mesh_count, _skin_count, _supermodel, problems = (
+        wf._verify_launch_reloaded_model(
+            body,
+            expected_supermodel="S_Female02",
+            expected_native_snapshot=body._gr_native_skeleton_snapshot,
+        )
+    )
+
+    assert ok is False
+    assert "lhand" not in hooks
+    assert "Missing required hook/node: lhand" in problems
+    assert (
+        "Reloaded export is missing native structural path: "
+        "pmbam / rootdummy / lhand"
+    ) in problems
 
 
 class _FakeHeadModel:
@@ -329,10 +590,33 @@ def test_t501_load_body_dispatches_gltf_to_auto_importer(tmp_path, monkeypatch):
     assert result.ok is True
 
 
+def test_t501_character_builder_fbx_uses_skeleton_aware_mesh_importer(tmp_path, monkeypatch):
+    fake = _FakeAmbiguousExternalModel("bendak")
+    fbx = tmp_path / "Bendak.fbx"
+    fbx.write_bytes(b"fbx stub")
+    called: List[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        wf,
+        "_load_fbx_mesh_for_character_builder",
+        lambda path, gv: (called.append((path, gv)) or fake),
+    )
+
+    result = wf._load_gltf_or_mesh(str(fbx), "K2")
+
+    assert result is fake
+    assert called == [(str(fbx), "K2")]
+
+
 def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
     tmp_path,
     monkeypatch,
 ):
+    from src.core.characters.character_rig_state import (
+        get_character_rig_state,
+        is_imported_temporary_skeleton,
+    )
+
     fake = _FakeAmbiguousExternalModel("bendak")
     fbx = tmp_path / "Bendak.fbx"
     fbx.write_bytes(b"fbx stub")
@@ -346,6 +630,12 @@ def test_t501_load_body_accepts_ambiguous_external_mesh_for_template_flow(
     assert result.detected_mode == md.CharacterMode.AMBIGUOUS
     assert "KOTOR base skeleton" in result.message
     assert scene.get(md.PartSlot.HEADLESS_BODY).resref == "bendak"
+    assert is_imported_temporary_skeleton(result.model) is True
+    rig_state = get_character_rig_state(result.model)
+    assert rig_state is not None
+    assert rig_state.state == "imported_temporary_skeleton"
+    assert rig_state.dag_authority == "imported_external_skeleton"
+    assert result.model.metadata["external_import"]["source_path"] == str(fbx)
 
 
 def test_t501_load_body_resref_is_lowercase_basename(tmp_path, monkeypatch):
@@ -1275,6 +1565,12 @@ def test_t505_preview_animations_constant_includes_idle_walk_talk():
     assert any(n.startswith("tlk") or n == "talk" for n in names)
 
 
+def test_t505_required_preview_animations_use_verified_kotor_slots():
+    names = {n for _, n in wf.REQUIRED_PREVIEW_ANIMATIONS}
+    assert names == {"pause1", "walk", "run", "tlknorm"}
+    assert "dodge" not in names
+
+
 def test_t505_available_preview_animations_no_body_returns_structured_error():
     scene = _make_scene("K1")
     result = wf.available_preview_animations(scene)
@@ -1465,6 +1761,135 @@ def test_t1204_animation_library_lists_real_supermodel_chain(monkeypatch):
     assert {name for _label, name in preview.available} == {"pause1", "walk", "run"}
     assert "tlknorm" in {name for _label, name in preview.missing}
     assert {name for _label, name in library.available} >= {"pause1", "walk", "run"}
+    assert library.details["effective_supermodel"] == "S_Male02"
+
+
+def test_t1204_animation_library_standard_supermodel_clips_populate(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+    body.anim_scale = 1.0
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [
+        _FakeAnimation("pause1", 1.0),
+        _FakeAnimation("walk", 1.2),
+        _FakeAnimation("run", 0.8),
+        _FakeAnimation("tlknorm", 2.0),
+    ]
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            return super_model if str(resref).lower() == "s_male02" else None
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(_RM())
+    try:
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    names = {name for _label, name in library.available}
+    assert library.code == "listed"
+    assert {"pause1", "walk", "run", "tlknorm"}.issubset(names)
+    assert library.diagnostics == []
+    assert library.details["resolved_supermodel"] == "S_Male02"
+
+
+def test_t1204_normalize_kotor_game_tag_accepts_ui_and_enum_labels():
+    assert wf.normalize_kotor_game_tag(None) == "K1"
+    assert wf.normalize_kotor_game_tag("") == "K1"
+    assert wf.normalize_kotor_game_tag("K1") == "K1"
+    assert wf.normalize_kotor_game_tag("GameVersion.K1") == "K1"
+    assert wf.normalize_kotor_game_tag(md.GameVersion.K1) == "K1"
+    assert wf.normalize_kotor_game_tag("K2") == "K2"
+    assert wf.normalize_kotor_game_tag("GameVersion.K2") == "K2"
+    assert wf.normalize_kotor_game_tag("KOTOR II") == "K2"
+    assert wf.normalize_kotor_game_tag("Knights of the Old Republic II") == "K2"
+    assert wf.normalize_kotor_game_tag("TSL") == "K2"
+    assert wf.normalize_kotor_game_tag(md.GameVersion.K2) == "K2"
+
+
+def test_t1204_animation_library_reports_normalized_kotor2_game(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    scene.game_version = "Knights of the Old Republic II"
+    body.supermodel = "NULL"
+    body.anim_scale = 1.0
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [
+        _FakeAnimation("pause1", 1.0),
+        _FakeAnimation("walk", 1.2),
+    ]
+
+    class _RM:
+        calls = []
+
+        def load_model(self, resref, game="K1"):
+            self.calls.append((str(resref), str(game)))
+            if str(resref).lower() == "s_male02" and game == "K2":
+                return super_model
+            return None
+
+    resource_manager = _RM()
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(resource_manager)
+    try:
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    names = {name for _label, name in library.available}
+    assert library.code == "listed"
+    assert {"pause1", "walk"}.issubset(names)
+    assert library.details["game"] == "K2"
+    assert library.details["raw_game"] == "Knights of the Old Republic II"
+    assert ("S_Male02", "K2") in resource_manager.calls
+
+
+def test_t1204_animation_library_empty_reports_resolver_reason(monkeypatch):
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "NULL"
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(None)
+    try:
+        library = wf.available_animation_library(scene)
+    finally:
+        SuperModelResolver.clear_cache()
+
+    assert library.code == "no_animations"
+    assert library.available == []
+    assert "resolver_not_configured" in library.diagnostics
+    assert library.details["effective_supermodel"] == "S_Male02"
+    assert "Diagnostics:" in library.message
 
 
 def test_t1204_play_inherited_preview_succeeds_without_local_clip():
@@ -1482,6 +1907,59 @@ def test_t1204_play_inherited_preview_succeeds_without_local_clip():
     assert result.code == "inherited_preview"
     assert result.playing == "walk"
     assert "S_Female03" in result.message
+
+
+def test_t1204_play_inherited_library_clip_dispatches_resolved_supermodel_animation():
+    scene, body = _scene_with_animated_body()
+    body.supermodel = "S_Male02"
+    body.anim_scale = 1.25
+    wf.assign_motion_source(
+        scene,
+        wf.MOTION_SOURCE_INHERITED,
+        supermodel="S_Male02",
+    )
+
+    super_model = _FakeBodyModel("S_Male02")
+    super_model.supermodel = "NULL"
+    super_model.anim_scale = 1.0
+    super_model.animations = [_FakeAnimation("spellready", 2.5)]
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            return super_model if str(resref).lower() == "s_male02" else None
+
+    class _Viewport:
+        def __init__(self):
+            self.calls = []
+
+        def set_animation_pose(self, pose, **kwargs):
+            self.calls.append({"pose": pose, **kwargs})
+
+    viewport = _Viewport()
+
+    from src.core.animation.animation_engine import SuperModelResolver
+
+    SuperModelResolver.clear_cache()
+    SuperModelResolver.configure(_RM())
+    try:
+        library = wf.available_animation_library(scene)
+        result = wf.play_preview_animation(scene, "spellready", viewport=viewport)
+    finally:
+        SuperModelResolver.clear_cache()
+        SuperModelResolver.configure(None)
+
+    assert {name for _label, name in library.available} == {"spellready"}
+    assert result.ok is True
+    assert result.code == "playing"
+    assert result.playing == "spellready"
+    assert result.length == 2.5
+    assert result.details["source_model"] == "S_Male02"
+    assert result.details["source_scope"] == "inherited"
+    assert result.details["anim_scale"] == 1.25
+    assert len(viewport.calls) == 1
+    assert getattr(viewport.calls[0]["pose"], "name", "") == "spellready"
+    assert viewport.calls[0]["name"] == "spellready"
+    assert viewport.calls[0]["length"] == 2.5
 
 
 def test_t1204_imported_motion_assignment_reflects_preview_subset():
@@ -1689,6 +2167,12 @@ def _install_fake_exporters(monkeypatch):
         "_import_mesh_exporters",
         lambda: (_FakeFBXExporter, _FakeGLTFExporter, _FakeOBJExporter),
     )
+    monkeypatch.setattr(
+        wf,
+        "_load_exported_kotor_model",
+        lambda _mdl_path: _FakeMDLBinaryWriter.calls[-1][0]
+        if _FakeMDLBinaryWriter.calls else None,
+    )
     return {
         "mdl": _FakeMDLBinaryWriter,
         "fbx": _FakeFBXExporter,
@@ -1728,6 +2212,32 @@ def test_t506_validate_for_export_warnings_only_is_not_blocked(monkeypatch):
     assert result.warning_count == 1
     assert result.info_count == 1
     assert result.blocking_codes == []
+
+
+def test_t1205_validate_for_export_keeps_optional_native_hooks_advisory() -> None:
+    """Vanilla native body bases may lack optional effect hooks such as chestconjure."""
+    from src.core.geometry import model_data as canonical_md
+
+    scene = canonical_md.CharacterScene(game_version="K1")
+    body = _FakeBodyModel("n_mandalorian")
+    scene.assign(
+        canonical_md.PartSlot.HEADLESS_BODY,
+        body,
+        resref="n_mandalorian",
+        source_path="/tmp/n_mandalorian.mdl",
+    )
+
+    result = wf.validate_for_export(scene, strict=True)
+
+    assert result.ok is True
+    assert result.code == "warnings_only"
+    missing_hooks = {
+        getattr(issue, "node", "")
+        for issue in result.issues
+        if getattr(issue, "code", "") == "HOOK_MISSING"
+    }
+    assert "chestconjure" in missing_hooks
+    assert "HOOK_MISSING" not in result.blocking_codes
 
 
 def test_t506_validate_for_export_errors_block_export(monkeypatch):
@@ -1947,6 +2457,38 @@ def test_t506_export_scene_skip_validation_bypasses_gate(monkeypatch, tmp_path):
     assert len(_FakeSceneIO.written) == 1
 
 
+def test_t1205_export_scene_skip_validation_keeps_native_template_gate(
+    monkeypatch, tmp_path,
+):
+    """``skip_validation=True`` bypasses UI validation only, not KOTOR preflight."""
+    from src.core.characters.character_rig_state import mark_imported_temporary_skeleton
+
+    _install_fake_scene_io(monkeypatch)
+    writers = _install_fake_exporters(monkeypatch)
+    _make_check_service(monkeypatch, issues=[])
+    scene, body = _scene_with_body()
+    mark_imported_temporary_skeleton(body, source="test_imported_payload")
+
+    result = wf.export_scene(
+        scene,
+        formats=["kotor"],
+        out_dir=str(tmp_path),
+        write_sidecar=False,
+        skip_validation=True,
+    )
+
+    assert result.ok is False
+    assert result.code == "all_failed"
+    row = result.formats[0]
+    assert row.key == "kotor"
+    assert row.ok is False
+    assert row.code == "failed"
+    assert "final native KOTOR template rig state" in row.message
+    assert writers["mdl"].calls == []
+    assert not (tmp_path / "pfbcm.mdl").exists()
+    assert not (tmp_path / "pfbcm.mdx").exists()
+
+
 def test_t506_export_scene_writes_sidecar_to_out_dir(monkeypatch, tmp_path):
     """Sidecar JSON path lives next to ``<resref>.mdl`` in the out_dir."""
     _install_fake_scene_io(monkeypatch)
@@ -2135,6 +2677,422 @@ def test_t506_export_scene_sanitises_resref_for_filenames(monkeypatch, tmp_path)
                 f"forbidden char {ch!r} in basename {base!r}"
 
 
+def test_t1205_launch_workflow_uses_native_template_without_acurig(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("external_payload")
+    rigged_model = _FakeBodyModel("native_template_result")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"load_template": 0, "apply_template_rig": 0, "export": 0}
+
+    def _fake_load_body(*args, **kwargs):
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "custom.fbx"),
+            resref="custom_payload",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            calls["load_template"] += 1
+            assert game == "K1"
+            assert part == "body"
+            return _FakeBodyModel("pmbam")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            calls["apply_template_rig"] += 1
+            assert model is source_model
+            assert getattr(template, "name", "") == "pmbam"
+            assert game == "K1"
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "native template applied",
+            }
+
+    def _legacy_place_body_guides(*args, **kwargs):
+        raise AssertionError("legacy AcuRig guide placement must not run")
+
+    def _legacy_generate_skeleton(*args, **kwargs):
+        raise AssertionError("legacy AcuRig skeleton generation must not run")
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **kwargs):
+        calls["export"] += 1
+        assert scene.get_model(md.PartSlot.HEADLESS_BODY) is rigged_model
+        assert formats == ["kotor"]
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(tmp_path / "custom_payload.mdl"),
+                    message="exported",
+                )
+            ],
+            out_dir=str(tmp_path),
+            message="exported",
+        )
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "place_body_guides", _legacy_place_body_guides)
+    monkeypatch.setattr(wf, "generate_skeleton", _legacy_generate_skeleton)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+    monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: rigged_model)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "custom.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        motion_supermodel="S_Female02",
+    )
+
+    assert result.ok is True
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
+    assert result.guide_result is None
+    assert result.generate_result is not None
+    assert result.generate_result.code == "native_template"
+    assert result.reloaded_model is rigged_model
+    assert calls == {"load_template": 1, "apply_template_rig": 1, "export": 1}
+
+
+def test_t1205_launch_workflow_uses_selected_native_template_for_fit_and_bind(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("bendak")
+    selected_template = _FakeBodyModel("n_mandalorian")
+    selected_template.supermodel = "S_Female02"
+    rigged_model = _FakeBodyModel("bendak_on_n_mandalorian")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"load_body": 0, "load_template": 0, "apply_template_rig": 0, "export": 0}
+
+    def _fake_load_body(*args, **kwargs):
+        calls["load_body"] += 1
+        assert kwargs["fit_reference_model"] is selected_template
+        assert kwargs["fit_reference_label"] == "n_mandalorian"
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "Bendak.fbx"),
+            resref="bendak",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            calls["load_template"] += 1
+            raise AssertionError("selected native template should bypass generic template load")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            calls["apply_template_rig"] += 1
+            assert model is source_model
+            assert template is selected_template
+            assert getattr(template, "name", "") == "n_mandalorian"
+            assert game == "K1"
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "Bendak payload bound to n_mandalorian",
+            }
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **kwargs):
+        calls["export"] += 1
+        assert scene.get_model(md.PartSlot.HEADLESS_BODY) is rigged_model
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(tmp_path / "bendak.mdl"),
+                    message="exported",
+                )
+            ],
+            out_dir=str(tmp_path),
+            message="exported",
+        )
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+    monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: rigged_model)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        template_model=selected_template,
+        template_label="n_mandalorian",
+        motion_supermodel="S_Female02",
+    )
+
+    assert result.ok is True
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
+    assert result.reloaded_model is rigged_model
+    assert calls == {
+        "load_body": 1,
+        "load_template": 0,
+        "apply_template_rig": 1,
+        "export": 1,
+    }
+
+
+def test_t1205_launch_workflow_records_inherited_animation_library(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("bendak")
+    selected_template = _FakeBodyModel("n_mandalorian")
+    selected_template.supermodel = "S_Female02"
+    rigged_model = _FakeBodyModel("bendak_on_n_mandalorian")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"export": 0}
+
+    class _RM:
+        def load_model(self, resref, game="K1"):
+            if str(resref).lower() != "s_female02":
+                return None
+            super_model = _FakeBodyModel("S_Female02")
+            super_model.supermodel = "NULL"
+            super_model.anim_scale = 1.0
+            super_model.animations = [
+                _FakeAnimation("pause1", 1.0),
+                _FakeAnimation("walk", 1.2),
+                _FakeAnimation("run", 0.9),
+                _FakeAnimation("tlknorm", 2.0),
+            ]
+            return super_model
+
+    selected_template._gr_supermodel_resource_manager = _RM()
+
+    def _fake_load_body(*args, **kwargs):
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "Bendak.fbx"),
+            resref="bendak",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            raise AssertionError("selected native template should bypass generic template load")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            assert model is source_model
+            assert template is selected_template
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "Bendak payload bound to n_mandalorian",
+            }
+
+    def _fake_export_scene(scene, *, formats, out_dir, write_sidecar=True, **kwargs):
+        calls["export"] += 1
+        return wf.ExportResult(
+            ok=True,
+            formats=[
+                wf.ExportFormatResult(
+                    key="kotor",
+                    label="KOTOR (MDL/MDX)",
+                    ok=True,
+                    path=str(tmp_path / "bendak.mdl"),
+                    message="exported",
+                )
+            ],
+            out_dir=str(tmp_path),
+            message="exported",
+        )
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+    monkeypatch.setattr(wf, "_load_exported_kotor_model", lambda _path: rigged_model)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        template_model=selected_template,
+        template_label="n_mandalorian",
+        motion_supermodel="S_Female02",
+        require_animation_library=True,
+    )
+
+    assert result.ok is True
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
+    assert result.animation_library_result is not None
+    names = {name for _label, name in result.animation_library_result.available}
+    assert {"pause1", "walk", "run", "tlknorm"}.issubset(names)
+    assert result.animation_library_result.details["resolved_supermodel"] == "S_Female02"
+    animation_evidence = rigged_model.metadata["character_builder_animation_library"]
+    assert animation_evidence["schema"] == "ghostrigger.character_animation_library_evidence.v1"
+    assert animation_evidence["status"] == "resolved"
+    assert animation_evidence["resolved_supermodel"] == "S_Female02"
+    assert animation_evidence["available_count"] == 4
+    assert set(animation_evidence["sample_animation_names"]) == {
+        "pause1",
+        "walk",
+        "run",
+        "tlknorm",
+    }
+    assert animation_evidence["required_preview_missing"] == []
+    motion_evidence = rigged_model.metadata["character_builder_motion_assignment"]
+    assert motion_evidence["source"] == wf.MOTION_SOURCE_INHERITED
+    assert motion_evidence["supermodel"] == "S_Female02"
+    assert calls["export"] == 1
+
+
+def test_t1205_launch_workflow_blocks_required_empty_animation_library(monkeypatch, tmp_path):
+    source_model = _FakeBodyModel("bendak")
+    selected_template = _FakeBodyModel("n_mandalorian")
+    selected_template.supermodel = "S_Female02"
+    rigged_model = _FakeBodyModel("bendak_on_n_mandalorian")
+    rigged_model.supermodel = "S_Female02"
+    calls = {"export": 0}
+
+    def _fake_load_body(*args, **kwargs):
+        return wf.LoadResult(
+            ok=True,
+            model=source_model,
+            source_path=str(tmp_path / "Bendak.fbx"),
+            resref="bendak",
+            message="loaded",
+            code="loaded",
+        )
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_template(*, game="K1", part="body"):
+            raise AssertionError("selected native template should bypass generic template load")
+
+        @staticmethod
+        def apply_template_rig(model, template, *, game="K1"):
+            return {
+                "ok": True,
+                "model": rigged_model,
+                "message": "Bendak payload bound to n_mandalorian",
+            }
+
+    def _fake_export_scene(*args, **kwargs):
+        calls["export"] += 1
+        raise AssertionError("export should not run without required animation library")
+
+    monkeypatch.setattr(wf, "load_body", _fake_load_body)
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "export_scene", _fake_export_scene)
+
+    result = wf.run_external_mesh_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        game_version="K1",
+        out_dir=str(tmp_path),
+        template_model=selected_template,
+        template_label="n_mandalorian",
+        motion_supermodel="S_Female02",
+        require_animation_library=True,
+    )
+
+    assert result.ok is False
+    assert result.code == "no_animations"
+    assert result.animation_library_result is not None
+    assert result.animation_library_result.available == []
+    assert "resolver_not_configured" in result.animation_library_result.diagnostics
+    assert calls["export"] == 0
+
+
+def test_t1205_native_template_launch_loads_selected_resref_before_fit(monkeypatch, tmp_path):
+    selected_template = _FakeBodyModel("N_Mandalorian")
+    selected_template.supermodel = "S_Female02"
+    calls = {"load_game_skeleton_source": 0, "launch": 0}
+
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_game_skeleton_source(resref, *, game="K1", game_dir=None):
+            calls["load_game_skeleton_source"] += 1
+            assert resref == "n_mandalorian"
+            assert game == "K1"
+            assert game_dir == "C:/KOTOR"
+            return selected_template
+
+    def _fake_launch(mesh_path, **kwargs):
+        calls["launch"] += 1
+        assert pathlib.Path(mesh_path).name == "Bendak.fbx"
+        assert kwargs["template_model"] is selected_template
+        assert kwargs["template_label"] == "n_mandalorian"
+        assert kwargs["motion_supermodel"] == "S_Female02"
+        assert kwargs["formats"] == ["kotor"]
+        return wf.LaunchWorkflowResult(
+            ok=True,
+            code="export_candidate_verified",
+            capability_stage="export_candidate",
+            game_tested=False,
+            message="verified",
+        )
+
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+    monkeypatch.setattr(wf, "run_external_mesh_launch_workflow", _fake_launch)
+
+    result = wf.run_external_mesh_native_template_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        "N_Mandalorian",
+        game_version="K1",
+        game_dir="C:/KOTOR",
+        out_dir=str(tmp_path),
+        formats=["kotor"],
+    )
+
+    assert result.ok is True
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.game_tested is False
+    assert calls == {"load_game_skeleton_source": 1, "launch": 1}
+
+
+def test_t1205_native_template_launch_blocks_missing_base_resref() -> None:
+    result = wf.run_external_mesh_native_template_launch_workflow(
+        "Bendak.fbx",
+        "",
+        out_dir="C:/out",
+    )
+
+    assert result.ok is False
+    assert result.code == "no_native_template_resref"
+    assert "No native KOTOR base skeleton resref" in result.message
+
+
+def test_t1205_native_template_launch_blocks_unresolved_game_model(monkeypatch, tmp_path):
+    class _FakeCharacterBuilder:
+        @staticmethod
+        def load_game_skeleton_source(resref, *, game="K1", game_dir=None):
+            assert resref == "missing_base"
+            return None
+
+    monkeypatch.setattr(wf, "_import_character_builder", lambda: _FakeCharacterBuilder)
+
+    result = wf.run_external_mesh_native_template_launch_workflow(
+        str(tmp_path / "Bendak.fbx"),
+        "missing_base",
+        out_dir=str(tmp_path),
+    )
+
+    assert result.ok is False
+    assert result.code == "native_template_missing"
+    assert "missing_base" in result.message
+
+
 def test_t506_export_formats_constant_exposes_all_four_targets():
     """EXPORT_FORMATS must declare KOTOR + FBX + glTF + OBJ in that order."""
     keys = [k for k, _label, _exts in wf.EXPORT_FORMATS]
@@ -2269,6 +3227,17 @@ def test_external_model_normalization_snaps_to_selected_reference_frame():
     assert result["fit_policy"] == "selected_reference_bounds"
     assert result["target_center_xy"] == pytest.approx((5.0, -2.0))
     assert result["target_ground_z"] == pytest.approx(0.25)
+    transform = result["fit_transform"]
+    assert transform["policy"] == "selected_reference_bounds"
+    assert transform["scale"] == pytest.approx(0.2)
+    for row, expected in zip(transform["linear_matrix"], [
+        [0.2, 0.0, 0.0],
+        [0.0, 0.2, 0.0],
+        [0.0, 0.0, 0.2],
+    ]):
+        assert row == pytest.approx(expected)
+    assert transform["translation"] == pytest.approx([5.0, -2.0, 0.25])
+    assert result["fit_report"]["fit_transform"] == transform
     assert model.bb_min[2] == pytest.approx(0.25)
     assert model.bb_max[2] == pytest.approx(2.25)
     assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
@@ -2317,13 +3286,13 @@ def test_external_model_normalization_uses_bone_landmarks_for_front_axis():
 
     assert result["ok"] is True
     assert result["fit_policy"] == "bone_landmark_basis"
-    assert result["scale_basis"] == "reference_bounds_height"
+    assert result["scale_basis"] == "paired_skeleton_landmark_height"
     assert result["vertical_axis"] == "bone_landmarks"
     assert result["source_fit_landmarks"]["side_pair"] == "shoulder"
     assert result["target_fit_landmarks"]["side_pair"] == "shoulder"
     assert result["scale"] == pytest.approx(0.2)
     assert model.bb_min[2] == pytest.approx(0.0)
-    assert model.bb_max[2] == pytest.approx(2.0)
+    assert model.bb_max[2] == pytest.approx(2.0, abs=0.01)
     assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
     assert model.bb_max[1] > -2.0
     assert model.bb_min[1] < -2.0
@@ -2413,3 +3382,649 @@ def test_external_world_position_drives_bone_world_position():
     node.external_world_position = (1.0, 2.0, 3.0)
 
     assert node.bone_world_position() == (1.0, 2.0, 3.0)
+
+
+def _fit_node(
+    name: str,
+    *,
+    position: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    parent=None,
+    flags: int = int(md.NodeFlags.HEADER),
+):
+    node = md.ModelNode(name=name, flags=flags)
+    node.position = position
+    if parent is not None:
+        node.parent = parent
+        parent.children.append(node)
+    return node
+
+
+def _fit_humanoid_model(
+    name: str,
+    *,
+    height: float,
+    shoulder_width: float,
+    foot_width: float,
+    mesh_height: float | None = None,
+):
+    root = _fit_node(name)
+    _fit_node("pelvis_g", position=(0.0, 0.0, height * 0.52), parent=root)
+    _fit_node("head_g", position=(0.0, 0.0, height), parent=root)
+    _fit_node("lcollar_g", position=(-shoulder_width * 0.5, 0.0, height * 0.78), parent=root)
+    _fit_node("rcollar_g", position=(shoulder_width * 0.5, 0.0, height * 0.78), parent=root)
+    _fit_node("lfoot_g", position=(-foot_width * 0.5, 0.0, 0.0), parent=root)
+    _fit_node("rfoot_g", position=(foot_width * 0.5, 0.0, 0.0), parent=root)
+    mesh = _fit_node(
+        f"{name}_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    h = float(mesh_height if mesh_height is not None else height)
+    mesh.vertices = [
+        (-shoulder_width * 0.5, -0.05, 0.0),
+        (shoulder_width * 0.5, 0.05, 0.0),
+        (0.0, 0.0, h),
+    ]
+    mesh.faces = [(0, 1, 2)]
+    return md.KotorModel(name=name, root_node=root)
+
+
+def test_external_fit_report_uses_humanoid_landmarks_when_available():
+    source = _fit_humanoid_model(
+        "external_body",
+        height=2.0,
+        shoulder_width=1.0,
+        foot_width=0.5,
+    )
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["scale_basis"] in {
+        "reference_bounds_height",
+        "bone_landmark_height",
+        "paired_skeleton_landmark_height",
+    }
+    assert report["reference"] == "pmbam"
+    assert report["source_frame"]["landmarks"]["head"] == "head_g"
+    assert report["target_frame"]["landmarks"]["head"] == "head_g"
+    assert report["source_forward_axis"] == "+y"
+    assert report["source_up_axis"] == "+z"
+    assert report["target_forward_axis"] == "+y"
+    assert report["target_up_axis"] == "+z"
+    assert report["scale_factor"] == pytest.approx(0.8)
+    assert report["height_source"] == "landmarks"
+    assert report["ground_origin_basis"] == "feet"
+    assert report["fallback_used"] is False
+    assert report["confidence"] == pytest.approx(0.95)
+    assert "source:head=head_g" in report["used_landmarks"]
+    assert report["auto_fit_report"]["scale_factor"] == pytest.approx(0.8)
+    assert report["auto_fit_report"]["used_landmarks"] == report["used_landmarks"]
+    transform = report["fit_transform"]
+    assert transform["policy"] == "bone_landmark_basis"
+    assert transform["formula"] == "kotor_point = linear_matrix * source_point + translation"
+    assert transform["scale"] == pytest.approx(0.8)
+    assert transform["landmark_alignment"]["method"] == "paired_skeleton_landmark_similarity"
+    assert transform["landmark_alignment"]["pair_count"] == 6
+    assert set(transform["landmark_alignment"]["paired_roles"]) == {
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+    }
+    assert transform["landmark_alignment"]["applied_scale"] == pytest.approx(0.8)
+    assert transform["landmark_alignment"]["applied_scale_basis"] in {
+        "reference_bounds_height",
+        "bone_landmark_height",
+        "paired_skeleton_landmark_height",
+    }
+    assert (
+        transform["landmark_alignment"]["translation_basis"]
+        == "skeleton_landmark_native_fit_origin"
+    )
+    assert transform["landmark_alignment"]["error_basis"] == "applied_fit_transform"
+    assert transform["landmark_alignment"]["worst_pair_role"] in {
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+    }
+    assert len(transform["landmark_alignment"]["pair_errors"]) == 6
+    pelvis_error = next(
+        item
+        for item in transform["landmark_alignment"]["pair_errors"]
+        if item["role"] == "pelvis"
+    )
+    assert pelvis_error["role"] == "pelvis"
+    assert pelvis_error["source_position"] == pytest.approx([0.0, 0.0, 1.04])
+    assert pelvis_error["target_position"] == pytest.approx([0.0, 0.0, 0.832])
+    assert pelvis_error["mapped_position"] == pytest.approx([0.0, 0.0, 0.832])
+    assert pelvis_error["error"] == pytest.approx(0.0)
+    for row, expected in zip(transform["rotation_matrix"], [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]):
+        assert row == pytest.approx(expected)
+    for row, expected in zip(transform["linear_matrix"], [
+        [0.8, 0.0, 0.0],
+        [0.0, 0.8, 0.0],
+        [0.0, 0.0, 0.8],
+    ]):
+        assert row == pytest.approx(expected)
+    assert transform["translation"] == pytest.approx([0.0, 0.0, 0.0])
+    assert report["kotor_contract"]["native_skeleton_is_authority"] is True
+    assert report["kotor_contract"]["imported_mesh_role"] == "payload_guest"
+    overlay = report["visual_overlay"]
+    assert overlay["coordinate_space"] == "source_pre_fit_and_kotor_reference"
+    assert overlay["source"]["origin"] == pytest.approx([-0.0, 0.0, 0.0])
+    assert overlay["source"]["axes"]["forward"]["axis_label"] == "+y"
+    assert overlay["source"]["axes"]["up"]["axis_label"] == "+z"
+    assert any(
+        item["role"] == "head" and item["name"] == "head_g"
+        for item in overlay["source"]["landmarks"]
+    )
+    assert overlay["target"]["axes"]["forward"]["axis_label"] == "+y"
+    assert any(
+        item["role"] == "left_foot" and item["name"] == "lfoot_g"
+        for item in overlay["target"]["landmarks"]
+    )
+
+
+def test_external_fit_report_prefers_imported_skeleton_over_mesh_name_collision():
+    root = _fit_node("external_body")
+    mesh_head = _fit_node(
+        "Head",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh_head.vertices = [
+        (-0.2, 0.0, 99.0),
+        (0.2, 0.0, 100.0),
+        (0.0, 0.2, 101.0),
+    ]
+    mesh_head.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("mixamorig:Hips", (0.0, 0.0, 0.0)),
+        ("mixamorig:Head", (0.0, 10.0, 0.0)),
+        ("mixamorig:LeftShoulder", (-1.0, 8.0, 0.0)),
+        ("mixamorig:RightShoulder", (1.0, 8.0, 0.0)),
+        ("mixamorig:LeftFoot", (-0.4, 0.0, -0.1)),
+        ("mixamorig:RightFoot", (0.4, 0.0, -0.1)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    source = md.KotorModel(name="bendak_payload", root_node=root)
+    reference = _fit_humanoid_model(
+        "n_mandalorian",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_frame"]["landmarks"]["head"] == "mixamorig:Head"
+    assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
+    assert report["source_height"] == pytest.approx(10.0)
+    assert report["auto_fit_report"]["scale_factor"] == pytest.approx(0.16)
+    assert report["fit_transform"]["landmark_alignment"]["method"] == "paired_skeleton_landmark_similarity"
+    assert abs(report["fit_transform"]["landmark_alignment"]["solved_scale"] - 0.16) > 1.0e-3
+    assert report["fit_transform"]["landmark_alignment"]["applied_scale"] == pytest.approx(0.16)
+    assert (
+        report["fit_transform"]["landmark_alignment"]["error_basis"]
+        == "applied_fit_transform"
+    )
+    assert (
+        report["fit_transform"]["landmark_alignment"]["translation_basis"]
+        == "skeleton_landmark_native_fit_origin"
+    )
+    assert report["fit_transform"]["landmark_alignment"]["rms_error"] < 0.5
+    assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
+    assert any(
+        item["role"] == "head"
+        and item["name"] == "mixamorig:Head"
+        and item["source"] == "imported_skeleton"
+        for item in report["visual_overlay"]["source"]["landmarks"]
+    )
+
+
+def test_external_fit_report_scales_rigged_payload_from_skeleton_not_render_bounds():
+    root = _fit_node("external_body")
+    oversized_mesh = _fit_node(
+        "Bendak",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    oversized_mesh.vertices = [
+        (-1.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 0.0, 20.0),
+    ]
+    oversized_mesh.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 0.0)),
+        ("Head", (0.0, 0.0, 10.0)),
+        ("LeftShoulder", (-1.0, 0.0, 8.0)),
+        ("RightShoulder", (1.0, 0.0, 8.0)),
+        ("LeftFoot", (-0.4, 0.0, 0.0)),
+        ("RightFoot", (0.4, 0.0, 0.0)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    source = md.KotorModel(name="bendak_payload", root_node=root)
+    reference = _fit_humanoid_model(
+        "n_mandalorian",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+        mesh_height=3.2,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["scale_basis"] == "paired_skeleton_landmark_height"
+    assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
+    assert report["source_height"] == pytest.approx(10.0)
+    assert report["target_height"] == pytest.approx(1.6)
+    assert report["scale_factor"] == pytest.approx(0.16)
+    assert report["fit_transform"]["scale"] == pytest.approx(0.16)
+    assert report["fit_transform"]["landmark_alignment"]["applied_scale"] == pytest.approx(0.16)
+    assert (
+        report["fit_transform"]["landmark_alignment"]["applied_scale_basis"]
+        == "paired_skeleton_landmark_height"
+    )
+    assert (
+        report["fit_transform"]["landmark_alignment"]["translation_basis"]
+        == "skeleton_landmark_native_fit_origin"
+    )
+    assert report["reference_bounds"]["max"][2] == pytest.approx(3.2)
+
+
+def test_external_fit_report_records_imported_foot_end_guides_for_facing():
+    root = _fit_node("external_body")
+    mesh = _fit_node(
+        "Bendak",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [
+        (-1.0, -0.2, 0.0),
+        (1.0, 0.2, 0.0),
+        (0.0, 0.0, 10.0),
+    ]
+    mesh.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 5.2)),
+        ("Head", (0.0, 0.0, 10.0)),
+        ("LeftShoulder", (-1.0, 0.0, 8.0)),
+        ("RightShoulder", (1.0, 0.0, 8.0)),
+        ("L_Foot", (-0.4, 0.0, 0.0)),
+        ("R_Foot", (0.4, 0.0, 0.0)),
+        ("L_Foot_end", (-0.4, 1.0, 0.0)),
+        ("R_Foot_end", (0.4, 1.0, 0.0)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    target_root = _fit_node("n_mandalorian")
+    for name, pos in [
+        ("pelvis_g", (0.0, 0.0, 0.8)),
+        ("head_g", (0.0, 0.0, 1.6)),
+        ("lcollar_g", (-0.4, 0.0, 1.25)),
+        ("rcollar_g", (0.4, 0.0, 1.25)),
+        ("lfoot_g", (-0.2, 0.0, 0.0)),
+        ("rfoot_g", (0.2, 0.0, 0.0)),
+        ("lfootT_g", (-0.2, 0.2, 0.0)),
+        ("rfootT_g", (0.2, 0.2, 0.0)),
+    ]:
+        _fit_node(name, position=pos, parent=target_root)
+    target_mesh = _fit_node(
+        "n_mandalorian_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=target_root,
+    )
+    target_mesh.vertices = [(-0.4, 0.0, 0.0), (0.4, 0.0, 0.0), (0.0, 0.0, 1.6)]
+    target_mesh.faces = [(0, 1, 2)]
+    source_model = md.KotorModel(name="bendak_payload", root_node=root)
+    target_model = md.KotorModel(name="n_mandalorian", root_node=target_root)
+
+    report = wf.inspect_external_model_fit(
+        source_model,
+        game_version="K1",
+        reference_model=target_model,
+        reference_label="n_mandalorian",
+    )
+
+    alignment = report["fit_transform"]["landmark_alignment"]
+    assert report["source_frame"]["landmarks"]["left_foot"] == "L_Foot"
+    assert report["source_frame"]["landmarks"]["left_toe"] == "L_Foot_end"
+    assert report["target_frame"]["landmarks"]["left_toe"] == "lfootT_g"
+    assert report["source_frame"]["toe_forward_alignment"] > 0.99
+    assert report["target_frame"]["toe_forward_alignment"] > 0.99
+    assert alignment["pair_count"] == 8
+    assert report["scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["height_scale"] == pytest.approx(0.16)
+    assert alignment["height_scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["solved_scale"] == pytest.approx(0.16343729497011864)
+    assert alignment["applied_scale"] == pytest.approx(0.16)
+    assert alignment["applied_scale_basis"] == "paired_skeleton_landmark_height"
+    assert alignment["similarity_transform_accepted"] is False
+    assert alignment["rotation_basis"] == "bone_landmark_basis"
+    assert alignment["max_error"] > 0.16
+    for row, expected in zip(report["fit_transform"]["rotation_matrix"], [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]):
+        assert row == pytest.approx(expected)
+    assert set(alignment["paired_roles"]) == {
+        "pelvis",
+        "head",
+        "left",
+        "right",
+        "left_foot",
+        "right_foot",
+        "left_toe",
+        "right_toe",
+    }
+    assert any(item["role"] == "left_toe" for item in alignment["pair_errors"])
+    assert any(item["role"] == "right_toe" for item in alignment["pair_errors"])
+    assert any(
+        item["role"] == "left_toe"
+        and item["name"] == "L_Foot_end"
+        and item["source"] == "imported_skeleton"
+        for item in report["visual_overlay"]["source"]["landmarks"]
+    )
+    normalized = wf.normalize_external_model_for_kotor(
+        source_model,
+        game_version="K1",
+        reference_model=target_model,
+        reference_label="n_mandalorian",
+    )
+    normalized_alignment = normalized["fit_transform"]["landmark_alignment"]
+    assert normalized_alignment["similarity_transform_accepted"] is False
+    assert normalized_alignment["rotation_basis"] == "bone_landmark_basis"
+    for row, expected in zip(normalized["fit_transform"]["rotation_matrix"], [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]):
+        assert row == pytest.approx(expected)
+
+
+def test_external_fit_report_uses_imported_toe_guides_for_front_facing_axis():
+    root = _fit_node("external_body")
+    mesh = _fit_node(
+        "Bendak",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [
+        (-1.0, -0.2, 0.0),
+        (1.0, 0.2, 0.0),
+        (0.0, 0.0, 10.0),
+    ]
+    mesh.faces = [(0, 1, 2)]
+
+    armature = _fit_node("Armature", parent=root)
+    for name, pos in [
+        ("Hips", (0.0, 0.0, 5.2)),
+        ("Head", (0.0, 0.0, 10.0)),
+        ("LeftShoulder", (-1.0, -0.8, 8.0)),
+        ("RightShoulder", (1.0, 0.8, 8.0)),
+        ("L_Foot", (-0.4, 0.0, 0.0)),
+        ("R_Foot", (0.4, 0.0, 0.0)),
+        ("L_Foot_end", (-0.4, 1.0, 0.0)),
+        ("R_Foot_end", (0.4, 1.0, 0.0)),
+    ]:
+        node = _fit_node(name, position=pos, parent=armature)
+        node.external_world_position = pos
+
+    reference = _fit_humanoid_model(
+        "n_mandalorian",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+    target_root = reference.root_node
+    _fit_node("lfootT_g", position=(-0.2, 0.2, 0.0), parent=target_root)
+    _fit_node("rfootT_g", position=(0.2, 0.2, 0.0), parent=target_root)
+
+    report = wf.inspect_external_model_fit(
+        md.KotorModel(name="bendak_payload", root_node=root),
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_forward_axis"] == "+y"
+    assert report["source_frame"]["forward"] == pytest.approx([0.0, 1.0, 0.0])
+    assert report["source_frame"]["right"] == pytest.approx([1.0, 0.0, 0.0])
+    assert report["source_frame"]["toe_forward_alignment"] > 0.99
+    assert report["source_frame"]["landmark_sources"]["left_toe"] == "imported_skeleton"
+    assert report["source_frame"]["landmark_sources"]["right_toe"] == "imported_skeleton"
+
+
+def test_external_fit_report_prefers_specific_pelvis_over_generic_root_alias():
+    source = _fit_humanoid_model(
+        "rootdummy",
+        height=2.0,
+        shoulder_width=1.0,
+        foot_width=0.5,
+    )
+    source.root_node.position = (0.0, 5.0, 0.0)
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_frame"]["landmarks"]["pelvis"] == "pelvis_g"
+    assert report["source_up_axis"] == "+z"
+    assert "source:pelvis=pelvis_g" in report["used_landmarks"]
+
+
+def test_normalization_persists_fit_report_in_model_metadata():
+    source = _fit_humanoid_model(
+        "external_body",
+        height=2.0,
+        shoulder_width=1.0,
+        foot_width=0.5,
+    )
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    result = wf.normalize_external_model_for_kotor(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "bone_landmark_basis"
+    assert "fit_report" in result
+    assert source.metadata["kotor_fit_report"]["fit_policy"] == "bone_landmark_basis"
+    assert source.metadata["kotor_normalization"]["fit_transform"] == result["fit_transform"]
+    assert source.metadata["kotor_fit_report"]["fit_transform"] == result["fit_transform"]
+    assert (
+        source.metadata["kotor_fit_report"]["auto_fit_report"]["source_forward_axis"]
+        == "+y"
+    )
+    assert (
+        source.metadata["kotor_fit_report"]["auto_fit_report"]["scale_factor"]
+        == pytest.approx(0.8)
+    )
+    fitted = source.metadata["kotor_fit_report"]["fitted_visual_overlay"]
+    assert fitted["coordinate_space"] == "kotor_world_after_fit"
+    assert fitted["source"]["origin"] == pytest.approx(fitted["target"]["origin"])
+    assert fitted["source"]["axes"]["forward"]["axis_label"] == "+y"
+    assert fitted["source"]["axes"]["up"]["axis_label"] == "+z"
+    assert fitted["source"]["bounds"]["max"][2] == pytest.approx(1.6)
+    assert source.metadata["kotor_normalization"]["fit_report"]["reference"] == "pmbam"
+    assert source.metadata["kotor_normalization"]["fitted_visual_overlay"] == fitted
+    assert (
+        source.metadata["kotor_fit_report"]["kotor_contract"]["final_dag_source"]
+        == "selected_kotor_base"
+    )
+
+
+def test_external_fit_report_falls_back_to_bounds_when_landmarks_missing():
+    root = _fit_node("import_root")
+    mesh = _fit_node(
+        "body_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [(0.0, 0.0, 0.0), (0.2, 0.0, 0.0), (0.0, 0.2, 3.0)]
+    mesh.faces = [(0, 1, 2)]
+    source = md.KotorModel(name="body", root_node=root)
+
+    report = wf.inspect_external_model_fit(source, game_version="K1")
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "origin_height"
+    assert report["vertical_axis"] == "z"
+    assert report["auto_fit_report"]["fallback_used"] is True
+    assert report["auto_fit_report"]["height_source"] == "bounds"
+    assert report["auto_fit_report"]["ground_origin_basis"] == "bounds_bottom"
+    assert report["auto_fit_report"]["source_forward_axis"] == "unknown"
+    assert report["auto_fit_report"]["source_up_axis"] == "+z"
+    assert report["visual_overlay"]["source"]["bounds"]["max"] == pytest.approx([0.2, 0.2, 3.0])
+    assert report["visual_overlay"]["source"]["axes"] == {}
+    assert report["visual_overlay"]["source"]["landmarks"] == []
+    assert any("falling back to bounds" in warning for warning in report["warnings"])
+
+
+def test_external_fit_report_accepts_manual_axis_override_for_bounds_only_mesh():
+    root = _fit_node("import_root")
+    mesh = _fit_node(
+        "body_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [(-0.5, 0.0, -0.25), (0.5, 2.0, 0.25), (0.0, 1.0, 0.5)]
+    mesh.faces = [(0, 1, 2)]
+    source = md.KotorModel(name="body", root_node=root)
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    report = wf.inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+        fit_override={
+            "source_forward_axis": "+z",
+            "source_up_axis": "+y",
+            "height_source": "bounds",
+            "ground_origin_basis": "bounds_bottom",
+        },
+    )
+
+    assert report["ok"] is True
+    assert report["fit_policy"] == "manual_axis_override"
+    assert report["vertical_axis"] == "manual_override"
+    assert report["auto_fit_report"]["fallback_used"] is False
+    assert report["auto_fit_report"]["source_forward_axis"] == "+z"
+    assert report["auto_fit_report"]["source_up_axis"] == "+y"
+    assert report["auto_fit_report"]["height_source"] == "bounds"
+    assert report["auto_fit_report"]["ground_origin_basis"] == "bounds_bottom"
+    assert report["auto_fit_report"]["confidence"] == pytest.approx(0.65)
+    assert "Manual source axis/ground override" in report["auto_fit_report"]["notes"]
+
+
+def test_normalization_uses_manual_axis_override_without_double_fallback():
+    root = _fit_node("import_root")
+    mesh = _fit_node(
+        "body_mesh",
+        flags=int(md.NodeFlags.HEADER | md.NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.vertices = [(-0.5, 0.0, -0.25), (0.5, 2.0, 0.25), (0.0, 1.0, 0.5)]
+    mesh.faces = [(0, 1, 2)]
+    source = md.KotorModel(name="body", root_node=root)
+    reference = _fit_humanoid_model(
+        "pmbam",
+        height=1.6,
+        shoulder_width=0.8,
+        foot_width=0.4,
+    )
+
+    result = wf.normalize_external_model_for_kotor(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="pmbam",
+        fit_override={
+            "source_forward_axis": "+z",
+            "source_up_axis": "+y",
+            "height_source": "bounds",
+            "ground_origin_basis": "bounds_bottom",
+        },
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "manual_axis_override"
+    assert result["fit_report"]["auto_fit_report"]["fallback_used"] is False
+    assert source.metadata["kotor_fit_report"]["fit_policy"] == "manual_axis_override"
+    assert source.metadata["kotor_fit_report"]["source_up_axis"] == "+y"

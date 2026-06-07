@@ -552,6 +552,8 @@ class ViewportRenderingPipelineMixin:
                     self._draw_joint_dots(img, w, h)
             if getattr(self._renderer, "_ext_skeleton", None) is not None:
                 self._renderer._draw_ext_skeleton(draw, w, h)
+            if getattr(self._renderer, "_character_fit_overlay", None):
+                self._renderer._draw_character_fit_overlay(draw, w, h)
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)

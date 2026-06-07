@@ -576,6 +576,18 @@ class ViewportSceneModelMixin:
         self._renderer._ext_skel_selected_ids = set()
         self._request_render()
 
+    def set_character_fit_overlay(self, overlay: dict | None) -> None:
+        """Display Character Builder auto-fit evidence from headless metadata."""
+        if hasattr(self._renderer, "set_character_fit_overlay"):
+            self._renderer.set_character_fit_overlay(overlay)
+        else:                                             # pragma: no cover
+            self._renderer._character_fit_overlay = overlay if isinstance(overlay, dict) else None
+        self._request_render()
+
+    def clear_character_fit_overlay(self) -> None:
+        """Remove Character Builder auto-fit evidence from the viewport."""
+        self.set_character_fit_overlay(None)
+
     def _fit_external_skeleton_overlay(self, skeleton) -> None:
         """Fit a KOTOR template skeleton preview to the active source mesh."""
         if self.model is None or skeleton is None:

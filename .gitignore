@@ -92,6 +92,9 @@ game_data/
 !/tests/test_ghostrigger_project_model.py
 !/tests/test_validation_bus.py
 !/tests/test_export_job.py
+!/tests/test_character_autofit_report.py
+!/tests/test_character_builder_bendak_local_fixture.py
+!/tests/test_character_builder_override_package.py
 !/tests/test_game_resource_provider.py
 !/tests/test_qt_resource_browser_model.py
 !/tests/test_sampler.py
@@ -177,6 +180,9 @@ chssiss*.png
 screenshot*.png
 
 # ── Temp / scratch directories ────────────────────────────────────────────────
+.tmp*/
+.tmp_*
+*.tmp
 lava_exercise/
 KotorModTools/
 /screenshots/

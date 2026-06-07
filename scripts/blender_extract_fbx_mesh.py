@@ -22,6 +22,10 @@ def _matrix_rows(matrix):
     return [[float(matrix[row][col]) for col in range(4)] for row in range(4)]
 
 
+def _vector3(vector):
+    return [float(vector.x), float(vector.y), float(vector.z)]
+
+
 def _material_info(material):
     if material is None:
         return {"name": "", "texture": "", "diffuse": [0.8, 0.8, 0.8]}
@@ -109,7 +113,10 @@ def _extract_mesh_object(obj, depsgraph):
                 normals.append([float(normal.x), float(normal.y), float(normal.z)])
                 if uv_layer is not None:
                     uv = uv_layer[loop_index].uv
-                    uvs.append([float(uv.x), 1.0 - float(uv.y)])
+                    # Blender FBX UVs are authored for DCC/OpenGL-style
+                    # bottom-left texture coordinates. Keep that convention
+                    # and mark imported GhostRigger nodes with uv_v_flip=False.
+                    uvs.append([float(uv.x), float(uv.y)])
                 else:
                     uvs.append([0.0, 0.0])
                 if is_skin:
@@ -135,6 +142,35 @@ def _extract_mesh_object(obj, depsgraph):
             evaluated.to_mesh_clear()
 
 
+def _extract_armature_object(obj):
+    """Return rest-pose bone positions for Character Builder auto-fit.
+
+    The importer consumes these as temporary guide joints only. The final KOTOR
+    character hierarchy is still cloned from the selected native base model.
+    """
+
+    bones = []
+    for bone in obj.data.bones:
+        world = obj.matrix_world @ bone.matrix_local
+        head_world = obj.matrix_world @ bone.head_local
+        tail_world = obj.matrix_world @ bone.tail_local
+        bones.append({
+            "name": str(bone.name),
+            "armature": str(obj.name),
+            "parent": str(bone.parent.name) if bone.parent is not None else None,
+            "world_position": _vector3(world.translation),
+            "head_world_position": _vector3(head_world),
+            "tail_world_position": _vector3(tail_world),
+            "matrix_world": _matrix_rows(world),
+            "use_deform": bool(getattr(bone, "use_deform", True)),
+        })
+    return {
+        "name": str(obj.name),
+        "matrix_world": _matrix_rows(obj.matrix_world),
+        "bones": bones,
+    }
+
+
 def main():
     args = parse_args()
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -144,6 +180,7 @@ def main():
     depsgraph = bpy.context.evaluated_depsgraph_get()
     meshes = [_extract_mesh_object(obj, depsgraph) for obj in bpy.data.objects if obj.type == "MESH"]
     armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
+    armature_payloads = [_extract_armature_object(obj) for obj in armatures]
     actions = [
         {
             "name": action.name,
@@ -160,6 +197,12 @@ def main():
         "meshes": meshes,
         "armature_count": len(armatures),
         "armatures": [obj.name for obj in armatures],
+        "armature_bones": [
+            bone
+            for armature in armature_payloads
+            for bone in armature.get("bones", [])
+        ],
+        "armature_objects": armature_payloads,
         "actions": actions,
     }
     args.json.parent.mkdir(parents=True, exist_ok=True)

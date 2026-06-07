@@ -8,11 +8,12 @@ later workflow steps hide, strip, or replace viewport geometry.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
-
-KOTOR_NATIVE_RESREF_MAX_LEN = 16
+from .kotor_constants import KOTOR_NATIVE_RESREF_MAX_LEN
 
 
 KOTOR_SOCKET_CATEGORIES: dict[str, str] = {
@@ -144,6 +145,10 @@ def capture_native_skeleton_snapshot(
         "source_mdl_path": str(getattr(model, "mdl_path", "") or ""),
         "source_mdx_path": str(getattr(model, "mdx_path", "") or ""),
         "source_resref": str(getattr(model, "_gr_source_resref", "") or ""),
+        "requested_resref": str(getattr(model, "_gr_requested_resref", "") or ""),
+        "target_resref": str(getattr(model, "_gr_target_resref", "") or ""),
+        "variant_source_resref": str(getattr(model, "_gr_variant_source_resref", "") or ""),
+        "variant_resolution": str(getattr(model, "_gr_variant_resolution", "") or ""),
         "source_game": str(getattr(model, "_gr_source_game", "") or ""),
         "source_layer": str(getattr(model, "_gr_source_layer", "") or ""),
         "animation_count": len(getattr(model, "animations", []) or []),
@@ -190,6 +195,82 @@ def find_snapshot_node(
         if node.name.lower() == wanted:
             return node
     return None
+
+
+def native_skeleton_fingerprint_payload(
+    snapshot: NativeSkeletonSnapshot,
+) -> dict[str, Any]:
+    """Return the stable native-DAG payload used for snapshot fingerprints.
+
+    The fingerprint is proof of the KOTOR hierarchy contract, not proof of the
+    local filesystem path that supplied it.  Volatile paths are therefore
+    excluded, while selected resref/game/variant facts are kept because they
+    define which native model contract the Character Builder used.
+    """
+
+    metadata = dict(snapshot.metadata or {})
+    stable_metadata = {
+        key: metadata.get(key)
+        for key in (
+            "source_resref",
+            "requested_resref",
+            "target_resref",
+            "variant_source_resref",
+            "variant_resolution",
+            "source_game",
+            "source_layer",
+            "captured_for",
+        )
+        if metadata.get(key) not in (None, "")
+    }
+    return {
+        "schema": "ghostrigger.native_skeleton_snapshot.v1",
+        "model_name": snapshot.model_name,
+        "game": snapshot.game,
+        "supermodel": snapshot.supermodel,
+        "classification": snapshot.classification,
+        "model_type": snapshot.model_type,
+        "node_count": snapshot.node_count,
+        "mesh_node_count": snapshot.mesh_node_count,
+        "skin_node_count": snapshot.skin_node_count,
+        "hook_names": list(snapshot.hook_names),
+        "metadata": stable_metadata,
+        "nodes": [
+            {
+                "name": node.name,
+                "parent_name": node.parent_name,
+                "parent_path": list(node.parent_path),
+                "full_path": list(node.full_path),
+                "child_names": list(node.child_names),
+                "flags": node.flags,
+                "type_label": node.type_label,
+                "is_mesh": node.is_mesh,
+                "is_skin": node.is_skin,
+                "is_dummy": node.is_dummy,
+                "render": node.render,
+                "has_geometry": node.has_geometry,
+                "vertex_count": node.vertex_count,
+                "face_count": node.face_count,
+                "texture": node.texture,
+                "socket_category": node.socket_category,
+                "export_role": node.export_role,
+            }
+            for node in snapshot.nodes
+        ],
+    }
+
+
+def native_skeleton_fingerprint(snapshot: NativeSkeletonSnapshot) -> str:
+    """Return a SHA-256 digest for the selected native KOTOR DAG contract."""
+
+    payload = native_skeleton_fingerprint_payload(snapshot)
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _snapshot_node(node: Any, *, include_mesh_stats: bool) -> NativeNodeSnapshot:

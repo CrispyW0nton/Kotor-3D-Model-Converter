@@ -74,14 +74,7 @@ _STEPS_SUPERMODEL: List[Tuple[int, str]] = [
 ]
 
 _STEPS_HUMANOID: List[Tuple[int, str]] = [
-    (1, "Load Humanoid"),
-    (2, "Check Model (body + head)"),
-    (3, "Body Rig"),
-    (4, "Hand Rig"),
-    (5, "Face Rig"),
-    (6, "Check Actor + Face"),
-    (7, "Add Motions"),
-    (8, "Validate + Export"),
+    *_STEPS_UNIFIED_CHARACTER_BUILDER,
 ]
 
 _STEPS_CREATURE: List[Tuple[int, str]] = [

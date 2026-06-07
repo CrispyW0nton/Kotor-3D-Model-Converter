@@ -12,6 +12,14 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _method_block(source: str, name: str) -> str:
+    start = source.index(f"def {name}")
+    end = source.find("\n    def ", start + 1)
+    if end < 0:
+        end = len(source)
+    return source[start:end]
+
+
 def test_t1204_inspector_replaces_animation_library_stub():
     source = _read("src/gui/panels/qt_inspector_panel.py")
 
@@ -28,6 +36,23 @@ def test_t1204_character_builder_connects_assignment_signal_to_workflow():
     assert "_on_assign_motions_requested" in source
     assert "assign_motion_source(" in source
     assert "_on_refresh_preview_animations_requested()" in source
+
+
+def test_t1204_character_builder_motion_and_export_handlers_use_safe_workflow_import():
+    source = _read("src/gui/panels/qt_character_builder_panel.py")
+
+    for name in (
+        "_on_assign_motions_requested",
+        "_on_refresh_preview_animations_requested",
+        "_on_play_preview_animation_requested",
+        "_on_stop_preview_animation_requested",
+        "_on_export_requested",
+        "_start_preview_animation",
+    ):
+        block = _method_block(source, name)
+        assert "from core.characters import headless_body_workflow as _wf" not in block
+        assert "from core.characters.headless_body_workflow import CheckActorResult" not in block
+        assert "_workflow_module()" in block
 
 
 def test_t1204_workflow_exports_motion_assignment_api():

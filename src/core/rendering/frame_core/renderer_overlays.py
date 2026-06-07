@@ -381,7 +381,9 @@ class RendererOverlayMixin:
         """
         self._acurig_guides_overlay = guides or {}
         self._acurig_selected_guide: str = ''
-        self.redraw()
+        redraw = getattr(self, "redraw", None)
+        if callable(redraw):
+            redraw()
 
     def _draw_acurig_guides(self, draw: 'ImageDraw.Draw', W: int, H: int):
         """Draw AcuRig guide handles as coloured circles with name labels.
@@ -714,6 +716,94 @@ class RendererOverlayMixin:
                 line_radius2 = d2
                 best_axis = axis
         return best_axis
+
+    # ── Character Builder fit evidence overlay ───────────────────────
+
+    def set_character_fit_overlay(self, overlay: dict | None):
+        """Register Character Builder auto-fit evidence for viewport drawing."""
+        self._character_fit_overlay = overlay if isinstance(overlay, dict) else None
+        redraw = getattr(self, "redraw", None)
+        if callable(redraw):
+            redraw()
+
+    def _draw_character_fit_overlay(self, draw, W: int, H: int):
+        """Draw headless auto-fit axes and landmarks from core report metadata."""
+        overlay = getattr(self, "_character_fit_overlay", None)
+        if not isinstance(overlay, dict):
+            return
+
+        source = overlay.get("source") if isinstance(overlay.get("source"), dict) else None
+        target = overlay.get("target") if isinstance(overlay.get("target"), dict) else None
+        if source is None and target is None:
+            return
+
+        source_col = tuple(getattr(self, "gimbal_active_color", (255, 255, 80)))[:3]
+        target_col = tuple(getattr(self, "gimbal_plane_yz_color", (220, 60, 220)))[:3]
+        text_col = tuple(getattr(self, "gimbal_text_color", getattr(self, "viewport_text", (200, 200, 200))))[:3]
+
+        def _point(value):
+            try:
+                if value is None or len(value) < 3:
+                    return None
+                return (float(value[0]), float(value[1]), float(value[2]))
+            except Exception:
+                return None
+
+        def _axis_color(axis_label: str):
+            axis = str(axis_label or "").lower()[-1:]
+            if axis == "x":
+                return tuple(getattr(self, "gimbal_x_color", (220, 60, 60)))[:3]
+            if axis == "y":
+                return tuple(getattr(self, "gimbal_y_color", (60, 220, 60)))[:3]
+            if axis == "z":
+                return tuple(getattr(self, "gimbal_z_color", (60, 120, 220)))[:3]
+            return text_col
+
+        def _draw_group(group: dict, label: str, landmark_col):
+            origin = _point(group.get("origin"))
+            if origin is not None:
+                sp = self._proj(origin[0], origin[1], origin[2], W, H)
+                if sp:
+                    sx, sy, _ = sp
+                    draw.ellipse([sx - 5, sy - 5, sx + 5, sy + 5], outline=landmark_col, width=2)
+                    try:
+                        draw.text((sx + 7, sy - 7), label, fill=landmark_col)
+                    except Exception:
+                        pass
+            axes = group.get("axes") if isinstance(group.get("axes"), dict) else {}
+            for axis_name, axis in axes.items():
+                if not isinstance(axis, dict):
+                    continue
+                end = _point(axis.get("end"))
+                if origin is None or end is None:
+                    continue
+                osp = self._proj(origin[0], origin[1], origin[2], W, H)
+                esp = self._proj(end[0], end[1], end[2], W, H)
+                if not (osp and esp):
+                    continue
+                col = _axis_color(str(axis.get("axis_label") or axis_name))
+                draw.line([osp[0], osp[1], esp[0], esp[1]], fill=col, width=2)
+                try:
+                    draw.text((esp[0] + 4, esp[1] - 6), str(axis_name)[:1].upper(), fill=col)
+                except Exception:
+                    pass
+            landmarks = group.get("landmarks") if isinstance(group.get("landmarks"), list) else []
+            for item in landmarks[:12]:
+                if not isinstance(item, dict):
+                    continue
+                pos = _point(item.get("position"))
+                if pos is None:
+                    continue
+                sp = self._proj(pos[0], pos[1], pos[2], W, H)
+                if not sp:
+                    continue
+                sx, sy, _ = sp
+                draw.ellipse([sx - 3, sy - 3, sx + 3, sy + 3], fill=landmark_col, outline=text_col)
+
+        if source is not None:
+            _draw_group(source, "fit source", source_col)
+        if target is not None:
+            _draw_group(target, "KOTOR base", target_col)
 
     # ── External skeleton overlay ─────────────────────────────────────
 

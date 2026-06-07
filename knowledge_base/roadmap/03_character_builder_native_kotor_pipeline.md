@@ -166,7 +166,7 @@ recorded diff.
 |----|------|------------|
 | T2201 | Add export preflight for native KOTOR character assets. | Blocks missing required hooks, missing skin rows, invalid bone-map sizes, unnormalized weights, and missing supermodel string. |
 | T2202 | Add generated appearance/head 2DA helper output. | Export can produce optional patch rows or instructions for placing the model in game. |
-| T2203 | Add golden exports for representative cases. | Include headless body, head, full-body disguise/creature-style model, and Bendak-like external import. |
+| T2203 | Add golden exports for representative cases. | Include headless body, head, full-body disguise/creature-style model, and the continual Bendak FBX -> `n_mandalorian03` external-import fixture documented in `knowledge_base/validation/character_builder_bendak_fixture.md`. |
 | T2204 | Add external reload smoke tests. | Exported MDL/MDX reloads through GhostRigger/PyKotor, then runs model info and validation. |
 | T2205 | Add modder beta checklist. | Document exact test steps: import, select base, fit, bind, assign animation, preview weapon, export, install to Override, load in game. |
 
@@ -211,4 +211,3 @@ Representative MCP ground-truth models:
 - `n_darthmalak`
 - one head model with `gogglehook`/`maskhook`
 - one full-body/disguise-style model with baked head geometry
-

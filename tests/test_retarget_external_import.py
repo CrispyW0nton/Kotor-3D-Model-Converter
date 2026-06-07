@@ -245,12 +245,147 @@ def test_source_clip_preview_model_can_include_fbx_mesh_geometry() -> None:
 
     assert getattr(model, "_gr_source_clip_preview") is True
     assert getattr(model, "_gr_source_clip_mesh_count") == 1
+    assert mesh_model.metadata["external_import"]["disable_kotor_uv_seam_fix"] is True
     assert len(mesh_nodes) == 1
     assert mesh_nodes[0].name == "Body"
     assert mesh_nodes[0].texture == "Body_D"
+    assert getattr(mesh_nodes[0], "_external_imported", False) is True
+    assert getattr(mesh_nodes[0], "uv_v_flip", True) is False
     assert mesh_nodes[0].vertex_space == 1
     assert mesh_nodes[0].vertices
+    assert mesh_nodes[0].uvs == pytest.approx([(0, 0), (1, 0), (0.5, 1)])
     assert mesh_nodes[0].faces == [(0, 1, 2)]
+
+
+def test_blender_fbx_preview_meshes_keep_dcc_uv_convention_for_viewport() -> None:
+    from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
+    from src.core.geometry.model_data import GameVersion
+    from src.core.rendering.mesh_render_data import _node_uv_array
+
+    mesh_model = model_from_blender_fbx_mesh_payload(
+        {
+            "success": True,
+            "armatures": ["Armature"],
+            "meshes": [
+                {
+                    "name": "Bendak",
+                    "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+                    "normals": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+                    "uvs": [[0.125, 0.25], [0.875, 0.5], [0.25, 0.75]],
+                    "faces": [[0, 1, 2]],
+                    "materials": [
+                        {
+                            "name": "Bendak",
+                            "texture": "BendakStarkiller_basecolor",
+                            "diffuse": [0.8, 0.8, 0.8],
+                        }
+                    ],
+                }
+            ],
+        },
+        model_name="Bendak",
+        game_version=GameVersion.K1,
+    )
+
+    mesh_node = next(node for node in mesh_model.all_nodes() if getattr(node, "vertices", None))
+
+    assert getattr(mesh_node, "_external_imported", False) is True
+    assert getattr(mesh_node, "uv_v_flip", True) is False
+    assert mesh_node.uvs == pytest.approx([(0.125, 0.25), (0.875, 0.5), (0.25, 0.75)])
+    assert _node_uv_array(mesh_node, "uvs", 3).reshape(-1).tolist() == pytest.approx(
+        [0.125, 0.75, 0.875, 0.5, 0.25, 0.25]
+    )
+
+
+def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> None:
+    from src.converters.blender_fbx_mesh_importer import model_from_blender_fbx_mesh_payload
+    from src.core.characters.headless_body_workflow import inspect_external_model_fit
+    from src.core.geometry.model_data import GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = model_from_blender_fbx_mesh_payload(
+        {
+            "success": True,
+            "armatures": ["Armature"],
+            "armature_objects": [
+                {
+                    "name": "Armature",
+                    "bones": [
+                        {"name": "Hips", "parent": None, "world_position": [0.0, 0.0, 0.0]},
+                        {"name": "Head", "parent": "Hips", "world_position": [0.0, 10.0, 0.0]},
+                        {"name": "LeftShoulder", "parent": "Hips", "world_position": [-1.0, 8.0, 0.0]},
+                        {"name": "RightShoulder", "parent": "Hips", "world_position": [1.0, 8.0, 0.0]},
+                        {"name": "LeftFoot", "parent": "Hips", "world_position": [-0.4, 0.0, -0.1]},
+                        {"name": "RightFoot", "parent": "Hips", "world_position": [0.4, 0.0, -0.1]},
+                    ],
+                }
+            ],
+            "actions": [{"name": "Armature|Take|Base Layer"}],
+            "meshes": [
+                {
+                    "name": "Head",
+                    "vertices": [[-0.2, 0.0, 99.0], [0.2, 0.0, 100.0], [0.0, 0.2, 101.0]],
+                    "normals": [[0, 1, 0], [0, 1, 0], [0, 1, 0]],
+                    "uvs": [[0, 0], [1, 0], [0.5, 1]],
+                    "faces": [[0, 1, 2]],
+                    "materials": [{"name": "BodyMat", "texture": "Body_D", "diffuse": [0.5, 0.6, 0.7]}],
+                }
+            ],
+        },
+        model_name="bendak_payload",
+        game_version=GameVersion.K1,
+    )
+
+    guide_nodes = [
+        node for node in source.all_nodes()
+        if getattr(node, "_gr_imported_armature_joint", False)
+    ]
+    assert getattr(source, "_gr_fbx_armature_bone_count") == 6
+    assert {node.name for node in guide_nodes} == {
+        "Hips",
+        "Head",
+        "LeftShoulder",
+        "RightShoulder",
+        "LeftFoot",
+        "RightFoot",
+    }
+    assert next(node for node in guide_nodes if node.name == "Head").external_world_position == pytest.approx((0.0, 10.0, 0.0))
+
+    reference = KotorModel(name="n_mandalorian", game_version=GameVersion.K1)
+    root = ModelNode(name="n_mandalorian", flags=int(NodeFlags.HEADER))
+    reference.root_node = root
+    for name, pos in [
+        ("pelvis_g", (0.0, 0.0, 0.8)),
+        ("head_g", (0.0, 0.0, 1.6)),
+        ("lcollar_g", (-0.4, 0.0, 1.25)),
+        ("rcollar_g", (0.4, 0.0, 1.25)),
+        ("lfoot_g", (-0.2, 0.0, 0.0)),
+        ("rfoot_g", (0.2, 0.0, 0.0)),
+    ]:
+        node = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=root)
+        node.position = pos
+        root.children.append(node)
+    reference.compute_bounds()
+
+    report = inspect_external_model_fit(
+        source,
+        game_version="K1",
+        reference_model=reference,
+        reference_label="n_mandalorian",
+    )
+
+    assert report["fit_policy"] == "bone_landmark_basis"
+    assert report["source_imported_armature"] == {
+        "source": "imported_fbx_armature",
+        "guide_joint_count": 6,
+        "scene_guide_joint_count": 6,
+        "armature_names": ["Armature"],
+    }
+    assert report["source_frame"]["landmarks"]["head"] == "Head"
+    assert report["source_frame"]["landmark_sources"]["head"] == "imported_skeleton"
+    assert report["source_frame"]["landmark_sources"]["pelvis"] == "imported_skeleton"
+    assert report["source_height"] == pytest.approx(10.0)
+    assert report["fit_transform"]["landmark_alignment"]["pair_count"] == 6
+    assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
 
 
 def test_source_clip_preview_model_preserves_fbx_skin_weights_for_playback() -> None:

@@ -428,6 +428,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # "Generate Skeleton" so user-locked guide overrides survive
         # across the two clicks.  Lazily populated by the body-rig slot.
         self._acurig: Optional[Any] = None
+        self._legacy_acurig_enabled = False
         self._body_guides: dict[str, Any] = {}
         self._body_guide_history: Optional[Any] = None
         # M12 / T1202 — selected KOTOR skeleton template for imported
@@ -476,7 +477,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         layout_manager = getattr(parent, "layout_manager", None)
         if theme_manager is not None:
             theme_manager.register_theme_aware_widget(self)
-            self.apply_ghost_theme(theme_manager.current_theme or theme_manager.get_theme())
+            theme = theme_manager.current_theme or theme_manager.get_theme()
+            if getattr(theme, "is_native", lambda: False)():
+                self.apply_native_theme()
+            else:
+                self.apply_ghost_theme(theme)
         if layout_manager is not None:
             self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
 
@@ -485,13 +490,206 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if viewport is not None and hasattr(viewport, "set_renderer_settings"):
             viewport.set_renderer_settings(settings)
 
+    def set_legacy_acurig_enabled(self, enabled: bool) -> None:
+        """Opt into the experimental AcuRig body-generation path.
+
+        The normal Character Builder export workflow uses the selected native
+        KOTOR template through ``apply_template_rig``.  AcuRig remains available
+        only as an explicit legacy/experimental diagnostic path.
+        """
+        self._legacy_acurig_enabled = bool(enabled)
+
+    def _require_legacy_acurig_enabled(self, action_label: str) -> bool:
+        """Return True only when the legacy AcuRig path has been opted into."""
+        if bool(getattr(self, "_legacy_acurig_enabled", False)):
+            return True
+        message = (
+            f"{action_label} uses the legacy/experimental AcuRig path and is "
+            "disabled by default. Use Build KOTOR Skeleton to bind the selected "
+            "native KOTOR template for game export."
+        )
+        if hasattr(self.inspector, "set_body_rig_status"):
+            try:
+                self.inspector.set_body_rig_status(message, kind="warning")
+            except Exception:                              # pragma: no cover
+                log.exception("inspector.set_body_rig_status failed")
+        if hasattr(self, "bottom_strip"):
+            self.bottom_strip.set_validation(
+                "warning",
+                "LEGACY_ACURIG_DISABLED",
+                issues=[message],
+            )
+        self.statusBar().showMessage(message, 7000)
+        return False
+
     def apply_ghost_theme(self, theme) -> None:
+        if getattr(theme, "is_native", lambda: False)():
+            self.apply_native_theme()
+            return
         update_legacy_palette(theme)
-        self.setStyleSheet("")
-        for widget in (getattr(self, "viewport", None), getattr(self, "rail", None), getattr(self, "inspector", None), getattr(self, "properties", None), getattr(self, "bottom_strip", None)):
+        self.setStyleSheet(self._character_builder_theme_stylesheet(theme))
+        themed: set[int] = set()
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget_id = id(widget)
+            if widget_id in themed:
+                continue
+            themed.add(widget_id)
             hook = getattr(widget, "apply_ghost_theme", None)
             if callable(hook):
                 hook(theme)
+
+    def apply_native_theme(self) -> None:
+        self.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            widget.setStyleSheet("")
+        for widget in self.findChildren(QtWidgets.QWidget):
+            hook = getattr(widget, "apply_native_theme", None)
+            if callable(hook):
+                hook()
+
+    @staticmethod
+    def _character_builder_theme_stylesheet(theme) -> str:
+        """Return window-scoped styling for palette-only Character Builder themes."""
+
+        c = theme.color
+        m = theme.metric
+        radius = m("border.radius", 3)
+        input_height = m("input.height", max(18, m("button.height", 28) - 8))
+        button_padding_x = m("button.paddingX", m("button.paddingH", 10))
+        button_padding_y = m("button.paddingY", m("button.paddingV", 5))
+        return f"""
+        QMainWindow#QtCharacterBuilderWindow,
+        QMainWindow#QtCharacterBuilderWindow QWidget {{
+            background: {c('window.background')};
+            color: {c('window.text', c('text.primary'))};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QMenuBar,
+        QMainWindow#QtCharacterBuilderWindow QMenu,
+        QMainWindow#QtCharacterBuilderWindow QToolBar,
+        QMainWindow#QtCharacterBuilderWindow QStatusBar {{
+            background: {c('toolbar.background')};
+            color: {c('text.primary')};
+            border: 0;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QToolBar#CharacterBuilderToolbar,
+        QMainWindow#QtCharacterBuilderWindow QToolBar#CharacterBuilderToolbarContents,
+        QMainWindow#QtCharacterBuilderWindow QScrollArea#CharacterBuilderToolbarScroll {{
+            background: {c('toolbar.background')};
+            border: 0;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QSplitter::handle,
+        QMainWindow#QtCharacterBuilderWindow QMainWindow::separator {{
+            background: {c('panel.border')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QGroupBox {{
+            color: {c('text.primary')};
+            border: 1px solid {c('groupbox.border')};
+            border-radius: {radius}px;
+            margin-top: {m('groupbox.margin', 8)}px;
+            padding-top: {m('groupbox.margin', 8)}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QGroupBox::title {{
+            subcontrol-origin: margin;
+            left: 8px;
+            color: {c('groupbox.title')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QListWidget,
+        QMainWindow#QtCharacterBuilderWindow QTextEdit,
+        QMainWindow#QtCharacterBuilderWindow QPlainTextEdit,
+        QMainWindow#QtCharacterBuilderWindow QTreeWidget,
+        QMainWindow#QtCharacterBuilderWindow QTableWidget,
+        QMainWindow#QtCharacterBuilderWindow QTableView,
+        QMainWindow#QtCharacterBuilderWindow QTabWidget::pane {{
+            background: {c('table.background', c('viewport.background'))};
+            color: {c('table.text', c('text.primary'))};
+            border: 1px solid {c('panel.border')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QHeaderView::section {{
+            background: {c('table.headerBackground')};
+            color: {c('table.headerText')};
+            border: 1px solid {c('table.grid', c('panel.border'))};
+            padding: 4px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QLineEdit,
+        QMainWindow#QtCharacterBuilderWindow QComboBox,
+        QMainWindow#QtCharacterBuilderWindow QDoubleSpinBox,
+        QMainWindow#QtCharacterBuilderWindow QSpinBox {{
+            background: {c('input.background')};
+            color: {c('input.text')};
+            border: 1px solid {c('input.border')};
+            border-radius: {radius}px;
+            padding: 4px 6px;
+            min-height: {input_height}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QLineEdit:focus,
+        QMainWindow#QtCharacterBuilderWindow QComboBox:focus,
+        QMainWindow#QtCharacterBuilderWindow QDoubleSpinBox:focus,
+        QMainWindow#QtCharacterBuilderWindow QSpinBox:focus {{
+            border-color: {c('input.focusBorder')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QComboBox QAbstractItemView {{
+            background: {c('panel.backgroundAlt', c('panel.altBackground'))};
+            color: {c('text.primary')};
+            selection-background-color: {c('selection.background')};
+            selection-color: {c('selection.text')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton,
+        QMainWindow#QtCharacterBuilderWindow QToolButton {{
+            background: {c('button.background')};
+            color: {c('button.text')};
+            border: 1px solid {c('panel.border')};
+            border-radius: {radius}px;
+            padding: {button_padding_y}px {button_padding_x}px;
+            min-height: {m('button.height', 28)}px;
+            min-width: {m('button.minWidth', 76)}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton:hover,
+        QMainWindow#QtCharacterBuilderWindow QToolButton:hover {{
+            background: {c('button.hover')};
+            color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton:checked,
+        QMainWindow#QtCharacterBuilderWindow QToolButton:checked {{
+            background: {c('button.checked')};
+            color: {c('button.checkedText', c('button.text'))};
+            border-color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton:disabled,
+        QMainWindow#QtCharacterBuilderWindow QToolButton:disabled {{
+            background: {c('button.disabledBackground')};
+            color: {c('button.disabledText', c('text.disabled'))};
+            border-color: {c('panel.border')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QPushButton[accent="true"],
+        QMainWindow#QtCharacterBuilderWindow QToolButton[accent="true"] {{
+            background: {c('accent.primary')};
+            color: {c('button.accentText')};
+            border-color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QTabBar::tab {{
+            background: {c('tab.background')};
+            color: {c('tab.text')};
+            border: 1px solid {c('panel.border')};
+            padding: {m('tab.paddingY', m('tab.padding', 4))}px {m('tab.paddingX', 12)}px;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QTabBar::tab:selected {{
+            background: {c('tab.selectedBackground')};
+            color: {c('tab.selectedText')};
+            border-color: {c('accent.primary')};
+        }}
+        QMainWindow#QtCharacterBuilderWindow QScrollBar:vertical,
+        QMainWindow#QtCharacterBuilderWindow QScrollBar:horizontal {{
+            background: {c('scrollbar.background')};
+            border: 0;
+        }}
+        QMainWindow#QtCharacterBuilderWindow QScrollBar::handle:vertical,
+        QMainWindow#QtCharacterBuilderWindow QScrollBar::handle:horizontal {{
+            background: {c('scrollbar.handle')};
+            border-radius: {radius}px;
+            min-height: 24px;
+            min-width: 24px;
+        }}
+        """
 
     def apply_ghost_layout(self, layout) -> None:
         toolbar = layout.toolbar("main")
@@ -786,6 +984,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "fitAdjustmentResetRequested"):
             self.inspector.fitAdjustmentResetRequested.connect(
                 self._on_fit_adjustment_reset_requested)
+        if hasattr(self.inspector, "refitToSelectedBaseRequested"):
+            self.inspector.refitToSelectedBaseRequested.connect(
+                self._on_refit_to_selected_base_requested)
         self.inspector.validateRequested.connect(self._on_validate_requested)
         self.inspector.checkModelRequested.connect(self._on_check_model_requested)
         self.bottom_strip.bannerClicked.connect(self._on_validation_banner_clicked)
@@ -1164,16 +1365,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
              getattr(self.scene, "game_version", "K1")
-        selected_option = self._skeleton_template_options_by_key.get(
-            str(self._selected_skeleton_template_key or "")
-        )
-        fit_label = ""
-        if selected_option is not None:
-            fit_label = str(
-                self._option_field(selected_option, "resref", "")
-                or self._option_field(selected_option, "name", "")
-                or ""
-            )
+        fit_label = self._selected_skeleton_template_fit_label()
         result = _wf.load_body(
             path,
             self.scene,
@@ -1372,10 +1564,96 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 )
             except Exception:
                 log.exception("inspector.set_fit_adjustment failed")
+        self._push_import_fit_report_to_inspector(result.model)
         self._refresh_skeleton_template_options()
         self._refresh_motion_assignment_state()
         self._update_title()
         self._schedule_live_validation("model_loaded")
+
+    def _extract_import_fit_report(self, model: Any) -> Optional[dict[str, Any]]:
+        """Return the auto-fit report persisted on an imported external mesh."""
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            return None
+        report = metadata.get("kotor_fit_report")
+        if isinstance(report, dict):
+            return report
+        normalization = metadata.get("kotor_normalization")
+        if isinstance(normalization, dict):
+            nested = normalization.get("fit_report")
+            if isinstance(nested, dict):
+                return nested
+        return None
+
+    def _push_import_fit_report_to_inspector(self, model: Any = None) -> None:
+        """Synchronize Character Builder inspector fit evidence from *model*."""
+        if model is None:
+            _entry, model = self._body_model_for_fit_adjustment()
+        report = self._extract_import_fit_report(model)
+        if hasattr(self.inspector, "set_import_fit_report"):
+            try:
+                self.inspector.set_import_fit_report(report)
+            except Exception:                                  # pragma: no cover
+                log.exception("inspector.set_import_fit_report failed")
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        overlay = None
+        if isinstance(report, dict):
+            fitted = report.get("fitted_visual_overlay")
+            visual = report.get("visual_overlay")
+            overlay = fitted if isinstance(fitted, dict) else visual if isinstance(visual, dict) else None
+        try:
+            if overlay is not None and hasattr(viewport, "set_character_fit_overlay"):
+                viewport.set_character_fit_overlay(overlay)
+            elif hasattr(viewport, "clear_character_fit_overlay"):
+                viewport.clear_character_fit_overlay()
+        except Exception:                                      # pragma: no cover
+            log.exception("viewport fit overlay sync failed")
+
+    def _selected_skeleton_template_fit_label(self) -> str:
+        selected_option = self._skeleton_template_options_by_key.get(
+            str(self._selected_skeleton_template_key or "")
+        )
+        if selected_option is None:
+            return ""
+        return str(
+            self._option_field(selected_option, "source_resref", "")
+            or self._option_field(selected_option, "resref", "")
+            or self._option_field(selected_option, "name", "")
+            or ""
+        )
+
+    def _skeleton_template_requested_resref(self, option: Any) -> str:
+        return str(
+            self._option_field(option, "resref", "")
+            or self._option_field(option, "name", "")
+            or ""
+        ).strip()
+
+    def _skeleton_template_source_resref(self, option: Any) -> str:
+        return str(
+            self._option_field(option, "source_resref", "")
+            or self._skeleton_template_requested_resref(option)
+            or ""
+        ).strip()
+
+    def _skeleton_template_status_label(self, option: Any) -> str:
+        requested = self._skeleton_template_requested_resref(option)
+        source = self._skeleton_template_source_resref(option)
+        if source and requested and source.lower() != requested.lower():
+            return f"{source} (requested target {requested})"
+        return source or requested or str(self._option_field(option, "name", "") or "")
+
+    def _external_import_source_path(self, model: Any, entry: Any = None) -> str:
+        metadata = getattr(model, "metadata", None)
+        if isinstance(metadata, dict):
+            external = metadata.get("external_import")
+            if isinstance(external, dict):
+                path = str(external.get("source_path") or "")
+                if path:
+                    return path
+        return str(getattr(entry, "source_path", "") or "")
 
     def _body_model_for_fit_adjustment(self) -> tuple[Any, Any]:
         try:
@@ -1480,6 +1758,89 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 "Fit controls reset. Reload the mesh to discard applied corrections.",
                 kind="info",
             )
+        self._push_import_fit_report_to_inspector()
+
+    @QtCore.Slot()
+    def _on_refit_to_selected_base_requested(self) -> None:
+        """Reload the original external mesh and auto-fit to the selected base."""
+        entry, model = self._body_model_for_fit_adjustment()
+        if model is None:
+            message = "Load a custom mesh before re-fitting to the selected base."
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="warning")
+            self.statusBar().showMessage(message, 6000)
+            return
+        if self._selected_skeleton_template_model is None:
+            message = "Choose a KOTOR base skeleton before re-fitting the custom mesh."
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="warning")
+            self.statusBar().showMessage(message, 6000)
+            return
+
+        source_path = self._external_import_source_path(model, entry)
+        if not source_path or not os.path.isfile(source_path):
+            message = (
+                "Cannot re-fit because the original external mesh path is missing. "
+                "Load the custom mesh again."
+            )
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="warning")
+            self.statusBar().showMessage(message, 7000)
+            return
+
+        try:
+            from src.core.characters import headless_body_workflow as _wf
+        except Exception:
+            try:
+                from core.characters import headless_body_workflow as _wf  # type: ignore
+            except Exception as exc:                         # pragma: no cover
+                message = f"Workflow service unavailable: {exc}"
+                if hasattr(self.inspector, "set_fit_adjustment_status"):
+                    self.inspector.set_fit_adjustment_status(message, kind="error")
+                self.statusBar().showMessage(message, 7000)
+                return
+
+        gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+             getattr(self.scene, "game_version", "K1")
+        fit_label = self._selected_skeleton_template_fit_label()
+        fit_override = {}
+        if hasattr(self.inspector, "selected_fit_override"):
+            try:
+                fit_override = self.inspector.selected_fit_override()
+            except Exception:
+                log.exception("inspector.selected_fit_override failed")
+        result = _wf.load_body(
+            source_path,
+            self.scene,
+            game_version=gv,
+            fit_reference_model=self._selected_skeleton_template_model,
+            fit_reference_label=fit_label,
+            fit_override=fit_override,
+        )
+        if not result.ok:
+            message = str(result.message or "Re-fit failed.")
+            if hasattr(self.inspector, "set_fit_adjustment_status"):
+                self.inspector.set_fit_adjustment_status(message, kind="error")
+            self.bottom_strip.set_validation(
+                "error",
+                str(result.code or "REFIT_FAILED").upper(),
+                issues=[message],
+            )
+            self.statusBar().showMessage(message, 7000)
+            return
+
+        self._on_model_loaded_into_scene(result)
+        if hasattr(self.inspector, "set_fit_adjustment_status"):
+            self.inspector.set_fit_adjustment_status(
+                f"Re-fit to {fit_label or 'selected KOTOR base'} completed from the original import.",
+                kind="ok",
+            )
+        self.bottom_strip.set_validation(
+            "info",
+            "REFIT_COMPLETE",
+            issues=[f"Re-fit external mesh to {fit_label or 'selected KOTOR base'}."],
+        )
+        self.statusBar().showMessage("Re-fit to selected base completed.", 6000)
 
     def _load_model_in_viewport_with_textures(
         self,
@@ -1555,11 +1916,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _ensure_game_resource_manager(self, game: str = "") -> Optional[Any]:
         """Index the configured game install and wire it to animation/texture systems."""
-        game_key = str(game or getattr(self.scene, "game_version", "K1") or "K1").upper()
-        if game_key.endswith("2"):
-            game_key = "K2"
-        else:
-            game_key = "K1"
+        raw_game = game or getattr(self.scene, "game_version", "K1") or "K1"
+        try:
+            from src.core.characters.headless_body_workflow import normalize_kotor_game_tag
+        except ImportError:                              # pragma: no cover
+            from core.characters.headless_body_workflow import normalize_kotor_game_tag  # type: ignore
+        game_key = normalize_kotor_game_tag(raw_game)
         if self._resource_manager is None:
             try:
                 from src.core.assets.resource_manager import get_manager
@@ -1617,7 +1979,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _installed_skeleton_template_rows(self, game: str) -> list[dict[str, str]]:
         """Return installed KOTOR MDLs for the base-skeleton picker."""
-        game_key = str(game or "K1").upper()
+        try:
+            from src.core.characters.headless_body_workflow import normalize_kotor_game_tag
+        except ImportError:                              # pragma: no cover
+            from core.characters.headless_body_workflow import normalize_kotor_game_tag  # type: ignore
+        game_key = normalize_kotor_game_tag(game)
         cached = self._installed_skeleton_template_rows_by_game.get(game_key)
         if cached is not None:
             return list(cached)
@@ -1661,9 +2027,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         game = str(self._option_field(option, "game", "") or
                    getattr(self.scene, "game_version", "K1"))
         part = str(self._option_field(option, "part", "body") or "body")
-        resref = str(self._option_field(option, "resref", "") or
-                     self._option_field(option, "source_resref", "") or
-                     self._option_field(option, "name", "") or "")
+        requested_resref = str(self._option_field(option, "resref", "") or
+                               self._option_field(option, "name", "") or "")
+        source_resref = str(self._option_field(option, "source_resref", "") or "")
+        resref = str(source_resref or requested_resref)
         path = str(self._option_field(option, "path", "") or "")
 
         if source == "bundled":
@@ -1691,6 +2058,28 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return None
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
+        source_resref = resref
+        warnings: list[str] = []
+        try:
+            try:
+                from core.animation_retargeting import skeleton_template_picker as _picker
+            except ImportError:                              # pragma: no cover
+                from src.core.animation_retargeting import skeleton_template_picker as _picker  # type: ignore
+            installed = [
+                str(row.get("resref") or "").strip().lower()
+                for row in self._installed_skeleton_template_rows(str(game or "K1"))
+            ]
+            source_resref = _picker.resolve_model_variant_source_resref(
+                resref,
+                installed,
+            )
+            if source_resref != resref:
+                warnings.append(
+                    f"'{resref}' is treated as an appearance/texture variant; "
+                    f"loading base MDL '{source_resref}' for the KOTOR node DAG."
+                )
+        except Exception:
+            log.debug("Could not resolve typed skeleton variant", exc_info=True)
         option = {
             "key": f"game:{str(game).lower()}:{resref}:typed",
             "source": "installation",
@@ -1698,10 +2087,19 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             "part": "body",
             "name": resref,
             "resref": resref,
-            "source_resref": resref,
-            "path": f"installation:{resref}.mdl",
+            "source_resref": source_resref,
+            "path": f"installation:{source_resref}.mdl",
             "description": "Typed KOTOR model resref from the configured installation.",
-            "warnings": [],
+            "warnings": warnings,
+            "metadata": {
+                "requested_resref": resref,
+                "source_resref": source_resref,
+                "variant_resolution": (
+                    "npc_numbered_variant_base"
+                    if source_resref != resref else
+                    "exact"
+                ),
+            },
         }
         self._skeleton_template_options_by_key[str(option["key"])] = option
         if not any(
@@ -1832,7 +2230,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if option is None:
             return
 
-        label = str(self._option_field(option, "name", "") or key)
+        label = self._skeleton_template_status_label(option) or str(
+            self._option_field(option, "name", "") or key
+        )
 
         template_model = self._load_skeleton_template_model(option)
         if template_model is None:
@@ -1845,6 +2245,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 )
             return
         self._selected_skeleton_template_model = template_model
+        requested_resref = str(self._option_field(option, "resref", "") or "")
+        source_resref = str(self._option_field(option, "source_resref", "") or requested_resref)
+        if requested_resref:
+            setattr(template_model, "_gr_requested_resref", requested_resref)
+            setattr(template_model, "_gr_target_resref", requested_resref)
+        if source_resref and source_resref != requested_resref:
+            setattr(template_model, "_gr_source_resref", source_resref)
+            setattr(template_model, "_gr_variant_source_resref", source_resref)
+            setattr(template_model, "_gr_variant_resolution", "npc_numbered_variant_base")
 
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_external_skeleton"):
@@ -1955,6 +2364,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         message = str(result.get("message") or "Template skeleton applied.")
         if hasattr(self.inspector, "set_skeleton_template_status"):
             self.inspector.set_skeleton_template_status(message, kind="ok")
+        self._push_import_fit_report_to_inspector(rigged_model)
         self.bottom_strip.set_validation(
             "info",
             "SKELETON_TEMPLATE",
@@ -2251,7 +2661,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         Supermodel mode uses the composite exporter so FBX/glTF contain
         the head parented under the body's headhook.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
         try:
             from src.gui.qt_lib.dialogs.qt_export_dialog import QtExportDialog
         except Exception:                                   # pragma: no cover
@@ -2269,9 +2679,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # dialog's read-only hint label.
         md = None
         try:
-            from core.geometry import model_data as md  # noqa: WPS433 - lazy on purpose
+            from src.core.geometry import model_data as md  # noqa: WPS433 - lazy on purpose
         except Exception:                                   # pragma: no cover
-            md = None
+            try:
+                from core.geometry import model_data as md  # type: ignore  # noqa: WPS433
+            except Exception:
+                md = None
         initial_resref = ""
         if md is not None:
             entry = self.scene.get(md.PartSlot.HEADLESS_BODY)
@@ -2362,7 +2775,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         subsequent *Generate Skeleton* click reuses it (preserving any
         user-locked guide overrides).
         """
-        from core.characters import headless_body_workflow as _wf
+        if not self._require_legacy_acurig_enabled("Place Body Guides"):
+            return
+
+        _wf = self._workflow_module()
 
         result = _wf.place_body_guides(
             self.scene,
@@ -2421,7 +2837,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         respected), pushes status into the inspector + bottom strip, and
         refreshes the viewport with the freshly-rigged model on success.
         """
-        from core.characters import headless_body_workflow as _wf
+        if not self._require_legacy_acurig_enabled("Create New Skeleton"):
+            return
+
+        _wf = self._workflow_module()
 
         result = _wf.generate_skeleton(
             self.scene,
@@ -2492,7 +2911,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         ``self._acurig`` (shared with T503) so subsequent mask toggles
         and the next body-rig pass keep working on the same instance.
         """
-        from core.characters import headless_body_workflow as _wf
+        if not self._require_legacy_acurig_enabled("Rebuild Hand Guides"):
+            return
+
+        _wf = self._workflow_module()
 
         result = _wf.place_hand_guides(
             self.scene,
@@ -2553,7 +2975,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         :func:`headless_body_workflow.apply_hand_masks` so AcuRig's
         :class:`BoneMask` mirrors the UI.
         """
-        from core.characters import headless_body_workflow as _wf
+        if not self._require_legacy_acurig_enabled("Hand weight mask edits"):
+            return
+
+        _wf = self._workflow_module()
 
         if self._acurig is None:
             # User toggled a checkbox before clicking *Place Hand Guides*.
@@ -2610,12 +3035,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     def _refresh_motion_assignment_state(self) -> None:
         """Mirror workflow motion state into the inspector controls."""
         try:
-            from core.characters import headless_body_workflow as _wf
-        except ImportError:                                 # pragma: no cover
-            try:
-                from src.core.characters import headless_body_workflow as _wf  # type: ignore
-            except Exception:
-                return
+            _wf = self._workflow_module()
+        except Exception:
+            return
 
         result = _wf.motion_assignment_options(self.scene)
         if hasattr(self.inspector, "set_motion_assignment"):
@@ -2638,10 +3060,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     @QtCore.Slot()
     def _on_assign_motions_requested(self) -> None:
         """Apply the selected KOTOR motion source to the current body."""
-        try:
-            from core.characters import headless_body_workflow as _wf
-        except ImportError:                                 # pragma: no cover
-            from src.core.characters import headless_body_workflow as _wf  # type: ignore
+        _wf = self._workflow_module()
 
         source = "model"
         if hasattr(self.inspector, "selected_motion_source"):
@@ -2790,7 +3209,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         dropdown.  Also surfaces a status banner so the user knows
         whether the standard set (walk / idle / talk) is present.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         self._ensure_game_resource_manager()
         self._sync_motion_controls_to_scene(_wf)
@@ -2812,7 +3231,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "set_animation_library"):
             try:
                 self.inspector.set_animation_library(
-                    library.available, library.missing,
+                    library.available,
+                    library.missing,
+                    message=library.message,
+                    diagnostics=getattr(library, "diagnostics", []),
                 )
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_animation_library failed")
@@ -2843,7 +3265,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         ``set_animation_pose`` is invoked on the chosen
         :class:`Animation`.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         self._ensure_game_resource_manager()
         self._sync_motion_controls_to_scene(_wf)
@@ -2884,7 +3306,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         which dispatches ``viewport.set_animation_pose(None)`` per the
         existing viewport contract.
         """
-        from core.characters import headless_body_workflow as _wf
+        _wf = self._workflow_module()
 
         viewport = getattr(self, "viewport", None)
         timer = getattr(self, "_animation_timer", None)
@@ -2936,8 +3358,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 length=length,
             )
         self._animation_timer.start()
-        from core.characters.headless_body_workflow import CheckActorResult
-        return CheckActorResult(
+        _wf = self._workflow_module()
+        return _wf.CheckActorResult(
             ok=True,
             playing=str(getattr(anim, "name", anim_name) if anim else anim_name),
             length=length,

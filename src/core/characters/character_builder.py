@@ -214,6 +214,47 @@ def _detect_game_dir(game: str) -> Optional[str]:
         return None
 
 
+class _KotorInstallSupermodelResourceManager:
+    """Resource adapter used by Character Builder animation inheritance checks.
+
+    ``SuperModelResolver`` expects a ``load_model(resref, game)`` method.  The
+    native-base loader already has a real installed-game index in hand, so this
+    small adapter lets the Character Builder resolve inherited supermodel clips
+    from the same install that supplied the selected KOTOR DAG authority.
+    """
+
+    def __init__(self, install: Any, *, game: str) -> None:
+        self._install = install
+        self._game = "K2" if str(game).upper().endswith("2") else "K1"
+
+    def load_model(self, resref: str, game: str = "K1") -> Optional["KotorModel"]:
+        try:
+            try:
+                from core.game.kotor_loader import load_model_from_bytes  # type: ignore
+                from core.geometry.model_data import GameVersion  # type: ignore
+            except ImportError:
+                from src.core.game.kotor_loader import load_model_from_bytes  # type: ignore
+                from src.core.geometry.model_data import GameVersion  # type: ignore
+            name = str(resref or "").strip().lower()
+            if not name:
+                return None
+            mdl_bytes = self._install.get_mdl(name)
+            if not mdl_bytes:
+                return None
+            mdx_bytes = self._install.get_mdx(name) or b""
+            game_tag = "K2" if str(game or self._game).upper().endswith("2") else "K1"
+            gv = GameVersion.K2 if game_tag == "K2" else GameVersion.K1
+            model = load_model_from_bytes(mdl_bytes, mdx_bytes, game_version=gv)
+            if model is not None:
+                setattr(model, "_gr_source_resref", name)
+                setattr(model, "_gr_source_game", game_tag)
+                setattr(model, "_gr_source_layer", "game_library")
+            return model
+        except Exception as exc:  # pragma: no cover - defensive adapter
+            log.debug("supermodel resource load failed for %r: %s", resref, exc, exc_info=True)
+            return None
+
+
 def load_game_skeleton_source(
     resref: str,
     *,
@@ -262,6 +303,15 @@ def load_game_skeleton_source(
             setattr(model, "_gr_source_resref", name)
             setattr(model, "_gr_source_game", "K2" if gv == GameVersion.K2 else "K1")
             setattr(model, "_gr_source_layer", "game_library")
+            setattr(model, "_gr_source_game_dir", root)
+            setattr(
+                model,
+                "_gr_supermodel_resource_manager",
+                _KotorInstallSupermodelResourceManager(
+                    inst,
+                    game="K2" if gv == GameVersion.K2 else "K1",
+                ),
+            )
         return model
     except Exception as exc:
         log.error("load_game_skeleton_source: failed for %s/%s: %s", game, name, exc)
@@ -819,8 +869,10 @@ def apply_template_rig(
     mesh_model      : KotorModel of the imported OBJ/FBX mesh (no rig)
     template_model  : KotorModel from load_template()
     game            : 'K1' or 'K2'
-    scale_mode      : 'auto' (match heights) or 'manual'
-    scale_factor    : only used when scale_mode == 'manual'
+    scale_mode      : compatibility input only. Imported meshes should already
+                      be auto-fitted before binding; the selected KOTOR
+                      skeleton is never scaled here.
+    scale_factor    : compatibility input only when scale_mode == 'manual'
 
     Returns
     -------
@@ -840,18 +892,29 @@ def apply_template_rig(
 
     warnings: List[str] = []
 
-    # Compute scale factor
+    # Compute the caller's requested scale for diagnostics only. The selected
+    # native KOTOR skeleton remains the final DAG authority and is not scaled
+    # in this binding step.
+    requested_scale = 1.0
     applied_scale = 1.0
     if scale_mode == "auto":
         try:
             mesh_h = _model_height(mesh_model)
             tmpl_h = _model_height(template_model)
             if tmpl_h > 0.01:
-                applied_scale = mesh_h / tmpl_h
+                requested_scale = mesh_h / tmpl_h
         except Exception as exc:
             warnings.append(f"Auto-scale failed: {exc}")
     elif scale_mode == "manual":
-        applied_scale = max(0.01, float(scale_factor))
+        requested_scale = max(0.01, float(scale_factor))
+    else:
+        warnings.append(f"Unknown scale mode '{scale_mode}'; using native template scale.")
+    if abs(requested_scale - 1.0) > 0.001:
+        warnings.append(
+            "Requested skeleton scale "
+            f"{requested_scale:.3f} was ignored; re-fit the imported mesh "
+            "to the selected KOTOR base before binding."
+        )
 
     # Clone mesh model
     try:
@@ -872,15 +935,27 @@ def apply_template_rig(
                     "warnings": warnings, "scale": applied_scale}
 
         native_skeleton_snapshot = None
+        native_dag_fingerprint = ""
+        native_dag_fingerprint_algorithm = ""
         try:
             try:
-                from .native_skeleton import capture_native_skeleton_snapshot
+                from .native_skeleton import (
+                    capture_native_skeleton_snapshot,
+                    native_skeleton_fingerprint,
+                )
             except ImportError:  # pragma: no cover
-                from src.core.characters.native_skeleton import capture_native_skeleton_snapshot  # type: ignore
+                from src.core.characters.native_skeleton import (  # type: ignore
+                    capture_native_skeleton_snapshot,
+                    native_skeleton_fingerprint,
+                )
             native_skeleton_snapshot = capture_native_skeleton_snapshot(
                 template_model,
                 game=game,
             )
+            native_dag_fingerprint = native_skeleton_fingerprint(
+                native_skeleton_snapshot
+            )
+            native_dag_fingerprint_algorithm = "sha256"
         except Exception as exc:
             log.debug("apply_template_rig native snapshot failed: %s", exc, exc_info=True)
             warnings.append(f"Native skeleton snapshot failed: {exc}")
@@ -888,12 +963,11 @@ def apply_template_rig(
         import copy
         skel_root = copy.deepcopy(tmpl_root)
 
-        # Apply scale to skeleton positions if needed
-        if abs(applied_scale - 1.0) > 0.001:
-            _scale_skeleton(skel_root, applied_scale)
-            warnings.append(f"Skeleton scaled by {applied_scale:.3f} to match mesh height")
-
-        removed_template_meshes = _strip_render_geometry_from_skeleton(skel_root)
+        replaced_native_render_nodes: List[dict] = []
+        removed_template_meshes = _strip_render_geometry_from_skeleton(
+            skel_root,
+            replaced_nodes=replaced_native_render_nodes,
+        )
         mesh_payloads = _extract_clean_mesh_payloads(mesh_model)
         if not mesh_payloads:
             return {"ok": False, "model": None,
@@ -936,6 +1010,7 @@ def apply_template_rig(
             bind_report = bind_imported_meshes_to_skeleton(
                 result_model,
                 mesh_nodes=mesh_payloads,
+                donor_model=template_model,
             )
             if not bind_report.ok:
                 return {"ok": False, "model": None,
@@ -951,15 +1026,99 @@ def apply_template_rig(
             if not isinstance(metadata, dict):
                 metadata = {}
                 setattr(result_model, "metadata", metadata)
+            native_metadata = (
+                dict(getattr(native_skeleton_snapshot, "metadata", {}) or {})
+                if native_skeleton_snapshot is not None else
+                {}
+            )
+            native_base_resref = str(
+                native_metadata.get("source_resref")
+                or getattr(template_model, "_gr_source_resref", "")
+                or getattr(template_model, "name", "")
+                or ""
+            )
+            native_base_game = str(
+                native_metadata.get("source_game")
+                or getattr(template_model, "_gr_source_game", "")
+                or game
+                or ""
+            )
+            native_base_model_name = str(
+                getattr(native_skeleton_snapshot, "model_name", "")
+                if native_skeleton_snapshot is not None else
+                getattr(template_model, "name", "")
+            )
+            imported_payload_name = str(getattr(mesh_model, "name", "") or "")
+            payload_mesh_names = tuple(
+                str(getattr(mesh_node, "name", "") or "")
+                for mesh_node in mesh_payloads
+            )
+            donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
+                "native_base": {
+                    "source_resref": native_base_resref,
+                    "model_name": native_base_model_name,
+                    "game": native_base_game,
+                    "supermodel": sm or "NULL",
+                    "dag_authority": "native_kotor_base",
+                    "dag_fingerprint": native_dag_fingerprint,
+                    "dag_fingerprint_algorithm": native_dag_fingerprint_algorithm,
+                    "replaced_render_payload_nodes": replaced_native_render_nodes,
+                    "replaced_render_payload_count": len(replaced_native_render_nodes),
+                },
+                "imported_payload": {
+                    "model_name": imported_payload_name,
+                    "mesh_role": "payload_guest",
+                    "mesh_names": list(payload_mesh_names),
+                    "removed_import_armature_or_helper_nodes": removed_import_nodes,
+                },
                 "mesh_count": len(mesh_payloads),
                 "skinned_meshes": bind_report.skinned_meshes,
                 "weighted_vertices": bind_report.weighted_vertices,
                 "bone_slots": bind_report.bone_count,
+                "skin_binding": {
+                    "weighting_method": getattr(
+                        bind_report,
+                        "weighting_method",
+                        "nearest_kotor_bone_segment",
+                    ),
+                    "quality_stage": getattr(
+                        bind_report,
+                        "quality_stage",
+                        "fallback_first_pass",
+                    ),
+                    "donor_weight_transfer": donor_weight_transfer,
+                    "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
+                    "note": (
+                        "Native-template donor weights were transferred by nearest "
+                        "surface vertex. Preview inherited animations before "
+                        "claiming launch-quality deformation."
+                        if donor_weight_transfer else
+                        "Nearest-bone fallback skinning is deterministic and "
+                        "exportable, but donor/native-template weight transfer "
+                        "is required before claiming launch-quality deformation."
+                    ),
+                },
                 "source": "apply_template_rig",
+                "skeleton_scale_applied": applied_scale,
+                "requested_skeleton_scale": requested_scale,
             }
+            try:
+                from .character_rig_state import mark_native_template_final_rig
+            except ImportError:  # pragma: no cover
+                from src.core.characters.character_rig_state import mark_native_template_final_rig  # type: ignore
+            mark_native_template_final_rig(
+                result_model,
+                source="apply_template_rig",
+                native_snapshot_present=native_skeleton_snapshot is not None,
+                native_base_resref=native_base_resref,
+                native_base_model_name=native_base_model_name,
+                native_base_game=native_base_game,
+                imported_payload_name=imported_payload_name,
+                payload_mesh_names=payload_mesh_names,
+            )
             setattr(result_model, "_gr_character_builder_bind_complete", True)
         except Exception as exc:
             log.error("apply_template_rig skin bind failed: %s", exc, exc_info=True)
@@ -989,11 +1148,13 @@ def apply_template_rig(
             ),
             "warnings": warnings,
             "scale": applied_scale,
+            "requested_scale": requested_scale,
             "meshes": len(mesh_payloads),
             "skinned_meshes": bind_report.skinned_meshes,
             "weighted_vertices": bind_report.weighted_vertices,
             "bone_slots": bind_report.bone_count,
             "removed_import_nodes": removed_import_nodes,
+            "replaced_native_render_nodes": replaced_native_render_nodes,
             "native_skeleton_snapshot": native_skeleton_snapshot,
         }
     except Exception as exc:
@@ -1046,7 +1207,11 @@ def _is_mesh_payload_node(node: Any) -> bool:
     )
 
 
-def _strip_render_geometry_from_skeleton(node: Any) -> int:
+def _strip_render_geometry_from_skeleton(
+    node: Any,
+    *,
+    replaced_nodes: List[dict] | None = None,
+) -> int:
     """Remove visible reference meshes from a copied template skeleton tree.
 
     KotOR character rigs are unusual: many deformation joints are stored as
@@ -1065,12 +1230,46 @@ def _strip_render_geometry_from_skeleton(node: Any) -> int:
                 _clear_template_render_payload(child)
             else:
                 removed += 1
+                if replaced_nodes is not None:
+                    replaced_nodes.append(_native_render_replacement_record(child))
                 continue
-        removed += _strip_render_geometry_from_skeleton(child)
+        removed += _strip_render_geometry_from_skeleton(
+            child,
+            replaced_nodes=replaced_nodes,
+        )
         child.parent = node
         kept.append(child)
     node.children = kept
     return removed
+
+
+def _native_render_replacement_record(node: Any) -> dict:
+    """Return audit metadata for a native render leaf replaced by payload mesh."""
+    return {
+        "name": str(getattr(node, "name", "") or ""),
+        "path": list(_node_path_for_record(node)),
+        "is_mesh": bool(getattr(node, "is_mesh", False)),
+        "is_skin": bool(getattr(node, "is_skin", False)),
+        "vertex_count": len(list(getattr(node, "vertices", []) or [])),
+        "face_count": len(list(getattr(node, "faces", []) or [])),
+        "texture": str(getattr(node, "texture_clean", getattr(node, "texture", "")) or ""),
+        "replacement": "imported_mesh_payload",
+    }
+
+
+def _node_path_for_record(node: Any) -> tuple[str, ...]:
+    names = []
+    current = node
+    visited: set[int] = set()
+    while current is not None:
+        current_id = id(current)
+        if current_id in visited:
+            break
+        visited.add(current_id)
+        names.append(str(getattr(current, "name", "") or ""))
+        current = getattr(current, "parent", None)
+    names.reverse()
+    return tuple(names)
 
 
 def _is_template_skeleton_helper(node: Any) -> bool:

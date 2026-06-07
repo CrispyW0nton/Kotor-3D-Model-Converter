@@ -20,6 +20,7 @@ The binary PDFs remain outside git. The notes here are documentation only.
 | [`ghostrigger_programming_crosswalk.md`](ghostrigger_programming_crosswalk.md) | Synthesizes the coding/architecture/UI references | Program-wide decision rules and roadmap checkpoint template for future coding work. |
 | [`coding_books_second_pass_2026_05_23.md`](coding_books_second_pass_2026_05_23.md) | Second pass across all six coding/UI/architecture books | Missed details: proxy models, data mappers, filesystem models, undo stacks, QProcess/job adapters, empty states, and roadmap corrections. |
 | [`coding_books_third_pass_scope_sanity_2026_05_23.md`](coding_books_third_pass_scope_sanity_2026_05_23.md) | Third pass across all six books | Scope sanity: what GhostRigger is for, what it should not become, command/query boundaries, capability honesty, and next-slice discipline. |
+| [`character_builder_rigging_skinning_sources_2026_06_04.md`](character_builder_rigging_skinning_sources_2026_06_04.md) | Tina O'Hailey, *Rig it Right!*; Pan et al., automatic skinning/weight-retargeting paper | Character Builder-specific rules for auto-fit, bind pose, symmetry, donor weight transfer, deformation preview, and export evidence. |
 
 ## How To Use These Notes
 
@@ -42,6 +43,11 @@ Before changing code in a subsystem, check the crosswalk:
 - **Third-pass scope sanity**: every feature must identify its owning studio,
   modder task, resource target, safety gates, and capability status before
   implementation.
+- **Character Builder rigging/skinning**: native KOTOR DAG remains authority;
+  imported mesh is payload; auto-fit, bind pose, symmetry, and weight-transfer
+  evidence must be explicit before export. Treat fit, bind, and weights as
+  separate gates, and prefer landmark-backed donor weight transfer over
+  nearest-bone guesses for Bendak-style custom body imports.
 - **Core architecture**: use-case services, provider/adapters, ValidationBus,
   ExportJob, ResourceAddress, GhostRiggerProject integration.
 - **Performance**: game-loop timing, profiling, resource loading, concurrency

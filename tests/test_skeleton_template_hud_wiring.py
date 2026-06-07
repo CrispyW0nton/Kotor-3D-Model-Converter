@@ -106,6 +106,18 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "scene.assign" in src
 
 
+def test_humanoid_mode_uses_five_step_character_builder_rail() -> None:
+    rail = _read("src/gui/panels/qt_workflow_rail.py")
+    humanoid_start = rail.index("_STEPS_HUMANOID")
+    humanoid_end = rail.index("_STEPS_CREATURE", humanoid_start)
+    humanoid_block = rail[humanoid_start:humanoid_end]
+
+    assert "*_STEPS_UNIFIED_CHARACTER_BUILDER" in humanoid_block
+    assert "Validate + Export" not in rail
+    assert "Load Humanoid" not in rail
+    assert "Add Motions" not in rail
+
+
 def test_template_selection_previews_external_skeleton_overlay() -> None:
     builder = _read("src/gui/panels/qt_character_builder_panel.py")
     viewport = _read("src/gui/viewports/qt_viewport.py")
@@ -148,11 +160,22 @@ def test_manual_import_fit_controls_are_wired() -> None:
     workflow = _read("src/core/characters/headless_body_workflow.py")
 
     assert "fitAdjustmentChanged" in inspector
+    assert "refitToSelectedBaseRequested" in inspector
     assert 'QtWidgets.QGroupBox("Import Fit")' in inspector
+    assert 'QtWidgets.QPushButton("Re-fit to Selected Base")' in inspector
+    assert "Source Forward" in inspector
+    assert "Source Up" in inspector
+    assert "Bounds Bottom" in inspector
+    assert "selected_fit_override" in inspector
     assert "_fit_pos_x_spin" in inspector
     assert "translation_delta" in builder
     assert "set_fit_adjustment" in inspector
     assert "_on_fit_adjustment_changed" in builder
+    assert "_on_refit_to_selected_base_requested" in builder
+    assert "_external_import_source_path" in builder
+    assert "selected_fit_override()" in builder
+    assert "fit_reference_model=self._selected_skeleton_template_model" in builder
+    assert "fit_override=fit_override" in builder
     assert "apply_external_model_fit_adjustment" in builder
     assert "refresh_model_geometry" in viewport
     assert "viewport.frame_all()" in builder
@@ -203,6 +226,34 @@ def test_gpu_viewport_draws_external_reference_skeleton_overlay() -> None:
 
     assert 'getattr(self._renderer, "_ext_skeleton", None)' in viewport
     assert "self._renderer._draw_ext_skeleton(draw, w, h)" in viewport
+
+
+def test_character_builder_pushes_auto_fit_overlay_to_viewport() -> None:
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+    viewport = _read("src/gui/viewports/qt_viewport.py")
+    renderer = _read("src/gui/rendering/frame_core/renderer_overlays.py")
+    setup = _read("src/core/rendering/frame_core/renderer_setup.py")
+
+    assert "report.get(\"fitted_visual_overlay\")" in builder
+    assert "report.get(\"visual_overlay\")" in builder
+    assert "viewport.set_character_fit_overlay(overlay)" in builder
+    assert "viewport.clear_character_fit_overlay()" in builder
+    assert "def set_character_fit_overlay" in viewport
+    assert "def clear_character_fit_overlay" in viewport
+    assert "self._renderer.set_character_fit_overlay(overlay)" in viewport
+    assert "_character_fit_overlay" in setup
+    assert "def set_character_fit_overlay" in renderer
+    assert "def _draw_character_fit_overlay" in renderer
+
+
+def test_gpu_and_software_paths_draw_character_fit_overlay() -> None:
+    viewport = _read("src/gui/viewports/qt_viewport.py")
+    render_loop = _read("src/core/rendering/frame_core/renderer_render_loop.py")
+
+    assert 'getattr(self._renderer, "_character_fit_overlay", None)' in viewport
+    assert "self._renderer._draw_character_fit_overlay(draw, w, h)" in viewport
+    assert 'getattr(self, "_character_fit_overlay", None)' in render_loop
+    assert "self._draw_character_fit_overlay(draw, W, H)" in render_loop
 
 
 def test_gpu_skinning_guards_external_parent_cycles() -> None:

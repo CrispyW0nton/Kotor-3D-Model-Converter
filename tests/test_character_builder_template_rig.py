@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import inspect
 import math
+from types import SimpleNamespace
 
 from src.core.characters.character_builder import apply_template_rig
+from src.core.characters.character_rig_state import get_character_rig_state
 from src.core.geometry.model_data import (
     BoneWeight,
     CharacterScene,
@@ -13,7 +16,11 @@ from src.core.geometry.model_data import (
     VertexSkinData,
 )
 from src.core.diagnostics.validation_service import ValidationService
+from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.systems.bas.preview_composer import build_bas_preview_model
+from src.gui.viewports.viewport_core.widgets.drag_interactions import (
+    ViewportDragInteractionsMixin,
+)
 
 
 def _node(name: str, flags: int = int(NodeFlags.HEADER), parent: ModelNode | None = None) -> ModelNode:
@@ -68,6 +75,64 @@ def test_character_builder_preview_uses_bas_socket_layers_for_attachments() -> N
     assert preview.find_node("body_skin").bone_map == ["BodyRoot", "headhook", "rhand"]
 
 
+def test_character_builder_legacy_acurig_slots_are_off_by_default() -> None:
+    init_source = inspect.getsource(QtCharacterBuilderWindow.__init__)
+    place_source = inspect.getsource(QtCharacterBuilderWindow._on_place_body_guides_requested)
+    generate_source = inspect.getsource(QtCharacterBuilderWindow._on_generate_skeleton_requested)
+    hand_source = inspect.getsource(QtCharacterBuilderWindow._on_place_hand_guides_requested)
+    mask_source = inspect.getsource(QtCharacterBuilderWindow._on_hand_mask_changed)
+
+    assert "_legacy_acurig_enabled = False" in init_source
+    assert hasattr(QtCharacterBuilderWindow, "set_legacy_acurig_enabled")
+    assert "_require_legacy_acurig_enabled" in place_source
+    assert "_require_legacy_acurig_enabled" in generate_source
+    assert "_require_legacy_acurig_enabled" in hand_source
+    assert "_require_legacy_acurig_enabled" in mask_source
+
+
+def test_character_builder_inspector_labels_legacy_acurig_controls() -> None:
+    from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel
+
+    source = inspect.getsource(QtInspectorPanel._populate_rig_page)
+
+    assert "Legacy / Experimental AcuRig" in source
+    assert "Legacy: Place Body Guides" in source
+    assert "Legacy: Create New Skeleton" in source
+    assert "Legacy / Experimental Hand AcuRig" in source
+    assert "Legacy: Rebuild Hand Guides" in source
+
+
+def test_character_builder_gizmo_routes_promoted_root_to_model_fit_drag() -> None:
+    root = SimpleNamespace(name="bendak")
+
+    class _FakeCharacterBuilderDrag(ViewportDragInteractionsMixin):
+        def __init__(self):
+            self.model = SimpleNamespace(root_node=root)
+            self._mesh_transform_promotes_to_model_root = True
+
+        def _is_selected_model_root(self, node) -> bool:
+            return node is root
+
+    view = _FakeCharacterBuilderDrag()
+
+    assert view._should_use_model_fit_gizmo_drag(root) is True
+    view._mesh_transform_promotes_to_model_root = False
+    assert view._should_use_model_fit_gizmo_drag(root) is False
+
+
+def test_character_builder_overlay_setters_do_not_require_widget_redraw() -> None:
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    renderer = FrameRenderer(ArcBallCamera())
+
+    renderer.set_acurig_guides({})
+    renderer.set_character_fit_overlay({"source": {"origin": [0.0, 0.0, 0.0]}})
+
+    assert getattr(renderer, "_acurig_guides_overlay") == {}
+    assert getattr(renderer, "_character_fit_overlay") is not None
+
+
 def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> None:
     src_root = _node("Bendak_UE")
     src_root.position = (10.0, 0.0, 0.0)
@@ -95,7 +160,10 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     kotor_root = _node("N_Mandalorian")
     _node("rootdummy", parent=kotor_root)
     _node("template_body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=kotor_root)
-    template = KotorModel(name="n_mandalorian03", root_node=kotor_root, supermodel="S_Female02")
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+    template._gr_source_resref = "n_mandalorian"
+    template._gr_source_game = "K1"
+    template._gr_source_layer = "game_library"
 
     result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
 
@@ -124,17 +192,68 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
     assert len(rigged_mesh.qbone_list) == len(rigged_mesh.bone_map)
     assert len(rigged_mesh.tbone_list) == len(rigged_mesh.bone_map)
+    skin_binding = rigged.metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "nearest_kotor_bone_segment"
+    assert skin_binding["quality_stage"] == "fallback_first_pass"
+    assert skin_binding["donor_weight_transfer"] is False
+    assert skin_binding["mesh_reports"][0]["mesh_name"] == "Bendak"
+    assert skin_binding["mesh_reports"][0]["weighted_vertices"] == 1
+    assert skin_binding["mesh_reports"][0]["bone_map_count"] == 1
+    assert rigged_mesh._gr_skin_binding_report == skin_binding["mesh_reports"][0]
     assert rigged_mesh._gr_bound_to_kotor_skeleton is True
     assert rigged_mesh._gr_kotor_skeleton_root == "N_Mandalorian"
     assert rigged_mesh.position == (0.0, 0.0, 0.0)
     assert rigged_mesh.rotation == (0.0, 0.0, 0.0, 1.0)
     assert rigged_mesh.vertices[0] == (11.0, 2.0, 3.0)
-    assert rigged.metadata["character_builder_bind"]["status"] == "bound_to_native_kotor_skeleton"
+    bind = rigged.metadata["character_builder_bind"]
+    assert bind["status"] == "bound_to_native_kotor_skeleton"
+    assert bind["native_base"] == {
+        "source_resref": "n_mandalorian",
+        "model_name": "n_mandalorian",
+        "game": "K1",
+        "supermodel": "S_Female02",
+        "dag_authority": "native_kotor_base",
+        "replaced_render_payload_nodes": [
+            {
+                "name": "template_body_mesh",
+                "path": ["N_Mandalorian", "template_body_mesh"],
+                "is_mesh": True,
+                "is_skin": False,
+                "vertex_count": 0,
+                "face_count": 0,
+                "texture": "",
+                "replacement": "imported_mesh_payload",
+            }
+        ],
+        "replaced_render_payload_count": 1,
+    }
+    assert bind["imported_payload"]["model_name"] == "bendak"
+    assert bind["imported_payload"]["mesh_role"] == "payload_guest"
+    assert bind["imported_payload"]["mesh_names"] == ["Bendak"]
+    state = get_character_rig_state(rigged)
+    assert state is not None
+    assert state.native_base_resref == "n_mandalorian"
+    assert state.native_base_model_name == "n_mandalorian"
+    assert state.native_base_game == "K1"
+    assert state.imported_payload_name == "bendak"
+    assert state.payload_mesh_names == ("Bendak",)
     assert rigged._gr_character_builder_bind_complete is True
     assert "KOTOR skeleton built" in result["message"]
     assert result["skinned_meshes"] == 1
     assert result["weighted_vertices"] == 1
     assert result["removed_import_nodes"] >= 3
+    assert result["replaced_native_render_nodes"] == [
+        {
+            "name": "template_body_mesh",
+            "path": ["N_Mandalorian", "template_body_mesh"],
+            "is_mesh": True,
+            "is_skin": False,
+            "vertex_count": 0,
+            "face_count": 0,
+            "texture": "",
+            "replacement": "imported_mesh_payload",
+        }
+    ]
 
 
 def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -> None:
@@ -165,7 +284,7 @@ def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -
     assert rigged_mesh._gr_vertices_in_kotor_world is True
 
 
-def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -> None:
+def test_apply_template_rig_does_not_scale_native_template_in_manual_mode() -> None:
     src_root = _node("import_root")
     mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
     mesh.vertices = [(0.0, 0.0, 0.0)]
@@ -177,7 +296,7 @@ def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -
     hand.position = (1.25, 0.5, 0.75)
     template = KotorModel(name="adjusted", root_node=kotor_root)
 
-    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual", scale_factor=1.0)
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual", scale_factor=2.0)
 
     assert result["ok"] is True
     rigged_hand = result["model"].find_node("rhand")
@@ -186,6 +305,106 @@ def test_apply_template_rig_preserves_adjusted_template_scale_in_manual_mode() -
     assert math.isclose(rigged_hand.position[1], 0.5)
     assert math.isclose(rigged_hand.position[2], 0.75)
     assert result["scale"] == 1.0
+    assert result["requested_scale"] == 2.0
+    assert any("ignored" in warning for warning in result["warnings"])
+    assert (
+        result["model"].metadata["character_builder_bind"]["skeleton_scale_applied"]
+        == 1.0
+    )
+
+
+def test_apply_template_rig_transfers_native_template_donor_weights_by_nearest_vertex() -> None:
+    src_root = _node("import_root")
+    mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(-1.1, 0.0, 0.0), (1.1, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = KotorModel(name="body", root_node=src_root)
+
+    kotor_root = _node("NativeRoot")
+    _node("left_g", parent=kotor_root)
+    _node("right_g", parent=kotor_root)
+    donor = _node(
+        "NativeTorso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    donor.vertices = [(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+    donor.faces = [(0, 1, 1)]
+    donor.bone_map = ["left_g", "right_g"]
+    donor.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    template = KotorModel(name="native_template", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("body_mesh")
+    assert rigged_mesh is not None
+    left_index = rigged_mesh.bone_map.index("left_g")
+    right_index = rigged_mesh.bone_map.index("right_g")
+    assert rigged_mesh.skin_data[0].influences[0].bone_index == left_index
+    assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
+    assert rigged_mesh.skin_data[1].influences[0].bone_index == right_index
+    assert math.isclose(rigged_mesh.skin_data[1].influences[0].weight, 1.0)
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "native_template_nearest_vertex_donor"
+    assert skin_binding["quality_stage"] == "donor_transfer_first_pass"
+    assert skin_binding["donor_weight_transfer"] is True
+    assert skin_binding["mesh_reports"][0]["donor_vertices"] == 2
+    assert skin_binding["mesh_reports"][0]["fallback_vertices"] == 0
+    assert skin_binding["mesh_reports"][0]["donor_vertex_count"] == 2
+
+
+def test_apply_template_rig_records_replaced_native_render_payload_nodes() -> None:
+    src_root = _node("import_root")
+    mesh = _node("bendak_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(0.0, 0.0, 0.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    native_torso = _node(
+        "Torso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    native_torso.vertices = [(0.0, 0.0, 0.0), (0.0, 0.1, 0.0), (0.1, 0.0, 0.0)]
+    native_torso.faces = [(0, 1, 2)]
+    native_torso.texture = "N_Mandalorian01"
+    native_helper = _node(
+        "torso_g",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        parent=rootdummy,
+    )
+    native_helper.vertices = [(0.0, 0.0, 1.0)]
+    native_helper.faces = [(0, 0, 0)]
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged = result["model"]
+    assert rigged.find_node("Torso") is None
+    assert rigged.find_node("torso_g") is not None
+    bind = rigged.metadata["character_builder_bind"]
+    replaced = bind["native_base"]["replaced_render_payload_nodes"]
+    assert replaced == [
+        {
+            "name": "Torso",
+            "path": ["N_Mandalorian", "Torso"],
+            "is_mesh": True,
+            "is_skin": True,
+            "vertex_count": 3,
+            "face_count": 1,
+            "texture": "N_Mandalorian01",
+            "replacement": "imported_mesh_payload",
+        }
+    ]
+    assert bind["native_base"]["replaced_render_payload_count"] == 1
+    assert result["replaced_native_render_nodes"] == replaced
 
 
 def test_apply_template_rig_preserves_kotor_helper_mesh_skeleton_hooks() -> None:
