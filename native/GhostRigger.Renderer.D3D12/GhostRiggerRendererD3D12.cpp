@@ -77,6 +77,7 @@ struct DiagnosticContext {
     bool command_list_closed = false;
     bool surface_handle_ready = false;
     bool swap_chain_ready = false;
+    bool render_target_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -372,13 +373,48 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_surface_swap_chain_readiness
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_render_target_metadata_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_render_target_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_device":false,"rtv_heap_ready":false,"swap_chain_created":false,"back_buffers_acquired":false,"render_target_views_created":false,"draw_submission_enabled":false})";
+    }
+
+    unsigned int rtv_descriptor_increment_size = 0;
+    if (target->device) {
+        rtv_descriptor_increment_size = target->device->GetDescriptorHandleIncrementSize(
+            D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+        );
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_render_target_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"rtv_heap_ready":)";
+    payload += target->rtv_heap ? "true" : "false";
+    payload += R"(,"rtv_heap_descriptor_capacity":8,"rtv_descriptor_increment_size":)";
+    payload += std::to_string(rtv_descriptor_increment_size);
+    payload += R"(,"expected_back_buffer_count":2,)"
+               R"("back_buffer_format":"DXGI_FORMAT_R8G8B8A8_UNORM",)"
+               R"("back_buffer_state_before_present":"D3D12_RESOURCE_STATE_RENDER_TARGET",)"
+               R"("back_buffer_state_after_present":"D3D12_RESOURCE_STATE_PRESENT",)"
+               R"("swap_chain_created":false,"back_buffers_acquired":false,)"
+               R"("render_target_views_created":false,"render_target_bound":false,)"
+               R"("clear_enabled":false,"present_enabled":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
         R"({"schema":"renderer_d3d12_failure_diagnostics.v1",)"
         R"("backend_id":"renderer_d3d12","diagnostic_only":true,)"
         R"("failure_points":["dxgi_factory","adapter_enumeration","feature_level",)"
-        R"("device_creation","command_queue","native_window_handle","swap_chain"],)"
+        R"("device_creation","command_queue","native_window_handle","swap_chain",)"
+        R"("render_target_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -531,6 +567,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->surface_handle_ready ? "true" : "false";
     payload += R"(,"swap_chain_ready":)";
     payload += target->swap_chain_ready ? "true" : "false";
+    payload += R"(,"render_target_metadata_ready":)";
+    payload += target->render_target_metadata_ready ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";

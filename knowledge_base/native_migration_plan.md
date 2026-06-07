@@ -72,16 +72,17 @@ a launcher and native workspace first, not a rewrite of the application.
   D3D12 device and direct command queue for lifetime validation, retain
   diagnostic descriptor heaps, a direct command allocator, and a closed direct
   command list, report descriptor-heap/command-allocator/command-list readiness
-  metadata, report native surface/swap-chain handle readiness metadata, and
-  report failure-diagnostic metadata, but it is diagnostic-only in Phase 1 and
-  does not create swap chains, present, execute command lists, or submit draws
-  yet.
+  metadata, report native surface/swap-chain handle readiness metadata, report
+  render-target/back-buffer metadata, and report failure-diagnostic metadata,
+  but it is diagnostic-only in Phase 1 and does not create swap chains, acquire
+  back buffers, create RTVs, present, execute command lists, or submit draws yet.
 - `native/GhostRigger.Renderer.D3D12.DEBUG/` verifies the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
   queue/swap-chain readiness export, diagnostic context create/destroy/export,
   descriptor-heap/command-allocator readiness export, command-list readiness
-  export, native surface/swap-chain readiness export, failure-diagnostic export,
-  and device-requirement metadata from Visual Studio without requiring Python.
+  export, native surface/swap-chain readiness export, render-target/back-buffer
+  metadata export, failure-diagnostic export, and device-requirement metadata
+  from Visual Studio without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package

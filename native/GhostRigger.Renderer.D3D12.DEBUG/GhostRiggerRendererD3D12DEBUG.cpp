@@ -114,6 +114,32 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 21;
     }
+    const char* render_target_json = gr_renderer_d3d12_render_target_metadata_json(context);
+    if (std::strstr(render_target_json, R"("schema":"renderer_d3d12_render_target_metadata.v1")") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 render-target metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 22;
+    }
+    if (std::strstr(render_target_json, R"("back_buffers_acquired":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 render-target metadata acquired back buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 23;
+    }
+    if (std::strstr(render_target_json, R"("render_target_views_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 render-target metadata created RTVs" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 24;
+    }
+    if (std::strstr(render_target_json, R"("present_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 render-target metadata enabled present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 25;
+    }
+    if (std::strstr(render_target_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 render-target metadata enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 26;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

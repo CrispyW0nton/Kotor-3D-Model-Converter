@@ -104,9 +104,10 @@ feature-level 12_0 device-readiness without retaining a device, and
 command-queue/swap-chain readiness requirements without creating either object,
 diagnostic retained device/queue lifetime metadata, diagnostic descriptor heaps,
 direct command allocator, closed direct command-list readiness metadata, and
-native surface/swap-chain handle readiness metadata, and failure-diagnostic
-metadata, but it does not create a swap chain, present, execute a command list,
-or create a draw submission path yet.
+native surface/swap-chain handle readiness metadata, render-target/back-buffer
+metadata, and failure-diagnostic metadata, but it does not create a swap chain,
+acquire back buffers, create RTVs, present, execute a command list, or create a
+draw submission path yet.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
@@ -256,8 +257,9 @@ Build and run `GhostRigger.Renderer.D3D12.DEBUG` to verify the D3D12 renderer
 package ABI, DXGI adapter-probe export, D3D12 device-readiness export,
 queue/swap-chain readiness export, diagnostic context create/destroy/export,
 descriptor-heap/command-allocator readiness export, command-list readiness
-export, native surface/swap-chain readiness export, failure-diagnostic export,
-and device-requirement metadata without starting Python or the GUI:
+export, native surface/swap-chain readiness export, render-target/back-buffer
+metadata export, failure-diagnostic export, and device-requirement metadata
+without starting Python or the GUI:
 
 ```text
 build\vs\x64\Debug\GhostRigger.Renderer.D3D12.DEBUG.exe
