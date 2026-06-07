@@ -1,0 +1,51 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.GUI.Textures",
+    "file_count":  7,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/gui/textures/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/textures/__init__.py",
+                      "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/gui/textures/qt_tex_atlas.py",
+                      "packaged_path":  "python_payload/src/gui/textures/qt_tex_atlas.py",
+                      "sha256":  "b295a7ff09da8f09d38caf215bf69a680fa54c7a4cf1705d74c5f6bdd5fc8d7a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/gui/textures/qt_tpc_render_utils.py",
+                      "packaged_path":  "python_payload/src/gui/textures/qt_tpc_render_utils.py",
+                      "sha256":  "cc18c20abe555780784a8862e0a5d04ae27641979264da37156d49e99db974d1"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/gui/textures/tex_atlas.py",
+                      "packaged_path":  "python_payload/src/gui/textures/tex_atlas.py",
+                      "sha256":  "8349c53aa495c7b51f07614cc86a1e41b56952141d7e9dbb37367ba164fe5eee"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/gui/textures/tpc.py",
+                      "packaged_path":  "python_payload/src/gui/textures/tpc.py",
+                      "sha256":  "8d9efdf237ab728f183035ef7c7584aeab703f51d242fd18d32777e7a6f15c67"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/gui/textures/tpc_render_utils.py",
+                      "packaged_path":  "python_payload/src/gui/textures/tpc_render_utils.py",
+                      "sha256":  "c1e68ea560852bbf151a2db0d4dfd46fcb012a66f1cb0555c40935e479a091af"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/gui/textures/txi.py",
+                      "packaged_path":  "python_payload/src/gui/textures/txi.py",
+                      "sha256":  "f7748e7a84579c187d905c2cb6e55aa400dcbe9e532e2cd5c795d12b8789f38e"
+                  }
+              ]
+}

@@ -221,6 +221,17 @@ a launcher and native workspace first, not a rewrite of the application.
   capability, owner-boundary, and dependency-schema metadata from Visual Studio
   without requiring Python, while the Python implementations remain the active
   owners of runtime behavior.
+- `native/GhostRigger.PythonPayloadManifest.json` owns the Phase 1.5 embedded
+  Python payload sweep manifest. It maps all 796 `src/**/*.py` files into 67
+  relevant native DLL projects, with byte-identical packaged copies under
+  `native/<Project>/python_payload/src/...`.
+- Each Phase 1.5 payload project owns a `GhostRiggerPythonPayload.json`
+  manifest and `GhostRiggerPythonPayload.rc` resource script. The `.rc` files
+  compile the manifest and copied Python files into the DLLs as `RCDATA`
+  resources while leaving the original Python application files in place.
+- Phase 1.5 is packaging foundation only. The active embedded Python runtime
+  still imports the original `src/` files until a later bridge, extraction, or
+  import path is implemented and verified.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental

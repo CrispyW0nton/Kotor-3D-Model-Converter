@@ -13,5 +13,35 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_SEQUENCE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerSequence.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerSequence.h" /></ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\sequence\__init__.py" />
+    <None Include="python_payload\src\sequence\sequence_asset.py" />
+    <None Include="python_payload\src\sequence\sequence_binding.py" />
+    <None Include="python_payload\src\sequence\sequence_clipboard.py" />
+    <None Include="python_payload\src\sequence\sequence_evaluator.py" />
+    <None Include="python_payload\src\sequence\sequence_interpolation.py" />
+    <None Include="python_payload\src\sequence\sequence_keyframe.py" />
+    <None Include="python_payload\src\sequence\sequence_manager.py" />
+    <None Include="python_payload\src\sequence\sequence_model.py" />
+    <None Include="python_payload\src\sequence\sequence_playback.py" />
+    <None Include="python_payload\src\sequence\sequence_render.py" />
+    <None Include="python_payload\src\sequence\sequence_serialization.py" />
+    <None Include="python_payload\src\sequence\sequence_track.py" />
+    <None Include="python_payload\src\sequence\sequence_undo.py" />
+    <None Include="python_payload\src\sequence\tracks\__init__.py" />
+    <None Include="python_payload\src\sequence\tracks\audio_track.py" />
+    <None Include="python_payload\src\sequence\tracks\camera_cut_track.py" />
+    <None Include="python_payload\src\sequence\tracks\camera_property_track.py" />
+    <None Include="python_payload\src\sequence\tracks\character_track.py" />
+    <None Include="python_payload\src\sequence\tracks\event_track.py" />
+    <None Include="python_payload\src\sequence\tracks\light_property_track.py" />
+    <None Include="python_payload\src\sequence\tracks\material_track.py" />
+    <None Include="python_payload\src\sequence\tracks\rig_track.py" />
+    <None Include="python_payload\src\sequence\tracks\sub_sequence_track.py" />
+    <None Include="python_payload\src\sequence\tracks\transform_property_track.py" />
+    <None Include="python_payload\src\sequence\tracks\transform_track.py" />
+    <None Include="python_payload\src\sequence\tracks\visibility_track.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

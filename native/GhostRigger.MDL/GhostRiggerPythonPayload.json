@@ -1,0 +1,45 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.MDL",
+    "file_count":  6,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/core/mdl/__init__.py",
+                      "packaged_path":  "python_payload/src/core/mdl/__init__.py",
+                      "sha256":  "83f0b858ab0bcc529645d7273bb51d02fcbc9f03c3892d0f331d8bc621ac2fde"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/core/mdl/ghostrigger_mdl_reader.py",
+                      "packaged_path":  "python_payload/src/core/mdl/ghostrigger_mdl_reader.py",
+                      "sha256":  "8e9d236e67b9ec18699373f06bbd05b6b7afc818c1d5d5c26c810644e31d2811"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/core/mdl/mdl_parser.py",
+                      "packaged_path":  "python_payload/src/core/mdl/mdl_parser.py",
+                      "sha256":  "7719477c89bc139c1e5c2d7b818a7a93e1d1f74e33e4f3702e59621c722ac381"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/core/mdl/mdl_porter.py",
+                      "packaged_path":  "python_payload/src/core/mdl/mdl_porter.py",
+                      "sha256":  "c2b5167adcb947644f46d60d3cc1c36e96ac3d922077fb5402d4ebd6decbb4ba"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/core/mdl/mdl_reader_wrapper.py",
+                      "packaged_path":  "python_payload/src/core/mdl/mdl_reader_wrapper.py",
+                      "sha256":  "8ef543431c24f731e926192f08345419c1f6bb4b6331acef3c76899dae49f1d9"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/core/mdl/mdl_writer.py",
+                      "packaged_path":  "python_payload/src/core/mdl/mdl_writer.py",
+                      "sha256":  "d8db82ca658e5dcc3bec6592a1a6c5fb54e2c7962016c592ae1bcbb5df03a867"
+                  }
+              ]
+}

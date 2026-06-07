@@ -1,0 +1,39 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Graphics",
+    "file_count":  5,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/core/graphics/__init__.py",
+                      "packaged_path":  "python_payload/src/core/graphics/__init__.py",
+                      "sha256":  "4b6ceb00139dcd7ba3d250d0ef1c472137b89fec95e30d68179e6568bb10168e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/core/graphics/tex_atlas.py",
+                      "packaged_path":  "python_payload/src/core/graphics/tex_atlas.py",
+                      "sha256":  "0e295de62be52eb38a0f9c96dc52f76d8b842e89c0ae4595d7ed4d7dc21f117b"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/core/graphics/tpc.py",
+                      "packaged_path":  "python_payload/src/core/graphics/tpc.py",
+                      "sha256":  "755575dccec66b591b8523de321258727563d3a394120fb060e71428ac671ccc"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/core/graphics/tpc_render_utils.py",
+                      "packaged_path":  "python_payload/src/core/graphics/tpc_render_utils.py",
+                      "sha256":  "53fb384cf09b3f54f0440f42417b140f2a14703456fa5358b98357605d050bc7"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/core/graphics/txi.py",
+                      "packaged_path":  "python_payload/src/core/graphics/txi.py",
+                      "sha256":  "713144cbe22702f6115c3edf00c04f2c8d20d5f38e24ee3e69931d5f778c7b54"
+                  }
+              ]
+}

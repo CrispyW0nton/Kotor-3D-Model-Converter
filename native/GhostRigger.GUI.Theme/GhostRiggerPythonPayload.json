@@ -1,0 +1,141 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.GUI.Theme",
+    "file_count":  22,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/gui/libtheme/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/__init__.py",
+                      "sha256":  "fc2ba7614c9d8aeef39a7b07315bf7587daaf072a1e9149f9a0693453d1ebfa7"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/gui/libtheme/collapsible_group.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/collapsible_group.py",
+                      "sha256":  "a1895f8ca8607359e5ebf920599977c4511470a17a7966a507e02340c4915f8d"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/gui/libtheme/font_manager.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/font_manager.py",
+                      "sha256":  "abd429430695ef63d421d866c56c4ea91d78b72484009e224a3a5cc33576dc8f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/gui/libtheme/icon_manager.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/icon_manager.py",
+                      "sha256":  "c33d8b5f9f2632ed39cd6a4e803e67e126aea5e34328c3fba36af1a3eb5e1550"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/gui/libtheme/layout_applier.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/layout_applier.py",
+                      "sha256":  "50e068a8f620e9792fa9c023d10ccaaa0c1b7649101ccee5a0c184d21783c65e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/gui/libtheme/layout_loader.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/layout_loader.py",
+                      "sha256":  "93389472ede6892876f6957ad4546b9f882e1d8126ec6ce12e1a20bbfc7eca69"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/gui/libtheme/layout_manager.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/layout_manager.py",
+                      "sha256":  "452647cfd375ff08679a4653f4efe785cf1e7a1803c412a31ad7aa7d35ced458"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/gui/libtheme/layout_model.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/layout_model.py",
+                      "sha256":  "694e44022c1bcc9d058b56ea346249eedb614e4ea3ec3fa78aceec0991c1e143"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/gui/libtheme/layout_validator.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/layout_validator.py",
+                      "sha256":  "7e9fab885cd86ad5b1ea6fba9feb7d0f06e0d023e1549a4eeb611d44d1def6a3"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src/gui/libtheme/os_theme_detector.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/os_theme_detector.py",
+                      "sha256":  "3da9f3e124fb34891c76aafea2abced23d960d7c171fe074e87a8c5ff09f8adb"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src/gui/libtheme/qt_stylesheet_builder.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/qt_stylesheet_builder.py",
+                      "sha256":  "2512791b6670040977e2b2e84dcaa416a3a7299f3efbb0b01c09a41d58ad32ca"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0012",
+                      "source_path":  "src/gui/libtheme/style_tokens.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/style_tokens.py",
+                      "sha256":  "142a8d085357701a1c751370517848056e162431da4eaa449525784fd08b8534"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0013",
+                      "source_path":  "src/gui/libtheme/theme_applier.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_applier.py",
+                      "sha256":  "2e568fa5a77068cb746c50f8d20b0559da5482771e2295b8d6a1fca2485c52ab"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0014",
+                      "source_path":  "src/gui/libtheme/theme_aware.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_aware.py",
+                      "sha256":  "2d91e27f53436b44555d6c5ef1302fab75fe48199227ef73fdc41a93c4c6f754"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0015",
+                      "source_path":  "src/gui/libtheme/theme_editor_window.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_editor_window.py",
+                      "sha256":  "6c7de6ffc5e52295d00d8183454a189159fa3c9f72a8a2707084e443c451dc7f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0016",
+                      "source_path":  "src/gui/libtheme/theme_loader.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_loader.py",
+                      "sha256":  "f64318996fb1fb587bf3022800d50877c46485a0264a39117e431d0aa66a2b16"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0017",
+                      "source_path":  "src/gui/libtheme/theme_manager.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_manager.py",
+                      "sha256":  "9872d0668e045ed541f49df06428d08e0b275a2b95935b32576f2143fd5554f0"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0018",
+                      "source_path":  "src/gui/libtheme/theme_model.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_model.py",
+                      "sha256":  "e202cdae1a4410715da3a3351d0d76d179f70f69c0de795f7c56ec9cc4055cd6"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0019",
+                      "source_path":  "src/gui/libtheme/theme_registry.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_registry.py",
+                      "sha256":  "f59211d9183a1488c1bf3adfc4bc678f907e675bd078232f8dcc351bdab5715d"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0020",
+                      "source_path":  "src/gui/libtheme/theme_settings.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_settings.py",
+                      "sha256":  "2584ed5b6512b52a96c5f915d0235b7e15573e2ed3b6f4482583e75066784b4d"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0021",
+                      "source_path":  "src/gui/libtheme/theme_validator.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_validator.py",
+                      "sha256":  "890995f81541242ff5bcd5ea1b6e08ca998d388bde1be2a8985e19499a435955"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0022",
+                      "source_path":  "src/gui/libtheme/theme_watcher.py",
+                      "packaged_path":  "python_payload/src/gui/libtheme/theme_watcher.py",
+                      "sha256":  "7d83b50b43794e0d103e2b9c37a93089d992edc99fcf110c9f7b1a219a9d0963"
+                  }
+              ]
+}

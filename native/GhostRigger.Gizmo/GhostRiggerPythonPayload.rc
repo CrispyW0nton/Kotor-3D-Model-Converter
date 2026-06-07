@@ -1,0 +1,9 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "python_payload\\src\\core\\gizmo\\__init__.py"
+PYTHON_PAYLOAD_0002 RCDATA "python_payload\\src\\core\\gizmo\\gizmo_draw_data.py"
+PYTHON_PAYLOAD_0003 RCDATA "python_payload\\src\\core\\gizmo\\gizmo_mode.py"
+PYTHON_PAYLOAD_0004 RCDATA "python_payload\\src\\core\\gizmo\\gizmo_picker.py"
+PYTHON_PAYLOAD_0005 RCDATA "python_payload\\src\\core\\gizmo\\gizmo_renderer.py"
+PYTHON_PAYLOAD_0006 RCDATA "python_payload\\src\\core\\gizmo\\transform_controller.py"
+PYTHON_PAYLOAD_0007 RCDATA "python_payload\\src\\core\\gizmo\\transform_gizmo.py"

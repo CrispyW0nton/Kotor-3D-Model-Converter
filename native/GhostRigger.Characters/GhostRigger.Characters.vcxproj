@@ -13,5 +13,21 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_CHARACTERS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerCharacters.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerCharacters.h" /></ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\core\characters\__init__.py" />
+    <None Include="python_payload\src\core\characters\character_autofit_report.py" />
+    <None Include="python_payload\src\core\characters\character_builder.py" />
+    <None Include="python_payload\src\core\characters\character_export_preflight.py" />
+    <None Include="python_payload\src\core\characters\character_export_transaction.py" />
+    <None Include="python_payload\src\core\characters\character_override_package.py" />
+    <None Include="python_payload\src\core\characters\character_rig_state.py" />
+    <None Include="python_payload\src\core\characters\character_validation_report.py" />
+    <None Include="python_payload\src\core\characters\creature_appearance.py" />
+    <None Include="python_payload\src\core\characters\head_workflow.py" />
+    <None Include="python_payload\src\core\characters\headless_body_workflow.py" />
+    <None Include="python_payload\src\core\characters\kotor_constants.py" />
+    <None Include="python_payload\src\core\characters\native_skeleton.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -1,0 +1,8 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "python_payload\\src\\adapters\\gpu\\__init__.py"
+PYTHON_PAYLOAD_0002 RCDATA "python_payload\\src\\adapters\\gpu\\lightmap_baker.py"
+PYTHON_PAYLOAD_0003 RCDATA "python_payload\\src\\adapters\\gpu\\lightmap_gpu_solver.py"
+PYTHON_PAYLOAD_0004 RCDATA "python_payload\\src\\adapters\\gpu\\moderngl_context.py"
+PYTHON_PAYLOAD_0005 RCDATA "python_payload\\src\\adapters\\gpu\\moderngl_runtime.py"
+PYTHON_PAYLOAD_0006 RCDATA "python_payload\\src\\adapters\\gpu\\viewport_probe.py"

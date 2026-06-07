@@ -1,0 +1,27 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Unreal",
+    "file_count":  3,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/unreal/__init__.py",
+                      "packaged_path":  "python_payload/src/unreal/__init__.py",
+                      "sha256":  "c2f292f62a979a3fbd8554af0d4909a1c90009a228304ce5bb98c994febcf21c"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/unreal/animation_retargeting.py",
+                      "packaged_path":  "python_payload/src/unreal/animation_retargeting.py",
+                      "sha256":  "e692ff7ceb43ecf6dd7d925203bf9f9adf81803623a501ac92cf859142e9fc83"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/unreal/quinn.py",
+                      "packaged_path":  "python_payload/src/unreal/quinn.py",
+                      "sha256":  "59e03a2c2dba0b85bb32eb5dea55233789dec0d17a280621dbe63317850259c2"
+                  }
+              ]
+}

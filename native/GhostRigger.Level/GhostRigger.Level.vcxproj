@@ -13,5 +13,19 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_LEVEL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerLevel.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerLevel.h" /></ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\core\level\__init__.py" />
+    <None Include="python_payload\src\core\level\kmap_model.py" />
+    <None Include="python_payload\src\core\level\kmap_project.py" />
+    <None Include="python_payload\src\core\level\kmap_serializer.py" />
+    <None Include="python_payload\src\core\level\kmap_validator.py" />
+    <None Include="python_payload\src\core\level\level_export_bridge.py" />
+    <None Include="python_payload\src\core\level\level_manifest.py" />
+    <None Include="python_payload\src\core\level\level_module_instance.py" />
+    <None Include="python_payload\src\core\level\level_room_instance.py" />
+    <None Include="python_payload\src\core\level\level_scene.py" />
+    <None Include="python_payload\src\core\level\level_texture_resolver.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

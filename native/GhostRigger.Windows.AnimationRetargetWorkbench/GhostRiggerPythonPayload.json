@@ -1,0 +1,33 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Windows.AnimationRetargetWorkbench",
+    "file_count":  4,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/gui/windows/qt_retarget_preview_controller.py",
+                      "packaged_path":  "python_payload/src/gui/windows/qt_retarget_preview_controller.py",
+                      "sha256":  "d6176e072ddac1df39073a493d8bd5559b3fd23221bb25b4ed65c33bad7429d6"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/gui/windows/qt_retarget_window.py",
+                      "packaged_path":  "python_payload/src/gui/windows/qt_retarget_window.py",
+                      "sha256":  "b1a1160fb2c522ca94da0f0438d08ccb11bcee5a29f9569ebeb39a2da3e46bd1"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/gui/windows/qt_retarget_workbench_controller.py",
+                      "packaged_path":  "python_payload/src/gui/windows/qt_retarget_workbench_controller.py",
+                      "sha256":  "ff7975919ec5ba3f8f881aaa1ca942a92f675f617090ca9a7393eaa5f6d12aac"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/gui/windows/qt_source_clip_preview_model.py",
+                      "packaged_path":  "python_payload/src/gui/windows/qt_source_clip_preview_model.py",
+                      "sha256":  "4e99cfd1c7924f73d0c4d1f0b781cc33c2572699219c4393bbd3847fc33e6c5e"
+                  }
+              ]
+}

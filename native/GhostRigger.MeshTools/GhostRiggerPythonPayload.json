@@ -1,0 +1,105 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.MeshTools",
+    "file_count":  16,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/mesh_tools/__init__.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/__init__.py",
+                      "sha256":  "e2d77d442bbd2596dfba6ac760fefee273f2d87e455cad0275aa121fde8f49ec"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/mesh_tools/mesh_attach.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_attach.py",
+                      "sha256":  "bc300768335ebea370fa7188f75275c54d6ab65a87933e68e5417ae56b1c6fcd"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/mesh_tools/mesh_border.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_border.py",
+                      "sha256":  "5213ee3d16d03d4afc6c6f3fa9e62ccd3ee051632c907d00bafb1c50cd8cf8ba"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/mesh_tools/mesh_bridge.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_bridge.py",
+                      "sha256":  "dfa7e6c747fcf0cec3dbaadb7a206e9c1ad4fe18ff5c7e2527665fcb65c333f0"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/mesh_tools/mesh_connect.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_connect.py",
+                      "sha256":  "112a009f6fb185361d6f30b8214798424553fe73a240828ee07c7e444db4e11e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/mesh_tools/mesh_edit_types.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_edit_types.py",
+                      "sha256":  "c87dba738e5a5c3ff208e0a17add58a27c929a9feafe4547b136e99908b63062"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/mesh_tools/mesh_element.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_element.py",
+                      "sha256":  "e80ac72cb79d1b03b06a448a52d57a622e807a03737fa0e70bee7ed05c4181dc"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/mesh_tools/mesh_history.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_history.py",
+                      "sha256":  "c1c3162301d5ba025b35f474af1c05b23b30842f19662b61407a32aa56a14970"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/mesh_tools/mesh_operations.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_operations.py",
+                      "sha256":  "01b2ce85402e80a1aec0d8ca0d99d59f4eecdd363d7928ddcf83088c31d7f34a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src/mesh_tools/mesh_preservation.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_preservation.py",
+                      "sha256":  "281cd068e4ab700767983f8200eef5a3b35ff8f3795f4ed3ef8c06c030590c00"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src/mesh_tools/mesh_selection_convert.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_selection_convert.py",
+                      "sha256":  "d3e08c58d848cf6e47711f11a8ac2d4e9e86bb6df22a158f26e8aea68b13cffb"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0012",
+                      "source_path":  "src/mesh_tools/mesh_selection_modes.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_selection_modes.py",
+                      "sha256":  "98c73ce52f240589fdd35801608b2c8093a2d44bbb1abbeb02a548920a00d268"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0013",
+                      "source_path":  "src/mesh_tools/mesh_selection_state.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_selection_state.py",
+                      "sha256":  "5cde7dd157e4adf291c9cc8b3d9d36eb10755db6fb39406cbb7e47c1565a5666"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0014",
+                      "source_path":  "src/mesh_tools/mesh_topology.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_topology.py",
+                      "sha256":  "1fbeca0c31f111dbe7618f757ea5844f94450d39104d00c28b2313b0a5b64a3d"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0015",
+                      "source_path":  "src/mesh_tools/mesh_validation.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_validation.py",
+                      "sha256":  "25086911e036ccf6229090691efbb1e539f0699545c437ad02c7f326a2caf4c9"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0016",
+                      "source_path":  "src/mesh_tools/mesh_weld.py",
+                      "packaged_path":  "python_payload/src/mesh_tools/mesh_weld.py",
+                      "sha256":  "a294e5be09411a5e4c8d20cfa1bce055bd308e19e70bcb67b984c9fa8d835a2b"
+                  }
+              ]
+}

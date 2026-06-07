@@ -1,0 +1,333 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.GUI.Rendering",
+    "file_count":  54,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/gui/rendering/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/__init__.py",
+                      "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/gui/rendering/accel.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/accel.py",
+                      "sha256":  "a8791289b4cb61b3ef504931255cd00840599463559e65cdcf9a67772619f2f1"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/gui/rendering/direct3d_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/direct3d_renderer.py",
+                      "sha256":  "081c7664589160e33d3c2e820925cf834b7806581fe21400da3ab98273cb78b8"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/gui/rendering/frame_core/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/__init__.py",
+                      "sha256":  "0d4e5f4b535cec7a1b9bb8352333cc7df248324701a8085df7c5122e8f57899e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/gui/rendering/frame_core/colors.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/colors.py",
+                      "sha256":  "1318192efaa610d70be7e97d2ec23b80f09d31dedd87b5a396cafe763ee4ceb5"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/gui/rendering/frame_core/dependencies.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/dependencies.py",
+                      "sha256":  "735e04ff340a62329427b3035e0e78b08213c068f7f33f8a6efa455817c15d16"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/gui/rendering/frame_core/diagnostics.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/diagnostics.py",
+                      "sha256":  "6e2be438769573cfa4136e96e872a40c12674f741846405635a8902b2f707a08"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/gui/rendering/frame_core/math_helpers.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/math_helpers.py",
+                      "sha256":  "3bda0c57116a3ced59bf791d70a37865dfda644a4394c11401a027c135eed44a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/gui/rendering/frame_core/mixin_imports.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/mixin_imports.py",
+                      "sha256":  "05c36d04f2eba50763c671a0de1ff871a36f72b1c0a8cd81a3d55ed9ccd9a401"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src/gui/rendering/frame_core/rasterizer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/rasterizer.py",
+                      "sha256":  "dc26e6999751a610b9d002e94b1a999b49030cbaa5f0ee6f2176e4130dd1ab45"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src/gui/rendering/frame_core/renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer.py",
+                      "sha256":  "69b134d40c079825ee2510f6137a93474c719c4947b87252b73a4223a1f3cf96"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0012",
+                      "source_path":  "src/gui/rendering/frame_core/renderer_geometry.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer_geometry.py",
+                      "sha256":  "f903417a529fbfb8588d27cc9db38a7e88901bd69f23df87d14f91c92b216f76"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0013",
+                      "source_path":  "src/gui/rendering/frame_core/renderer_meshes.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer_meshes.py",
+                      "sha256":  "6b0cf4887b23c26bedf92a6755eefa5bb3ff92112584092eae0f247f1b5b23f0"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0014",
+                      "source_path":  "src/gui/rendering/frame_core/renderer_overlays.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer_overlays.py",
+                      "sha256":  "702efcf0585a4fd2ce89e00c86ebe32b8388c76aad41e2ac8d1a9aff28721551"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0015",
+                      "source_path":  "src/gui/rendering/frame_core/renderer_render_loop.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer_render_loop.py",
+                      "sha256":  "b60baf58d4d6265a87f5dc10b6f5940121685a8574ad82fca70266cfa3bfeb40"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0016",
+                      "source_path":  "src/gui/rendering/frame_core/renderer_setup.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer_setup.py",
+                      "sha256":  "285180f81d9c5ac5c5c2dcc19c33731d484c6d92e68c0cbc0947e026dc9bf407"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0017",
+                      "source_path":  "src/gui/rendering/frame_core/renderer_textures.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/renderer_textures.py",
+                      "sha256":  "057894809b3e73d8b88073956b2729c1c4c3f5dc1d6d6d8200dc28e142369421"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0018",
+                      "source_path":  "src/gui/rendering/frame_core/texture_cache.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/frame_core/texture_cache.py",
+                      "sha256":  "f02e5042b12714b9c642338e080c63f894cbf6e227eaf55528bb9abf4d1c32ba"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0019",
+                      "source_path":  "src/gui/rendering/gpu_core/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/__init__.py",
+                      "sha256":  "bcc0cc7b9e436fc469acd69c0af2d4cbb9ea9515197c42bef5c967cc374a1074"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0020",
+                      "source_path":  "src/gui/rendering/gpu_core/benchmark.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/benchmark.py",
+                      "sha256":  "a3fe1453fd6966bd973d3fe1926ebdb01fb451cdec523237ddc650d5b1d4a258"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0021",
+                      "source_path":  "src/gui/rendering/gpu_core/cli.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/cli.py",
+                      "sha256":  "5c0ebbbc2e1dd761c8631b62f86bc911921da7f0f3ea8ecaf042503c31ea2a08"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0022",
+                      "source_path":  "src/gui/rendering/gpu_core/debug_tables.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/debug_tables.py",
+                      "sha256":  "e0b78cbd8e1a1c17c08f9246fd6e5f2d32566b501f61780c0a2909ae4cf62151"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0023",
+                      "source_path":  "src/gui/rendering/gpu_core/diagnostics.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/diagnostics.py",
+                      "sha256":  "49cb742883cee4bc105693ffba122a653ec2f308432b3677455eb8cd218b71aa"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0024",
+                      "source_path":  "src/gui/rendering/gpu_core/math_helpers.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/math_helpers.py",
+                      "sha256":  "80ee1717558b72549564c0ef3baa502f2b27cd828d6cfbbcc4fd68a93871ba5e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0025",
+                      "source_path":  "src/gui/rendering/gpu_core/renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/renderer.py",
+                      "sha256":  "57ba70fe42adaeab6e0484a5c20b7eebf74f105598fd4ee5e69a5c626587b789"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0026",
+                      "source_path":  "src/gui/rendering/gpu_core/resources.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/resources.py",
+                      "sha256":  "04eb734debb7bb4cc0dde660e4be469a2bb18609836364b257e2a108123b0a4c"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0027",
+                      "source_path":  "src/gui/rendering/gpu_core/scene_helpers.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/scene_helpers.py",
+                      "sha256":  "218a55fc0ebdcbf028e9ced14f465863976f78976d96b7b286b0d8efb6c0808c"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0028",
+                      "source_path":  "src/gui/rendering/gpu_core/shaders.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_core/shaders.py",
+                      "sha256":  "c2a9345ec5378c5a784e6c1c6557b8bba5bf7156e02bd44f2ffaf2b1903c20c6"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0029",
+                      "source_path":  "src/gui/rendering/gpu_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/gpu_renderer.py",
+                      "sha256":  "e125098c72f9deb9ad042f7851b4b99787c3332b9ebb71b2814de1f3651509ba"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0030",
+                      "source_path":  "src/gui/rendering/hardware_info.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/hardware_info.py",
+                      "sha256":  "479615e4a92c7520a467dc431964f5fe83e14025d5086eb1dea5048d95936c9e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0031",
+                      "source_path":  "src/gui/rendering/mesh_render_data.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/mesh_render_data.py",
+                      "sha256":  "8358cd3d0c1361d3c065ff1c07efaa7b975181b0a729037f44ab2e3b933f6c82"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0032",
+                      "source_path":  "src/gui/rendering/moderngl_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/moderngl_renderer.py",
+                      "sha256":  "98c2b7514364d74f9753abf52b3310d6cb7a80a6b7fc0b3be751ecf346172875"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0033",
+                      "source_path":  "src/gui/rendering/null_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/null_renderer.py",
+                      "sha256":  "ea9bba0153cb34919f190040e56457cbe7dd92b8729a909d033e5f826778468a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0034",
+                      "source_path":  "src/gui/rendering/picking.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/picking.py",
+                      "sha256":  "2052449321947dac17d3aa07169e7a862b6f162da672af210530685e98e005f1"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0035",
+                      "source_path":  "src/gui/rendering/pygfx_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/pygfx_renderer.py",
+                      "sha256":  "4445d4c739c8d03439656ea6c3ed42ea804224b0b35652479f639dd01b97b41a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0036",
+                      "source_path":  "src/gui/rendering/qt_accel.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/qt_accel.py",
+                      "sha256":  "9ef09952f0be89d454e1f48d89f5851a8b8fbeaad722b83bfb676333afb5fe93"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0037",
+                      "source_path":  "src/gui/rendering/qt_gpu_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/qt_gpu_renderer.py",
+                      "sha256":  "7e24e957ba03dc2fac4b4b5f803437d2bc5b2758c3e585011a479ded91aa5b32"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0038",
+                      "source_path":  "src/gui/rendering/renderer_backend.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_backend.py",
+                      "sha256":  "e47641b987c53c1faa73558d2ceaeb5669087636a0c704934262e6fb28b42e47"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0039",
+                      "source_path":  "src/gui/rendering/renderer_capabilities.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_capabilities.py",
+                      "sha256":  "a971a74206ca152f025c072c676640b99a3123ac63aa9cb8fc2ed9c1ca9dda04"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0040",
+                      "source_path":  "src/gui/rendering/renderer_factory.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_factory.py",
+                      "sha256":  "13faaafca121240708d5f7c7d65f35b614fb6dcf1bbc17a214111ea89e73498c"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0041",
+                      "source_path":  "src/gui/rendering/renderer_interface.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_interface.py",
+                      "sha256":  "04da57f6577d8185dab219117967c9a6c2be1c7dc9def2deb6562de68c27959f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0042",
+                      "source_path":  "src/gui/rendering/renderer_performance.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_performance.py",
+                      "sha256":  "9a70cf1f0f485e67c1d7bd32702b98f124774b18283ac8e7d12843e2c6f6bb12"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0043",
+                      "source_path":  "src/gui/rendering/renderer_profiler.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_profiler.py",
+                      "sha256":  "20ba6e85b925d7b93be0b7172babe191e99792ff04ee784c07f9b1edf12dab67"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0044",
+                      "source_path":  "src/gui/rendering/renderer_settings.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/renderer_settings.py",
+                      "sha256":  "1665a57b315e6e98716059548eb03c6a5df658559cccc0d873381f4477aba14a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0045",
+                      "source_path":  "src/gui/rendering/skeleton_render_data.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/skeleton_render_data.py",
+                      "sha256":  "e29221c38b943dbbe72a67b6b0aacd4a232ee06b8cf4c4c422dc1fb31e6c34c4"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0046",
+                      "source_path":  "src/gui/rendering/viewport_core.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/viewport_core.py",
+                      "sha256":  "92862da94dff505453ebb0a536d13ab593cc6be85061438f403fd881388ccbc6"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0047",
+                      "source_path":  "src/gui/rendering/viewport_display.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/viewport_display.py",
+                      "sha256":  "e8a92ad0e9b67f6b5792e4826b00855043ed2a7e54f1024fe89854356356e390"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0048",
+                      "source_path":  "src/gui/rendering/viewport_navigation.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/viewport_navigation.py",
+                      "sha256":  "051f68eb7394015f80e52f0548d4b6417d7ea3a346862f400ae119bfc2599044"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0049",
+                      "source_path":  "src/gui/rendering/wgpu_core/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/wgpu_core/__init__.py",
+                      "sha256":  "bbc39c2dd7847f40eaa331a2803bdc686544d16eb92c4082de483708e0ed3b7d"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0050",
+                      "source_path":  "src/gui/rendering/wgpu_core/renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/wgpu_core/renderer.py",
+                      "sha256":  "2c5950bb083d14e6bfae81d7136a9f8b620e47608c338653aa86eb81f309c21b"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0051",
+                      "source_path":  "src/gui/rendering/wgpu_core/resources.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/wgpu_core/resources.py",
+                      "sha256":  "29d26ca7a0c123881ce53c8f342c26e0679bb21688f3aa440c73b5e10b93d25e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0052",
+                      "source_path":  "src/gui/rendering/wgpu_core/shaders.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/wgpu_core/shaders.py",
+                      "sha256":  "a4fd0e8c0a84792ffbc1c2fbd55071a4c002af14641770dbea2b08868da07633"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0053",
+                      "source_path":  "src/gui/rendering/wgpu_core/shared.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/wgpu_core/shared.py",
+                      "sha256":  "9358e90f41eae1930a840ca790df2cbf4d010049365c624bbb92abaa2284cd87"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0054",
+                      "source_path":  "src/gui/rendering/wgpu_renderer.py",
+                      "packaged_path":  "python_payload/src/gui/rendering/wgpu_renderer.py",
+                      "sha256":  "3eceacd6264992114034665d74770feb0d341873e2458e42addf9dcea06dc464"
+                  }
+              ]
+}

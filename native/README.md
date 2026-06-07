@@ -143,6 +143,14 @@ MCP validation, plus adapter, GUI category, and `GhostRigger.Systems.BAS`
 packages. These packages are native-readiness boundaries only: Python still
 owns the current implementation until a later migration slice proves parity.
 
+`native/GhostRigger.PythonPayloadManifest.json` records the Phase 1.5 embedded
+Python payload sweep. It maps every `src/**/*.py` file into one relevant native
+DLL project, copies the files under `native/<Project>/python_payload/src/...`,
+and builds them into the DLL as `RCDATA` resources through
+`GhostRiggerPythonPayload.rc`. These are packaged copies only; the active
+Python application still imports the originals from `src/` until a later
+bridge, extraction, or import path is deliberately enabled.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes

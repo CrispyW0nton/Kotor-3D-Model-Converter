@@ -13,5 +13,20 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_DIALOGS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerGUIDialogs.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerGUIDialogs.h" /></ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\gui\dialogs\__init__.py" />
+    <None Include="python_payload\src\gui\dialogs\add_model_to_scene_dialog.py" />
+    <None Include="python_payload\src\gui\dialogs\fbx_sdk_setup_dialog.py" />
+    <None Include="python_payload\src\gui\dialogs\lightmap_bake_worker.py" />
+    <None Include="python_payload\src\gui\dialogs\lightmap_preview_window.py" />
+    <None Include="python_payload\src\gui\dialogs\qt_dialogs.py" />
+    <None Include="python_payload\src\gui\dialogs\qt_export_dialog.py" />
+    <None Include="python_payload\src\gui\dialogs\qt_lightmap_baker_dialog.py" />
+    <None Include="python_payload\src\gui\dialogs\qt_render_frame_dialog.py" />
+    <None Include="python_payload\src\gui\dialogs\qt_settings_dialog.py" />
+    <None Include="python_payload\src\gui\dialogs\uv_geometry_preview_window.py" />
+    <None Include="python_payload\src\gui\dialogs\uv_preview_window.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

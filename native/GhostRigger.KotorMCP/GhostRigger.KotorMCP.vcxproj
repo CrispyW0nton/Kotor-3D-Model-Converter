@@ -13,5 +13,36 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_KOTOR_MCP_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerKotorMCP.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerKotorMCP.h" /></ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\kotormcp\__init__.py" />
+    <None Include="python_payload\src\kotormcp\__main__.py" />
+    <None Include="python_payload\src\kotormcp\adapters.py" />
+    <None Include="python_payload\src\kotormcp\adapters_decompile.py" />
+    <None Include="python_payload\src\kotormcp\mcp_resources.py" />
+    <None Include="python_payload\src\kotormcp\ports.py" />
+    <None Include="python_payload\src\kotormcp\schemas\__init__.py" />
+    <None Include="python_payload\src\kotormcp\server.py" />
+    <None Include="python_payload\src\kotormcp\state.py" />
+    <None Include="python_payload\src\kotormcp\tools\__init__.py" />
+    <None Include="python_payload\src\kotormcp\tools\archives.py" />
+    <None Include="python_payload\src\kotormcp\tools\debug_materials.py" />
+    <None Include="python_payload\src\kotormcp\tools\debug_skinning.py" />
+    <None Include="python_payload\src\kotormcp\tools\decompile.py" />
+    <None Include="python_payload\src\kotormcp\tools\discovery.py" />
+    <None Include="python_payload\src\kotormcp\tools\gamedata.py" />
+    <None Include="python_payload\src\kotormcp\tools\gffdata.py" />
+    <None Include="python_payload\src\kotormcp\tools\ghostrigger.py" />
+    <None Include="python_payload\src\kotormcp\tools\ghostrigger_tools.py" />
+    <None Include="python_payload\src\kotormcp\tools\installation.py" />
+    <None Include="python_payload\src\kotormcp\tools\modules.py" />
+    <None Include="python_payload\src\kotormcp\tools\quest.py" />
+    <None Include="python_payload\src\kotormcp\tools\refs.py" />
+    <None Include="python_payload\src\kotormcp\tools\resource.py" />
+    <None Include="python_payload\src\kotormcp\tools\retargeting.py" />
+    <None Include="python_payload\src\kotormcp\tools\walkmesh.py" />
+    <None Include="python_payload\src\kotormcp\utils\__init__.py" />
+    <None Include="python_payload\src\kotormcp\utils\formatting.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -13,5 +13,54 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_RETARGETING_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerRetargeting.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerRetargeting.h" /></ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\core\retargeting\__init__.py" />
+    <None Include="python_payload\src\core\retargeting\animation_injector.py" />
+    <None Include="python_payload\src\core\retargeting\apose_compatibility.py" />
+    <None Include="python_payload\src\core\retargeting\aurora_animation_writer.py" />
+    <None Include="python_payload\src\core\retargeting\baker.py" />
+    <None Include="python_payload\src\core\retargeting\blender_animation_injection.py" />
+    <None Include="python_payload\src\core\retargeting\coordinate.py" />
+    <None Include="python_payload\src\core\retargeting\coordinate_converter.py" />
+    <None Include="python_payload\src\core\retargeting\coordinate_normalizer.py" />
+    <None Include="python_payload\src\core\retargeting\fbx_backend.py" />
+    <None Include="python_payload\src\core\retargeting\fbx_exporter.py" />
+    <None Include="python_payload\src\core\retargeting\fbx_importer.py" />
+    <None Include="python_payload\src\core\retargeting\kotor_source_animation.py" />
+    <None Include="python_payload\src\core\retargeting\kotor_to_kotor_preview.py" />
+    <None Include="python_payload\src\core\retargeting\kotor_to_unreal_preview.py" />
+    <None Include="python_payload\src\core\retargeting\kotor_to_unreal_solver.py" />
+    <None Include="python_payload\src\core\retargeting\mesh_loader.py" />
+    <None Include="python_payload\src\core\retargeting\mesh_rebinder.py" />
+    <None Include="python_payload\src\core\retargeting\mixamo_companion_mesh.py" />
+    <None Include="python_payload\src\core\retargeting\mixamo_source_adapter.py" />
+    <None Include="python_payload\src\core\retargeting\reference_pose.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_calibration.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_frame_audit.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_frames.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_mapping.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_modes.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_output_naming.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_preview.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_preview_export.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_profile.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_solve_audit.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_solver.py" />
+    <None Include="python_payload\src\core\retargeting\retarget_workbench_readiness.py" />
+    <None Include="python_payload\src\core\retargeting\reverse_renamer.py" />
+    <None Include="python_payload\src\core\retargeting\root_motion.py" />
+    <None Include="python_payload\src\core\retargeting\sampler.py" />
+    <None Include="python_payload\src\core\retargeting\skeleton_aligner.py" />
+    <None Include="python_payload\src\core\retargeting\skeleton_renamer.py" />
+    <None Include="python_payload\src\core\retargeting\source_animation.py" />
+    <None Include="python_payload\src\core\retargeting\source_skeleton_audit.py" />
+    <None Include="python_payload\src\core\retargeting\target_skeleton_audit.py" />
+    <None Include="python_payload\src\core\retargeting\test_utils.py" />
+    <None Include="python_payload\src\core\retargeting\ue_fbx_exporter.py" />
+    <None Include="python_payload\src\core\retargeting\ue5_source_adapter.py" />
+    <None Include="python_payload\src\core\retargeting\ue5_to_aurora_r3b_preview.py" />
+    <None Include="python_payload\src\core\retargeting\unreal_target_skeleton.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

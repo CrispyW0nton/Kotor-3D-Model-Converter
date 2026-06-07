@@ -1,0 +1,75 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.GUI.SequenceEditor",
+    "file_count":  11,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/gui/sequence_editor/__init__.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/__init__.py",
+                      "sha256":  "8104d9d332c663c5a2d3ac4b646921996739614f0fdcc59b422e9d78a621c38c"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/gui/sequence_editor/sequence_curve_editor.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_curve_editor.py",
+                      "sha256":  "70cfa7f3943f9ebb3af4784d6457862853dbd4733e33a1c1864a8be73b5d9dfb"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/gui/sequence_editor/sequence_dopesheet.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_dopesheet.py",
+                      "sha256":  "b500e51ea11b5b68a3ba55e7921f98836e9751716e24af81600f0cd1118c8dc1"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/gui/sequence_editor/sequence_editor_window.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_editor_window.py",
+                      "sha256":  "45957b08bad1acd43fffe70cc541496bd652a8bfe8b87523afdbf51160c4a258"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/gui/sequence_editor/sequence_outliner.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_outliner.py",
+                      "sha256":  "550e851169b8b2b1e5a40fb52362cdedbb2ec3f826d517e5043ca2e2eae03d92"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/gui/sequence_editor/sequence_property_panel.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_property_panel.py",
+                      "sha256":  "452f407ece5151e883b29bf0fa3c00368fcc2385fbf172622fc997a0cb43e9e6"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/gui/sequence_editor/sequence_timeline_widget.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_timeline_widget.py",
+                      "sha256":  "9c1760239ec79354840a64a3a9313f62542fd6a79885c979b85990170ed13083"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/gui/sequence_editor/sequence_toolbar.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_toolbar.py",
+                      "sha256":  "3a957960e62a07c8489f81b4725bc2b7347a141a3dea7129271e74c17bccb2e6"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/gui/sequence_editor/sequence_track_list_widget.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_track_list_widget.py",
+                      "sha256":  "627c4bb9bf77831ced6a7b13319dcfdf23f1a139181813907e1a9abd814f9e19"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src/gui/sequence_editor/sequence_transport_bar.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_transport_bar.py",
+                      "sha256":  "6de62b14227df6eb26d448ffc9aa6c21e3cfbae3dff6189cfa78f9303e726eb8"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src/gui/sequence_editor/sequence_viewport_panel.py",
+                      "packaged_path":  "python_payload/src/gui/sequence_editor/sequence_viewport_panel.py",
+                      "sha256":  "4ea195e40b44bc2d5e71dca994adb93dd26eecc8738de55c456e5ae77673701e"
+                  }
+              ]
+}

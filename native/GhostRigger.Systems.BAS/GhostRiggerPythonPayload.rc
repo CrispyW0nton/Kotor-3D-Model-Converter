@@ -1,0 +1,6 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "python_payload\\src\\systems\\bas\\attachment_alignment.py"
+PYTHON_PAYLOAD_0002 RCDATA "python_payload\\src\\systems\\bas\\head_resolution.py"
+PYTHON_PAYLOAD_0003 RCDATA "python_payload\\src\\systems\\bas\\model_recipe.py"
+PYTHON_PAYLOAD_0004 RCDATA "python_payload\\src\\systems\\bas\\preview_composer.py"

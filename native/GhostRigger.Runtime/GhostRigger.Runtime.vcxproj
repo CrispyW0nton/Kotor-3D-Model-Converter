@@ -115,6 +115,12 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     <ClInclude Include="GhostRiggerDeviceResources.h" />
     <ClInclude Include="GhostRigger.Runtime.h" />
   </ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\__init__.py" />
+    <None Include="python_payload\src\core\__init__.py" />
+    <None Include="python_payload\src\core\qt_core.py" />
+  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>
