@@ -2,27 +2,21 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
-      <UniqueIdentifier>{f297b74a-b515-4f58-91d5-a7b306ac7b86}</UniqueIdentifier>
+      <UniqueIdentifier>{55484d80-c100-48f1-94e0-c80288bb6d6b}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
     <Filter Include="Header Files">
-      <UniqueIdentifier>{17955e23-3880-447c-a648-e645961370d4}</UniqueIdentifier>
+      <UniqueIdentifier>{8ffac8a0-0444-47db-a551-dff47a105c82}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GhostRiggerDeviceResources.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GhostRiggerRuntime.cpp">
+    <ClCompile Include="GhostRiggerRuntimeSharedContracts.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GhostRiggerDeviceResources.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GhostRiggerRuntime.h">
+    <ClInclude Include="GhostRiggerRuntimeSharedContracts.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

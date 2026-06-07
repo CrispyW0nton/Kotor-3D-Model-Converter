@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef GHOSTRIGGER_RUNTIME_EXPORTS
+#ifdef RUNTIME_EXPORTS
 #define GR_RUNTIME_API __declspec(dllexport)
 #else
 #define GR_RUNTIME_API __declspec(dllimport)

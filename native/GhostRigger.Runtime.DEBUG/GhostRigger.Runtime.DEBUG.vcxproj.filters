@@ -7,7 +7,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GhostRiggerRuntimeSmoke.cpp">
+    <ClCompile Include="GhostRigger.Runtime.DEBUG.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

@@ -1,4 +1,4 @@
-#include "GhostRiggerRuntime.h"
+#include "GhostRigger.Runtime.h"
 #include "GhostRiggerDeviceResources.h"
 
 #include <chrono>
@@ -176,7 +176,7 @@ struct SceneState {
     std::string diagnostics;
 };
 
-struct RuntimeState {
+struct GhostRiggerRuntimeState {
     std::uint64_t frame_counter = 0;
     std::uint64_t next_scene_id = 1;
     std::vector<std::unique_ptr<SceneState>> scenes;
@@ -228,8 +228,8 @@ const char* kCapabilities =
     R"("skin_palette_matrix_range_updates":true,)"
     R"("animation_sample_payloads":true,"animation_palette_sampling":true}})";
 
-RuntimeState* runtime_from_handle(void* runtime) {
-    return static_cast<RuntimeState*>(runtime);
+GhostRiggerRuntimeState* runtime_from_handle(void* runtime) {
+    return static_cast<GhostRiggerRuntimeState*>(runtime);
 }
 
 SceneState* scene_from_handle(void* scene) {
@@ -943,7 +943,7 @@ GR_RUNTIME_API const char* gr_runtime_get_capabilities() {
 }
 
 GR_RUNTIME_API void* gr_runtime_create() {
-    return new RuntimeState();
+    return new GhostRiggerRuntimeState();
 }
 
 GR_RUNTIME_API void gr_runtime_destroy(void* runtime) {

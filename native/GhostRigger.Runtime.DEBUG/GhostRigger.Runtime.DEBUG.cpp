@@ -1,4 +1,4 @@
-#include "../GhostRiggerRuntime/GhostRiggerRuntime.h"
+#include "../GhostRigger.Runtime/GhostRigger.Runtime.h"
 
 #include <iostream>
 #include <string>
@@ -10,7 +10,7 @@ bool contains(const char* value, const std::string& needle) {
 }
 
 int fail(const char* message) {
-    std::cerr << "GhostRiggerRuntimeSmoke: " << message << '\n';
+    std::cerr << "GhostRigger.Runtime.DEBUG: " << message << '\n';
     return 1;
 }
 
@@ -1762,6 +1762,6 @@ int main() {
     gr_runtime_scene_destroy(runtime, scene);
     gr_runtime_destroy(runtime);
 
-    std::cout << "GhostRiggerRuntimeSmoke OK: " << version << '\n';
+    std::cout << "GhostRigger.Runtime.DEBUG OK: " << version << '\n';
     return 0;
 }

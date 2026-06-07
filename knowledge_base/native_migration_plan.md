@@ -22,9 +22,14 @@ a launcher and native workspace first, not a rewrite of the application.
 ## Current State
 
 - `GhostRigger.sln` opens the native Visual Studio workspace.
-- `native/GhostRiggerNative/` builds a C++ launcher that starts the existing
+- `native/GhostRigger.Native/` builds a C++ launcher that starts the existing
   Python Qt application.
-- `native/GhostRiggerRuntime/` owns the first native DLL boundary for renderer
+- `native/GhostRigger.Native.NativeCore/` owns the first shared native core package for
+  renderer/toolbox-neutral version, capability, diagnostics, and handle
+  foundations.
+- `native/GhostRigger.Native.NativeCore.DEBUG/` verifies the shared native core ABI from
+  Visual Studio without requiring Python.
+- `native/GhostRigger.Runtime/` owns the first native DLL boundary for renderer
   lifecycle, retained scene handles, mesh/texture-resource descriptors,
   mesh position/index buffer payloads, mesh vertex/index-range update payloads,
   mesh transform payloads, mesh skinning influence payloads, texture byte and
@@ -37,12 +42,24 @@ a launcher and native workspace first, not a rewrite of the application.
   mesh descriptors, retained-bounds query/culling diagnostics, and draw-list
   assembly statistics before triangle-accurate rendered picking and real draw
   submission are introduced.
-- `native/GhostRiggerRuntimeSmoke/` verifies the native runtime ABI from
+- `native/GhostRigger.Runtime.DEBUG/` verifies the native runtime ABI from
   Visual Studio without requiring Python.
+- `native/templates/` owns the Phase 1 scaffolding for future native DLL and
+  DEBUG executable projects.
+- `src.adapters.native_core.package_registry` detects native package
+  availability and capability metadata without starting the GUI. It now exposes
+  a reusable package spec so future `GhostRigger.Native.NativeCore.*` and `GhostRigger.Runtime.Shared.*`
+  packages can be added consistently.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental
   Direct3D, the native runtime contract, and null diagnostic backends.
+
+Native project naming:
+- Anchor projects: `GhostRigger.Native`, `GhostRigger.Native.NativeCore`,
+  `GhostRigger.Runtime`.
+- Shared core extensions: `GhostRigger.Native.NativeCore.{System}`.
+- Shared runtime contracts: `GhostRigger.Runtime.Shared.{System}`.
 
 ## Migration Principles
 
@@ -87,7 +104,7 @@ a launcher and native workspace first, not a rewrite of the application.
 
 ### N0: Native Workspace Baseline
 
-Owner package: `native/GhostRiggerNative`
+Owner package: `native/GhostRigger.Native`
 
 Acceptance:
 - Visual Studio can load the solution and project.
@@ -96,7 +113,7 @@ Acceptance:
 
 ### N1: Native Adapter Contract
 
-Owner packages: `native/GhostRiggerRuntime`,
+Owner packages: `native/GhostRigger.Runtime`,
 `src/adapters/rendering/native_core`, `src.core.ports.viewport_renderer`
 
 Acceptance:
@@ -104,7 +121,7 @@ Acceptance:
 - Renderer factory can select the native backend and fall back cleanly.
 - Targeted tests cover backend normalization, factory ordering, diagnostics, and
   missing-runtime behavior.
-- `GhostRiggerRuntimeSmoke` validates the exported C ABI from native code.
+- `GhostRigger.Runtime.DEBUG` validates the exported C ABI from native code.
 - The native runtime can create, clear, diagnose, and destroy retained scene
   handles before mesh/texture resources are introduced.
 - The native runtime accepts mesh/texture-resource descriptors into retained
@@ -263,19 +280,19 @@ Acceptance:
   D3D/WGPU-style residency gate before command recording becomes backed by real
   GPU resources.
 
-### N2: Native Retained Scene Smoke
+### N2: Native Retained Scene DEBUG
 
-Owner packages: `native/GhostRiggerRuntime`,
+Owner packages: `native/GhostRigger.Runtime`,
 `src/adapters/rendering/native_core`
 
 Acceptance:
 - Empty scene and one test mesh render without crashing.
-- Visible app smoke opens the actual GhostRigger viewport.
+- Visible app DEBUG check opens the actual GhostRigger viewport.
 - Existing non-native renderers still work.
 
 ### N3: Native KOTOR Mesh Path
 
-Owner packages: `native/GhostRiggerRuntime`, `src/core/rendering`,
+Owner packages: `native/GhostRigger.Runtime`, `src/core/rendering`,
 `src/adapters/rendering/native_core`
 
 Acceptance:
@@ -285,7 +302,7 @@ Acceptance:
 
 ### N4: Native Animation And Skinning Runtime
 
-Owner packages: `native/GhostRiggerRuntime`, `src/core/animation`,
+Owner packages: `native/GhostRigger.Runtime`, `src/core/animation`,
 `src/core/rendering`, `src/adapters/rendering/native_core`
 
 Acceptance:
@@ -299,7 +316,7 @@ Acceptance:
 
 ### N5: Native Picking, Bounds, And Tool Data
 
-Owner packages: `native/GhostRiggerRuntime`,
+Owner packages: `native/GhostRigger.Runtime`,
 `src/gui/viewports/viewport_core/widgets`, `src/adapters/rendering/native_core`
 
 Acceptance:
@@ -313,7 +330,7 @@ Acceptance:
 
 ### N6: Export/Readback Native Helpers
 
-Owner packages: `native/GhostRiggerRuntime`, `src/core/mdl`, `src/core/export`
+Owner packages: `native/GhostRigger.Runtime`, `src/core/mdl`, `src/core/export`
 
 Acceptance:
 - Exported MDL/MDX reloads through GhostRigger and PyKotor.

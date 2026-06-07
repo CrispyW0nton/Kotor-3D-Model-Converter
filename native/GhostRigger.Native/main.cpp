@@ -28,8 +28,8 @@ namespace {
 
 constexpr const wchar_t* kDefaultPython313 = L"C:\\Users\\KingJamesIX\\AppData\\Local\\Programs\\Python\\Python313\\python.exe";
 constexpr const wchar_t* kDefaultPython313Home = L"C:\\Users\\KingJamesIX\\AppData\\Local\\Programs\\Python\\Python313";
-constexpr const wchar_t* kNativeHostSmokeArg = L"--native-host-smoke";
-constexpr const wchar_t* kNativeEmbedInitSmokeArg = L"--native-embed-init-smoke";
+constexpr const wchar_t* kNativeHostDebugArg = L"--native-host-debug";
+constexpr const wchar_t* kNativeEmbedInitDebugArg = L"--native-embed-init-debug";
 
 std::wstring quote(const std::wstring& value) {
     std::wstring result = L"\"";
@@ -213,10 +213,10 @@ std::wstring join_args(int argc, wchar_t* argv[]) {
     std::wostringstream stream;
     bool emitted_arg = false;
     for (int index = 1; index < argc; ++index) {
-        if (wcscmp(argv[index], kNativeHostSmokeArg) == 0) {
+        if (wcscmp(argv[index], kNativeHostDebugArg) == 0) {
             continue;
         }
-        if (wcscmp(argv[index], kNativeEmbedInitSmokeArg) == 0) {
+        if (wcscmp(argv[index], kNativeEmbedInitDebugArg) == 0) {
             continue;
         }
         if (emitted_arg) {
@@ -260,7 +260,7 @@ bool append_python_arg(PyConfig& config, const std::wstring& arg) {
     PyStatus status = PyWideStringList_Append(&config.argv, arg.c_str());
     if (PyStatus_Exception(status)) {
         PyConfig_Clear(&config);
-        show_error(L"GhostRiggerNative could not configure embedded Python argv.");
+        show_error(L"GhostRigger.Native could not configure embedded Python argv.");
         return false;
     }
     return true;
@@ -270,7 +270,7 @@ bool set_python_config_string(PyConfig& config, wchar_t** field, const std::wstr
     PyStatus status = PyConfig_SetString(&config, field, value.c_str());
     if (PyStatus_Exception(status)) {
         PyConfig_Clear(&config);
-        show_error(L"GhostRiggerNative could not configure embedded Python paths.");
+        show_error(L"GhostRigger.Native could not configure embedded Python paths.");
         return false;
     }
     return true;
@@ -292,7 +292,7 @@ bool configure_embedded_python(PyConfig& config, const fs::path& repo_root, cons
     }
 
     auto exe_dir = executable_directory();
-    const std::wstring program_name = exe_dir ? ((*exe_dir / L"GhostRiggerNative.exe").wstring()) : L"GhostRiggerNative.exe";
+    const std::wstring program_name = exe_dir ? ((*exe_dir / L"GhostRigger.exe").wstring()) : L"GhostRigger.exe";
     if (!set_python_config_string(config, &config.program_name, program_name)) {
         return false;
     }
@@ -310,7 +310,10 @@ bool configure_embedded_python(PyConfig& config, const fs::path& repo_root, cons
         }
     } else {
         for (int index = 1; index < argc; ++index) {
-            if (wcscmp(argv[index], kNativeHostSmokeArg) == 0 || wcscmp(argv[index], kNativeEmbedInitSmokeArg) == 0) {
+            if (
+                wcscmp(argv[index], kNativeHostDebugArg) == 0 ||
+                wcscmp(argv[index], kNativeEmbedInitDebugArg) == 0
+            ) {
                 continue;
             }
             if (!append_python_arg(config, argv[index])) {
@@ -337,7 +340,7 @@ int initialize_embedded_python(const fs::path& repo_root, const fs::path& python
     status = Py_InitializeFromConfig(&config);
     PyConfig_Clear(&config);
     if (PyStatus_Exception(status)) {
-        show_error(L"GhostRiggerNative could not initialize embedded Python.");
+        show_error(L"GhostRigger.Native could not initialize embedded Python.");
         return 5;
     }
 
@@ -349,7 +352,7 @@ int run_embedded_python(int argc, wchar_t* argv[], const fs::path& repo_root, co
     if (init_result != 0) {
         return init_result;
     }
-    if (has_arg(argc, argv, kNativeEmbedInitSmokeArg)) {
+    if (has_arg(argc, argv, kNativeEmbedInitDebugArg)) {
         return Py_FinalizeEx() == 0 ? 0 : 8;
     }
 
@@ -357,7 +360,7 @@ int run_embedded_python(int argc, wchar_t* argv[], const fs::path& repo_root, co
     const std::string main_py_utf8 = utf8_from_wstring(main_py.wstring());
     if (main_py_utf8.empty()) {
         Py_FinalizeEx();
-        show_error(L"GhostRiggerNative could not convert main.py path for embedded Python.");
+        show_error(L"GhostRigger.Native could not convert main.py path for embedded Python.");
         return 6;
     }
 
@@ -372,7 +375,7 @@ int run_embedded_python(int argc, wchar_t* argv[], const fs::path& repo_root, co
     const int run_result = PyRun_SimpleStringFlags(run_command.c_str(), nullptr);
     const int finalize_result = Py_FinalizeEx();
     if (run_result != 0) {
-        show_error(L"GhostRiggerNative embedded Python exited after a startup error. Check Logs for details.");
+        show_error(L"GhostRigger.Native embedded Python exited after a startup error. Check Logs for details.");
         return 7;
     }
     if (finalize_result != 0) {
@@ -382,26 +385,26 @@ int run_embedded_python(int argc, wchar_t* argv[], const fs::path& repo_root, co
 }
 
 int run_hosted_python(int argc, wchar_t* argv[]) {
-    if (has_arg(argc, argv, kNativeHostSmokeArg)) {
+    if (has_arg(argc, argv, kNativeHostDebugArg)) {
         return 0;
     }
 
     auto repo_root = find_repo_root();
     if (!repo_root) {
-        show_error(L"GhostRiggerNative could not find main.py and pyproject.toml.");
+        show_error(L"GhostRigger.Native could not find main.py and pyproject.toml.");
         return 2;
     }
 
     auto python_home = find_python_home();
     if (!python_home) {
         show_error(
-            L"GhostRiggerNative could not find an embeddable Python 3.13 home. "
+            L"GhostRigger.Native could not find an embeddable Python 3.13 home. "
             L"Set GHOSTRIGGER_PYTHON to a Python executable inside the Python 3.13 install."
         );
         return 3;
     }
 
-    if (!has_arg(argc, argv, kNativeEmbedInitSmokeArg)) {
+    if (!has_arg(argc, argv, kNativeEmbedInitDebugArg)) {
         open_log_console();
     }
 
@@ -414,7 +417,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv == nullptr) {
-        show_error(L"GhostRiggerNative could not parse the command line.");
+        show_error(L"GhostRigger.Native could not parse the command line.");
         return 4;
     }
 

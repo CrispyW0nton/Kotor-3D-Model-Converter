@@ -21,8 +21,8 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{4c39e3f7-fa50-451a-a8a7-1c38f3f79b7d}</ProjectGuid>
-    <RootNamespace>GhostRiggerNative</RootNamespace>
+    <ProjectGuid>{c03c45bd-2af3-471b-a83e-24b4af17f002}</ProjectGuid>
+    <RootNamespace>GhostRiggerNativeNativeCoreDEBUG</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -70,31 +70,23 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <OutDir>$(SolutionDir)build\vs\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>GhostRiggerNative</TargetName>
-    <LocalDebuggerWorkingDirectory>$(SolutionDir)</LocalDebuggerWorkingDirectory>
-    <LocalDebuggerCommandArguments>--gui qt</LocalDebuggerCommandArguments>
-    <LocalDebuggerEnvironment>GHOSTRIGGER_PYTHON=C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe</LocalDebuggerEnvironment>
+    <IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\GhostRigger.Native.NativeCore.DEBUG\</IntDir>
+    <TargetName>GhostRigger.Native.NativeCore.DEBUG</TargetName>
+    <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
-      <AdditionalLibraryDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>python313.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <PostBuildEvent>
-      <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
-copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
@@ -102,34 +94,26 @@ copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dl
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <SubSystem>Windows</SubSystem>
-      <AdditionalLibraryDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>python313.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
-    <PostBuildEvent>
-      <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
-copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="GhostRigger.Native.NativeCore.DEBUG.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\main.py" />
-    <None Include="..\..\pyproject.toml" />
-    <None Include="..\..\requirements.txt" />
-    <None Include="..\..\README.md" />
-    <None Include="..\..\CHANGES.md" />
-    <None Include="..\README.md" />
+    <ProjectReference Include="..\GhostRigger.Native.NativeCore\GhostRigger.Native.NativeCore.vcxproj">
+      <Project>{f2d7b7d0-3d17-4d1d-a5b2-d7cb91fce001}</Project>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

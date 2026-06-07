@@ -19,7 +19,8 @@ and other performance-sensitive systems.
 
 ## Core Architecture Statement
 
-`GhostRiggerNative.exe` is the owning process. It embeds Python and runs the
+`GhostRigger.exe` is the owning process. It is built by the `GhostRigger.Native`
+Visual Studio project, embeds Python, and runs the
 existing Qt application in-process. Because C++ and Python now share the same
 process, Python can access native C++ functionality through stable bridge
 surfaces instead of launching sidecar processes or duplicating runtime logic.
@@ -28,22 +29,22 @@ Allowed bridge surfaces:
 
 1. C ABI DLLs loaded by Python through `ctypes` or `cffi`.
 2. Python extension modules (`.pyd`) imported directly by Python.
-3. Host-registered Python modules created by `GhostRiggerNative.exe` before
+3. Host-registered Python modules created by `GhostRigger.exe` before
    `main.py` runs.
 4. Narrow shared-handle APIs for host-owned runtime objects such as renderer
    devices, retained scenes, buffers, textures, skin palettes, and frame
    contexts.
 
-The C ABI DLL route is the baseline because it is testable from C++ smoke
+The C ABI DLL route is the baseline because it is testable from C++ DEBUG
 programs and Python without requiring the full GUI. Richer `.pyd` or
 host-registered modules may be added only when the owning system needs a more
-expressive Python API and still preserves a targeted native smoke path.
+expressive Python API and still preserves a targeted native DEBUG path.
 
 ## Non-Negotiable Boundaries
 
 - Every durable native system must live in its own Visual Studio project or in
   a clearly named shared native project. Do not pile unrelated systems into
-  `GhostRiggerNative` or a convenient runtime file.
+  `GhostRigger.Native` or a convenient runtime file.
 - Shared code used by more than one toolbox, renderer, window, or native
   system belongs in a shared native project. Do not duplicate the same C++ logic
   across renderer DLLs or toolbox DLLs.
@@ -74,7 +75,7 @@ The Visual Studio solution should grow as a set of deliberately small projects:
 | Shared native core | `.lib` or `.dll` | Math, memory helpers, handles, diagnostics packets, common resource descriptors | UI decisions, game-specific guesses |
 | Toolbox native package | `.dll` or `.pyd` | One feature system such as animation runtime, model runtime, skinning, picking, export/readback helper | Unrelated toolbox behavior |
 | Renderer package | `.dll` | One renderer backend and its GPU/device/resource implementation | Python UI state, non-renderer workflow policy |
-| Smoke/test project | `.exe` | Native ABI and project-level regression checks without Python/GUI | Product workflow replacement |
+| DEBUG project | `.exe` | Native ABI and project-level regression checks without Python/GUI | Product workflow replacement |
 
 Each new native project must declare:
 
@@ -86,7 +87,7 @@ Each new native project must declare:
   or `src/core/rendering`.
 - Python bridge method: C ABI, `.pyd`, host module, or shared-handle API.
 - Data ownership: which side owns allocation, mutation, lifetime, and cleanup.
-- Verification gate: native smoke, targeted Python test, MCP comparison, and
+- Verification gate: native DEBUG executable, targeted Python test, MCP comparison, and
   visible app check where applicable.
 
 ## Shared-System Rule
@@ -173,25 +174,53 @@ first shared runtime handles without moving product behavior prematurely.
 
 Current completed foundation:
 
-- `GhostRiggerNative.exe` hosts embedded Python in-process.
+- `GhostRigger.exe` hosts embedded Python in-process from the `GhostRigger.Native` project.
 - The native host starts `main.py --gui qt` without launching a separate Python
   process.
-- `GhostRiggerRuntime.dll` exists as the first C ABI bridge boundary.
-- `GhostRiggerRuntimeSmoke.exe` validates the runtime ABI without Python.
+- `GhostRigger.Native.NativeCore.dll` exists as the first shared native core package for
+  renderer/toolbox-neutral version, capability, diagnostics, and handle
+  foundations.
+- `GhostRigger.Runtime.dll` exists as the first C ABI bridge boundary.
+- `GhostRigger.Runtime.Shared.Contracts.dll` exists as the first `GhostRigger.Runtime.Shared.*`
+  package for renderer-neutral contract metadata shared by future runtime and
+  renderer packages.
+- `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
+  Python or the GUI.
+- `GhostRigger.Runtime.Shared.Contracts.DEBUG.exe` validates the shared runtime contract ABI
+  without Python or the GUI.
+- `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
+- `src.adapters.native_core.package_registry` can detect
+  `GhostRigger.Native.NativeCore.dll` and `GhostRigger.Runtime.Shared.Contracts.dll` availability
+  and capabilities from Python without starting the GUI.
+- `native/templates/` contains Phase 1 Visual Studio project templates for
+  native DLL packages and DEBUG executables, with ownership metadata and
+  changelog requirements.
+
+Native project naming foundation:
+
+- The three anchor C++ projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore`,
+  and `GhostRigger.Runtime`.
+- Additional shared systems that extend the core foundation should use
+  `GhostRigger.Native.NativeCore.{System}` naming.
+- Additional runtime-shared contracts that multiple runtime or renderer
+  packages consume should use `GhostRigger.Runtime.Shared.{System}` naming.
+- Concrete renderer and toolbox packages should name the owner clearly while
+  depending on `GhostRigger.Native.NativeCore`, `GhostRigger.Native.NativeCore.*`, or
+  `GhostRigger.Runtime.Shared.*` packages instead of duplicating shared code.
 
 Required remaining foundation work:
 
-- Add separate Visual Studio projects for each durable native system instead of
-  growing one monolithic runtime DLL.
+- Continue adding separate Visual Studio projects for each durable native system
+  instead of growing one monolithic runtime DLL.
 - Add shared native projects for cross-toolbox contracts, handle management,
   descriptors, math, resource residency, diagnostics, and common runtime
   helpers.
 - Split renderer contracts from renderer implementations.
 - Create one renderer DLL package per renderer backend.
-- Define project templates for native toolbox DLLs, renderer DLLs, and native
-  smoke tests so future agents add projects consistently.
+- Use the native project templates for native toolbox DLLs, renderer DLLs, and
+  native DEBUG executables so future agents add projects consistently.
 - Add version and capability negotiation to every native package that Python can
   load.
 - Add strict ownership documentation for all handle lifetimes crossing the
@@ -202,9 +231,11 @@ Required remaining foundation work:
 Phase 1 acceptance:
 
 - The solution builds Debug and Release x64.
-- Each native package has a smoke test or a targeted ABI check.
-- Python can detect package availability and report capabilities without
-  starting the GUI.
+- Release solution output contains only shippable `.exe`, `.dll`, and `.lib`
+  files; it does not contain `.pdb`, `.exp`, or DEBUG validator executables.
+- Each native package has a DEBUG executable or a targeted ABI check.
+- Python can detect package availability and report capabilities for native
+  packages without starting the GUI.
 - Missing native packages fall back cleanly.
 - `knowledge_base/native_migration_plan.md`, `native/README.md`, and this file
   agree on the current ownership model.
@@ -242,7 +273,7 @@ Phase 2 acceptance:
   parsing or transform behavior replaces Python behavior.
 - Targeted Python tests cover adapters, fallback, diagnostics, and data
   marshalling.
-- Native smoke tests cover each DLL package independently.
+- Native DEBUG executables cover each DLL package independently.
 - Visible GhostRigger checks confirm viewport/workflow behavior for the affected
   surface.
 - Performance-sensitive paths show measurable improvement or lower frame-time
@@ -325,7 +356,7 @@ Before making any native system authoritative, confirm:
 - Handles have explicit lifetime rules.
 - Version/capability negotiation exists.
 - Missing-DLL and unsupported-feature fallback exists.
-- Targeted native smoke test exists.
+- Targeted native DEBUG executable exists.
 - Targeted Python adapter test exists.
 - MCP comparison has been run for backend/model-pipeline truth when applicable.
 - Visible app workflow has been tested when UI/viewport/startup behavior is
@@ -334,15 +365,17 @@ Before making any native system authoritative, confirm:
 
 ## Immediate Next Native Foundation Tasks
 
-1. Create native project templates for shared libraries, renderer DLLs, toolbox
-   DLLs, and smoke tests.
-2. Split renderer-neutral contracts out of `GhostRiggerRuntime` into an explicit
-   shared contract project.
+1. Use `native/templates/` for the next renderer/toolbox/shared DLL package and
+   keep names under `GhostRigger.Native.NativeCore.{System}` or `GhostRigger.Runtime.Shared.{System}` when the
+   package is shared rather than product-surface-specific.
+2. Move the next renderer-neutral payload contract from `GhostRigger.Runtime`
+   into `GhostRigger.Runtime.Shared.Contracts` once another runtime/renderer package needs
+   it.
 3. Define the first renderer package boundary before adding real D3D12/WGPU
    draw submission.
-4. Add a shared native handle/diagnostics project used by runtime and renderer
-   packages.
-5. Add a Python-side package loader/capability registry so adapters can query
-   native packages consistently.
+4. Move reusable handle/diagnostics code from runtime-local helpers into
+   `GhostRigger.Native.NativeCore` when another package needs it.
+5. Extend the Python-side native package registry entries as each native package
+   gains version/capability exports.
 6. Document the first concrete toolbox DLL candidate before implementing it,
    including its owner, bridge surface, tests, and fallback path.

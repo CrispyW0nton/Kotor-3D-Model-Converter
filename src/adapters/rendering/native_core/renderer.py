@@ -69,7 +69,7 @@ class NativeViewportRenderer(NullDiagnosticRenderer):
                 backend_id=self.backend_id,
                 name=self.name,
                 available=False,
-                reason=self._load_error or "GhostRiggerRuntime.dll has not been built",
+                reason=self._load_error or "GhostRigger.Runtime.dll has not been built",
                 api="Native/D3D12",
                 diagnostic_only=True,
                 requires_restart=False,

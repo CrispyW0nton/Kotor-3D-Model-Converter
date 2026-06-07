@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Iterable
 
 
-_DLL_NAME = "GhostRiggerRuntime.dll"
+_DLL_NAME = "GhostRigger.Runtime.dll"
 
 
 class GrMeshResourceDesc(ctypes.Structure):
@@ -674,7 +674,7 @@ def _candidate_paths() -> Iterable[Path]:
     for platform_name in ("x64", "Win32"):
         for configuration in ("Debug", "Release"):
             yield root / "build" / "vs" / platform_name / configuration / _DLL_NAME
-    yield root / "native" / "GhostRiggerRuntime" / _DLL_NAME
+    yield root / "native" / "GhostRigger.Runtime" / _DLL_NAME
     yield Path(__file__).resolve().parent / _DLL_NAME
 
 
