@@ -976,6 +976,52 @@ def test_renderer_d3d12_exports_pipeline_state_readiness_metadata_boundary() -> 
     assert "gr_renderer_d3d12_pipeline_state_readiness_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_guarded_shader_bytecode_metadata_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_guarded_shader_bytecode_metadata_json" in header
+    assert "renderer_d3d12_guarded_shader_bytecode_metadata.v1" in implementation
+    assert '"shader_bytecode_ready":false' in implementation
+    assert '"shader_compiler_invoked":false' in implementation
+    assert '"dxc_compiler_required":true' in implementation
+    assert '"legacy_d3dcompile_used":false' in implementation
+    assert '"compiled_shader_blob_count":0' in implementation
+    assert '"vertex_shader_entry":"VSMain"' in implementation
+    assert '"vertex_shader_target":"vs_6_0"' in implementation
+    assert '"pixel_shader_entry":"PSMain"' in implementation
+    assert '"pixel_shader_target":"ps_6_0"' in implementation
+    assert '"vertex_shader_compiled":false' in implementation
+    assert '"pixel_shader_compiled":false' in implementation
+    assert '"skinning_shader_variant_compiled":false' in implementation
+    assert '"sprite_shader_variant_compiled":false' in implementation
+    assert '"shader_reflection_ready":false' in implementation
+    assert '"input_layout_from_reflection":false' in implementation
+    assert '"root_signature_from_shader":false' in implementation
+    assert '"pipeline_state_created":false' in implementation
+    assert '"draw_calls_recorded":0' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "D3DCompile(" not in implementation
+    assert "DxcCreateInstance" not in implementation
+    assert "gr_renderer_d3d12_guarded_shader_bytecode_metadata_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

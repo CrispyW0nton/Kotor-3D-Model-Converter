@@ -115,8 +115,9 @@ diagnostics, guarded clear-pass command execution/fence diagnostics, and
 post-clear present-readiness diagnostics, and guarded present-call diagnostics,
 and post-present frame/accounting diagnostics, and native draw-list readiness
 metadata, and native resource-binding readiness metadata, and
-pipeline-state/root-signature readiness metadata, but it does not record draws
-or create a real draw submission path yet.
+pipeline-state/root-signature readiness metadata, and guarded shader-bytecode
+metadata, but it does not record draws or create a real draw submission path
+yet.
 `Present` is only reachable through the guarded present-call diagnostic after
 prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
 

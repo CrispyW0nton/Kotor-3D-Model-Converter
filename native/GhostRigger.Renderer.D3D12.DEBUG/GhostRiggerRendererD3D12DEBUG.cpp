@@ -736,6 +736,56 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 131;
     }
+    const char* shader_bytecode_json =
+        gr_renderer_d3d12_guarded_shader_bytecode_metadata_json(context);
+    if (std::strstr(
+            shader_bytecode_json,
+            R"("schema":"renderer_d3d12_guarded_shader_bytecode_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded shader-bytecode metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 132;
+    }
+    if (std::strstr(shader_bytecode_json, R"("shader_bytecode_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 133;
+    }
+    if (std::strstr(shader_bytecode_json, R"("shader_compiler_invoked":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode invoked a compiler" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 134;
+    }
+    if (std::strstr(shader_bytecode_json, R"("compiled_shader_blob_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode compiled blobs" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 135;
+    }
+    if (std::strstr(shader_bytecode_json, R"("vertex_shader_compiled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode compiled a vertex shader" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 136;
+    }
+    if (std::strstr(shader_bytecode_json, R"("pixel_shader_compiled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode compiled a pixel shader" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 137;
+    }
+    if (std::strstr(shader_bytecode_json, R"("pipeline_state_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode created a PSO" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 138;
+    }
+    if (std::strstr(shader_bytecode_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 139;
+    }
+    if (std::strstr(shader_bytecode_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader bytecode enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 140;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

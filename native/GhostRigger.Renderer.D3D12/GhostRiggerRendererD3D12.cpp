@@ -142,6 +142,7 @@ struct DiagnosticContext {
     bool draw_list_readiness_metadata_ready = false;
     bool resource_binding_readiness_metadata_ready = false;
     bool pipeline_state_readiness_metadata_ready = false;
+    bool guarded_shader_bytecode_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1311,6 +1312,41 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_pipeline_state_readiness_met
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_shader_bytecode_metadata_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_shader_bytecode_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"shader_bytecode_ready":false,"vertex_shader_compiled":false,"pixel_shader_compiled":false,"compiled_shader_blob_count":0,"draw_submission_enabled":false})";
+    }
+
+    target->guarded_shader_bytecode_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_shader_bytecode_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"pipeline_state_ready":false,"shader_bytecode_ready":false,)"
+               R"("shader_compiler_invoked":false,"dxc_compiler_required":true,)"
+               R"("legacy_d3dcompile_used":false,"compiled_shader_blob_count":0,)"
+               R"("vertex_shader_entry":"VSMain","vertex_shader_target":"vs_6_0",)"
+               R"("pixel_shader_entry":"PSMain","pixel_shader_target":"ps_6_0",)"
+               R"("vertex_shader_compiled":false,"pixel_shader_compiled":false,)"
+               R"("skinning_shader_variant_compiled":false,)"
+               R"("sprite_shader_variant_compiled":false,)"
+               R"("debug_shader_symbols_embedded":false,)"
+               R"("shader_reflection_ready":false,"input_layout_from_reflection":false,)"
+               R"("root_signature_from_shader":false,"pipeline_state_created":false,)"
+               R"("draw_calls_recorded":0,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["shader_sources_missing","dxc_compiler_missing",)"
+               R"("vertex_shader_missing","pixel_shader_missing",)"
+               R"("shader_reflection_missing","draw_submission_disabled"],)"
+               R"("phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1325,7 +1361,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence",)"
         R"("post_clear_present_readiness","guarded_present_call",)"
         R"("post_present_frame_accounting","draw_list_readiness_metadata",)"
-        R"("resource_binding_readiness_metadata","pipeline_state_readiness_metadata"],)"
+        R"("resource_binding_readiness_metadata","pipeline_state_readiness_metadata",)"
+        R"("guarded_shader_bytecode_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1526,6 +1563,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->resource_binding_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"pipeline_state_readiness_metadata_ready":)";
     payload += target->pipeline_state_readiness_metadata_ready ? "true" : "false";
+    payload += R"(,"guarded_shader_bytecode_metadata_ready":)";
+    payload += target->guarded_shader_bytecode_metadata_ready ? "true" : "false";
     payload += R"(,"diagnostic_frame_index":)";
     payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
     payload += R"(,"diagnostic_presented_frame_count":)";
