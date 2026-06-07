@@ -43,10 +43,12 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Private\CameraMath.cpp" />
+    <ClCompile Include="Private\FrameMath.cpp" />
     <ClCompile Include="Private\GhostRiggerNativeCoreMath.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\CameraMath.h" />
+    <ClInclude Include="Public\FrameMath.h" />
     <ClInclude Include="Public\GhostRiggerNativeCoreMath.h" />
   </ItemGroup>
   <ItemGroup>
