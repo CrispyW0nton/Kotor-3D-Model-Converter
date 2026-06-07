@@ -750,6 +750,39 @@ def test_renderer_d3d12_exports_guarded_clear_pass_execution_fence_boundary() ->
     assert "gr_renderer_d3d12_guarded_clear_pass_execution_fence_diagnostics_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_post_clear_present_readiness_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_post_clear_present_readiness_diagnostics_json" in header
+    assert "renderer_d3d12_post_clear_present_readiness_diagnostics.v1" in implementation
+    assert '"clear_pass_executed":false' in implementation
+    assert '"clear_pass_fence_completed":false' in implementation
+    assert '"back_buffer_state_expected":"D3D12_RESOURCE_STATE_PRESENT"' in implementation
+    assert '"present_ready":false' in implementation
+    assert '"present_called":false' in implementation
+    assert '"present_enabled":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert '"present_call_disabled"' in implementation
+    assert "gr_renderer_d3d12_post_clear_present_readiness_diagnostics_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

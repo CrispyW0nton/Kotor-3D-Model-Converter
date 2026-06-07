@@ -496,6 +496,46 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 89;
     }
+    const char* post_clear_present_json =
+        gr_renderer_d3d12_post_clear_present_readiness_diagnostics_json(context);
+    if (std::strstr(
+            post_clear_present_json,
+            R"("schema":"renderer_d3d12_post_clear_present_readiness_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 90;
+    }
+    if (std::strstr(post_clear_present_json, R"("clear_pass_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness executed clear pass" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 91;
+    }
+    if (std::strstr(post_clear_present_json, R"("clear_pass_fence_completed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness completed fence" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 92;
+    }
+    if (std::strstr(post_clear_present_json, R"("present_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 93;
+    }
+    if (std::strstr(post_clear_present_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness called present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 94;
+    }
+    if (std::strstr(post_clear_present_json, R"("present_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness enabled present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 95;
+    }
+    if (std::strstr(post_clear_present_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 post-clear present-readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 96;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
