@@ -2,6 +2,11 @@
 
 Open `GhostRigger.sln` from the repository root in Visual Studio 2022.
 
+Before adding new native projects, renderer DLLs, toolbox DLLs, shared native
+libraries, or Python bridge surfaces, read
+`knowledge_base/cpp_integration_phases.md`. The detailed migration/status plan
+is `knowledge_base/native_migration_plan.md`.
+
 The first native application project is a C++ Windows host. It embeds the local
 Python 3.13 runtime in `GhostRiggerNative.exe` and runs the existing
 `main.py --gui qt` path inside that native process. The current UI is still the

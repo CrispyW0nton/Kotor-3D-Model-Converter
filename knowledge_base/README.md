@@ -84,6 +84,7 @@ knowledge_base/
 | Goal | Read |
 |------|------|
 | Plan / pick up Qt-branch work | [`roadmap/02_roadmap_2026_05.md`](roadmap/02_roadmap_2026_05.md) |
+| Add native C++ host/DLL/renderer work | [`cpp_integration_phases.md`](cpp_integration_phases.md) and [`native_migration_plan.md`](native_migration_plan.md) |
 | Understand the current Qt vs Tk state | [`roadmap/01_qt_branch_audit.md`](roadmap/01_qt_branch_audit.md) |
 | Debug skinning / rendering | [`audits/2026-05/skinning_parity.md`](audits/2026-05/skinning_parity.md) |
 | Run the CLI | [`cli/CLI.md`](cli/CLI.md) |

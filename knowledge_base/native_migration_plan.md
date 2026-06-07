@@ -11,6 +11,11 @@ KOTOR game semantics, MCP validation, project/session formats, module and map
 authoring, and regression orchestration. C++ owns only the hot model-runtime and
 renderer paths once each boundary has parity tests and visible verification.
 
+The strict project-boundary and phase foundation lives in
+`knowledge_base/cpp_integration_phases.md`. Read that document before adding new
+native DLL projects, renderer packages, shared native systems, or Python bridge
+surfaces.
+
 The current Visual Studio solution is the entry point for this migration. It is
 a launcher and native workspace first, not a rewrite of the application.
 
