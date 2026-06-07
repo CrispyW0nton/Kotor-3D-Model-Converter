@@ -11,6 +11,12 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-07
 
+- Native startup-console audit single-line pass: removed the secondary DLL detail row from the pre-Python native dependency audit and changed each dependency entry to print as a single colored line containing only the dependency number, status, and full DLL file name. No roadmap task ID applies.
+  Owner: LordVaderCW.
+  Intersects: upstream/qt-ghostrigger native startup-console logging, Phase 1.5 payload DLL dependency audit, embedded Python startup visibility, and future C++/Python bridge diagnostics.
+  Affected areas: `native/GhostRigger.Native/main.cpp`, `tests/test_native_python_payloads.py`, `CHANGES.md`.
+  Verification: `git diff --check` passed. `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m py_compile tests/test_native_python_payloads.py` passed. `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m pytest tests/test_native_python_payloads.py tests/test_native_project_templates.py tests/test_native_core_package_registry.py -q` passed (`114 passed`). `Release|x64` and `Debug|x64` Visual Studio builds passed. The Release output scan confirmed only `.exe`, `.dll`, and `.lib` files with no DEBUG executables and `GhostRigger.exe` present. `GhostRigger.exe --native-embed-init-debug` exited with code `0`.
+
 - Native startup-console audit layout pass: reformatted the pre-Python DLL dependency audit to use timestamp/severity/source columns that match the Python startup log style, colored OK/WARN/MISSING statuses through the Win32 console API, and split long DLL/version/payload details onto shortened continuation lines for smaller console windows. No roadmap task ID applies.
   Owner: LordVaderCW.
   Intersects: upstream/qt-ghostrigger native startup-console logging, Phase 1.5 payload DLL dependency audit, embedded Python startup visibility, and future C++/Python bridge diagnostics.
