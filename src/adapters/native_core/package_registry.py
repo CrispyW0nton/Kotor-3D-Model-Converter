@@ -106,6 +106,14 @@ TOOLS_EXPORT_PACKAGE = NativePackageSpec(
     capabilities_export="gr_tools_export_capabilities_json",
 )
 
+TOOLS_CHARACTER_BUILDER_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.CharacterBuilder",
+    dll_name="GhostRigger.Tools.CharacterBuilder.dll",
+    env_var="GHOSTRIGGER_TOOLS_CHARACTER_BUILDER",
+    version_export="gr_tools_character_builder_version",
+    capabilities_export="gr_tools_character_builder_capabilities_json",
+)
+
 RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES = (
     "descriptor_allocator_readiness",
     "command_list_readiness",
@@ -294,6 +302,12 @@ def query_tools_export_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(TOOLS_EXPORT_PACKAGE, search_paths)
+
+
+def query_tools_character_builder_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_CHARACTER_BUILDER_PACKAGE, search_paths)
 
 
 def renderer_d3d12_guarded_metadata_capabilities(

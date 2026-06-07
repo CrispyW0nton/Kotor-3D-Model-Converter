@@ -138,6 +138,13 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.Tools.Export.DEBUG/` verifies the Export toolbox package
   ABI, capabilities export, owner-boundary metadata, and preflight-packet schema
   placeholder from Visual Studio without requiring Python.
+- `native/GhostRigger.Tools.CharacterBuilder/` owns the native toolbox package
+  boundary for Character Studio helpers. It reports package capabilities,
+  owner-boundary metadata, and an autofit-packet schema placeholder while
+  keeping native autofit disabled and requiring Python fallback.
+- `native/GhostRigger.Tools.CharacterBuilder.DEBUG/` verifies the Character
+  Builder toolbox package ABI, capabilities export, owner-boundary metadata, and
+  autofit-packet schema placeholder from Visual Studio without requiring Python.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental

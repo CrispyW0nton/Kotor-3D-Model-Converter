@@ -230,6 +230,72 @@ def test_tools_export_exports_diagnostic_c_abi_boundary() -> None:
     assert "gr_tools_export_preflight_packet_schema_json()" in validator
 
 
+def test_tools_character_builder_project_scaffold_matches_phase_one_boundary() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.CharacterBuilder"
+        / "GhostRigger.Tools.CharacterBuilder.vcxproj"
+    ).read_text(encoding="utf-8")
+    debug_project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.CharacterBuilder.DEBUG"
+        / "GhostRigger.Tools.CharacterBuilder.DEBUG.vcxproj"
+    ).read_text(encoding="utf-8")
+    readme = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.CharacterBuilder"
+        / "README.md"
+    ).read_text(encoding="utf-8")
+
+    assert "GhostRigger.Tools.CharacterBuilder" in solution
+    assert "GhostRigger.Tools.CharacterBuilder.DEBUG" in solution
+    assert "<TargetName>GhostRigger.Tools.CharacterBuilder</TargetName>" in project
+    assert "GHOSTRIGGER_TOOLS_CHARACTER_BUILDER_EXPORTS" in project
+    assert "<TargetName>GhostRigger.Tools.CharacterBuilder.DEBUG</TargetName>" in debug_project
+    assert "Owner surface: Character Studio" in readme
+    assert "Bridge method: C ABI DLL" in readme
+
+
+def test_tools_character_builder_exports_diagnostic_c_abi_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.CharacterBuilder"
+        / "GhostRiggerToolsCharacterBuilder.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.CharacterBuilder"
+        / "GhostRiggerToolsCharacterBuilder.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.CharacterBuilder.DEBUG"
+        / "GhostRiggerToolsCharacterBuilderDEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_tools_character_builder_version" in header
+    assert "gr_tools_character_builder_capabilities_json" in header
+    assert "gr_tools_character_builder_owner_boundary_json" in header
+    assert "gr_tools_character_builder_autofit_packet_schema_json" in header
+    assert '"tool_package":true' in implementation
+    assert '"owner_surface":"Character Studio"' in implementation
+    assert '"bridge_method":"C ABI DLL"' in implementation
+    assert '"native_autofit_enabled":false' in implementation
+    assert '"python_fallback_required":true' in implementation
+    assert "tools_character_builder_owner_boundary.v1" in implementation
+    assert "tools_character_builder_autofit_packet_schema.v1" in implementation
+    assert '"autofit_attempted":false' in implementation
+    assert '"autofit_result_count":0' in implementation
+    assert "gr_tools_character_builder_autofit_packet_schema_json()" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1501,6 +1567,7 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}",
         "{8225E261-C091-40A6-8386-D68B6A43FC02}",
         "{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}",
+        "{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}",
     }
 
     for guid in debug_project_guids:

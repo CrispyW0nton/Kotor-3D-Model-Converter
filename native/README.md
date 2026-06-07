@@ -86,6 +86,12 @@ capabilities, owner-boundary metadata, and a preflight-packet schema placeholder
 while keeping native file writes disabled and requiring the Python export
 fallback.
 
+`GhostRigger.Tools.CharacterBuilder` is the Phase 1 native toolbox package
+boundary for Character Studio helpers. It is diagnostic-only: it reports package
+capabilities, owner-boundary metadata, and an autofit-packet schema placeholder
+while keeping native autofit disabled and requiring the Python Character Studio
+fallback.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes

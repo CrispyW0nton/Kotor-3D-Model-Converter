@@ -14,6 +14,7 @@ from src.adapters.native_core.package_registry import (
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     RUNTIME_SHARED_RESOURCES_PACKAGE,
+    TOOLS_CHARACTER_BUILDER_PACKAGE,
     TOOLS_EXPORT_PACKAGE,
     TOOLS_RETARGETING_PACKAGE,
     NativePackageSpec,
@@ -28,6 +29,7 @@ from src.adapters.native_core.package_registry import (
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
+    query_tools_character_builder_status,
     query_tools_export_status,
     query_tools_retargeting_status,
     renderer_d3d12_guarded_metadata_capabilities,
@@ -100,6 +102,18 @@ class _FakeToolsExportDll:
             b'"tool_package":true,"owner_surface":"Export and validation workflow",'
             b'"bridge_method":"C ABI DLL","diagnostic_only":true,'
             b'"native_write_enabled":false,"python_fallback_required":true}'
+        )
+    )
+
+
+class _FakeToolsCharacterBuilderDll:
+    gr_tools_character_builder_version = _FakeNativeExport(b"0.1.0")
+    gr_tools_character_builder_capabilities_json = _FakeNativeExport(
+        (
+            b'{"name":"GhostRigger.Tools.CharacterBuilder","version":"0.1.0",'
+            b'"tool_package":true,"owner_surface":"Character Studio",'
+            b'"bridge_method":"C ABI DLL","diagnostic_only":true,'
+            b'"native_autofit_enabled":false,"python_fallback_required":true}'
         )
     )
 
@@ -214,6 +228,17 @@ def test_tools_export_status_uses_shared_registry_path(tmp_path: Path) -> None:
     assert status.available is False
     assert (
         "GhostRigger.Tools.Export.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_tools_character_builder_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_tools_character_builder_status([tmp_path])
+
+    assert status.name == "GhostRigger.Tools.CharacterBuilder"
+    assert status.available is False
+    assert (
+        "GhostRigger.Tools.CharacterBuilder.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -356,6 +381,17 @@ def test_tools_export_package_spec_names_current_contract() -> None:
     assert TOOLS_EXPORT_PACKAGE.capabilities_export == "gr_tools_export_capabilities_json"
 
 
+def test_tools_character_builder_package_spec_names_current_contract() -> None:
+    assert TOOLS_CHARACTER_BUILDER_PACKAGE.name == "GhostRigger.Tools.CharacterBuilder"
+    assert TOOLS_CHARACTER_BUILDER_PACKAGE.dll_name == "GhostRigger.Tools.CharacterBuilder.dll"
+    assert TOOLS_CHARACTER_BUILDER_PACKAGE.env_var == "GHOSTRIGGER_TOOLS_CHARACTER_BUILDER"
+    assert TOOLS_CHARACTER_BUILDER_PACKAGE.version_export == "gr_tools_character_builder_version"
+    assert (
+        TOOLS_CHARACTER_BUILDER_PACKAGE.capabilities_export
+        == "gr_tools_character_builder_capabilities_json"
+    )
+
+
 def test_renderer_d3d12_guarded_metadata_capabilities_name_complete_phase_1_surface() -> None:
     assert RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES == (
         "descriptor_allocator_readiness",
@@ -460,4 +496,29 @@ def test_tools_export_status_reports_diagnostic_capabilities(
     assert status.capabilities["tool_package"] is True
     assert status.capabilities["owner_surface"] == "Export and validation workflow"
     assert status.capabilities["native_write_enabled"] is False
+    assert status.capabilities["python_fallback_required"] is True
+
+
+def test_tools_character_builder_status_reports_diagnostic_capabilities(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dll_path = tmp_path / "GhostRigger.Tools.CharacterBuilder.dll"
+    dll_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        package_registry,
+        "_load_library",
+        lambda path: _FakeToolsCharacterBuilderDll(),
+    )
+
+    status = query_tools_character_builder_status([tmp_path])
+
+    assert status.available is True
+    assert status.version == "0.1.0"
+    assert status.capabilities is not None
+    assert status.capabilities["tool_package"] is True
+    assert status.capabilities["owner_surface"] == "Character Studio"
+    assert status.capabilities["native_autofit_enabled"] is False
     assert status.capabilities["python_fallback_required"] is True

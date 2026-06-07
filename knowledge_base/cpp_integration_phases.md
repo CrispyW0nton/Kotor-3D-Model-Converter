@@ -298,6 +298,14 @@ Current completed foundation:
 - `GhostRigger.Tools.Export.DEBUG.exe` validates the Export toolbox package
   ABI, owner-boundary metadata, capabilities export, and preflight-packet schema
   placeholder without Python or the GUI.
+- `GhostRigger.Tools.CharacterBuilder.dll` exists as the native toolbox package
+  boundary for Character Studio helpers. It reports Character Studio owner
+  metadata, package capabilities, and an autofit-packet schema placeholder while
+  keeping native autofit disabled and requiring the Python Character Studio
+  fallback.
+- `GhostRigger.Tools.CharacterBuilder.DEBUG.exe` validates the Character
+  Builder toolbox package ABI, owner-boundary metadata, capabilities export, and
+  autofit-packet schema placeholder without Python or the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.

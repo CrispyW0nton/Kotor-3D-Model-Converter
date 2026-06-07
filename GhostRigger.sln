@@ -107,6 +107,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Tools.Export.DE
 		{94B0835D-C4BD-4800-8DC0-D05AA5A1C3EA} = {94B0835D-C4BD-4800-8DC0-D05AA5A1C3EA}
 	EndProjectSection
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Tools.CharacterBuilder", "native\GhostRigger.Tools.CharacterBuilder\GhostRigger.Tools.CharacterBuilder.vcxproj", "{FE876070-E8DE-449E-AC51-2DA5768DD511}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Tools.CharacterBuilder.DEBUG", "native\GhostRigger.Tools.CharacterBuilder.DEBUG\GhostRigger.Tools.CharacterBuilder.DEBUG.vcxproj", "{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{FE876070-E8DE-449E-AC51-2DA5768DD511} = {FE876070-E8DE-449E-AC51-2DA5768DD511}
+	EndProjectSection
+EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Runtime.DEBUG", "native\GhostRigger.Runtime.DEBUG\GhostRigger.Runtime.DEBUG.vcxproj", "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}"
 	ProjectSection(ProjectDependencies) = postProject
 		{A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB} = {A68E3D8D-9D1C-45B6-BD1B-64D85756DDAB}
@@ -290,6 +297,20 @@ Global
 		{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}.Debug|x64.Build.0 = Debug|x64
 		{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}.Release|Win32.ActiveCfg = Release|Win32
 		{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}.Release|x64.ActiveCfg = Release|x64
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Debug|Win32.Build.0 = Debug|Win32
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Debug|x64.ActiveCfg = Debug|x64
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Debug|x64.Build.0 = Debug|x64
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Release|Win32.ActiveCfg = Release|Win32
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Release|Win32.Build.0 = Release|Win32
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Release|x64.ActiveCfg = Release|x64
+		{FE876070-E8DE-449E-AC51-2DA5768DD511}.Release|x64.Build.0 = Release|x64
+		{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}.Debug|Win32.ActiveCfg = Debug|Win32
+		{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}.Debug|Win32.Build.0 = Debug|Win32
+		{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}.Debug|x64.ActiveCfg = Debug|x64
+		{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}.Debug|x64.Build.0 = Debug|x64
+		{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}.Release|Win32.ActiveCfg = Release|Win32
+		{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}.Release|x64.ActiveCfg = Release|x64
 		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|Win32.ActiveCfg = Debug|Win32
 		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|Win32.Build.0 = Debug|Win32
 		{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}.Debug|x64.ActiveCfg = Debug|x64
