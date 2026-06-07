@@ -213,6 +213,22 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_device_readiness_json() {
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_queue_swap_chain_readiness_json() {
+    static thread_local std::string payload;
+    payload =
+        R"({"schema":"renderer_d3d12_queue_swap_chain_readiness.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,)"
+        R"("draw_submission_enabled":false,"command_queue_created":false,)"
+        R"("swap_chain_created":false,"requires_device_ready":true,)"
+        R"("queue_desc":{"type":"direct","priority":"normal","flags":"none","node_mask":0},)"
+        R"("swap_chain_desc":{"buffer_count":2,"format":"DXGI_FORMAT_R8G8B8A8_UNORM",)"
+        R"("swap_effect":"DXGI_SWAP_EFFECT_FLIP_DISCARD","sample_count":1},)"
+        R"("failure_points":["device_not_ready","command_queue_create",)"
+        R"("window_handle_missing","swap_chain_create","present_mode_unsupported"],)"
+        R"("phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =

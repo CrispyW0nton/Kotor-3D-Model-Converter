@@ -101,8 +101,9 @@ backend DLL/DEBUG-validator pattern before a hardware renderer such as
 boundary. In Phase 1 it is diagnostic-only: it reports D3D12 package
 capabilities, backend metadata, device requirements, DXGI adapter-probe output,
 feature-level 12_0 device-readiness without retaining a device, and
-failure-diagnostic metadata, but it does not create a swap chain, command queue,
-or draw submission path yet.
+command-queue/swap-chain readiness requirements without creating either object,
+and failure-diagnostic metadata, but it does not create a retained device,
+swap chain, command queue, or draw submission path yet.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
@@ -250,8 +251,8 @@ Python can query the diagnostic renderer backend package through
 
 Build and run `GhostRigger.Renderer.D3D12.DEBUG` to verify the D3D12 renderer
 package ABI, DXGI adapter-probe export, D3D12 device-readiness export,
-failure-diagnostic export, and device-requirement metadata without starting
-Python or the GUI:
+queue/swap-chain readiness export, failure-diagnostic export, and
+device-requirement metadata without starting Python or the GUI:
 
 ```text
 build\vs\x64\Debug\GhostRigger.Renderer.D3D12.DEBUG.exe
