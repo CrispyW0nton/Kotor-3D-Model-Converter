@@ -10,7 +10,9 @@ from src.adapters.native_core.package_registry import (
     RENDERER_CONTRACTS_PACKAGE,
     RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES,
     RENDERER_D3D12_PACKAGE,
+    RENDERER_MODERNGL_PACKAGE,
     RENDERER_NULL_PACKAGE,
+    RENDERER_PYGFX_PACKAGE,
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     RUNTIME_SHARED_RESOURCES_PACKAGE,
@@ -26,7 +28,9 @@ from src.adapters.native_core.package_registry import (
     query_native_package_status,
     query_renderer_contracts_status,
     query_renderer_d3d12_status,
+    query_renderer_moderngl_status,
     query_renderer_null_status,
+    query_renderer_pygfx_status,
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
@@ -80,6 +84,30 @@ class _FakeRendererD3D12Dll:
             b'"guarded_draw_command_recording_metadata",'
             b'"guarded_draw_submission_readiness_metadata",'
             b'"guarded_post_draw_frame_accounting_readiness_metadata"]}'
+        )
+    )
+
+
+class _FakeRendererModernGLDll:
+    gr_renderer_moderngl_version = _FakeNativeExport(b"0.1.0")
+    gr_renderer_moderngl_capabilities_json = _FakeNativeExport(
+        (
+            b'{"name":"GhostRigger.Renderer.ModernGL","version":"0.1.0",'
+            b'"renderer_backend":true,"backend":"moderngl",'
+            b'"contract_version":"0.1.0","python_adapter_required":true,'
+            b'"native_device_owner":false,"draw_submission_enabled":false}'
+        )
+    )
+
+
+class _FakeRendererPyGFXDll:
+    gr_renderer_pygfx_version = _FakeNativeExport(b"0.1.0")
+    gr_renderer_pygfx_capabilities_json = _FakeNativeExport(
+        (
+            b'{"name":"GhostRigger.Renderer.PyGFX","version":"0.1.0",'
+            b'"renderer_backend":true,"backend":"pygfx",'
+            b'"contract_version":"0.1.0","python_adapter_required":true,'
+            b'"native_device_owner":false,"draw_submission_enabled":false}'
         )
     )
 
@@ -220,6 +248,28 @@ def test_renderer_d3d12_status_uses_shared_registry_path(tmp_path: Path) -> None
     assert status.available is False
     assert (
         "GhostRigger.Renderer.D3D12.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_renderer_moderngl_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_renderer_moderngl_status([tmp_path])
+
+    assert status.name == "GhostRigger.Renderer.ModernGL"
+    assert status.available is False
+    assert (
+        "GhostRigger.Renderer.ModernGL.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_renderer_pygfx_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_renderer_pygfx_status([tmp_path])
+
+    assert status.name == "GhostRigger.Renderer.PyGFX"
+    assert status.available is False
+    assert (
+        "GhostRigger.Renderer.PyGFX.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -390,6 +440,22 @@ def test_renderer_d3d12_package_spec_names_current_contract() -> None:
     assert RENDERER_D3D12_PACKAGE.capabilities_export == "gr_renderer_d3d12_capabilities_json"
 
 
+def test_renderer_moderngl_package_spec_names_current_contract() -> None:
+    assert RENDERER_MODERNGL_PACKAGE.name == "GhostRigger.Renderer.ModernGL"
+    assert RENDERER_MODERNGL_PACKAGE.dll_name == "GhostRigger.Renderer.ModernGL.dll"
+    assert RENDERER_MODERNGL_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_MODERNGL"
+    assert RENDERER_MODERNGL_PACKAGE.version_export == "gr_renderer_moderngl_version"
+    assert RENDERER_MODERNGL_PACKAGE.capabilities_export == "gr_renderer_moderngl_capabilities_json"
+
+
+def test_renderer_pygfx_package_spec_names_current_contract() -> None:
+    assert RENDERER_PYGFX_PACKAGE.name == "GhostRigger.Renderer.PyGFX"
+    assert RENDERER_PYGFX_PACKAGE.dll_name == "GhostRigger.Renderer.PyGFX.dll"
+    assert RENDERER_PYGFX_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_PYGFX"
+    assert RENDERER_PYGFX_PACKAGE.version_export == "gr_renderer_pygfx_version"
+    assert RENDERER_PYGFX_PACKAGE.capabilities_export == "gr_renderer_pygfx_capabilities_json"
+
+
 def test_tools_retargeting_package_spec_names_current_contract() -> None:
     assert TOOLS_RETARGETING_PACKAGE.name == "GhostRigger.Tools.Retargeting"
     assert TOOLS_RETARGETING_PACKAGE.dll_name == "GhostRigger.Tools.Retargeting.dll"
@@ -483,6 +549,58 @@ def test_renderer_d3d12_status_reports_guarded_metadata_capabilities(
         renderer_d3d12_guarded_metadata_capabilities(status)
         == RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES
     )
+
+
+def test_renderer_moderngl_status_reports_diagnostic_capabilities(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dll_path = tmp_path / "GhostRigger.Renderer.ModernGL.dll"
+    dll_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        package_registry,
+        "_load_library",
+        lambda path: _FakeRendererModernGLDll(),
+    )
+
+    status = query_renderer_moderngl_status([tmp_path])
+
+    assert status.available is True
+    assert status.version == "0.1.0"
+    assert status.capabilities is not None
+    assert status.capabilities["renderer_backend"] is True
+    assert status.capabilities["backend"] == "moderngl"
+    assert status.capabilities["python_adapter_required"] is True
+    assert status.capabilities["native_device_owner"] is False
+    assert status.capabilities["draw_submission_enabled"] is False
+
+
+def test_renderer_pygfx_status_reports_diagnostic_capabilities(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dll_path = tmp_path / "GhostRigger.Renderer.PyGFX.dll"
+    dll_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        package_registry,
+        "_load_library",
+        lambda path: _FakeRendererPyGFXDll(),
+    )
+
+    status = query_renderer_pygfx_status([tmp_path])
+
+    assert status.available is True
+    assert status.version == "0.1.0"
+    assert status.capabilities is not None
+    assert status.capabilities["renderer_backend"] is True
+    assert status.capabilities["backend"] == "pygfx"
+    assert status.capabilities["python_adapter_required"] is True
+    assert status.capabilities["native_device_owner"] is False
+    assert status.capabilities["draw_submission_enabled"] is False
 
 
 def test_tools_retargeting_status_reports_diagnostic_capabilities(

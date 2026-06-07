@@ -595,6 +595,136 @@ def test_renderer_d3d12_project_uses_phase_one_naming_and_release_hygiene() -> N
     assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
 
 
+def test_renderer_moderngl_project_uses_phase_one_naming_and_release_hygiene() -> None:
+    project_path = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.ModernGL"
+        / "GhostRigger.Renderer.ModernGL.vcxproj"
+    )
+    tree = ET.parse(project_path)
+    ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
+
+    target_names = [node.text for node in tree.findall(".//msb:TargetName", ns)]
+    project_refs = [node.attrib["Include"] for node in tree.findall(".//msb:ProjectReference", ns)]
+    release_debug_info = tree.findall(
+        ".//msb:ItemDefinitionGroup[@Condition=\"'$(Configuration)'=='Release'\""
+        "]/msb:Link/msb:GenerateDebugInformation",
+        ns,
+    )
+    post_build_commands = [
+        node.text or ""
+        for node in tree.findall(
+            ".//msb:ItemDefinitionGroup[@Condition=\"'$(Configuration)'=='Release'\""
+            "]/msb:PostBuildEvent/msb:Command",
+            ns,
+        )
+    ]
+
+    assert target_names == ["GhostRigger.Renderer.ModernGL"]
+    assert any("GhostRigger.Renderer.Contracts.vcxproj" in ref for ref in project_refs)
+    assert [node.text for node in release_debug_info] == ["false"]
+    assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
+    assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
+
+
+def test_renderer_pygfx_project_uses_phase_one_naming_and_release_hygiene() -> None:
+    project_path = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.PyGFX"
+        / "GhostRigger.Renderer.PyGFX.vcxproj"
+    )
+    tree = ET.parse(project_path)
+    ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
+
+    target_names = [node.text for node in tree.findall(".//msb:TargetName", ns)]
+    project_refs = [node.attrib["Include"] for node in tree.findall(".//msb:ProjectReference", ns)]
+    release_debug_info = tree.findall(
+        ".//msb:ItemDefinitionGroup[@Condition=\"'$(Configuration)'=='Release'\""
+        "]/msb:Link/msb:GenerateDebugInformation",
+        ns,
+    )
+    post_build_commands = [
+        node.text or ""
+        for node in tree.findall(
+            ".//msb:ItemDefinitionGroup[@Condition=\"'$(Configuration)'=='Release'\""
+            "]/msb:PostBuildEvent/msb:Command",
+            ns,
+        )
+    ]
+
+    assert target_names == ["GhostRigger.Renderer.PyGFX"]
+    assert any("GhostRigger.Renderer.Contracts.vcxproj" in ref for ref in project_refs)
+    assert [node.text for node in release_debug_info] == ["false"]
+    assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
+    assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
+
+
+def test_renderer_moderngl_exports_diagnostic_bridge_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.ModernGL"
+        / "GhostRiggerRendererModernGL.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.ModernGL"
+        / "GhostRiggerRendererModernGL.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.ModernGL.DEBUG"
+        / "GhostRiggerRendererModernGLDEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_moderngl_version" in header
+    assert "gr_renderer_moderngl_capabilities_json" in header
+    assert "gr_renderer_moderngl_backend_info_json" in header
+    assert "gr_renderer_moderngl_adapter_bridge_json" in header
+    assert '"renderer_backend":true' in implementation
+    assert '"backend":"moderngl"' in implementation
+    assert '"python_adapter_required":true' in implementation
+    assert '"native_device_owner":false' in implementation
+    assert '"fallback_backend":"python_moderngl"' in implementation
+    assert "gr_renderer_moderngl_adapter_bridge_json()" in validator
+
+
+def test_renderer_pygfx_exports_diagnostic_bridge_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.PyGFX"
+        / "GhostRiggerRendererPyGFX.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.PyGFX"
+        / "GhostRiggerRendererPyGFX.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.PyGFX.DEBUG"
+        / "GhostRiggerRendererPyGFXDEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_pygfx_version" in header
+    assert "gr_renderer_pygfx_capabilities_json" in header
+    assert "gr_renderer_pygfx_backend_info_json" in header
+    assert "gr_renderer_pygfx_adapter_bridge_json" in header
+    assert '"renderer_backend":true' in implementation
+    assert '"backend":"pygfx"' in implementation
+    assert '"python_adapter_required":true' in implementation
+    assert '"native_device_owner":false' in implementation
+    assert '"fallback_backend":"python_pygfx"' in implementation
+    assert "gr_renderer_pygfx_adapter_bridge_json()" in validator
+
+
 def test_renderer_d3d12_exports_descriptor_allocator_readiness_boundary() -> None:
     header = (
         ROOT
@@ -1630,6 +1760,8 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{672F0576-76BB-4A46-AB34-2AEE67CC9CBB}",
         "{3309ACB6-2BE0-4C54-BA13-412310A65888}",
         "{6BAA4B32-55DD-4A3B-8440-C15A47B83423}",
+        "{157E648D-1365-4B81-BAB9-F32391E34E6E}",
+        "{AB4B452F-7BB0-443F-B57E-1887724EAC4E}",
         "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}",
         "{8225E261-C091-40A6-8386-D68B6A43FC02}",
         "{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}",

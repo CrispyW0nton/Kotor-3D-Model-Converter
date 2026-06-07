@@ -248,6 +248,18 @@ Current completed foundation:
   without Python or the GUI.
 - `GhostRigger.Renderer.Null.DEBUG.exe` validates the diagnostic renderer
   backend ABI without Python or the GUI.
+- `GhostRigger.Renderer.ModernGL.dll` exists as the Phase 1 renderer package
+  boundary for the existing Python ModernGL adapter. It reports renderer package
+  capabilities, backend metadata, and adapter-bridge fallback metadata while
+  keeping ModernGL context/device ownership in Python.
+- `GhostRigger.Renderer.ModernGL.DEBUG.exe` validates the ModernGL renderer
+  package ABI without Python or the GUI.
+- `GhostRigger.Renderer.PyGFX.dll` exists as the Phase 1 renderer package
+  boundary for the existing Python PyGFX/WGPU adapter. It reports renderer
+  package capabilities, backend metadata, and adapter-bridge fallback metadata
+  while keeping PyGFX/WGPU device ownership in Python.
+- `GhostRigger.Renderer.PyGFX.DEBUG.exe` validates the PyGFX renderer package
+  ABI without Python or the GUI.
 - `GhostRigger.Renderer.D3D12.DEBUG.exe` validates the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
   queue/swap-chain readiness export, diagnostic context create/destroy/export,
@@ -281,7 +293,8 @@ Current completed foundation:
   `GhostRigger.Runtime.Shared.Descriptors.dll`, and
   `GhostRigger.Runtime.Shared.Resources.dll`, and
   `GhostRigger.Renderer.Contracts.dll`, and `GhostRigger.Renderer.Null.dll`,
-  and `GhostRigger.Renderer.D3D12.dll` availability and capabilities from
+  `GhostRigger.Renderer.ModernGL.dll`, `GhostRigger.Renderer.PyGFX.dll`, and
+  `GhostRigger.Renderer.D3D12.dll` availability and capabilities from
   Python without starting the GUI. The D3D12 registry entry exposes the complete
   guarded Phase 1 metadata capability set advertised by the native DLL.
 - `GhostRigger.Tools.Retargeting.dll` exists as the first native toolbox package

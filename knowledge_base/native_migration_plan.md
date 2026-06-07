@@ -64,6 +64,18 @@ a launcher and native workspace first, not a rewrite of the application.
   not own GPU devices or draw submission.
 - `native/GhostRigger.Renderer.Null.DEBUG/` verifies the diagnostic renderer
   backend ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.ModernGL/` owns the Phase 1 renderer package
+  boundary for the existing Python ModernGL adapter. It reports package
+  capabilities, backend metadata, and adapter-bridge fallback metadata while
+  keeping ModernGL context/device ownership in Python.
+- `native/GhostRigger.Renderer.ModernGL.DEBUG/` verifies the ModernGL renderer
+  package ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.PyGFX/` owns the Phase 1 renderer package
+  boundary for the existing Python PyGFX/WGPU adapter. It reports package
+  capabilities, backend metadata, and adapter-bridge fallback metadata while
+  keeping PyGFX/WGPU device ownership in Python.
+- `native/GhostRigger.Renderer.PyGFX.DEBUG/` verifies the PyGFX renderer
+  package ABI from Visual Studio without requiring Python.
 - `native/GhostRigger.Renderer.D3D12/` owns the first hardware renderer backend
   package boundary behind the renderer contract boundary. It can probe DXGI
   adapters, probe D3D12 feature-level 12_0 device-readiness without retaining a

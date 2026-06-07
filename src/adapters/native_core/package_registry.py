@@ -90,6 +90,22 @@ RENDERER_D3D12_PACKAGE = NativePackageSpec(
     capabilities_export="gr_renderer_d3d12_capabilities_json",
 )
 
+RENDERER_MODERNGL_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Renderer.ModernGL",
+    dll_name="GhostRigger.Renderer.ModernGL.dll",
+    env_var="GHOSTRIGGER_RENDERER_MODERNGL",
+    version_export="gr_renderer_moderngl_version",
+    capabilities_export="gr_renderer_moderngl_capabilities_json",
+)
+
+RENDERER_PYGFX_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Renderer.PyGFX",
+    dll_name="GhostRigger.Renderer.PyGFX.dll",
+    env_var="GHOSTRIGGER_RENDERER_PYGFX",
+    version_export="gr_renderer_pygfx_version",
+    capabilities_export="gr_renderer_pygfx_capabilities_json",
+)
+
 TOOLS_RETARGETING_PACKAGE = NativePackageSpec(
     name="GhostRigger.Tools.Retargeting",
     dll_name="GhostRigger.Tools.Retargeting.dll",
@@ -298,6 +314,18 @@ def query_renderer_d3d12_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(RENDERER_D3D12_PACKAGE, search_paths)
+
+
+def query_renderer_moderngl_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(RENDERER_MODERNGL_PACKAGE, search_paths)
+
+
+def query_renderer_pygfx_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(RENDERER_PYGFX_PACKAGE, search_paths)
 
 
 def query_tools_retargeting_status(

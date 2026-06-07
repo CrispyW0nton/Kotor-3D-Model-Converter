@@ -119,6 +119,12 @@ is diagnostic-only, depends on `GhostRigger.Renderer.Contracts`, and proves the
 backend DLL/DEBUG-validator pattern before a hardware renderer such as
 `GhostRigger.Renderer.D3D12` owns a real device.
 
+`GhostRigger.Renderer.ModernGL` and `GhostRigger.Renderer.PyGFX` are Phase 1
+renderer package boundaries for the existing Python renderer adapters. They are
+diagnostic-only: they report package capabilities, backend metadata, and
+adapter-bridge fallback metadata while leaving ModernGL/PyGFX device and
+surface ownership in Python until later parity gates.
+
 `GhostRigger.Renderer.D3D12` is the first hardware renderer backend package
 boundary. In Phase 1 it is diagnostic-only: it reports D3D12 package
 capabilities, backend metadata, device requirements, DXGI adapter-probe output,
@@ -289,6 +295,19 @@ build\vs\x64\Debug\GhostRigger.Renderer.Null.DEBUG.exe
 
 Python can query the diagnostic renderer backend package through
 `src.adapters.native_core.package_registry.query_renderer_null_status()`.
+
+Build and run `GhostRigger.Renderer.ModernGL.DEBUG` and
+`GhostRigger.Renderer.PyGFX.DEBUG` to verify the Python-adapter renderer package
+ABI boundaries without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Renderer.ModernGL.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Renderer.PyGFX.DEBUG.exe
+```
+
+Python can query those renderer packages through
+`src.adapters.native_core.package_registry.query_renderer_moderngl_status()` and
+`src.adapters.native_core.package_registry.query_renderer_pygfx_status()`.
 
 Build and run `GhostRigger.Renderer.D3D12.DEBUG` to verify the D3D12 renderer
 package ABI, DXGI adapter-probe export, D3D12 device-readiness export,
