@@ -258,6 +258,8 @@ exports/retargets/day4_mcp_smoke/
 !/tests/test_retarget_workbench_readiness.py
 !/tests/test_secret_hygiene.py
 !/tests/test_retarget_workbench_ui_placement.py
+!/tests/test_native_core_package_registry.py
+!/tests/test_native_project_templates.py
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py
@@ -279,4 +281,7 @@ knowledge_base/test_artifacts/*.zip
 *.user
 /tests
 /tests
+!/tests/
+!/tests/test_native_core_package_registry.py
+!/tests/test_native_project_templates.py
 /knowledge_base/books

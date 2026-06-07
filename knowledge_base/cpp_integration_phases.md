@@ -183,6 +183,9 @@ Current completed foundation:
 - `GhostRigger.Native.NativeCore.Diagnostics.dll` exists as the first shared
   native core extension package for renderer/toolbox-neutral diagnostic record
   schema metadata and simple record formatting.
+- `GhostRigger.Native.NativeCore.Math.dll` exists as the shared native core
+  math package for renderer/toolbox-neutral bounds, center, and matrix
+  point-transform helpers.
 - `GhostRigger.Runtime.dll` exists as the first C ABI bridge boundary.
 - `GhostRigger.Runtime.Shared.Contracts.dll` exists as the first `GhostRigger.Runtime.Shared.*`
   package for renderer-neutral contract metadata shared by future runtime and
@@ -191,6 +194,8 @@ Current completed foundation:
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
   native diagnostics ABI without Python or the GUI.
+- `GhostRigger.Native.NativeCore.Math.DEBUG.exe` validates the shared native
+  math ABI without Python or the GUI.
 - `GhostRigger.Runtime.Shared.Contracts.DEBUG.exe` validates the shared runtime contract ABI
   without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
@@ -199,6 +204,7 @@ Current completed foundation:
 - `src.adapters.native_core.package_registry` can detect
   `GhostRigger.Native.NativeCore.dll`,
   `GhostRigger.Native.NativeCore.Diagnostics.dll`, and
+  `GhostRigger.Native.NativeCore.Math.dll`, and
   `GhostRigger.Runtime.Shared.Contracts.dll` availability and capabilities from
   Python without starting the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
@@ -380,9 +386,10 @@ Before making any native system authoritative, confirm:
    it.
 3. Define the first renderer package boundary before adding real D3D12/WGPU
    draw submission.
-4. Move reusable handle code into `GhostRigger.Native.NativeCore` and reusable
-   diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`
-   when another package needs it.
+4. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
+   diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
+   and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
+   when another package needs them.
 5. Extend the Python-side native package registry entries as each native package
    gains version/capability exports.
 6. Document the first concrete toolbox DLL candidate before implementing it,

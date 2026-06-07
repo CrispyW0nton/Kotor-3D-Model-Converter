@@ -49,6 +49,11 @@ schema and lightweight record formatting helper that future native runtime,
 renderer, and toolbox DLLs can share instead of inventing local diagnostic
 payload shapes.
 
+`GhostRigger.Native.NativeCore.Math` is the shared native core math package for
+renderer/toolbox-neutral bounds, center, and matrix point-transform helpers.
+Future renderer, picking, gizmo, and resource-residency packages should depend
+on it instead of duplicating small math routines in local DLLs.
+
 The anchor C++ projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore`, and
 `GhostRigger.Runtime`. New shared core systems should be named
 `GhostRigger.Native.NativeCore.{System}`, while shared runtime contracts should be named
@@ -149,3 +154,13 @@ build\vs\x64\Debug\GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe
 
 Python can query the diagnostics package through
 `src.adapters.native_core.package_registry.query_native_core_diagnostics_status()`.
+
+Build and run `GhostRigger.Native.NativeCore.Math.DEBUG` to verify the shared
+math ABI without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Native.NativeCore.Math.DEBUG.exe
+```
+
+Python can query the math package through
+`src.adapters.native_core.package_registry.query_native_core_math_status()`.
