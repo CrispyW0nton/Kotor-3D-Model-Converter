@@ -1220,6 +1220,51 @@ def test_renderer_d3d12_exports_guarded_draw_command_recording_metadata_boundary
     assert "gr_renderer_d3d12_guarded_draw_command_recording_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_guarded_draw_submission_readiness_metadata_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_guarded_draw_submission_readiness_metadata_json" in header
+    assert "renderer_d3d12_guarded_draw_submission_readiness_metadata.v1" in implementation
+    assert '"draw_command_recording_ready":false' in implementation
+    assert '"draw_command_list_closed":false' in implementation
+    assert '"draw_submission_ready":false' in implementation
+    assert '"draw_submission_attempted":false' in implementation
+    assert '"command_lists_submitted_for_draws":0' in implementation
+    assert '"draw_fence_created":false' in implementation
+    assert '"draw_fence_signaled":false' in implementation
+    assert '"draw_fence_completed":false' in implementation
+    assert '"draw_fence_waited":false' in implementation
+    assert '"gpu_timeline_value":0' in implementation
+    assert '"cpu_wait_milliseconds":0' in implementation
+    assert '"submitted_draw_call_count":0' in implementation
+    assert '"submitted_triangle_count":0' in implementation
+    assert '"submitted_instance_count":0' in implementation
+    assert '"submitted_resource_barrier_count":0' in implementation
+    assert '"present_after_draws_ready":false' in implementation
+    assert '"present_after_draws_called":false' in implementation
+    assert '"present_after_draws_succeeded":false' in implementation
+    assert '"frame_accounting_after_draws_ready":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "gr_renderer_d3d12_guarded_draw_submission_readiness_metadata_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

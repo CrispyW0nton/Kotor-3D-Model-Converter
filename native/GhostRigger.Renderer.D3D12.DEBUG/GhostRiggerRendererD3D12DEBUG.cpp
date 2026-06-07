@@ -966,6 +966,46 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 172;
     }
+    const char* draw_submission_json =
+        gr_renderer_d3d12_guarded_draw_submission_readiness_metadata_json(context);
+    if (std::strstr(
+            draw_submission_json,
+            R"("schema":"renderer_d3d12_guarded_draw_submission_readiness_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded draw-submission metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 173;
+    }
+    if (std::strstr(draw_submission_json, R"("draw_submission_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 reported draw submission ready" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 174;
+    }
+    if (std::strstr(draw_submission_json, R"("draw_submission_attempted":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 attempted draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 175;
+    }
+    if (std::strstr(draw_submission_json, R"("command_lists_submitted_for_draws":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 submitted draw command lists" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 176;
+    }
+    if (std::strstr(draw_submission_json, R"("submitted_draw_call_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 submitted draw calls" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 177;
+    }
+    if (std::strstr(draw_submission_json, R"("present_after_draws_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 presented after draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 178;
+    }
+    if (std::strstr(draw_submission_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 enabled guarded draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 179;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
