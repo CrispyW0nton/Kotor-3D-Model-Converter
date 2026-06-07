@@ -815,6 +815,40 @@ def test_renderer_d3d12_exports_guarded_present_call_boundary() -> None:
     assert "gr_renderer_d3d12_guarded_present_call_diagnostics_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_post_present_frame_accounting_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_post_present_frame_accounting_diagnostics_json" in header
+    assert "renderer_d3d12_post_present_frame_accounting_diagnostics.v1" in implementation
+    assert '"frame_presented":false' in implementation
+    assert '"frame_index":0' in implementation
+    assert '"presented_frame_count":0' in implementation
+    assert '"cpu_submit_ms":0.0' in implementation
+    assert '"gpu_frame_ms":0.0' in implementation
+    assert '"draw_calls_recorded":0' in implementation
+    assert '"triangles_submitted":0' in implementation
+    assert '"resource_uploads":0' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "gr_renderer_d3d12_post_present_frame_accounting_diagnostics_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

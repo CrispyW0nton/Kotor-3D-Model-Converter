@@ -81,11 +81,12 @@ a launcher and native workspace first, not a rewrite of the application.
   handle, run guarded back-buffer acquisition and RTV creation diagnostics, run
   guarded render-target barrier/clear recording diagnostics, report guarded
   clear-pass command execution/fence diagnostics, report post-clear
-  present-readiness diagnostics, run guarded present-call diagnostics, and
-  report failure-diagnostic metadata, but it is diagnostic-only in Phase 1 and
-  does not record draws or enable real draw submission yet. `Present` is only
-  reachable through the guarded present-call diagnostic after prior swap-chain,
-  back-buffer, RTV, clear-pass, and fence readiness gates pass.
+  present-readiness diagnostics, run guarded present-call diagnostics, report
+  post-present frame/accounting diagnostics, and report failure-diagnostic
+  metadata, but it is diagnostic-only in Phase 1 and does not record draws or
+  enable real draw submission yet. `Present` is only reachable through the
+  guarded present-call diagnostic after prior swap-chain, back-buffer, RTV,
+  clear-pass, and fence readiness gates pass.
 - `native/GhostRigger.Renderer.D3D12.DEBUG/` verifies the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
   queue/swap-chain readiness export, diagnostic context create/destroy/export,
@@ -99,8 +100,8 @@ a launcher and native workspace first, not a rewrite of the application.
   diagnostics export, guarded barrier/clear recording diagnostics export,
   guarded clear-pass execution/fence diagnostics export, post-clear
   present-readiness diagnostics export, guarded present-call diagnostics export,
-  failure-diagnostic export, and device-requirement metadata from Visual Studio
-  without requiring Python.
+  post-present frame/accounting diagnostics export, failure-diagnostic export,
+  and device-requirement metadata from Visual Studio without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package

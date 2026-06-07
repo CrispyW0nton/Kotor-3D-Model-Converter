@@ -98,6 +98,8 @@ struct DiagnosticContext {
     DWORD guarded_clear_pass_wait_result = WAIT_FAILED;
     UINT64 no_draw_fence_value = 1;
     UINT64 guarded_clear_pass_fence_value = 1;
+    UINT64 diagnostic_frame_index = 0;
+    UINT64 diagnostic_presented_frame_count = 0;
     bool device_ready = false;
     bool command_queue_ready = false;
     bool descriptor_heaps_ready = false;
@@ -136,6 +138,7 @@ struct DiagnosticContext {
     bool guarded_present_ready = false;
     bool guarded_present_called = false;
     bool guarded_present_succeeded = false;
+    bool post_present_frame_accounting_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1158,6 +1161,42 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_present_call_diagnos
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_post_present_frame_accounting_diagnostics_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_post_present_frame_accounting_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"present_called":false,"present_succeeded":false,"frame_presented":false,"frame_index":0,"presented_frame_count":0,"draw_calls_recorded":0,"draw_submission_enabled":false})";
+    }
+
+    const bool frame_presented = target->guarded_present_called && target->guarded_present_succeeded;
+    target->post_present_frame_accounting_ready = true;
+    target->diagnostic_presented_frame_count = frame_presented ? 1 : 0;
+    target->diagnostic_frame_index = frame_presented ? target->diagnostic_presented_frame_count : 0;
+
+    payload =
+        R"({"schema":"renderer_d3d12_post_present_frame_accounting_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"present_ready":)";
+    payload += target->guarded_present_ready ? "true" : "false";
+    payload += R"(,"present_called":)";
+    payload += target->guarded_present_called ? "true" : "false";
+    payload += R"(,"present_succeeded":)";
+    payload += target->guarded_present_succeeded ? "true" : "false";
+    payload += R"(,"frame_presented":)";
+    payload += frame_presented ? "true" : "false";
+    payload += R"(,"frame_index":)";
+    payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
+    payload += R"(,"presented_frame_count":)";
+    payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_presented_frame_count));
+    payload += R"(,"cpu_submit_ms":0.0,"gpu_frame_ms":0.0,"draw_calls_recorded":0,)"
+               R"("triangles_submitted":0,"resource_uploads":0,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["present_not_called","present_failed",)"
+               R"("draw_submission_disabled"],"phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1170,7 +1209,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("no_draw_execution_fence","present_readiness_metadata",)"
         R"("guarded_swap_chain_creation","guarded_back_buffer_rtv",)"
         R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence",)"
-        R"("post_clear_present_readiness","guarded_present_call"],)"
+        R"("post_clear_present_readiness","guarded_present_call",)"
+        R"("post_present_frame_accounting"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1363,6 +1403,12 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_present_called ? "true" : "false";
     payload += R"(,"guarded_present_succeeded":)";
     payload += target->guarded_present_succeeded ? "true" : "false";
+    payload += R"(,"post_present_frame_accounting_ready":)";
+    payload += target->post_present_frame_accounting_ready ? "true" : "false";
+    payload += R"(,"diagnostic_frame_index":)";
+    payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
+    payload += R"(,"diagnostic_presented_frame_count":)";
+    payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_presented_frame_count));
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";

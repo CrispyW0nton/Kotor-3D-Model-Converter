@@ -219,11 +219,12 @@ Current completed foundation:
   handle, run guarded back-buffer acquisition and RTV creation diagnostics, run
   guarded render-target barrier/clear recording diagnostics, report guarded
   clear-pass command execution/fence diagnostics, report post-clear
-  present-readiness diagnostics, run guarded present-call diagnostics, and
-  report failure-diagnostic schema metadata, but it is still diagnostic-only in
-  Phase 1 and does not record draws or enable real draw submission. `Present`
-  is only reachable through the guarded present-call diagnostic after prior
-  swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
+  present-readiness diagnostics, run guarded present-call diagnostics, report
+  post-present frame/accounting diagnostics, and report failure-diagnostic
+  schema metadata, but it is still diagnostic-only in Phase 1 and does not
+  record draws or enable real draw submission. `Present` is only reachable
+  through the guarded present-call diagnostic after prior swap-chain,
+  back-buffer, RTV, clear-pass, and fence readiness gates pass.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -252,8 +253,9 @@ Current completed foundation:
   export, guarded back-buffer/RTV diagnostics export, guarded barrier/clear
   recording diagnostics export, guarded clear-pass execution/fence diagnostics
   export, post-clear present-readiness diagnostics export, guarded present-call
-  diagnostics export, failure-diagnostic export, and device-requirement metadata
-  without Python or the GUI.
+  diagnostics export, post-present frame/accounting diagnostics export,
+  failure-diagnostic export, and device-requirement metadata without Python or
+  the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -462,9 +464,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from guarded present-call diagnostics
-   into post-present frame/accounting diagnostics before enabling real draw
-   submission.
+5. Extend `GhostRigger.Renderer.D3D12` from post-present frame/accounting
+   diagnostics into native draw-list readiness metadata before enabling real
+   draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
