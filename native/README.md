@@ -64,11 +64,16 @@ DEBUG executable expectations stay consistent.
 Native toolbox migrations from Python must be named
 `GhostRigger.Tools.{Toolname}` and should stay focused on one product tool, such
 as `GhostRigger.Tools.Retargeting`, `GhostRigger.Tools.Export`, or
-`GhostRigger.Tools.CharacterBuilder`. Native window projects must be named
-`GhostRigger.Windows.{WindowName}`, such as `GhostRigger.Windows.MainWindow`.
+`GhostRigger.Tools.CharacterBuilder`. The Phase 1 native main-window package is
+`GhostRigger.Windows.MainWindow`.
 Reusable logic shared by multiple tools, windows, renderers, or runtime packages
 belongs in `GhostRigger.Native.NativeCore.*` or `GhostRigger.Runtime.Shared.*`
 before those product-surface packages consume it.
+
+The first toolbox and window candidates are recorded in
+`knowledge_base/native_toolbox_window_migration_candidates.md`; update that file
+before implementing a `GhostRigger.Tools.*` or `GhostRigger.Windows.MainWindow`
+package.
 
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and

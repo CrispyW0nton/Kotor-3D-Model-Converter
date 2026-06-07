@@ -45,7 +45,7 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     assert "GhostRigger.Native.NativeCore.{System}" in readme
     assert "GhostRigger.Runtime.Shared.{System}" in readme
     assert "GhostRigger.Tools.{Toolname}" in readme
-    assert "GhostRigger.Windows.{WindowName}" in readme
+    assert "GhostRigger.Windows.MainWindow" in readme
     assert "GhostRigger.Runtime.Shared.Descriptors" in (ROOT / "native" / "README.md").read_text(
         encoding="utf-8"
     )
@@ -70,8 +70,23 @@ def test_native_docs_define_toolbox_and_window_project_naming() -> None:
 
     assert "GhostRigger.Tools.{Toolname}" in docs
     assert "GhostRigger.Tools.Retargeting" in docs
-    assert "GhostRigger.Windows.{WindowName}" in docs
     assert "GhostRigger.Windows.MainWindow" in docs
+
+
+def test_native_toolbox_window_migration_candidates_define_first_phase_one_surfaces() -> None:
+    candidates = (
+        ROOT / "knowledge_base" / "native_toolbox_window_migration_candidates.md"
+    ).read_text(encoding="utf-8")
+
+    assert "GhostRigger.Tools.Retargeting" in candidates
+    assert "GhostRigger.Tools.Export" in candidates
+    assert "GhostRigger.Tools.CharacterBuilder" in candidates
+    assert "GhostRigger.Windows.MainWindow" in candidates
+    assert "Owner surface: Retarget Workbench" in candidates
+    assert "Owner surface: Export and validation workflow" in candidates
+    assert "Owner surface: Character Studio" in candidates
+    assert "Owner surface: Main window composition shell" in candidates
+    assert "Visible app check: required only when" in candidates
 
 
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:

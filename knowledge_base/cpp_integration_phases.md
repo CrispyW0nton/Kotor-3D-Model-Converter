@@ -235,8 +235,8 @@ Native project naming foundation:
   `GhostRigger.Tools.{Toolname}` naming, for example
   `GhostRigger.Tools.Retargeting`, `GhostRigger.Tools.Export`, or
   `GhostRigger.Tools.CharacterBuilder`.
-- Native window packages must use `GhostRigger.Windows.{WindowName}` naming, for
-  example `GhostRigger.Windows.MainWindow`.
+- The Phase 1 native main-window package must use
+  `GhostRigger.Windows.MainWindow` naming.
 - Concrete renderer packages should name the owner clearly while depending on
   `GhostRigger.Native.NativeCore`, `GhostRigger.Native.NativeCore.*`, or
   `GhostRigger.Runtime.Shared.*` packages instead of duplicating shared code.
@@ -246,7 +246,7 @@ Required remaining foundation work:
 - Continue adding separate Visual Studio projects for each durable native system
   instead of growing one monolithic runtime DLL.
 - Use `GhostRigger.Tools.{Toolname}` for C++ toolbox migrations and
-  `GhostRigger.Windows.{WindowName}` for native window packages.
+  `GhostRigger.Windows.MainWindow` for the Phase 1 native main-window package.
 - Add shared native projects for cross-toolbox contracts, handle management,
   descriptors, math, resource residency, diagnostics, and common runtime
   helpers.
@@ -421,3 +421,6 @@ Before making any native system authoritative, confirm:
 8. Document the first concrete toolbox DLL candidate before implementing it,
    including its `GhostRigger.Tools.{Toolname}` project name, owner, bridge
    surface, tests, and fallback path.
+9. Keep `knowledge_base/native_toolbox_window_migration_candidates.md` updated
+   before implementing `GhostRigger.Tools.*` or `GhostRigger.Windows.MainWindow`
+   packages.

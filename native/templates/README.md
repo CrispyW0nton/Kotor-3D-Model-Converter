@@ -20,10 +20,10 @@ runtime contracts consumed by multiple renderer/toolbox packages.
 Toolbox and window migrations must use product-surface namespaces rather than
 being folded into the host or runtime projects. Native toolbox packages use
 `GhostRigger.Tools.{Toolname}`, for example `GhostRigger.Tools.Retargeting` or
-`GhostRigger.Tools.Export`. Native window packages use
-`GhostRigger.Windows.{WindowName}`, for example `GhostRigger.Windows.MainWindow`.
-Shared logic that more than one tool or window consumes still belongs in
-`GhostRigger.Native.NativeCore.*` or `GhostRigger.Runtime.Shared.*` first.
+`GhostRigger.Tools.Export`. The Phase 1 native main-window package is
+`GhostRigger.Windows.MainWindow`. Shared logic that more than one tool or
+window consumes still belongs in `GhostRigger.Native.NativeCore.*` or
+`GhostRigger.Runtime.Shared.*` first.
 
 Do not copy an existing feature project and then strip it down. Start from the
 matching template and replace every `{{TOKEN}}`.

@@ -71,7 +71,10 @@ Native project naming:
 - Shared core extensions: `GhostRigger.Native.NativeCore.{System}`.
 - Shared runtime contracts: `GhostRigger.Runtime.Shared.{System}`.
 - Toolbox migrations from Python: `GhostRigger.Tools.{Toolname}`.
-- Native window packages: `GhostRigger.Windows.{WindowName}`.
+- Phase 1 native main-window package: `GhostRigger.Windows.MainWindow`.
+
+The first concrete toolbox and window migration candidates are documented in
+`knowledge_base/native_toolbox_window_migration_candidates.md`.
 
 ## Migration Principles
 
