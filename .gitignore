@@ -279,3 +279,4 @@ knowledge_base/test_artifacts/*.zip
 *.user
 /tests
 /tests
+/knowledge_base/books
