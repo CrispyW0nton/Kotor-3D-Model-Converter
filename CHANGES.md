@@ -11,6 +11,12 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-07
 
+- Phase 1.5 native project folder layout: normalized native Visual Studio projects so public headers live under `Public/`, implementation sources live under `Private/`, and embedded Python payload copies live under `Python/` while leaving the original Python files in place. Updated Visual Studio project paths, debug validator include paths, native templates, docs, and layout tests for the new folder contract. No roadmap task ID applies.
+  Owner: LordVaderCW.
+  Intersects: upstream/qt-ghostrigger Phase 1.5 native project structure, Visual Studio solution packaging, embedded Python payload packaging, debug validator builds, renderer contract includes, and future per-function C++ migration stubs.
+  Affected areas: `native/GhostRigger*/`, `native/templates/`, `tests/test_native_python_payloads.py`, `tests/test_native_project_templates.py`, `knowledge_base/cpp_integration_phases.md`, `knowledge_base/native_migration_plan.md`, `native/README.md`, `CHANGES.md`.
+  Verification: `git diff --check` passed. `python -m py_compile tests/test_native_python_payloads.py tests/test_native_project_templates.py` passed. `python -m pytest tests/test_native_python_payloads.py tests/test_native_project_templates.py tests/test_native_core_package_registry.py -q` passed (`115 passed`). `Release|x64` and `Debug|x64` Visual Studio builds passed. The Release output scan confirmed only `.exe`, `.dll`, and `.lib` files with no DEBUG executables and `GhostRigger.exe` present. `GhostRigger.exe --native-embed-init-debug` exited with code `0`.
+
 - Native startup-console audit single-line pass: removed the secondary DLL detail row from the pre-Python native dependency audit and changed each dependency entry to print as a single colored line containing only the dependency number, status, and full DLL file name. No roadmap task ID applies.
   Owner: LordVaderCW.
   Intersects: upstream/qt-ghostrigger native startup-console logging, Phase 1.5 payload DLL dependency audit, embedded Python startup visibility, and future C++/Python bridge diagnostics.

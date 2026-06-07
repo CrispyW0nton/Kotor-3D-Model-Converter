@@ -6,28 +6,28 @@
     {
       "resource_name": "PYTHON_PAYLOAD_0001",
       "source_path": "src\\adapters\\rendering\\null_renderer.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\null_renderer.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\null_renderer.py",
       "sha256": "da4dfcb4102196a21a1234d3ed6f8fb2fd7f70ad4c09da77fe82058f92b404e3",
       "byte_count": 5218
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0002",
       "source_path": "src\\gui\\rendering\\null_renderer.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\null_renderer.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\null_renderer.py",
       "sha256": "ea9bba0153cb34919f190040e56457cbe7dd92b8729a909d033e5f826778468a",
       "byte_count": 251
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0003",
       "source_path": "src\\core\\rendering\\renderer_capabilities.py",
-      "packaged_path": "python_payload\\src\\core\\rendering\\renderer_capabilities.py",
+      "packaged_path": "Python\\src\\core\\rendering\\renderer_capabilities.py",
       "sha256": "c6b53f08fb6bd4960ab1d1681da3703a273667b0cc146b376089842bbcfd8051",
       "byte_count": 10591
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0004",
       "source_path": "src\\core\\rendering\\renderer_interface.py",
-      "packaged_path": "python_payload\\src\\core\\rendering\\renderer_interface.py",
+      "packaged_path": "Python\\src\\core\\rendering\\renderer_interface.py",
       "sha256": "ffefc8924c1a278b83ace1916a5d67778162ef2d10f99a764e7765bf4f9509f7",
       "byte_count": 1727
     }

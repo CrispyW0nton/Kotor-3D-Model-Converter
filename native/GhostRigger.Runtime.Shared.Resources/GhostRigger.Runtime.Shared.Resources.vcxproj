@@ -32,17 +32,17 @@
     <TargetName>GhostRigger.Runtime.Shared.Resources</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;RUNTIME_SHARED_RESOURCES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;RUNTIME_SHARED_RESOURCES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;RUNTIME_SHARED_RESOURCES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;RUNTIME_SHARED_RESOURCES_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link>
     <PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerRuntimeSharedResources.cpp" /></ItemGroup>
-  <ItemGroup><ClInclude Include="GhostRiggerRuntimeSharedResources.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerRuntimeSharedResources.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Public\GhostRiggerRuntimeSharedResources.h" /></ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GhostRigger.Native.NativeCore\GhostRigger.Native.NativeCore.vcxproj">
       <Project>{f2d7b7d0-3d17-4d1d-a5b2-d7cb91fce001}</Project>
@@ -52,15 +52,15 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\core\resources\__init__.py" />
-    <None Include="python_payload\src\core\resources\game_resource_provider.py" />
-    <None Include="python_payload\src\resources\__init__.py" />
-    <None Include="python_payload\src\resources\game_detector.py" />
-    <None Include="python_payload\src\resources\game_library.py" />
-    <None Include="python_payload\src\core\assets\resource_manager.py" />
-    <None Include="python_payload\src\core\assets\override_layer.py" />
-    <None Include="python_payload\src\core\ports\resources.py" />
-    <None Include="python_payload\src\core\ports\textures.py" />
+    <None Include="Python\src\core\resources\__init__.py" />
+    <None Include="Python\src\core\resources\game_resource_provider.py" />
+    <None Include="Python\src\resources\__init__.py" />
+    <None Include="Python\src\resources\game_detector.py" />
+    <None Include="Python\src\resources\game_library.py" />
+    <None Include="Python\src\core\assets\resource_manager.py" />
+    <None Include="Python\src\core\assets\override_layer.py" />
+    <None Include="Python\src\core\ports\resources.py" />
+    <None Include="Python\src\core\ports\textures.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

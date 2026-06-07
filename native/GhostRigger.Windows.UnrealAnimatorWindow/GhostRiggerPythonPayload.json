@@ -8,7 +8,7 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/gui/windows/qt_unreal_animator.py",
-                      "packaged_path":  "python_payload/src/gui/windows/qt_unreal_animator.py",
+                      "packaged_path":  "Python/src/gui/windows/qt_unreal_animator.py",
                       "sha256":  "9a9a1fae520fcd69cdefaf95c50ef836ec8c22604d8c8e2ce4254a34137ce4ae"
                   }
               ]

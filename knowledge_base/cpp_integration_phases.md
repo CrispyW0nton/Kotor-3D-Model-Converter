@@ -385,7 +385,7 @@ Current completed foundation:
   embedded Python payload sweep. The payload map covers all 93 non-DEBUG native
   DLL projects and every `src/**/*.py` file at least once.
 - The Phase 1.5 payload copies live under
-  `native/<Project>/python_payload/src/...` and are built into native DLLs as
+  `native/<Project>/Python/src/...` and are built into native DLLs as
   `RCDATA` resources through per-project `GhostRiggerPythonPayload.rc` files,
   alongside per-project `GhostRiggerPythonPayload.json` manifests.
 - The manifest contains 1,270 packaged Python file references. Duplicate source

@@ -8,55 +8,55 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/measurement/__init__.py",
-                      "packaged_path":  "python_payload/src/measurement/__init__.py",
+                      "packaged_path":  "Python/src/measurement/__init__.py",
                       "sha256":  "d00e2b0e1fa55b6313d73c9bc29ae268f64606e9d20a57896c291d8ebc8126d8"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/measurement/angle_snap.py",
-                      "packaged_path":  "python_payload/src/measurement/angle_snap.py",
+                      "packaged_path":  "Python/src/measurement/angle_snap.py",
                       "sha256":  "5c770144d7c7b01e5960010d6f842c68851fed349aa6b47fa3a75cf8d7b5db6c"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/measurement/dimension_calculator.py",
-                      "packaged_path":  "python_payload/src/measurement/dimension_calculator.py",
+                      "packaged_path":  "Python/src/measurement/dimension_calculator.py",
                       "sha256":  "931423e5dec268576e5ee848ce1b673b6daf5438ef975131dd884205699b60cb"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/measurement/grid_measurement.py",
-                      "packaged_path":  "python_payload/src/measurement/grid_measurement.py",
+                      "packaged_path":  "Python/src/measurement/grid_measurement.py",
                       "sha256":  "598faf4fe776168f369c50ff168fc8f2766b27f4ef2f27ab1deccc2a98739db7"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0005",
                       "source_path":  "src/measurement/measurement_controller.py",
-                      "packaged_path":  "python_payload/src/measurement/measurement_controller.py",
+                      "packaged_path":  "Python/src/measurement/measurement_controller.py",
                       "sha256":  "9ffaab7cf09a9e789d0703de3cf2ec863a35d5a13f737a891aed23bf6fa1b292"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0006",
                       "source_path":  "src/measurement/measurement_formatter.py",
-                      "packaged_path":  "python_payload/src/measurement/measurement_formatter.py",
+                      "packaged_path":  "Python/src/measurement/measurement_formatter.py",
                       "sha256":  "20e4c04baf1efb66af1166f0e5d629fd6100b5a5599c16d2ada1f8965fb19942"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0007",
                       "source_path":  "src/measurement/percent_snap.py",
-                      "packaged_path":  "python_payload/src/measurement/percent_snap.py",
+                      "packaged_path":  "Python/src/measurement/percent_snap.py",
                       "sha256":  "08b2aeb560d69f87e0ebe748d696a704e8b646a688aab302f62007bd5a0c2dc0"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0008",
                       "source_path":  "src/measurement/unit_settings.py",
-                      "packaged_path":  "python_payload/src/measurement/unit_settings.py",
+                      "packaged_path":  "Python/src/measurement/unit_settings.py",
                       "sha256":  "816950b1a9fe0e80159b2e68140841b1f85cc3a2c4a4259ae595e45128c5f17e"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0009",
                       "source_path":  "src/measurement/unit_system.py",
-                      "packaged_path":  "python_payload/src/measurement/unit_system.py",
+                      "packaged_path":  "Python/src/measurement/unit_system.py",
                       "sha256":  "410af45b77d43694fef1d342b5963e3047eb14e84490d54a9723e7bca88049ea"
                   }
               ]

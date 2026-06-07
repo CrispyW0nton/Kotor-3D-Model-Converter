@@ -8,13 +8,13 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/adapters/qt_autorig/__init__.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_autorig/__init__.py",
+                      "packaged_path":  "Python/src/adapters/qt_autorig/__init__.py",
                       "sha256":  "b8d1eae1b3df3481beb5511e3f13043fc71d030680f5a3903a4b134687cd8dbe"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/adapters/qt_autorig/cloth_dialogs.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_autorig/cloth_dialogs.py",
+                      "packaged_path":  "Python/src/adapters/qt_autorig/cloth_dialogs.py",
                       "sha256":  "e8a2fae61815e76c2a24e8d669cd2f3e6a1bdf84feaf2d68a0e859bc341f90ec"
                   }
               ]

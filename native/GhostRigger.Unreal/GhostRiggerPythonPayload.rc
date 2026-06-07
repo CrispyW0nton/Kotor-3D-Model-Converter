@@ -1,5 +1,5 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "python_payload/src/unreal/__init__.py"
-PYTHON_PAYLOAD_0002 RCDATA "python_payload/src/unreal/animation_retargeting.py"
-PYTHON_PAYLOAD_0003 RCDATA "python_payload/src/unreal/quinn.py"
+PYTHON_PAYLOAD_0001 RCDATA "Python/src/unreal/__init__.py"
+PYTHON_PAYLOAD_0002 RCDATA "Python/src/unreal/animation_retargeting.py"
+PYTHON_PAYLOAD_0003 RCDATA "Python/src/unreal/quinn.py"

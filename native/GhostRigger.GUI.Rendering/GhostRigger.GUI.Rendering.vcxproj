@@ -9,66 +9,68 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" /><ImportGroup Label="ExtensionSettings" /><ImportGroup Label="Shared" />
   <PropertyGroup><OutDir>$(SolutionDir)build\vs\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\GhostRigger.GUI.Rendering\</IntDir><TargetName>GhostRigger.GUI.Rendering</TargetName></PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GUI_RENDERING_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_RENDERING_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GUI_RENDERING_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_RENDERING_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerGUIRendering.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerGUIRendering.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerGUIRendering.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGUIRendering.h" /></ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\gui\rendering\__init__.py" />
-    <None Include="python_payload\src\gui\rendering\accel.py" />
-    <None Include="python_payload\src\gui\rendering\direct3d_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\__init__.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\colors.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\dependencies.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\diagnostics.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\math_helpers.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\mixin_imports.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\rasterizer.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer_geometry.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer_meshes.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer_overlays.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer_render_loop.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer_setup.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\renderer_textures.py" />
-    <None Include="python_payload\src\gui\rendering\frame_core\texture_cache.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\__init__.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\benchmark.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\cli.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\debug_tables.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\diagnostics.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\math_helpers.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\renderer.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\resources.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\scene_helpers.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_core\shaders.py" />
-    <None Include="python_payload\src\gui\rendering\gpu_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\hardware_info.py" />
-    <None Include="python_payload\src\gui\rendering\mesh_render_data.py" />
-    <None Include="python_payload\src\gui\rendering\moderngl_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\null_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\picking.py" />
-    <None Include="python_payload\src\gui\rendering\pygfx_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\qt_accel.py" />
-    <None Include="python_payload\src\gui\rendering\qt_gpu_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_backend.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_capabilities.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_factory.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_interface.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_performance.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_profiler.py" />
-    <None Include="python_payload\src\gui\rendering\renderer_settings.py" />
-    <None Include="python_payload\src\gui\rendering\skeleton_render_data.py" />
-    <None Include="python_payload\src\gui\rendering\viewport_core.py" />
-    <None Include="python_payload\src\gui\rendering\viewport_display.py" />
-    <None Include="python_payload\src\gui\rendering\viewport_navigation.py" />
-    <None Include="python_payload\src\gui\rendering\wgpu_core\__init__.py" />
-    <None Include="python_payload\src\gui\rendering\wgpu_core\renderer.py" />
-    <None Include="python_payload\src\gui\rendering\wgpu_core\resources.py" />
-    <None Include="python_payload\src\gui\rendering\wgpu_core\shaders.py" />
-    <None Include="python_payload\src\gui\rendering\wgpu_core\shared.py" />
-    <None Include="python_payload\src\gui\rendering\wgpu_renderer.py" />
+    <None Include="Python\src\gui\rendering\__init__.py" />
+    <None Include="Python\src\gui\rendering\accel.py" />
+    <None Include="Python\src\gui\rendering\direct3d_renderer.py" />
+    <None Include="Python\src\gui\rendering\frame_core\__init__.py" />
+    <None Include="Python\src\gui\rendering\frame_core\colors.py" />
+    <None Include="Python\src\gui\rendering\frame_core\dependencies.py" />
+    <None Include="Python\src\gui\rendering\frame_core\diagnostics.py" />
+    <None Include="Python\src\gui\rendering\frame_core\math_helpers.py" />
+    <None Include="Python\src\gui\rendering\frame_core\mixin_imports.py" />
+    <None Include="Python\src\gui\rendering\frame_core\rasterizer.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer_geometry.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer_meshes.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer_overlays.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer_render_loop.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer_setup.py" />
+    <None Include="Python\src\gui\rendering\frame_core\renderer_textures.py" />
+    <None Include="Python\src\gui\rendering\frame_core\texture_cache.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\__init__.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\benchmark.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\cli.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\debug_tables.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\diagnostics.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\math_helpers.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\renderer.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\resources.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\scene_helpers.py" />
+    <None Include="Python\src\gui\rendering\gpu_core\shaders.py" />
+    <None Include="Python\src\gui\rendering\gpu_renderer.py" />
+    <None Include="Python\src\gui\rendering\hardware_info.py" />
+    <None Include="Python\src\gui\rendering\mesh_render_data.py" />
+    <None Include="Python\src\gui\rendering\moderngl_renderer.py" />
+    <None Include="Python\src\gui\rendering\null_renderer.py" />
+    <None Include="Python\src\gui\rendering\picking.py" />
+    <None Include="Python\src\gui\rendering\pygfx_renderer.py" />
+    <None Include="Python\src\gui\rendering\qt_accel.py" />
+    <None Include="Python\src\gui\rendering\qt_gpu_renderer.py" />
+    <None Include="Python\src\gui\rendering\renderer_backend.py" />
+    <None Include="Python\src\gui\rendering\renderer_capabilities.py" />
+    <None Include="Python\src\gui\rendering\renderer_factory.py" />
+    <None Include="Python\src\gui\rendering\renderer_interface.py" />
+    <None Include="Python\src\gui\rendering\renderer_performance.py" />
+    <None Include="Python\src\gui\rendering\renderer_profiler.py" />
+    <None Include="Python\src\gui\rendering\renderer_settings.py" />
+    <None Include="Python\src\gui\rendering\skeleton_render_data.py" />
+    <None Include="Python\src\gui\rendering\viewport_core.py" />
+    <None Include="Python\src\gui\rendering\viewport_display.py" />
+    <None Include="Python\src\gui\rendering\viewport_navigation.py" />
+    <None Include="Python\src\gui\rendering\wgpu_core\__init__.py" />
+    <None Include="Python\src\gui\rendering\wgpu_core\renderer.py" />
+    <None Include="Python\src\gui\rendering\wgpu_core\resources.py" />
+    <None Include="Python\src\gui\rendering\wgpu_core\shaders.py" />
+    <None Include="Python\src\gui\rendering\wgpu_core\shared.py" />
+    <None Include="Python\src\gui\rendering\wgpu_renderer.py" />
   </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

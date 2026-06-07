@@ -9,19 +9,21 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" /><ImportGroup Label="ExtensionSettings" /><ImportGroup Label="Shared" />
   <PropertyGroup><OutDir>$(SolutionDir)build\vs\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\GhostRigger.Game\</IntDir><TargetName>GhostRigger.Game</TargetName></PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GAME_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GAME_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GAME_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GAME_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerGame.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerGame.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerGame.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGame.h" /></ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\core\game\__init__.py" />
-    <None Include="python_payload\src\core\game\game_library_ext.py" />
-    <None Include="python_payload\src\core\game\import_normalisation.py" />
-    <None Include="python_payload\src\core\game\kotor_install.py" />
-    <None Include="python_payload\src\core\game\kotor_loader.py" />
-    <None Include="python_payload\src\core\game\pykotor_bridge.py" />
-    <None Include="python_payload\src\core\game\pykotor_mdl_io_fix.py" />
+    <None Include="Python\src\core\game\__init__.py" />
+    <None Include="Python\src\core\game\game_library_ext.py" />
+    <None Include="Python\src\core\game\import_normalisation.py" />
+    <None Include="Python\src\core\game\kotor_install.py" />
+    <None Include="Python\src\core\game\kotor_loader.py" />
+    <None Include="Python\src\core\game\pykotor_bridge.py" />
+    <None Include="Python\src\core\game\pykotor_mdl_io_fix.py" />
   </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

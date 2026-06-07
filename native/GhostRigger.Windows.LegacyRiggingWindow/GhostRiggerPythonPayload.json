@@ -8,7 +8,7 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/gui/windows/qt_character_builder_window.py",
-                      "packaged_path":  "python_payload/src/gui/windows/qt_character_builder_window.py",
+                      "packaged_path":  "Python/src/gui/windows/qt_character_builder_window.py",
                       "sha256":  "bcb2f35b502fc5866be9f389ba0361bff70a16ab24db2cf8696f10ba59f22d0a"
                   }
               ]

@@ -80,6 +80,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;NATIVE_CORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -95,6 +96,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;NATIVE_CORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -108,17 +110,17 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="GhostRigger.Native.NativeCore.cpp" />
+    <ClCompile Include="Private\GhostRigger.Native.NativeCore.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GhostRigger.Native.NativeCore.h" />
+    <ClInclude Include="Public\GhostRigger.Native.NativeCore.h" />
   </ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\adapters\__init__.py" />
-    <None Include="python_payload\src\adapters\native_core\__init__.py" />
-    <None Include="python_payload\src\adapters\native_core\package_registry.py" />
+    <None Include="Python\src\adapters\__init__.py" />
+    <None Include="Python\src\adapters\native_core\__init__.py" />
+    <None Include="Python\src\adapters\native_core\package_registry.py" />
   </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

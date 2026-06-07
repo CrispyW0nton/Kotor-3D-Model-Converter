@@ -1,6 +1,6 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "python_payload/src/gui/windows/qt_retarget_preview_controller.py"
-PYTHON_PAYLOAD_0002 RCDATA "python_payload/src/gui/windows/qt_retarget_window.py"
-PYTHON_PAYLOAD_0003 RCDATA "python_payload/src/gui/windows/qt_retarget_workbench_controller.py"
-PYTHON_PAYLOAD_0004 RCDATA "python_payload/src/gui/windows/qt_source_clip_preview_model.py"
+PYTHON_PAYLOAD_0001 RCDATA "Python/src/gui/windows/qt_retarget_preview_controller.py"
+PYTHON_PAYLOAD_0002 RCDATA "Python/src/gui/windows/qt_retarget_window.py"
+PYTHON_PAYLOAD_0003 RCDATA "Python/src/gui/windows/qt_retarget_workbench_controller.py"
+PYTHON_PAYLOAD_0004 RCDATA "Python/src/gui/windows/qt_source_clip_preview_model.py"

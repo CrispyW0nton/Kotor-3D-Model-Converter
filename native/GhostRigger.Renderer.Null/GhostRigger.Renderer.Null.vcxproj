@@ -32,17 +32,17 @@
     <TargetName>GhostRigger.Renderer.Null</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;RENDERER_NULL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Renderer.Contracts;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;RENDERER_NULL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;$(SolutionDir)native\GhostRigger.Renderer.Contracts\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;RENDERER_NULL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Renderer.Contracts;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;RENDERER_NULL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;$(SolutionDir)native\GhostRigger.Renderer.Contracts\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link>
     <PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerRendererNull.cpp" /></ItemGroup>
-  <ItemGroup><ClInclude Include="GhostRiggerRendererNull.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerRendererNull.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Public\GhostRiggerRendererNull.h" /></ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GhostRigger.Renderer.Contracts\GhostRigger.Renderer.Contracts.vcxproj">
       <Project>{c6c4d5f5-e479-4679-874a-157ee2ff0b1b}</Project>
@@ -56,10 +56,10 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\adapters\rendering\null_renderer.py" />
-    <None Include="python_payload\src\gui\rendering\null_renderer.py" />
-    <None Include="python_payload\src\core\rendering\renderer_capabilities.py" />
-    <None Include="python_payload\src\core\rendering\renderer_interface.py" />
+    <None Include="Python\src\adapters\rendering\null_renderer.py" />
+    <None Include="Python\src\gui\rendering\null_renderer.py" />
+    <None Include="Python\src\core\rendering\renderer_capabilities.py" />
+    <None Include="Python\src\core\rendering\renderer_interface.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

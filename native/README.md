@@ -145,7 +145,7 @@ owns the current implementation until a later migration slice proves parity.
 
 `native/GhostRigger.PythonPayloadManifest.json` records the Phase 1.5 embedded
 Python payload sweep. It maps every non-DEBUG native DLL project to packaged
-Python source copies under `native/<Project>/python_payload/src/...` and builds
+Python source copies under `native/<Project>/Python/src/...` and builds
 them into the DLL as `RCDATA` resources through `GhostRiggerPythonPayload.rc`.
 The manifest covers all 93 native DLL projects and 1,270 packaged Python file
 references; duplicated references are intentional when toolbox, renderer,

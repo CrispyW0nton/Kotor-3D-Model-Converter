@@ -8,37 +8,37 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/adapters/qt_viewport/__init__.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_viewport/__init__.py",
+                      "packaged_path":  "Python/src/adapters/qt_viewport/__init__.py",
                       "sha256":  "8da59e3fcdcaf1fc29e518c970e563ec783b3631759d9c39d935fc913fa3bd13"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/adapters/qt_viewport/camera_gizmo_renderer.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_viewport/camera_gizmo_renderer.py",
+                      "packaged_path":  "Python/src/adapters/qt_viewport/camera_gizmo_renderer.py",
                       "sha256":  "a802e8ca09876dd2185b96ac8528ea26e65a479c54507b6905b6fb8716252e70"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/adapters/qt_viewport/camera_overlays.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_viewport/camera_overlays.py",
+                      "packaged_path":  "Python/src/adapters/qt_viewport/camera_overlays.py",
                       "sha256":  "09f2c9ae8c7395803634a0c224416253c418da0a8f1b6b40e7dd8ff7546f63ec"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/adapters/qt_viewport/frame_renderer.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_viewport/frame_renderer.py",
+                      "packaged_path":  "Python/src/adapters/qt_viewport/frame_renderer.py",
                       "sha256":  "2cc547bf090b0b178f79618dfe9fbf13837345feb9ace8ad3459ed7c4076ec52"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0005",
                       "source_path":  "src/adapters/qt_viewport/lighting_viewport_controller.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_viewport/lighting_viewport_controller.py",
+                      "packaged_path":  "Python/src/adapters/qt_viewport/lighting_viewport_controller.py",
                       "sha256":  "870f27a05aefc1787c7f22ab45f12614b29346dd6dccdb09f806e30737188825"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0006",
                       "source_path":  "src/adapters/qt_viewport/still_frame_renderer.py",
-                      "packaged_path":  "python_payload/src/adapters/qt_viewport/still_frame_renderer.py",
+                      "packaged_path":  "Python/src/adapters/qt_viewport/still_frame_renderer.py",
                       "sha256":  "44ffaac223ed41e09a5e2500d236423404d533a48ae59924266305bc0754a427"
                   }
               ]

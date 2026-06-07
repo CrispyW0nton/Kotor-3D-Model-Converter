@@ -224,7 +224,7 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.PythonPayloadManifest.json` owns the Phase 1.5 embedded
   Python payload sweep manifest. It maps all 93 non-DEBUG native DLL projects
   to byte-identical packaged Python source copies under
-  `native/<Project>/python_payload/src/...`.
+  `native/<Project>/Python/src/...`.
 - The manifest includes 1,270 packaged Python file references and covers every
   `src/**/*.py` file at least once. Duplicate source references are intentional
   where toolbox, renderer, window, native-core, or runtime-shared package

@@ -9,18 +9,20 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" /><ImportGroup Label="ExtensionSettings" /><ImportGroup Label="Shared" />
   <PropertyGroup><OutDir>$(SolutionDir)build\vs\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\GhostRigger.Ports\</IntDir><TargetName>GhostRigger.Ports</TargetName></PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_PORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_PORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_PORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_PORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerPorts.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerPorts.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerPorts.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerPorts.h" /></ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\core\ports\__init__.py" />
-    <None Include="python_payload\src\core\ports\files.py" />
-    <None Include="python_payload\src\core\ports\resources.py" />
-    <None Include="python_payload\src\core\ports\scripts.py" />
-    <None Include="python_payload\src\core\ports\textures.py" />
-    <None Include="python_payload\src\core\ports\viewport_renderer.py" />
+    <None Include="Python\src\core\ports\__init__.py" />
+    <None Include="Python\src\core\ports\files.py" />
+    <None Include="Python\src\core\ports\resources.py" />
+    <None Include="Python\src\core\ports\scripts.py" />
+    <None Include="Python\src\core\ports\textures.py" />
+    <None Include="Python\src\core\ports\viewport_renderer.py" />
   </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

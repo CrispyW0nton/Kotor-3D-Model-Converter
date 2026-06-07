@@ -8,19 +8,19 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/resources/__init__.py",
-                      "packaged_path":  "python_payload/src/resources/__init__.py",
+                      "packaged_path":  "Python/src/resources/__init__.py",
                       "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/resources/game_detector.py",
-                      "packaged_path":  "python_payload/src/resources/game_detector.py",
+                      "packaged_path":  "Python/src/resources/game_detector.py",
                       "sha256":  "6b8ac9c8ae95f6c024acaee655782112ec87db27777f99eec15a958cbeb590e6"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/resources/game_library.py",
-                      "packaged_path":  "python_payload/src/resources/game_library.py",
+                      "packaged_path":  "Python/src/resources/game_library.py",
                       "sha256":  "f7c1bcb2e6c4807dbd9f3a67cda832082f2d361e7ad3ced9e14d17220f4bc7ac"
                   }
               ]

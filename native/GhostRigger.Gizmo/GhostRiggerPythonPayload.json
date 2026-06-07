@@ -8,43 +8,43 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/core/gizmo/__init__.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/__init__.py",
+                      "packaged_path":  "Python/src/core/gizmo/__init__.py",
                       "sha256":  "efc6e986fefd06012a56592da627584d576f8ccdb5ab614a119fae1655885e4d"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/core/gizmo/gizmo_draw_data.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/gizmo_draw_data.py",
+                      "packaged_path":  "Python/src/core/gizmo/gizmo_draw_data.py",
                       "sha256":  "2823996e547d607b76cd46f1890708c846fd73bf9badba79af120eeb2adef7e9"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/core/gizmo/gizmo_mode.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/gizmo_mode.py",
+                      "packaged_path":  "Python/src/core/gizmo/gizmo_mode.py",
                       "sha256":  "9fb1b1b770d10dce19c83c2c156f788f8e51b56d169afc53f59a1aa5e815d60e"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/core/gizmo/gizmo_picker.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/gizmo_picker.py",
+                      "packaged_path":  "Python/src/core/gizmo/gizmo_picker.py",
                       "sha256":  "67bf93a100fa994fdbf852b34ee1d8dafcd019b360d9ea41376a143a37705334"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0005",
                       "source_path":  "src/core/gizmo/gizmo_renderer.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/gizmo_renderer.py",
+                      "packaged_path":  "Python/src/core/gizmo/gizmo_renderer.py",
                       "sha256":  "63073fbf896fd8f253d1639b4bdb9df84f3efdab5bb3ca90c136235ab79b652e"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0006",
                       "source_path":  "src/core/gizmo/transform_controller.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/transform_controller.py",
+                      "packaged_path":  "Python/src/core/gizmo/transform_controller.py",
                       "sha256":  "4cde1a5daa0107117023983b7314ec37d8650204904c98c00d8a6e2cbe3388f9"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0007",
                       "source_path":  "src/core/gizmo/transform_gizmo.py",
-                      "packaged_path":  "python_payload/src/core/gizmo/transform_gizmo.py",
+                      "packaged_path":  "Python/src/core/gizmo/transform_gizmo.py",
                       "sha256":  "320a97a38e48724c16915e455ac5a1466182cafa2f7a5098361ca80cc99a17dd"
                   }
               ]

@@ -80,7 +80,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;RUNTIME_SHARED_CONTRACTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -96,7 +96,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;RUNTIME_SHARED_CONTRACTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -110,10 +110,10 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="GhostRiggerRuntimeSharedContracts.cpp" />
+    <ClCompile Include="Private\GhostRiggerRuntimeSharedContracts.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GhostRiggerRuntimeSharedContracts.h" />
+    <ClInclude Include="Public\GhostRiggerRuntimeSharedContracts.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GhostRigger.Native.NativeCore\GhostRigger.Native.NativeCore.vcxproj">
@@ -124,18 +124,18 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\core\ports\__init__.py" />
-    <None Include="python_payload\src\core\ports\files.py" />
-    <None Include="python_payload\src\core\ports\resources.py" />
-    <None Include="python_payload\src\core\ports\scripts.py" />
-    <None Include="python_payload\src\core\ports\textures.py" />
-    <None Include="python_payload\src\core\ports\viewport_renderer.py" />
-    <None Include="python_payload\src\core\rendering\renderer_interface.py" />
-    <None Include="python_payload\src\core\rendering\renderer_backend.py" />
-    <None Include="python_payload\src\core\rendering\renderer_capabilities.py" />
-    <None Include="python_payload\src\adapters\rendering\native_core\__init__.py" />
-    <None Include="python_payload\src\adapters\rendering\native_core\binding.py" />
-    <None Include="python_payload\src\adapters\rendering\native_core\renderer.py" />
+    <None Include="Python\src\core\ports\__init__.py" />
+    <None Include="Python\src\core\ports\files.py" />
+    <None Include="Python\src\core\ports\resources.py" />
+    <None Include="Python\src\core\ports\scripts.py" />
+    <None Include="Python\src\core\ports\textures.py" />
+    <None Include="Python\src\core\ports\viewport_renderer.py" />
+    <None Include="Python\src\core\rendering\renderer_interface.py" />
+    <None Include="Python\src\core\rendering\renderer_backend.py" />
+    <None Include="Python\src\core\rendering\renderer_capabilities.py" />
+    <None Include="Python\src\adapters\rendering\native_core\__init__.py" />
+    <None Include="Python\src\adapters\rendering\native_core\binding.py" />
+    <None Include="Python\src\adapters\rendering\native_core\renderer.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

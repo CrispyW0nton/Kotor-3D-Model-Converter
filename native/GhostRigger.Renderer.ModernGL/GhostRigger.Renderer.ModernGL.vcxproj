@@ -32,17 +32,17 @@
     <TargetName>GhostRigger.Renderer.ModernGL</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;RENDERER_MODERNGL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Renderer.Contracts;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;RENDERER_MODERNGL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;$(SolutionDir)native\GhostRigger.Renderer.Contracts\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;RENDERER_MODERNGL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Renderer.Contracts;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;RENDERER_MODERNGL_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard><AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;$(SolutionDir)native\GhostRigger.Renderer.Contracts\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link>
     <PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerRendererModernGL.cpp" /></ItemGroup>
-  <ItemGroup><ClInclude Include="GhostRiggerRendererModernGL.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerRendererModernGL.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Public\GhostRiggerRendererModernGL.h" /></ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GhostRigger.Renderer.Contracts\GhostRigger.Renderer.Contracts.vcxproj">
       <Project>{c6c4d5f5-e479-4679-874a-157ee2ff0b1b}</Project>
@@ -56,16 +56,16 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_benchmark.py" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_cli.py" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_legacy_bridge.py" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_renderer.py" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_renderer_impl.py" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_resources.py" />
-    <None Include="python_payload\src\adapters\rendering\moderngl_scene_helpers.py" />
-    <None Include="python_payload\src\adapters\gpu\moderngl_context.py" />
-    <None Include="python_payload\src\adapters\gpu\moderngl_runtime.py" />
-    <None Include="python_payload\src\gui\rendering\moderngl_renderer.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_benchmark.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_cli.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_legacy_bridge.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_renderer.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_renderer_impl.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_resources.py" />
+    <None Include="Python\src\adapters\rendering\moderngl_scene_helpers.py" />
+    <None Include="Python\src\adapters\gpu\moderngl_context.py" />
+    <None Include="Python\src\adapters\gpu\moderngl_runtime.py" />
+    <None Include="Python\src\gui\rendering\moderngl_renderer.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

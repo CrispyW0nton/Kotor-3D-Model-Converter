@@ -9,20 +9,22 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" /><ImportGroup Label="ExtensionSettings" /><ImportGroup Label="Shared" />
   <PropertyGroup><OutDir>$(SolutionDir)build\vs\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\GhostRigger.GUI.Gizmo\</IntDir><TargetName>GhostRigger.GUI.Gizmo</TargetName></PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GUI_GIZMO_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_GIZMO_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GUI_GIZMO_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_GIZMO_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerGUIGizmo.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerGUIGizmo.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerGUIGizmo.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGUIGizmo.h" /></ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\gui\gizmo\__init__.py" />
-    <None Include="python_payload\src\gui\gizmo\gizmo_draw_data.py" />
-    <None Include="python_payload\src\gui\gizmo\gizmo_mode.py" />
-    <None Include="python_payload\src\gui\gizmo\gizmo_picker.py" />
-    <None Include="python_payload\src\gui\gizmo\gizmo_renderer.py" />
-    <None Include="python_payload\src\gui\gizmo\transform_controller.py" />
-    <None Include="python_payload\src\gui\gizmo\transform_gizmo.py" />
-    <None Include="python_payload\src\gui\gizmo\transform_math.py" />
+    <None Include="Python\src\gui\gizmo\__init__.py" />
+    <None Include="Python\src\gui\gizmo\gizmo_draw_data.py" />
+    <None Include="Python\src\gui\gizmo\gizmo_mode.py" />
+    <None Include="Python\src\gui\gizmo\gizmo_picker.py" />
+    <None Include="Python\src\gui\gizmo\gizmo_renderer.py" />
+    <None Include="Python\src\gui\gizmo\transform_controller.py" />
+    <None Include="Python\src\gui\gizmo\transform_gizmo.py" />
+    <None Include="Python\src\gui\gizmo\transform_math.py" />
   </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

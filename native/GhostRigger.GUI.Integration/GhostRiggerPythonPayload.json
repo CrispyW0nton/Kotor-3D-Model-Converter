@@ -8,55 +8,55 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/gui/__init__.py",
-                      "packaged_path":  "python_payload/src/gui/__init__.py",
+                      "packaged_path":  "Python/src/gui/__init__.py",
                       "sha256":  "a891cb9ab2a76189d85af085d68d9044a3b85e6d3612b3e7b5c715f5005b8306"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/gui/assets/__init__.py",
-                      "packaged_path":  "python_payload/src/gui/assets/__init__.py",
+                      "packaged_path":  "Python/src/gui/assets/__init__.py",
                       "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/gui/assets/qt_icon_manager.py",
-                      "packaged_path":  "python_payload/src/gui/assets/qt_icon_manager.py",
+                      "packaged_path":  "Python/src/gui/assets/qt_icon_manager.py",
                       "sha256":  "a480ad6463a7a08a6a672b759ba434677841b72c8fdd9a4e6d1d4744638920be"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/gui/assets/qt_matrix_background.py",
-                      "packaged_path":  "python_payload/src/gui/assets/qt_matrix_background.py",
+                      "packaged_path":  "Python/src/gui/assets/qt_matrix_background.py",
                       "sha256":  "b7b191e94c77ee55ecf2a76b8da72c277cfd5550f327413a2ec7e3dc80c40489"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0005",
                       "source_path":  "src/gui/assets/qt_theme.py",
-                      "packaged_path":  "python_payload/src/gui/assets/qt_theme.py",
+                      "packaged_path":  "Python/src/gui/assets/qt_theme.py",
                       "sha256":  "1a80a53009990012d085463d768193c82ae067f8f9d781f597455f0e3ca378a5"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0006",
                       "source_path":  "src/gui/integration/__init__.py",
-                      "packaged_path":  "python_payload/src/gui/integration/__init__.py",
+                      "packaged_path":  "Python/src/gui/integration/__init__.py",
                       "sha256":  "644c95650e0fa68d3800d8f8f681481fad8654c67e082f852177e799f76bc186"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0007",
                       "source_path":  "src/gui/integration/editor_services.py",
-                      "packaged_path":  "python_payload/src/gui/integration/editor_services.py",
+                      "packaged_path":  "Python/src/gui/integration/editor_services.py",
                       "sha256":  "726e00bca9bcd62d4c13bb580d72f8cab2528bdef954402fb7061ab4618d7154"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0008",
                       "source_path":  "src/gui/integration/tool_integration_registry.py",
-                      "packaged_path":  "python_payload/src/gui/integration/tool_integration_registry.py",
+                      "packaged_path":  "Python/src/gui/integration/tool_integration_registry.py",
                       "sha256":  "d1827c2790208da1c98d7626534978274ea2c15346cf1bad520a9ecb564fa05a"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0009",
                       "source_path":  "src/gui/qt_lib.py",
-                      "packaged_path":  "python_payload/src/gui/qt_lib.py",
+                      "packaged_path":  "Python/src/gui/qt_lib.py",
                       "sha256":  "d9e9846370f76e5eba6e5572df8f65e02dc63622453179771a592cbc71dc7330"
                   }
               ]

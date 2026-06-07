@@ -8,25 +8,25 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/systems/bas/attachment_alignment.py",
-                      "packaged_path":  "python_payload/src/systems/bas/attachment_alignment.py",
+                      "packaged_path":  "Python/src/systems/bas/attachment_alignment.py",
                       "sha256":  "bf0b3bcc5faac8e62ac617060159c6f987972f440488dbb12f6c882f9a78eb92"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/systems/bas/head_resolution.py",
-                      "packaged_path":  "python_payload/src/systems/bas/head_resolution.py",
+                      "packaged_path":  "Python/src/systems/bas/head_resolution.py",
                       "sha256":  "6740bd6965ec1d893f456875308b1f9efda2dc3cf17f232ba68a9f7b990ea21c"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/systems/bas/model_recipe.py",
-                      "packaged_path":  "python_payload/src/systems/bas/model_recipe.py",
+                      "packaged_path":  "Python/src/systems/bas/model_recipe.py",
                       "sha256":  "bfb9e4dc4cf8d1c06fbca6ad655eaac1fd354ac04ec9c32dccda2dbf94663195"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/systems/bas/preview_composer.py",
-                      "packaged_path":  "python_payload/src/systems/bas/preview_composer.py",
+                      "packaged_path":  "Python/src/systems/bas/preview_composer.py",
                       "sha256":  "b57ae4cfd5085ec43bf7b7beff11f7bc621bc2574fd59c5d57fbaea77366a8a4"
                   }
               ]

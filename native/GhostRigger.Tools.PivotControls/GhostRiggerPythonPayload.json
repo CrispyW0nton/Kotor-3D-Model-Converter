@@ -6,42 +6,42 @@
     {
       "resource_name": "PYTHON_PAYLOAD_0001",
       "source_path": "src\\gui\\panels\\adjust_pivot_panel.py",
-      "packaged_path": "python_payload\\src\\gui\\panels\\adjust_pivot_panel.py",
+      "packaged_path": "Python\\src\\gui\\panels\\adjust_pivot_panel.py",
       "sha256": "055907f3a9a3cbd3265fad293ddd2b459ddd4ece47be1370810c0b9c771d1320",
       "byte_count": 6520
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0002",
       "source_path": "src\\gui\\panels\\axis_mode_control.py",
-      "packaged_path": "python_payload\\src\\gui\\panels\\axis_mode_control.py",
+      "packaged_path": "Python\\src\\gui\\panels\\axis_mode_control.py",
       "sha256": "a5c90d8288fe44e700600e53cc5c40c4d8ceab867e07f3d238b4cb4bfc4dee6a",
       "byte_count": 3211
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0003",
       "source_path": "src\\core\\scene\\axis_mode.py",
-      "packaged_path": "python_payload\\src\\core\\scene\\axis_mode.py",
+      "packaged_path": "Python\\src\\core\\scene\\axis_mode.py",
       "sha256": "eaaca8da40ab2e6bca8ca42a49d20f3b91361f91c1549c9b3bbd202120455806",
       "byte_count": 5974
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0004",
       "source_path": "src\\core\\gizmo\\transform_controller.py",
-      "packaged_path": "python_payload\\src\\core\\gizmo\\transform_controller.py",
+      "packaged_path": "Python\\src\\core\\gizmo\\transform_controller.py",
       "sha256": "4cde1a5daa0107117023983b7314ec37d8650204904c98c00d8a6e2cbe3388f9",
       "byte_count": 18734
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0005",
       "source_path": "src\\core\\gizmo\\transform_gizmo.py",
-      "packaged_path": "python_payload\\src\\core\\gizmo\\transform_gizmo.py",
+      "packaged_path": "Python\\src\\core\\gizmo\\transform_gizmo.py",
       "sha256": "320a97a38e48724c16915e455ac5a1466182cafa2f7a5098361ca80cc99a17dd",
       "byte_count": 6503
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0006",
       "source_path": "src\\math\\transform_math.py",
-      "packaged_path": "python_payload\\src\\math\\transform_math.py",
+      "packaged_path": "Python\\src\\math\\transform_math.py",
       "sha256": "1aa4402acc0f067899d0b57e9365305fd9e5bd26da920a90558f04ff7c5b711c",
       "byte_count": 7007
     }

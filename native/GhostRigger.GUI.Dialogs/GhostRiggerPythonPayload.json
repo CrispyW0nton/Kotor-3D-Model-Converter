@@ -8,73 +8,73 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/gui/dialogs/__init__.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/__init__.py",
+                      "packaged_path":  "Python/src/gui/dialogs/__init__.py",
                       "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/gui/dialogs/add_model_to_scene_dialog.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/add_model_to_scene_dialog.py",
+                      "packaged_path":  "Python/src/gui/dialogs/add_model_to_scene_dialog.py",
                       "sha256":  "221e5f5fc1107a3d8a7a9159697256f898296ab5db08a9025059c3b047b223cd"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/gui/dialogs/fbx_sdk_setup_dialog.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/fbx_sdk_setup_dialog.py",
+                      "packaged_path":  "Python/src/gui/dialogs/fbx_sdk_setup_dialog.py",
                       "sha256":  "c65172fca9666039fe4cecb9adb128856fe158e7361b5692ce62c22d347b3c22"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/gui/dialogs/lightmap_bake_worker.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/lightmap_bake_worker.py",
+                      "packaged_path":  "Python/src/gui/dialogs/lightmap_bake_worker.py",
                       "sha256":  "b0563e8ae2c155fdc633051c92bc600914e00aaf13667dfaa9aa1ae97a2f680c"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0005",
                       "source_path":  "src/gui/dialogs/lightmap_preview_window.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/lightmap_preview_window.py",
+                      "packaged_path":  "Python/src/gui/dialogs/lightmap_preview_window.py",
                       "sha256":  "8190cac8110f815715a4ebf7ebd7d79ce43ec73c0a4d79278ac379706bd0bb7d"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0006",
                       "source_path":  "src/gui/dialogs/qt_dialogs.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/qt_dialogs.py",
+                      "packaged_path":  "Python/src/gui/dialogs/qt_dialogs.py",
                       "sha256":  "76744bbd8f06fed6a43679963ef04a56bd268dc414fde7ebda1c6c08694fed74"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0007",
                       "source_path":  "src/gui/dialogs/qt_export_dialog.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/qt_export_dialog.py",
+                      "packaged_path":  "Python/src/gui/dialogs/qt_export_dialog.py",
                       "sha256":  "a335febf363d97ea5c01033af3e26a173e03d8b46eb8bea082437a440d39f0ca"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0008",
                       "source_path":  "src/gui/dialogs/qt_lightmap_baker_dialog.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/qt_lightmap_baker_dialog.py",
+                      "packaged_path":  "Python/src/gui/dialogs/qt_lightmap_baker_dialog.py",
                       "sha256":  "4f8c943458462a1242de34afb041396b27c67d0af06aeddfabd900b7a23d3f78"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0009",
                       "source_path":  "src/gui/dialogs/qt_render_frame_dialog.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/qt_render_frame_dialog.py",
+                      "packaged_path":  "Python/src/gui/dialogs/qt_render_frame_dialog.py",
                       "sha256":  "f6b9030d039ba776b1a989d760457b54d2c4f1d1b0a591be273df8c92d9f0ddd"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0010",
                       "source_path":  "src/gui/dialogs/qt_settings_dialog.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/qt_settings_dialog.py",
+                      "packaged_path":  "Python/src/gui/dialogs/qt_settings_dialog.py",
                       "sha256":  "1a6b2b14d2cb127c96c28f789cda97c0858b28234d9d43f57d5973ef9b5f9f9d"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0011",
                       "source_path":  "src/gui/dialogs/uv_geometry_preview_window.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/uv_geometry_preview_window.py",
+                      "packaged_path":  "Python/src/gui/dialogs/uv_geometry_preview_window.py",
                       "sha256":  "ea0b7459840587b5ffefbd4c6c2852c360e7b4d9b788f4ede131a0e717f6a34d"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0012",
                       "source_path":  "src/gui/dialogs/uv_preview_window.py",
-                      "packaged_path":  "python_payload/src/gui/dialogs/uv_preview_window.py",
+                      "packaged_path":  "Python/src/gui/dialogs/uv_preview_window.py",
                       "sha256":  "94fe0e6300172815782651f35d78da2bca00370710a1d337e0593c4e1863ed02"
                   }
               ]

@@ -9,51 +9,53 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration"><ConfigurationType>DynamicLibrary</ConfigurationType><UseDebugLibraries>false</UseDebugLibraries><PlatformToolset>v143</PlatformToolset><WholeProgramOptimization>true</WholeProgramOptimization><CharacterSet>Unicode</CharacterSet></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" /><ImportGroup Label="ExtensionSettings" /><ImportGroup Label="Shared" />
   <PropertyGroup><OutDir>$(SolutionDir)build\vs\$(Platform)\$(Configuration)\</OutDir><IntDir>$(SolutionDir)build\vs\obj\$(Platform)\$(Configuration)\GhostRigger.GUI.Viewports\</IntDir><TargetName>GhostRigger.GUI.Viewports</TargetName></PropertyGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GUI_VIEWPORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_VIEWPORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'"><ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_GUI_VIEWPORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link></ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GUI_VIEWPORTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerGUIViewports.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerGUIViewports.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerGUIViewports.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGUIViewports.h" /></ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\gui\viewports\__init__.py" />
-    <None Include="python_payload\src\gui\viewports\frame_renderer.py" />
-    <None Include="python_payload\src\gui\viewports\qt_transform_typein_bar.py" />
-    <None Include="python_payload\src\gui\viewports\qt_uv_viewer.py" />
-    <None Include="python_payload\src\gui\viewports\qt_viewport.py" />
-    <None Include="python_payload\src\gui\viewports\viewcube.py" />
-    <None Include="python_payload\src\gui\viewports\viewcube_math.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\__init__.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\shared\__init__.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\shared\dependencies.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\shared\icons.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\shared\joint_palette.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\shared\selection_modes.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\shared\weight_heatmap.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widget.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widget_scaffold.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\__init__.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\camera_workflow.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\construction.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\display_controls.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\drag_interactions.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\event_navigation.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\history_animation.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\measurement_controls.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\mini_thumbnail.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\overlay_layers.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\picking_hover.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\rendering_pipeline.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\resource_cache.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\scene_models.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\selection_mesh.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\snap_view_bar.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\state_helpers.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\transform_camera.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\variants.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_core\widgets\viewport_widget.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_display.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_host.py" />
-    <None Include="python_payload\src\gui\viewports\viewport_navigation.py" />
+    <None Include="Python\src\gui\viewports\__init__.py" />
+    <None Include="Python\src\gui\viewports\frame_renderer.py" />
+    <None Include="Python\src\gui\viewports\qt_transform_typein_bar.py" />
+    <None Include="Python\src\gui\viewports\qt_uv_viewer.py" />
+    <None Include="Python\src\gui\viewports\qt_viewport.py" />
+    <None Include="Python\src\gui\viewports\viewcube.py" />
+    <None Include="Python\src\gui\viewports\viewcube_math.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\__init__.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\shared\__init__.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\shared\dependencies.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\shared\icons.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\shared\joint_palette.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\shared\selection_modes.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\shared\weight_heatmap.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widget.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widget_scaffold.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\__init__.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\camera_workflow.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\construction.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\display_controls.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\drag_interactions.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\event_navigation.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\history_animation.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\measurement_controls.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\mini_thumbnail.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\picking_hover.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\rendering_pipeline.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\resource_cache.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\scene_models.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\selection_mesh.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\snap_view_bar.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\state_helpers.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\transform_camera.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\variants.py" />
+    <None Include="Python\src\gui\viewports\viewport_core\widgets\viewport_widget.py" />
+    <None Include="Python\src\gui\viewports\viewport_display.py" />
+    <None Include="Python\src\gui\viewports\viewport_host.py" />
+    <None Include="Python\src\gui\viewports\viewport_navigation.py" />
   </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

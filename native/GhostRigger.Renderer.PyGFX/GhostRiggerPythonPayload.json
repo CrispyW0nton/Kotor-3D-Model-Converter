@@ -6,140 +6,140 @@
     {
       "resource_name": "PYTHON_PAYLOAD_0001",
       "source_path": "src\\adapters\\rendering\\pygfx_renderer_exports.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\pygfx_renderer_exports.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\pygfx_renderer_exports.py",
       "sha256": "670e9fb71e4aa21b9baa503d33baee9600f9d69ac9e546494dffc597b283aff3",
       "byte_count": 213
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0002",
       "source_path": "src\\adapters\\rendering\\pygfx_core\\__init__.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\pygfx_core\\__init__.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\pygfx_core\\__init__.py",
       "sha256": "743e89681bd206809e72687e380b122c5117947b4baf00c1337894cf4f1f1201",
       "byte_count": 166
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0003",
       "source_path": "src\\adapters\\rendering\\pygfx_core\\backend_env.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\pygfx_core\\backend_env.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\pygfx_core\\backend_env.py",
       "sha256": "2cafc61f5a0de74cb2a4f5a38902e0ff1f7b92dd1bc0c516c199f5b43809935a",
       "byte_count": 2637
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0004",
       "source_path": "src\\adapters\\rendering\\pygfx_core\\mesh_cache.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\pygfx_core\\mesh_cache.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\pygfx_core\\mesh_cache.py",
       "sha256": "78814bb14acec45ee1f6b7f6fd2c6c994b72dbf4603cc0d9dbf268140c76f8fb",
       "byte_count": 47704
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0005",
       "source_path": "src\\adapters\\rendering\\pygfx_core\\renderer.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\pygfx_core\\renderer.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\pygfx_core\\renderer.py",
       "sha256": "c88401292cc236eb84121d42737d04c9a192c90025a094e8aa291bed4473f479",
       "byte_count": 26458
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0006",
       "source_path": "src\\adapters\\rendering\\pygfx_core\\scene_bridge.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\pygfx_core\\scene_bridge.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\pygfx_core\\scene_bridge.py",
       "sha256": "544b9e018c9859b2b1981b08eebe3d882f303fd3f7817ec99a7f5aebee91aab9",
       "byte_count": 25323
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src\\adapters\\rendering\\wgpu_core\\__init__.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\wgpu_core\\__init__.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\wgpu_core\\__init__.py",
       "sha256": "49fc797b51cdf6fb25c0fd0a4eb6cdc1c4b7d63086e394efa562586bc953dd87",
       "byte_count": 52
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
       "source_path": "src\\adapters\\rendering\\wgpu_core\\renderer.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\wgpu_core\\renderer.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\wgpu_core\\renderer.py",
       "sha256": "e415efaab3dffbd996f7febe6e5db4aabfdc60ea0618f27874bc9aaec1d4f5a5",
       "byte_count": 177412
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0009",
       "source_path": "src\\adapters\\rendering\\wgpu_core\\resources.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\wgpu_core\\resources.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\wgpu_core\\resources.py",
       "sha256": "4da80c7c1a435ef39be0c759b52f9a52ee771caf35cfe073750d3e7f0f67cbb4",
       "byte_count": 31188
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0010",
       "source_path": "src\\adapters\\rendering\\wgpu_core\\shared.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\wgpu_core\\shared.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\wgpu_core\\shared.py",
       "sha256": "7380fcc40743d135d31d7b576a7a9f0df049ac7ced5addbec4c7a01b70185147",
       "byte_count": 4359
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0011",
       "source_path": "src\\adapters\\rendering\\wgpu_renderer_exports.py",
-      "packaged_path": "python_payload\\src\\adapters\\rendering\\wgpu_renderer_exports.py",
+      "packaged_path": "Python\\src\\adapters\\rendering\\wgpu_renderer_exports.py",
       "sha256": "1c58c226f68cfcbc9472f1d9f64c41238f7202a56bc7ae395ac13385e8c295b3",
       "byte_count": 1874
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0012",
       "source_path": "src\\gui\\rendering\\pygfx_renderer.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\pygfx_renderer.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\pygfx_renderer.py",
       "sha256": "4445d4c739c8d03439656ea6c3ed42ea804224b0b35652479f639dd01b97b41a",
       "byte_count": 234
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0013",
       "source_path": "src\\gui\\rendering\\wgpu_renderer.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\wgpu_renderer.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\wgpu_renderer.py",
       "sha256": "3eceacd6264992114034665d74770feb0d341873e2458e42addf9dcea06dc464",
       "byte_count": 232
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0014",
       "source_path": "src\\gui\\rendering\\wgpu_core\\__init__.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\wgpu_core\\__init__.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\wgpu_core\\__init__.py",
       "sha256": "bbc39c2dd7847f40eaa331a2803bdc686544d16eb92c4082de483708e0ed3b7d",
       "byte_count": 63
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0015",
       "source_path": "src\\gui\\rendering\\wgpu_core\\renderer.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\wgpu_core\\renderer.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\wgpu_core\\renderer.py",
       "sha256": "2c5950bb083d14e6bfae81d7136a9f8b620e47608c338653aa86eb81f309c21b",
       "byte_count": 252
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0016",
       "source_path": "src\\gui\\rendering\\wgpu_core\\resources.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\wgpu_core\\resources.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\wgpu_core\\resources.py",
       "sha256": "29d26ca7a0c123881ce53c8f342c26e0679bb21688f3aa440c73b5e10b93d25e",
       "byte_count": 248
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0017",
       "source_path": "src\\gui\\rendering\\wgpu_core\\shaders.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\wgpu_core\\shaders.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\wgpu_core\\shaders.py",
       "sha256": "a4fd0e8c0a84792ffbc1c2fbd55071a4c002af14641770dbea2b08868da07633",
       "byte_count": 247
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0018",
       "source_path": "src\\gui\\rendering\\wgpu_core\\shared.py",
-      "packaged_path": "python_payload\\src\\gui\\rendering\\wgpu_core\\shared.py",
+      "packaged_path": "Python\\src\\gui\\rendering\\wgpu_core\\shared.py",
       "sha256": "9358e90f41eae1930a840ca790df2cbf4d010049365c624bbb92abaa2284cd87",
       "byte_count": 243
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0019",
       "source_path": "src\\core\\rendering\\wgpu_shaders.py",
-      "packaged_path": "python_payload\\src\\core\\rendering\\wgpu_shaders.py",
+      "packaged_path": "Python\\src\\core\\rendering\\wgpu_shaders.py",
       "sha256": "56ad6442998cc3f4227e1d8b996acba753c0b6adf397f21c64d2c3b597e0c004",
       "byte_count": 6702
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0020",
       "source_path": "src\\core\\rendering\\wgpu_shared.py",
-      "packaged_path": "python_payload\\src\\core\\rendering\\wgpu_shared.py",
+      "packaged_path": "Python\\src\\core\\rendering\\wgpu_shared.py",
       "sha256": "b02fcef1f014454b974b9c30ff8a08c00b1cb8cd23d6fb41a54e0e225779ebf4",
       "byte_count": 6380
     }

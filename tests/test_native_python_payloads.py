@@ -17,6 +17,20 @@ def _payload_entries() -> list[dict[str, object]]:
     return entries
 
 
+def _native_text(path: Path) -> str:
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    if path.suffix in {".h", ".hpp"}:
+        public_path = path.parent / "Public" / path.name
+        if public_path.exists():
+            return public_path.read_text(encoding="utf-8")
+    if path.suffix == ".cpp":
+        private_path = path.parent / "Private" / path.name
+        if private_path.exists():
+            return private_path.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8")
+
+
 def test_python_payload_manifest_covers_every_python_source_and_dll_project() -> None:
     entries = _payload_entries()
     payload_files = [
@@ -75,7 +89,7 @@ def test_python_payloads_are_included_in_visual_studio_projects() -> None:
         assert '<ResourceCompile Include="GhostRiggerPythonPayload.rc" />' in vcxproj
         assert '<None Include="GhostRiggerPythonPayload.json" />' in vcxproj
         for source in entry["files"]:
-            include_path = f"python_payload\\{source}"
+            include_path = f"Python\\{source}"
             assert f'<None Include="{include_path}" />' in vcxproj
 
 
@@ -83,7 +97,7 @@ def test_payload_dlls_export_common_python_payload_abi() -> None:
     for entry in _payload_entries():
         project = str(entry["project"])
         project_dir = ROOT / "native" / project
-        cpp_text = "\n".join(path.read_text(encoding="utf-8") for path in project_dir.glob("*.cpp"))
+        cpp_text = "\n".join(path.read_text(encoding="utf-8") for path in project_dir.rglob("*.cpp"))
 
         assert "GhostRiggerPythonPayloadResource.h" in cpp_text
         assert "gr_python_payload_manifest_json" in cpp_text
@@ -113,18 +127,19 @@ def test_native_host_dependency_table_covers_every_payload_project() -> None:
     entries = _payload_entries()
     dependency_header = (
         ROOT / "native" / "GhostRigger.Native" / "GhostRiggerNativeDependencies.h"
-    ).read_text(encoding="utf-8")
+    )
+    dependency_header_text = _native_text(dependency_header)
 
-    dependency_names = set(re.findall(r'\{L"(GhostRigger[^"]+)", L"GhostRigger[^"]+\.dll"', dependency_header))
+    dependency_names = set(re.findall(r'\{L"(GhostRigger[^"]+)", L"GhostRigger[^"]+\.dll"', dependency_header_text))
 
     assert dependency_names == {str(entry["project"]) for entry in entries}
-    assert "kNativeDependencySpecs" in dependency_header
-    assert "kNativeDependencySpecCount" in dependency_header
+    assert "kNativeDependencySpecs" in dependency_header_text
+    assert "kNativeDependencySpecCount" in dependency_header_text
 
 
 def test_native_host_logs_dependency_audit_before_python_startup() -> None:
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
-    host_source = (ROOT / "native" / "GhostRigger.Native" / "main.cpp").read_text(encoding="utf-8")
+    host_source = _native_text(ROOT / "native" / "GhostRigger.Native" / "main.cpp")
 
     assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" not in main_source
     assert "_log_native_dependency_audit" not in main_source
@@ -137,3 +152,17 @@ def test_native_host_logs_dependency_audit_before_python_startup() -> None:
     assert host_source.index("log_native_dependency_audit_to_console(*exe_dir)") < host_source.index(
         "return run_embedded_python"
     )
+
+
+def test_native_projects_use_public_private_python_layout() -> None:
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        vcxproj = (project_dir / f"{project}.vcxproj").read_text(encoding="utf-8")
+
+        assert (project_dir / "Public").is_dir()
+        assert (project_dir / "Private").is_dir()
+        assert (project_dir / "Python").is_dir()
+        assert "ClInclude Include=\"Public\\" in vcxproj
+        assert "ClCompile Include=\"Private\\" in vcxproj
+        assert "None Include=\"Python\\" in vcxproj

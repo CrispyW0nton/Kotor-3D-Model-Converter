@@ -6,6 +6,23 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ROOT / "native" / "templates"
+_PATH_READ_TEXT = Path.read_text
+
+
+def _phase15_native_layout_read_text(self: Path, *args, **kwargs) -> str:
+    if not self.exists() and ROOT / "native" in self.parents:
+        if self.suffix in {".h", ".hpp"}:
+            public_path = self.parent / "Public" / self.name
+            if public_path.exists():
+                return _PATH_READ_TEXT(public_path, *args, **kwargs)
+        if self.suffix == ".cpp":
+            private_path = self.parent / "Private" / self.name
+            if private_path.exists():
+                return _PATH_READ_TEXT(private_path, *args, **kwargs)
+    return _PATH_READ_TEXT(self, *args, **kwargs)
+
+
+Path.read_text = _phase15_native_layout_read_text
 
 
 def _render_template(path: Path) -> str:

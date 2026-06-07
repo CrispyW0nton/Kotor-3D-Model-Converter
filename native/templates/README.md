@@ -49,17 +49,19 @@ matching template and replace every `{{TOKEN}}`.
 1. Add the project directory under `native/{{PROJECT_NAME}}/`.
 2. Add a DEBUG executable under `native/{{PROJECT_NAME}}DEBUG/` unless the
    project is DEBUG-only.
-3. Add both projects to `GhostRigger.sln` with Debug/Release and Win32/x64
+3. Put public headers in `Public/`, private implementation files in `Private/`,
+   and embedded Python copies in `Python/`.
+4. Add both projects to `GhostRigger.sln` with Debug/Release and Win32/x64
    mappings. DEBUG executable projects must not have `Release|Win32.Build.0`
    or `Release|x64.Build.0` entries in the solution.
-4. Add `GhostRigger.Native.NativeCore` as a dependency when the package uses shared
+5. Add `GhostRigger.Native.NativeCore` as a dependency when the package uses shared
    handles, diagnostics, or capability contracts.
-5. Add Python detection through `src.adapters.native_core.package_registry`
+6. Add Python detection through `src.adapters.native_core.package_registry`
    when Python must query the package without starting the GUI.
-6. Update `knowledge_base/cpp_integration_phases.md`, `native/README.md`, and
+7. Update `knowledge_base/cpp_integration_phases.md`, `native/README.md`, and
    `CHANGES.md`.
-7. Include `Owner: LordVaderCW` and `Intersects:` in the changelog entry.
-8. Run Debug x64 plus the package DEBUG executable, then run Release x64 and
+8. Include `Owner: LordVaderCW` and `Intersects:` in the changelog entry.
+9. Run Debug x64 plus the package DEBUG executable, then run Release x64 and
    confirm the Release output contains only `.exe`, `.dll`, and `.lib` files.
 
 ## Ownership Header

@@ -8,31 +8,31 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/core/special/__init__.py",
-                      "packaged_path":  "python_payload/src/core/special/__init__.py",
+                      "packaged_path":  "Python/src/core/special/__init__.py",
                       "sha256":  "6c4452e06ff18b29f79a7bf80385f794019fb2f1f1a4f846300a78f3ce8002fd"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/core/special/hooks.py",
-                      "packaged_path":  "python_payload/src/core/special/hooks.py",
+                      "packaged_path":  "Python/src/core/special/hooks.py",
                       "sha256":  "95f6df8856d028af3b05337a296c2e0fa67926010b9fd0427e89b58b59c9b9cc"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/core/special/lip_reader.py",
-                      "packaged_path":  "python_payload/src/core/special/lip_reader.py",
+                      "packaged_path":  "Python/src/core/special/lip_reader.py",
                       "sha256":  "4dadfdf6e25a6d17f5a78984f42a1e637d0203ec6c0f471c8a3aecf49b0fdb4a"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0004",
                       "source_path":  "src/core/special/render_constants.py",
-                      "packaged_path":  "python_payload/src/core/special/render_constants.py",
+                      "packaged_path":  "Python/src/core/special/render_constants.py",
                       "sha256":  "dbf4a35e47a1b3be7167b329c1197e1488a864633b12a9d9f843df6106a6eb91"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0005",
                       "source_path":  "src/core/special/unity_malak_smoke.py",
-                      "packaged_path":  "python_payload/src/core/special/unity_malak_smoke.py",
+                      "packaged_path":  "Python/src/core/special/unity_malak_smoke.py",
                       "sha256":  "c5470f623c7f8f8dedbf29c26d66f49ce1affa5a62122088e4dc057804eadc22"
                   }
               ]

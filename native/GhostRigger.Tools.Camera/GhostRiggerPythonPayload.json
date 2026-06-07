@@ -6,245 +6,245 @@
     {
       "resource_name": "PYTHON_PAYLOAD_0001",
       "source_path": "src\\gui\\panels\\qt_camera_panel.py",
-      "packaged_path": "python_payload\\src\\gui\\panels\\qt_camera_panel.py",
+      "packaged_path": "Python\\src\\gui\\panels\\qt_camera_panel.py",
       "sha256": "e811443b484b96cfa09d83f58ed15007e93df2b5b0b542acbc36999be81df198",
       "byte_count": 41272
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0002",
       "source_path": "src\\core\\camera\\__init__.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\__init__.py",
+      "packaged_path": "Python\\src\\core\\camera\\__init__.py",
       "sha256": "df26844eacd2528ae11c04b84542374425248519c347e02145451289a04d7d45",
       "byte_count": 63
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0003",
       "source_path": "src\\core\\camera\\arcball_camera.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\arcball_camera.py",
+      "packaged_path": "Python\\src\\core\\camera\\arcball_camera.py",
       "sha256": "024788d49b05beafb3cd7ceec6ad8c7286be49cc12721ffb95966dd608c92b5f",
       "byte_count": 8514
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0004",
       "source_path": "src\\core\\camera\\camera_controller.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_controller.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_controller.py",
       "sha256": "0fc443aab329531bc85113f74329109122b1fe7a93c5b8d2d4e414b0c395be28",
       "byte_count": 1624
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0005",
       "source_path": "src\\core\\camera\\camera_manager.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_manager.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_manager.py",
       "sha256": "30bbe5adabad2b293a1c0ad4680b1a4b8bbaf2ebfc06199d711c4d44304e6f23",
       "byte_count": 11456
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0006",
       "source_path": "src\\core\\camera\\camera_model.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_model.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_model.py",
       "sha256": "4e63348187afac5286808c085c39f0b97db5c950ca081a69f888ebc9ac4ea528",
       "byte_count": 7893
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src\\core\\camera\\camera_picker.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_picker.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_picker.py",
       "sha256": "6528a55f88371e3ff61b70893983d27ca76fc61913a0eaff63c0f77a2551cc4a",
       "byte_count": 1813
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
       "source_path": "src\\core\\camera\\camera_presets.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_presets.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_presets.py",
       "sha256": "4e127d2a286b42c5a895f1272d5229af4217497ea2e2d5758f8702a74d05bd21",
       "byte_count": 1446
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0009",
       "source_path": "src\\core\\camera\\camera_render_settings.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_render_settings.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_render_settings.py",
       "sha256": "f7d8e1f3cfc54906f9b04f94145a847939508fe25daf77cc597c30bd637cd0e1",
       "byte_count": 1619
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0010",
       "source_path": "src\\core\\camera\\camera_rig.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_rig.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_rig.py",
       "sha256": "485fd5afd6d2eebd943bb2145f78e35e214d6d1bb1668ed29a8533ff1bcb65a2",
       "byte_count": 624
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0011",
       "source_path": "src\\core\\camera\\camera_selection.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_selection.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_selection.py",
       "sha256": "1e9ac28e35322af3e41f245812bdc64a81dddff93af990d47f5d8eb6093d0b95",
       "byte_count": 1411
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0012",
       "source_path": "src\\core\\camera\\camera_target.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_target.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_target.py",
       "sha256": "d86d7b5ad48382b5e1f629cb43941db8972848f66e13ddf2acf4cdc1ef434b7a",
       "byte_count": 252
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0013",
       "source_path": "src\\core\\camera\\camera_viewport_adapter.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\camera_viewport_adapter.py",
+      "packaged_path": "Python\\src\\core\\camera\\camera_viewport_adapter.py",
       "sha256": "88d86c6bbb065572759d6097981f27613a2fdc88de623d3205b8d0310622e9a7",
       "byte_count": 3179
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0014",
       "source_path": "src\\core\\camera\\render_manifest.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\render_manifest.py",
+      "packaged_path": "Python\\src\\core\\camera\\render_manifest.py",
       "sha256": "be095aa4eabac5a89027e6dbac6e4b21559bccd11525f19e875b449d3735a90b",
       "byte_count": 1109
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0015",
       "source_path": "src\\core\\camera\\render_output.py",
-      "packaged_path": "python_payload\\src\\core\\camera\\render_output.py",
+      "packaged_path": "Python\\src\\core\\camera\\render_output.py",
       "sha256": "500b33b6f4098c8d5358749ea87ee35aa0b2ac4f7bee76d2665b087bc25fb7e8",
       "byte_count": 1994
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0016",
       "source_path": "src\\gui\\camera\\__init__.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\__init__.py",
+      "packaged_path": "Python\\src\\gui\\camera\\__init__.py",
       "sha256": "bd87e34c46223123ec20a64c90ec34b1b87eb0123b8c91378fe8a7e10d37ba30",
       "byte_count": 839
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0017",
       "source_path": "src\\gui\\camera\\arcball_camera.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\arcball_camera.py",
+      "packaged_path": "Python\\src\\gui\\camera\\arcball_camera.py",
       "sha256": "de98a32ba4c451be4137db8e7e66cbb2cf76af5b47c8f56eb793c425f2ae5116",
       "byte_count": 294
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0018",
       "source_path": "src\\gui\\camera\\camera_controller.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_controller.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_controller.py",
       "sha256": "d55043727db1f1fcad18ed039794c9be162ff77a8866a7892ee72686b86fd2bb",
       "byte_count": 251
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0019",
       "source_path": "src\\gui\\camera\\camera_gizmo_renderer.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_gizmo_renderer.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_gizmo_renderer.py",
       "sha256": "a9a1a0e80f539a6a2c65460defb84f55dc5065780274a9410f426abd6d183b2a",
       "byte_count": 331
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0020",
       "source_path": "src\\gui\\camera\\camera_manager.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_manager.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_manager.py",
       "sha256": "40b65c07b2c4de6eb1947d2fdca955c4bb42cf27464e24b820b059dad5ab7c78",
       "byte_count": 245
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0021",
       "source_path": "src\\gui\\camera\\camera_math.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_math.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_math.py",
       "sha256": "6a4d72d8b90e74fea13e4a3907f7e2db4688fdb727fc97215291cad090302b09",
       "byte_count": 280
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0022",
       "source_path": "src\\gui\\camera\\camera_model.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_model.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_model.py",
       "sha256": "56b8adc0758054ae889028e9a48131ecaa6e7b33364c6ae8c3f71f3120581e8c",
       "byte_count": 287
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0023",
       "source_path": "src\\gui\\camera\\camera_overlays.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_overlays.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_overlays.py",
       "sha256": "b2e057bde869d28b786e787e6aeee0864d90669b6e51c95168ad629772833aad",
       "byte_count": 320
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0024",
       "source_path": "src\\gui\\camera\\camera_picker.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_picker.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_picker.py",
       "sha256": "6c1b4a7201f914b1e986e047c4e79a08b70257e323afe2221006695fa2b1d84c",
       "byte_count": 243
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0025",
       "source_path": "src\\gui\\camera\\camera_presets.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_presets.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_presets.py",
       "sha256": "b663b15595cef2f93c10e95a46664894beb29af633037f13495fc6b75766a17d",
       "byte_count": 245
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0026",
       "source_path": "src\\gui\\camera\\camera_render_settings.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_render_settings.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_render_settings.py",
       "sha256": "c19eb719465caecac70ec884f72d69ff0f3f6155b4d9b8651f8b2dbc3911497a",
       "byte_count": 312
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0027",
       "source_path": "src\\gui\\camera\\camera_rig.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_rig.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_rig.py",
       "sha256": "c1211933873f4d2c956a3a281ecf0406a20c48235a1face176ef5c190f94560e",
       "byte_count": 237
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0028",
       "source_path": "src\\gui\\camera\\camera_selection.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_selection.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_selection.py",
       "sha256": "bfac4fe63edd51ff776977070b0421427f8216acb1b44c6aca11f866494be1c1",
       "byte_count": 249
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0029",
       "source_path": "src\\gui\\camera\\camera_target.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_target.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_target.py",
       "sha256": "cb5044d0b1bce79c0b76c99ed796ed83c7f16cc009a6e0294d18ac8df1038858",
       "byte_count": 243
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0030",
       "source_path": "src\\gui\\camera\\camera_viewport_adapter.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\camera_viewport_adapter.py",
+      "packaged_path": "Python\\src\\gui\\camera\\camera_viewport_adapter.py",
       "sha256": "574ebc4c71776ff3b3eef22e0bf80326303bc9401c0df7eb090f193a54e7f732",
       "byte_count": 263
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0031",
       "source_path": "src\\gui\\camera\\frame_renderer.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\frame_renderer.py",
+      "packaged_path": "Python\\src\\gui\\camera\\frame_renderer.py",
       "sha256": "28db580c96a3a237b24e9a2e8dfdaeb508d3310bd091a45c0b857af405a51ccf",
       "byte_count": 267
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0032",
       "source_path": "src\\gui\\camera\\render_manifest.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\render_manifest.py",
+      "packaged_path": "Python\\src\\gui\\camera\\render_manifest.py",
       "sha256": "b78b86f8c3da94ad3eef29e87f23029d7853b57e50b2eaa7ac58a260b6cd8c50",
       "byte_count": 247
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0033",
       "source_path": "src\\gui\\camera\\render_output.py",
-      "packaged_path": "python_payload\\src\\gui\\camera\\render_output.py",
+      "packaged_path": "Python\\src\\gui\\camera\\render_output.py",
       "sha256": "922f35ffc05b2ed832ded7c70b0c4218f115d70707f642873a4316877d5853ed",
       "byte_count": 300
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0034",
       "source_path": "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
-      "packaged_path": "python_payload\\src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
+      "packaged_path": "Python\\src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
       "sha256": "a802e8ca09876dd2185b96ac8528ea26e65a479c54507b6905b6fb8716252e70",
       "byte_count": 9027
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0035",
       "source_path": "src\\adapters\\qt_viewport\\camera_overlays.py",
-      "packaged_path": "python_payload\\src\\adapters\\qt_viewport\\camera_overlays.py",
+      "packaged_path": "Python\\src\\adapters\\qt_viewport\\camera_overlays.py",
       "sha256": "09f2c9ae8c7395803634a0c224416253c418da0a8f1b6b40e7dd8ff7546f63ec",
       "byte_count": 3400
     }

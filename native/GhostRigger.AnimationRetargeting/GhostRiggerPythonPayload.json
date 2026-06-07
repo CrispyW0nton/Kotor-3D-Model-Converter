@@ -8,19 +8,19 @@
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0001",
                       "source_path":  "src/core/animation_retargeting/__init__.py",
-                      "packaged_path":  "python_payload/src/core/animation_retargeting/__init__.py",
+                      "packaged_path":  "Python/src/core/animation_retargeting/__init__.py",
                       "sha256":  "ec03c12bad98b9082e88f0c8a5d1c958156be76272b91b10a00b9ce15742419c"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0002",
                       "source_path":  "src/core/animation_retargeting/retargeter.py",
-                      "packaged_path":  "python_payload/src/core/animation_retargeting/retargeter.py",
+                      "packaged_path":  "Python/src/core/animation_retargeting/retargeter.py",
                       "sha256":  "8a8cfac4c8f22fb15bda92d2e80eae86380199257dd9cea8387dd2912555d228"
                   },
                   {
                       "resource_name":  "PYTHON_PAYLOAD_0003",
                       "source_path":  "src/core/animation_retargeting/skeleton_template_picker.py",
-                      "packaged_path":  "python_payload/src/core/animation_retargeting/skeleton_template_picker.py",
+                      "packaged_path":  "Python/src/core/animation_retargeting/skeleton_template_picker.py",
                       "sha256":  "8bd219ad7e1c1cb7f24d56e76f9dd4ad8d6d519a67947e2a86e7a03ea0d4f510"
                   }
               ]

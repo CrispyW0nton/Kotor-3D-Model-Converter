@@ -80,7 +80,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;NATIVE_CORE_DIAGNOSTICS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -96,7 +96,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;NATIVE_CORE_DIAGNOSTICS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -110,10 +110,10 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="GhostRiggerNativeCoreDiagnostics.cpp" />
+    <ClCompile Include="Private\GhostRiggerNativeCoreDiagnostics.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GhostRiggerNativeCoreDiagnostics.h" />
+    <ClInclude Include="Public\GhostRiggerNativeCoreDiagnostics.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GhostRigger.Native.NativeCore\GhostRigger.Native.NativeCore.vcxproj">
@@ -124,13 +124,13 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\core\diagnostics\__init__.py" />
-    <None Include="python_payload\src\core\diagnostics\diagnostics.py" />
-    <None Include="python_payload\src\core\diagnostics\module_reference_safety.py" />
-    <None Include="python_payload\src\core\diagnostics\validation_service.py" />
-    <None Include="python_payload\src\core\rendering\gpu_diagnostics_config.py" />
-    <None Include="python_payload\src\core\rendering\gpu_diagnostics_records.py" />
-    <None Include="python_payload\src\adapters\rendering\gpu_diagnostics_exports.py" />
+    <None Include="Python\src\core\diagnostics\__init__.py" />
+    <None Include="Python\src\core\diagnostics\diagnostics.py" />
+    <None Include="Python\src\core\diagnostics\module_reference_safety.py" />
+    <None Include="Python\src\core\diagnostics\validation_service.py" />
+    <None Include="Python\src\core\rendering\gpu_diagnostics_config.py" />
+    <None Include="Python\src\core\rendering\gpu_diagnostics_records.py" />
+    <None Include="Python\src\adapters\rendering\gpu_diagnostics_exports.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

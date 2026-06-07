@@ -32,35 +32,37 @@
     <TargetName>GhostRigger.Tools.CharacterBuilder</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_TOOLS_CHARACTER_BUILDER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;_DEBUG;GHOSTRIGGER_TOOLS_CHARACTER_BUILDER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
-    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_TOOLS_CHARACTER_BUILDER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile>
+    <ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_TOOLS_CHARACTER_BUILDER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile>
     <Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link>
     <PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerToolsCharacterBuilder.cpp" /></ItemGroup>
-  <ItemGroup><ClInclude Include="GhostRiggerToolsCharacterBuilder.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerToolsCharacterBuilder.cpp" /></ItemGroup>
+  <ItemGroup><ClInclude Include="Public\GhostRiggerToolsCharacterBuilder.h" /></ItemGroup>
   <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
-    <None Include="python_payload\src\gui\panels\qt_character_builder_panel.py" />
-    <None Include="python_payload\src\gui\windows\qt_character_builder_window.py" />
-    <None Include="python_payload\src\core\characters\__init__.py" />
-    <None Include="python_payload\src\core\characters\character_autofit_report.py" />
-    <None Include="python_payload\src\core\characters\character_builder.py" />
-    <None Include="python_payload\src\core\characters\character_export_preflight.py" />
-    <None Include="python_payload\src\core\characters\character_export_transaction.py" />
-    <None Include="python_payload\src\core\characters\character_override_package.py" />
-    <None Include="python_payload\src\core\characters\character_rig_state.py" />
-    <None Include="python_payload\src\core\characters\character_validation_report.py" />
-    <None Include="python_payload\src\core\characters\creature_appearance.py" />
-    <None Include="python_payload\src\core\characters\head_workflow.py" />
-    <None Include="python_payload\src\core\characters\headless_body_workflow.py" />
-    <None Include="python_payload\src\core\characters\kotor_constants.py" />
-    <None Include="python_payload\src\core\characters\native_skeleton.py" />
+    <None Include="Python\src\gui\panels\qt_character_builder_panel.py" />
+    <None Include="Python\src\gui\windows\qt_character_builder_window.py" />
+    <None Include="Python\src\core\characters\__init__.py" />
+    <None Include="Python\src\core\characters\character_autofit_report.py" />
+    <None Include="Python\src\core\characters\character_builder.py" />
+    <None Include="Python\src\core\characters\character_export_preflight.py" />
+    <None Include="Python\src\core\characters\character_export_transaction.py" />
+    <None Include="Python\src\core\characters\character_override_package.py" />
+    <None Include="Python\src\core\characters\character_rig_state.py" />
+    <None Include="Python\src\core\characters\character_validation_report.py" />
+    <None Include="Python\src\core\characters\creature_appearance.py" />
+    <None Include="Python\src\core\characters\head_workflow.py" />
+    <None Include="Python\src\core\characters\headless_body_workflow.py" />
+    <None Include="Python\src\core\characters\kotor_constants.py" />
+    <None Include="Python\src\core\characters\native_skeleton.py" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

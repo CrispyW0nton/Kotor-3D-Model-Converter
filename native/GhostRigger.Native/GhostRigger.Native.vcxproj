@@ -81,7 +81,7 @@
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
@@ -103,7 +103,7 @@ copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dl
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
@@ -122,10 +122,10 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Private\main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GhostRiggerNativeDependencies.h" />
+    <ClInclude Include="Public\GhostRiggerNativeDependencies.h" />
   </ItemGroup>
   <ItemGroup Label="NativePayloadDependencies">
     <ProjectReference Include="..\GhostRigger.Adapters.Files\GhostRigger.Adapters.Files.vcxproj">
