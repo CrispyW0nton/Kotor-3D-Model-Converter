@@ -9,6 +9,12 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-07
+
+- Native hosted Qt launcher: converted `GhostRiggerNative.exe` from a console wrapper into a Windows-subsystem host for `main.py`. The Visual Studio project now launches the Qt app through the native `.exe` without an extra console window, sets the debugger environment to the local Python 3.13 interpreter, marks hosted launches with `GHOSTRIGGER_NATIVE_HOST=1`, prefers `GHOSTRIGGER_PYTHON`/local Python 3.13/`py -3.13`/`py -3`/`python`, and reports launcher failures through a native message box. Added `--native-host-smoke` for non-GUI entrypoint verification and documented `GHOSTRIGGER_NATIVE_CONSOLE=1` for debug-console launches. No roadmap task ID applies.
+  Affected areas: `native/GhostRiggerNative/`, `native/README.md`.
+  Verification: `F:\Unreal VS\MSBuild\Current\Bin\MSBuild.exe GhostRigger.sln /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` and the same command for `Release|x64` both built `GhostRiggerNative`, `GhostRiggerRuntime`, and `GhostRiggerRuntimeSmoke`. `build\vs\x64\Debug\GhostRiggerNative.exe --native-host-smoke` and `build\vs\x64\Release\GhostRiggerNative.exe --native-host-smoke` both exited successfully. Visible startup smoke launched `build\vs\x64\Debug\GhostRiggerNative.exe` with `GHOSTRIGGER_PYTHON=C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe`, observed one hosted Python `main.py` child and a `GhostRigger` window title, then cleaned up the launched processes. `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m py_compile main.py` passed. `build\vs\x64\Debug\GhostRiggerRuntimeSmoke.exe` passed with `GhostRiggerRuntimeSmoke OK: 0.1.0` when the solution output directory was prepended to `PATH`.
+
 ## 2026-06-05
 
 - IPC completion backlog: added `ipc_todo.md` as a living tracker for the remaining GhostRigger IPC integration work after scanning the current IPC routes, client helpers, main-window actions, panels, dialogs, and workbenches. The tracker records current coverage, recent completed IPC slices, prioritized remaining app surfaces, and native visual verification requirements. No roadmap task ID applies.

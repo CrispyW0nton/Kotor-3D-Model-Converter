@@ -30,8 +30,9 @@ capabilities, and diagnostics. It is an adapter contract first; real retained
 rendering, GPU palette buffers, and triangle-accurate picking will be added
 behind that boundary in later migration slices.
 
-Build `GhostRiggerNative`, then run it from Visual Studio. With no arguments it
-launches:
+Build `GhostRiggerNative`, then run it from Visual Studio. The launcher is a
+Windows-subsystem host, so it opens the Qt application without an extra console
+window. With no arguments it launches:
 
 ```powershell
 python main.py --gui qt
@@ -42,6 +43,18 @@ Set `GHOSTRIGGER_PYTHON` if Visual Studio should use a specific interpreter:
 ```powershell
 $env:GHOSTRIGGER_PYTHON = "C:\Path\To\python.exe"
 ```
+
+The checked-in Visual Studio debugger environment points at the local Python
+3.13 install used for this workspace:
+
+```text
+C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe
+```
+
+If `GHOSTRIGGER_PYTHON` is not set, the launcher tries that local Python 3.13
+path when it exists, then `py -3.13`, `py -3`, and finally `python`. Set
+`GHOSTRIGGER_NATIVE_CONSOLE=1` when you want the hosted Python process to keep a
+debug console while launched through the native host.
 
 Any command-line arguments passed to `GhostRiggerNative.exe` are forwarded to
 `main.py`, replacing the default `--gui qt`.
