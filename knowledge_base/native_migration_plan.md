@@ -197,6 +197,16 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.Windows.MainWindow.DEBUG/` verifies the main-window
   package ABI, capabilities export, owner-boundary metadata, and host-service
   schema placeholder from Visual Studio without requiring Python.
+- `native/GhostRigger.Windows.LevelEditor/`,
+  `native/GhostRigger.Windows.AnimationRetargetWorkbench/`,
+  `native/GhostRigger.Windows.LegacyRiggingWindow/`, and
+  `native/GhostRigger.Windows.UnrealAnimatorWindow/` own Phase 1 native window
+  package boundaries for the extra standalone/workbench windows. They report
+  package capabilities, owner-boundary metadata, and host-service schema
+  placeholders while keeping the Python/Qt windows as the visible shell owners.
+- Their `.DEBUG` projects verify the extra window package ABIs, capabilities
+  exports, owner-boundary metadata, and host-service schema placeholders from
+  Visual Studio without requiring Python.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental
@@ -211,6 +221,11 @@ Native project naming:
 - Renderer backends: `GhostRigger.Renderer.{Backend}`.
 - Toolbox migrations from Python: `GhostRigger.Tools.{Toolname}`.
 - Phase 1 native main-window package: `GhostRigger.Windows.MainWindow`.
+- Extra Phase 1 native window packages:
+  `GhostRigger.Windows.LevelEditor`,
+  `GhostRigger.Windows.AnimationRetargetWorkbench`,
+  `GhostRigger.Windows.LegacyRiggingWindow`, and
+  `GhostRigger.Windows.UnrealAnimatorWindow`.
 
 The first concrete toolbox and window migration candidates are documented in
 `knowledge_base/native_toolbox_window_migration_candidates.md`.

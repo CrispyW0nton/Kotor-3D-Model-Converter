@@ -32,7 +32,11 @@ from src.adapters.native_core.package_registry import (
     TOOLS_SEQUENCE_EDITOR_PACKAGE,
     TOOLS_SPRITE_MATERIALS_PACKAGE,
     TOOLS_TWO_DA_BROWSER_PACKAGE,
+    WINDOWS_ANIMATION_RETARGET_WORKBENCH_PACKAGE,
+    WINDOWS_LEGACY_RIGGING_WINDOW_PACKAGE,
+    WINDOWS_LEVEL_EDITOR_PACKAGE,
     WINDOWS_MAIN_WINDOW_PACKAGE,
+    WINDOWS_UNREAL_ANIMATOR_WINDOW_PACKAGE,
     NativePackageSpec,
     NativePackageStatus,
     query_native_core_diagnostics_status,
@@ -63,7 +67,11 @@ from src.adapters.native_core.package_registry import (
     query_tools_sequence_editor_status,
     query_tools_sprite_materials_status,
     query_tools_two_da_browser_status,
+    query_windows_animation_retarget_workbench_status,
+    query_windows_legacy_rigging_window_status,
+    query_windows_level_editor_status,
     query_windows_main_window_status,
+    query_windows_unreal_animator_window_status,
     renderer_d3d12_guarded_metadata_capabilities,
 )
 
@@ -390,6 +398,24 @@ def test_windows_main_window_status_uses_shared_registry_path(tmp_path: Path) ->
     )
 
 
+def test_extra_window_statuses_use_shared_registry_path(tmp_path: Path) -> None:
+    cases = (
+        (query_windows_level_editor_status, "GhostRigger.Windows.LevelEditor"),
+        (
+            query_windows_animation_retarget_workbench_status,
+            "GhostRigger.Windows.AnimationRetargetWorkbench",
+        ),
+        (query_windows_legacy_rigging_window_status, "GhostRigger.Windows.LegacyRiggingWindow"),
+        (query_windows_unreal_animator_window_status, "GhostRigger.Windows.UnrealAnimatorWindow"),
+    )
+
+    for query_status, package_name in cases:
+        status = query_status([tmp_path])
+        assert status.name == package_name
+        assert status.available is False
+        assert f"{package_name}.dll was not found." in status.reason or "Windows native package" in status.reason
+
+
 def test_native_core_diagnostics_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_native_core_diagnostics_status([tmp_path])
 
@@ -691,6 +717,46 @@ def test_windows_main_window_package_spec_names_current_contract() -> None:
         WINDOWS_MAIN_WINDOW_PACKAGE.capabilities_export
         == "gr_windows_main_window_capabilities_json"
     )
+
+
+def test_extra_window_package_specs_name_current_contracts() -> None:
+    cases = (
+        (
+            WINDOWS_LEVEL_EDITOR_PACKAGE,
+            "GhostRigger.Windows.LevelEditor",
+            "GHOSTRIGGER_WINDOWS_LEVEL_EDITOR",
+            "gr_windows_level_editor_version",
+            "gr_windows_level_editor_capabilities_json",
+        ),
+        (
+            WINDOWS_ANIMATION_RETARGET_WORKBENCH_PACKAGE,
+            "GhostRigger.Windows.AnimationRetargetWorkbench",
+            "GHOSTRIGGER_WINDOWS_ANIMATION_RETARGET_WORKBENCH",
+            "gr_windows_animation_retarget_workbench_version",
+            "gr_windows_animation_retarget_workbench_capabilities_json",
+        ),
+        (
+            WINDOWS_LEGACY_RIGGING_WINDOW_PACKAGE,
+            "GhostRigger.Windows.LegacyRiggingWindow",
+            "GHOSTRIGGER_WINDOWS_LEGACY_RIGGING_WINDOW",
+            "gr_windows_legacy_rigging_window_version",
+            "gr_windows_legacy_rigging_window_capabilities_json",
+        ),
+        (
+            WINDOWS_UNREAL_ANIMATOR_WINDOW_PACKAGE,
+            "GhostRigger.Windows.UnrealAnimatorWindow",
+            "GHOSTRIGGER_WINDOWS_UNREAL_ANIMATOR_WINDOW",
+            "gr_windows_unreal_animator_window_version",
+            "gr_windows_unreal_animator_window_capabilities_json",
+        ),
+    )
+
+    for spec, name, env_var, version_export, capabilities_export in cases:
+        assert spec.name == name
+        assert spec.dll_name == f"{name}.dll"
+        assert spec.env_var == env_var
+        assert spec.version_export == version_export
+        assert spec.capabilities_export == capabilities_export
 
 
 def test_renderer_d3d12_guarded_metadata_capabilities_name_complete_phase_1_surface() -> None:

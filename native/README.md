@@ -123,6 +123,15 @@ for main-window host services. It is diagnostic-only: it reports package
 capabilities, owner-boundary metadata, and a host-service schema placeholder
 while keeping the Python/Qt main window as the visible shell owner.
 
+`GhostRigger.Windows.LevelEditor`,
+`GhostRigger.Windows.AnimationRetargetWorkbench`,
+`GhostRigger.Windows.LegacyRiggingWindow`, and
+`GhostRigger.Windows.UnrealAnimatorWindow` are Phase 1 native window package
+boundaries for the extra standalone/workbench windows. They are
+diagnostic-only: they report package capabilities, owner-boundary metadata, and
+host-service schema placeholders while keeping the Python/Qt windows as the
+visible shell owners.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes

@@ -362,6 +362,91 @@ def test_windows_main_window_exports_diagnostic_c_abi_boundary() -> None:
     assert "gr_windows_main_window_host_service_schema_json()" in validator
 
 
+def test_extra_window_project_scaffolds_match_phase_one_boundaries() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    cases = (
+        (
+            "GhostRigger.Windows.LevelEditor",
+            "GHOSTRIGGER_WINDOWS_LEVEL_EDITOR_EXPORTS",
+            "GhostRiggerWindowsLevelEditor.h",
+            "GhostRiggerWindowsLevelEditor.cpp",
+            "GhostRiggerWindowsLevelEditorDEBUG.cpp",
+            "Level Editor",
+            "windows_level_editor_owner_boundary.v1",
+            "windows_level_editor_host_service_schema.v1",
+        ),
+        (
+            "GhostRigger.Windows.AnimationRetargetWorkbench",
+            "GHOSTRIGGER_WINDOWS_ANIMATION_RETARGET_WORKBENCH_EXPORTS",
+            "GhostRiggerWindowsAnimationRetargetWorkbench.h",
+            "GhostRiggerWindowsAnimationRetargetWorkbench.cpp",
+            "GhostRiggerWindowsAnimationRetargetWorkbenchDEBUG.cpp",
+            "Animation Retarget Workbench",
+            "windows_animation_retarget_workbench_owner_boundary.v1",
+            "windows_animation_retarget_workbench_host_service_schema.v1",
+        ),
+        (
+            "GhostRigger.Windows.LegacyRiggingWindow",
+            "GHOSTRIGGER_WINDOWS_LEGACY_RIGGING_WINDOW_EXPORTS",
+            "GhostRiggerWindowsLegacyRiggingWindow.h",
+            "GhostRiggerWindowsLegacyRiggingWindow.cpp",
+            "GhostRiggerWindowsLegacyRiggingWindowDEBUG.cpp",
+            "Legacy Rigging Window",
+            "windows_legacy_rigging_window_owner_boundary.v1",
+            "windows_legacy_rigging_window_host_service_schema.v1",
+        ),
+        (
+            "GhostRigger.Windows.UnrealAnimatorWindow",
+            "GHOSTRIGGER_WINDOWS_UNREAL_ANIMATOR_WINDOW_EXPORTS",
+            "GhostRiggerWindowsUnrealAnimatorWindow.h",
+            "GhostRiggerWindowsUnrealAnimatorWindow.cpp",
+            "GhostRiggerWindowsUnrealAnimatorWindowDEBUG.cpp",
+            "Unreal Animator Window",
+            "windows_unreal_animator_window_owner_boundary.v1",
+            "windows_unreal_animator_window_host_service_schema.v1",
+        ),
+    )
+
+    for (
+        project_name,
+        export_define,
+        header_name,
+        implementation_name,
+        validator_name,
+        owner,
+        owner_schema,
+        host_schema,
+    ) in cases:
+        project_dir = ROOT / "native" / project_name
+        debug_dir = ROOT / "native" / f"{project_name}.DEBUG"
+        project = (project_dir / f"{project_name}.vcxproj").read_text(encoding="utf-8")
+        debug_project = (debug_dir / f"{project_name}.DEBUG.vcxproj").read_text(encoding="utf-8")
+        readme = (project_dir / "README.md").read_text(encoding="utf-8")
+        header = (project_dir / header_name).read_text(encoding="utf-8")
+        implementation = (project_dir / implementation_name).read_text(encoding="utf-8")
+        validator = (debug_dir / validator_name).read_text(encoding="utf-8")
+
+        assert project_name in solution
+        assert f"{project_name}.DEBUG" in solution
+        assert f"<TargetName>{project_name}</TargetName>" in project
+        assert export_define in project
+        assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
+        assert f"Owner surface: {owner}" in readme
+        assert "Bridge method: C ABI DLL" in readme
+        assert "_version" in header
+        assert "_capabilities_json" in header
+        assert "_owner_boundary_json" in header
+        assert "_host_service_schema_json" in header
+        assert '"window_package":true' in implementation
+        assert f'"owner_surface":"{owner}"' in implementation
+        assert '"native_shell_enabled":false' in implementation
+        assert '"python_fallback_required":true' in implementation
+        assert owner_schema in implementation
+        assert host_schema in implementation
+        assert "host_module_registered" in validator
+        assert "visible_shell_mutation_allowed" in validator
+
+
 def test_browser_tool_project_scaffolds_match_phase_one_boundaries() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
     cases = (
@@ -2020,6 +2105,10 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{5CC02F9B-9C30-4CB1-A7CD-317E4284889F}",
         "{9C4ED985-3501-44CB-B502-A26DC8ECF9CA}",
         "{87E36993-4B11-402F-9882-B2D4C0CAE704}",
+        "{36A7C6D9-C634-4853-9075-B19D4DF4A411}",
+        "{A3EDE9F0-58AC-465A-B1A0-829207C74C2B}",
+        "{D5CBE742-CA27-4AC2-A896-A4AF0A70DDF2}",
+        "{DF90689E-C4D0-4475-80E2-CC77C87F8EFC}",
     }
 
     for guid in debug_project_guids:

@@ -242,6 +242,38 @@ WINDOWS_MAIN_WINDOW_PACKAGE = NativePackageSpec(
     capabilities_export="gr_windows_main_window_capabilities_json",
 )
 
+WINDOWS_LEVEL_EDITOR_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Windows.LevelEditor",
+    dll_name="GhostRigger.Windows.LevelEditor.dll",
+    env_var="GHOSTRIGGER_WINDOWS_LEVEL_EDITOR",
+    version_export="gr_windows_level_editor_version",
+    capabilities_export="gr_windows_level_editor_capabilities_json",
+)
+
+WINDOWS_ANIMATION_RETARGET_WORKBENCH_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Windows.AnimationRetargetWorkbench",
+    dll_name="GhostRigger.Windows.AnimationRetargetWorkbench.dll",
+    env_var="GHOSTRIGGER_WINDOWS_ANIMATION_RETARGET_WORKBENCH",
+    version_export="gr_windows_animation_retarget_workbench_version",
+    capabilities_export="gr_windows_animation_retarget_workbench_capabilities_json",
+)
+
+WINDOWS_LEGACY_RIGGING_WINDOW_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Windows.LegacyRiggingWindow",
+    dll_name="GhostRigger.Windows.LegacyRiggingWindow.dll",
+    env_var="GHOSTRIGGER_WINDOWS_LEGACY_RIGGING_WINDOW",
+    version_export="gr_windows_legacy_rigging_window_version",
+    capabilities_export="gr_windows_legacy_rigging_window_capabilities_json",
+)
+
+WINDOWS_UNREAL_ANIMATOR_WINDOW_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Windows.UnrealAnimatorWindow",
+    dll_name="GhostRigger.Windows.UnrealAnimatorWindow.dll",
+    env_var="GHOSTRIGGER_WINDOWS_UNREAL_ANIMATOR_WINDOW",
+    version_export="gr_windows_unreal_animator_window_version",
+    capabilities_export="gr_windows_unreal_animator_window_capabilities_json",
+)
+
 RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES = (
     "descriptor_allocator_readiness",
     "command_list_readiness",
@@ -532,6 +564,30 @@ def query_windows_main_window_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(WINDOWS_MAIN_WINDOW_PACKAGE, search_paths)
+
+
+def query_windows_level_editor_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(WINDOWS_LEVEL_EDITOR_PACKAGE, search_paths)
+
+
+def query_windows_animation_retarget_workbench_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(WINDOWS_ANIMATION_RETARGET_WORKBENCH_PACKAGE, search_paths)
+
+
+def query_windows_legacy_rigging_window_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(WINDOWS_LEGACY_RIGGING_WINDOW_PACKAGE, search_paths)
+
+
+def query_windows_unreal_animator_window_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(WINDOWS_UNREAL_ANIMATOR_WINDOW_PACKAGE, search_paths)
 
 
 def renderer_d3d12_guarded_metadata_capabilities(

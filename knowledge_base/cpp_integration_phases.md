@@ -359,6 +359,16 @@ Current completed foundation:
 - `GhostRigger.Windows.MainWindow.DEBUG.exe` validates the main-window package
   ABI, owner-boundary metadata, capabilities export, and host-service schema
   placeholder without Python or the GUI.
+- `GhostRigger.Windows.LevelEditor.dll`,
+  `GhostRigger.Windows.AnimationRetargetWorkbench.dll`,
+  `GhostRigger.Windows.LegacyRiggingWindow.dll`, and
+  `GhostRigger.Windows.UnrealAnimatorWindow.dll` exist as Phase 1 native window
+  package boundaries for the extra standalone/workbench windows. They report
+  package capabilities, owner-boundary metadata, and host-service schema
+  placeholders while keeping the Python/Qt windows as the visible shell owners.
+- Their `.DEBUG.exe` validators verify the extra window package ABIs,
+  owner-boundary metadata, capabilities exports, and host-service schema
+  placeholders without Python or the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -377,6 +387,12 @@ Native project naming foundation:
   `GhostRigger.Tools.CharacterBuilder`.
 - The Phase 1 native main-window package must use
   `GhostRigger.Windows.MainWindow` naming.
+- Extra Phase 1 native window packages use
+  `GhostRigger.Windows.{WindowName}` naming, including
+  `GhostRigger.Windows.LevelEditor`,
+  `GhostRigger.Windows.AnimationRetargetWorkbench`,
+  `GhostRigger.Windows.LegacyRiggingWindow`, and
+  `GhostRigger.Windows.UnrealAnimatorWindow`.
 - Renderer contract packages use `GhostRigger.Renderer.Contracts`, and concrete
   renderer backend packages use `GhostRigger.Renderer.{Backend}`, for example
   `GhostRigger.Renderer.D3D12` or the diagnostic `GhostRigger.Renderer.Null`.
