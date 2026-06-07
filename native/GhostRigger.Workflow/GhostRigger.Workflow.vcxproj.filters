@@ -30,12 +30,18 @@
     <ClCompile Include="Private\GhostRiggerWorkflow.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\WorkflowBase.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerWorkflow.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\WorkflowBase.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
