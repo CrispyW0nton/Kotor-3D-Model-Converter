@@ -1,0 +1,10 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "python_payload\\src\\gui\\panels\\qt_body_attachment_panel.py"
+PYTHON_PAYLOAD_0002 RCDATA "python_payload\\src\\systems\\bas\\attachment_alignment.py"
+PYTHON_PAYLOAD_0003 RCDATA "python_payload\\src\\systems\\bas\\head_resolution.py"
+PYTHON_PAYLOAD_0004 RCDATA "python_payload\\src\\systems\\bas\\model_recipe.py"
+PYTHON_PAYLOAD_0005 RCDATA "python_payload\\src\\systems\\bas\\preview_composer.py"
+PYTHON_PAYLOAD_0006 RCDATA "python_payload\\src\\gui\\windows\\application_core\\shared\\bas_workflow.py"
+PYTHON_PAYLOAD_0007 RCDATA "python_payload\\src\\core\\characters\\head_workflow.py"
+PYTHON_PAYLOAD_0008 RCDATA "python_payload\\src\\core\\characters\\headless_body_workflow.py"

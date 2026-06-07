@@ -49,6 +49,18 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\math\camera_math.py" />
+    <None Include="python_payload\src\math\frame_math.py" />
+    <None Include="python_payload\src\math\gpu_math.py" />
+    <None Include="python_payload\src\math\module_layout_math.py" />
+    <None Include="python_payload\src\math\transform_math.py" />
+    <None Include="python_payload\src\math\viewcube_math.py" />
+    <None Include="python_payload\src\core\rendering\frame_core\math_helpers.py" />
+    <None Include="python_payload\src\gui\gizmo\transform_math.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

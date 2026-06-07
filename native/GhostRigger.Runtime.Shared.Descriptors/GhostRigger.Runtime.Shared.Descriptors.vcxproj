@@ -49,6 +49,16 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\core\rendering\mesh_render_data.py" />
+    <None Include="python_payload\src\adapters\rendering\mesh_render_data.py" />
+    <None Include="python_payload\src\core\rendering\skeleton_render_data.py" />
+    <None Include="python_payload\src\core\scene\scene_object.py" />
+    <None Include="python_payload\src\core\scene\scene_object_instance.py" />
+    <None Include="python_payload\src\core\project\resource_address.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

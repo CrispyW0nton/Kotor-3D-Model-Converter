@@ -121,6 +121,22 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\core\ports\__init__.py" />
+    <None Include="python_payload\src\core\ports\files.py" />
+    <None Include="python_payload\src\core\ports\resources.py" />
+    <None Include="python_payload\src\core\ports\scripts.py" />
+    <None Include="python_payload\src\core\ports\textures.py" />
+    <None Include="python_payload\src\core\ports\viewport_renderer.py" />
+    <None Include="python_payload\src\core\rendering\renderer_interface.py" />
+    <None Include="python_payload\src\core\rendering\renderer_backend.py" />
+    <None Include="python_payload\src\core\rendering\renderer_capabilities.py" />
+    <None Include="python_payload\src\adapters\rendering\native_core\__init__.py" />
+    <None Include="python_payload\src\adapters\rendering\native_core\binding.py" />
+    <None Include="python_payload\src\adapters\rendering\native_core\renderer.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

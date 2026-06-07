@@ -1,0 +1,63 @@
+{
+  "schema": "ghostrigger_python_payload.v1",
+  "project": "GhostRigger.Native.NativeCore.Math",
+  "file_count": 8,
+  "files": [
+    {
+      "resource_name": "PYTHON_PAYLOAD_0001",
+      "source_path": "src\\math\\camera_math.py",
+      "packaged_path": "python_payload\\src\\math\\camera_math.py",
+      "sha256": "f6229a96c012864aead9e49d814975019625b83424f3d3ba6008dc4b216eaeee",
+      "byte_count": 6355
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0002",
+      "source_path": "src\\math\\frame_math.py",
+      "packaged_path": "python_payload\\src\\math\\frame_math.py",
+      "sha256": "511e90bd9b88e2d4aacce93e39c00b6561d7f45756bead3c598440aa15158635",
+      "byte_count": 7300
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0003",
+      "source_path": "src\\math\\gpu_math.py",
+      "packaged_path": "python_payload\\src\\math\\gpu_math.py",
+      "sha256": "467473a0079762c56b379a06dd44dd98910757f476ee2ab4cb690da08fc3589e",
+      "byte_count": 9604
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0004",
+      "source_path": "src\\math\\module_layout_math.py",
+      "packaged_path": "python_payload\\src\\math\\module_layout_math.py",
+      "sha256": "c6db1005ad0b32d306b66d291032d9d54ec20578903fe15dca319428578edc10",
+      "byte_count": 895
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0005",
+      "source_path": "src\\math\\transform_math.py",
+      "packaged_path": "python_payload\\src\\math\\transform_math.py",
+      "sha256": "1aa4402acc0f067899d0b57e9365305fd9e5bd26da920a90558f04ff7c5b711c",
+      "byte_count": 7007
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0006",
+      "source_path": "src\\math\\viewcube_math.py",
+      "packaged_path": "python_payload\\src\\math\\viewcube_math.py",
+      "sha256": "09808cd6be4ad101453e40418e21736ef1122ae107cdfc82d56d73fe5910df79",
+      "byte_count": 6142
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0007",
+      "source_path": "src\\core\\rendering\\frame_core\\math_helpers.py",
+      "packaged_path": "python_payload\\src\\core\\rendering\\frame_core\\math_helpers.py",
+      "sha256": "eae12895f6a1fe277a2c39a893822d8d9e63a81dbe5bcf01bef3f0edc78de0f1",
+      "byte_count": 286
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0008",
+      "source_path": "src\\gui\\gizmo\\transform_math.py",
+      "packaged_path": "python_payload\\src\\gui\\gizmo\\transform_math.py",
+      "sha256": "06ab6c0f2c8290f4f11eaa558da873f82c7b8edce824dbb774ced4cdeab768c6",
+      "byte_count": 295
+    }
+  ]
+}

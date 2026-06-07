@@ -13,5 +13,19 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_TOOLS_TWO_DA_BROWSER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerToolsTwoDABrowser.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerToolsTwoDABrowser.h" /></ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\gui\panels\qt_resource_panel.py" />
+    <None Include="python_payload\src\gui\windows\application_core\shared\resource_panels.py" />
+    <None Include="python_payload\src\core\templates\twoda.py" />
+    <None Include="python_payload\src\core\templates\__init__.py" />
+    <None Include="python_payload\src\resources\__init__.py" />
+    <None Include="python_payload\src\resources\game_detector.py" />
+    <None Include="python_payload\src\resources\game_library.py" />
+    <None Include="python_payload\src\core\resources\__init__.py" />
+    <None Include="python_payload\src\core\resources\game_resource_provider.py" />
+    <None Include="python_payload\src\core\game\game_library_ext.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -43,6 +43,19 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerToolsExport.cpp" /></ItemGroup>
   <ItemGroup><ClInclude Include="GhostRiggerToolsExport.h" /></ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\core\export\__init__.py" />
+    <None Include="python_payload\src\core\export\export_job.py" />
+    <None Include="python_payload\src\core\export\gltf_importer.py" />
+    <None Include="python_payload\src\core\export\unity_export_bridge.py" />
+    <None Include="python_payload\src\core\export\unity_import_validator.py" />
+    <None Include="python_payload\src\gui\dialogs\qt_export_dialog.py" />
+    <None Include="python_payload\src\gui\panels\module_editor\export_panel.py" />
+    <None Include="python_payload\src\core\characters\character_export_preflight.py" />
+    <None Include="python_payload\src\core\characters\character_export_transaction.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

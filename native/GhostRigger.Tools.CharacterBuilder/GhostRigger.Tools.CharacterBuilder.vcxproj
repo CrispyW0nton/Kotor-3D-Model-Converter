@@ -43,6 +43,25 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerToolsCharacterBuilder.cpp" /></ItemGroup>
   <ItemGroup><ClInclude Include="GhostRiggerToolsCharacterBuilder.h" /></ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\gui\panels\qt_character_builder_panel.py" />
+    <None Include="python_payload\src\gui\windows\qt_character_builder_window.py" />
+    <None Include="python_payload\src\core\characters\__init__.py" />
+    <None Include="python_payload\src\core\characters\character_autofit_report.py" />
+    <None Include="python_payload\src\core\characters\character_builder.py" />
+    <None Include="python_payload\src\core\characters\character_export_preflight.py" />
+    <None Include="python_payload\src\core\characters\character_export_transaction.py" />
+    <None Include="python_payload\src\core\characters\character_override_package.py" />
+    <None Include="python_payload\src\core\characters\character_rig_state.py" />
+    <None Include="python_payload\src\core\characters\character_validation_report.py" />
+    <None Include="python_payload\src\core\characters\creature_appearance.py" />
+    <None Include="python_payload\src\core\characters\head_workflow.py" />
+    <None Include="python_payload\src\core\characters\headless_body_workflow.py" />
+    <None Include="python_payload\src\core\characters\kotor_constants.py" />
+    <None Include="python_payload\src\core\characters\native_skeleton.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

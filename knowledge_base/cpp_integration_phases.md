@@ -382,12 +382,16 @@ Current completed foundation:
   owner-boundary metadata, and dependency-schema placeholders without Python or
   the GUI.
 - `native/GhostRigger.PythonPayloadManifest.json` records the Phase 1.5
-  embedded Python payload sweep. The payload map covers all 796 `src/**/*.py`
-  files and assigns each file to one relevant native DLL project.
+  embedded Python payload sweep. The payload map covers all 93 non-DEBUG native
+  DLL projects and every `src/**/*.py` file at least once.
 - The Phase 1.5 payload copies live under
-  `native/<Project>/python_payload/src/...` and are built into 67 native DLLs
-  as `RCDATA` resources through per-project `GhostRiggerPythonPayload.rc`
-  files, alongside per-project `GhostRiggerPythonPayload.json` manifests.
+  `native/<Project>/python_payload/src/...` and are built into native DLLs as
+  `RCDATA` resources through per-project `GhostRiggerPythonPayload.rc` files,
+  alongside per-project `GhostRiggerPythonPayload.json` manifests.
+- The manifest contains 1,270 packaged Python file references. Duplicate source
+  references are allowed and expected when product-surface DLLs, renderer DLLs,
+  shared runtime DLLs, and diagnostic native-core extension DLLs all need a copy
+  of the same Python owner surface.
 - Phase 1.5 does not change runtime import behavior. The packaged Python files
   are byte-identical DLL payload copies; the active application still imports
   originals from `src/` until a later native bridge, extraction, or import path

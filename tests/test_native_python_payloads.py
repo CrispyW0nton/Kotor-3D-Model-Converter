@@ -15,7 +15,7 @@ def _payload_entries() -> list[dict[str, object]]:
     return entries
 
 
-def test_python_payload_manifest_covers_every_python_source_once() -> None:
+def test_python_payload_manifest_covers_every_python_source_and_dll_project() -> None:
     entries = _payload_entries()
     payload_files = [
         Path(file)
@@ -23,11 +23,18 @@ def test_python_payload_manifest_covers_every_python_source_once() -> None:
         for file in entry["files"]
     ]
     source_files = sorted(Path("src") / path.relative_to(ROOT / "src") for path in (ROOT / "src").rglob("*.py"))
+    payload_projects = {str(entry["project"]) for entry in entries}
+    dll_projects = {
+        project.stem
+        for project in (ROOT / "native").glob("GhostRigger*/GhostRigger*.vcxproj")
+        if ".DEBUG" not in project.stem
+        and "<ConfigurationType>DynamicLibrary</ConfigurationType>" in project.read_text(encoding="utf-8")
+    }
 
-    assert len(entries) == 67
-    assert len(payload_files) == 796
-    assert sorted(payload_files) == source_files
-    assert len(set(payload_files)) == len(payload_files)
+    assert len(entries) == 93
+    assert len(payload_files) == 1270
+    assert set(source_files).issubset(set(payload_files))
+    assert payload_projects == dll_projects
 
 
 def test_python_payload_copies_are_byte_identical_and_manifested() -> None:

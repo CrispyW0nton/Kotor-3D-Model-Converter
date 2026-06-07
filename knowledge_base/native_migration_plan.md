@@ -222,9 +222,13 @@ a launcher and native workspace first, not a rewrite of the application.
   without requiring Python, while the Python implementations remain the active
   owners of runtime behavior.
 - `native/GhostRigger.PythonPayloadManifest.json` owns the Phase 1.5 embedded
-  Python payload sweep manifest. It maps all 796 `src/**/*.py` files into 67
-  relevant native DLL projects, with byte-identical packaged copies under
+  Python payload sweep manifest. It maps all 93 non-DEBUG native DLL projects
+  to byte-identical packaged Python source copies under
   `native/<Project>/python_payload/src/...`.
+- The manifest includes 1,270 packaged Python file references and covers every
+  `src/**/*.py` file at least once. Duplicate source references are intentional
+  where toolbox, renderer, window, native-core, or runtime-shared package
+  boundaries all depend on the same Python owner.
 - Each Phase 1.5 payload project owns a `GhostRiggerPythonPayload.json`
   manifest and `GhostRiggerPythonPayload.rc` resource script. The `.rc` files
   compile the manifest and copied Python files into the DLLs as `RCDATA`

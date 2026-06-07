@@ -1,0 +1,105 @@
+{
+  "schema": "ghostrigger_python_payload.v1",
+  "project": "GhostRigger.Tools.SpriteMaterials",
+  "file_count": 14,
+  "files": [
+    {
+      "resource_name": "PYTHON_PAYLOAD_0001",
+      "source_path": "src\\gui\\panels\\qt_sprite_material_panel.py",
+      "packaged_path": "python_payload\\src\\gui\\panels\\qt_sprite_material_panel.py",
+      "sha256": "cc9a742b972e85fea6649e762aafea1b98eba25abc916fcbc2685c5ba4bf4101",
+      "byte_count": 31582
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0002",
+      "source_path": "src\\gui\\textures\\__init__.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "byte_count": 0
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0003",
+      "source_path": "src\\gui\\textures\\qt_tex_atlas.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\qt_tex_atlas.py",
+      "sha256": "b295a7ff09da8f09d38caf215bf69a680fa54c7a4cf1705d74c5f6bdd5fc8d7a",
+      "byte_count": 225
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0004",
+      "source_path": "src\\gui\\textures\\qt_tpc_render_utils.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\qt_tpc_render_utils.py",
+      "sha256": "cc18c20abe555780784a8862e0a5d04ae27641979264da37156d49e99db974d1",
+      "byte_count": 210
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0005",
+      "source_path": "src\\gui\\textures\\tex_atlas.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\tex_atlas.py",
+      "sha256": "8349c53aa495c7b51f07614cc86a1e41b56952141d7e9dbb37367ba164fe5eee",
+      "byte_count": 295
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0006",
+      "source_path": "src\\gui\\textures\\tpc.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\tpc.py",
+      "sha256": "8d9efdf237ab728f183035ef7c7584aeab703f51d242fd18d32777e7a6f15c67",
+      "byte_count": 282
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0007",
+      "source_path": "src\\gui\\textures\\tpc_render_utils.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\tpc_render_utils.py",
+      "sha256": "c1e68ea560852bbf151a2db0d4dfd46fcb012a66f1cb0555c40935e479a091af",
+      "byte_count": 284
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0008",
+      "source_path": "src\\gui\\textures\\txi.py",
+      "packaged_path": "python_payload\\src\\gui\\textures\\txi.py",
+      "sha256": "f7748e7a84579c187d905c2cb6e55aa400dcbe9e532e2cd5c795d12b8789f38e",
+      "byte_count": 284
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0009",
+      "source_path": "src\\core\\graphics\\__init__.py",
+      "packaged_path": "python_payload\\src\\core\\graphics\\__init__.py",
+      "sha256": "4b6ceb00139dcd7ba3d250d0ef1c472137b89fec95e30d68179e6568bb10168e",
+      "byte_count": 53
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0010",
+      "source_path": "src\\core\\graphics\\tex_atlas.py",
+      "packaged_path": "python_payload\\src\\core\\graphics\\tex_atlas.py",
+      "sha256": "0e295de62be52eb38a0f9c96dc52f76d8b842e89c0ae4595d7ed4d7dc21f117b",
+      "byte_count": 6726
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0011",
+      "source_path": "src\\core\\graphics\\tpc.py",
+      "packaged_path": "python_payload\\src\\core\\graphics\\tpc.py",
+      "sha256": "755575dccec66b591b8523de321258727563d3a394120fb060e71428ac671ccc",
+      "byte_count": 36091
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0012",
+      "source_path": "src\\core\\graphics\\tpc_render_utils.py",
+      "packaged_path": "python_payload\\src\\core\\graphics\\tpc_render_utils.py",
+      "sha256": "53fb384cf09b3f54f0440f42417b140f2a14703456fa5358b98357605d050bc7",
+      "byte_count": 34549
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0013",
+      "source_path": "src\\core\\graphics\\txi.py",
+      "packaged_path": "python_payload\\src\\core\\graphics\\txi.py",
+      "sha256": "713144cbe22702f6115c3edf00c04f2c8d20d5f38e24ee3e69931d5f778c7b54",
+      "byte_count": 18794
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0014",
+      "source_path": "src\\sequence\\tracks\\material_track.py",
+      "packaged_path": "python_payload\\src\\sequence\\tracks\\material_track.py",
+      "sha256": "5d0fdc243fc05a25a8bafb4d6082db9b5e98e7c9c42ac1394082d653d1439c6d",
+      "byte_count": 2342
+    }
+  ]
+}

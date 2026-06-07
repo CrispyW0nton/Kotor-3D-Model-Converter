@@ -144,12 +144,15 @@ packages. These packages are native-readiness boundaries only: Python still
 owns the current implementation until a later migration slice proves parity.
 
 `native/GhostRigger.PythonPayloadManifest.json` records the Phase 1.5 embedded
-Python payload sweep. It maps every `src/**/*.py` file into one relevant native
-DLL project, copies the files under `native/<Project>/python_payload/src/...`,
-and builds them into the DLL as `RCDATA` resources through
-`GhostRiggerPythonPayload.rc`. These are packaged copies only; the active
-Python application still imports the originals from `src/` until a later
-bridge, extraction, or import path is deliberately enabled.
+Python payload sweep. It maps every non-DEBUG native DLL project to packaged
+Python source copies under `native/<Project>/python_payload/src/...` and builds
+them into the DLL as `RCDATA` resources through `GhostRiggerPythonPayload.rc`.
+The manifest covers all 93 native DLL projects and 1,270 packaged Python file
+references; duplicated references are intentional when toolbox, renderer,
+window, or shared-runtime package boundaries depend on the same Python owner.
+These are packaged copies only; the active Python application still imports the
+originals from `src/` until a later bridge, extraction, or import path is
+deliberately enabled.
 
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and

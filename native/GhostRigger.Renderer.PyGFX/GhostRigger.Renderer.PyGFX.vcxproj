@@ -53,6 +53,30 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\adapters\rendering\pygfx_renderer_exports.py" />
+    <None Include="python_payload\src\adapters\rendering\pygfx_core\__init__.py" />
+    <None Include="python_payload\src\adapters\rendering\pygfx_core\backend_env.py" />
+    <None Include="python_payload\src\adapters\rendering\pygfx_core\mesh_cache.py" />
+    <None Include="python_payload\src\adapters\rendering\pygfx_core\renderer.py" />
+    <None Include="python_payload\src\adapters\rendering\pygfx_core\scene_bridge.py" />
+    <None Include="python_payload\src\adapters\rendering\wgpu_core\__init__.py" />
+    <None Include="python_payload\src\adapters\rendering\wgpu_core\renderer.py" />
+    <None Include="python_payload\src\adapters\rendering\wgpu_core\resources.py" />
+    <None Include="python_payload\src\adapters\rendering\wgpu_core\shared.py" />
+    <None Include="python_payload\src\adapters\rendering\wgpu_renderer_exports.py" />
+    <None Include="python_payload\src\gui\rendering\pygfx_renderer.py" />
+    <None Include="python_payload\src\gui\rendering\wgpu_renderer.py" />
+    <None Include="python_payload\src\gui\rendering\wgpu_core\__init__.py" />
+    <None Include="python_payload\src\gui\rendering\wgpu_core\renderer.py" />
+    <None Include="python_payload\src\gui\rendering\wgpu_core\resources.py" />
+    <None Include="python_payload\src\gui\rendering\wgpu_core\shaders.py" />
+    <None Include="python_payload\src\gui\rendering\wgpu_core\shared.py" />
+    <None Include="python_payload\src\core\rendering\wgpu_shaders.py" />
+    <None Include="python_payload\src\core\rendering\wgpu_shared.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

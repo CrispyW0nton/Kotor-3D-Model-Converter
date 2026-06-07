@@ -13,5 +13,25 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_TOOLS_SCENE_INFORMATION_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerToolsSceneInformation.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerToolsSceneInformation.h" /></ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\gui\panels\qt_scene_outliner_panel.py" />
+    <None Include="python_payload\src\gui\panels\qt_inspector_panel.py" />
+    <None Include="python_payload\src\core\scene\__init__.py" />
+    <None Include="python_payload\src\core\scene\axis_mode.py" />
+    <None Include="python_payload\src\core\scene\kmax_scene.py" />
+    <None Include="python_payload\src\core\scene\kmax_scene_manager.py" />
+    <None Include="python_payload\src\core\scene\kmax_serializer.py" />
+    <None Include="python_payload\src\core\scene\kmax_validator.py" />
+    <None Include="python_payload\src\core\scene\lyt_room_graph.py" />
+    <None Include="python_payload\src\core\scene\module_scene_import.py" />
+    <None Include="python_payload\src\core\scene\scene_manager.py" />
+    <None Include="python_payload\src\core\scene\scene_manifest.py" />
+    <None Include="python_payload\src\core\scene\scene_object.py" />
+    <None Include="python_payload\src\core\scene\scene_object_instance.py" />
+    <None Include="python_payload\src\core\scene\scene_resource_ref.py" />
+    <None Include="python_payload\src\core\scene\vis_editor.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

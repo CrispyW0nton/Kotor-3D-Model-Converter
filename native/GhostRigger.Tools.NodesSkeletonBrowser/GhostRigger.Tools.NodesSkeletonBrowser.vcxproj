@@ -13,5 +13,57 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_TOOLS_NODES_SKELETON_BROWSER_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="GhostRiggerToolsNodesSkeletonBrowser.cpp" /></ItemGroup><ItemGroup><ClInclude Include="GhostRiggerToolsNodesSkeletonBrowser.h" /></ItemGroup>
+  <ItemGroup Label="PythonPayload">
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="python_payload\src\gui\panels\qt_skeleton_panel.py" />
+    <None Include="python_payload\src\core\skeleton\__init__.py" />
+    <None Include="python_payload\src\core\skeleton\skeleton_builder.py" />
+    <None Include="python_payload\src\core\animation\__init__.py" />
+    <None Include="python_payload\src\core\animation\animation_engine.py" />
+    <None Include="python_payload\src\core\animation\animation_library.py" />
+    <None Include="python_payload\src\core\animation\gpu_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\animation_supermodel_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\creature_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\default_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\droid_rigid_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\droid_skinned_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\generated_character_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\head_attachment_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\humanoid_supermodel_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\local_character_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\modular_body_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\bith.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\duros.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\hero.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\human.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\mandalorian.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\party.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\sith.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\characters\wookie.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\creatures\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\creatures\selkath.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\droids\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\droids\battledroid.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\droids\t3m3.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\droids\t3m4.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\droids\utilitydroid.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\generated_character_skinning.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\bastila.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\kreia.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\malak.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\nihlus.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\revan.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\specialcase\sion.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\supermodels\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\supermodels\supermodel_female.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\supermodels\supermodel_male.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\turrets\__init__.py" />
+    <None Include="python_payload\src\core\animation\skinning_profiles\types\turrets\turret_01.py" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -1,0 +1,11 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "python_payload\\src\\core\\resources\\__init__.py"
+PYTHON_PAYLOAD_0002 RCDATA "python_payload\\src\\core\\resources\\game_resource_provider.py"
+PYTHON_PAYLOAD_0003 RCDATA "python_payload\\src\\resources\\__init__.py"
+PYTHON_PAYLOAD_0004 RCDATA "python_payload\\src\\resources\\game_detector.py"
+PYTHON_PAYLOAD_0005 RCDATA "python_payload\\src\\resources\\game_library.py"
+PYTHON_PAYLOAD_0006 RCDATA "python_payload\\src\\core\\assets\\resource_manager.py"
+PYTHON_PAYLOAD_0007 RCDATA "python_payload\\src\\core\\assets\\override_layer.py"
+PYTHON_PAYLOAD_0008 RCDATA "python_payload\\src\\core\\ports\\resources.py"
+PYTHON_PAYLOAD_0009 RCDATA "python_payload\\src\\core\\ports\\textures.py"
