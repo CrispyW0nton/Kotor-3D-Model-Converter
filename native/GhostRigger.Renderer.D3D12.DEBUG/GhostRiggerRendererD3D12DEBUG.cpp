@@ -60,6 +60,25 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 12;
     }
+    const char* descriptor_allocator_json = gr_renderer_d3d12_descriptor_allocator_readiness_json(context);
+    if (std::strstr(
+            descriptor_allocator_json,
+            R"("schema":"renderer_d3d12_descriptor_allocator_readiness.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 descriptor/allocator readiness mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 13;
+    }
+    if (std::strstr(descriptor_allocator_json, R"("command_list_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 descriptor/allocator readiness created a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 14;
+    }
+    if (std::strstr(descriptor_allocator_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 descriptor/allocator readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 15;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

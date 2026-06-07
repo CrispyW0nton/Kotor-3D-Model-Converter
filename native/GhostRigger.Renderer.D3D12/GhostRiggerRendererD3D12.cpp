@@ -55,11 +55,21 @@ std::string hresult_hex(HRESULT hr) {
 struct DiagnosticContext {
     Microsoft::WRL::ComPtr<ID3D12Device> device;
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> command_queue;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> cbv_srv_uav_heap;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsv_heap;
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator;
     std::string adapter_description;
     HRESULT device_hr = E_FAIL;
     HRESULT queue_hr = E_FAIL;
+    HRESULT cbv_srv_uav_heap_hr = E_FAIL;
+    HRESULT rtv_heap_hr = E_FAIL;
+    HRESULT dsv_heap_hr = E_FAIL;
+    HRESULT command_allocator_hr = E_FAIL;
     bool device_ready = false;
     bool command_queue_ready = false;
+    bool descriptor_heaps_ready = false;
+    bool command_allocator_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -245,6 +255,41 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_queue_swap_chain_readiness_j
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_descriptor_allocator_readiness_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_descriptor_allocator_readiness.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_device":false,"descriptor_heaps_ready":false,"command_allocator_ready":false,"command_list_created":false,"draw_submission_enabled":false})";
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_descriptor_allocator_readiness.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"cbv_srv_uav_heap_ready":)";
+    payload += target->cbv_srv_uav_heap ? "true" : "false";
+    payload += R"(,"rtv_heap_ready":)";
+    payload += target->rtv_heap ? "true" : "false";
+    payload += R"(,"dsv_heap_ready":)";
+    payload += target->dsv_heap ? "true" : "false";
+    payload += R"(,"descriptor_heaps_ready":)";
+    payload += target->descriptor_heaps_ready ? "true" : "false";
+    payload += R"(,"command_allocator_ready":)";
+    payload += target->command_allocator_ready ? "true" : "false";
+    payload += R"(,"command_list_created":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"cbv_srv_uav_heap_hresult":")";
+    payload += hresult_hex(target->cbv_srv_uav_heap_hr);
+    payload += R"(","rtv_heap_hresult":")";
+    payload += hresult_hex(target->rtv_heap_hr);
+    payload += R"(","dsv_heap_hresult":")";
+    payload += hresult_hex(target->dsv_heap_hr);
+    payload += R"(","command_allocator_hresult":")";
+    payload += hresult_hex(target->command_allocator_hr);
+    payload += R"("})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -307,6 +352,38 @@ GR_RENDERER_D3D12_API void* gr_renderer_d3d12_create_diagnostic_context() {
         hr = context->device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&context->command_queue));
         context->queue_hr = hr;
         context->command_queue_ready = SUCCEEDED(hr);
+
+        D3D12_DESCRIPTOR_HEAP_DESC descriptor_heap_desc{};
+        descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+        descriptor_heap_desc.NumDescriptors = 64;
+        descriptor_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        descriptor_heap_desc.NodeMask = 0;
+        hr = context->device->CreateDescriptorHeap(
+            &descriptor_heap_desc,
+            IID_PPV_ARGS(&context->cbv_srv_uav_heap)
+        );
+        context->cbv_srv_uav_heap_hr = hr;
+
+        descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+        descriptor_heap_desc.NumDescriptors = 8;
+        descriptor_heap_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+        hr = context->device->CreateDescriptorHeap(&descriptor_heap_desc, IID_PPV_ARGS(&context->rtv_heap));
+        context->rtv_heap_hr = hr;
+
+        descriptor_heap_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+        descriptor_heap_desc.NumDescriptors = 8;
+        hr = context->device->CreateDescriptorHeap(&descriptor_heap_desc, IID_PPV_ARGS(&context->dsv_heap));
+        context->dsv_heap_hr = hr;
+
+        context->descriptor_heaps_ready =
+            context->cbv_srv_uav_heap != nullptr && context->rtv_heap != nullptr && context->dsv_heap != nullptr;
+
+        hr = context->device->CreateCommandAllocator(
+            D3D12_COMMAND_LIST_TYPE_DIRECT,
+            IID_PPV_ARGS(&context->command_allocator)
+        );
+        context->command_allocator_hr = hr;
+        context->command_allocator_ready = SUCCEEDED(hr);
         return context.release();
     }
 }
@@ -324,18 +401,38 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->device ? "true" : "false";
     payload += R"(,"retained_command_queue":)";
     payload += target->command_queue ? "true" : "false";
+    payload += R"(,"retained_cbv_srv_uav_heap":)";
+    payload += target->cbv_srv_uav_heap ? "true" : "false";
+    payload += R"(,"retained_rtv_heap":)";
+    payload += target->rtv_heap ? "true" : "false";
+    payload += R"(,"retained_dsv_heap":)";
+    payload += target->dsv_heap ? "true" : "false";
+    payload += R"(,"retained_command_allocator":)";
+    payload += target->command_allocator ? "true" : "false";
     payload += R"(,"device_ready":)";
     payload += target->device_ready ? "true" : "false";
     payload += R"(,"command_queue_ready":)";
     payload += target->command_queue_ready ? "true" : "false";
+    payload += R"(,"descriptor_heaps_ready":)";
+    payload += target->descriptor_heaps_ready ? "true" : "false";
+    payload += R"(,"command_allocator_ready":)";
+    payload += target->command_allocator_ready ? "true" : "false";
     payload += R"(,"draw_submission_enabled":)";
     payload += target->draw_submission_enabled ? "true" : "false";
-    payload += R"(,"swap_chain_created":false,"adapter_description":")";
+    payload += R"(,"swap_chain_created":false,"command_list_created":false,"adapter_description":")";
     payload += target->adapter_description;
     payload += R"(","device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
     payload += hresult_hex(target->queue_hr);
+    payload += R"(","cbv_srv_uav_heap_hresult":")";
+    payload += hresult_hex(target->cbv_srv_uav_heap_hr);
+    payload += R"(","rtv_heap_hresult":")";
+    payload += hresult_hex(target->rtv_heap_hr);
+    payload += R"(","dsv_heap_hresult":")";
+    payload += hresult_hex(target->dsv_heap_hr);
+    payload += R"(","command_allocator_hresult":")";
+    payload += hresult_hex(target->command_allocator_hr);
     payload += R"("})";
     return payload.c_str();
 }
