@@ -1,10 +1,12 @@
-# GhostRigger Native Visual Studio Wrapper
+# GhostRigger Native Visual Studio Host
 
 Open `GhostRigger.sln` from the repository root in Visual Studio 2022.
 
-The first native application project is a small C++ launcher. It keeps the
-current Python/Qt application usable from Visual Studio while establishing a
-native project layout for future graphics-heavy C++ work.
+The first native application project is a C++ Windows host. It embeds the local
+Python 3.13 runtime in `GhostRiggerNative.exe` and runs the existing
+`main.py --gui qt` path inside that native process. The current UI is still the
+Python/Qt application, but the process, debugger target, and future graphics
+integration point now belong to the Visual Studio solution.
 
 The first native runtime project is `GhostRiggerRuntime`, a DLL with a tiny C
 ABI used by Python to query native runtime version, lifecycle, retained scene
@@ -30,12 +32,14 @@ capabilities, and diagnostics. It is an adapter contract first; real retained
 rendering, GPU palette buffers, and triangle-accurate picking will be added
 behind that boundary in later migration slices.
 
-Build `GhostRiggerNative`, then run it from Visual Studio. The launcher is a
-Windows-subsystem host, so it opens the Qt application without an extra console
-window. With no arguments it launches:
+Build `GhostRiggerNative`, then run it from Visual Studio. The host is a
+Windows-subsystem application, but while GhostRigger is still under active
+construction it opens the startup log console by default before Python starts,
+preserving the visible `ghostrigger.main` and diagnostics log output. With no
+arguments it embeds Python and runs the equivalent of:
 
 ```powershell
-python main.py --gui qt
+main.py --gui qt
 ```
 
 Set `GHOSTRIGGER_PYTHON` if Visual Studio should use a specific interpreter:
@@ -51,10 +55,17 @@ The checked-in Visual Studio debugger environment points at the local Python
 C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe
 ```
 
-If `GHOSTRIGGER_PYTHON` is not set, the launcher tries that local Python 3.13
-path when it exists, then `py -3.13`, `py -3`, and finally `python`. Set
-`GHOSTRIGGER_NATIVE_CONSOLE=1` when you want the hosted Python process to keep a
-debug console while launched through the native host.
+If `GHOSTRIGGER_PYTHON` is not set, the host uses that local Python 3.13 home
+when it exists. The build links against `python313.lib` and copies
+`python313.dll` plus `python3.dll` beside `GhostRiggerNative.exe`.
+
+Hosted runs set `GHOSTRIGGER_NATIVE_HOST=1` and
+`GHOSTRIGGER_EMBEDDED_PYTHON=1` before Python starts. Set
+`GHOSTRIGGER_NATIVE_LOG_CONSOLE=0` to suppress the startup log console only
+after we decide the application no longer needs it. Use
+`--native-host-smoke` to verify the native entrypoint without initializing
+Python, and `--native-embed-init-smoke` to verify embedded Python
+initialization/finalization without opening the Qt application.
 
 Any command-line arguments passed to `GhostRiggerNative.exe` are forwarded to
 `main.py`, replacing the default `--gui qt`.
