@@ -7,6 +7,7 @@
 #include <wrl/client.h>
 
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <string>
 
@@ -49,6 +50,21 @@ std::string hresult_hex(HRESULT hr) {
     std::ostringstream stream;
     stream << "0x" << std::uppercase << std::hex << static_cast<unsigned long>(hr);
     return stream.str();
+}
+
+struct DiagnosticContext {
+    Microsoft::WRL::ComPtr<ID3D12Device> device;
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> command_queue;
+    std::string adapter_description;
+    HRESULT device_hr = E_FAIL;
+    HRESULT queue_hr = E_FAIL;
+    bool device_ready = false;
+    bool command_queue_ready = false;
+    bool draw_submission_enabled = false;
+};
+
+DiagnosticContext* context_from_handle(void* context) {
+    return static_cast<DiagnosticContext*>(context);
 }
 
 } // namespace
@@ -242,6 +258,90 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
 
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_dry_run_frame_stats_json() {
     return kDryRunFrameStats;
+}
+
+GR_RENDERER_D3D12_API void* gr_renderer_d3d12_create_diagnostic_context() {
+    auto context = std::make_unique<DiagnosticContext>();
+
+    Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
+    HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) {
+        context->device_hr = hr;
+        context->queue_hr = hr;
+        return context.release();
+    }
+
+    for (UINT index = 0;; ++index) {
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+        hr = factory->EnumAdapters1(index, &adapter);
+        if (hr == DXGI_ERROR_NOT_FOUND) {
+            context->device_hr = DXGI_ERROR_NOT_FOUND;
+            context->queue_hr = DXGI_ERROR_NOT_FOUND;
+            return context.release();
+        }
+        if (FAILED(hr)) {
+            context->device_hr = hr;
+            context->queue_hr = hr;
+            return context.release();
+        }
+
+        DXGI_ADAPTER_DESC1 desc{};
+        hr = adapter->GetDesc1(&desc);
+        if (FAILED(hr) || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            continue;
+        }
+
+        context->adapter_description = json_escape(desc.Description);
+        hr = D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, IID_PPV_ARGS(&context->device));
+        context->device_hr = hr;
+        context->device_ready = SUCCEEDED(hr);
+        if (!context->device_ready) {
+            continue;
+        }
+
+        D3D12_COMMAND_QUEUE_DESC queue_desc{};
+        queue_desc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+        queue_desc.Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL;
+        queue_desc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
+        queue_desc.NodeMask = 0;
+        hr = context->device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&context->command_queue));
+        context->queue_hr = hr;
+        context->command_queue_ready = SUCCEEDED(hr);
+        return context.release();
+    }
+}
+
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_diagnostic_context.v1","backend_id":"renderer_d3d12","status":"null_context","device_ready":false,"command_queue_ready":false,"draw_submission_enabled":false})";
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_diagnostic_context.v1","backend_id":"renderer_d3d12",)"
+        R"("diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"retained_command_queue":)";
+    payload += target->command_queue ? "true" : "false";
+    payload += R"(,"device_ready":)";
+    payload += target->device_ready ? "true" : "false";
+    payload += R"(,"command_queue_ready":)";
+    payload += target->command_queue_ready ? "true" : "false";
+    payload += R"(,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"swap_chain_created":false,"adapter_description":")";
+    payload += target->adapter_description;
+    payload += R"(","device_hresult":")";
+    payload += hresult_hex(target->device_hr);
+    payload += R"(","command_queue_hresult":")";
+    payload += hresult_hex(target->queue_hr);
+    payload += R"("})";
+    return payload.c_str();
+}
+
+GR_RENDERER_D3D12_API void gr_renderer_d3d12_destroy_diagnostic_context(void* context) {
+    delete context_from_handle(context);
 }
 
 }

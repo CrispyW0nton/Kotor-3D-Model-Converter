@@ -48,6 +48,19 @@ int main()
         std::cerr << "GhostRigger.Renderer.D3D12 dry-run frame stats mismatch" << std::endl;
         return 10;
     }
+    void* context = gr_renderer_d3d12_create_diagnostic_context();
+    const char* context_json = gr_renderer_d3d12_diagnostic_context_json(context);
+    if (std::strstr(context_json, R"("schema":"renderer_d3d12_diagnostic_context.v1")") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 diagnostic context mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 11;
+    }
+    if (std::strstr(context_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 diagnostic context enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 12;
+    }
+    gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
     return 0;

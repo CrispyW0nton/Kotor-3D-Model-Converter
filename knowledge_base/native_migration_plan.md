@@ -68,12 +68,15 @@ a launcher and native workspace first, not a rewrite of the application.
   package boundary behind the renderer contract boundary. It can probe DXGI
   adapters, probe D3D12 feature-level 12_0 device-readiness without retaining a
   device, report command-queue/swap-chain readiness requirements without
-  creating either object, and report failure-diagnostic metadata, but it is
-  diagnostic-only in Phase 1 and does not submit draws yet.
+  creating either object, create/destroy a diagnostic context that retains a
+  D3D12 device and direct command queue for lifetime validation, and report
+  failure-diagnostic metadata, but it is diagnostic-only in Phase 1 and does not
+  create swap chains, command lists, or submit draws yet.
 - `native/GhostRigger.Renderer.D3D12.DEBUG/` verifies the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
-  queue/swap-chain readiness export, failure-diagnostic export, and
-  device-requirement metadata from Visual Studio without requiring Python.
+  queue/swap-chain readiness export, diagnostic context create/destroy/export,
+  failure-diagnostic export, and device-requirement metadata from Visual Studio
+  without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package
