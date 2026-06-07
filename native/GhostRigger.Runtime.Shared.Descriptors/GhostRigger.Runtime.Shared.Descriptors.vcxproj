@@ -41,8 +41,14 @@
     <PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="Private\GhostRiggerRuntimeSharedDescriptors.cpp" /></ItemGroup>
-  <ItemGroup><ClInclude Include="Public\GhostRiggerRuntimeSharedDescriptors.h" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerRuntimeSharedDescriptors.cpp" />
+    <ClCompile Include="Private\ResourceAddress.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerRuntimeSharedDescriptors.h" />
+    <ClInclude Include="Public\ResourceAddress.h" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GhostRigger.Native.NativeCore\GhostRigger.Native.NativeCore.vcxproj">
       <Project>{f2d7b7d0-3d17-4d1d-a5b2-d7cb91fce001}</Project>

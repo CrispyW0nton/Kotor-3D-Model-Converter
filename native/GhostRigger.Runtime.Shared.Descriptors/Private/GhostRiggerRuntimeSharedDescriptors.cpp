@@ -8,7 +8,9 @@ constexpr const char* kCapabilities =
     R"({"name":"GhostRigger.Runtime.Shared.Descriptors","version":"0.1.0",)"
     R"("phase":"P1 foundation","shared_runtime_descriptors":true,)"
     R"("renderer_neutral":true,"mesh_schema":"runtime_mesh_descriptor.v1",)"
-    R"("material_schema":"runtime_material_descriptor.v1","frame_schema":"runtime_frame_descriptor.v1"})";
+    R"("material_schema":"runtime_material_descriptor.v1","frame_schema":"runtime_frame_descriptor.v1",)"
+    R"("native_resource_address":true,"native_resource_address_schema":"resource_address.v1",)"
+    R"("python_fallback_secondary":true})";
 constexpr const char* kMeshSchema =
     R"({"schema":"runtime_mesh_descriptor.v1","fields":["native_mesh_id","vertex_count",)"
     R"("index_count","material_slot","bounds_min_xyz","bounds_max_xyz","flags"]})";
