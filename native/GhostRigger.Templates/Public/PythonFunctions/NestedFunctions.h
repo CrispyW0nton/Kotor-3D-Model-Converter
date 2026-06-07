@@ -2,19 +2,26 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_templates {
+namespace ghostrigger::templates {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TEMPLATES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TEMPLATES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TEMPLATES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_templates_twoda_twoda_parse_binary_get_str_line_175_54443ef9_descriptor_json();
+const NativeFunctionImplementation& twoda_parse_binary_get_str_line_175_54443ef9_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_templates
+} // namespace ghostrigger::templates

@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_panels {
+namespace ghostrigger::gui::panels {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_PANELS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_PANELS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_PANELS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_panels_qt_content_browser_panel_contentassetdescriptor_searchable_text_line_403_b686721a_descriptor_json();
-const char* src_gui_panels_qt_rig_panel_qtrigwindow_status_label_line_177_c870d04c_descriptor_json();
+const NativeFunctionImplementation& contentassetdescriptor_searchable_text_line_403_b686721a_native();
+const NativeFunctionImplementation& qtrigwindow_status_label_line_177_c870d04c_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_panels
+} // namespace ghostrigger::gui::panels

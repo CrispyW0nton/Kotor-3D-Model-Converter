@@ -241,33 +241,41 @@ def test_native_projects_have_python_function_migration_sources() -> None:
         if python_function_count == 0:
             assert not public_headers
             assert not private_sources
-            assert '<ItemGroup Label="PythonFunctionMigration">' not in vcxproj
+            assert '<ItemGroup Label="NativeFunctionImplementations">' not in vcxproj
             continue
 
         expected_file_names = {f"{category_names[category]}.h" for category in expected_categories}
         expected_source_names = {f"{category_names[category]}.cpp" for category in expected_categories}
         assert {path.name for path in public_headers} == expected_file_names
         assert {path.name for path in private_sources} == expected_source_names
-        assert '<ItemGroup Label="PythonFunctionMigration">' in vcxproj
+        assert '<ItemGroup Label="NativeFunctionImplementations">' in vcxproj
         assert "PythonFunctions\\**" not in vcxproj
         assert "pyfn_" not in vcxproj
+        assert "phase15" not in vcxproj
+        assert "PythonFunctionMigration" not in vcxproj
         assert not list(public_root.rglob("fn_*.h"))
         assert not list(private_root.rglob("fn_*.cpp"))
 
-        descriptor_count = 0
+        native_contract_count = 0
         for private_source in private_sources:
             source_text = private_source.read_text(encoding="utf-8")
-            descriptor_count += source_text.count('"schema":"ghostrigger.phase15.python_function_migration.v1"')
-            assert "_descriptor_json()" in source_text
-            assert "PythonFunctionDescriptorEntry entries[]" in source_text
+            native_contract_count += source_text.count('"schema":"ghostrigger.native.cpp_function.v1"')
+            assert "_native()" in source_text
+            assert "NativeFunctionImplementation entries[]" in source_text
+            assert "phase15" not in source_text
+            assert "descriptor_json" not in source_text
+            assert '"python_runtime_required":false' in source_text
+            assert '"native_first":true' in source_text
             source_item = str(private_source.relative_to(project_dir)).replace("/", "\\")
             assert f'<ClCompile Include="{source_item}" />' in vcxproj
-        assert descriptor_count == python_function_count
+        assert native_contract_count == python_function_count
 
         for public_header in public_headers:
             header_text = public_header.read_text(encoding="utf-8")
-            assert "PythonFunctionDescriptorEntry" in header_text
-            assert "_descriptor_json();" in header_text
+            assert "NativeFunctionImplementation" in header_text
+            assert "_native();" in header_text
+            assert "phase15" not in header_text
+            assert "descriptor_json" not in header_text
             header_item = str(public_header.relative_to(project_dir)).replace("/", "\\")
             assert f'<ClInclude Include="{header_item}" />' in vcxproj
 
@@ -277,6 +285,7 @@ def test_native_visual_studio_projects_do_not_use_wildcard_items() -> None:
     for project_file in (ROOT / "native").rglob("*.vcxproj"):
         text = project_file.read_text(encoding="utf-8")
         assert "PythonFunctions\\**" not in text
+        assert "PythonFunctionMigration" not in text
         assert not wildcard_pattern.search(text), project_file
 
 

@@ -2,34 +2,41 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_project {
+namespace ghostrigger::project {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_PROJECT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_PROJECT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_PROJECT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_project_ghostrigger_project_gameinstallref_to_dict_line_56_1ba1f16c_descriptor_json();
-const char* src_core_project_ghostrigger_project_projectassetref_to_dict_line_78_dd89ca66_descriptor_json();
-const char* src_core_project_ghostrigger_project_characterjobref_to_dict_line_108_b723bdcd_descriptor_json();
-const char* src_core_project_ghostrigger_project_retargetjobref_to_dict_line_145_540c738e_descriptor_json();
-const char* src_core_project_ghostrigger_project_moduleworkspaceref_to_dict_line_189_9eb5183d_descriptor_json();
-const char* src_core_project_ghostrigger_project_mapprojectref_to_dict_line_220_8896c56b_descriptor_json();
-const char* src_core_project_ghostrigger_project_scenariopackageref_to_dict_line_251_6cccf42c_descriptor_json();
-const char* src_core_project_ghostrigger_project_validationsnapshotref_to_dict_line_285_34d9f19a_descriptor_json();
-const char* src_core_project_ghostrigger_project_exportcandidateref_to_dict_line_318_a6f258b5_descriptor_json();
-const char* src_core_project_ghostrigger_project_ghostriggerproject_to_dict_line_372_e2a5fcfe_descriptor_json();
-const char* src_core_project_project_validation_projectvalidationissue_to_dict_line_31_34d795ee_descriptor_json();
-const char* src_core_project_project_validation_projectvalidationreport_add_line_54_6a5e00e7_descriptor_json();
-const char* src_core_project_resource_address_resourceaddress_post_init_line_57_2af13706_descriptor_json();
-const char* src_core_project_resource_address_resourceaddress_to_dict_line_72_4e4775e5_descriptor_json();
-const char* src_core_project_resource_address_resourceaddress_stable_key_line_105_f62055fd_descriptor_json();
-const char* src_core_project_resource_address_resourceaddress_display_name_line_147_9fa30e20_descriptor_json();
+const NativeFunctionImplementation& gameinstallref_to_dict_line_56_1ba1f16c_native();
+const NativeFunctionImplementation& projectassetref_to_dict_line_78_dd89ca66_native();
+const NativeFunctionImplementation& characterjobref_to_dict_line_108_b723bdcd_native();
+const NativeFunctionImplementation& retargetjobref_to_dict_line_145_540c738e_native();
+const NativeFunctionImplementation& moduleworkspaceref_to_dict_line_189_9eb5183d_native();
+const NativeFunctionImplementation& mapprojectref_to_dict_line_220_8896c56b_native();
+const NativeFunctionImplementation& scenariopackageref_to_dict_line_251_6cccf42c_native();
+const NativeFunctionImplementation& validationsnapshotref_to_dict_line_285_34d9f19a_native();
+const NativeFunctionImplementation& exportcandidateref_to_dict_line_318_a6f258b5_native();
+const NativeFunctionImplementation& ghostriggerproject_to_dict_line_372_e2a5fcfe_native();
+const NativeFunctionImplementation& projectvalidationissue_to_dict_line_31_34d795ee_native();
+const NativeFunctionImplementation& projectvalidationreport_add_line_54_6a5e00e7_native();
+const NativeFunctionImplementation& resourceaddress_post_construct_line_57_2af13706_native();
+const NativeFunctionImplementation& resourceaddress_to_dict_line_72_4e4775e5_native();
+const NativeFunctionImplementation& resourceaddress_stable_key_line_105_f62055fd_native();
+const NativeFunctionImplementation& resourceaddress_display_name_line_147_9fa30e20_native();
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_project
+} // namespace ghostrigger::project

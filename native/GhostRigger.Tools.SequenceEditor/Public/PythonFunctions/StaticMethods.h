@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_tools_sequenceeditor {
+namespace ghostrigger::tools::sequenceeditor {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TOOLS_SEQUENCEEDITOR_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_SEQUENCEEDITOR_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TOOLS_SEQUENCEEDITOR_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_windows_application_core_shared_animation_workflow_animationworkflowmixin_is_head_animation_slot_line_278_daa495fc_descriptor_json();
-const char* src_sequence_sequence_manager_sequencemanager_safe_filename_line_174_6e8e07fc_descriptor_json();
+const NativeFunctionImplementation& animationworkflowmixin_is_head_animation_slot_line_278_daa495fc_native();
+const NativeFunctionImplementation& sequencemanager_safe_filename_line_174_6e8e07fc_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_sequenceeditor
+} // namespace ghostrigger::tools::sequenceeditor

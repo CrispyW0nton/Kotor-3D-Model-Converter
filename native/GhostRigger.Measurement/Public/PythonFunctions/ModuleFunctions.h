@@ -2,22 +2,29 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_measurement {
+namespace ghostrigger::measurement {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_MEASUREMENT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_MEASUREMENT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_MEASUREMENT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_measurement_dimension_calculator_quat_to_euler_degrees_line_23_8759ec24_descriptor_json();
-const char* src_measurement_unit_settings_load_measurement_settings_line_73_ed98c203_descriptor_json();
-const char* src_measurement_unit_settings_save_measurement_settings_line_82_f5bf0fc4_descriptor_json();
-const char* src_measurement_unit_system_normalize_unit_line_96_2c3e73d5_descriptor_json();
+const NativeFunctionImplementation& quat_to_euler_degrees_line_23_8759ec24_native();
+const NativeFunctionImplementation& load_measurement_settings_line_73_ed98c203_native();
+const NativeFunctionImplementation& save_measurement_settings_line_82_f5bf0fc4_native();
+const NativeFunctionImplementation& normalize_unit_line_96_2c3e73d5_native();
 
-const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_measurement
+} // namespace ghostrigger::measurement

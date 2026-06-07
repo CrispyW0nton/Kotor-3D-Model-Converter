@@ -1,17 +1,29 @@
 #include "PythonFunctions/NestedFunctions.h"
 
-namespace ghostrigger::phase15::ghostrigger_unreal {
+namespace ghostrigger::unreal {
 
-const char* src_unreal_animation_retargeting_world_positions_by_key_visit_line_343_1fe69925_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Unreal","python_module":"src.unreal.animation_retargeting","python_file":"src/unreal/animation_retargeting.py","qualname":"_world_positions_by_key.visit","name":"visit","kind":"nested_functions","line":343,"end_line":350,"signature":{"args":["node","parent_pos"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& world_positions_by_key_visit_line_343_1fe69925_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Unreal",
+        "ghostrigger::unreal::animation_retargeting",
+        "src/unreal/animation_retargeting.py",
+        "_world_positions_by_key.visit",
+        "nested_functions",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Unreal","namespace":"ghostrigger::unreal::animation_retargeting","python_file":"src/unreal/animation_retargeting.py","qualname":"_world_positions_by_key.visit","name":"visit","callable_type":"nested_functions","line":343,"end_line":350,"signature":{"args":["node","parent_pos"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/unreal/animation_retargeting.py", "_world_positions_by_key.visit", "nested_functions", &src_unreal_animation_retargeting_world_positions_by_key_visit_line_343_1fe69925_descriptor_json},
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        world_positions_by_key_visit_line_343_1fe69925_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_unreal
+} // namespace ghostrigger::unreal

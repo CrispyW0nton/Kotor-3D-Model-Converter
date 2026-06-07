@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_runtime_shared_descriptors {
+namespace ghostrigger::runtime::shared::descriptors {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_scene_scene_object_pivotdata_position_line_54_fa472186_descriptor_json();
-const char* src_core_scene_scene_object_pivotdata_rotation_line_62_8f4a7cea_descriptor_json();
+const NativeFunctionImplementation& pivotdata_position_line_54_fa472186_native();
+const NativeFunctionImplementation& pivotdata_rotation_line_62_8f4a7cea_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_runtime_shared_descriptors
+} // namespace ghostrigger::runtime::shared::descriptors

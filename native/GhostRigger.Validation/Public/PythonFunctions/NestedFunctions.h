@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_validation {
+namespace ghostrigger::validation {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_validation_animation_block_validator_validate_raw_animation_footprint_walk_line_148_d39479ce_descriptor_json();
-const char* src_core_validation_validation_bus_validationbus_subscribe_unsubscribe_line_158_b8f03986_descriptor_json();
+const NativeFunctionImplementation& validate_raw_animation_footprint_walk_line_148_d39479ce_native();
+const NativeFunctionImplementation& validationbus_subscribe_unsubscribe_line_158_b8f03986_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_validation
+} // namespace ghostrigger::validation

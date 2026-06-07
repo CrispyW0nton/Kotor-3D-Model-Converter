@@ -2,21 +2,28 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_tools_camera {
+namespace ghostrigger::tools::camera {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TOOLS_CAMERA_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_CAMERA_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TOOLS_CAMERA_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_camera_camera_model_ghostriggercamera_from_object_line_63_00a75f63_descriptor_json();
-const char* src_core_camera_camera_model_ghostriggercamera_from_dict_line_83_1d2e8091_descriptor_json();
-const char* src_core_camera_camera_render_settings_rendersettings_from_dict_line_41_2f47dc1e_descriptor_json();
+const NativeFunctionImplementation& ghostriggercamera_from_object_line_63_00a75f63_native();
+const NativeFunctionImplementation& ghostriggercamera_from_dict_line_83_1d2e8091_native();
+const NativeFunctionImplementation& rendersettings_from_dict_line_41_2f47dc1e_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_camera
+} // namespace ghostrigger::tools::camera

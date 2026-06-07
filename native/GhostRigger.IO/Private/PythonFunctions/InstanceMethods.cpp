@@ -1,22 +1,46 @@
 #include "PythonFunctions/InstanceMethods.h"
 
-namespace ghostrigger::phase15::ghostrigger_io {
+namespace ghostrigger::io {
 
-const char* src_io_fbx_fbx_scene_adapter_fbximportsummary_log_line_line_23_d3f43f45_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.IO","python_module":"src.io.fbx.fbx_scene_adapter","python_file":"src/io/fbx/fbx_scene_adapter.py","qualname":"FbxImportSummary.log_line","name":"log_line","kind":"instance_methods","line":23,"end_line":27,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& fbximportsummary_log_line_line_23_d3f43f45_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.IO",
+        "ghostrigger::io::fbx::fbx_scene_adapter",
+        "src/io/fbx/fbx_scene_adapter.py",
+        "FbxImportSummary.log_line",
+        "instance_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.IO","namespace":"ghostrigger::io::fbx::fbx_scene_adapter","python_file":"src/io/fbx/fbx_scene_adapter.py","qualname":"FbxImportSummary.log_line","name":"log_line","callable_type":"instance_methods","line":23,"end_line":27,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_io_fbx_fbx_scene_adapter_fbxexportsummary_log_line_line_39_848f749e_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.IO","python_module":"src.io.fbx.fbx_scene_adapter","python_file":"src/io/fbx/fbx_scene_adapter.py","qualname":"FbxExportSummary.log_line","name":"log_line","kind":"instance_methods","line":39,"end_line":43,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& fbxexportsummary_log_line_line_39_848f749e_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.IO",
+        "ghostrigger::io::fbx::fbx_scene_adapter",
+        "src/io/fbx/fbx_scene_adapter.py",
+        "FbxExportSummary.log_line",
+        "instance_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.IO","namespace":"ghostrigger::io::fbx::fbx_scene_adapter","python_file":"src/io/fbx/fbx_scene_adapter.py","qualname":"FbxExportSummary.log_line","name":"log_line","callable_type":"instance_methods","line":39,"end_line":43,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/io/fbx/fbx_scene_adapter.py", "FbxImportSummary.log_line", "instance_methods", &src_io_fbx_fbx_scene_adapter_fbximportsummary_log_line_line_23_d3f43f45_descriptor_json},
-        {"src/io/fbx/fbx_scene_adapter.py", "FbxExportSummary.log_line", "instance_methods", &src_io_fbx_fbx_scene_adapter_fbxexportsummary_log_line_line_39_848f749e_descriptor_json},
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        fbximportsummary_log_line_line_23_d3f43f45_native(),
+        fbxexportsummary_log_line_line_39_848f749e_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_io
+} // namespace ghostrigger::io

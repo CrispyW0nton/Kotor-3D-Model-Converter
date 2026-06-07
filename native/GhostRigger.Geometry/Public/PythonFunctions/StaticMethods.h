@@ -2,23 +2,30 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_geometry {
+namespace ghostrigger::geometry {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GEOMETRY_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GEOMETRY_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GEOMETRY_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_geometry_model_data_characterscene_node_names_line_2046_bd679a25_descriptor_json();
-const char* src_core_geometry_model_data_sceneio_save_line_2352_2e457c4f_descriptor_json();
-const char* src_core_geometry_model_data_sceneio_load_line_2381_e2644113_descriptor_json();
-const char* src_core_geometry_model_data_sceneio_write_sidecar_line_2409_d2aa14fb_descriptor_json();
-const char* src_core_geometry_model_data_sceneio_find_sidecar_line_2432_2ad489d9_descriptor_json();
+const NativeFunctionImplementation& characterscene_node_names_line_2046_bd679a25_native();
+const NativeFunctionImplementation& sceneio_save_line_2352_2e457c4f_native();
+const NativeFunctionImplementation& sceneio_load_line_2381_e2644113_native();
+const NativeFunctionImplementation& sceneio_write_sidecar_line_2409_d2aa14fb_native();
+const NativeFunctionImplementation& sceneio_find_sidecar_line_2432_2ad489d9_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_geometry
+} // namespace ghostrigger::geometry

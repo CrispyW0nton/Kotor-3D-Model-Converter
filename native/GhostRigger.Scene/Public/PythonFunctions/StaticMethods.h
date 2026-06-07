@@ -2,26 +2,33 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_scene {
+namespace ghostrigger::scene {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_SCENE_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_SCENE_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_SCENE_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_scene_kmax_scene_kmaxscene_asset_payload_line_61_75cc6148_descriptor_json();
-const char* src_core_scene_kmax_scene_manager_kmaxscenemanager_normalize_camera_type_line_394_205df1f2_descriptor_json();
-const char* src_core_scene_kmax_scene_manager_kmaxscenemanager_normalize_light_type_line_411_0362e990_descriptor_json();
-const char* src_core_scene_kmax_scene_manager_kmaxscenemanager_camera_payload_line_416_dc4ef080_descriptor_json();
-const char* src_core_scene_kmax_scene_manager_kmaxscenemanager_light_payload_line_425_1f04dbe5_descriptor_json();
-const char* src_core_scene_kmax_serializer_kmaxserializer_validate_line_138_ebaba754_descriptor_json();
-const char* src_core_scene_kmax_serializer_kmaxserializer_migrate_line_142_d4105a22_descriptor_json();
-const char* src_core_scene_kmax_validator_kmaxvalidator_validate_line_28_448519b7_descriptor_json();
+const NativeFunctionImplementation& kmaxscene_asset_payload_line_61_75cc6148_native();
+const NativeFunctionImplementation& kmaxscenemanager_normalize_camera_type_line_394_205df1f2_native();
+const NativeFunctionImplementation& kmaxscenemanager_normalize_light_type_line_411_0362e990_native();
+const NativeFunctionImplementation& kmaxscenemanager_camera_payload_line_416_dc4ef080_native();
+const NativeFunctionImplementation& kmaxscenemanager_light_payload_line_425_1f04dbe5_native();
+const NativeFunctionImplementation& kmaxserializer_validate_line_138_ebaba754_native();
+const NativeFunctionImplementation& kmaxserializer_migrate_line_142_d4105a22_native();
+const NativeFunctionImplementation& kmaxvalidator_validate_line_28_448519b7_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_scene
+} // namespace ghostrigger::scene

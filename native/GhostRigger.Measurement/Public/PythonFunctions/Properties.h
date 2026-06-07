@@ -2,19 +2,26 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_measurement {
+namespace ghostrigger::measurement {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_MEASUREMENT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_MEASUREMENT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_MEASUREMENT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_measurement_grid_measurement_gridmeasurement_major_every_line_28_7937c7aa_descriptor_json();
+const NativeFunctionImplementation& gridmeasurement_major_every_line_28_7937c7aa_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_measurement
+} // namespace ghostrigger::measurement

@@ -2,33 +2,40 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_modules {
+namespace ghostrigger::modules {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_MODULES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_MODULES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_MODULES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_modules_module_format_aredata_from_bytes_get_line_254_7b32e3fd_descriptor_json();
-const char* src_core_modules_module_format_aredata_from_bytes_unpack_color_line_259_f459f580_descriptor_json();
-const char* src_core_modules_module_format_gitdata_from_bytes_f_line_359_cd338368_descriptor_json();
-const char* src_core_modules_module_format_gitdata_from_bytes_s_line_364_84c169a9_descriptor_json();
-const char* src_core_modules_module_format_gitdata_from_bytes_i_line_368_c6c42b3d_descriptor_json();
-const char* src_core_modules_module_format_ifodata_from_bytes_s_line_473_22235eff_descriptor_json();
-const char* src_core_modules_module_format_ifodata_from_bytes_f_line_479_a5527165_descriptor_json();
-const char* src_core_modules_module_format_ifodata_from_bytes_i_line_484_f55d5644_descriptor_json();
-const char* src_core_modules_module_format_wokdata_from_pykotor_bwm_vertex_index_line_587_c514930a_descriptor_json();
-const char* src_core_modules_module_format_wokdata_from_pykotor_bwm_face_index_line_596_9009dbc5_descriptor_json();
-const char* src_core_modules_module_format_wokdata_face_at_point_sign_line_736_af46a9ee_descriptor_json();
-const char* src_core_modules_module_format_walkmeshwallgenerator_generate_add_vert_line_859_efac3f70_descriptor_json();
-const char* src_core_modules_module_format_kotormodule_from_directory_load_line_958_693f72fb_descriptor_json();
-const char* src_core_modules_module_loader_moduleloader_load_from_lyt_text_minimalmodule_init_line_271_22a7169d_descriptor_json();
-const char* src_core_modules_module_loader_moduleloader_load_from_lyt_text_minimalmodule_summary_line_281_7bca94cc_descriptor_json();
+const NativeFunctionImplementation& aredata_from_bytes_get_line_254_7b32e3fd_native();
+const NativeFunctionImplementation& aredata_from_bytes_unpack_color_line_259_f459f580_native();
+const NativeFunctionImplementation& gitdata_from_bytes_f_line_359_cd338368_native();
+const NativeFunctionImplementation& gitdata_from_bytes_s_line_364_84c169a9_native();
+const NativeFunctionImplementation& gitdata_from_bytes_i_line_368_c6c42b3d_native();
+const NativeFunctionImplementation& ifodata_from_bytes_s_line_473_22235eff_native();
+const NativeFunctionImplementation& ifodata_from_bytes_f_line_479_a5527165_native();
+const NativeFunctionImplementation& ifodata_from_bytes_i_line_484_f55d5644_native();
+const NativeFunctionImplementation& wokdata_from_pykotor_bwm_vertex_index_line_587_c514930a_native();
+const NativeFunctionImplementation& wokdata_from_pykotor_bwm_face_index_line_596_9009dbc5_native();
+const NativeFunctionImplementation& wokdata_face_at_point_sign_line_736_af46a9ee_native();
+const NativeFunctionImplementation& walkmeshwallgenerator_generate_add_vert_line_859_efac3f70_native();
+const NativeFunctionImplementation& kotormodule_from_directory_load_line_958_693f72fb_native();
+const NativeFunctionImplementation& moduleloader_load_from_lyt_text_minimalmodule_construct_line_271_22a7169d_native();
+const NativeFunctionImplementation& moduleloader_load_from_lyt_text_minimalmodule_summary_line_281_7bca94cc_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_modules
+} // namespace ghostrigger::modules

@@ -2,19 +2,26 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_formats {
+namespace ghostrigger::formats {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_FORMATS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_FORMATS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_FORMATS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_formats_gff_writer_gffwriter_serialize_collect_line_59_1e5f42ee_descriptor_json();
+const NativeFunctionImplementation& gffwriter_serialize_collect_line_59_1e5f42ee_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_formats
+} // namespace ghostrigger::formats

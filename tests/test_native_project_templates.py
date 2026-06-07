@@ -9,7 +9,7 @@ TEMPLATE_DIR = ROOT / "native" / "templates"
 _PATH_READ_TEXT = Path.read_text
 
 
-def _phase15_native_layout_read_text(self: Path, *args, **kwargs) -> str:
+def _native_layout_read_text(self: Path, *args, **kwargs) -> str:
     if not self.exists() and ROOT / "native" in self.parents:
         if self.suffix in {".h", ".hpp"}:
             public_path = self.parent / "Public" / self.name
@@ -22,7 +22,7 @@ def _phase15_native_layout_read_text(self: Path, *args, **kwargs) -> str:
     return _PATH_READ_TEXT(self, *args, **kwargs)
 
 
-Path.read_text = _phase15_native_layout_read_text
+Path.read_text = _native_layout_read_text
 
 
 def _render_template(path: Path) -> str:

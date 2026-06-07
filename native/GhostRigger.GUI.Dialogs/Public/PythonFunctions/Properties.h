@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_dialogs {
+namespace ghostrigger::gui::dialogs {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_DIALOGS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_DIALOGS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_DIALOGS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_dialogs_add_model_to_scene_dialog_addmodeltoscenedialog_remember_choice_line_81_fd2c0ca3_descriptor_json();
-const char* src_gui_dialogs_add_model_to_scene_dialog_addmodeltoscenedialog_placement_mode_line_85_6874109e_descriptor_json();
+const NativeFunctionImplementation& addmodeltoscenedialog_remember_choice_line_81_fd2c0ca3_native();
+const NativeFunctionImplementation& addmodeltoscenedialog_placement_mode_line_85_6874109e_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_dialogs
+} // namespace ghostrigger::gui::dialogs

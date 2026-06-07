@@ -1,17 +1,29 @@
 #include "PythonFunctions/ClassMethods.h"
 
-namespace ghostrigger::phase15::ghostrigger_tools_pivotcontrols {
+namespace ghostrigger::tools::pivotcontrols {
 
-const char* src_core_scene_axis_mode_axismode_from_value_line_29_43c38e4a_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Tools.PivotControls","python_module":"src.core.scene.axis_mode","python_file":"src/core/scene/axis_mode.py","qualname":"AxisMode.from_value","name":"from_value","kind":"class_methods","line":29,"end_line":36,"signature":{"args":["cls","value"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& axismode_from_value_line_29_43c38e4a_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Tools.PivotControls",
+        "ghostrigger::tools::pivotcontrols::core::scene::axis_mode",
+        "src/core/scene/axis_mode.py",
+        "AxisMode.from_value",
+        "class_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.PivotControls","namespace":"ghostrigger::tools::pivotcontrols::core::scene::axis_mode","python_file":"src/core/scene/axis_mode.py","qualname":"AxisMode.from_value","name":"from_value","callable_type":"class_methods","line":29,"end_line":36,"signature":{"args":["cls","value"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/core/scene/axis_mode.py", "AxisMode.from_value", "class_methods", &src_core_scene_axis_mode_axismode_from_value_line_29_43c38e4a_descriptor_json},
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        axismode_from_value_line_29_43c38e4a_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_pivotcontrols
+} // namespace ghostrigger::tools::pivotcontrols

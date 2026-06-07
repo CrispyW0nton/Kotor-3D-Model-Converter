@@ -2,19 +2,26 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_renderer_moderngl {
+namespace ghostrigger::renderer::moderngl {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_rendering_moderngl_renderer_impl_gpurenderer_is_gpu_line_2716_996d44b7_descriptor_json();
+const NativeFunctionImplementation& gpurenderer_is_gpu_line_2716_996d44b7_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_renderer_moderngl
+} // namespace ghostrigger::renderer::moderngl

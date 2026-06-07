@@ -2,23 +2,30 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_tools_sceneinformation {
+namespace ghostrigger::tools::sceneinformation {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TOOLS_SCENEINFORMATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_SCENEINFORMATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TOOLS_SCENEINFORMATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_scene_axis_mode_axismode_label_line_25_7f940ea5_descriptor_json();
-const char* src_core_scene_kmax_scene_kmaxscene_display_name_line_43_4c4f5179_descriptor_json();
-const char* src_core_scene_module_scene_import_moduleroomplacement_group_id_line_26_2739f71f_descriptor_json();
-const char* src_core_scene_scene_object_pivotdata_position_line_54_fa472186_descriptor_json();
-const char* src_core_scene_scene_object_pivotdata_rotation_line_62_8f4a7cea_descriptor_json();
+const NativeFunctionImplementation& axismode_label_line_25_7f940ea5_native();
+const NativeFunctionImplementation& kmaxscene_display_name_line_43_4c4f5179_native();
+const NativeFunctionImplementation& moduleroomplacement_group_id_line_26_2739f71f_native();
+const NativeFunctionImplementation& pivotdata_position_line_54_fa472186_native();
+const NativeFunctionImplementation& pivotdata_rotation_line_62_8f4a7cea_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_sceneinformation
+} // namespace ghostrigger::tools::sceneinformation

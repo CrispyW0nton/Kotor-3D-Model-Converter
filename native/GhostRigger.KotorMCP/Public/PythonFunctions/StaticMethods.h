@@ -2,24 +2,31 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_kotormcp {
+namespace ghostrigger::kotormcp {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_KOTORMCP_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_KOTORMCP_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_KOTORMCP_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_kotormcp_adapters_filesystemmodellocator_load_mdx_line_401_1325659a_descriptor_json();
-const char* src_kotormcp_adapters_modelanalyzer_all_nodes_line_571_84d72b05_descriptor_json();
-const char* src_kotormcp_adapters_modelanalyzer_mesh_nodes_line_579_15aa35bb_descriptor_json();
-const char* src_kotormcp_adapters_modelanalyzer_bone_nodes_line_604_bf59a565_descriptor_json();
-const char* src_kotormcp_adapters_modelanalyzer_bbox_line_611_69879d13_descriptor_json();
-const char* src_kotormcp_adapters_modelanalyzer_node_count_line_617_de9db12b_descriptor_json();
+const NativeFunctionImplementation& filesystemmodellocator_load_mdx_line_401_1325659a_native();
+const NativeFunctionImplementation& modelanalyzer_all_nodes_line_571_84d72b05_native();
+const NativeFunctionImplementation& modelanalyzer_mesh_nodes_line_579_15aa35bb_native();
+const NativeFunctionImplementation& modelanalyzer_bone_nodes_line_604_bf59a565_native();
+const NativeFunctionImplementation& modelanalyzer_bbox_line_611_69879d13_native();
+const NativeFunctionImplementation& modelanalyzer_node_count_line_617_de9db12b_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_kotormcp
+} // namespace ghostrigger::kotormcp

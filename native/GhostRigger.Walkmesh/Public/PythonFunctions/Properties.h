@@ -2,23 +2,30 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_walkmesh {
+namespace ghostrigger::walkmesh {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_WALKMESH_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_WALKMESH_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_WALKMESH_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_walkmesh_walkmesh_renderer_walkmeshface_color_line_151_366a94f0_descriptor_json();
-const char* src_core_walkmesh_walkmesh_renderer_walkmeshface_normal_line_155_2b51a16b_descriptor_json();
-const char* src_core_walkmesh_walkmesh_renderer_walkmeshtogglecontroller_visible_line_753_0e217618_descriptor_json();
-const char* src_core_walkmesh_walkmesh_renderer_walkmeshtogglecontroller_key_line_814_e16bcb57_descriptor_json();
-const char* src_core_walkmesh_walkmesh_renderer_walkmeshtogglecontroller_overlay_count_line_819_771599f7_descriptor_json();
+const NativeFunctionImplementation& walkmeshface_color_line_151_366a94f0_native();
+const NativeFunctionImplementation& walkmeshface_normal_line_155_2b51a16b_native();
+const NativeFunctionImplementation& walkmeshtogglecontroller_visible_line_753_0e217618_native();
+const NativeFunctionImplementation& walkmeshtogglecontroller_key_line_814_e16bcb57_native();
+const NativeFunctionImplementation& walkmeshtogglecontroller_overlay_count_line_819_771599f7_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_walkmesh
+} // namespace ghostrigger::walkmesh

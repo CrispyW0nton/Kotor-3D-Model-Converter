@@ -1,17 +1,29 @@
 #include "PythonFunctions/NestedFunctions.h"
 
-namespace ghostrigger::phase15::ghostrigger_tools_sequenceeditor {
+namespace ghostrigger::tools::sequenceeditor {
 
-const char* src_gui_windows_application_core_shared_animation_workflow_animationworkflowmixin_build_baked_animation_samples_for_node_line_501_8b43e701_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Tools.SequenceEditor","python_module":"src.gui.windows.application_core.shared.animation_workflow","python_file":"src/gui/windows/application_core/shared/animation_workflow.py","qualname":"AnimationWorkflowMixin._build_baked_animation._samples_for_node","name":"_samples_for_node","kind":"nested_functions","line":501,"end_line":505,"signature":{"args":[],"positional_count":0,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& animationworkflowmixin_build_baked_animation_samples_for_node_line_501_8b43e701_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Tools.SequenceEditor",
+        "ghostrigger::tools::sequenceeditor::gui::windows::application_core::shared::animation_workflow",
+        "src/gui/windows/application_core/shared/animation_workflow.py",
+        "AnimationWorkflowMixin._build_baked_animation._samples_for_node",
+        "nested_functions",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.SequenceEditor","namespace":"ghostrigger::tools::sequenceeditor::gui::windows::application_core::shared::animation_workflow","python_file":"src/gui/windows/application_core/shared/animation_workflow.py","qualname":"AnimationWorkflowMixin._build_baked_animation._samples_for_node","name":"_samples_for_node","callable_type":"nested_functions","line":501,"end_line":505,"signature":{"args":[],"positional_count":0,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/gui/windows/application_core/shared/animation_workflow.py", "AnimationWorkflowMixin._build_baked_animation._samples_for_node", "nested_functions", &src_gui_windows_application_core_shared_animation_workflow_animationworkflowmixin_build_baked_animation_samples_for_node_line_501_8b43e701_descriptor_json},
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        animationworkflowmixin_build_baked_animation_samples_for_node_line_501_8b43e701_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_sequenceeditor
+} // namespace ghostrigger::tools::sequenceeditor

@@ -2,19 +2,26 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_sequenceeditor {
+namespace ghostrigger::gui::sequenceeditor {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_SEQUENCEEDITOR_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_SEQUENCEEDITOR_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_SEQUENCEEDITOR_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_sequence_editor_sequence_editor_window_sequenceeditorwindow_render_sequence_on_progress_line_846_12cb4eb8_descriptor_json();
+const NativeFunctionImplementation& sequenceeditorwindow_render_sequence_on_progress_line_846_12cb4eb8_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_sequenceeditor
+} // namespace ghostrigger::gui::sequenceeditor

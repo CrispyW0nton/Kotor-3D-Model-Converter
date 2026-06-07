@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_unreal {
+namespace ghostrigger::unreal {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_UNREAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_UNREAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_UNREAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_unreal_quinn_fbxnode_child_line_58_e1028af9_descriptor_json();
-const char* src_unreal_quinn_fbxnode_children_named_line_64_07b0592d_descriptor_json();
+const NativeFunctionImplementation& fbxnode_child_line_58_e1028af9_native();
+const NativeFunctionImplementation& fbxnode_children_named_line_64_07b0592d_native();
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_unreal
+} // namespace ghostrigger::unreal

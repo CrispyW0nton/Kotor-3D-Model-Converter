@@ -2,27 +2,34 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_adapters_gpu {
+namespace ghostrigger::adapters::gpu {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_ADAPTERS_GPU_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_ADAPTERS_GPU_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_ADAPTERS_GPU_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_gpu_lightmap_baker_lightmapbaker_init_line_13_ea0e7678_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_init_line_121_8c058229_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_solve_buffer_line_131_1afe1ce7_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_can_use_gpu_line_152_ffd61772_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_ensure_line_162_a771dede_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_solve_gpu_line_177_47133327_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_render_direct_chunk_line_210_0fddce25_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_tex2d_line_249_324b574b_descriptor_json();
-const char* src_adapters_gpu_lightmap_gpu_solver_lightmapgpusolver_pack_lights_line_257_2f7fdace_descriptor_json();
+const NativeFunctionImplementation& lightmapbaker_construct_line_13_ea0e7678_native();
+const NativeFunctionImplementation& lightmapgpusolver_construct_line_121_8c058229_native();
+const NativeFunctionImplementation& lightmapgpusolver_solve_buffer_line_131_1afe1ce7_native();
+const NativeFunctionImplementation& lightmapgpusolver_can_use_gpu_line_152_ffd61772_native();
+const NativeFunctionImplementation& lightmapgpusolver_ensure_line_162_a771dede_native();
+const NativeFunctionImplementation& lightmapgpusolver_solve_gpu_line_177_47133327_native();
+const NativeFunctionImplementation& lightmapgpusolver_render_direct_chunk_line_210_0fddce25_native();
+const NativeFunctionImplementation& lightmapgpusolver_tex2d_line_249_324b574b_native();
+const NativeFunctionImplementation& lightmapgpusolver_pack_lights_line_257_2f7fdace_native();
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_adapters_gpu
+} // namespace ghostrigger::adapters::gpu

@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_tools_bodyattachmentsystem {
+namespace ghostrigger::tools::bodyattachmentsystem {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TOOLS_BODYATTACHMENTSYSTEM_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_BODYATTACHMENTSYSTEM_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TOOLS_BODYATTACHMENTSYSTEM_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_characters_headless_body_workflow_bodyguideedithistory_can_undo_line_3233_965ab5fb_descriptor_json();
-const char* src_core_characters_headless_body_workflow_bodyguideedithistory_can_redo_line_3237_68214687_descriptor_json();
+const NativeFunctionImplementation& bodyguideedithistory_can_undo_line_3233_965ab5fb_native();
+const NativeFunctionImplementation& bodyguideedithistory_can_redo_line_3237_68214687_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_bodyattachmentsystem
+} // namespace ghostrigger::tools::bodyattachmentsystem

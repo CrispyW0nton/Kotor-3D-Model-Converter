@@ -121,7 +121,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup Label="PythonFunctionMigration">
+  <ItemGroup Label="NativeFunctionImplementations">
     <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
     <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp" />

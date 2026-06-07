@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_adapters_qtviewport {
+namespace ghostrigger::adapters::qtviewport {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_ADAPTERS_QTVIEWPORT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_ADAPTERS_QTVIEWPORT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_ADAPTERS_QTVIEWPORT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_qt_viewport_frame_renderer_create_viewport_frame_renderer_line_6_3db885a3_descriptor_json();
-const char* src_adapters_qt_viewport_frame_renderer_create_validation_frame_renderer_line_13_70d85031_descriptor_json();
+const NativeFunctionImplementation& create_viewport_frame_renderer_line_6_3db885a3_native();
+const NativeFunctionImplementation& create_validation_frame_renderer_line_13_70d85031_native();
 
-const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_adapters_qtviewport
+} // namespace ghostrigger::adapters::qtviewport

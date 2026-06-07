@@ -115,7 +115,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
   <ItemGroup>
     <ClInclude Include="Public\GhostRigger.Native.NativeCore.h" />
   </ItemGroup>
-  <ItemGroup Label="PythonFunctionMigration">
+  <ItemGroup Label="NativeFunctionImplementations">
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
   </ItemGroup>

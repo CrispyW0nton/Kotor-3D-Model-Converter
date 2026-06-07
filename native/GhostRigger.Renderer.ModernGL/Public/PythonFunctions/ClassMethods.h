@@ -2,21 +2,28 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_renderer_moderngl {
+namespace ghostrigger::renderer::moderngl {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_rendering_moderngl_renderer_impl_gpurenderer_is_sprite_hilt_line_2650_5adc72a0_descriptor_json();
-const char* src_adapters_rendering_moderngl_renderer_impl_gpurenderer_sprite_alpha_source_line_2665_2b8129c9_descriptor_json();
-const char* src_adapters_rendering_moderngl_renderer_impl_gpurenderer_sprite_glow_line_2677_fe0a0901_descriptor_json();
+const NativeFunctionImplementation& gpurenderer_is_sprite_hilt_line_2650_5adc72a0_native();
+const NativeFunctionImplementation& gpurenderer_sprite_alpha_source_line_2665_2b8129c9_native();
+const NativeFunctionImplementation& gpurenderer_sprite_glow_line_2677_fe0a0901_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_renderer_moderngl
+} // namespace ghostrigger::renderer::moderngl

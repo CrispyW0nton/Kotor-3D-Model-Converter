@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_theme {
+namespace ghostrigger::gui::theme {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_THEME_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_THEME_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_THEME_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_libtheme_theme_applier_themeapplier_precache_stylesheets_line_77_c29937da_descriptor_json();
-const char* src_gui_libtheme_theme_settings_themelayoutsettings_from_settings_line_29_0c63c89b_descriptor_json();
+const NativeFunctionImplementation& themeapplier_precache_stylesheets_line_77_c29937da_native();
+const NativeFunctionImplementation& themelayoutsettings_from_settings_line_29_0c63c89b_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_theme
+} // namespace ghostrigger::gui::theme

@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_gizmo {
+namespace ghostrigger::gui::gizmo {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_GIZMO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_GIZMO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_GIZMO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_gizmo_init_getattr_line_20_0dc9caf2_descriptor_json();
-const char* src_gui_gizmo_init_dir_line_29_ef1640f7_descriptor_json();
+const NativeFunctionImplementation& getattr_line_20_0dc9caf2_native();
+const NativeFunctionImplementation& dir_line_29_ef1640f7_native();
 
-const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_gizmo
+} // namespace ghostrigger::gui::gizmo

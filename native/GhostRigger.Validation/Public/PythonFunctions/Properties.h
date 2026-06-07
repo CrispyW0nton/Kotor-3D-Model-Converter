@@ -2,22 +2,29 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_validation {
+namespace ghostrigger::validation {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_validation_animation_block_validator_rawanimationfootprintreport_node_names_line_108_8ae23bc4_descriptor_json();
-const char* src_core_validation_validation_bus_validationreport_has_blocking_line_85_2f48161f_descriptor_json();
-const char* src_core_validation_validation_bus_validationreport_has_errors_line_89_1b4a9e00_descriptor_json();
-const char* src_core_validation_validation_bus_validationreport_blocking_issues_line_93_dd1bb43c_descriptor_json();
+const NativeFunctionImplementation& rawanimationfootprintreport_node_names_line_108_8ae23bc4_native();
+const NativeFunctionImplementation& validationreport_has_blocking_line_85_2f48161f_native();
+const NativeFunctionImplementation& validationreport_has_errors_line_89_1b4a9e00_native();
+const NativeFunctionImplementation& validationreport_blocking_issues_line_93_dd1bb43c_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_validation
+} // namespace ghostrigger::validation

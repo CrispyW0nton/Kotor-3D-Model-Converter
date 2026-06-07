@@ -2,22 +2,29 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_renderer_d3d12 {
+namespace ghostrigger::renderer::d3d12 {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RENDERER_D3D12_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_D3D12_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RENDERER_D3D12_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_rendering_gpu_diagnostics_records_texture_content_stats_sample_line_180_6862de25_descriptor_json();
-const char* src_core_rendering_gpu_diagnostics_records_skin_3g_candidate_records_norm_pos_line_1096_04f54701_descriptor_json();
-const char* src_core_rendering_gpu_diagnostics_records_skin_3g_candidate_records_delta_to_production_line_1109_482a84f4_descriptor_json();
-const char* src_core_rendering_gpu_scene_helpers_compositemodel_init_bb_line_204_ce6728e6_descriptor_json();
+const NativeFunctionImplementation& texture_content_stats_sample_line_180_6862de25_native();
+const NativeFunctionImplementation& skin_3g_candidate_records_norm_pos_line_1096_04f54701_native();
+const NativeFunctionImplementation& skin_3g_candidate_records_delta_to_production_line_1109_482a84f4_native();
+const NativeFunctionImplementation& compositemodel_construct_bb_line_204_ce6728e6_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_renderer_d3d12
+} // namespace ghostrigger::renderer::d3d12

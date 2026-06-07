@@ -2,42 +2,49 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_viewports {
+namespace ghostrigger::gui::viewports {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_VIEWPORTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_VIEWPORTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_VIEWPORTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_viewports_frame_renderer_getattr_line_68_20c2e042_descriptor_json();
-const char* src_gui_viewports_frame_renderer_dir_line_77_9e771612_descriptor_json();
-const char* src_gui_viewports_qt_transform_typein_bar_transform_bar_stylesheet_line_8_ac72df50_descriptor_json();
-const char* src_gui_viewports_qt_viewport_getattr_line_53_8301ae8b_descriptor_json();
-const char* src_gui_viewports_qt_viewport_dir_line_69_1b14d4c1_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_icon_line_11_f42d4c27_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_gpu_brand_icon_line_19_41f1dd39_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_branded_control_icon_line_24_4e53b774_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_detect_gpu_brand_line_29_508ced69_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_gpu_icon_name_line_53_4723c85d_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_gpu_icon_line_62_ab15f180_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_icons_navigation_profile_icon_line_71_218baef7_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_joint_palette_is_key_joint_name_line_60_44774def_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_joint_palette_classify_joint_color_line_64_e4d32256_descriptor_json();
-const char* src_gui_viewports_viewport_core_shared_weight_heatmap_weight_to_heatmap_color_line_18_cdcb55ad_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_getattr_line_19_42fcc11c_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_dir_line_29_bb5314bf_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_scaffold_snake_case_line_33_6b027c77_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_scaffold_pascal_case_line_47_9e6ff2a9_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_scaffold_widget_template_line_51_1cf8e479_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_scaffold_mixin_template_line_85_13a7f91a_descriptor_json();
-const char* src_gui_viewports_viewport_core_widget_scaffold_create_custom_viewport_widget_line_105_4368fa97_descriptor_json();
-const char* src_gui_viewports_viewport_core_widgets_init_getattr_line_21_9180ba79_descriptor_json();
-const char* src_gui_viewports_viewport_core_widgets_init_dir_line_31_9bfc2cf2_descriptor_json();
+const NativeFunctionImplementation& getattr_line_68_20c2e042_native();
+const NativeFunctionImplementation& dir_line_77_9e771612_native();
+const NativeFunctionImplementation& transform_bar_stylesheet_line_8_ac72df50_native();
+const NativeFunctionImplementation& getattr_line_53_8301ae8b_native();
+const NativeFunctionImplementation& dir_line_69_1b14d4c1_native();
+const NativeFunctionImplementation& icon_line_11_f42d4c27_native();
+const NativeFunctionImplementation& gpu_brand_icon_line_19_41f1dd39_native();
+const NativeFunctionImplementation& branded_control_icon_line_24_4e53b774_native();
+const NativeFunctionImplementation& detect_gpu_brand_line_29_508ced69_native();
+const NativeFunctionImplementation& gpu_icon_name_line_53_4723c85d_native();
+const NativeFunctionImplementation& gpu_icon_line_62_ab15f180_native();
+const NativeFunctionImplementation& navigation_profile_icon_line_71_218baef7_native();
+const NativeFunctionImplementation& is_key_joint_name_line_60_44774def_native();
+const NativeFunctionImplementation& classify_joint_color_line_64_e4d32256_native();
+const NativeFunctionImplementation& weight_to_heatmap_color_line_18_cdcb55ad_native();
+const NativeFunctionImplementation& getattr_line_19_42fcc11c_native();
+const NativeFunctionImplementation& dir_line_29_bb5314bf_native();
+const NativeFunctionImplementation& snake_case_line_33_6b027c77_native();
+const NativeFunctionImplementation& pascal_case_line_47_9e6ff2a9_native();
+const NativeFunctionImplementation& widget_template_line_51_1cf8e479_native();
+const NativeFunctionImplementation& mixin_template_line_85_13a7f91a_native();
+const NativeFunctionImplementation& create_custom_viewport_widget_line_105_4368fa97_native();
+const NativeFunctionImplementation& getattr_line_21_9180ba79_native();
+const NativeFunctionImplementation& dir_line_31_9bfc2cf2_native();
 
-const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_viewports
+} // namespace ghostrigger::gui::viewports

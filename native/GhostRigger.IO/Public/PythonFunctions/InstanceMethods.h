@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_io {
+namespace ghostrigger::io {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_IO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_IO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_IO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_io_fbx_fbx_scene_adapter_fbximportsummary_log_line_line_23_d3f43f45_descriptor_json();
-const char* src_io_fbx_fbx_scene_adapter_fbxexportsummary_log_line_line_39_848f749e_descriptor_json();
+const NativeFunctionImplementation& fbximportsummary_log_line_line_23_d3f43f45_native();
+const NativeFunctionImplementation& fbxexportsummary_log_line_line_39_848f749e_native();
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_io
+} // namespace ghostrigger::io

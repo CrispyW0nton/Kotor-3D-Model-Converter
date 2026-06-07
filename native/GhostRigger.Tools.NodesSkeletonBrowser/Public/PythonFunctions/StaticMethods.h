@@ -2,24 +2,31 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_tools_nodesskeletonbrowser {
+namespace ghostrigger::tools::nodesskeletonbrowser {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TOOLS_NODESSKELETONBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_NODESSKELETONBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TOOLS_NODESSKELETONBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_animation_animation_library_animationretargeter_build_map_line_372_debf3019_descriptor_json();
-const char* src_core_animation_animation_library_animationretargeter_from_json_line_391_cc3025a4_descriptor_json();
-const char* src_core_animation_animation_library_animationretargeter_save_json_line_398_0daaa362_descriptor_json();
-const char* src_core_animation_gpu_skinning_matrixpaletteuploader_qbone_inverse_bind_matrix_line_738_39b95042_descriptor_json();
-const char* src_core_animation_gpu_skinning_matrixpaletteuploader_qbone_direct_bind_matrix_line_757_49040c9a_descriptor_json();
-const char* src_core_animation_gpu_skinning_matrixpaletteuploader_qbone_inverse_bind_matrix_g5_line_779_8029ac58_descriptor_json();
+const NativeFunctionImplementation& animationretargeter_build_map_line_372_debf3019_native();
+const NativeFunctionImplementation& animationretargeter_from_json_line_391_cc3025a4_native();
+const NativeFunctionImplementation& animationretargeter_save_json_line_398_0daaa362_native();
+const NativeFunctionImplementation& matrixpaletteuploader_qbone_inverse_bind_matrix_line_738_39b95042_native();
+const NativeFunctionImplementation& matrixpaletteuploader_qbone_direct_bind_matrix_line_757_49040c9a_native();
+const NativeFunctionImplementation& matrixpaletteuploader_qbone_inverse_bind_matrix_g5_line_779_8029ac58_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_nodesskeletonbrowser
+} // namespace ghostrigger::tools::nodesskeletonbrowser

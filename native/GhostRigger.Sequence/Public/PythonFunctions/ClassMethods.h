@@ -2,39 +2,46 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_sequence {
+namespace ghostrigger::sequence {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_SEQUENCE_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_SEQUENCE_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_SEQUENCE_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_sequence_sequence_binding_sequencebinding_deserialize_line_93_e965cd49_descriptor_json();
-const char* src_sequence_sequence_keyframe_sequencekeyframe_deserialize_line_54_58ea4257_descriptor_json();
-const char* src_sequence_sequence_model_sequencemarker_deserialize_line_79_3f88fc02_descriptor_json();
-const char* src_sequence_sequence_model_ghostriggerlevelsequence_deserialize_line_240_d646c358_descriptor_json();
-const char* src_sequence_sequence_render_sequencerendersettings_for_sequence_line_34_eb8a7514_descriptor_json();
-const char* src_sequence_sequence_track_sequencetrack_deserialize_line_132_ecf49285_descriptor_json();
-const char* src_sequence_sequence_track_sequencetrack_deserialize_base_line_146_c14f6cd4_descriptor_json();
-const char* src_sequence_tracks_audio_track_audiotrack_deserialize_line_23_d8f97c48_descriptor_json();
-const char* src_sequence_tracks_camera_cut_track_cameracut_deserialize_line_35_6d88b350_descriptor_json();
-const char* src_sequence_tracks_camera_cut_track_cameracuttrack_deserialize_line_101_ace0bfd2_descriptor_json();
-const char* src_sequence_tracks_camera_property_track_camerapropertytrack_deserialize_line_54_a03addfe_descriptor_json();
-const char* src_sequence_tracks_character_track_charactertrack_deserialize_line_24_92f07074_descriptor_json();
-const char* src_sequence_tracks_event_track_eventtrack_deserialize_line_65_cf26438d_descriptor_json();
-const char* src_sequence_tracks_light_property_track_lightpropertytrack_deserialize_line_55_71c8a198_descriptor_json();
-const char* src_sequence_tracks_material_track_materialtrack_deserialize_line_51_ed9b85b8_descriptor_json();
-const char* src_sequence_tracks_rig_track_rigtrack_deserialize_line_24_1de00093_descriptor_json();
-const char* src_sequence_tracks_sub_sequence_track_subsequencesection_deserialize_line_33_66c6838b_descriptor_json();
-const char* src_sequence_tracks_sub_sequence_track_subsequencetrack_deserialize_line_67_904c0e07_descriptor_json();
-const char* src_sequence_tracks_transform_property_track_transformpropertytrack_deserialize_line_66_1d6d4ca0_descriptor_json();
-const char* src_sequence_tracks_transform_track_transformtrack_deserialize_line_47_12a7ff2b_descriptor_json();
-const char* src_sequence_tracks_visibility_track_visibilitytrack_deserialize_line_31_408a71b9_descriptor_json();
+const NativeFunctionImplementation& sequencebinding_deserialize_line_93_e965cd49_native();
+const NativeFunctionImplementation& sequencekeyframe_deserialize_line_54_58ea4257_native();
+const NativeFunctionImplementation& sequencemarker_deserialize_line_79_3f88fc02_native();
+const NativeFunctionImplementation& ghostriggerlevelsequence_deserialize_line_240_d646c358_native();
+const NativeFunctionImplementation& sequencerendersettings_for_sequence_line_34_eb8a7514_native();
+const NativeFunctionImplementation& sequencetrack_deserialize_line_132_ecf49285_native();
+const NativeFunctionImplementation& sequencetrack_deserialize_base_line_146_c14f6cd4_native();
+const NativeFunctionImplementation& audiotrack_deserialize_line_23_d8f97c48_native();
+const NativeFunctionImplementation& cameracut_deserialize_line_35_6d88b350_native();
+const NativeFunctionImplementation& cameracuttrack_deserialize_line_101_ace0bfd2_native();
+const NativeFunctionImplementation& camerapropertytrack_deserialize_line_54_a03addfe_native();
+const NativeFunctionImplementation& charactertrack_deserialize_line_24_92f07074_native();
+const NativeFunctionImplementation& eventtrack_deserialize_line_65_cf26438d_native();
+const NativeFunctionImplementation& lightpropertytrack_deserialize_line_55_71c8a198_native();
+const NativeFunctionImplementation& materialtrack_deserialize_line_51_ed9b85b8_native();
+const NativeFunctionImplementation& rigtrack_deserialize_line_24_1de00093_native();
+const NativeFunctionImplementation& subsequencesection_deserialize_line_33_66c6838b_native();
+const NativeFunctionImplementation& subsequencetrack_deserialize_line_67_904c0e07_native();
+const NativeFunctionImplementation& transformpropertytrack_deserialize_line_66_1d6d4ca0_native();
+const NativeFunctionImplementation& transformtrack_deserialize_line_47_12a7ff2b_native();
+const NativeFunctionImplementation& visibilitytrack_deserialize_line_31_408a71b9_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_sequence
+} // namespace ghostrigger::sequence

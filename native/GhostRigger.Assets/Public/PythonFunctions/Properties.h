@@ -2,22 +2,29 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_assets {
+namespace ghostrigger::assets {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_ASSETS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_ASSETS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_ASSETS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_assets_override_layer_overridelayer_game_dir_line_112_49db4eaa_descriptor_json();
-const char* src_core_assets_override_layer_overridelayer_override_dir_line_116_d702c23f_descriptor_json();
-const char* src_core_assets_override_layer_overridelayer_is_available_line_120_4fde95ac_descriptor_json();
-const char* src_core_assets_override_layer_overridelayer_entry_count_line_125_b6182ba0_descriptor_json();
+const NativeFunctionImplementation& overridelayer_game_dir_line_112_49db4eaa_native();
+const NativeFunctionImplementation& overridelayer_override_dir_line_116_d702c23f_native();
+const NativeFunctionImplementation& overridelayer_is_available_line_120_4fde95ac_native();
+const NativeFunctionImplementation& overridelayer_entry_count_line_125_b6182ba0_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_assets
+} // namespace ghostrigger::assets

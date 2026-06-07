@@ -1,27 +1,63 @@
 #include "PythonFunctions/Properties.h"
 
-namespace ghostrigger::phase15::ghostrigger_unreal {
+namespace ghostrigger::unreal {
 
-const char* src_unreal_animation_retargeting_bonemappingreport_matched_count_line_115_46b24e61_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Unreal","python_module":"src.unreal.animation_retargeting","python_file":"src/unreal/animation_retargeting.py","qualname":"BoneMappingReport.matched_count","name":"matched_count","kind":"properties","line":115,"end_line":116,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& bonemappingreport_matched_count_line_115_46b24e61_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Unreal",
+        "ghostrigger::unreal::animation_retargeting",
+        "src/unreal/animation_retargeting.py",
+        "BoneMappingReport.matched_count",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Unreal","namespace":"ghostrigger::unreal::animation_retargeting","python_file":"src/unreal/animation_retargeting.py","qualname":"BoneMappingReport.matched_count","name":"matched_count","callable_type":"properties","line":115,"end_line":116,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_unreal_animation_retargeting_bonemappingreport_derived_count_line_119_fce392dc_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Unreal","python_module":"src.unreal.animation_retargeting","python_file":"src/unreal/animation_retargeting.py","qualname":"BoneMappingReport.derived_count","name":"derived_count","kind":"properties","line":119,"end_line":120,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& bonemappingreport_derived_count_line_119_fce392dc_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Unreal",
+        "ghostrigger::unreal::animation_retargeting",
+        "src/unreal/animation_retargeting.py",
+        "BoneMappingReport.derived_count",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Unreal","namespace":"ghostrigger::unreal::animation_retargeting","python_file":"src/unreal/animation_retargeting.py","qualname":"BoneMappingReport.derived_count","name":"derived_count","callable_type":"properties","line":119,"end_line":120,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_unreal_quinn_unrealskeletonasset_bone_count_line_48_9f2efdff_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Unreal","python_module":"src.unreal.quinn","python_file":"src/unreal/quinn.py","qualname":"UnrealSkeletonAsset.bone_count","name":"bone_count","kind":"properties","line":48,"end_line":49,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& unrealskeletonasset_bone_count_line_48_9f2efdff_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Unreal",
+        "ghostrigger::unreal::quinn",
+        "src/unreal/quinn.py",
+        "UnrealSkeletonAsset.bone_count",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Unreal","namespace":"ghostrigger::unreal::quinn","python_file":"src/unreal/quinn.py","qualname":"UnrealSkeletonAsset.bone_count","name":"bone_count","callable_type":"properties","line":48,"end_line":49,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/unreal/animation_retargeting.py", "BoneMappingReport.matched_count", "properties", &src_unreal_animation_retargeting_bonemappingreport_matched_count_line_115_46b24e61_descriptor_json},
-        {"src/unreal/animation_retargeting.py", "BoneMappingReport.derived_count", "properties", &src_unreal_animation_retargeting_bonemappingreport_derived_count_line_119_fce392dc_descriptor_json},
-        {"src/unreal/quinn.py", "UnrealSkeletonAsset.bone_count", "properties", &src_unreal_quinn_unrealskeletonasset_bone_count_line_48_9f2efdff_descriptor_json},
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        bonemappingreport_matched_count_line_115_46b24e61_native(),
+        bonemappingreport_derived_count_line_119_fce392dc_native(),
+        unrealskeletonasset_bone_count_line_48_9f2efdff_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_unreal
+} // namespace ghostrigger::unreal

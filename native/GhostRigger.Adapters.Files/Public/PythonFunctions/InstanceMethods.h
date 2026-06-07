@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_adapters_files {
+namespace ghostrigger::adapters::files {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_ADAPTERS_FILES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_ADAPTERS_FILES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_ADAPTERS_FILES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_files_local_file_writer_localfilewriter_write_bytes_line_15_ad2c205d_descriptor_json();
-const char* src_adapters_files_local_file_writer_localfilewriter_write_text_line_20_ec441b06_descriptor_json();
+const NativeFunctionImplementation& localfilewriter_write_bytes_line_15_ad2c205d_native();
+const NativeFunctionImplementation& localfilewriter_write_text_line_20_ec441b06_native();
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_adapters_files
+} // namespace ghostrigger::adapters::files

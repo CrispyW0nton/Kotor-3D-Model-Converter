@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_renderer_pygfx {
+namespace ghostrigger::renderer::pygfx {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RENDERER_PYGFX_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_PYGFX_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RENDERER_PYGFX_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_rendering_pygfx_core_renderer_pygfxviewportrenderer_probe_availability_line_87_bda39575_descriptor_json();
-const char* src_adapters_rendering_pygfx_core_scene_bridge_pygfxscenebridge_polyline_to_segments_line_524_5d05e78c_descriptor_json();
+const NativeFunctionImplementation& pygfxviewportrenderer_probe_availability_line_87_bda39575_native();
+const NativeFunctionImplementation& pygfxscenebridge_polyline_to_segments_line_524_5d05e78c_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_renderer_pygfx
+} // namespace ghostrigger::renderer::pygfx

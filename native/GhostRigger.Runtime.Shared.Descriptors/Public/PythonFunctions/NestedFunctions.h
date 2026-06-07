@@ -2,20 +2,27 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_runtime_shared_descriptors {
+namespace ghostrigger::runtime::shared::descriptors {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_rendering_skeleton_render_data_cached_world_position_resolver_world_transform_line_189_c0b42698_descriptor_json();
-const char* src_core_rendering_skeleton_render_data_cached_world_position_resolver_world_position_line_217_44c528c3_descriptor_json();
+const NativeFunctionImplementation& cached_world_position_resolver_world_transform_line_189_c0b42698_native();
+const NativeFunctionImplementation& cached_world_position_resolver_world_position_line_217_44c528c3_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_runtime_shared_descriptors
+} // namespace ghostrigger::runtime::shared::descriptors

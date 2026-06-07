@@ -1,17 +1,29 @@
 #include "PythonFunctions/Properties.h"
 
-namespace ghostrigger::phase15::ghostrigger_ipc {
+namespace ghostrigger::ipc {
 
-const char* src_ipc_server_ghostriggeripcserver_is_running_line_86_e9c58b6b_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.IPC","python_module":"src.ipc.server","python_file":"src/ipc/server.py","qualname":"GhostRiggerIPCServer.is_running","name":"is_running","kind":"properties","line":86,"end_line":87,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& ghostriggeripcserver_is_running_line_86_e9c58b6b_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.IPC",
+        "ghostrigger::ipc::server",
+        "src/ipc/server.py",
+        "GhostRiggerIPCServer.is_running",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.IPC","namespace":"ghostrigger::ipc::server","python_file":"src/ipc/server.py","qualname":"GhostRiggerIPCServer.is_running","name":"is_running","callable_type":"properties","line":86,"end_line":87,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/ipc/server.py", "GhostRiggerIPCServer.is_running", "properties", &src_ipc_server_ghostriggeripcserver_is_running_line_86_e9c58b6b_descriptor_json},
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        ghostriggeripcserver_is_running_line_86_e9c58b6b_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_ipc
+} // namespace ghostrigger::ipc

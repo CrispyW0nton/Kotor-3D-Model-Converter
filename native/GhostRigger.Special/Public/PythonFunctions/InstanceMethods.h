@@ -2,27 +2,34 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_special {
+namespace ghostrigger::special {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_SPECIAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_SPECIAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_SPECIAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_special_lip_reader_lipkeyframe_lt_line_131_797259dd_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_to_bytes_line_198_9f8d9982_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_to_file_line_213_b84e77e2_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_get_shapes_line_222_c8f91519_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_get_shape_at_time_line_266_f9399635_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_add_keyframe_line_276_f5b4312e_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_remove_keyframe_line_284_deb1089d_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_validate_line_295_e1e505cf_descriptor_json();
-const char* src_core_special_unity_malak_smoke_unitybridgeclient_request_line_37_cd7b03b9_descriptor_json();
+const NativeFunctionImplementation& lipkeyframe_lt_line_131_797259dd_native();
+const NativeFunctionImplementation& lipfile_to_bytes_line_198_9f8d9982_native();
+const NativeFunctionImplementation& lipfile_to_file_line_213_b84e77e2_native();
+const NativeFunctionImplementation& lipfile_get_shapes_line_222_c8f91519_native();
+const NativeFunctionImplementation& lipfile_get_shape_at_time_line_266_f9399635_native();
+const NativeFunctionImplementation& lipfile_add_keyframe_line_276_f5b4312e_native();
+const NativeFunctionImplementation& lipfile_remove_keyframe_line_284_deb1089d_native();
+const NativeFunctionImplementation& lipfile_validate_line_295_e1e505cf_native();
+const NativeFunctionImplementation& unitybridgeclient_request_line_37_cd7b03b9_native();
 
-const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_special
+} // namespace ghostrigger::special

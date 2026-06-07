@@ -2,30 +2,37 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_tools_contentbrowser {
+namespace ghostrigger::tools::contentbrowser {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_TOOLS_CONTENTBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_CONTENTBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_TOOLS_CONTENTBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_resources_game_resource_provider_gameresourcerecord_resref_line_116_3d616c56_descriptor_json();
-const char* src_core_resources_game_resource_provider_gameresourcerecord_restype_line_120_1d46f82f_descriptor_json();
-const char* src_core_resources_game_resource_provider_gameresourcerecord_layer_line_124_3bab406c_descriptor_json();
-const char* src_core_resources_game_resource_provider_gameresourcerecord_key_line_128_f409ca4e_descriptor_json();
-const char* src_core_resources_game_resource_provider_gameresourceresult_address_line_147_0e30bfb9_descriptor_json();
-const char* src_gui_panels_qt_content_browser_panel_contentassetdescriptor_searchable_text_line_403_b686721a_descriptor_json();
-const char* src_resources_game_library_resourceentry_is_model_line_148_43c8a66b_descriptor_json();
-const char* src_resources_game_library_resourceentry_is_texture_line_158_fe34306f_descriptor_json();
-const char* src_resources_game_library_resourceentry_ext_line_176_0604481f_descriptor_json();
-const char* src_resources_game_library_resourceentry_filename_line_183_c3d15313_descriptor_json();
-const char* src_resources_game_library_modellibraryentry_display_label_line_564_bd018b8d_descriptor_json();
-const char* src_resources_game_library_modellibraryentry_display_label_rich_line_572_ec474d1b_descriptor_json();
+const NativeFunctionImplementation& gameresourcerecord_resref_line_116_3d616c56_native();
+const NativeFunctionImplementation& gameresourcerecord_restype_line_120_1d46f82f_native();
+const NativeFunctionImplementation& gameresourcerecord_layer_line_124_3bab406c_native();
+const NativeFunctionImplementation& gameresourcerecord_key_line_128_f409ca4e_native();
+const NativeFunctionImplementation& gameresourceresult_address_line_147_0e30bfb9_native();
+const NativeFunctionImplementation& contentassetdescriptor_searchable_text_line_403_b686721a_native();
+const NativeFunctionImplementation& resourceentry_is_model_line_148_43c8a66b_native();
+const NativeFunctionImplementation& resourceentry_is_texture_line_158_fe34306f_native();
+const NativeFunctionImplementation& resourceentry_ext_line_176_0604481f_native();
+const NativeFunctionImplementation& resourceentry_filename_line_183_c3d15313_native();
+const NativeFunctionImplementation& modellibraryentry_display_label_line_564_bd018b8d_native();
+const NativeFunctionImplementation& modellibraryentry_display_label_rich_line_572_ec474d1b_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_contentbrowser
+} // namespace ghostrigger::tools::contentbrowser

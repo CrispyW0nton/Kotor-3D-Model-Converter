@@ -1,37 +1,97 @@
 #include "PythonFunctions/Properties.h"
 
-namespace ghostrigger::phase15::ghostrigger_sequence {
+namespace ghostrigger::sequence {
 
-const char* src_sequence_sequence_binding_sequencebinding_missing_line_64_68724a08_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Sequence","python_module":"src.sequence.sequence_binding","python_file":"src/sequence/sequence_binding.py","qualname":"SequenceBinding.missing","name":"missing","kind":"properties","line":64,"end_line":65,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& sequencebinding_missing_line_64_68724a08_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Sequence",
+        "ghostrigger::sequence::sequence_binding",
+        "src/sequence/sequence_binding.py",
+        "SequenceBinding.missing",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Sequence","namespace":"ghostrigger::sequence::sequence_binding","python_file":"src/sequence/sequence_binding.py","qualname":"SequenceBinding.missing","name":"missing","callable_type":"properties","line":64,"end_line":65,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_sequence_sequence_model_ghostriggerlevelsequence_duration_seconds_line_134_5192bc4a_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Sequence","python_module":"src.sequence.sequence_model","python_file":"src/sequence/sequence_model.py","qualname":"GhostRiggerLevelSequence.duration_seconds","name":"duration_seconds","kind":"properties","line":134,"end_line":135,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& ghostriggerlevelsequence_duration_seconds_line_134_5192bc4a_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Sequence",
+        "ghostrigger::sequence::sequence_model",
+        "src/sequence/sequence_model.py",
+        "GhostRiggerLevelSequence.duration_seconds",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Sequence","namespace":"ghostrigger::sequence::sequence_model","python_file":"src/sequence/sequence_model.py","qualname":"GhostRiggerLevelSequence.duration_seconds","name":"duration_seconds","callable_type":"properties","line":134,"end_line":135,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_sequence_sequence_model_ghostriggerlevelsequence_time_line_138_79375b49_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Sequence","python_module":"src.sequence.sequence_model","python_file":"src/sequence/sequence_model.py","qualname":"GhostRiggerLevelSequence.time","name":"time","kind":"properties","line":138,"end_line":139,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& ghostriggerlevelsequence_time_line_138_79375b49_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Sequence",
+        "ghostrigger::sequence::sequence_model",
+        "src/sequence/sequence_model.py",
+        "GhostRiggerLevelSequence.time",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Sequence","namespace":"ghostrigger::sequence::sequence_model","python_file":"src/sequence/sequence_model.py","qualname":"GhostRiggerLevelSequence.time","name":"time","callable_type":"properties","line":138,"end_line":139,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_sequence_sequence_track_sequencetrack_supports_duplicate_frames_line_48_14bff92f_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Sequence","python_module":"src.sequence.sequence_track","python_file":"src/sequence/sequence_track.py","qualname":"SequenceTrack.supports_duplicate_frames","name":"supports_duplicate_frames","kind":"properties","line":48,"end_line":49,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& sequencetrack_supports_duplicate_frames_line_48_14bff92f_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Sequence",
+        "ghostrigger::sequence::sequence_track",
+        "src/sequence/sequence_track.py",
+        "SequenceTrack.supports_duplicate_frames",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Sequence","namespace":"ghostrigger::sequence::sequence_track","python_file":"src/sequence/sequence_track.py","qualname":"SequenceTrack.supports_duplicate_frames","name":"supports_duplicate_frames","callable_type":"properties","line":48,"end_line":49,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_sequence_tracks_event_track_eventtrack_supports_duplicate_frames_line_18_87491932_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Sequence","python_module":"src.sequence.tracks.event_track","python_file":"src/sequence/tracks/event_track.py","qualname":"EventTrack.supports_duplicate_frames","name":"supports_duplicate_frames","kind":"properties","line":18,"end_line":19,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& eventtrack_supports_duplicate_frames_line_18_87491932_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Sequence",
+        "ghostrigger::sequence::tracks::event_track",
+        "src/sequence/tracks/event_track.py",
+        "EventTrack.supports_duplicate_frames",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Sequence","namespace":"ghostrigger::sequence::tracks::event_track","python_file":"src/sequence/tracks/event_track.py","qualname":"EventTrack.supports_duplicate_frames","name":"supports_duplicate_frames","callable_type":"properties","line":18,"end_line":19,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/sequence/sequence_binding.py", "SequenceBinding.missing", "properties", &src_sequence_sequence_binding_sequencebinding_missing_line_64_68724a08_descriptor_json},
-        {"src/sequence/sequence_model.py", "GhostRiggerLevelSequence.duration_seconds", "properties", &src_sequence_sequence_model_ghostriggerlevelsequence_duration_seconds_line_134_5192bc4a_descriptor_json},
-        {"src/sequence/sequence_model.py", "GhostRiggerLevelSequence.time", "properties", &src_sequence_sequence_model_ghostriggerlevelsequence_time_line_138_79375b49_descriptor_json},
-        {"src/sequence/sequence_track.py", "SequenceTrack.supports_duplicate_frames", "properties", &src_sequence_sequence_track_sequencetrack_supports_duplicate_frames_line_48_14bff92f_descriptor_json},
-        {"src/sequence/tracks/event_track.py", "EventTrack.supports_duplicate_frames", "properties", &src_sequence_tracks_event_track_eventtrack_supports_duplicate_frames_line_18_87491932_descriptor_json},
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        sequencebinding_missing_line_64_68724a08_native(),
+        ghostriggerlevelsequence_duration_seconds_line_134_5192bc4a_native(),
+        ghostriggerlevelsequence_time_line_138_79375b49_native(),
+        sequencetrack_supports_duplicate_frames_line_48_14bff92f_native(),
+        eventtrack_supports_duplicate_frames_line_18_87491932_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_sequence
+} // namespace ghostrigger::sequence

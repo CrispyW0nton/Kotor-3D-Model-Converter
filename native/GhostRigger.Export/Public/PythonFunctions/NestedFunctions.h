@@ -2,21 +2,28 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_export {
+namespace ghostrigger::export_ {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_EXPORT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_EXPORT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_EXPORT_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_export_gltf_importer_gltfimporter_process_pygltflib_acc_line_518_3d5ae96e_descriptor_json();
-const char* src_core_export_gltf_importer_gltfimporter_import_builtin_bytes_acc_line_726_d6c230cd_descriptor_json();
-const char* src_core_export_gltf_importer_candidate_blender_executables_add_line_1087_320d6829_descriptor_json();
+const NativeFunctionImplementation& gltfimporter_process_pygltflib_acc_line_518_3d5ae96e_native();
+const NativeFunctionImplementation& gltfimporter_import_builtin_bytes_acc_line_726_d6c230cd_native();
+const NativeFunctionImplementation& candidate_blender_executables_add_line_1087_320d6829_native();
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_export
+} // namespace ghostrigger::export_

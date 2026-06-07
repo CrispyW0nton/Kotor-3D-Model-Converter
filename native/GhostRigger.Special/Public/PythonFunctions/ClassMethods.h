@@ -2,22 +2,29 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_special {
+namespace ghostrigger::special {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_SPECIAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_SPECIAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_SPECIAL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_special_lip_reader_lipshape_label_line_82_0c06e812_descriptor_json();
-const char* src_core_special_lip_reader_lipshape_from_phoneme_line_98_4a5108b5_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_from_bytes_line_155_70542997_descriptor_json();
-const char* src_core_special_lip_reader_lipfile_from_file_line_190_1a30d4ed_descriptor_json();
+const NativeFunctionImplementation& lipshape_label_line_82_0c06e812_native();
+const NativeFunctionImplementation& lipshape_from_phoneme_line_98_4a5108b5_native();
+const NativeFunctionImplementation& lipfile_from_bytes_line_155_70542997_native();
+const NativeFunctionImplementation& lipfile_from_file_line_190_1a30d4ed_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_special
+} // namespace ghostrigger::special

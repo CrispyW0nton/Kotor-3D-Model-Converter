@@ -2,22 +2,29 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_runtime_shared_descriptors {
+namespace ghostrigger::runtime::shared::descriptors {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_core_project_resource_address_resourceaddress_from_dict_line_87_734cf9ce_descriptor_json();
-const char* src_core_scene_scene_object_transform_from_dict_line_35_68aeedb9_descriptor_json();
-const char* src_core_scene_scene_object_pivotdata_from_dict_line_88_6fd6a9f3_descriptor_json();
-const char* src_core_scene_scene_object_instance_sceneobjectinstance_from_dict_line_49_531c3383_descriptor_json();
+const NativeFunctionImplementation& resourceaddress_from_dict_line_87_734cf9ce_native();
+const NativeFunctionImplementation& transform_from_dict_line_35_68aeedb9_native();
+const NativeFunctionImplementation& pivotdata_from_dict_line_88_6fd6a9f3_native();
+const NativeFunctionImplementation& sceneobjectinstance_from_dict_line_49_531c3383_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_runtime_shared_descriptors
+} // namespace ghostrigger::runtime::shared::descriptors

@@ -1,27 +1,63 @@
 #include "PythonFunctions/StaticMethods.h"
 
-namespace ghostrigger::phase15::ghostrigger_tools_characterbuilder {
+namespace ghostrigger::tools::characterbuilder {
 
-const char* src_gui_panels_qt_character_builder_panel_qtcharacterbuilderwindow_character_builder_theme_stylesheet_line_551_081c8327_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Tools.CharacterBuilder","python_module":"src.gui.panels.qt_character_builder_panel","python_file":"src/gui/panels/qt_character_builder_panel.py","qualname":"QtCharacterBuilderWindow._character_builder_theme_stylesheet","name":"_character_builder_theme_stylesheet","kind":"static_methods","line":551,"end_line":692,"signature":{"args":["theme"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& qtcharacterbuilderwindow_character_builder_theme_stylesheet_line_551_081c8327_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Tools.CharacterBuilder",
+        "ghostrigger::tools::characterbuilder::gui::panels::qt_character_builder_panel",
+        "src/gui/panels/qt_character_builder_panel.py",
+        "QtCharacterBuilderWindow._character_builder_theme_stylesheet",
+        "static_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.CharacterBuilder","namespace":"ghostrigger::tools::characterbuilder::gui::panels::qt_character_builder_panel","python_file":"src/gui/panels/qt_character_builder_panel.py","qualname":"QtCharacterBuilderWindow._character_builder_theme_stylesheet","name":"_character_builder_theme_stylesheet","callable_type":"static_methods","line":551,"end_line":692,"signature":{"args":["theme"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_gui_panels_qt_character_builder_panel_qtcharacterbuilderwindow_option_field_line_1975_4be3154b_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Tools.CharacterBuilder","python_module":"src.gui.panels.qt_character_builder_panel","python_file":"src/gui/panels/qt_character_builder_panel.py","qualname":"QtCharacterBuilderWindow._option_field","name":"_option_field","kind":"static_methods","line":1975,"end_line":1978,"signature":{"args":["option","name","default"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& qtcharacterbuilderwindow_option_field_line_1975_4be3154b_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Tools.CharacterBuilder",
+        "ghostrigger::tools::characterbuilder::gui::panels::qt_character_builder_panel",
+        "src/gui/panels/qt_character_builder_panel.py",
+        "QtCharacterBuilderWindow._option_field",
+        "static_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.CharacterBuilder","namespace":"ghostrigger::tools::characterbuilder::gui::panels::qt_character_builder_panel","python_file":"src/gui/panels/qt_character_builder_panel.py","qualname":"QtCharacterBuilderWindow._option_field","name":"_option_field","callable_type":"static_methods","line":1975,"end_line":1978,"signature":{"args":["option","name","default"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_gui_panels_qt_character_builder_panel_qtcharacterbuilderwindow_settings_line_4222_ff8074da_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Tools.CharacterBuilder","python_module":"src.gui.panels.qt_character_builder_panel","python_file":"src/gui/panels/qt_character_builder_panel.py","qualname":"QtCharacterBuilderWindow._settings","name":"_settings","kind":"static_methods","line":4222,"end_line":4223,"signature":{"args":[],"positional_count":0,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& qtcharacterbuilderwindow_settings_line_4222_ff8074da_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Tools.CharacterBuilder",
+        "ghostrigger::tools::characterbuilder::gui::panels::qt_character_builder_panel",
+        "src/gui/panels/qt_character_builder_panel.py",
+        "QtCharacterBuilderWindow._settings",
+        "static_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.CharacterBuilder","namespace":"ghostrigger::tools::characterbuilder::gui::panels::qt_character_builder_panel","python_file":"src/gui/panels/qt_character_builder_panel.py","qualname":"QtCharacterBuilderWindow._settings","name":"_settings","callable_type":"static_methods","line":4222,"end_line":4223,"signature":{"args":[],"positional_count":0,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/gui/panels/qt_character_builder_panel.py", "QtCharacterBuilderWindow._character_builder_theme_stylesheet", "static_methods", &src_gui_panels_qt_character_builder_panel_qtcharacterbuilderwindow_character_builder_theme_stylesheet_line_551_081c8327_descriptor_json},
-        {"src/gui/panels/qt_character_builder_panel.py", "QtCharacterBuilderWindow._option_field", "static_methods", &src_gui_panels_qt_character_builder_panel_qtcharacterbuilderwindow_option_field_line_1975_4be3154b_descriptor_json},
-        {"src/gui/panels/qt_character_builder_panel.py", "QtCharacterBuilderWindow._settings", "static_methods", &src_gui_panels_qt_character_builder_panel_qtcharacterbuilderwindow_settings_line_4222_ff8074da_descriptor_json},
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        qtcharacterbuilderwindow_character_builder_theme_stylesheet_line_551_081c8327_native(),
+        qtcharacterbuilderwindow_option_field_line_1975_4be3154b_native(),
+        qtcharacterbuilderwindow_settings_line_4222_ff8074da_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_characterbuilder
+} // namespace ghostrigger::tools::characterbuilder

@@ -1,17 +1,29 @@
 #include "PythonFunctions/NestedFunctions.h"
 
-namespace ghostrigger::phase15::ghostrigger_tools_lighting {
+namespace ghostrigger::tools::lighting {
 
-const char* src_core_lighting_light_manager_lightmanager_make_light_node_all_nodes_with_generated_line_186_39c41903_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Tools.Lighting","python_module":"src.core.lighting.light_manager","python_file":"src/core/lighting/light_manager.py","qualname":"LightManager._make_light_node._all_nodes_with_generated","name":"_all_nodes_with_generated","kind":"nested_functions","line":186,"end_line":187,"signature":{"args":["_orig","_model"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& lightmanager_make_light_node_all_nodes_with_generated_line_186_39c41903_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Tools.Lighting",
+        "ghostrigger::tools::lighting::core::lighting::light_manager",
+        "src/core/lighting/light_manager.py",
+        "LightManager._make_light_node._all_nodes_with_generated",
+        "nested_functions",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Lighting","namespace":"ghostrigger::tools::lighting::core::lighting::light_manager","python_file":"src/core/lighting/light_manager.py","qualname":"LightManager._make_light_node._all_nodes_with_generated","name":"_all_nodes_with_generated","callable_type":"nested_functions","line":186,"end_line":187,"signature":{"args":["_orig","_model"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/core/lighting/light_manager.py", "LightManager._make_light_node._all_nodes_with_generated", "nested_functions", &src_core_lighting_light_manager_lightmanager_make_light_node_all_nodes_with_generated_line_186_39c41903_descriptor_json},
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        lightmanager_make_light_node_all_nodes_with_generated_line_186_39c41903_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_tools_lighting
+} // namespace ghostrigger::tools::lighting

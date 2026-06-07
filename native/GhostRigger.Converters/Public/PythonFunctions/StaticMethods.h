@@ -2,24 +2,31 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_converters {
+namespace ghostrigger::converters {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_converters_mesh_converter_objexporter_clean_tex_line_498_52c0af98_descriptor_json();
-const char* src_converters_mesh_converter_objexporter_node_bind_world_verts_line_650_d03ab6eb_descriptor_json();
-const char* src_converters_mesh_converter_objexporter_node_bind_world_normals_line_695_d85a26c8_descriptor_json();
-const char* src_converters_mesh_converter_objexporter_export_textures_to_dir_line_886_657b24bf_descriptor_json();
-const char* src_converters_mesh_converter_objexporter_export_baked_lightmaps_to_dir_line_918_79da02c3_descriptor_json();
-const char* src_converters_mesh_converter_gltfexporter_tex_to_base64_uri_line_3260_857d474d_descriptor_json();
+const NativeFunctionImplementation& objexporter_clean_tex_line_498_52c0af98_native();
+const NativeFunctionImplementation& objexporter_node_bind_world_verts_line_650_d03ab6eb_native();
+const NativeFunctionImplementation& objexporter_node_bind_world_normals_line_695_d85a26c8_native();
+const NativeFunctionImplementation& objexporter_export_textures_to_dir_line_886_657b24bf_native();
+const NativeFunctionImplementation& objexporter_export_baked_lightmaps_to_dir_line_918_79da02c3_native();
+const NativeFunctionImplementation& gltfexporter_tex_to_base64_uri_line_3260_857d474d_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_converters
+} // namespace ghostrigger::converters

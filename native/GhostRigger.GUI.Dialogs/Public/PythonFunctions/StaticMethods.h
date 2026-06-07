@@ -2,24 +2,31 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_gui_dialogs {
+namespace ghostrigger::gui::dialogs {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_GUI_DIALOGS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_DIALOGS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_GUI_DIALOGS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_gui_dialogs_qt_dialogs_qtaboutdialog_window_icon_line_352_7eb68aaa_descriptor_json();
-const char* src_gui_dialogs_qt_dialogs_qtaboutdialog_renderer_status_line_363_4b84e3eb_descriptor_json();
-const char* src_gui_dialogs_qt_dialogs_qtaboutdialog_theme_status_line_373_40d02a86_descriptor_json();
-const char* src_gui_dialogs_qt_settings_dialog_qtsettingsdialog_coerce_hardware_diagnostics_line_422_9371990e_descriptor_json();
-const char* src_gui_dialogs_qt_settings_dialog_qtsettingsdialog_coerce_renderer_capabilities_line_430_3412f953_descriptor_json();
-const char* src_gui_dialogs_qt_settings_dialog_qtsettingsdialog_set_combo_data_line_551_9b7f556e_descriptor_json();
+const NativeFunctionImplementation& qtaboutdialog_window_icon_line_352_7eb68aaa_native();
+const NativeFunctionImplementation& qtaboutdialog_renderer_status_line_363_4b84e3eb_native();
+const NativeFunctionImplementation& qtaboutdialog_theme_status_line_373_40d02a86_native();
+const NativeFunctionImplementation& qtsettingsdialog_coerce_hardware_diagnostics_line_422_9371990e_native();
+const NativeFunctionImplementation& qtsettingsdialog_coerce_renderer_capabilities_line_430_3412f953_native();
+const NativeFunctionImplementation& qtsettingsdialog_set_combo_data_line_551_9b7f556e_native();
 
-const PythonFunctionDescriptorEntry* staticmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_gui_dialogs
+} // namespace ghostrigger::gui::dialogs

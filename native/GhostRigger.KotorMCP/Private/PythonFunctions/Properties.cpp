@@ -1,22 +1,46 @@
 #include "PythonFunctions/Properties.h"
 
-namespace ghostrigger::phase15::ghostrigger_kotormcp {
+namespace ghostrigger::kotormcp {
 
-const char* src_kotormcp_tools_debug_skinning_debugsession_uptime_s_line_119_caf797cb_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.KotorMCP","python_module":"src.kotormcp.tools.debug_skinning","python_file":"src/kotormcp/tools/debug_skinning.py","qualname":"_DebugSession.uptime_s","name":"uptime_s","kind":"properties","line":119,"end_line":122,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& debugsession_uptime_s_line_119_caf797cb_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.KotorMCP",
+        "ghostrigger::kotormcp::tools::debug_skinning",
+        "src/kotormcp/tools/debug_skinning.py",
+        "_DebugSession.uptime_s",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.KotorMCP","namespace":"ghostrigger::kotormcp::tools::debug_skinning","python_file":"src/kotormcp/tools/debug_skinning.py","qualname":"_DebugSession.uptime_s","name":"uptime_s","callable_type":"properties","line":119,"end_line":122,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_kotormcp_tools_discovery_resourceentryproxy_data_line_180_7da55bff_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.KotorMCP","python_module":"src.kotormcp.tools.discovery","python_file":"src/kotormcp/tools/discovery.py","qualname":"_ResourceEntryProxy.data","name":"data","kind":"properties","line":180,"end_line":181,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":false})grjson";
+const NativeFunctionImplementation& resourceentryproxy_data_line_180_7da55bff_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.KotorMCP",
+        "ghostrigger::kotormcp::tools::discovery",
+        "src/kotormcp/tools/discovery.py",
+        "_ResourceEntryProxy.data",
+        "properties",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.KotorMCP","namespace":"ghostrigger::kotormcp::tools::discovery","python_file":"src/kotormcp/tools/discovery.py","qualname":"_ResourceEntryProxy.data","name":"data","callable_type":"properties","line":180,"end_line":181,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/kotormcp/tools/debug_skinning.py", "_DebugSession.uptime_s", "properties", &src_kotormcp_tools_debug_skinning_debugsession_uptime_s_line_119_caf797cb_descriptor_json},
-        {"src/kotormcp/tools/discovery.py", "_ResourceEntryProxy.data", "properties", &src_kotormcp_tools_discovery_resourceentryproxy_data_line_180_7da55bff_descriptor_json},
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        debugsession_uptime_s_line_119_caf797cb_native(),
+        resourceentryproxy_data_line_180_7da55bff_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_kotormcp
+} // namespace ghostrigger::kotormcp

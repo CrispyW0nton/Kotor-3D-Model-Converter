@@ -2,23 +2,30 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_adapters_rendering {
+namespace ghostrigger::adapters::rendering {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_ADAPTERS_RENDERING_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_ADAPTERS_RENDERING_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_ADAPTERS_RENDERING_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_adapters_rendering_moderngl_renderer_impl_gpurenderer_is_gpu_line_2716_996d44b7_descriptor_json();
-const char* src_adapters_rendering_renderer_factory_fallbackviewportrenderer_name_line_127_fde2575f_descriptor_json();
-const char* src_adapters_rendering_renderer_factory_fallbackviewportrenderer_backend_id_line_132_2bc3f975_descriptor_json();
-const char* src_adapters_rendering_renderer_factory_fallbackviewportrenderer_active_renderer_line_196_3eb56d6b_descriptor_json();
-const char* src_adapters_rendering_renderer_factory_fallbackviewportrenderer_active_backend_line_200_710bb50c_descriptor_json();
+const NativeFunctionImplementation& gpurenderer_is_gpu_line_2716_996d44b7_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_name_line_127_fde2575f_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_backend_id_line_132_2bc3f975_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_active_renderer_line_196_3eb56d6b_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_active_backend_line_200_710bb50c_native();
 
-const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_adapters_rendering
+} // namespace ghostrigger::adapters::rendering

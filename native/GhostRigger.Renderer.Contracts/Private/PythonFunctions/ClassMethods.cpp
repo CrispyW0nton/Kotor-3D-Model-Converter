@@ -1,22 +1,46 @@
 #include "PythonFunctions/ClassMethods.h"
 
-namespace ghostrigger::phase15::ghostrigger_renderer_contracts {
+namespace ghostrigger::renderer::contracts {
 
-const char* src_core_rendering_renderer_capabilities_renderercapabilities_from_dict_line_104_185dfd96_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Renderer.Contracts","python_module":"src.core.rendering.renderer_capabilities","python_file":"src/core/rendering/renderer_capabilities.py","qualname":"RendererCapabilities.from_dict","name":"from_dict","kind":"class_methods","line":104,"end_line":150,"signature":{"args":["cls","values"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& renderercapabilities_from_dict_line_104_185dfd96_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Renderer.Contracts",
+        "ghostrigger::renderer::contracts::core::rendering::renderer_capabilities",
+        "src/core/rendering/renderer_capabilities.py",
+        "RendererCapabilities.from_dict",
+        "class_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Renderer.Contracts","namespace":"ghostrigger::renderer::contracts::core::rendering::renderer_capabilities","python_file":"src/core/rendering/renderer_capabilities.py","qualname":"RendererCapabilities.from_dict","name":"from_dict","callable_type":"class_methods","line":104,"end_line":150,"signature":{"args":["cls","values"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const char* src_core_rendering_renderer_settings_renderersettings_from_settings_line_68_2bcc02b5_descriptor_json() {
-    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Renderer.Contracts","python_module":"src.core.rendering.renderer_settings","python_file":"src/core/rendering/renderer_settings.py","qualname":"RendererSettings.from_settings","name":"from_settings","kind":"class_methods","line":68,"end_line":113,"signature":{"args":["cls","settings"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+const NativeFunctionImplementation& renderersettings_from_settings_line_68_2bcc02b5_native() {
+    static const NativeFunctionImplementation implementation = {
+        "GhostRigger.Renderer.Contracts",
+        "ghostrigger::renderer::contracts::core::rendering::renderer_settings",
+        "src/core/rendering/renderer_settings.py",
+        "RendererSettings.from_settings",
+        "class_methods",
+        "native_contract_pending_semantic_port",
+        true,
+        false,
+        true,
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Renderer.Contracts","namespace":"ghostrigger::renderer::contracts::core::rendering::renderer_settings","python_file":"src/core/rendering/renderer_settings.py","qualname":"RendererSettings.from_settings","name":"from_settings","callable_type":"class_methods","line":68,"end_line":113,"signature":{"args":["cls","settings"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+    };
+    return implementation;
 }
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count) {
-    static const PythonFunctionDescriptorEntry entries[] = {
-        {"src/core/rendering/renderer_capabilities.py", "RendererCapabilities.from_dict", "class_methods", &src_core_rendering_renderer_capabilities_renderercapabilities_from_dict_line_104_185dfd96_descriptor_json},
-        {"src/core/rendering/renderer_settings.py", "RendererSettings.from_settings", "class_methods", &src_core_rendering_renderer_settings_renderersettings_from_settings_line_68_2bcc02b5_descriptor_json},
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count) {
+    static const NativeFunctionImplementation entries[] = {
+        renderercapabilities_from_dict_line_104_185dfd96_native(),
+        renderersettings_from_settings_line_68_2bcc02b5_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;
 }
 
-} // namespace ghostrigger::phase15::ghostrigger_renderer_contracts
+} // namespace ghostrigger::renderer::contracts

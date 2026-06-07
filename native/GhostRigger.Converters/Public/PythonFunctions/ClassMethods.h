@@ -2,24 +2,31 @@
 
 #include <cstddef>
 
-namespace ghostrigger::phase15::ghostrigger_converters {
+namespace ghostrigger::converters {
 
-using PythonFunctionDescriptorJson = const char* (*)();
-
-struct PythonFunctionDescriptorEntry {
+#ifndef GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
     const char* python_file;
     const char* qualname;
-    const char* function_type;
-    PythonFunctionDescriptorJson descriptor_json;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
 };
+#endif // GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const char* src_converters_mesh_converter_objexporter_is_facial_geometry_line_535_594fa6cf_descriptor_json();
-const char* src_converters_mesh_converter_objexporter_is_deformation_helper_line_574_cc6f545f_descriptor_json();
-const char* src_converters_mesh_converter_objexporter_is_renderable_line_623_01a547cf_descriptor_json();
-const char* src_converters_normal_map_txibuilder_normal_map_preset_line_134_faf7d193_descriptor_json();
-const char* src_converters_normal_map_txibuilder_envmap_preset_line_142_f3d3c78b_descriptor_json();
-const char* src_converters_normal_map_txibuilder_diffuse_preset_line_147_1291f1af_descriptor_json();
+const NativeFunctionImplementation& objexporter_is_facial_geometry_line_535_594fa6cf_native();
+const NativeFunctionImplementation& objexporter_is_deformation_helper_line_574_cc6f545f_native();
+const NativeFunctionImplementation& objexporter_is_renderable_line_623_01a547cf_native();
+const NativeFunctionImplementation& txibuilder_normal_map_preset_line_134_faf7d193_native();
+const NativeFunctionImplementation& txibuilder_envmap_preset_line_142_f3d3c78b_native();
+const NativeFunctionImplementation& txibuilder_diffuse_preset_line_147_1291f1af_native();
 
-const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count);
+const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::phase15::ghostrigger_converters
+} // namespace ghostrigger::converters
