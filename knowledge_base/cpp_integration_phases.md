@@ -82,8 +82,8 @@ Each new native project must declare:
 - Owning product surface, such as Main Viewport/KMAX, Character Studio,
   Retarget Workbench, Module Studio, Map Studio, Resource Browser, Validation,
   Export, or Project/session infrastructure.
-- Owning code package, such as `native/GhostRiggerRendererD3D12`,
-  `native/GhostRiggerAnimationRuntime`, `src/adapters/rendering/native_core`,
+- Owning code package, such as `native/GhostRigger.Renderer.D3D12`,
+  `native/GhostRigger.Tools.Retargeting`, `src/adapters/rendering/native_core`,
   or `src/core/rendering`.
 - Python bridge method: C ABI, `.pyd`, host module, or shared-handle API.
 - Data ownership: which side owns allocation, mutation, lifetime, and cleanup.
@@ -116,13 +116,13 @@ on each other's implementation details.
 
 Baseline renderer packages should follow this shape:
 
-- `GhostRiggerRendererContracts`: renderer-neutral native interfaces,
+- `GhostRigger.Renderer.Contracts`: renderer-neutral native interfaces,
   descriptor structs, capability flags, diagnostics, draw-list records, and
   shared handle types.
-- `GhostRiggerRendererD3D12`: Windows Direct3D 12 renderer package.
-- `GhostRiggerRendererWGPU`: WGPU renderer package if/when the native WGPU path
+- `GhostRigger.Renderer.D3D12`: Windows Direct3D 12 renderer package.
+- `GhostRigger.Renderer.WGPU`: WGPU renderer package if/when the native WGPU path
   is promoted beyond Python adapters.
-- `GhostRiggerRendererNull`: diagnostic fallback package for tests and failure
+- `GhostRigger.Renderer.Null`: diagnostic fallback package for tests and failure
   reporting, not a product-facing renderer mode.
 
 Renderer DLLs should own:
@@ -196,6 +196,9 @@ Current completed foundation:
 - `GhostRigger.Runtime.Shared.Resources.dll` exists as the renderer-neutral
   resource residency schema package for resource identifiers, residency records,
   upload packets, and transition packets.
+- `GhostRigger.Renderer.Contracts.dll` exists as the renderer-neutral package
+  boundary for backend capability, surface, draw-item, and frame-stat schema
+  metadata before D3D12/WGPU implementation DLLs are introduced.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -208,6 +211,8 @@ Current completed foundation:
   runtime descriptor ABI without Python or the GUI.
 - `GhostRigger.Runtime.Shared.Resources.DEBUG.exe` validates the shared runtime
   resource ABI without Python or the GUI.
+- `GhostRigger.Renderer.Contracts.DEBUG.exe` validates the renderer contract ABI
+  without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -217,8 +222,9 @@ Current completed foundation:
   `GhostRigger.Native.NativeCore.Math.dll`, and
   `GhostRigger.Runtime.Shared.Contracts.dll`, and
   `GhostRigger.Runtime.Shared.Descriptors.dll`, and
-  `GhostRigger.Runtime.Shared.Resources.dll` availability and capabilities from
-  Python without starting the GUI.
+  `GhostRigger.Runtime.Shared.Resources.dll`, and
+  `GhostRigger.Renderer.Contracts.dll` availability and capabilities from Python
+  without starting the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -237,6 +243,9 @@ Native project naming foundation:
   `GhostRigger.Tools.CharacterBuilder`.
 - The Phase 1 native main-window package must use
   `GhostRigger.Windows.MainWindow` naming.
+- Renderer contract packages use `GhostRigger.Renderer.Contracts`, and concrete
+  renderer backend packages use `GhostRigger.Renderer.{Backend}`, for example
+  `GhostRigger.Renderer.D3D12`.
 - Concrete renderer packages should name the owner clearly while depending on
   `GhostRigger.Native.NativeCore`, `GhostRigger.Native.NativeCore.*`, or
   `GhostRigger.Runtime.Shared.*` packages instead of duplicating shared code.
@@ -250,8 +259,8 @@ Required remaining foundation work:
 - Add shared native projects for cross-toolbox contracts, handle management,
   descriptors, math, resource residency, diagnostics, and common runtime
   helpers.
-- Split renderer contracts from renderer implementations.
-- Create one renderer DLL package per renderer backend.
+- Create one renderer DLL package per renderer backend, starting with the
+  boundary defined by `GhostRigger.Renderer.Contracts`.
 - Use the native project templates for native toolbox DLLs, renderer DLLs, and
   native DEBUG executables so future agents add projects consistently.
 - Add version and capability negotiation to every native package that Python can
@@ -410,8 +419,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Define the first renderer package boundary before adding real D3D12/WGPU
-   draw submission.
+5. Add the first concrete renderer backend package, such as
+   `GhostRigger.Renderer.D3D12`, behind `GhostRigger.Renderer.Contracts` before
+   adding real draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`

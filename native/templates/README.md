@@ -25,6 +25,10 @@ being folded into the host or runtime projects. Native toolbox packages use
 window consumes still belongs in `GhostRigger.Native.NativeCore.*` or
 `GhostRigger.Runtime.Shared.*` first.
 
+Renderer contract packages use `GhostRigger.Renderer.Contracts`. Concrete
+renderer backend packages use `GhostRigger.Renderer.{Backend}`, for example
+`GhostRigger.Renderer.D3D12`.
+
 Do not copy an existing feature project and then strip it down. Start from the
 matching template and replace every `{{TOKEN}}`.
 

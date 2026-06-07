@@ -6,6 +6,7 @@ from src.adapters.native_core.package_registry import (
     NATIVE_CORE_DIAGNOSTICS_PACKAGE,
     NATIVE_CORE_MATH_PACKAGE,
     NATIVE_CORE_PACKAGE,
+    RENDERER_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     RUNTIME_SHARED_RESOURCES_PACKAGE,
@@ -15,6 +16,7 @@ from src.adapters.native_core.package_registry import (
     query_native_core_math_status,
     query_native_core_status,
     query_native_package_status,
+    query_renderer_contracts_status,
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
@@ -76,6 +78,17 @@ def test_runtime_shared_resources_status_uses_shared_registry_path(tmp_path: Pat
     assert status.available is False
     assert (
         "GhostRigger.Runtime.Shared.Resources.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_renderer_contracts_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_renderer_contracts_status([tmp_path])
+
+    assert status.name == "GhostRigger.Renderer.Contracts"
+    assert status.available is False
+    assert (
+        "GhostRigger.Renderer.Contracts.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -176,3 +189,11 @@ def test_runtime_shared_resources_package_spec_names_current_contract() -> None:
         RUNTIME_SHARED_RESOURCES_PACKAGE.capabilities_export
         == "gr_runtime_shared_resources_capabilities_json"
     )
+
+
+def test_renderer_contracts_package_spec_names_current_contract() -> None:
+    assert RENDERER_CONTRACTS_PACKAGE.name == "GhostRigger.Renderer.Contracts"
+    assert RENDERER_CONTRACTS_PACKAGE.dll_name == "GhostRigger.Renderer.Contracts.dll"
+    assert RENDERER_CONTRACTS_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_CONTRACTS"
+    assert RENDERER_CONTRACTS_PACKAGE.version_export == "gr_renderer_contracts_version"
+    assert RENDERER_CONTRACTS_PACKAGE.capabilities_export == "gr_renderer_contracts_capabilities_json"

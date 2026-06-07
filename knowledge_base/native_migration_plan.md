@@ -54,12 +54,18 @@ a launcher and native workspace first, not a rewrite of the application.
   submission are introduced.
 - `native/GhostRigger.Runtime.DEBUG/` verifies the native runtime ABI from
   Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.Contracts/` owns the renderer-neutral backend,
+  surface, draw-item, and frame-stat schema metadata that concrete renderer
+  packages must share before D3D12/WGPU draw submission moves native.
+- `native/GhostRigger.Renderer.Contracts.DEBUG/` verifies the renderer contract
+  ABI from Visual Studio without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package
   availability and capability metadata without starting the GUI. It now exposes
-  a reusable package spec so future `GhostRigger.Native.NativeCore.*` and `GhostRigger.Runtime.Shared.*`
-  packages can be added consistently.
+  a reusable package spec so future `GhostRigger.Native.NativeCore.*`,
+  `GhostRigger.Runtime.Shared.*`, and `GhostRigger.Renderer.*` packages can be
+  added consistently.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental
@@ -70,6 +76,8 @@ Native project naming:
   `GhostRigger.Runtime`.
 - Shared core extensions: `GhostRigger.Native.NativeCore.{System}`.
 - Shared runtime contracts: `GhostRigger.Runtime.Shared.{System}`.
+- Renderer contracts: `GhostRigger.Renderer.Contracts`.
+- Renderer backends: `GhostRigger.Renderer.{Backend}`.
 - Toolbox migrations from Python: `GhostRigger.Tools.{Toolname}`.
 - Phase 1 native main-window package: `GhostRigger.Windows.MainWindow`.
 
