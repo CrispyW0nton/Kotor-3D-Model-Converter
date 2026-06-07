@@ -42,6 +42,9 @@
     <ClCompile Include="Private\GhostRiggerNativeCoreMath.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\CameraMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -51,6 +54,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerNativeCoreMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\CameraMath.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
