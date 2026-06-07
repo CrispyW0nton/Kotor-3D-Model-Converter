@@ -145,6 +145,7 @@ struct DiagnosticContext {
     bool guarded_shader_bytecode_metadata_ready = false;
     bool shader_reflection_input_layout_metadata_ready = false;
     bool guarded_root_signature_metadata_ready = false;
+    bool guarded_pipeline_state_object_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1423,6 +1424,51 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_root_signature_metad
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_pipeline_state_object_metadata_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_pipeline_state_object_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"pipeline_state_ready":false,"pipeline_state_created":false,"pso_descriptor_ready":false,"draw_submission_enabled":false})";
+    }
+
+    target->guarded_pipeline_state_object_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_pipeline_state_object_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"root_signature_ready":false,"shader_bytecode_ready":false,)"
+               R"("input_layout_ready":false,"pipeline_state_ready":false,)"
+               R"("pso_descriptor_ready":false,"pipeline_state_created":false,)"
+               R"("graphics_pso_desc_fields":[)"
+               R"({"field":"pRootSignature","ready":false},)"
+               R"({"field":"VS","ready":false,"entry":"VSMain","target":"vs_6_0"},)"
+               R"({"field":"PS","ready":false,"entry":"PSMain","target":"ps_6_0"},)"
+               R"({"field":"InputLayout","ready":false,"element_count":0},)"
+               R"({"field":"BlendState","ready":false},)"
+               R"({"field":"RasterizerState","ready":false},)"
+               R"({"field":"DepthStencilState","ready":false},)"
+               R"({"field":"SampleMask","ready":false},)"
+               R"({"field":"PrimitiveTopologyType","ready":false},)"
+               R"({"field":"RTVFormats","ready":false,"format":"DXGI_FORMAT_R8G8B8A8_UNORM"},)"
+               R"({"field":"DSVFormat","ready":false,"format":"DXGI_FORMAT_D24_UNORM_S8_UINT"},)"
+               R"({"field":"SampleDesc","ready":false,"count":1}],)"
+               R"("blend_state_ready":false,"rasterizer_state_ready":false,)"
+               R"("depth_stencil_state_ready":false,"sample_mask_ready":false,)"
+               R"("primitive_topology_ready":false,"rtv_formats_ready":false,)"
+               R"("dsv_format_ready":false,"sample_desc_ready":false,)"
+               R"("cached_pso_count":0,"draw_calls_recorded":0,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["root_signature_missing",)"
+               R"("shader_bytecode_missing","input_layout_missing",)"
+               R"("pso_descriptor_incomplete","pipeline_state_missing",)"
+               R"("draw_submission_disabled"],"phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1439,7 +1485,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("post_present_frame_accounting","draw_list_readiness_metadata",)"
         R"("resource_binding_readiness_metadata","pipeline_state_readiness_metadata",)"
         R"("guarded_shader_bytecode_metadata","shader_reflection_input_layout_metadata",)"
-        R"("guarded_root_signature_metadata"],)"
+        R"("guarded_root_signature_metadata","guarded_pipeline_state_object_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1646,6 +1692,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->shader_reflection_input_layout_metadata_ready ? "true" : "false";
     payload += R"(,"guarded_root_signature_metadata_ready":)";
     payload += target->guarded_root_signature_metadata_ready ? "true" : "false";
+    payload += R"(,"guarded_pipeline_state_object_metadata_ready":)";
+    payload += target->guarded_pipeline_state_object_metadata_ready ? "true" : "false";
     payload += R"(,"diagnostic_frame_index":)";
     payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
     payload += R"(,"diagnostic_presented_frame_count":)";

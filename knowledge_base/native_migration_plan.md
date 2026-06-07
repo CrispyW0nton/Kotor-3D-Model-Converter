@@ -86,8 +86,9 @@ a launcher and native workspace first, not a rewrite of the application.
   metadata, report native resource-binding readiness metadata, report
   pipeline-state/root-signature readiness metadata, report guarded
   shader-bytecode metadata, report shader reflection/input-layout metadata,
-  report guarded root-signature metadata, and report failure-diagnostic
-  metadata, but it is diagnostic-only in Phase 1 and does
+  report guarded root-signature metadata, report guarded pipeline-state object
+  metadata, and report failure-diagnostic metadata, but it is diagnostic-only
+  in Phase 1 and does
   not record draws or enable real draw submission yet.
   `Present` is only reachable through the guarded present-call diagnostic after
   prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
@@ -108,8 +109,9 @@ a launcher and native workspace first, not a rewrite of the application.
   native draw-list readiness metadata export, native resource-binding readiness
   metadata export, pipeline-state/root-signature readiness metadata export,
   guarded shader-bytecode metadata export, shader reflection/input-layout
-  metadata export, guarded root-signature metadata export, and
-  device-requirement metadata from Visual Studio without
+  metadata export, guarded root-signature metadata export,
+  guarded pipeline-state object metadata export, and device-requirement
+  metadata from Visual Studio without
   requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.

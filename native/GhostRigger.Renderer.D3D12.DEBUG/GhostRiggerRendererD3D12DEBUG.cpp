@@ -886,6 +886,46 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 158;
     }
+    const char* pipeline_state_object_json =
+        gr_renderer_d3d12_guarded_pipeline_state_object_metadata_json(context);
+    if (std::strstr(
+            pipeline_state_object_json,
+            R"("schema":"renderer_d3d12_guarded_pipeline_state_object_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded PSO metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 159;
+    }
+    if (std::strstr(pipeline_state_object_json, R"("pipeline_state_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 PSO reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 160;
+    }
+    if (std::strstr(pipeline_state_object_json, R"("pso_descriptor_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 PSO descriptor reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 161;
+    }
+    if (std::strstr(pipeline_state_object_json, R"("pipeline_state_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 PSO was created" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 162;
+    }
+    if (std::strstr(pipeline_state_object_json, R"("cached_pso_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 PSO cache counted entries" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 163;
+    }
+    if (std::strstr(pipeline_state_object_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 PSO recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 164;
+    }
+    if (std::strstr(pipeline_state_object_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 PSO enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 165;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

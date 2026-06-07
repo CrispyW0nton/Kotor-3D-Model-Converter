@@ -224,8 +224,9 @@ Current completed foundation:
   metadata, report native resource-binding readiness metadata, report
   pipeline-state/root-signature readiness metadata, report guarded
   shader-bytecode metadata, report shader reflection/input-layout metadata,
-  report guarded root-signature metadata, and report failure-diagnostic schema
-  metadata, but it is still diagnostic-only in Phase 1
+  report guarded root-signature metadata, report guarded pipeline-state object
+  metadata, and report failure-diagnostic schema metadata, but it is still
+  diagnostic-only in Phase 1
   and does not record draws or enable real draw submission. `Present` is only
   reachable through the guarded present-call diagnostic after prior swap-chain,
   back-buffer, RTV, clear-pass, and fence readiness gates pass.
@@ -262,7 +263,8 @@ Current completed foundation:
   metadata export, pipeline-state/root-signature readiness metadata export,
   guarded shader-bytecode metadata export, shader reflection/input-layout
   metadata export, guarded root-signature metadata export,
-  failure-diagnostic export, and device-requirement metadata
+  guarded pipeline-state object metadata export, failure-diagnostic export,
+  and device-requirement metadata
   without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
@@ -472,9 +474,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from guarded root-signature metadata
-   into guarded pipeline-state object metadata before enabling real draw
-   submission.
+5. Extend `GhostRigger.Renderer.D3D12` from guarded pipeline-state object
+   metadata into guarded draw-command recording metadata before enabling real
+   draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`

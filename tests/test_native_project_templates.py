@@ -1115,6 +1115,59 @@ def test_renderer_d3d12_exports_guarded_root_signature_metadata_boundary() -> No
     assert "gr_renderer_d3d12_guarded_root_signature_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_guarded_pipeline_state_object_metadata_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_guarded_pipeline_state_object_metadata_json" in header
+    assert "renderer_d3d12_guarded_pipeline_state_object_metadata.v1" in implementation
+    assert '"root_signature_ready":false' in implementation
+    assert '"shader_bytecode_ready":false' in implementation
+    assert '"input_layout_ready":false' in implementation
+    assert '"pipeline_state_ready":false' in implementation
+    assert '"pso_descriptor_ready":false' in implementation
+    assert '"pipeline_state_created":false' in implementation
+    assert '"field":"pRootSignature"' in implementation
+    assert '"field":"VS"' in implementation
+    assert '"entry":"VSMain"' in implementation
+    assert '"target":"vs_6_0"' in implementation
+    assert '"field":"PS"' in implementation
+    assert '"entry":"PSMain"' in implementation
+    assert '"target":"ps_6_0"' in implementation
+    assert '"field":"InputLayout"' in implementation
+    assert '"field":"BlendState"' in implementation
+    assert '"field":"RasterizerState"' in implementation
+    assert '"field":"DepthStencilState"' in implementation
+    assert '"field":"PrimitiveTopologyType"' in implementation
+    assert '"field":"RTVFormats"' in implementation
+    assert '"format":"DXGI_FORMAT_R8G8B8A8_UNORM"' in implementation
+    assert '"field":"DSVFormat"' in implementation
+    assert '"format":"DXGI_FORMAT_D24_UNORM_S8_UINT"' in implementation
+    assert '"field":"SampleDesc"' in implementation
+    assert '"cached_pso_count":0' in implementation
+    assert '"draw_calls_recorded":0' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "D3D12_GRAPHICS_PIPELINE_STATE_DESC" not in implementation
+    assert "CreateGraphicsPipelineState" not in implementation
+    assert "gr_renderer_d3d12_guarded_pipeline_state_object_metadata_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

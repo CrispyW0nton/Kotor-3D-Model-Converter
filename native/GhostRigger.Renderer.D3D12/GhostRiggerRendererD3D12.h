@@ -69,6 +69,9 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_shader_reflection_input_layo
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_root_signature_metadata_json(
     void* context
 );
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_pipeline_state_object_metadata_json(
+    void* context
+);
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_dry_run_frame_stats_json();
 GR_RENDERER_D3D12_API void* gr_renderer_d3d12_create_diagnostic_context();
