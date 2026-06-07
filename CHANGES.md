@@ -11,6 +11,12 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-07
 
+- Changelog ownership/intersection instruction: updated `AGENTS.md` so future agents add `Owner: LordVaderCW` to every new `CHANGES.md` entry and mark intersecting contributor/branch work with an `Intersects:` line when applicable. This should make future upstream merges less ambiguous when multiple agents edit the same dated changelog section. No roadmap task ID applies.
+  Owner: LordVaderCW.
+  Intersects: upstream/qt-ghostrigger changelog merge-conflict prevention.
+  Affected areas: `AGENTS.md`, `CHANGES.md`.
+  Verification: instruction-only change; reviewed the updated Change log section in `AGENTS.md`.
+
 - C++ integration foundation: added the phased C++ integration document that defines the native-host architecture, native DLL/project boundaries, shared-project rule, renderer DLL packaging rule, Python bridge contract, phase gates, and immediate next native foundation tasks for fully adopting the embedded C++ host. No roadmap task ID applies.
   Affected areas: `knowledge_base/cpp_integration_phases.md`, `knowledge_base/native_migration_plan.md`, `knowledge_base/README.md`, `native/README.md`.
   Verification: documentation-only change; `rg -n "cpp_integration_phases|native_migration_plan" knowledge_base\README.md knowledge_base\native_migration_plan.md native\README.md knowledge_base\cpp_integration_phases.md` confirmed the new foundation document and cross-links.
