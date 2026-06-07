@@ -212,9 +212,10 @@ Current completed foundation:
   command list, report descriptor-heap/command-allocator/command-list readiness
   metadata, report native surface/swap-chain handle readiness metadata, report
   render-target/back-buffer metadata, report resource-barrier/clear-pass
-  metadata, and report failure-diagnostic schema metadata, but it is still
-  diagnostic-only in Phase 1 and does not create swap chains, acquire back
-  buffers, create RTVs, record barriers or clears, present, execute command
+  metadata, report command-recording dry-run frame metadata, and report
+  failure-diagnostic schema metadata, but it is still diagnostic-only in Phase 1
+  and does not create swap chains, acquire back buffers, create RTVs, reset
+  command lists, record barriers, clears, or draws, present, execute command
   lists, or submit draws.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
@@ -238,8 +239,8 @@ Current completed foundation:
   descriptor-heap/command-allocator readiness export, command-list readiness
   export, native surface/swap-chain readiness export, render-target/back-buffer
   metadata export, resource-barrier/clear-pass metadata export,
-  failure-diagnostic export, and device-requirement metadata without Python or
-  the GUI.
+  command-recording dry-run frame metadata export, failure-diagnostic export,
+  and device-requirement metadata without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -448,9 +449,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from resource-barrier and clear-pass
-   metadata diagnostics into command-recording dry-run frame metadata before
-   adding present or real draw submission.
+5. Extend `GhostRigger.Renderer.D3D12` from command-recording dry-run frame
+   metadata into guarded command-list reset/record/close diagnostics before
+   adding command execution, present, or real draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`

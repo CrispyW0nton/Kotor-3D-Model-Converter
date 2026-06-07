@@ -169,6 +169,35 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 31;
     }
+    const char* command_recording_json = gr_renderer_d3d12_command_recording_dry_run_frame_json(context);
+    if (std::strstr(
+            command_recording_json,
+            R"("schema":"renderer_d3d12_command_recording_dry_run_frame.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-recording dry-run metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 32;
+    }
+    if (std::strstr(command_recording_json, R"("command_list_reset":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-recording dry-run reset a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 33;
+    }
+    if (std::strstr(command_recording_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-recording dry-run recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 34;
+    }
+    if (std::strstr(command_recording_json, R"("command_list_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-recording dry-run executed a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 35;
+    }
+    if (std::strstr(command_recording_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-recording dry-run enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 36;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
