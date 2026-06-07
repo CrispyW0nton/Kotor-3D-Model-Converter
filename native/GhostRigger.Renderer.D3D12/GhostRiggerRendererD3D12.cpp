@@ -64,6 +64,8 @@ struct DiagnosticContext {
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
     Microsoft::WRL::ComPtr<ID3D12Fence> no_draw_fence;
     Microsoft::WRL::ComPtr<IDXGISwapChain3> guarded_swap_chain;
+    Microsoft::WRL::ComPtr<ID3D12Resource> guarded_back_buffer_0;
+    Microsoft::WRL::ComPtr<ID3D12Resource> guarded_back_buffer_1;
     std::string adapter_description;
     HRESULT device_hr = E_FAIL;
     HRESULT queue_hr = E_FAIL;
@@ -82,6 +84,8 @@ struct DiagnosticContext {
     HRESULT guarded_swap_chain_factory_hr = E_FAIL;
     HRESULT guarded_swap_chain_create_hr = E_FAIL;
     HRESULT guarded_swap_chain_query_hr = E_FAIL;
+    HRESULT guarded_back_buffer_0_hr = E_FAIL;
+    HRESULT guarded_back_buffer_1_hr = E_FAIL;
     DWORD no_draw_wait_result = WAIT_FAILED;
     UINT64 no_draw_fence_value = 1;
     bool device_ready = false;
@@ -107,6 +111,8 @@ struct DiagnosticContext {
     bool guarded_swap_chain_native_window_handle_ready = false;
     bool guarded_swap_chain_create_attempted = false;
     bool guarded_swap_chain_created = false;
+    bool guarded_back_buffers_acquired = false;
+    bool guarded_render_target_views_created = false;
     bool draw_submission_enabled = false;
 };
 
@@ -766,6 +772,80 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_swap_chain_creation_
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_back_buffer_rtv_diagnostics_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_back_buffer_rtv_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"swap_chain_created":false,"rtv_heap_ready":false,"back_buffer_get_attempted":false,"back_buffers_acquired":false,"render_target_views_created":false,"render_target_bound":false,"present_called":false,"present_enabled":false,"draw_submission_enabled":false})";
+    }
+
+    const bool prerequisites_ready =
+        target->device != nullptr &&
+        target->guarded_swap_chain != nullptr &&
+        target->rtv_heap != nullptr;
+    bool back_buffer_get_attempted = false;
+
+    if (prerequisites_ready && !target->guarded_back_buffers_acquired) {
+        back_buffer_get_attempted = true;
+        HRESULT hr = target->guarded_swap_chain->GetBuffer(
+            0,
+            IID_PPV_ARGS(&target->guarded_back_buffer_0)
+        );
+        target->guarded_back_buffer_0_hr = hr;
+
+        if (SUCCEEDED(hr)) {
+            hr = target->guarded_swap_chain->GetBuffer(
+                1,
+                IID_PPV_ARGS(&target->guarded_back_buffer_1)
+            );
+            target->guarded_back_buffer_1_hr = hr;
+        }
+
+        target->guarded_back_buffers_acquired =
+            target->guarded_back_buffer_0 != nullptr &&
+            target->guarded_back_buffer_1 != nullptr;
+
+        if (target->guarded_back_buffers_acquired) {
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = target->rtv_heap->GetCPUDescriptorHandleForHeapStart();
+            const UINT rtv_increment = target->device->GetDescriptorHandleIncrementSize(
+                D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+            );
+            target->device->CreateRenderTargetView(target->guarded_back_buffer_0.Get(), nullptr, rtv_handle);
+            rtv_handle.ptr += rtv_increment;
+            target->device->CreateRenderTargetView(target->guarded_back_buffer_1.Get(), nullptr, rtv_handle);
+            target->guarded_render_target_views_created = true;
+            target->render_target_metadata_ready = true;
+        }
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_back_buffer_rtv_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"swap_chain_created":)";
+    payload += target->guarded_swap_chain_created ? "true" : "false";
+    payload += R"(,"rtv_heap_ready":)";
+    payload += target->rtv_heap ? "true" : "false";
+    payload += R"(,"prerequisites_ready":)";
+    payload += prerequisites_ready ? "true" : "false";
+    payload += R"(,"back_buffer_get_attempted":)";
+    payload += back_buffer_get_attempted ? "true" : "false";
+    payload += R"(,"expected_back_buffer_count":2,"back_buffers_acquired":)";
+    payload += target->guarded_back_buffers_acquired ? "true" : "false";
+    payload += R"(,"render_target_views_created":)";
+    payload += target->guarded_render_target_views_created ? "true" : "false";
+    payload += R"(,"render_target_bound":false,"resource_barriers_recorded":false,)"
+               R"("clear_recorded":false,"present_called":false,"present_enabled":false,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"back_buffer_0_hresult":")";
+    payload += hresult_hex(target->guarded_back_buffer_0_hr);
+    payload += R"(","back_buffer_1_hresult":")";
+    payload += hresult_hex(target->guarded_back_buffer_1_hr);
+    payload += R"(","phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -776,7 +856,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("render_target_metadata","barrier_clear_pass_metadata",)"
         R"("command_recording_dry_run","guarded_command_recording",)"
         R"("no_draw_execution_fence","present_readiness_metadata",)"
-        R"("guarded_swap_chain_creation"],)"
+        R"("guarded_swap_chain_creation","guarded_back_buffer_rtv"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -949,6 +1029,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->present_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"guarded_swap_chain_created":)";
     payload += target->guarded_swap_chain_created ? "true" : "false";
+    payload += R"(,"guarded_back_buffers_acquired":)";
+    payload += target->guarded_back_buffers_acquired ? "true" : "false";
+    payload += R"(,"guarded_render_target_views_created":)";
+    payload += target->guarded_render_target_views_created ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
@@ -983,6 +1067,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += hresult_hex(target->guarded_swap_chain_create_hr);
     payload += R"(","guarded_swap_chain_query_hresult":")";
     payload += hresult_hex(target->guarded_swap_chain_query_hr);
+    payload += R"(","guarded_back_buffer_0_hresult":")";
+    payload += hresult_hex(target->guarded_back_buffer_0_hr);
+    payload += R"(","guarded_back_buffer_1_hresult":")";
+    payload += hresult_hex(target->guarded_back_buffer_1_hr);
     payload += R"("})";
     return payload.c_str();
 }

@@ -109,9 +109,9 @@ metadata, resource-barrier/clear-pass metadata, and failure-diagnostic metadata,
 command-recording dry-run frame metadata, and guarded command-list reset/close
 diagnostics, and guarded no-draw command execution/fence readiness diagnostics,
 present-readiness metadata, and guarded swap-chain creation diagnostics behind
-an explicit native window handle, but it does not acquire back buffers, create
-RTVs, record barriers, clears, or draws, present, or create a real draw
-submission path yet.
+an explicit native window handle, and guarded back-buffer acquisition and RTV
+creation diagnostics, but it does not record barriers, clears, or draws,
+present, or create a real draw submission path yet.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active

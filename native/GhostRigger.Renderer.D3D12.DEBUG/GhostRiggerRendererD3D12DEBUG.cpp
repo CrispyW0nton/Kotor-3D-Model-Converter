@@ -367,6 +367,45 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 66;
     }
+    const char* guarded_back_buffer_json = gr_renderer_d3d12_guarded_back_buffer_rtv_diagnostics_json(context);
+    if (std::strstr(
+            guarded_back_buffer_json,
+            R"("schema":"renderer_d3d12_guarded_back_buffer_rtv_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 67;
+    }
+    if (std::strstr(guarded_back_buffer_json, R"("swap_chain_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics expected a swap chain" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 68;
+    }
+    if (std::strstr(guarded_back_buffer_json, R"("back_buffer_get_attempted":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics attempted without swap chain" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 69;
+    }
+    if (std::strstr(guarded_back_buffer_json, R"("back_buffers_acquired":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics acquired back buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 70;
+    }
+    if (std::strstr(guarded_back_buffer_json, R"("render_target_views_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics created RTVs" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 71;
+    }
+    if (std::strstr(guarded_back_buffer_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics called present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 72;
+    }
+    if (std::strstr(guarded_back_buffer_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded back-buffer/RTV diagnostics enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 73;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
