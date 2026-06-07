@@ -164,6 +164,72 @@ def test_tools_retargeting_exports_diagnostic_c_abi_boundary() -> None:
     assert "gr_tools_retargeting_solve_packet_schema_json()" in validator
 
 
+def test_tools_export_project_scaffold_matches_phase_one_boundary() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Export"
+        / "GhostRigger.Tools.Export.vcxproj"
+    ).read_text(encoding="utf-8")
+    debug_project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Export.DEBUG"
+        / "GhostRigger.Tools.Export.DEBUG.vcxproj"
+    ).read_text(encoding="utf-8")
+    readme = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Export"
+        / "README.md"
+    ).read_text(encoding="utf-8")
+
+    assert "GhostRigger.Tools.Export" in solution
+    assert "GhostRigger.Tools.Export.DEBUG" in solution
+    assert "<TargetName>GhostRigger.Tools.Export</TargetName>" in project
+    assert "GHOSTRIGGER_TOOLS_EXPORT_EXPORTS" in project
+    assert "<TargetName>GhostRigger.Tools.Export.DEBUG</TargetName>" in debug_project
+    assert "Owner surface: Export and validation workflow" in readme
+    assert "Bridge method: C ABI DLL" in readme
+
+
+def test_tools_export_exports_diagnostic_c_abi_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Export"
+        / "GhostRiggerToolsExport.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Export"
+        / "GhostRiggerToolsExport.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Export.DEBUG"
+        / "GhostRiggerToolsExportDEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_tools_export_version" in header
+    assert "gr_tools_export_capabilities_json" in header
+    assert "gr_tools_export_owner_boundary_json" in header
+    assert "gr_tools_export_preflight_packet_schema_json" in header
+    assert '"tool_package":true' in implementation
+    assert '"owner_surface":"Export and validation workflow"' in implementation
+    assert '"bridge_method":"C ABI DLL"' in implementation
+    assert '"native_write_enabled":false' in implementation
+    assert '"python_fallback_required":true' in implementation
+    assert "tools_export_owner_boundary.v1" in implementation
+    assert "tools_export_preflight_packet_schema.v1" in implementation
+    assert '"preflight_attempted":false' in implementation
+    assert '"preflight_result_count":0' in implementation
+    assert "gr_tools_export_preflight_packet_schema_json()" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1434,6 +1500,7 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{6BAA4B32-55DD-4A3B-8440-C15A47B83423}",
         "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}",
         "{8225E261-C091-40A6-8386-D68B6A43FC02}",
+        "{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}",
     }
 
     for guid in debug_project_guids:

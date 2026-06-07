@@ -291,6 +291,13 @@ Current completed foundation:
 - `GhostRigger.Tools.Retargeting.DEBUG.exe` validates the Retargeting toolbox
   package ABI, owner-boundary metadata, capabilities export, and solve-packet
   schema placeholder without Python or the GUI.
+- `GhostRigger.Tools.Export.dll` exists as the native toolbox package boundary
+  for export and validation helpers. It reports export workflow owner metadata,
+  package capabilities, and a preflight-packet schema placeholder while keeping
+  native file writes disabled and requiring the Python export fallback.
+- `GhostRigger.Tools.Export.DEBUG.exe` validates the Export toolbox package
+  ABI, owner-boundary metadata, capabilities export, and preflight-packet schema
+  placeholder without Python or the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
