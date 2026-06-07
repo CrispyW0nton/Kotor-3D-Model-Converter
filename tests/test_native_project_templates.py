@@ -318,10 +318,14 @@ def test_renderer_d3d12_project_uses_phase_one_naming_and_release_hygiene() -> N
     post_build_commands = [
         node.text or "" for node in tree.findall(".//msb:PostBuildEvent/msb:Command", ns)
     ]
+    link_dependencies = [
+        node.text or "" for node in tree.findall(".//msb:Link/msb:AdditionalDependencies", ns)
+    ]
 
     assert target_names == ["GhostRigger.Renderer.D3D12"]
     assert any("GhostRigger.Renderer.Contracts.vcxproj" in ref for ref in project_refs)
     assert [node.text for node in release_debug_info] == ["false"]
+    assert any("dxgi.lib" in dependencies for dependencies in link_dependencies)
     assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
     assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
 
