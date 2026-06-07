@@ -50,6 +50,14 @@ RUNTIME_SHARED_CONTRACTS_PACKAGE = NativePackageSpec(
     capabilities_export="gr_runtime_shared_contracts_capabilities_json",
 )
 
+NATIVE_CORE_DIAGNOSTICS_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Native.NativeCore.Diagnostics",
+    dll_name="GhostRigger.Native.NativeCore.Diagnostics.dll",
+    env_var="GHOSTRIGGER_NATIVE_CORE_DIAGNOSTICS",
+    version_export="gr_native_core_diagnostics_version",
+    capabilities_export="gr_native_core_diagnostics_capabilities_json",
+)
+
 
 def _candidate_output_dirs(repo_root: Path) -> Iterable[Path]:
     yield repo_root / "build" / "vs" / "x64" / "Debug"
@@ -133,6 +141,12 @@ def query_native_package_status(
 
 def query_native_core_status(search_paths: Iterable[Path] | None = None) -> NativePackageStatus:
     return query_native_package_status(NATIVE_CORE_PACKAGE, search_paths)
+
+
+def query_native_core_diagnostics_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(NATIVE_CORE_DIAGNOSTICS_PACKAGE, search_paths)
 
 
 def query_runtime_shared_contracts_status(

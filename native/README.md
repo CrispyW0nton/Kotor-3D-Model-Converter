@@ -43,6 +43,12 @@ capability reporting, diagnostics contract placement, and stable handle
 allocation patterns. Future renderer and toolbox DLLs should depend on shared
 core contracts instead of duplicating handle or diagnostic logic.
 
+`GhostRigger.Native.NativeCore.Diagnostics` is the first shared native core
+extension package. It owns the renderer/toolbox-neutral diagnostic record
+schema and lightweight record formatting helper that future native runtime,
+renderer, and toolbox DLLs can share instead of inventing local diagnostic
+payload shapes.
+
 The anchor C++ projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore`, and
 `GhostRigger.Runtime`. New shared core systems should be named
 `GhostRigger.Native.NativeCore.{System}`, while shared runtime contracts should be named
@@ -133,3 +139,13 @@ build\vs\x64\Debug\GhostRigger.Native.NativeCore.DEBUG.exe
 
 Python can query the shared native core package without starting the GUI through
 `src.adapters.native_core.package_registry.query_native_core_status()`.
+
+Build and run `GhostRigger.Native.NativeCore.Diagnostics.DEBUG` to verify the
+shared diagnostics ABI without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe
+```
+
+Python can query the diagnostics package through
+`src.adapters.native_core.package_registry.query_native_core_diagnostics_status()`.

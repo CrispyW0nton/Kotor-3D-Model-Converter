@@ -27,8 +27,13 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.Native.NativeCore/` owns the first shared native core package for
   renderer/toolbox-neutral version, capability, diagnostics, and handle
   foundations.
+- `native/GhostRigger.Native.NativeCore.Diagnostics/` owns the first shared
+  native diagnostics package for renderer/toolbox-neutral diagnostic record
+  schema metadata and lightweight record formatting.
 - `native/GhostRigger.Native.NativeCore.DEBUG/` verifies the shared native core ABI from
   Visual Studio without requiring Python.
+- `native/GhostRigger.Native.NativeCore.Diagnostics.DEBUG/` verifies the shared
+  native diagnostics ABI from Visual Studio without requiring Python.
 - `native/GhostRigger.Runtime/` owns the first native DLL boundary for renderer
   lifecycle, retained scene handles, mesh/texture-resource descriptors,
   mesh position/index buffer payloads, mesh vertex/index-range update payloads,
