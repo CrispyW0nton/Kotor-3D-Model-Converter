@@ -1,4 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #define PY_SSIZE_T_CLEAN
 #include <windows.h>
 #include <shellapi.h>
@@ -9,6 +10,7 @@
 #include <cwctype>
 #include <cstdio>
 #include <filesystem>
+#include <algorithm>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -214,6 +216,95 @@ unsigned int read_file_count_export(HMODULE module, bool& present) {
     return reinterpret_cast<FileCountExport>(proc)();
 }
 
+WORD default_console_attributes() {
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle == INVALID_HANDLE_VALUE || !GetConsoleScreenBufferInfo(handle, &info)) {
+        return FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
+    }
+    return info.wAttributes;
+}
+
+void set_console_color(WORD color) {
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle != INVALID_HANDLE_VALUE) {
+        SetConsoleTextAttribute(handle, color);
+    }
+}
+
+int console_width() {
+    CONSOLE_SCREEN_BUFFER_INFO info{};
+    HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (handle == INVALID_HANDLE_VALUE || !GetConsoleScreenBufferInfo(handle, &info)) {
+        return 100;
+    }
+    return (std::max)(60, static_cast<int>(info.srWindow.Right - info.srWindow.Left + 1));
+}
+
+std::string current_time_hhmmss() {
+    SYSTEMTIME time{};
+    GetLocalTime(&time);
+    char buffer[16] = {};
+    std::snprintf(buffer, sizeof(buffer), "%02u:%02u:%02u", time.wHour, time.wMinute, time.wSecond);
+    return buffer;
+}
+
+std::string shorten_middle(const std::string& value, std::size_t max_width) {
+    if (value.size() <= max_width || max_width < 8) {
+        return value;
+    }
+    const std::size_t left = (max_width - 3) / 2;
+    const std::size_t right = max_width - 3 - left;
+    return value.substr(0, left) + "..." + value.substr(value.size() - right);
+}
+
+const char* status_level(bool available, bool payload_ready) {
+    return (available && payload_ready) ? "INFO" : "WARN";
+}
+
+WORD status_color(bool available, bool payload_ready) {
+    if (available && payload_ready) {
+        return FOREGROUND_GREEN | FOREGROUND_INTENSITY;
+    }
+    if (!available) {
+        return FOREGROUND_RED | FOREGROUND_INTENSITY;
+    }
+    return FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY;
+}
+
+void print_native_log_line(
+    const char* level,
+    const char* source,
+    const std::string& message,
+    WORD message_color = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE
+) {
+    const WORD normal = default_console_attributes();
+    const std::string time = current_time_hhmmss();
+    const int prefix_width = 41;
+    const std::size_t message_width = static_cast<std::size_t>((std::max)(24, console_width() - prefix_width));
+    set_console_color(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+    std::printf("%s  ", time.c_str());
+    set_console_color(FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+    std::printf("%-5s  ", level);
+    set_console_color(FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+    std::printf("%-24s", source);
+    set_console_color(message_color);
+    std::printf("%s\n", shorten_middle(message, message_width).c_str());
+    set_console_color(normal);
+}
+
+void print_native_log_continuation(const std::string& message) {
+    const WORD normal = default_console_attributes();
+    const int width = console_width();
+    const int prefix_width = 41;
+    const std::size_t detail_width = static_cast<std::size_t>((std::max)(24, width - prefix_width));
+    set_console_color(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+    std::printf("%*s", prefix_width, "");
+    set_console_color(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+    std::printf("%s\n", shorten_middle(message, detail_width).c_str());
+    set_console_color(normal);
+}
+
 void log_native_dependency_audit_to_console(const fs::path& output_dir) {
     std::size_t available_count = 0;
     std::size_t payload_ready_count = 0;
@@ -260,10 +351,15 @@ void log_native_dependency_audit_to_console(const fs::path& output_dir) {
     }
 
     const std::size_t dependency_count = ghostrigger::native_host::kNativeDependencySpecCount;
-    std::printf("============================================================\n");
-    std::printf("GhostRigger Native dependency audit\n");
-    std::printf("DLLs loaded: %zu/%zu | Python payload manifests: %zu/%zu\n", available_count, dependency_count, payload_ready_count, dependency_count);
-    std::printf("============================================================\n");
+    print_native_log_line("INFO", "ghostrigger.native", "============================================================");
+    print_native_log_line("INFO", "ghostrigger.native", "GhostRigger Native dependency audit");
+    {
+        std::ostringstream summary;
+        summary << "DLLs loaded: " << available_count << "/" << dependency_count
+            << " | Python payload manifests: " << payload_ready_count << "/" << dependency_count;
+        print_native_log_line("INFO", "ghostrigger.native", summary.str());
+    }
+    print_native_log_line("INFO", "ghostrigger.native", "============================================================");
 
     for (std::size_t index = 0; index < rows.size(); ++index) {
         const Row& row = rows[index];
@@ -273,22 +369,23 @@ void log_native_dependency_audit_to_console(const fs::path& output_dir) {
         } else if (!row.payload_ready) {
             state = "NO_PAYLOAD";
         }
-        std::printf(
-            "Native DLL dependency %02zu/%02zu %-10s %-44ls dll=%ls version=%s payload_files=%u version_abi=%s capabilities_abi=%s%s%s\n",
-            index + 1,
-            rows.size(),
-            state,
-            row.name.c_str(),
-            row.dll_name.c_str(),
-            row.version.empty() ? "unversioned" : row.version.c_str(),
-            row.file_count,
-            row.version_present ? "yes" : "no",
-            row.capabilities_present ? "yes" : "no",
-            row.reason.empty() ? "" : " reason=",
-            row.reason.empty() ? "" : row.reason.c_str()
-        );
+        std::ostringstream message;
+        message << "Native DLL dependency " << (index + 1) << "/" << rows.size()
+            << " " << state << " " << utf8_from_wstring(row.name);
+        print_native_log_line(status_level(row.available, row.payload_ready), "ghostrigger.native", message.str(), status_color(row.available, row.payload_ready));
+
+        std::ostringstream detail;
+        detail << "dll=" << utf8_from_wstring(row.dll_name)
+            << " | version=" << (row.version.empty() ? "unversioned" : row.version)
+            << " | payload_files=" << row.file_count
+            << " | abi=" << (row.version_present ? "version" : "no-version")
+            << "/" << (row.capabilities_present ? "capabilities" : "no-capabilities");
+        if (!row.reason.empty()) {
+            detail << " | reason=" << row.reason;
+        }
+        print_native_log_continuation(detail.str());
     }
-    std::printf("============================================================\n");
+    print_native_log_line("INFO", "ghostrigger.native", "============================================================");
 }
 
 void open_log_console() {

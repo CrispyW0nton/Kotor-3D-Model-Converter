@@ -129,7 +129,10 @@ def test_native_host_logs_dependency_audit_before_python_startup() -> None:
     assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" not in main_source
     assert "_log_native_dependency_audit" not in main_source
     assert "GhostRigger Native dependency audit" in host_source
-    assert "Native DLL dependency %02zu/%02zu" in host_source
+    assert "print_native_log_line" in host_source
+    assert "print_native_log_continuation" in host_source
+    assert "Native DLL dependency " in host_source
+    assert "payload_files=" in host_source
     assert "log_native_dependency_audit_to_console(*exe_dir)" in host_source
     assert host_source.index("log_native_dependency_audit_to_console(*exe_dir)") < host_source.index(
         "return run_embedded_python"
