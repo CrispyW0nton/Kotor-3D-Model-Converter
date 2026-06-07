@@ -69,15 +69,26 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 13;
     }
-    if (std::strstr(descriptor_allocator_json, R"("command_list_created":false)") == nullptr) {
-        std::cerr << "GhostRigger.Renderer.D3D12 descriptor/allocator readiness created a command list" << std::endl;
-        gr_renderer_d3d12_destroy_diagnostic_context(context);
-        return 14;
-    }
     if (std::strstr(descriptor_allocator_json, R"("draw_submission_enabled":false)") == nullptr) {
         std::cerr << "GhostRigger.Renderer.D3D12 descriptor/allocator readiness enabled draw submission" << std::endl;
         gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 14;
+    }
+    const char* command_list_json = gr_renderer_d3d12_command_list_readiness_json(context);
+    if (std::strstr(command_list_json, R"("schema":"renderer_d3d12_command_list_readiness.v1")") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-list readiness mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 15;
+    }
+    if (std::strstr(command_list_json, R"("command_list_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-list readiness executed a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 16;
+    }
+    if (std::strstr(command_list_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 command-list readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 17;
     }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 

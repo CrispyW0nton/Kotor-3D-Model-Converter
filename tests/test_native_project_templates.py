@@ -355,9 +355,38 @@ def test_renderer_d3d12_exports_descriptor_allocator_readiness_boundary() -> Non
     assert "renderer_d3d12_descriptor_allocator_readiness.v1" in implementation
     assert "CreateDescriptorHeap" in implementation
     assert "CreateCommandAllocator" in implementation
-    assert '"command_list_created":false' in implementation
     assert '"draw_submission_enabled":false' in implementation
     assert "gr_renderer_d3d12_descriptor_allocator_readiness_json(context)" in validator
+
+
+def test_renderer_d3d12_exports_command_list_readiness_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_command_list_readiness_json" in header
+    assert "renderer_d3d12_command_list_readiness.v1" in implementation
+    assert "CreateCommandList" in implementation
+    assert "command_list->Close()" in implementation
+    assert '"app_commands_recorded":false' in implementation
+    assert '"command_list_executed":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "gr_renderer_d3d12_command_list_readiness_json(context)" in validator
 
 
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:

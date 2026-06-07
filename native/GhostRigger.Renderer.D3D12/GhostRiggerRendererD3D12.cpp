@@ -59,6 +59,7 @@ struct DiagnosticContext {
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtv_heap;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsv_heap;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
     std::string adapter_description;
     HRESULT device_hr = E_FAIL;
     HRESULT queue_hr = E_FAIL;
@@ -66,10 +67,14 @@ struct DiagnosticContext {
     HRESULT rtv_heap_hr = E_FAIL;
     HRESULT dsv_heap_hr = E_FAIL;
     HRESULT command_allocator_hr = E_FAIL;
+    HRESULT command_list_hr = E_FAIL;
+    HRESULT command_list_close_hr = E_FAIL;
     bool device_ready = false;
     bool command_queue_ready = false;
     bool descriptor_heaps_ready = false;
     bool command_allocator_ready = false;
+    bool command_list_ready = false;
+    bool command_list_closed = false;
     bool draw_submission_enabled = false;
 };
 
@@ -276,7 +281,9 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_descriptor_allocator_readine
     payload += target->descriptor_heaps_ready ? "true" : "false";
     payload += R"(,"command_allocator_ready":)";
     payload += target->command_allocator_ready ? "true" : "false";
-    payload += R"(,"command_list_created":false,"draw_submission_enabled":)";
+    payload += R"(,"command_list_created":)";
+    payload += target->command_list ? "true" : "false";
+    payload += R"(,"draw_submission_enabled":)";
     payload += target->draw_submission_enabled ? "true" : "false";
     payload += R"(,"cbv_srv_uav_heap_hresult":")";
     payload += hresult_hex(target->cbv_srv_uav_heap_hr);
@@ -286,6 +293,41 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_descriptor_allocator_readine
     payload += hresult_hex(target->dsv_heap_hr);
     payload += R"(","command_allocator_hresult":")";
     payload += hresult_hex(target->command_allocator_hr);
+    payload += R"("})";
+    return payload.c_str();
+}
+
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_command_list_readiness_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_command_list_readiness.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_device":false,"command_allocator_ready":false,"command_list_ready":false,"command_list_closed":false,"command_list_executed":false,"draw_submission_enabled":false})";
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_command_list_readiness.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"retained_command_allocator":)";
+    payload += target->command_allocator ? "true" : "false";
+    payload += R"(,"retained_command_list":)";
+    payload += target->command_list ? "true" : "false";
+    payload += R"(,"command_allocator_ready":)";
+    payload += target->command_allocator_ready ? "true" : "false";
+    payload += R"(,"command_list_ready":)";
+    payload += target->command_list_ready ? "true" : "false";
+    payload += R"(,"command_list_closed":)";
+    payload += target->command_list_closed ? "true" : "false";
+    payload += R"(,"command_list_type":"direct","initial_pipeline_state":false,)"
+               R"("app_commands_recorded":false,"command_list_executed":false,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"command_allocator_hresult":")";
+    payload += hresult_hex(target->command_allocator_hr);
+    payload += R"(","command_list_hresult":")";
+    payload += hresult_hex(target->command_list_hr);
+    payload += R"(","command_list_close_hresult":")";
+    payload += hresult_hex(target->command_list_close_hr);
     payload += R"("})";
     return payload.c_str();
 }
@@ -384,6 +426,22 @@ GR_RENDERER_D3D12_API void* gr_renderer_d3d12_create_diagnostic_context() {
         );
         context->command_allocator_hr = hr;
         context->command_allocator_ready = SUCCEEDED(hr);
+        if (context->command_allocator_ready) {
+            hr = context->device->CreateCommandList(
+                0,
+                D3D12_COMMAND_LIST_TYPE_DIRECT,
+                context->command_allocator.Get(),
+                nullptr,
+                IID_PPV_ARGS(&context->command_list)
+            );
+            context->command_list_hr = hr;
+            context->command_list_ready = SUCCEEDED(hr);
+            if (context->command_list_ready) {
+                hr = context->command_list->Close();
+                context->command_list_close_hr = hr;
+                context->command_list_closed = SUCCEEDED(hr);
+            }
+        }
         return context.release();
     }
 }
@@ -409,6 +467,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->dsv_heap ? "true" : "false";
     payload += R"(,"retained_command_allocator":)";
     payload += target->command_allocator ? "true" : "false";
+    payload += R"(,"retained_command_list":)";
+    payload += target->command_list ? "true" : "false";
     payload += R"(,"device_ready":)";
     payload += target->device_ready ? "true" : "false";
     payload += R"(,"command_queue_ready":)";
@@ -417,9 +477,15 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->descriptor_heaps_ready ? "true" : "false";
     payload += R"(,"command_allocator_ready":)";
     payload += target->command_allocator_ready ? "true" : "false";
+    payload += R"(,"command_list_ready":)";
+    payload += target->command_list_ready ? "true" : "false";
+    payload += R"(,"command_list_closed":)";
+    payload += target->command_list_closed ? "true" : "false";
     payload += R"(,"draw_submission_enabled":)";
     payload += target->draw_submission_enabled ? "true" : "false";
-    payload += R"(,"swap_chain_created":false,"command_list_created":false,"adapter_description":")";
+    payload += R"(,"swap_chain_created":false,"command_list_created":)";
+    payload += target->command_list ? "true" : "false";
+    payload += R"(,"command_list_executed":false,"adapter_description":")";
     payload += target->adapter_description;
     payload += R"(","device_hresult":")";
     payload += hresult_hex(target->device_hr);
@@ -433,6 +499,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += hresult_hex(target->dsv_heap_hr);
     payload += R"(","command_allocator_hresult":")";
     payload += hresult_hex(target->command_allocator_hr);
+    payload += R"(","command_list_hresult":")";
+    payload += hresult_hex(target->command_list_hr);
+    payload += R"(","command_list_close_hresult":")";
+    payload += hresult_hex(target->command_list_close_hr);
     payload += R"("})";
     return payload.c_str();
 }
