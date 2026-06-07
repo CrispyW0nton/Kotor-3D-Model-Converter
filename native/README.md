@@ -110,7 +110,8 @@ command-recording dry-run frame metadata, and guarded command-list reset/close
 diagnostics, and guarded no-draw command execution/fence readiness diagnostics,
 present-readiness metadata, and guarded swap-chain creation diagnostics behind
 an explicit native window handle, and guarded back-buffer acquisition and RTV
-creation diagnostics, but it does not record barriers, clears, or draws,
+creation diagnostics, and guarded render-target barrier/clear recording
+diagnostics, but it does not execute the recorded clear pass, record draws,
 present, or create a real draw submission path yet.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a

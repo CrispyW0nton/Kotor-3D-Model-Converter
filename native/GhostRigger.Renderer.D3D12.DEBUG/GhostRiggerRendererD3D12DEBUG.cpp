@@ -406,6 +406,51 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 73;
     }
+    const char* guarded_barrier_clear_json =
+        gr_renderer_d3d12_guarded_barrier_clear_recording_diagnostics_json(context);
+    if (std::strstr(
+            guarded_barrier_clear_json,
+            R"("schema":"renderer_d3d12_guarded_barrier_clear_recording_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 74;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("back_buffers_acquired":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics acquired back buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 75;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("barrier_clear_recording_attempted":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics attempted without RTVs" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 76;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("resource_barriers_recorded":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics recorded barriers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 77;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("clear_recorded":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics recorded a clear" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 78;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("command_list_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics executed a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 79;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics called present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 80;
+    }
+    if (std::strstr(guarded_barrier_clear_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded barrier/clear diagnostics enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 81;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

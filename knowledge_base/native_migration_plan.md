@@ -79,8 +79,9 @@ a launcher and native workspace first, not a rewrite of the application.
   execution/fence readiness diagnostics, report present-readiness metadata, run
   guarded swap-chain creation diagnostics behind an explicit native window
   handle, run guarded back-buffer acquisition and RTV creation diagnostics, and
-  report failure-diagnostic metadata, but it is diagnostic-only in Phase 1 and
-  does not record barriers, clears, or draws, present, or enable real draw
+  run guarded render-target barrier/clear recording diagnostics, and report
+  failure-diagnostic metadata, but it is diagnostic-only in Phase 1 and does not
+  execute the recorded clear pass, record draws, present, or enable real draw
   submission yet.
 - `native/GhostRigger.Renderer.D3D12.DEBUG/` verifies the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
@@ -92,8 +93,9 @@ a launcher and native workspace first, not a rewrite of the application.
   reset/close diagnostics export, guarded no-draw command execution/fence
   readiness diagnostics export, present-readiness metadata export,
   guarded swap-chain creation diagnostics export, guarded back-buffer/RTV
-  diagnostics export, failure-diagnostic export, and device-requirement metadata
-  from Visual Studio without requiring Python.
+  diagnostics export, guarded barrier/clear recording diagnostics export,
+  failure-diagnostic export, and device-requirement metadata from Visual Studio
+  without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package

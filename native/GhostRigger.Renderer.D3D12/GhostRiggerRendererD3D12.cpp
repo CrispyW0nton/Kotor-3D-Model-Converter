@@ -86,6 +86,9 @@ struct DiagnosticContext {
     HRESULT guarded_swap_chain_query_hr = E_FAIL;
     HRESULT guarded_back_buffer_0_hr = E_FAIL;
     HRESULT guarded_back_buffer_1_hr = E_FAIL;
+    HRESULT guarded_barrier_clear_allocator_reset_hr = E_FAIL;
+    HRESULT guarded_barrier_clear_command_list_reset_hr = E_FAIL;
+    HRESULT guarded_barrier_clear_command_list_close_hr = E_FAIL;
     DWORD no_draw_wait_result = WAIT_FAILED;
     UINT64 no_draw_fence_value = 1;
     bool device_ready = false;
@@ -113,6 +116,10 @@ struct DiagnosticContext {
     bool guarded_swap_chain_created = false;
     bool guarded_back_buffers_acquired = false;
     bool guarded_render_target_views_created = false;
+    bool guarded_barrier_clear_attempted = false;
+    bool guarded_resource_barriers_recorded = false;
+    bool guarded_clear_recorded = false;
+    bool guarded_barrier_clear_command_list_closed = false;
     bool draw_submission_enabled = false;
 };
 
@@ -846,6 +853,94 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_back_buffer_rtv_diag
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_barrier_clear_recording_diagnostics_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_barrier_clear_recording_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_command_allocator":false,"retained_command_list":false,"back_buffers_acquired":false,"render_target_views_created":false,"barrier_clear_recording_attempted":false,"resource_barriers_recorded":false,"clear_recorded":false,"command_list_closed":false,"command_list_executed":false,"present_called":false,"present_enabled":false,"draw_submission_enabled":false})";
+    }
+
+    const bool prerequisites_ready =
+        target->command_allocator != nullptr &&
+        target->command_list != nullptr &&
+        target->guarded_back_buffer_0 != nullptr &&
+        target->rtv_heap != nullptr &&
+        target->guarded_render_target_views_created;
+
+    if (prerequisites_ready && !target->guarded_barrier_clear_command_list_closed) {
+        target->guarded_barrier_clear_attempted = true;
+        HRESULT hr = target->command_allocator->Reset();
+        target->guarded_barrier_clear_allocator_reset_hr = hr;
+
+        if (SUCCEEDED(hr)) {
+            hr = target->command_list->Reset(target->command_allocator.Get(), nullptr);
+            target->guarded_barrier_clear_command_list_reset_hr = hr;
+        }
+
+        if (SUCCEEDED(hr)) {
+            D3D12_RESOURCE_BARRIER barrier{};
+            barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+            barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+            barrier.Transition.pResource = target->guarded_back_buffer_0.Get();
+            barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            target->command_list->ResourceBarrier(1, &barrier);
+            target->guarded_resource_barriers_recorded = true;
+
+            D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle = target->rtv_heap->GetCPUDescriptorHandleForHeapStart();
+            constexpr FLOAT clear_color[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+            target->command_list->ClearRenderTargetView(rtv_handle, clear_color, 0, nullptr);
+            target->guarded_clear_recorded = true;
+
+            barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+            target->command_list->ResourceBarrier(1, &barrier);
+        }
+
+        if (target->guarded_resource_barriers_recorded && target->guarded_clear_recorded) {
+            hr = target->command_list->Close();
+            target->guarded_barrier_clear_command_list_close_hr = hr;
+            target->guarded_barrier_clear_command_list_closed = SUCCEEDED(hr);
+            target->barrier_clear_pass_metadata_ready = target->guarded_barrier_clear_command_list_closed;
+        }
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_barrier_clear_recording_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_command_allocator":)";
+    payload += target->command_allocator ? "true" : "false";
+    payload += R"(,"retained_command_list":)";
+    payload += target->command_list ? "true" : "false";
+    payload += R"(,"back_buffers_acquired":)";
+    payload += target->guarded_back_buffers_acquired ? "true" : "false";
+    payload += R"(,"render_target_views_created":)";
+    payload += target->guarded_render_target_views_created ? "true" : "false";
+    payload += R"(,"prerequisites_ready":)";
+    payload += prerequisites_ready ? "true" : "false";
+    payload += R"(,"barrier_clear_recording_attempted":)";
+    payload += target->guarded_barrier_clear_attempted ? "true" : "false";
+    payload += R"(,"resource_barriers_recorded":)";
+    payload += target->guarded_resource_barriers_recorded ? "true" : "false";
+    payload += R"(,"clear_recorded":)";
+    payload += target->guarded_clear_recorded ? "true" : "false";
+    payload += R"(,"clear_color":[0.0,0.0,0.0,1.0],"command_list_closed":)";
+    payload += target->guarded_barrier_clear_command_list_closed ? "true" : "false";
+    payload += R"(,"command_list_executed":false,"present_called":false,)"
+               R"("present_enabled":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"allocator_reset_hresult":")";
+    payload += hresult_hex(target->guarded_barrier_clear_allocator_reset_hr);
+    payload += R"(","command_list_reset_hresult":")";
+    payload += hresult_hex(target->guarded_barrier_clear_command_list_reset_hr);
+    payload += R"(","command_list_close_hresult":")";
+    payload += hresult_hex(target->guarded_barrier_clear_command_list_close_hr);
+    payload += R"(","phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -856,7 +951,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("render_target_metadata","barrier_clear_pass_metadata",)"
         R"("command_recording_dry_run","guarded_command_recording",)"
         R"("no_draw_execution_fence","present_readiness_metadata",)"
-        R"("guarded_swap_chain_creation","guarded_back_buffer_rtv"],)"
+        R"("guarded_swap_chain_creation","guarded_back_buffer_rtv",)"
+        R"("guarded_barrier_clear_recording"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1033,6 +1129,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_back_buffers_acquired ? "true" : "false";
     payload += R"(,"guarded_render_target_views_created":)";
     payload += target->guarded_render_target_views_created ? "true" : "false";
+    payload += R"(,"guarded_resource_barriers_recorded":)";
+    payload += target->guarded_resource_barriers_recorded ? "true" : "false";
+    payload += R"(,"guarded_clear_recorded":)";
+    payload += target->guarded_clear_recorded ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
@@ -1071,6 +1171,12 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += hresult_hex(target->guarded_back_buffer_0_hr);
     payload += R"(","guarded_back_buffer_1_hresult":")";
     payload += hresult_hex(target->guarded_back_buffer_1_hr);
+    payload += R"(","guarded_barrier_clear_allocator_reset_hresult":")";
+    payload += hresult_hex(target->guarded_barrier_clear_allocator_reset_hr);
+    payload += R"(","guarded_barrier_clear_command_list_reset_hresult":")";
+    payload += hresult_hex(target->guarded_barrier_clear_command_list_reset_hr);
+    payload += R"(","guarded_barrier_clear_command_list_close_hresult":")";
+    payload += hresult_hex(target->guarded_barrier_clear_command_list_close_hr);
     payload += R"("})";
     return payload.c_str();
 }
