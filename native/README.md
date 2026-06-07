@@ -112,8 +112,10 @@ present-readiness metadata, and guarded swap-chain creation diagnostics behind
 an explicit native window handle, and guarded back-buffer acquisition and RTV
 creation diagnostics, and guarded render-target barrier/clear recording
 diagnostics, guarded clear-pass command execution/fence diagnostics, and
-post-clear present-readiness diagnostics, but it does not record draws, call
-`Present`, or create a real draw submission path yet.
+post-clear present-readiness diagnostics, and guarded present-call diagnostics,
+but it does not record draws or create a real draw submission path yet.
+`Present` is only reachable through the guarded present-call diagnostic after
+prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active

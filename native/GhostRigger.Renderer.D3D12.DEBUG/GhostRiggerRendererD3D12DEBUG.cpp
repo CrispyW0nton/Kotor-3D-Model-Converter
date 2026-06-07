@@ -536,6 +536,41 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 96;
     }
+    const char* guarded_present_json =
+        gr_renderer_d3d12_guarded_present_call_diagnostics_json(context);
+    if (std::strstr(
+            guarded_present_json,
+            R"("schema":"renderer_d3d12_guarded_present_call_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded present-call diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 97;
+    }
+    if (std::strstr(guarded_present_json, R"("present_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded present-call reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 98;
+    }
+    if (std::strstr(guarded_present_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded present-call presented without readiness" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 99;
+    }
+    if (std::strstr(guarded_present_json, R"("present_succeeded":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded present-call succeeded without readiness" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 100;
+    }
+    if (std::strstr(guarded_present_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded present-call recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 101;
+    }
+    if (std::strstr(guarded_present_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded present-call enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 102;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

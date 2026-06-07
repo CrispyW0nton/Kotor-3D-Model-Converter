@@ -93,6 +93,7 @@ struct DiagnosticContext {
     HRESULT guarded_clear_pass_fence_hr = E_FAIL;
     HRESULT guarded_clear_pass_signal_hr = E_FAIL;
     HRESULT guarded_clear_pass_set_event_hr = E_FAIL;
+    HRESULT guarded_present_hr = E_FAIL;
     DWORD no_draw_wait_result = WAIT_FAILED;
     DWORD guarded_clear_pass_wait_result = WAIT_FAILED;
     UINT64 no_draw_fence_value = 1;
@@ -132,6 +133,9 @@ struct DiagnosticContext {
     bool guarded_clear_pass_fence_completed = false;
     bool guarded_clear_pass_fence_waited = false;
     bool post_clear_present_readiness_metadata_ready = false;
+    bool guarded_present_ready = false;
+    bool guarded_present_called = false;
+    bool guarded_present_succeeded = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1101,6 +1105,59 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_post_clear_present_readiness
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_present_call_diagnostics_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_present_call_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"swap_chain_created":false,"back_buffers_acquired":false,"clear_pass_executed":false,"clear_pass_fence_completed":false,"present_ready":false,"present_called":false,"present_succeeded":false,"draw_calls_recorded":0,"draw_submission_enabled":false})";
+    }
+
+    const bool present_ready =
+        target->guarded_swap_chain_created &&
+        target->guarded_back_buffers_acquired &&
+        target->guarded_render_target_views_created &&
+        target->guarded_clear_pass_command_list_executed &&
+        target->guarded_clear_pass_fence_completed &&
+        target->guarded_swap_chain != nullptr;
+    target->guarded_present_ready = present_ready;
+
+    if (present_ready && !target->guarded_present_called) {
+        target->guarded_present_hr = target->guarded_swap_chain->Present(0, 0);
+        target->guarded_present_called = true;
+        target->guarded_present_succeeded = SUCCEEDED(target->guarded_present_hr);
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_present_call_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"swap_chain_created":)";
+    payload += target->guarded_swap_chain_created ? "true" : "false";
+    payload += R"(,"back_buffers_acquired":)";
+    payload += target->guarded_back_buffers_acquired ? "true" : "false";
+    payload += R"(,"render_target_views_created":)";
+    payload += target->guarded_render_target_views_created ? "true" : "false";
+    payload += R"(,"clear_pass_executed":)";
+    payload += target->guarded_clear_pass_command_list_executed ? "true" : "false";
+    payload += R"(,"clear_pass_fence_completed":)";
+    payload += target->guarded_clear_pass_fence_completed ? "true" : "false";
+    payload += R"(,"present_ready":)";
+    payload += target->guarded_present_ready ? "true" : "false";
+    payload += R"(,"present_called":)";
+    payload += target->guarded_present_called ? "true" : "false";
+    payload += R"(,"present_succeeded":)";
+    payload += target->guarded_present_succeeded ? "true" : "false";
+    payload += R"(,"present_sync_interval":0,"present_flags":0,"draw_calls_recorded":0,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"present_hresult":")";
+    payload += hresult_hex(target->guarded_present_hr);
+    payload += R"(","failure_points":["swap_chain_missing","back_buffers_missing",)"
+               R"("rtv_missing","clear_pass_not_executed","clear_pass_fence_incomplete",)"
+               R"("present_failed"],"phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1113,7 +1170,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("no_draw_execution_fence","present_readiness_metadata",)"
         R"("guarded_swap_chain_creation","guarded_back_buffer_rtv",)"
         R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence",)"
-        R"("post_clear_present_readiness"],)"
+        R"("post_clear_present_readiness","guarded_present_call"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1300,6 +1357,12 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_clear_pass_fence_completed ? "true" : "false";
     payload += R"(,"post_clear_present_readiness_metadata_ready":)";
     payload += target->post_clear_present_readiness_metadata_ready ? "true" : "false";
+    payload += R"(,"guarded_present_ready":)";
+    payload += target->guarded_present_ready ? "true" : "false";
+    payload += R"(,"guarded_present_called":)";
+    payload += target->guarded_present_called ? "true" : "false";
+    payload += R"(,"guarded_present_succeeded":)";
+    payload += target->guarded_present_succeeded ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
