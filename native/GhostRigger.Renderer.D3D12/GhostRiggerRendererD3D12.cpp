@@ -140,6 +140,7 @@ struct DiagnosticContext {
     bool guarded_present_succeeded = false;
     bool post_present_frame_accounting_ready = false;
     bool draw_list_readiness_metadata_ready = false;
+    bool resource_binding_readiness_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1235,6 +1236,45 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_draw_list_readiness_metadata
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_resource_binding_readiness_metadata_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_resource_binding_readiness_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"resource_binding_ready":false,"descriptor_tables_bound":false,"vertex_buffers_bound":0,"index_buffers_bound":0,"constant_buffers_bound":0,"shader_resources_bound":0,"draw_submission_enabled":false})";
+    }
+
+    target->resource_binding_readiness_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_resource_binding_readiness_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"cbv_srv_uav_heap_ready":)";
+    payload += target->cbv_srv_uav_heap ? "true" : "false";
+    payload += R"(,"rtv_heap_ready":)";
+    payload += target->rtv_heap ? "true" : "false";
+    payload += R"(,"dsv_heap_ready":)";
+    payload += target->dsv_heap ? "true" : "false";
+    payload += R"(,"draw_list_ready":false,"resource_binding_ready":false,)"
+               R"("root_signature_created":false,"pipeline_state_created":false,)"
+               R"("descriptor_heaps_set_for_draws":false,"descriptor_tables_bound":false,)"
+               R"("vertex_buffers_bound":0,"index_buffers_bound":0,)"
+               R"("constant_buffers_bound":0,"shader_resources_bound":0,)"
+               R"("samplers_bound":0,"textures_bound":0,"skin_palettes_bound":0,)"
+               R"("materials_bound":0,"resource_barriers_for_draws_recorded":false,)"
+               R"("command_list_recorded_for_draws":false,"draw_calls_recorded":0,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["draw_list_missing","root_signature_missing",)"
+               R"("pipeline_state_missing","descriptor_tables_missing",)"
+               R"("vertex_buffers_missing","index_buffers_missing",)"
+               R"("shader_resources_missing","draw_submission_disabled"],)"
+               R"("phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1248,7 +1288,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("guarded_swap_chain_creation","guarded_back_buffer_rtv",)"
         R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence",)"
         R"("post_clear_present_readiness","guarded_present_call",)"
-        R"("post_present_frame_accounting","draw_list_readiness_metadata"],)"
+        R"("post_present_frame_accounting","draw_list_readiness_metadata",)"
+        R"("resource_binding_readiness_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1445,6 +1486,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->post_present_frame_accounting_ready ? "true" : "false";
     payload += R"(,"draw_list_readiness_metadata_ready":)";
     payload += target->draw_list_readiness_metadata_ready ? "true" : "false";
+    payload += R"(,"resource_binding_readiness_metadata_ready":)";
+    payload += target->resource_binding_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"diagnostic_frame_index":)";
     payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
     payload += R"(,"diagnostic_presented_frame_count":)";

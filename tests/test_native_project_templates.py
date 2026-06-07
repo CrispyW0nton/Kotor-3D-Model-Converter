@@ -890,6 +890,48 @@ def test_renderer_d3d12_exports_draw_list_readiness_metadata_boundary() -> None:
     assert "gr_renderer_d3d12_draw_list_readiness_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_resource_binding_readiness_metadata_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_resource_binding_readiness_metadata_json" in header
+    assert "renderer_d3d12_resource_binding_readiness_metadata.v1" in implementation
+    assert '"resource_binding_ready":false' in implementation
+    assert '"root_signature_created":false' in implementation
+    assert '"pipeline_state_created":false' in implementation
+    assert '"descriptor_heaps_set_for_draws":false' in implementation
+    assert '"descriptor_tables_bound":false' in implementation
+    assert '"vertex_buffers_bound":0' in implementation
+    assert '"index_buffers_bound":0' in implementation
+    assert '"constant_buffers_bound":0' in implementation
+    assert '"shader_resources_bound":0' in implementation
+    assert '"samplers_bound":0' in implementation
+    assert '"textures_bound":0' in implementation
+    assert '"skin_palettes_bound":0' in implementation
+    assert '"materials_bound":0' in implementation
+    assert '"resource_barriers_for_draws_recorded":false' in implementation
+    assert '"command_list_recorded_for_draws":false' in implementation
+    assert '"draw_calls_recorded":0' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "gr_renderer_d3d12_resource_binding_readiness_metadata_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

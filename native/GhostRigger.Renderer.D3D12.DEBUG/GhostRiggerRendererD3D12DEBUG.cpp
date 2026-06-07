@@ -646,6 +646,51 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 115;
     }
+    const char* resource_binding_json =
+        gr_renderer_d3d12_resource_binding_readiness_metadata_json(context);
+    if (std::strstr(
+            resource_binding_json,
+            R"("schema":"renderer_d3d12_resource_binding_readiness_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 116;
+    }
+    if (std::strstr(resource_binding_json, R"("resource_binding_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 117;
+    }
+    if (std::strstr(resource_binding_json, R"("descriptor_tables_bound":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness bound descriptor tables" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 118;
+    }
+    if (std::strstr(resource_binding_json, R"("vertex_buffers_bound":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness bound vertex buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 119;
+    }
+    if (std::strstr(resource_binding_json, R"("index_buffers_bound":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness bound index buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 120;
+    }
+    if (std::strstr(resource_binding_json, R"("shader_resources_bound":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness bound shader resources" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 121;
+    }
+    if (std::strstr(resource_binding_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 122;
+    }
+    if (std::strstr(resource_binding_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 resource-binding readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 123;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

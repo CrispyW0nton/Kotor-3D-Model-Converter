@@ -114,7 +114,8 @@ creation diagnostics, and guarded render-target barrier/clear recording
 diagnostics, guarded clear-pass command execution/fence diagnostics, and
 post-clear present-readiness diagnostics, and guarded present-call diagnostics,
 and post-present frame/accounting diagnostics, and native draw-list readiness
-metadata, but it does not record draws or create a real draw submission path yet.
+metadata, and native resource-binding readiness metadata, but it does not record
+draws or create a real draw submission path yet.
 `Present` is only reachable through the guarded present-call diagnostic after
 prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
 
