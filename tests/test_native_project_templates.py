@@ -362,6 +362,64 @@ def test_windows_main_window_exports_diagnostic_c_abi_boundary() -> None:
     assert "gr_windows_main_window_host_service_schema_json()" in validator
 
 
+def test_browser_tool_project_scaffolds_match_phase_one_boundaries() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    cases = (
+        (
+            "GhostRigger.Tools.ContentBrowser",
+            "GHOSTRIGGER_TOOLS_CONTENT_BROWSER_EXPORTS",
+            "GhostRiggerToolsContentBrowser.h",
+            "GhostRiggerToolsContentBrowser.cpp",
+            "GhostRiggerToolsContentBrowserDEBUG.cpp",
+            "Content Browser",
+            "catalogue_schema",
+        ),
+        (
+            "GhostRigger.Tools.ResourceBrowser",
+            "GHOSTRIGGER_TOOLS_RESOURCE_BROWSER_EXPORTS",
+            "GhostRiggerToolsResourceBrowser.h",
+            "GhostRiggerToolsResourceBrowser.cpp",
+            "GhostRiggerToolsResourceBrowserDEBUG.cpp",
+            "Resource Browser",
+            "catalogue_schema",
+        ),
+        (
+            "GhostRigger.Tools.TwoDABrowser",
+            "GHOSTRIGGER_TOOLS_TWO_DA_BROWSER_EXPORTS",
+            "GhostRiggerToolsTwoDABrowser.h",
+            "GhostRiggerToolsTwoDABrowser.cpp",
+            "GhostRiggerToolsTwoDABrowserDEBUG.cpp",
+            "2DA Browser",
+            "table_schema",
+        ),
+    )
+
+    for project_name, export_define, header_name, implementation_name, validator_name, owner, schema in cases:
+        project_dir = ROOT / "native" / project_name
+        debug_dir = ROOT / "native" / f"{project_name}.DEBUG"
+        project = (project_dir / f"{project_name}.vcxproj").read_text(encoding="utf-8")
+        debug_project = (debug_dir / f"{project_name}.DEBUG.vcxproj").read_text(encoding="utf-8")
+        readme = (project_dir / "README.md").read_text(encoding="utf-8")
+        header = (project_dir / header_name).read_text(encoding="utf-8")
+        implementation = (project_dir / implementation_name).read_text(encoding="utf-8")
+        validator = (debug_dir / validator_name).read_text(encoding="utf-8")
+
+        assert project_name in solution
+        assert f"{project_name}.DEBUG" in solution
+        assert f"<TargetName>{project_name}</TargetName>" in project
+        assert export_define in project
+        assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
+        assert f"Owner surface: {owner}" in readme
+        assert "Bridge method: C ABI DLL" in readme
+        assert "_version" in header
+        assert "_capabilities_json" in header
+        assert '"tool_package":true' in implementation
+        assert f'"owner_surface":"{owner}"' in implementation
+        assert '"python_fallback_required":true' in implementation
+        assert schema in implementation
+        assert "query_attempted" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1766,6 +1824,9 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{8225E261-C091-40A6-8386-D68B6A43FC02}",
         "{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}",
         "{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}",
+        "{CEA01257-352B-449F-8024-27125D68C18A}",
+        "{59D2C00B-ECC7-4017-936E-CB654727A04C}",
+        "{B4AE1578-33D7-4A66-BCA6-43EAAD741D4E}",
         "{87E36993-4B11-402F-9882-B2D4C0CAE704}",
     }
 

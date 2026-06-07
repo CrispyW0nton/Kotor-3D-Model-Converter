@@ -92,6 +92,13 @@ capabilities, owner-boundary metadata, and an autofit-packet schema placeholder
 while keeping native autofit disabled and requiring the Python Character Studio
 fallback.
 
+`GhostRigger.Tools.ContentBrowser`, `GhostRigger.Tools.ResourceBrowser`, and
+`GhostRigger.Tools.TwoDABrowser` are Phase 1 native toolbox package boundaries
+for browser/catalogue workflows. They are diagnostic-only: they report package
+capabilities, owner-boundary metadata, and catalogue/table schema placeholders
+while keeping native indexing and table queries disabled and requiring Python
+fallback.
+
 `GhostRigger.Windows.MainWindow` is the Phase 1 native window package boundary
 for main-window host services. It is diagnostic-only: it reports package
 capabilities, owner-boundary metadata, and a host-service schema placeholder

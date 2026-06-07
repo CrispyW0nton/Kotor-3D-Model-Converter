@@ -157,6 +157,15 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.Tools.CharacterBuilder.DEBUG/` verifies the Character
   Builder toolbox package ABI, capabilities export, owner-boundary metadata, and
   autofit-packet schema placeholder from Visual Studio without requiring Python.
+- `native/GhostRigger.Tools.ContentBrowser/`,
+  `native/GhostRigger.Tools.ResourceBrowser/`, and
+  `native/GhostRigger.Tools.TwoDABrowser/` own Phase 1 browser/catalogue tool
+  package boundaries. They report package capabilities, owner-boundary metadata,
+  and catalogue/table schema placeholders while keeping native indexing and
+  table queries disabled and requiring Python fallback.
+- Their `.DEBUG` projects verify the browser/catalogue package ABIs,
+  capabilities exports, owner-boundary metadata, and schema placeholders from
+  Visual Studio without requiring Python.
 - `native/GhostRigger.Windows.MainWindow/` owns the Phase 1 native window
   package boundary for main-window host services. It reports package
   capabilities, owner-boundary metadata, and a host-service schema placeholder

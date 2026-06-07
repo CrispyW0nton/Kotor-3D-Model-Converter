@@ -130,6 +130,30 @@ TOOLS_CHARACTER_BUILDER_PACKAGE = NativePackageSpec(
     capabilities_export="gr_tools_character_builder_capabilities_json",
 )
 
+TOOLS_CONTENT_BROWSER_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.ContentBrowser",
+    dll_name="GhostRigger.Tools.ContentBrowser.dll",
+    env_var="GHOSTRIGGER_TOOLS_CONTENT_BROWSER",
+    version_export="gr_tools_content_browser_version",
+    capabilities_export="gr_tools_content_browser_capabilities_json",
+)
+
+TOOLS_RESOURCE_BROWSER_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.ResourceBrowser",
+    dll_name="GhostRigger.Tools.ResourceBrowser.dll",
+    env_var="GHOSTRIGGER_TOOLS_RESOURCE_BROWSER",
+    version_export="gr_tools_resource_browser_version",
+    capabilities_export="gr_tools_resource_browser_capabilities_json",
+)
+
+TOOLS_TWO_DA_BROWSER_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.TwoDABrowser",
+    dll_name="GhostRigger.Tools.TwoDABrowser.dll",
+    env_var="GHOSTRIGGER_TOOLS_TWO_DA_BROWSER",
+    version_export="gr_tools_two_da_browser_version",
+    capabilities_export="gr_tools_two_da_browser_capabilities_json",
+)
+
 WINDOWS_MAIN_WINDOW_PACKAGE = NativePackageSpec(
     name="GhostRigger.Windows.MainWindow",
     dll_name="GhostRigger.Windows.MainWindow.dll",
@@ -344,6 +368,24 @@ def query_tools_character_builder_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(TOOLS_CHARACTER_BUILDER_PACKAGE, search_paths)
+
+
+def query_tools_content_browser_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_CONTENT_BROWSER_PACKAGE, search_paths)
+
+
+def query_tools_resource_browser_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_RESOURCE_BROWSER_PACKAGE, search_paths)
+
+
+def query_tools_two_da_browser_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_TWO_DA_BROWSER_PACKAGE, search_paths)
 
 
 def query_windows_main_window_status(

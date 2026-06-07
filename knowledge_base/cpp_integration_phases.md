@@ -319,6 +319,15 @@ Current completed foundation:
 - `GhostRigger.Tools.CharacterBuilder.DEBUG.exe` validates the Character
   Builder toolbox package ABI, owner-boundary metadata, capabilities export, and
   autofit-packet schema placeholder without Python or the GUI.
+- `GhostRigger.Tools.ContentBrowser.dll`,
+  `GhostRigger.Tools.ResourceBrowser.dll`, and
+  `GhostRigger.Tools.TwoDABrowser.dll` exist as Phase 1 browser/catalogue tool
+  package boundaries. They report package capabilities, owner-boundary metadata,
+  and catalogue/table schema placeholders while keeping native indexing and
+  table queries disabled and requiring Python fallback.
+- Their `.DEBUG.exe` validators verify the browser/catalogue package ABIs,
+  capabilities exports, owner-boundary metadata, and schema placeholders without
+  Python or the GUI.
 - `GhostRigger.Windows.MainWindow.dll` exists as the Phase 1 native window
   package boundary for main-window host services. It reports main-window owner
   metadata, package capabilities, and a host-service schema placeholder while
