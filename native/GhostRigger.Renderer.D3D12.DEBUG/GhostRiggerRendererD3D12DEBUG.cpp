@@ -786,6 +786,56 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 140;
     }
+    const char* shader_reflection_json =
+        gr_renderer_d3d12_shader_reflection_input_layout_metadata_json(context);
+    if (std::strstr(
+            shader_reflection_json,
+            R"("schema":"renderer_d3d12_shader_reflection_input_layout_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection/input-layout metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 141;
+    }
+    if (std::strstr(shader_reflection_json, R"("shader_reflection_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 142;
+    }
+    if (std::strstr(shader_reflection_json, R"("reflection_invoked":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection invoked reflection" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 143;
+    }
+    if (std::strstr(shader_reflection_json, R"("input_layout_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection created an input layout" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 144;
+    }
+    if (std::strstr(shader_reflection_json, R"("input_element_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection counted input elements" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 145;
+    }
+    if (std::strstr(shader_reflection_json, R"("root_signature_from_reflection":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection created a root signature" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 146;
+    }
+    if (std::strstr(shader_reflection_json, R"("pipeline_state_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection created a PSO" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 147;
+    }
+    if (std::strstr(shader_reflection_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 148;
+    }
+    if (std::strstr(shader_reflection_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 shader reflection enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 149;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

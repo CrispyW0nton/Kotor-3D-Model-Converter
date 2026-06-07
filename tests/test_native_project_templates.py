@@ -1022,6 +1022,51 @@ def test_renderer_d3d12_exports_guarded_shader_bytecode_metadata_boundary() -> N
     assert "gr_renderer_d3d12_guarded_shader_bytecode_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_shader_reflection_input_layout_metadata_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_shader_reflection_input_layout_metadata_json" in header
+    assert "renderer_d3d12_shader_reflection_input_layout_metadata.v1" in implementation
+    assert '"shader_reflection_ready":false' in implementation
+    assert '"reflection_api":"DXC reflection"' in implementation
+    assert '"reflection_invoked":false' in implementation
+    assert '"input_layout_ready":false' in implementation
+    assert '"input_layout_from_reflection":false' in implementation
+    assert '"input_element_count":0' in implementation
+    assert '"semantic":"POSITION"' in implementation
+    assert '"semantic":"NORMAL"' in implementation
+    assert '"semantic":"TEXCOORD"' in implementation
+    assert '"semantic":"BLENDINDICES"' in implementation
+    assert '"semantic":"BLENDWEIGHT"' in implementation
+    assert '"actual_input_elements":[]' in implementation
+    assert '"vertex_stride_bytes":0' in implementation
+    assert '"skinned_vertex_stride_bytes":0' in implementation
+    assert '"root_signature_from_reflection":false' in implementation
+    assert '"pipeline_state_created":false' in implementation
+    assert '"draw_calls_recorded":0' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "D3DReflect(" not in implementation
+    assert "ID3D12ShaderReflection" not in implementation
+    assert "gr_renderer_d3d12_shader_reflection_input_layout_metadata_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 
