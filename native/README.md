@@ -108,6 +108,16 @@ lighting/camera/module-mesh packet schema placeholders while keeping native
 scene querying, property edits, light/camera evaluation, and module-mesh
 indexing disabled and requiring Python fallback.
 
+`GhostRigger.Tools.BodyAttachmentSystem`,
+`GhostRigger.Tools.NodesSkeletonBrowser`, `GhostRigger.Tools.SpriteMaterials`,
+`GhostRigger.Tools.PivotControls`, and `GhostRigger.Tools.SequenceEditor` are
+Phase 1 native toolbox package boundaries for the remaining requested tool
+surfaces. They are diagnostic-only: they report package capabilities,
+owner-boundary metadata, and attachment/node-tree/material/pivot/sequence packet
+schema placeholders while keeping native attachment evaluation, node-tree
+queries, sprite-material evaluation, pivot edits, and sequence evaluation
+disabled and requiring Python fallback.
+
 `GhostRigger.Windows.MainWindow` is the Phase 1 native window package boundary
 for main-window host services. It is diagnostic-only: it reports package
 capabilities, owner-boundary metadata, and a host-service schema placeholder

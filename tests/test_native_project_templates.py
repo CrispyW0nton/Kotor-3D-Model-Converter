@@ -511,6 +511,97 @@ def test_scene_workbench_tool_project_scaffolds_match_phase_one_boundaries() -> 
         assert "query_attempted" in validator
 
 
+def test_final_phase_one_tool_project_scaffolds_match_phase_one_boundaries() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    cases = (
+        (
+            "GhostRigger.Tools.BodyAttachmentSystem",
+            "GHOSTRIGGER_TOOLS_BODY_ATTACHMENT_SYSTEM_EXPORTS",
+            "GhostRiggerToolsBodyAttachmentSystem.h",
+            "GhostRiggerToolsBodyAttachmentSystem.cpp",
+            "GhostRiggerToolsBodyAttachmentSystemDEBUG.cpp",
+            "Body Attachment System",
+            "attachment_packet_schema",
+            "native_attachment_eval_enabled",
+        ),
+        (
+            "GhostRigger.Tools.NodesSkeletonBrowser",
+            "GHOSTRIGGER_TOOLS_NODES_SKELETON_BROWSER_EXPORTS",
+            "GhostRiggerToolsNodesSkeletonBrowser.h",
+            "GhostRiggerToolsNodesSkeletonBrowser.cpp",
+            "GhostRiggerToolsNodesSkeletonBrowserDEBUG.cpp",
+            "Nodes/Skeleton Browser",
+            "node_tree_schema",
+            "native_node_tree_query_enabled",
+        ),
+        (
+            "GhostRigger.Tools.SpriteMaterials",
+            "GHOSTRIGGER_TOOLS_SPRITE_MATERIALS_EXPORTS",
+            "GhostRiggerToolsSpriteMaterials.h",
+            "GhostRiggerToolsSpriteMaterials.cpp",
+            "GhostRiggerToolsSpriteMaterialsDEBUG.cpp",
+            "Sprite Materials",
+            "material_packet_schema",
+            "native_sprite_material_eval_enabled",
+        ),
+        (
+            "GhostRigger.Tools.PivotControls",
+            "GHOSTRIGGER_TOOLS_PIVOT_CONTROLS_EXPORTS",
+            "GhostRiggerToolsPivotControls.h",
+            "GhostRiggerToolsPivotControls.cpp",
+            "GhostRiggerToolsPivotControlsDEBUG.cpp",
+            "PivotControls",
+            "pivot_packet_schema",
+            "native_pivot_edit_enabled",
+        ),
+        (
+            "GhostRigger.Tools.SequenceEditor",
+            "GHOSTRIGGER_TOOLS_SEQUENCE_EDITOR_EXPORTS",
+            "GhostRiggerToolsSequenceEditor.h",
+            "GhostRiggerToolsSequenceEditor.cpp",
+            "GhostRiggerToolsSequenceEditorDEBUG.cpp",
+            "Sequence Editor",
+            "sequence_packet_schema",
+            "native_sequence_eval_enabled",
+        ),
+    )
+
+    for (
+        project_name,
+        export_define,
+        header_name,
+        implementation_name,
+        validator_name,
+        owner,
+        schema,
+        disabled_flag,
+    ) in cases:
+        project_dir = ROOT / "native" / project_name
+        debug_dir = ROOT / "native" / f"{project_name}.DEBUG"
+        project = (project_dir / f"{project_name}.vcxproj").read_text(encoding="utf-8")
+        debug_project = (debug_dir / f"{project_name}.DEBUG.vcxproj").read_text(encoding="utf-8")
+        readme = (project_dir / "README.md").read_text(encoding="utf-8")
+        header = (project_dir / header_name).read_text(encoding="utf-8")
+        implementation = (project_dir / implementation_name).read_text(encoding="utf-8")
+        validator = (debug_dir / validator_name).read_text(encoding="utf-8")
+
+        assert project_name in solution
+        assert f"{project_name}.DEBUG" in solution
+        assert f"<TargetName>{project_name}</TargetName>" in project
+        assert export_define in project
+        assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
+        assert f"Owner surface: {owner}" in readme
+        assert "Bridge method: C ABI DLL" in readme
+        assert "_version" in header
+        assert "_capabilities_json" in header
+        assert '"tool_package":true' in implementation
+        assert f'"owner_surface":"{owner}"' in implementation
+        assert f'"{disabled_flag}":false' in implementation
+        assert '"python_fallback_required":true' in implementation
+        assert schema in implementation
+        assert "query_attempted" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1923,6 +2014,11 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{EF469D65-8BE2-4CDC-8B6B-07067092CD18}",
         "{7624BF79-3A6D-4EF6-9BD1-7D234A998AEC}",
         "{EC869962-CD4E-4010-8A84-1297540E5C67}",
+        "{6859AC27-C0F9-4F6A-B452-71F3E6CECC10}",
+        "{ED3B2949-A13A-47EF-9407-76C39D4145F5}",
+        "{574B0009-8D00-43D5-8E4B-1131192773B9}",
+        "{5CC02F9B-9C30-4CB1-A7CD-317E4284889F}",
+        "{9C4ED985-3501-44CB-B502-A26DC8ECF9CA}",
         "{87E36993-4B11-402F-9882-B2D4C0CAE704}",
     }
 

@@ -194,6 +194,46 @@ TOOLS_MODULE_MESHES_PACKAGE = NativePackageSpec(
     capabilities_export="gr_tools_module_meshes_capabilities_json",
 )
 
+TOOLS_BODY_ATTACHMENT_SYSTEM_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.BodyAttachmentSystem",
+    dll_name="GhostRigger.Tools.BodyAttachmentSystem.dll",
+    env_var="GHOSTRIGGER_TOOLS_BODY_ATTACHMENT_SYSTEM",
+    version_export="gr_tools_body_attachment_system_version",
+    capabilities_export="gr_tools_body_attachment_system_capabilities_json",
+)
+
+TOOLS_NODES_SKELETON_BROWSER_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.NodesSkeletonBrowser",
+    dll_name="GhostRigger.Tools.NodesSkeletonBrowser.dll",
+    env_var="GHOSTRIGGER_TOOLS_NODES_SKELETON_BROWSER",
+    version_export="gr_tools_nodes_skeleton_browser_version",
+    capabilities_export="gr_tools_nodes_skeleton_browser_capabilities_json",
+)
+
+TOOLS_SPRITE_MATERIALS_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.SpriteMaterials",
+    dll_name="GhostRigger.Tools.SpriteMaterials.dll",
+    env_var="GHOSTRIGGER_TOOLS_SPRITE_MATERIALS",
+    version_export="gr_tools_sprite_materials_version",
+    capabilities_export="gr_tools_sprite_materials_capabilities_json",
+)
+
+TOOLS_PIVOT_CONTROLS_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.PivotControls",
+    dll_name="GhostRigger.Tools.PivotControls.dll",
+    env_var="GHOSTRIGGER_TOOLS_PIVOT_CONTROLS",
+    version_export="gr_tools_pivot_controls_version",
+    capabilities_export="gr_tools_pivot_controls_capabilities_json",
+)
+
+TOOLS_SEQUENCE_EDITOR_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.SequenceEditor",
+    dll_name="GhostRigger.Tools.SequenceEditor.dll",
+    env_var="GHOSTRIGGER_TOOLS_SEQUENCE_EDITOR",
+    version_export="gr_tools_sequence_editor_version",
+    capabilities_export="gr_tools_sequence_editor_capabilities_json",
+)
+
 WINDOWS_MAIN_WINDOW_PACKAGE = NativePackageSpec(
     name="GhostRigger.Windows.MainWindow",
     dll_name="GhostRigger.Windows.MainWindow.dll",
@@ -456,6 +496,36 @@ def query_tools_module_meshes_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(TOOLS_MODULE_MESHES_PACKAGE, search_paths)
+
+
+def query_tools_body_attachment_system_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_BODY_ATTACHMENT_SYSTEM_PACKAGE, search_paths)
+
+
+def query_tools_nodes_skeleton_browser_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_NODES_SKELETON_BROWSER_PACKAGE, search_paths)
+
+
+def query_tools_sprite_materials_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_SPRITE_MATERIALS_PACKAGE, search_paths)
+
+
+def query_tools_pivot_controls_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_PIVOT_CONTROLS_PACKAGE, search_paths)
+
+
+def query_tools_sequence_editor_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_SEQUENCE_EDITOR_PACKAGE, search_paths)
 
 
 def query_windows_main_window_status(

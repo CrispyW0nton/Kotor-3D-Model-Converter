@@ -177,6 +177,19 @@ a launcher and native workspace first, not a rewrite of the application.
 - Their `.DEBUG` projects verify the scene/workbench package ABIs, capabilities
   exports, owner-boundary metadata, and schema placeholders from Visual Studio
   without requiring Python.
+- `native/GhostRigger.Tools.BodyAttachmentSystem/`,
+  `native/GhostRigger.Tools.NodesSkeletonBrowser/`,
+  `native/GhostRigger.Tools.SpriteMaterials/`,
+  `native/GhostRigger.Tools.PivotControls/`, and
+  `native/GhostRigger.Tools.SequenceEditor/` own the remaining requested Phase 1
+  toolbox package boundaries. They report package capabilities, owner-boundary
+  metadata, and attachment/node-tree/material/pivot/sequence packet schema
+  placeholders while keeping native attachment evaluation, node-tree queries,
+  sprite-material evaluation, pivot edits, and sequence evaluation disabled and
+  requiring Python fallback.
+- Their `.DEBUG` projects verify the remaining toolbox package ABIs,
+  capabilities exports, owner-boundary metadata, and schema placeholders from
+  Visual Studio without requiring Python.
 - `native/GhostRigger.Windows.MainWindow/` owns the Phase 1 native window
   package boundary for main-window host services. It reports package
   capabilities, owner-boundary metadata, and a host-service schema placeholder

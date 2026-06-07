@@ -16,16 +16,21 @@ from src.adapters.native_core.package_registry import (
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     RUNTIME_SHARED_RESOURCES_PACKAGE,
+    TOOLS_BODY_ATTACHMENT_SYSTEM_PACKAGE,
     TOOLS_CHARACTER_BUILDER_PACKAGE,
     TOOLS_CAMERA_PACKAGE,
     TOOLS_CONTENT_BROWSER_PACKAGE,
     TOOLS_EXPORT_PACKAGE,
     TOOLS_LIGHTING_PACKAGE,
     TOOLS_MODULE_MESHES_PACKAGE,
+    TOOLS_NODES_SKELETON_BROWSER_PACKAGE,
+    TOOLS_PIVOT_CONTROLS_PACKAGE,
     TOOLS_PROPERTIES_PACKAGE,
     TOOLS_RETARGETING_PACKAGE,
     TOOLS_RESOURCE_BROWSER_PACKAGE,
     TOOLS_SCENE_INFORMATION_PACKAGE,
+    TOOLS_SEQUENCE_EDITOR_PACKAGE,
+    TOOLS_SPRITE_MATERIALS_PACKAGE,
     TOOLS_TWO_DA_BROWSER_PACKAGE,
     WINDOWS_MAIN_WINDOW_PACKAGE,
     NativePackageSpec,
@@ -42,16 +47,21 @@ from src.adapters.native_core.package_registry import (
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
+    query_tools_body_attachment_system_status,
     query_tools_camera_status,
     query_tools_character_builder_status,
     query_tools_content_browser_status,
     query_tools_export_status,
     query_tools_lighting_status,
     query_tools_module_meshes_status,
+    query_tools_nodes_skeleton_browser_status,
+    query_tools_pivot_controls_status,
     query_tools_properties_status,
     query_tools_resource_browser_status,
     query_tools_retargeting_status,
     query_tools_scene_information_status,
+    query_tools_sequence_editor_status,
+    query_tools_sprite_materials_status,
     query_tools_two_da_browser_status,
     query_windows_main_window_status,
     renderer_d3d12_guarded_metadata_capabilities,
@@ -353,6 +363,22 @@ def test_scene_workbench_tool_statuses_use_shared_registry_path(tmp_path: Path) 
         assert f"{package_name}.dll was not found." in status.reason or "Windows native package" in status.reason
 
 
+def test_final_phase_one_tool_statuses_use_shared_registry_path(tmp_path: Path) -> None:
+    cases = (
+        (query_tools_body_attachment_system_status, "GhostRigger.Tools.BodyAttachmentSystem"),
+        (query_tools_nodes_skeleton_browser_status, "GhostRigger.Tools.NodesSkeletonBrowser"),
+        (query_tools_sprite_materials_status, "GhostRigger.Tools.SpriteMaterials"),
+        (query_tools_pivot_controls_status, "GhostRigger.Tools.PivotControls"),
+        (query_tools_sequence_editor_status, "GhostRigger.Tools.SequenceEditor"),
+    )
+
+    for query_status, package_name in cases:
+        status = query_status([tmp_path])
+        assert status.name == package_name
+        assert status.available is False
+        assert f"{package_name}.dll was not found." in status.reason or "Windows native package" in status.reason
+
+
 def test_windows_main_window_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_windows_main_window_status([tmp_path])
 
@@ -598,6 +624,53 @@ def test_scene_workbench_tool_package_specs_name_current_contracts() -> None:
             "GHOSTRIGGER_TOOLS_MODULE_MESHES",
             "gr_tools_module_meshes_version",
             "gr_tools_module_meshes_capabilities_json",
+        ),
+    )
+
+    for spec, name, env_var, version_export, capabilities_export in cases:
+        assert spec.name == name
+        assert spec.dll_name == f"{name}.dll"
+        assert spec.env_var == env_var
+        assert spec.version_export == version_export
+        assert spec.capabilities_export == capabilities_export
+
+
+def test_final_phase_one_tool_package_specs_name_current_contracts() -> None:
+    cases = (
+        (
+            TOOLS_BODY_ATTACHMENT_SYSTEM_PACKAGE,
+            "GhostRigger.Tools.BodyAttachmentSystem",
+            "GHOSTRIGGER_TOOLS_BODY_ATTACHMENT_SYSTEM",
+            "gr_tools_body_attachment_system_version",
+            "gr_tools_body_attachment_system_capabilities_json",
+        ),
+        (
+            TOOLS_NODES_SKELETON_BROWSER_PACKAGE,
+            "GhostRigger.Tools.NodesSkeletonBrowser",
+            "GHOSTRIGGER_TOOLS_NODES_SKELETON_BROWSER",
+            "gr_tools_nodes_skeleton_browser_version",
+            "gr_tools_nodes_skeleton_browser_capabilities_json",
+        ),
+        (
+            TOOLS_SPRITE_MATERIALS_PACKAGE,
+            "GhostRigger.Tools.SpriteMaterials",
+            "GHOSTRIGGER_TOOLS_SPRITE_MATERIALS",
+            "gr_tools_sprite_materials_version",
+            "gr_tools_sprite_materials_capabilities_json",
+        ),
+        (
+            TOOLS_PIVOT_CONTROLS_PACKAGE,
+            "GhostRigger.Tools.PivotControls",
+            "GHOSTRIGGER_TOOLS_PIVOT_CONTROLS",
+            "gr_tools_pivot_controls_version",
+            "gr_tools_pivot_controls_capabilities_json",
+        ),
+        (
+            TOOLS_SEQUENCE_EDITOR_PACKAGE,
+            "GhostRigger.Tools.SequenceEditor",
+            "GHOSTRIGGER_TOOLS_SEQUENCE_EDITOR",
+            "gr_tools_sequence_editor_version",
+            "gr_tools_sequence_editor_capabilities_json",
         ),
     )
 

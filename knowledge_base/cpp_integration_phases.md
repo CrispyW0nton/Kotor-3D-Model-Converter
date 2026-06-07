@@ -339,6 +339,19 @@ Current completed foundation:
 - Their `.DEBUG.exe` validators verify the scene/workbench package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders without
   Python or the GUI.
+- `GhostRigger.Tools.BodyAttachmentSystem.dll`,
+  `GhostRigger.Tools.NodesSkeletonBrowser.dll`,
+  `GhostRigger.Tools.SpriteMaterials.dll`,
+  `GhostRigger.Tools.PivotControls.dll`, and
+  `GhostRigger.Tools.SequenceEditor.dll` exist as the remaining requested Phase
+  1 toolbox package boundaries. They report package capabilities,
+  owner-boundary metadata, and attachment/node-tree/material/pivot/sequence
+  packet schema placeholders while keeping native attachment evaluation,
+  node-tree queries, sprite-material evaluation, pivot edits, and sequence
+  evaluation disabled and requiring Python fallback.
+- Their `.DEBUG.exe` validators verify the remaining toolbox package ABIs,
+  capabilities exports, owner-boundary metadata, and schema placeholders without
+  Python or the GUI.
 - `GhostRigger.Windows.MainWindow.dll` exists as the Phase 1 native window
   package boundary for main-window host services. It reports main-window owner
   metadata, package capabilities, and a host-service schema placeholder while
