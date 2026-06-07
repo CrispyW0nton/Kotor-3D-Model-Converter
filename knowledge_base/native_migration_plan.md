@@ -207,6 +207,20 @@ a launcher and native workspace first, not a rewrite of the application.
 - Their `.DEBUG` projects verify the extra window package ABIs, capabilities
   exports, owner-boundary metadata, and host-service schema placeholders from
   Visual Studio without requiring Python.
+- `native/GhostRigger.NativeModulePackages.json` owns the Phase 1 full Python
+  module sweep manifest. The generated package set adds diagnostic Visual
+  Studio DLL/DEBUG project pairs for the durable Python subsystems under
+  `src/`, including `GhostRigger.Modules` for `src/core/modules`, core scene,
+  level, animation, retargeting, character, MDL, geometry, gizmo, graphics,
+  lighting, validation, project, resource, export, game, port, rendering,
+  diagnostics, template, workflow, and walkmesh domains; top-level math,
+  measurement, format, IO, IPC, converter, autorig, Unreal, workbench,
+  mesh-tool, sequence, infrastructure, and KOTOR MCP packages; adapter
+  categories; GUI category packages; and `GhostRigger.Systems.BAS`.
+- The generated module package `.DEBUG` projects verify C ABI version,
+  capability, owner-boundary, and dependency-schema metadata from Visual Studio
+  without requiring Python, while the Python implementations remain the active
+  owners of runtime behavior.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental
@@ -226,6 +240,11 @@ Native project naming:
   `GhostRigger.Windows.AnimationRetargetWorkbench`,
   `GhostRigger.Windows.LegacyRiggingWindow`, and
   `GhostRigger.Windows.UnrealAnimatorWindow`.
+- Python module sweep packages use `GhostRigger.{Domain}` for core/top-level
+  domains, `GhostRigger.Adapters.{AdapterName}` for adapter categories,
+  `GhostRigger.GUI.{Category}` for GUI category boundaries, and
+  `GhostRigger.Systems.{SystemName}` for durable systems. `GhostRigger.Modules`
+  is the native package boundary for `src/core/modules`.
 
 The first concrete toolbox and window migration candidates are documented in
 `knowledge_base/native_toolbox_window_migration_candidates.md`.

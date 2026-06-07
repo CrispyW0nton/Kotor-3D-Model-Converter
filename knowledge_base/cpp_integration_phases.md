@@ -369,6 +369,18 @@ Current completed foundation:
 - Their `.DEBUG.exe` validators verify the extra window package ABIs,
   owner-boundary metadata, capabilities exports, and host-service schema
   placeholders without Python or the GUI.
+- `native/GhostRigger.NativeModulePackages.json` records the full Phase 1
+  Python module sweep. The generated Visual Studio package pairs include
+  `GhostRigger.Modules` for `src/core/modules`, the core domains, top-level
+  support packages, adapter category packages, GUI category packages, KOTOR MCP
+  validation support, and `GhostRigger.Systems.BAS`.
+- The generated module package DLLs are diagnostic-only: they report C ABI
+  version/capability metadata, owner-boundary metadata, and dependency-scan
+  schema metadata while keeping `native_implementation_enabled:false` and
+  `python_fallback_required:true`.
+- Their `.DEBUG.exe` validators verify the generated module package ABIs,
+  owner-boundary metadata, and dependency-schema placeholders without Python or
+  the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -393,6 +405,10 @@ Native project naming foundation:
   `GhostRigger.Windows.AnimationRetargetWorkbench`,
   `GhostRigger.Windows.LegacyRiggingWindow`, and
   `GhostRigger.Windows.UnrealAnimatorWindow`.
+- Python module sweep packages use `GhostRigger.{Domain}`,
+  `GhostRigger.Adapters.{AdapterName}`, `GhostRigger.GUI.{Category}`, and
+  `GhostRigger.Systems.{SystemName}` naming. `GhostRigger.Modules` is reserved
+  for the native boundary that mirrors `src/core/modules`.
 - Renderer contract packages use `GhostRigger.Renderer.Contracts`, and concrete
   renderer backend packages use `GhostRigger.Renderer.{Backend}`, for example
   `GhostRigger.Renderer.D3D12` or the diagnostic `GhostRigger.Renderer.Null`.

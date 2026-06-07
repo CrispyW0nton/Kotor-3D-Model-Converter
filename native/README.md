@@ -132,6 +132,17 @@ diagnostic-only: they report package capabilities, owner-boundary metadata, and
 host-service schema placeholders while keeping the Python/Qt windows as the
 visible shell owners.
 
+`native/GhostRigger.NativeModulePackages.json` records the Phase 1 full Python
+module sweep. The sweep adds diagnostic Visual Studio package boundaries for
+every durable Python subsystem currently identified from `src/`, including
+`GhostRigger.Modules` for `src/core/modules`, core domains such as scene,
+level, animation, MDL, lighting, validation, project/session infrastructure,
+top-level support packages such as math, measurement, formats, IO, IPC,
+converters, autorig, Unreal, mesh tools, sequence, infrastructure, and KOTOR
+MCP validation, plus adapter, GUI category, and `GhostRigger.Systems.BAS`
+packages. These packages are native-readiness boundaries only: Python still
+owns the current implementation until a later migration slice proves parity.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes
