@@ -140,6 +140,35 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 26;
     }
+    const char* barrier_clear_pass_json = gr_renderer_d3d12_barrier_clear_pass_metadata_json(context);
+    if (std::strstr(
+            barrier_clear_pass_json,
+            R"("schema":"renderer_d3d12_barrier_clear_pass_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 barrier/clear-pass metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 27;
+    }
+    if (std::strstr(barrier_clear_pass_json, R"("resource_barriers_recorded":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 barrier/clear-pass metadata recorded barriers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 28;
+    }
+    if (std::strstr(barrier_clear_pass_json, R"("clear_recorded":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 barrier/clear-pass metadata recorded a clear" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 29;
+    }
+    if (std::strstr(barrier_clear_pass_json, R"("command_list_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 barrier/clear-pass metadata executed a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 30;
+    }
+    if (std::strstr(barrier_clear_pass_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 barrier/clear-pass metadata enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 31;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
