@@ -32,13 +32,17 @@ int main()
         std::cerr << "GhostRigger.Renderer.D3D12 adapter probe mismatch" << std::endl;
         return 6;
     }
+    if (std::strstr(gr_renderer_d3d12_device_readiness_json(), R"("schema":"renderer_d3d12_device_readiness.v1")") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 device readiness mismatch" << std::endl;
+        return 7;
+    }
     if (std::strstr(gr_renderer_d3d12_failure_diagnostics_json(), R"("schema":"renderer_d3d12_failure_diagnostics.v1")") == nullptr) {
         std::cerr << "GhostRigger.Renderer.D3D12 failure diagnostics mismatch" << std::endl;
-        return 7;
+        return 8;
     }
     if (std::strstr(gr_renderer_d3d12_dry_run_frame_stats_json(), R"("backend_id":"renderer_d3d12")") == nullptr) {
         std::cerr << "GhostRigger.Renderer.D3D12 dry-run frame stats mismatch" << std::endl;
-        return 8;
+        return 9;
     }
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

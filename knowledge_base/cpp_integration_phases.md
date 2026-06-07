@@ -204,8 +204,9 @@ Current completed foundation:
   proves backend package shape without owning a real GPU device.
 - `GhostRigger.Renderer.D3D12.dll` exists as the first hardware renderer backend
   package boundary behind `GhostRigger.Renderer.Contracts`; it can probe DXGI
-  adapters and report failure-diagnostic schema metadata, but it is still
-  diagnostic-only in Phase 1 and does not create a D3D12 device or submit draws.
+  adapters, probe D3D12 feature-level 12_0 device-readiness without retaining a
+  device, and report failure-diagnostic schema metadata, but it is still
+  diagnostic-only in Phase 1 and does not submit draws.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -223,8 +224,9 @@ Current completed foundation:
 - `GhostRigger.Renderer.Null.DEBUG.exe` validates the diagnostic renderer
   backend ABI without Python or the GUI.
 - `GhostRigger.Renderer.D3D12.DEBUG.exe` validates the D3D12 renderer package
-  ABI, DXGI adapter-probe export, failure-diagnostic export, and
-  device-requirement metadata without Python or the GUI.
+  ABI, DXGI adapter-probe export, D3D12 device-readiness export,
+  failure-diagnostic export, and device-requirement metadata without Python or
+  the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -433,9 +435,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from adapter/failure diagnostics into
-   explicit device-creation readiness diagnostics before adding real draw
-   submission.
+5. Extend `GhostRigger.Renderer.D3D12` from device-readiness diagnostics into
+   explicit command-queue and swap-chain readiness diagnostics before adding
+   real draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`

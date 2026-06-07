@@ -2,6 +2,7 @@
 
 #include "GhostRiggerRendererContracts.h"
 
+#include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
@@ -137,6 +138,77 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_adapter_probe_json() {
 
     payload += R"(],"status":"ok","adapter_count":)";
     payload += std::to_string(adapter_count);
+    payload += "}";
+    return payload.c_str();
+}
+
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_device_readiness_json() {
+    static thread_local std::string payload;
+    payload =
+        R"({"schema":"renderer_d3d12_device_readiness.v1","backend_id":"renderer_d3d12",)"
+        R"("diagnostic_only":true,"feature_level":"12_0","draw_submission_enabled":false,)"
+        R"("devices":[)";
+
+    Microsoft::WRL::ComPtr<IDXGIFactory6> factory;
+    HRESULT hr = CreateDXGIFactory2(0, IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) {
+        payload += R"(],"status":"factory_error","hresult":")";
+        payload += hresult_hex(hr);
+        payload += R"("})";
+        return payload.c_str();
+    }
+
+    unsigned int checked_count = 0;
+    unsigned int ready_count = 0;
+    for (UINT index = 0;; ++index) {
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> adapter;
+        hr = factory->EnumAdapters1(index, &adapter);
+        if (hr == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+        if (FAILED(hr)) {
+            payload += R"(],"status":"adapter_error","hresult":")";
+            payload += hresult_hex(hr);
+            payload += R"("})";
+            return payload.c_str();
+        }
+
+        DXGI_ADAPTER_DESC1 desc{};
+        hr = adapter->GetDesc1(&desc);
+        if (FAILED(hr) || (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)) {
+            continue;
+        }
+
+        if (checked_count > 0) {
+            payload += ",";
+        }
+        payload += R"({"index":)";
+        payload += std::to_string(index);
+        payload += R"(,"description":")";
+        payload += json_escape(desc.Description);
+        payload += R"(","vendor_id":)";
+        payload += std::to_string(desc.VendorId);
+        payload += R"(,"device_id":)";
+        payload += std::to_string(desc.DeviceId);
+
+        hr = D3D12CreateDevice(adapter.Get(), D3D_FEATURE_LEVEL_12_0, __uuidof(ID3D12Device), nullptr);
+        const bool device_ready = SUCCEEDED(hr);
+        if (device_ready) {
+            ++ready_count;
+        }
+
+        payload += R"(,"device_ready":)";
+        payload += device_ready ? "true" : "false";
+        payload += R"(,"hresult":")";
+        payload += hresult_hex(hr);
+        payload += R"(","retained_device":false})";
+        ++checked_count;
+    }
+
+    payload += R"(],"status":"ok","checked_adapter_count":)";
+    payload += std::to_string(checked_count);
+    payload += R"(,"ready_adapter_count":)";
+    payload += std::to_string(ready_count);
     payload += "}";
     return payload.c_str();
 }

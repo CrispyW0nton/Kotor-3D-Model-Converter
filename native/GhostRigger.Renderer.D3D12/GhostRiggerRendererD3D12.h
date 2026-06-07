@@ -17,6 +17,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_capabilities_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_backend_info_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_device_requirements_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_adapter_probe_json();
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_device_readiness_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_dry_run_frame_stats_json();
 

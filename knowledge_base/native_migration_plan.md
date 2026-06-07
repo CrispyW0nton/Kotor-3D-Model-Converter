@@ -66,11 +66,13 @@ a launcher and native workspace first, not a rewrite of the application.
   backend ABI from Visual Studio without requiring Python.
 - `native/GhostRigger.Renderer.D3D12/` owns the first hardware renderer backend
   package boundary behind the renderer contract boundary. It can probe DXGI
-  adapters and report failure-diagnostic metadata, but it is diagnostic-only in
-  Phase 1 and does not create a device or submit draws yet.
+  adapters, probe D3D12 feature-level 12_0 device-readiness without retaining a
+  device, and report failure-diagnostic metadata, but it is diagnostic-only in
+  Phase 1 and does not submit draws yet.
 - `native/GhostRigger.Renderer.D3D12.DEBUG/` verifies the D3D12 renderer package
-  ABI, DXGI adapter-probe export, failure-diagnostic export, and
-  device-requirement metadata from Visual Studio without requiring Python.
+  ABI, DXGI adapter-probe export, D3D12 device-readiness export,
+  failure-diagnostic export, and device-requirement metadata from Visual Studio
+  without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package
