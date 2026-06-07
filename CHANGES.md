@@ -11,6 +11,12 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-07
 
+- Native host product executable name: kept the Visual Studio project named `GhostRigger.Native` while changing its emitted application target to `GhostRigger.exe`, and aligned the embedded Python program name, native docs, and template tests with the product executable name. No roadmap task ID applies.
+  Owner: LordVaderCW.
+  Intersects: upstream/qt-ghostrigger Phase 1 native Visual Studio host output and release packaging.
+  Affected areas: `native/GhostRigger.Native/GhostRigger.Native.vcxproj`, `native/GhostRigger.Native/main.cpp`, `native/README.md`, `knowledge_base/cpp_integration_phases.md`, `tests/test_native_project_templates.py`, `CHANGES.md`.
+  Verification: `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m py_compile tests/test_native_project_templates.py tests/test_native_core_package_registry.py src/adapters/native_core/__init__.py src/adapters/native_core/package_registry.py src/adapters/rendering/native_core/__init__.py src/adapters/rendering/native_core/binding.py src/adapters/rendering/native_core/renderer.py` passed. `C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe -m pytest tests/test_native_project_templates.py tests/test_native_core_package_registry.py -q` passed (`12 passed`). Clean `Release|x64` build passed and produced `GhostRigger.exe` instead of `GhostRigger.Native.exe`; release-folder scan confirmed only `.exe`, `.dll`, and `.lib` outputs and no DEBUG executables. Release `GhostRigger.exe --native-host-debug` and `GhostRigger.exe --native-embed-init-debug` passed. Clean `Debug|x64` build passed, DEBUG validators passed, and the Debug stale-name scan found no `GhostRigger.Native.exe`, `*Smoke*`, `GhostRiggerRuntime*`, or `GhostRiggerNative*` outputs.
+
 - Phase 1 GhostRigger native namespace naming: renamed the native Visual Studio project/output namespace so the host is `GhostRigger.Native`, the shared native core is `GhostRigger.Native.NativeCore`, the runtime is `GhostRigger.Runtime`, and runtime-shared packages use `GhostRigger.Runtime.Shared.*`. Updated the Python native package registry and native renderer binding to discover the dotted DLL names, updated project templates/docs to use the GhostRigger-prefixed package convention, and preserved Release output hygiene under the new names. No roadmap task ID applies.
   Owner: LordVaderCW.
   Intersects: upstream/qt-ghostrigger Phase 1 native Visual Studio project naming and output layout.
