@@ -55,6 +55,14 @@ a concise summary of the change, the affected files or subsystem, and the
 verification performed. Keep entries factual so future agents can avoid repeating
 completed work.
 
+Every new `CHANGES.md` entry must include an owner line using the project owner's
+GitHub username: `Owner: LordVaderCW`. If the change overlaps, merges, rebases,
+or otherwise intersects work from another contributor, also include an
+`Intersects:` line naming the other user or branch/commit when known and briefly
+state the touched subsystem, for example `Intersects: upstream/qt-ghostrigger
+Character Builder export changes`. This keeps concurrent changelog edits
+attributable and easier to merge.
+
 ## Python terminal cheatsheet
 
 When adding, changing, or discovering useful commands for the embedded Python
