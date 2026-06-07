@@ -21,6 +21,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_device_readiness_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_queue_swap_chain_readiness_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_descriptor_allocator_readiness_json(void* context);
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_command_list_readiness_json(void* context);
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_surface_swap_chain_readiness_json(
+    void* context,
+    void* native_window_handle
+);
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json();
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_dry_run_frame_stats_json();
 GR_RENDERER_D3D12_API void* gr_renderer_d3d12_create_diagnostic_context();

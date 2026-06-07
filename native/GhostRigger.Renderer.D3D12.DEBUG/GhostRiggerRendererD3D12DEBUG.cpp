@@ -90,6 +90,30 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 17;
     }
+    const char* surface_swap_chain_json = gr_renderer_d3d12_surface_swap_chain_readiness_json(context, nullptr);
+    if (std::strstr(
+            surface_swap_chain_json,
+            R"("schema":"renderer_d3d12_surface_swap_chain_readiness.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 surface/swap-chain readiness mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 18;
+    }
+    if (std::strstr(surface_swap_chain_json, R"("native_window_handle_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 surface/swap-chain readiness accepted a null window handle" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 19;
+    }
+    if (std::strstr(surface_swap_chain_json, R"("present_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 surface/swap-chain readiness enabled present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 20;
+    }
+    if (std::strstr(surface_swap_chain_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 surface/swap-chain readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 21;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

@@ -389,6 +389,36 @@ def test_renderer_d3d12_exports_command_list_readiness_boundary() -> None:
     assert "gr_renderer_d3d12_command_list_readiness_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_surface_swap_chain_readiness_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_surface_swap_chain_readiness_json" in header
+    assert "renderer_d3d12_surface_swap_chain_readiness.v1" in implementation
+    assert '"surface_handle_type":"HWND"' in implementation
+    assert '"native_window_handle_ready":false' in implementation
+    assert '"swap_chain_created":false' in implementation
+    assert '"present_enabled":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "gr_renderer_d3d12_surface_swap_chain_readiness_json(context, nullptr)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

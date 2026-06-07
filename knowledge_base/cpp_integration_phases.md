@@ -210,9 +210,10 @@ Current completed foundation:
   D3D12 device and direct command queue for lifetime validation, retain
   diagnostic descriptor heaps, a direct command allocator, and a closed direct
   command list, report descriptor-heap/command-allocator/command-list readiness
-  metadata, and report failure-diagnostic schema metadata, but it is still
-  diagnostic-only in Phase 1 and does not create swap chains, execute command
-  lists, or submit draws.
+  metadata, report native surface/swap-chain handle readiness metadata, and
+  report failure-diagnostic schema metadata, but it is still diagnostic-only in
+  Phase 1 and does not create swap chains, present, execute command lists, or
+  submit draws.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -233,8 +234,8 @@ Current completed foundation:
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
   queue/swap-chain readiness export, diagnostic context create/destroy/export,
   descriptor-heap/command-allocator readiness export, command-list readiness
-  export, failure-diagnostic export, and device-requirement metadata without
-  Python or the GUI.
+  export, native surface/swap-chain readiness export, failure-diagnostic export,
+  and device-requirement metadata without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -443,9 +444,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from command-list readiness diagnostics
-   into native surface/swap-chain handle readiness diagnostics before adding
-   real draw submission.
+5. Extend `GhostRigger.Renderer.D3D12` from native surface/swap-chain handle
+   readiness diagnostics into render-target/back-buffer metadata diagnostics
+   before adding present or real draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
