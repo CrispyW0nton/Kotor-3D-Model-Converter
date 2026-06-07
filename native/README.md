@@ -92,6 +92,11 @@ capabilities, owner-boundary metadata, and an autofit-packet schema placeholder
 while keeping native autofit disabled and requiring the Python Character Studio
 fallback.
 
+`GhostRigger.Windows.MainWindow` is the Phase 1 native window package boundary
+for main-window host services. It is diagnostic-only: it reports package
+capabilities, owner-boundary metadata, and a host-service schema placeholder
+while keeping the Python/Qt main window as the visible shell owner.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes

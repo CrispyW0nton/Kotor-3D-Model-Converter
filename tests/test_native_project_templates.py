@@ -296,6 +296,72 @@ def test_tools_character_builder_exports_diagnostic_c_abi_boundary() -> None:
     assert "gr_tools_character_builder_autofit_packet_schema_json()" in validator
 
 
+def test_windows_main_window_project_scaffold_matches_phase_one_boundary() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Windows.MainWindow"
+        / "GhostRigger.Windows.MainWindow.vcxproj"
+    ).read_text(encoding="utf-8")
+    debug_project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Windows.MainWindow.DEBUG"
+        / "GhostRigger.Windows.MainWindow.DEBUG.vcxproj"
+    ).read_text(encoding="utf-8")
+    readme = (
+        ROOT
+        / "native"
+        / "GhostRigger.Windows.MainWindow"
+        / "README.md"
+    ).read_text(encoding="utf-8")
+
+    assert "GhostRigger.Windows.MainWindow" in solution
+    assert "GhostRigger.Windows.MainWindow.DEBUG" in solution
+    assert "<TargetName>GhostRigger.Windows.MainWindow</TargetName>" in project
+    assert "GHOSTRIGGER_WINDOWS_MAIN_WINDOW_EXPORTS" in project
+    assert "<TargetName>GhostRigger.Windows.MainWindow.DEBUG</TargetName>" in debug_project
+    assert "Owner surface: Main window composition shell" in readme
+    assert "Bridge method: C ABI DLL" in readme
+
+
+def test_windows_main_window_exports_diagnostic_c_abi_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Windows.MainWindow"
+        / "GhostRiggerWindowsMainWindow.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Windows.MainWindow"
+        / "GhostRiggerWindowsMainWindow.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Windows.MainWindow.DEBUG"
+        / "GhostRiggerWindowsMainWindowDEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_windows_main_window_version" in header
+    assert "gr_windows_main_window_capabilities_json" in header
+    assert "gr_windows_main_window_owner_boundary_json" in header
+    assert "gr_windows_main_window_host_service_schema_json" in header
+    assert '"window_package":true' in implementation
+    assert '"owner_surface":"Main window composition shell"' in implementation
+    assert '"bridge_method":"C ABI DLL"' in implementation
+    assert '"native_shell_enabled":false' in implementation
+    assert '"python_fallback_required":true' in implementation
+    assert "windows_main_window_owner_boundary.v1" in implementation
+    assert "windows_main_window_host_service_schema.v1" in implementation
+    assert '"host_module_registered":false' in implementation
+    assert '"visible_shell_mutation_allowed":false' in implementation
+    assert "gr_windows_main_window_host_service_schema_json()" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1568,6 +1634,7 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{8225E261-C091-40A6-8386-D68B6A43FC02}",
         "{B1BC93B7-319E-4D94-95E2-91394E8D9AF9}",
         "{4CCF590C-2F20-4393-9C42-DC45FF2CD8D2}",
+        "{87E36993-4B11-402F-9882-B2D4C0CAE704}",
     }
 
     for guid in debug_project_guids:

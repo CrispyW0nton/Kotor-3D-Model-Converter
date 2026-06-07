@@ -306,6 +306,13 @@ Current completed foundation:
 - `GhostRigger.Tools.CharacterBuilder.DEBUG.exe` validates the Character
   Builder toolbox package ABI, owner-boundary metadata, capabilities export, and
   autofit-packet schema placeholder without Python or the GUI.
+- `GhostRigger.Windows.MainWindow.dll` exists as the Phase 1 native window
+  package boundary for main-window host services. It reports main-window owner
+  metadata, package capabilities, and a host-service schema placeholder while
+  keeping the Python/Qt main window as the visible shell owner.
+- `GhostRigger.Windows.MainWindow.DEBUG.exe` validates the main-window package
+  ABI, owner-boundary metadata, capabilities export, and host-service schema
+  placeholder without Python or the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.

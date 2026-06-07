@@ -114,6 +114,14 @@ TOOLS_CHARACTER_BUILDER_PACKAGE = NativePackageSpec(
     capabilities_export="gr_tools_character_builder_capabilities_json",
 )
 
+WINDOWS_MAIN_WINDOW_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Windows.MainWindow",
+    dll_name="GhostRigger.Windows.MainWindow.dll",
+    env_var="GHOSTRIGGER_WINDOWS_MAIN_WINDOW",
+    version_export="gr_windows_main_window_version",
+    capabilities_export="gr_windows_main_window_capabilities_json",
+)
+
 RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES = (
     "descriptor_allocator_readiness",
     "command_list_readiness",
@@ -308,6 +316,12 @@ def query_tools_character_builder_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(TOOLS_CHARACTER_BUILDER_PACKAGE, search_paths)
+
+
+def query_windows_main_window_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(WINDOWS_MAIN_WINDOW_PACKAGE, search_paths)
 
 
 def renderer_d3d12_guarded_metadata_capabilities(
