@@ -122,10 +122,15 @@ def test_native_host_dependency_table_covers_every_payload_project() -> None:
     assert "kNativeDependencySpecCount" in dependency_header
 
 
-def test_main_py_logs_native_dependency_audit_from_host_environment() -> None:
+def test_native_host_logs_dependency_audit_before_python_startup() -> None:
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
+    host_source = (ROOT / "native" / "GhostRigger.Native" / "main.cpp").read_text(encoding="utf-8")
 
-    assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" in main_source
-    assert "Native DLL dependency audit:" in main_source
-    assert "Native DLL dependency %0*d/%0*d" in main_source
-    assert "_log_native_dependency_audit(log)" in main_source
+    assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" not in main_source
+    assert "_log_native_dependency_audit" not in main_source
+    assert "GhostRigger Native dependency audit" in host_source
+    assert "Native DLL dependency %02zu/%02zu" in host_source
+    assert "log_native_dependency_audit_to_console(*exe_dir)" in host_source
+    assert host_source.index("log_native_dependency_audit_to_console(*exe_dir)") < host_source.index(
+        "return run_embedded_python"
+    )

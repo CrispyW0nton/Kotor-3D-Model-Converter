@@ -158,11 +158,10 @@ Each payload DLL also exports the shared Phase 1.5 resource ABI:
 `gr_python_payload_manifest_json()` returns the embedded
 `GhostRiggerPythonPayload.json` resource and `gr_python_payload_file_count()`
 returns its manifest file count. `GhostRigger.exe` has build-order project
-references to every payload DLL, probes those DLLs before embedded Python
-startup, and publishes the result to `main.py` through
-`GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON`. The startup log console then lists
-each DLL dependency, version ABI, capabilities ABI, and Python payload file
-count before the Qt launcher starts.
+references to every payload DLL and probes those DLLs after the native startup
+log console opens but before embedded Python starts. The host writes each DLL
+dependency, version ABI, capabilities ABI, and Python payload file count
+directly to the native console before `main.py` prints its Python startup log.
 
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and

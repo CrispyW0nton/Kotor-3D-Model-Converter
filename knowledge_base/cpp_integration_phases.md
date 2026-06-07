@@ -402,12 +402,10 @@ Current completed foundation:
   boundary without executing copied Python files.
 - `GhostRigger.exe` has build-order project references to every payload DLL and
   runs a startup dependency audit before embedded Python executes `main.py`.
-  The host loads each DLL, checks version/capability exports, reads the payload
-  file count, and passes a compact audit JSON through
-  `GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON`.
-- `main.py` logs that native dependency cycle in the visible startup log window
-  before Qt startup, including loaded state, version ABI, capabilities ABI, and
-  payload file counts for each DLL.
+  After the native log console opens, the host loads each DLL, checks
+  version/capability exports, reads the payload file count, and writes the
+  audit directly to the console before Python emits the normal `main.py`
+  startup log.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.

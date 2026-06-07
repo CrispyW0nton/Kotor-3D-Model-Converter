@@ -20,7 +20,7 @@ shell launched from ``src/gui/main_window.py``. Both the flag and the
 Tk shell were removed in milestone M3 (T302 deleted the modules,
 T303 trimmed the launcher). Qt is now the only supported front-end.
 """
-import sys, os, logging, atexit, traceback, datetime, argparse, json
+import sys, os, logging, atexit, traceback, datetime, argparse
 
 # ── Path setup ────────────────────────────────────────────────────────────
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -340,63 +340,6 @@ def _precache_themes(app_dir: str, log: logging.Logger) -> None:
     )
 
 
-def _log_native_dependency_audit(log: logging.Logger) -> None:
-    """Log the native host DLL dependency/payload audit when embedded in GhostRigger.exe."""
-    raw = os.environ.get("GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON", "").strip()
-    if not raw:
-        return
-
-    try:
-        audit = json.loads(raw)
-    except Exception as exc:
-        log.warning("Native dependency audit unavailable: %s", exc)
-        return
-
-    dependencies = list(audit.get("dependencies") or [])
-    dependency_count = int(audit.get("dependency_count") or len(dependencies))
-    available_count = int(audit.get("available_count") or 0)
-    payload_ready_count = int(audit.get("payload_ready_count") or 0)
-    log.info(
-        "Native DLL dependency audit: %d/%d loaded, %d/%d Python payload manifests ready.",
-        available_count,
-        dependency_count,
-        payload_ready_count,
-        dependency_count,
-    )
-
-    width = max(2, len(str(max(1, dependency_count))))
-    for index, row in enumerate(dependencies, start=1):
-        name = str(row.get("name") or "(unknown)")
-        dll = str(row.get("dll") or "")
-        version = str(row.get("version") or "unversioned")
-        file_count = int(row.get("python_payload_file_count") or 0)
-        available = bool(row.get("available"))
-        payload_ready = bool(row.get("python_payload_ready"))
-        version_export_present = bool(row.get("version_export_present"))
-        capabilities_export_present = bool(row.get("capabilities_export_present"))
-        reason = str(row.get("reason") or "")
-        state = "OK" if available and payload_ready else "CHECK"
-        if not available:
-            state = "MISSING"
-        elif not payload_ready:
-            state = "NO_PAYLOAD"
-
-        log.info(
-            "Native DLL dependency %0*d/%0*d %-10s %-44s dll=%s version=%s payload_files=%d version_abi=%s capabilities_abi=%s%s",
-            width,
-            index,
-            width,
-            dependency_count,
-            state,
-            name,
-            dll,
-            version,
-            file_count,
-            "yes" if version_export_present else "no",
-            "yes" if capabilities_export_present else "no",
-            f" reason={reason}" if reason else "",
-        )
-
 
 def main(argv: list[str] | None = None):
     args = _parse_args(sys.argv[1:] if argv is None else argv)
@@ -410,8 +353,6 @@ def main(argv: list[str] | None = None):
     log.info(f"Session log: {logfile or 'DISABLED (could not open log file)'}")
     log.info(f"App directory: {_APP_DIR}")
     log.info("=" * 60)
-    _log_native_dependency_audit(log)
-
     # M3/T303 — Qt is the only supported GUI. ``--gui=qt`` is accepted for
     # backward compatibility; ``GHOSTRIGGER_GUI`` is still consulted so
     # existing launch scripts keep working, but any non-``qt`` value is

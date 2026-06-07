@@ -240,10 +240,10 @@ a launcher and native workspace first, not a rewrite of the application.
   the original `src/` files until a later extraction/import path is implemented
   and verified.
 - `GhostRigger.exe` depends on every payload DLL project for build order and
-  probes the DLL set before Python starts. The host checks DLL load state,
-  version/capability exports, and payload file counts, then publishes the audit
-  to `main.py` through `GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON` so the visible
-  startup log cycles through the native DLL dependencies before Qt startup.
+  probes the DLL set before Python starts. After the native log console opens,
+  the host checks DLL load state, version/capability exports, and payload file
+  counts, then writes the audit directly to the console before `main.py` begins
+  printing the Python startup log.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental
