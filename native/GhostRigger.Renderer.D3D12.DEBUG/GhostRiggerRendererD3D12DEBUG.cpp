@@ -836,6 +836,56 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 149;
     }
+    const char* root_signature_json =
+        gr_renderer_d3d12_guarded_root_signature_metadata_json(context);
+    if (std::strstr(
+            root_signature_json,
+            R"("schema":"renderer_d3d12_guarded_root_signature_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded root-signature metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 150;
+    }
+    if (std::strstr(root_signature_json, R"("root_signature_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 151;
+    }
+    if (std::strstr(root_signature_json, R"("root_signature_serialized":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature serialized unexpectedly" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 152;
+    }
+    if (std::strstr(root_signature_json, R"("root_signature_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature was created" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 153;
+    }
+    if (std::strstr(root_signature_json, R"("root_parameter_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature counted root parameters" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 154;
+    }
+    if (std::strstr(root_signature_json, R"("descriptor_range_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature counted descriptor ranges" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 155;
+    }
+    if (std::strstr(root_signature_json, R"("pipeline_state_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature created a PSO" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 156;
+    }
+    if (std::strstr(root_signature_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 157;
+    }
+    if (std::strstr(root_signature_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 root signature enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 158;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

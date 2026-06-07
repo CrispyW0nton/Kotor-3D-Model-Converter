@@ -144,6 +144,7 @@ struct DiagnosticContext {
     bool pipeline_state_readiness_metadata_ready = false;
     bool guarded_shader_bytecode_metadata_ready = false;
     bool shader_reflection_input_layout_metadata_ready = false;
+    bool guarded_root_signature_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1384,6 +1385,44 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_shader_reflection_input_layo
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_root_signature_metadata_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_guarded_root_signature_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"root_signature_ready":false,"root_signature_created":false,"root_parameter_count":0,"descriptor_range_count":0,"draw_submission_enabled":false})";
+    }
+
+    target->guarded_root_signature_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_guarded_root_signature_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"shader_reflection_ready":false,"root_signature_ready":false,)"
+               R"("root_signature_serialized":false,"root_signature_created":false,)"
+               R"("root_signature_version":"D3D_ROOT_SIGNATURE_VERSION_1_1",)"
+               R"("root_parameter_count":0,"descriptor_range_count":0,)"
+               R"("static_sampler_count":0,"expected_root_parameters":[)"
+               R"({"slot":"frame_constants","type":"CBV","register":"b0","space":0},)"
+               R"({"slot":"object_constants","type":"CBV","register":"b1","space":0},)"
+               R"({"slot":"material_constants","type":"CBV","register":"b2","space":0},)"
+               R"({"slot":"texture_table","type":"SRV_TABLE","register":"t0","space":0},)"
+               R"({"slot":"skin_palette","type":"SRV","register":"t8","space":0}],)"
+               R"("expected_static_samplers":[{"slot":"linear_wrap","register":"s0","space":0}],)"
+               R"("actual_root_parameters":[],"actual_descriptor_ranges":[],)"
+               R"("descriptor_tables_ready":false,"root_constants_ready":false,)"
+               R"("root_signature_from_reflection":false,"pipeline_state_created":false,)"
+               R"("draw_calls_recorded":0,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["shader_reflection_missing",)"
+               R"("root_signature_not_serialized","root_signature_missing",)"
+               R"("descriptor_ranges_missing","static_samplers_missing",)"
+               R"("draw_submission_disabled"],"phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1399,7 +1438,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("post_clear_present_readiness","guarded_present_call",)"
         R"("post_present_frame_accounting","draw_list_readiness_metadata",)"
         R"("resource_binding_readiness_metadata","pipeline_state_readiness_metadata",)"
-        R"("guarded_shader_bytecode_metadata","shader_reflection_input_layout_metadata"],)"
+        R"("guarded_shader_bytecode_metadata","shader_reflection_input_layout_metadata",)"
+        R"("guarded_root_signature_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1604,6 +1644,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_shader_bytecode_metadata_ready ? "true" : "false";
     payload += R"(,"shader_reflection_input_layout_metadata_ready":)";
     payload += target->shader_reflection_input_layout_metadata_ready ? "true" : "false";
+    payload += R"(,"guarded_root_signature_metadata_ready":)";
+    payload += target->guarded_root_signature_metadata_ready ? "true" : "false";
     payload += R"(,"diagnostic_frame_index":)";
     payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
     payload += R"(,"diagnostic_presented_frame_count":)";
