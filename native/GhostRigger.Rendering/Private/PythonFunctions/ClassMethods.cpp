@@ -1,0 +1,27 @@
+#include "PythonFunctions/ClassMethods.h"
+
+namespace ghostrigger::phase15::ghostrigger_rendering {
+
+const char* src_core_rendering_hardware_info_hardwarediagnostics_from_dict_line_56_a66bccdf_descriptor_json() {
+    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Rendering","python_module":"src.core.rendering.hardware_info","python_file":"src/core/rendering/hardware_info.py","qualname":"HardwareDiagnostics.from_dict","name":"from_dict","kind":"class_methods","line":56,"end_line":71,"signature":{"args":["cls","values"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+}
+
+const char* src_core_rendering_renderer_capabilities_renderercapabilities_from_dict_line_104_185dfd96_descriptor_json() {
+    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Rendering","python_module":"src.core.rendering.renderer_capabilities","python_file":"src/core/rendering/renderer_capabilities.py","qualname":"RendererCapabilities.from_dict","name":"from_dict","kind":"class_methods","line":104,"end_line":150,"signature":{"args":["cls","values"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+}
+
+const char* src_core_rendering_renderer_settings_renderersettings_from_settings_line_68_2bcc02b5_descriptor_json() {
+    return R"grjson({"schema":"ghostrigger.phase15.python_function_migration.v1","project":"GhostRigger.Rendering","python_module":"src.core.rendering.renderer_settings","python_file":"src/core/rendering/renderer_settings.py","qualname":"RendererSettings.from_settings","name":"from_settings","kind":"class_methods","line":68,"end_line":113,"signature":{"args":["cls","settings"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_status":"migration_stub","python_fallback_required":true,"heavy_cpp_candidate":true})grjson";
+}
+
+const PythonFunctionDescriptorEntry* classmethods_descriptors(std::size_t& count) {
+    static const PythonFunctionDescriptorEntry entries[] = {
+        {"src/core/rendering/hardware_info.py", "HardwareDiagnostics.from_dict", "class_methods", &src_core_rendering_hardware_info_hardwarediagnostics_from_dict_line_56_a66bccdf_descriptor_json},
+        {"src/core/rendering/renderer_capabilities.py", "RendererCapabilities.from_dict", "class_methods", &src_core_rendering_renderer_capabilities_renderercapabilities_from_dict_line_104_185dfd96_descriptor_json},
+        {"src/core/rendering/renderer_settings.py", "RendererSettings.from_settings", "class_methods", &src_core_rendering_renderer_settings_renderersettings_from_settings_line_68_2bcc02b5_descriptor_json},
+    };
+    count = sizeof(entries) / sizeof(entries[0]);
+    return entries;
+}
+
+} // namespace ghostrigger::phase15::ghostrigger_rendering

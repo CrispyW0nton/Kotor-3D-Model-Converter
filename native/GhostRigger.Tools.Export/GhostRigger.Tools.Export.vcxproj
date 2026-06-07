@@ -45,7 +45,19 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="Private\GhostRiggerToolsExport.cpp" /></ItemGroup>
   <ItemGroup><ClInclude Include="Public\GhostRiggerToolsExport.h" /></ItemGroup>
-  <ItemGroup Label="PythonPayload">
+  <ItemGroup Label="PythonFunctionMigration">
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp" />
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp" />
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp" />
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h" />
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h" />
+    <ClInclude Include="Public\PythonFunctions\Properties.h" />
+  </ItemGroup>
+<ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\core\export\__init__.py" />
@@ -58,6 +70,6 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
     <None Include="Python\src\core\characters\character_export_preflight.py" />
     <None Include="Python\src\core\characters\character_export_transaction.py" />
   </ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

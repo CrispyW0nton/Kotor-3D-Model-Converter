@@ -1,0 +1,30 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_mdl {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_mdl_ghostrigger_mdl_reader_ghostriggertrimeshheader_read_read_i32_as_u32_line_104_2570ace6_descriptor_json();
+const char* src_core_mdl_ghostrigger_mdl_reader_ghostriggernode_sanitize_light_header_trim_line_326_465d4bb7_descriptor_json();
+const char* src_core_mdl_mdl_porter_mdlbinarywriter_build_collect_line_276_e22adbf6_descriptor_json();
+const char* src_core_mdl_mdl_porter_mdlbinarywriter_animation_nodes_with_hierarchy_clone_stub_node_line_1227_cdeae576_descriptor_json();
+const char* src_core_mdl_mdl_porter_mdlbinarywriter_animation_nodes_with_hierarchy_visit_line_1269_b7de480b_descriptor_json();
+const char* src_core_mdl_mdl_writer_mdlbinarywriter_prepare_animation_only_state_collect_line_370_edba9dee_descriptor_json();
+const char* src_core_mdl_mdl_writer_mdlbinarywriter_write_collect_line_472_853941a9_descriptor_json();
+const char* src_core_mdl_mdl_writer_mdlbinarywriter_write_node_tree_dfs_line_774_bc015d3d_descriptor_json();
+const char* src_core_mdl_mdl_writer_mdlbinarywriter_animation_nodes_with_hierarchy_clone_stub_node_line_1620_1319cce1_descriptor_json();
+const char* src_core_mdl_mdl_writer_mdlbinarywriter_animation_nodes_with_hierarchy_visit_line_1664_6b486ffb_descriptor_json();
+const char* src_core_mdl_mdl_writer_mdlbinarywriter_write_anim_node_tree_write_depth_first_line_1824_fbbbefed_descriptor_json();
+
+const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_mdl

@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{c7133345-f3bc-fed4-07e7-e93d49ecc2cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{2875025a-d2eb-7add-abda-d8fead1fc946}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{b936f107-dfe7-1327-a375-7b9bc66ac7c7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{57f23fe4-9970-f1f1-c8c8-e6e5f825fb1b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{f79186d7-cc60-023d-45ed-a15f6ea5fab2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows">
+      <UniqueIdentifier>{3ce31b87-f284-4a9f-8ae9-40d518df72d5}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerWindowsLegacyRiggingWindow.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerWindowsLegacyRiggingWindow.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\windows\qt_character_builder_window.py">
+      <Filter>Python\src\gui\windows</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

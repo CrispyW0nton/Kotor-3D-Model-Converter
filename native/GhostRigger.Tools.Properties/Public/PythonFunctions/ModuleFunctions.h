@@ -1,0 +1,42 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_tools_properties {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_modules_module_object_inspector_module_from_input_line_119_11ee3249_descriptor_json();
+const char* src_core_modules_module_object_inspector_git_from_input_line_123_7d1b755f_descriptor_json();
+const char* src_core_modules_module_object_inspector_git_raw_line_128_8526b7f8_descriptor_json();
+const char* src_core_modules_module_object_inspector_field_type_line_133_09abfa8f_descriptor_json();
+const char* src_core_modules_module_object_inspector_coerce_value_line_147_07961272_descriptor_json();
+const char* src_core_modules_module_object_inspector_raw_list_line_159_1f905db2_descriptor_json();
+const char* src_core_modules_module_object_inspector_dataclass_items_line_167_cc0521e0_descriptor_json();
+const char* src_core_modules_module_object_inspector_get_value_line_174_01259d2d_descriptor_json();
+const char* src_core_modules_module_object_inspector_as_float_line_181_72f335b6_descriptor_json();
+const char* src_core_modules_module_object_inspector_object_position_line_188_fc593ffd_descriptor_json();
+const char* src_core_modules_module_object_inspector_object_bearing_line_197_369d0c5b_descriptor_json();
+const char* src_core_modules_module_object_inspector_object_template_line_201_38168292_descriptor_json();
+const char* src_core_modules_module_object_inspector_object_tag_line_205_efba54dc_descriptor_json();
+const char* src_core_modules_module_object_inspector_dataclass_to_raw_line_209_ae3b751c_descriptor_json();
+const char* src_core_modules_module_object_inspector_field_sort_key_line_225_d36ee55f_descriptor_json();
+const char* src_core_modules_module_object_inspector_form_fields_line_248_b4087386_descriptor_json();
+const char* src_core_modules_module_object_inspector_template_index_line_266_62dbf7c3_descriptor_json();
+const char* src_core_modules_module_object_inspector_template_source_line_279_5f7ff19f_descriptor_json();
+const char* src_core_modules_module_object_inspector_make_form_line_284_943b366c_descriptor_json();
+const char* src_core_modules_module_object_inspector_transition_forms_line_310_f6bb69da_descriptor_json();
+const char* src_core_modules_module_object_inspector_build_module_object_inspector_line_342_9ce4bab3_descriptor_json();
+const char* src_core_modules_module_object_inspector_find_form_line_399_a31f82bf_descriptor_json();
+const char* src_core_modules_module_object_inspector_apply_object_form_edit_line_406_3e1234b8_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_tools_properties

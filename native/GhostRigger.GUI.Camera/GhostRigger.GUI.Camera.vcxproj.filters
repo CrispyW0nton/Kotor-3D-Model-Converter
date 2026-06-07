@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{29d9a167-a052-5941-a8f7-fa0f38978d79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{0e0406bb-af82-7652-0e3c-5b39d4415aab}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{c1bb8727-2a94-3ec7-1b99-c259bddcd6f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{51a5deea-d9fb-4c61-1e46-7b232b46507b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{41095937-b596-685e-2bbd-b7951d870c91}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{f8ff664c-107d-4c74-c062-086e7230ac50}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{d43fc936-900c-43e2-d7e8-a82c33b0af49}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\camera">
+      <UniqueIdentifier>{d096d8e7-1ffb-5414-bb3e-da6538a2062e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerGUICamera.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerGUICamera.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\camera\__init__.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\arcball_camera.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_controller.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_gizmo_renderer.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_manager.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_math.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_model.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_overlays.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_picker.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_presets.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_render_settings.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_rig.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_selection.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_target.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\camera_viewport_adapter.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\frame_renderer.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\render_manifest.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+    <None Include="Python\src\gui\camera\render_output.py">
+      <Filter>Python\src\gui\camera</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

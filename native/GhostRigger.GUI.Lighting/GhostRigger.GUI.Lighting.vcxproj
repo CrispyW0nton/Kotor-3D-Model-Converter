@@ -15,7 +15,11 @@
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="Private\GhostRiggerGUILighting.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGUILighting.h" /></ItemGroup>
-  <ItemGroup Label="PythonPayload">
+  <ItemGroup Label="PythonFunctionMigration">
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
+  </ItemGroup>
+<ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\gui\lighting\__init__.py" />
@@ -55,5 +59,6 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\gui\lighting\shader_complexity.py" />
     <None Include="Python\src\gui\lighting\uv_atlas_generator.py" />
     <None Include="Python\src\gui\lighting\uv_channel_info.py" />
-  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  </ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

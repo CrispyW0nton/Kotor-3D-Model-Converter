@@ -1,15 +1,111 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{7CC3F1DC-0B6A-4F41-9663-BE78C7BB3A78}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="Private">
+      <UniqueIdentifier>{cd544343-23bd-5d2b-41e1-f48184761cc2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{8E453865-C1D0-40BE-8C0E-61677C2F9E2D}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{b31086ef-7d81-dfb9-dfe3-e2406e9f6223}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{542a8c23-dd00-5ffe-8154-7a84d93803ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{cb397456-fcbc-03f1-b2ae-9e46863ff869}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{2ed558f1-a8e7-863b-cfe7-2635687b94fa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{a5c4f8a3-e7b2-9cce-9af9-6fab7aca2f70}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{07a61b96-105a-bf59-a421-a880a9f3d67d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\assets">
+      <UniqueIdentifier>{7d898b27-8f60-f83c-ebb2-4f2b3466c4f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\ports">
+      <UniqueIdentifier>{78860c3c-0374-5320-c8f4-19003aa73168}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\resources">
+      <UniqueIdentifier>{cff78231-6adb-731b-536a-8aa36bc8bb79}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\resources">
+      <UniqueIdentifier>{d91e0a98-d2e3-338b-2349-e058e59cacce}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerRuntimeSharedResources.cpp"><Filter>Source Files</Filter></ClCompile></ItemGroup>
-  <ItemGroup><ClInclude Include="GhostRiggerRuntimeSharedResources.h"><Filter>Header Files</Filter></ClInclude></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerRuntimeSharedResources.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerRuntimeSharedResources.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\resources\__init__.py">
+      <Filter>Python\src\core\resources</Filter>
+    </None>
+    <None Include="Python\src\core\resources\game_resource_provider.py">
+      <Filter>Python\src\core\resources</Filter>
+    </None>
+    <None Include="Python\src\resources\__init__.py">
+      <Filter>Python\src\resources</Filter>
+    </None>
+    <None Include="Python\src\resources\game_detector.py">
+      <Filter>Python\src\resources</Filter>
+    </None>
+    <None Include="Python\src\resources\game_library.py">
+      <Filter>Python\src\resources</Filter>
+    </None>
+    <None Include="Python\src\core\assets\resource_manager.py">
+      <Filter>Python\src\core\assets</Filter>
+    </None>
+    <None Include="Python\src\core\assets\override_layer.py">
+      <Filter>Python\src\core\assets</Filter>
+    </None>
+    <None Include="Python\src\core\ports\resources.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\ports\textures.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
 </Project>

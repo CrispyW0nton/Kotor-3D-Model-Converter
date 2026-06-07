@@ -1,23 +1,99 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{1B7F74BC-1E28-45E5-B41A-2371890438D2}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="Private">
+      <UniqueIdentifier>{c74326cc-f196-b75d-da54-0fbdbf883be0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{090E2209-3E81-4C49-933E-E74CC8407EAA}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{de7f7782-ab0a-a2fa-dace-0f8350342108}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{03d4914f-28a8-9c6a-7b9f-a613cde90245}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{ac0c47f5-efda-595c-d099-61a505710515}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{794edffd-2361-f1dd-51ee-cf1f8b59328a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{ea815f2f-88df-11d0-f115-162be5916c8e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{4e1784bd-930a-c938-a19d-2af573e4173e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\rendering">
+      <UniqueIdentifier>{0f314bec-a487-251a-08ac-df4b50c79131}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{c5e5bf61-3829-75c8-1588-5d3e1e3d5d47}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\diagnostics">
+      <UniqueIdentifier>{c05a2d1b-a7f1-1f9c-80f0-b3a0d4e39efa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\rendering">
+      <UniqueIdentifier>{bacb9211-0b2b-a18f-d7a5-5ad83ca1d15a}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="GhostRiggerNativeCoreDiagnostics.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Private\GhostRiggerNativeCoreDiagnostics.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="GhostRiggerNativeCoreDiagnostics.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Public\GhostRiggerNativeCoreDiagnostics.h">
+      <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\diagnostics\__init__.py">
+      <Filter>Python\src\core\diagnostics</Filter>
+    </None>
+    <None Include="Python\src\core\diagnostics\diagnostics.py">
+      <Filter>Python\src\core\diagnostics</Filter>
+    </None>
+    <None Include="Python\src\core\diagnostics\module_reference_safety.py">
+      <Filter>Python\src\core\diagnostics</Filter>
+    </None>
+    <None Include="Python\src\core\diagnostics\validation_service.py">
+      <Filter>Python\src\core\diagnostics</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\gpu_diagnostics_config.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\gpu_diagnostics_records.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\adapters\rendering\gpu_diagnostics_exports.py">
+      <Filter>Python\src\adapters\rendering</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
   </ItemGroup>
 </Project>

@@ -1,10 +1,16 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{AF395806-2D58-4E8A-8577-ADE4B2C8D9C2}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="Private">
+      <UniqueIdentifier>{770e19d7-2223-f298-766a-45921ece7aa1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{fcc57516-f5cf-85f0-bb16-67feafc71cef}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
-  <ItemGroup><ClCompile Include="GhostRiggerRuntimeSharedDescriptorsDEBUG.cpp"><Filter>Source Files</Filter></ClCompile></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerRuntimeSharedDescriptorsDEBUG.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+  </ItemGroup>
 </Project>

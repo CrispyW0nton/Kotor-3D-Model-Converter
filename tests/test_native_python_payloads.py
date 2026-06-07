@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -166,3 +167,137 @@ def test_native_projects_use_public_private_python_layout() -> None:
         assert "ClInclude Include=\"Public\\" in vcxproj
         assert "ClCompile Include=\"Private\\" in vcxproj
         assert "None Include=\"Python\\" in vcxproj
+
+
+def test_native_projects_have_python_function_migration_sources() -> None:
+    category_names = {
+        "async_instance_methods": "AsyncInstanceMethods",
+        "async_module_functions": "AsyncModuleFunctions",
+        "async_nested_functions": "AsyncNestedFunctions",
+        "class_methods": "ClassMethods",
+        "instance_methods": "InstanceMethods",
+        "module_functions": "ModuleFunctions",
+        "nested_functions": "NestedFunctions",
+        "properties": "Properties",
+        "static_methods": "StaticMethods",
+    }
+
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        vcxproj = (project_dir / f"{project}.vcxproj").read_text(encoding="utf-8")
+        python_root = project_dir / "Python"
+
+        expected_categories: set[str] = set()
+        python_function_count = 0
+        for source in python_root.rglob("*.py"):
+            tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+            parents: dict[ast.AST, ast.AST] = {}
+            for parent in ast.walk(tree):
+                for child in ast.iter_child_nodes(parent):
+                    parents[child] = parent
+
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                python_function_count += 1
+                is_async = isinstance(node, ast.AsyncFunctionDef)
+                ancestors: list[ast.AST] = []
+                parent = parents.get(node)
+                while parent is not None:
+                    ancestors.append(parent)
+                    parent = parents.get(parent)
+                decorators = {
+                    getattr(
+                        decorator.func if isinstance(decorator, ast.Call) else decorator,
+                        "id",
+                        getattr(
+                            decorator.func if isinstance(decorator, ast.Call) else decorator,
+                            "attr",
+                            "",
+                        ),
+                    )
+                    for decorator in node.decorator_list
+                }
+                if any(isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef)) for parent in ancestors):
+                    expected_categories.add("async_nested_functions" if is_async else "nested_functions")
+                elif any(isinstance(parent, ast.ClassDef) for parent in ancestors):
+                    if "property" in decorators or "setter" in decorators or "deleter" in decorators:
+                        expected_categories.add("properties")
+                    elif "staticmethod" in decorators:
+                        expected_categories.add("static_methods")
+                    elif "classmethod" in decorators:
+                        expected_categories.add("class_methods")
+                    else:
+                        expected_categories.add("async_instance_methods" if is_async else "instance_methods")
+                else:
+                    expected_categories.add("async_module_functions" if is_async else "module_functions")
+
+        public_root = project_dir / "Public" / "PythonFunctions"
+        private_root = project_dir / "Private" / "PythonFunctions"
+        public_headers = sorted(public_root.glob("*.h")) if public_root.exists() else []
+        private_sources = sorted(private_root.glob("*.cpp")) if private_root.exists() else []
+
+        if python_function_count == 0:
+            assert not public_headers
+            assert not private_sources
+            assert '<ItemGroup Label="PythonFunctionMigration">' not in vcxproj
+            continue
+
+        expected_file_names = {f"{category_names[category]}.h" for category in expected_categories}
+        expected_source_names = {f"{category_names[category]}.cpp" for category in expected_categories}
+        assert {path.name for path in public_headers} == expected_file_names
+        assert {path.name for path in private_sources} == expected_source_names
+        assert '<ItemGroup Label="PythonFunctionMigration">' in vcxproj
+        assert "PythonFunctions\\**" not in vcxproj
+        assert "pyfn_" not in vcxproj
+        assert not list(public_root.rglob("fn_*.h"))
+        assert not list(private_root.rglob("fn_*.cpp"))
+
+        descriptor_count = 0
+        for private_source in private_sources:
+            source_text = private_source.read_text(encoding="utf-8")
+            descriptor_count += source_text.count('"schema":"ghostrigger.phase15.python_function_migration.v1"')
+            assert "_descriptor_json()" in source_text
+            assert "PythonFunctionDescriptorEntry entries[]" in source_text
+            source_item = str(private_source.relative_to(project_dir)).replace("/", "\\")
+            assert f'<ClCompile Include="{source_item}" />' in vcxproj
+        assert descriptor_count == python_function_count
+
+        for public_header in public_headers:
+            header_text = public_header.read_text(encoding="utf-8")
+            assert "PythonFunctionDescriptorEntry" in header_text
+            assert "_descriptor_json();" in header_text
+            header_item = str(public_header.relative_to(project_dir)).replace("/", "\\")
+            assert f'<ClInclude Include="{header_item}" />' in vcxproj
+
+
+def test_native_visual_studio_projects_do_not_use_wildcard_items() -> None:
+    wildcard_pattern = re.compile(r'Include="[^"]*[*]')
+    for project_file in (ROOT / "native").rglob("*.vcxproj"):
+        text = project_file.read_text(encoding="utf-8")
+        assert "PythonFunctions\\**" not in text
+        assert not wildcard_pattern.search(text), project_file
+
+
+def test_native_visual_studio_filters_expose_public_private_python_folders() -> None:
+    ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
+    for project_file in (ROOT / "native").glob("GhostRigger*/GhostRigger*.vcxproj"):
+        project_dir = project_file.parent
+        filters_file = project_file.with_suffix(project_file.suffix + ".filters")
+        assert filters_file.exists(), filters_file
+
+        filters_tree = ET.parse(filters_file)
+        filters = {
+            node.attrib["Include"]
+            for node in filters_tree.findall(".//msb:Filter", ns)
+            if "Include" in node.attrib
+        }
+        project_text = project_file.read_text(encoding="utf-8")
+
+        if "ClInclude Include=\"Public\\" in project_text or (project_dir / "Public").is_dir():
+            assert "Public" in filters
+        if "ClCompile Include=\"Private\\" in project_text or (project_dir / "Private").is_dir():
+            assert "Private" in filters
+        if "None Include=\"Python\\" in project_text or (project_dir / "Python").is_dir():
+            assert "Python" in filters

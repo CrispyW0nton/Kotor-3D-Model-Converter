@@ -15,7 +15,13 @@
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
   <ItemGroup><ClCompile Include="Private\GhostRiggerAdaptersGPU.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerAdaptersGPU.h" /></ItemGroup>
-  <ItemGroup Label="PythonPayload">
+  <ItemGroup Label="PythonFunctionMigration">
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
+  </ItemGroup>
+<ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\adapters\gpu\__init__.py" />
@@ -24,5 +30,6 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\adapters\gpu\moderngl_context.py" />
     <None Include="Python\src\adapters\gpu\moderngl_runtime.py" />
     <None Include="Python\src\adapters\gpu\viewport_probe.py" />
-  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
+  </ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

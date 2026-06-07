@@ -1,0 +1,52 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_game {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_game_game_library_ext_tlkreader_init_line_167_2f3cdaf4_descriptor_json();
+const char* src_core_game_game_library_ext_tlkreader_load_line_172_76724e95_descriptor_json();
+const char* src_core_game_game_library_ext_tlkreader_parse_line_183_18ef6c07_descriptor_json();
+const char* src_core_game_game_library_ext_tlkreader_get_line_217_f3a16685_descriptor_json();
+const char* src_core_game_game_library_ext_tlkreader_len_line_225_640e6bea_descriptor_json();
+const char* src_core_game_game_library_ext_tlkreader_repr_line_230_f271490e_descriptor_json();
+const char* src_core_game_game_library_ext_gffreader_parse_line_268_943754d3_descriptor_json();
+const char* src_core_game_game_library_ext_gffreader_read_struct_line_300_eb335a17_descriptor_json();
+const char* src_core_game_game_library_ext_gffreader_read_field_line_341_d4df73a7_descriptor_json();
+const char* src_core_game_kotor_install_bifindex_init_line_96_e3f5caa3_descriptor_json();
+const char* src_core_game_kotor_install_bifindex_read_line_114_0d60c198_descriptor_json();
+const char* src_core_game_kotor_install_erfindex_init_line_143_5d938732_descriptor_json();
+const char* src_core_game_kotor_install_erfindex_read_line_171_dc98b23d_descriptor_json();
+const char* src_core_game_kotor_install_erfindex_list_resrefs_line_184_2c017a44_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_init_line_207_57ceb3a6_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_index_key_line_226_2f3fe143_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_find_case_insensitive_line_274_f943828e_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_index_texture_erfs_line_291_6286ce79_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_index_override_line_314_6fc556f2_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_get_line_339_70b9faa4_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_get_mdl_line_372_3f15db89_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_get_mdx_line_375_65bb5366_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_get_texture_line_378_fc7172f8_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_get_txi_line_385_6e34ec67_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_list_resrefs_line_397_53b3eb1b_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_list_models_line_414_0bcbeab2_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_list_textures_line_417_bb7d581d_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_has_resource_line_420_bd25a366_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_load_model_line_432_191d1877_descriptor_json();
+const char* src_core_game_kotor_install_kotorinstallation_load_texture_image_line_449_8915f60b_descriptor_json();
+const char* src_core_game_pykotor_mdl_io_fix_mdxdataoffsetzero_new_line_61_4137355e_descriptor_json();
+const char* src_core_game_pykotor_mdl_io_fix_mdxdataoffsetzero_eq_line_64_f90d326b_descriptor_json();
+const char* src_core_game_pykotor_mdl_io_fix_mdxdataoffsetzero_hash_line_69_6dfe63d9_descriptor_json();
+
+const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_game

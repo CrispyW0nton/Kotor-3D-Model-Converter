@@ -1,0 +1,39 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_geometry {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_geometry_model_data_modeltaxonomy_display_name_line_181_50864de3_descriptor_json();
+const char* src_core_geometry_model_data_charactermode_display_name_line_256_6ffae90b_descriptor_json();
+const char* src_core_geometry_model_data_charactermode_icon_key_line_261_6d6ba368_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_mesh_line_861_87a3e698_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_skin_line_863_0c5e9483_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_dangly_line_865_895122c9_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_light_line_867_d6b188e4_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_saber_line_869_72a287f1_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_emitter_line_871_65c50406_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_reference_line_873_95986679_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_aabb_line_875_65efb8e0_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_is_dummy_line_877_b7087822_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_texture_clean_line_881_50118ff6_descriptor_json();
+const char* src_core_geometry_model_data_modelnode_type_label_line_895_1a0757ed_descriptor_json();
+const char* src_core_geometry_model_data_resolvedanimationslot_found_line_1377_b2bb6dd4_descriptor_json();
+const char* src_core_geometry_model_data_kotormodel_nodes_line_1417_359eea1e_descriptor_json();
+const char* src_core_geometry_model_data_characterscene_is_empty_line_1998_6546bb91_descriptor_json();
+const char* src_core_geometry_model_data_characterscene_all_models_line_2003_6f8cd0df_descriptor_json();
+const char* src_core_geometry_model_data_characterscene_head_model_line_2012_c7bb6aa8_descriptor_json();
+const char* src_core_geometry_model_data_characterscene_body_model_line_2016_061967db_descriptor_json();
+
+const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_geometry

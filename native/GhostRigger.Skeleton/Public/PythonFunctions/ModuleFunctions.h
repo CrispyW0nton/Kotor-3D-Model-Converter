@@ -1,0 +1,45 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_skeleton {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_skeleton_skeleton_builder_bind_imported_meshes_to_skeleton_line_42_8c21e061_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_candidate_bones_line_205_45148d86_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_is_deform_candidate_line_220_5bb32fff_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_imported_mesh_payloads_line_239_7d29b1b1_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_bone_slots_line_252_dd3f0e52_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_weights_for_vertex_line_266_3b24781c_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_weights_for_vertex_with_donor_line_289_465d2469_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_build_donor_vertex_index_line_307_7977e6fa_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_map_donor_influences_to_slots_line_350_61c60ca2_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_nearest_donor_vertex_line_379_543fc617_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_normalize_influences_line_393_f4394482_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_compact_skin_bone_map_to_used_influences_line_419_b8b64074_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_used_influence_indices_line_487_a4a04898_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_filter_parallel_list_line_504_ccc05097_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_mesh_binding_report_line_516_49dd1ef2_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_transform_point_line_574_29b0bdb7_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_quat_rotate_vec_line_587_b17df509_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_make_skin_node_line_606_36ea11ae_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_child_positions_line_613_f85807df_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_node_world_line_628_75cafaa7_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_has_vertices_line_643_c4d17845_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_is_non_deform_hook_line_647_91e659ca_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_vec3_line_652_05721302_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_quat_line_657_7e1d187a_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_distance_line_664_46b727fc_descriptor_json();
+const char* src_core_skeleton_skeleton_builder_distance_point_segment_line_668_6562c54f_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_skeleton

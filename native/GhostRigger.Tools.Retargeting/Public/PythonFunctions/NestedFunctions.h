@@ -1,0 +1,29 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_tools_retargeting {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_retargeting_fbx_exporter_validate_ground_truth_visit_line_422_084fe0e3_descriptor_json();
+const char* src_core_retargeting_fbx_importer_topological_nodes_visit_line_526_fc7691aa_descriptor_json();
+const char* src_core_retargeting_retarget_preview_export_export_retarget_preview_override_writer_line_112_f70d9a3b_descriptor_json();
+const char* src_core_retargeting_retarget_preview_export_export_retarget_preview_override_verifier_line_151_ace060b3_descriptor_json();
+const char* src_core_retargeting_skeleton_aligner_topological_sort_visit_line_122_cfa7e074_descriptor_json();
+const char* src_core_retargeting_skeleton_aligner_align_target_skeleton_to_source_record_line_318_919b9ae6_descriptor_json();
+const char* src_core_retargeting_source_skeleton_audit_check_acyclic_visit_line_146_a9d75fe8_descriptor_json();
+const char* src_core_retargeting_ue_fbx_exporter_export_kotor_to_unreal_preview_writer_line_77_4312eaa2_descriptor_json();
+const char* src_core_retargeting_ue_fbx_exporter_export_kotor_to_unreal_preview_verifier_line_87_9a6ab22b_descriptor_json();
+const char* src_core_retargeting_ue_fbx_exporter_export_kotor_to_unreal_preview_manifest_writer_line_101_467a4d6c_descriptor_json();
+
+const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_tools_retargeting

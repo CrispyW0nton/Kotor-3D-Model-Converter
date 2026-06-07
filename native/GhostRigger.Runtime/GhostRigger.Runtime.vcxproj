@@ -117,12 +117,19 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     <ClInclude Include="Public\GhostRiggerDeviceResources.h" />
     <ClInclude Include="Public\GhostRigger.Runtime.h" />
   </ItemGroup>
-  <ItemGroup Label="PythonPayload">
+  <ItemGroup Label="PythonFunctionMigration">
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
+  </ItemGroup>
+<ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\__init__.py" />
     <None Include="Python\src\core\__init__.py" />
     <None Include="Python\src\core\qt_core.py" />
-  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  </ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

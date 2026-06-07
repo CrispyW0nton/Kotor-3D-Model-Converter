@@ -1,0 +1,54 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_ipc {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_ipc_client_ipc_call_line_40_ac90d3de_descriptor_json();
+const char* src_ipc_client_marshal_to_gui_thread_line_85_eefdf9c9_descriptor_json();
+const char* src_ipc_client_ipc_call_async_line_99_4660fcf5_descriptor_json();
+const char* src_ipc_client_notify_blueprint_saved_line_126_8c8df0fa_descriptor_json();
+const char* src_ipc_client_refresh_gmodular_viewport_line_141_253985ae_descriptor_json();
+const char* src_ipc_client_show_ghostrigger_panel_line_155_2f579067_descriptor_json();
+const char* src_ipc_client_open_ghostrigger_tool_line_165_bcc51ebf_descriptor_json();
+const char* src_ipc_client_run_ghostrigger_viewport_command_line_175_dd1028a5_descriptor_json();
+const char* src_ipc_client_get_ghostrigger_state_line_187_394ecd14_descriptor_json();
+const char* src_ipc_client_set_ghostrigger_appearance_line_192_97c61399_descriptor_json();
+const char* src_ipc_client_run_ghostrigger_animation_command_line_202_1ae1832b_descriptor_json();
+const char* src_ipc_client_search_ghostrigger_library_line_224_33f2c865_descriptor_json();
+const char* src_ipc_client_select_ghostrigger_library_asset_line_243_223f447c_descriptor_json();
+const char* src_ipc_client_search_ghostrigger_resources_line_264_3fdb730a_descriptor_json();
+const char* src_ipc_client_select_ghostrigger_resource_line_280_4ceba30f_descriptor_json();
+const char* src_ipc_client_new_ghostrigger_scene_line_299_d0f6d152_descriptor_json();
+const char* src_ipc_client_open_ghostrigger_scene_line_309_edf51d3c_descriptor_json();
+const char* src_ipc_client_save_ghostrigger_scene_line_319_4741e83c_descriptor_json();
+const char* src_ipc_client_create_ghostrigger_scene_camera_line_329_1ba6a7af_descriptor_json();
+const char* src_ipc_client_create_ghostrigger_scene_light_line_339_03dc3d63_descriptor_json();
+const char* src_ipc_client_select_ghostrigger_scene_object_line_349_13fb2547_descriptor_json();
+const char* src_ipc_client_set_ghostrigger_scene_object_visibility_line_359_9b460b02_descriptor_json();
+const char* src_ipc_client_run_ghostrigger_scene_object_command_line_374_1c524389_descriptor_json();
+const char* src_ipc_client_set_ghostrigger_scene_object_properties_line_388_9921c09a_descriptor_json();
+const char* src_ipc_client_select_ghostrigger_module_mesh_line_401_9d8fad27_descriptor_json();
+const char* src_ipc_client_set_ghostrigger_renderer_backend_line_411_3cbfb425_descriptor_json();
+const char* src_ipc_client_set_ghostrigger_dummy_helpers_line_424_07b929e8_descriptor_json();
+const char* src_ipc_client_set_ghostrigger_light_helpers_line_434_55a013bf_descriptor_json();
+const char* src_ipc_client_select_ghostrigger_helper_line_447_383b7092_descriptor_json();
+const char* src_ipc_client_capture_ghostrigger_viewport_line_457_7b4c3cf5_descriptor_json();
+const char* src_ipc_client_open_script_in_scripter_line_467_1d360a0f_descriptor_json();
+const char* src_ipc_client_open_dlg_in_scripter_line_481_e4fd79c3_descriptor_json();
+const char* src_ipc_client_ping_program_line_495_d03614ea_descriptor_json();
+const char* src_ipc_client_ping_all_line_514_d2ea7cd2_descriptor_json();
+const char* src_ipc_client_log_result_line_526_623eb031_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_ipc

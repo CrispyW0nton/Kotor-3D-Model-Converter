@@ -1,0 +1,29 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_renderer_pygfx {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_adapters_rendering_pygfx_core_mesh_cache_pygfxmeshcache_build_geometric_boundary_edges_key_line_966_9d6153f3_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_create_gizmo_line_pipeline_create_pipeline_line_1086_a828ac49_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_draw_meshes_build_queue_line_1324_4c33a38f_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_draw_meshes_draw_pass_line_1420_012d61e7_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_mesh_model_matrix_stored_world_matrix_line_1576_96b0e67d_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_ensure_light_resource_score_line_1774_8290fbca_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_draw_light_overlays_draw_batches_line_1913_228e0eb1_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_draw_skeleton_overlay_draw_buffer_line_2042_17a991c9_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_renderer_wgpurenderer_get_or_upload_skeleton_resource_make_buffer_line_2092_22813374_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_resources_wgpuresourcecache_build_geometric_boundary_edges_key_line_275_e4f6976e_descriptor_json();
+
+const PythonFunctionDescriptorEntry* nestedfunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_renderer_pygfx

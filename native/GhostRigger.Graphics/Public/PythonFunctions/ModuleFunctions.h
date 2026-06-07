@@ -1,0 +1,46 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_graphics {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_graphics_tpc_is_tpc_data_line_21_56991bd7_descriptor_json();
+const char* src_core_graphics_tpc_is_tpc_file_line_103_58c8812d_descriptor_json();
+const char* src_core_graphics_tpc_decompress_dxt1_bytes_line_113_56e741e0_descriptor_json();
+const char* src_core_graphics_tpc_decompress_dxt5_bytes_line_159_f508a425_descriptor_json();
+const char* src_core_graphics_tpc_ensure_bottom_up_line_199_d5a36106_descriptor_json();
+const char* src_core_graphics_tpc_load_tpc_bytes_line_257_03436037_descriptor_json();
+const char* src_core_graphics_tpc_extract_txi_from_tpc_line_345_370af0a0_descriptor_json();
+const char* src_core_graphics_tpc_load_tpc_bytes_legacy_line_369_59664c39_descriptor_json();
+const char* src_core_graphics_tpc_load_tpc_bytes_legacy_inner_line_398_1578225a_descriptor_json();
+const char* src_core_graphics_tpc_extract_txi_from_tpc_legacy_line_585_b7d431dc_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_normalize_line_45_c928b456_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_clean_tex_name_line_49_5185b106_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_lerp_line_58_ffc177cb_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_uwrap_global_line_61_e4284d38_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_edge_has_seam_global_line_68_d7b46ead_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_vflip_nontiled_line_75_3eb9b7bb_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_vflip_tiled_line_79_d5112866_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_is_tpc_data_line_85_5f5162ea_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_is_tpc_file_line_143_542723f6_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_decompress_dxt1_bytes_line_153_bea423c9_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_decompress_dxt5_bytes_line_189_48a9f687_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_load_tpc_bytes_line_228_89ab9f25_descriptor_json();
+const char* src_core_graphics_tpc_render_utils_paste_textured_triangle_line_414_d4547733_descriptor_json();
+const char* src_core_graphics_txi_parse_txi_string_line_19_90baf54b_descriptor_json();
+const char* src_core_graphics_txi_extract_alpha_test_from_tpc_line_285_052c2d77_descriptor_json();
+const char* src_core_graphics_txi_apply_txi_to_node_line_319_913a6ad9_descriptor_json();
+const char* src_core_graphics_txi_compute_flipbook_uv_line_413_476971ae_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_graphics

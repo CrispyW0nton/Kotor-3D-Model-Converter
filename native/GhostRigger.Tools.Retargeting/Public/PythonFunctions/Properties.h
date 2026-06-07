@@ -1,0 +1,33 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_tools_retargeting {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_retargeting_coordinate_basisconversion_change_of_basis_line_37_338000fa_descriptor_json();
+const char* src_core_retargeting_mixamo_source_adapter_mixamosourceadapterresult_mapped_line_90_8f9062d9_descriptor_json();
+const char* src_core_retargeting_mixamo_source_adapter_mixamosourceadapterresult_ignored_line_94_eae179fa_descriptor_json();
+const char* src_core_retargeting_mixamo_source_adapter_mixamosourceadapterresult_unmapped_line_98_ce2da706_descriptor_json();
+const char* src_core_retargeting_retarget_calibration_retargetcalibrationreport_success_line_68_e1910ba5_descriptor_json();
+const char* src_core_retargeting_retarget_frame_audit_retargetframeaudit_success_line_55_37382967_descriptor_json();
+const char* src_core_retargeting_retarget_preview_retargetpreviewaudit_passed_line_77_4eaea28d_descriptor_json();
+const char* src_core_retargeting_source_animation_sourceskeletonclip_node_names_line_181_6364f90b_descriptor_json();
+const char* src_core_retargeting_target_skeleton_audit_targetskeletonaudit_success_line_38_fe34433d_descriptor_json();
+const char* src_core_retargeting_ue5_source_adapter_ue5sourceadapterresult_mapped_line_71_45bfdd64_descriptor_json();
+const char* src_core_retargeting_ue5_source_adapter_ue5sourceadapterresult_dropped_line_75_4d9b2022_descriptor_json();
+const char* src_core_retargeting_ue5_source_adapter_ue5sourceadapterresult_collapsed_line_79_a1e2431e_descriptor_json();
+const char* src_core_retargeting_ue5_source_adapter_ue5sourceadapterresult_unmapped_line_83_dd059e0b_descriptor_json();
+const char* src_core_retargeting_unreal_target_skeleton_unrealtargetskeleton_node_names_line_47_f38e0b2a_descriptor_json();
+
+const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_tools_retargeting

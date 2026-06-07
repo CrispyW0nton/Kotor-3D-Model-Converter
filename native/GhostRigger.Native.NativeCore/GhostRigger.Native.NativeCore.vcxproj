@@ -115,12 +115,17 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
   <ItemGroup>
     <ClInclude Include="Public\GhostRigger.Native.NativeCore.h" />
   </ItemGroup>
-  <ItemGroup Label="PythonPayload">
+  <ItemGroup Label="PythonFunctionMigration">
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
+  </ItemGroup>
+<ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\adapters\__init__.py" />
     <None Include="Python\src\adapters\native_core\__init__.py" />
     <None Include="Python\src\adapters\native_core\package_registry.py" />
-  </ItemGroup>  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  </ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

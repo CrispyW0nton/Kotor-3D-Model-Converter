@@ -1,0 +1,39 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_renderer_pygfx {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_adapters_rendering_pygfx_core_backend_env_gpu_runtime_imported_line_26_47280230_descriptor_json();
+const char* src_adapters_rendering_pygfx_core_backend_env_prepare_pygfx_wgpu_environment_line_32_ef7d19d9_descriptor_json();
+const char* src_adapters_rendering_wgpu_core_shared_probe_script_line_73_458ebad6_descriptor_json();
+const char* src_adapters_rendering_wgpu_renderer_exports_getattr_line_35_3a809ba4_descriptor_json();
+const char* src_adapters_rendering_wgpu_renderer_exports_dir_line_45_972c5fdd_descriptor_json();
+const char* src_core_rendering_wgpu_shaders_load_mesh_shader_line_6_2d673ba0_descriptor_json();
+const char* src_core_rendering_wgpu_shaders_load_skinned_mesh_shader_line_14_843f9a71_descriptor_json();
+const char* src_core_rendering_wgpu_shared_rgb_float_line_127_9d78f9a4_descriptor_json();
+const char* src_core_rendering_wgpu_shared_blend_rgb_line_131_eeb9479a_descriptor_json();
+const char* src_core_rendering_wgpu_shared_relative_luma_line_136_ac138b90_descriptor_json();
+const char* src_core_rendering_wgpu_shared_rgba8_line_141_bd9365fb_descriptor_json();
+const char* src_core_rendering_wgpu_shared_point_distance_line_145_c54244b6_descriptor_json();
+const char* src_core_rendering_wgpu_shared_joint_marker_segments_line_149_bb4dab87_descriptor_json();
+const char* src_core_rendering_wgpu_shared_srgb_channel_to_linear_line_162_43d6320e_descriptor_json();
+const char* src_core_rendering_wgpu_shared_srgb_to_linear_line_169_cbc572d3_descriptor_json();
+const char* src_core_rendering_wgpu_shared_format_is_srgb_line_176_977aa9e8_descriptor_json();
+const char* src_core_rendering_wgpu_shared_mat4_perspective_wgpu_line_180_30daf050_descriptor_json();
+const char* src_core_rendering_wgpu_shared_mat4_lookat_line_193_5cb75700_descriptor_json();
+const char* src_core_rendering_wgpu_shared_mat4_tobytes_line_222_f9135a93_descriptor_json();
+const char* src_core_rendering_wgpu_shared_adapter_info_dict_line_228_dcc235f2_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_renderer_pygfx

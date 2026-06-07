@@ -1,0 +1,53 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_gamelibrary {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_resources_game_library_resourceentry_read_line_186_03bea365_descriptor_json();
+const char* src_resources_game_library_keybifreader_init_line_205_cf570382_descriptor_json();
+const char* src_resources_game_library_keybifreader_load_line_214_75fa6781_descriptor_json();
+const char* src_resources_game_library_keybifreader_get_line_391_63f58f54_descriptor_json();
+const char* src_resources_game_library_keybifreader_list_type_line_419_6f3477e8_descriptor_json();
+const char* src_resources_game_library_keybifreader_list_all_types_line_441_fbf76cca_descriptor_json();
+const char* src_resources_game_library_keybifreader_list_all_resources_line_445_55202d73_descriptor_json();
+const char* src_resources_game_library_erfreader_init_line_458_20e07f2c_descriptor_json();
+const char* src_resources_game_library_erfreader_load_line_463_787a1e59_descriptor_json();
+const char* src_resources_game_library_erfreader_load_v1_from_tables_line_501_00997c81_descriptor_json();
+const char* src_resources_game_library_erfreader_load_v1_line_525_48cb5f73_descriptor_json();
+const char* src_resources_game_library_erfreader_get_line_535_3e2e3feb_descriptor_json();
+const char* src_resources_game_library_erfreader_list_type_line_538_73602c7a_descriptor_json();
+const char* src_resources_game_library_erfreader_list_all_line_541_8c5287c8_descriptor_json();
+const char* src_resources_game_library_gamelibrary_init_line_674_79ae6ceb_descriptor_json();
+const char* src_resources_game_library_gamelibrary_set_k1_dir_line_690_bc728836_descriptor_json();
+const char* src_resources_game_library_gamelibrary_set_k2_dir_line_697_f18ba4c4_descriptor_json();
+const char* src_resources_game_library_gamelibrary_scan_line_704_943f553e_descriptor_json();
+const char* src_resources_game_library_gamelibrary_scan_game_line_861_11feb0eb_descriptor_json();
+const char* src_resources_game_library_gamelibrary_read_mdl_metadata_line_1021_49fe64f9_descriptor_json();
+const char* src_resources_game_library_gamelibrary_get_2da_line_1036_e392fe83_descriptor_json();
+const char* src_resources_game_library_gamelibrary_get_2da_raw_line_1060_d6cd5828_descriptor_json();
+const char* src_resources_game_library_gamelibrary_list_2da_names_line_1083_66e75be4_descriptor_json();
+const char* src_resources_game_library_gamelibrary_list_resources_line_1093_d309a480_descriptor_json();
+const char* src_resources_game_library_gamelibrary_get_resource_data_line_1100_da175a53_descriptor_json();
+const char* src_resources_game_library_gamelibrary_search_line_1125_3a92a130_descriptor_json();
+const char* src_resources_game_library_gamelibrary_list_models_by_class_line_1131_305675e6_descriptor_json();
+const char* src_resources_game_library_gamelibrary_list_textures_line_1147_14298a13_descriptor_json();
+const char* src_resources_game_library_gamelibrary_get_tlk_string_line_1153_e6a818a7_descriptor_json();
+const char* src_resources_game_library_gamelibrary_get_texture_data_line_1180_0a58651f_descriptor_json();
+const char* src_resources_game_library_gamelibrary_get_model_data_line_1331_84a35054_descriptor_json();
+const char* src_resources_game_library_gamelibrary_extract_to_folder_line_1375_1f447f19_descriptor_json();
+const char* src_resources_game_library_gamelibrary_scan_texture_names_line_1407_2c8a495d_descriptor_json();
+const char* src_resources_game_library_gamelibrary_detect_texture_ext_line_1441_cab77586_descriptor_json();
+
+const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_gamelibrary

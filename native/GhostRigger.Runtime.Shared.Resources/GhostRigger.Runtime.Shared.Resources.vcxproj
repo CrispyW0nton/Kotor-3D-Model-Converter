@@ -49,7 +49,19 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
-  <ItemGroup Label="PythonPayload">
+  <ItemGroup Label="PythonFunctionMigration">
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp" />
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp" />
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp" />
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h" />
+    <ClInclude Include="Public\PythonFunctions\Properties.h" />
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h" />
+  </ItemGroup>
+<ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\core\resources\__init__.py" />
@@ -62,6 +74,6 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent>
     <None Include="Python\src\core\ports\resources.py" />
     <None Include="Python\src\core\ports\textures.py" />
   </ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
 </Project>

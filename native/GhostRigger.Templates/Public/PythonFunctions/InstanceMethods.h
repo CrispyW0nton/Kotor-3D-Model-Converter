@@ -1,0 +1,47 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_templates {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_templates_twoda_twodarow_init_line_34_4f00bb80_descriptor_json();
+const char* src_core_templates_twoda_twodarow_getitem_line_43_3deb55fb_descriptor_json();
+const char* src_core_templates_twoda_twodarow_contains_line_52_27e8026b_descriptor_json();
+const char* src_core_templates_twoda_twodarow_get_line_55_f1b27c9c_descriptor_json();
+const char* src_core_templates_twoda_twodarow_as_dict_line_59_443468d9_descriptor_json();
+const char* src_core_templates_twoda_twodarow_repr_line_63_e0ba0154_descriptor_json();
+const char* src_core_templates_twoda_twoda_init_line_80_51280743_descriptor_json();
+const char* src_core_templates_twoda_twoda_len_line_241_01c7db26_descriptor_json();
+const char* src_core_templates_twoda_twoda_iter_line_244_b3ebed03_descriptor_json();
+const char* src_core_templates_twoda_twoda_getitem_line_248_e9805510_descriptor_json();
+const char* src_core_templates_twoda_twoda_get_line_251_b2abdf65_descriptor_json();
+const char* src_core_templates_twoda_twoda_get_int_line_263_b13fd544_descriptor_json();
+const char* src_core_templates_twoda_twoda_get_float_line_271_7978e939_descriptor_json();
+const char* src_core_templates_twoda_twoda_col_index_line_279_1c96b70f_descriptor_json();
+const char* src_core_templates_twoda_twoda_find_line_287_9c8c098d_descriptor_json();
+const char* src_core_templates_twoda_twoda_find_first_line_302_066407ce_descriptor_json();
+const char* src_core_templates_twoda_twoda_column_values_line_307_8c2c2599_descriptor_json();
+const char* src_core_templates_twoda_twoda_to_tsv_line_317_e35792ea_descriptor_json();
+const char* src_core_templates_twoda_twoda_to_ascii_2da_line_325_08da05a0_descriptor_json();
+const char* src_core_templates_twoda_twoda_repr_line_336_67e37638_descriptor_json();
+const char* src_core_templates_twoda_twodacache_init_line_387_020aea30_descriptor_json();
+const char* src_core_templates_twoda_twodacache_set_library_line_391_ef421473_descriptor_json();
+const char* src_core_templates_twoda_twodacache_get_line_395_f4262f50_descriptor_json();
+const char* src_core_templates_twoda_twodacache_fetch_raw_line_413_8f2f66d9_descriptor_json();
+const char* src_core_templates_twoda_twodacache_list_all_line_442_889d365e_descriptor_json();
+const char* src_core_templates_twoda_twodacache_preload_all_line_454_7db2e0f7_descriptor_json();
+const char* src_core_templates_twoda_twodacache_clear_line_465_abb270d0_descriptor_json();
+const char* src_core_templates_twoda_twodacache_repr_line_468_69a81d85_descriptor_json();
+
+const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_templates

@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{6697d5b4-f656-6815-dbc8-c922ea97e686}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{d8b719f7-e83e-fca7-e911-cab222336b0a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{f1955407-a354-d0ce-a201-d4b000b83929}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{b945e902-69b8-b69e-27cc-56851324f546}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{069fb5ba-41dd-42a6-6b6c-6e86c297c868}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{d6198809-1266-b4de-667c-5bae64e9806c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{f6dea34a-325a-faa4-146b-1b9f300df075}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\qt_autorig">
+      <UniqueIdentifier>{b6e9c8db-6b60-919c-8cc8-03a16aba680f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerAdaptersQtAutorig.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerAdaptersQtAutorig.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\adapters\qt_autorig\__init__.py">
+      <Filter>Python\src\adapters\qt_autorig</Filter>
+    </None>
+    <None Include="Python\src\adapters\qt_autorig\cloth_dialogs.py">
+      <Filter>Python\src\adapters\qt_autorig</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

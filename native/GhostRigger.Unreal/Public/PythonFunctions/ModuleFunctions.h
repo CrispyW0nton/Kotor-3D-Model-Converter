@@ -1,0 +1,75 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_unreal {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_unreal_animation_retargeting_is_null_helper_name_line_65_0343b175_descriptor_json();
+const char* src_unreal_animation_retargeting_is_kotor_mesh_bone_name_line_70_18280a53_descriptor_json();
+const char* src_unreal_animation_retargeting_nodes_by_name_line_129_f8a1d6a2_descriptor_json();
+const char* src_unreal_animation_retargeting_target_nodes_line_138_3bc52421_descriptor_json();
+const char* src_unreal_animation_retargeting_node_key_line_142_a22e38f5_descriptor_json();
+const char* src_unreal_animation_retargeting_is_skeletal_node_line_146_e1060f45_descriptor_json();
+const char* src_unreal_animation_retargeting_candidate_names_line_161_90a4b08e_descriptor_json();
+const char* src_unreal_animation_retargeting_clean_manual_mapping_line_173_e06b1f6c_descriptor_json();
+const char* src_unreal_animation_retargeting_build_bone_map_line_185_ac179881_descriptor_json();
+const char* src_unreal_animation_retargeting_sub3_line_246_16ce312d_descriptor_json();
+const char* src_unreal_animation_retargeting_add3_line_254_91675499_descriptor_json();
+const char* src_unreal_animation_retargeting_mul3_line_262_4ee118d9_descriptor_json();
+const char* src_unreal_animation_retargeting_sub_quat_line_266_ec3bf51c_descriptor_json();
+const char* src_unreal_animation_retargeting_normal_quat_line_270_288f4168_descriptor_json();
+const char* src_unreal_animation_retargeting_quat_conjugate_line_278_89858516_descriptor_json();
+const char* src_unreal_animation_retargeting_quat_mul_line_283_389ecdd2_descriptor_json();
+const char* src_unreal_animation_retargeting_retarget_rotation_line_294_a81a4bfb_descriptor_json();
+const char* src_unreal_animation_retargeting_slerp_quat_line_300_12f988b5_descriptor_json();
+const char* src_unreal_animation_retargeting_bind_pose_line_330_fbbe736a_descriptor_json();
+const char* src_unreal_animation_retargeting_world_positions_by_key_line_340_8108eecc_descriptor_json();
+const char* src_unreal_animation_retargeting_height_from_positions_line_363_3c65168f_descriptor_json();
+const char* src_unreal_animation_retargeting_position_delta_scale_line_370_abf8e5e9_descriptor_json();
+const char* src_unreal_animation_retargeting_nearest_direct_ancestor_line_393_ce66872b_descriptor_json();
+const char* src_unreal_animation_retargeting_path_from_ancestor_to_node_line_402_83e81fe8_descriptor_json();
+const char* src_unreal_animation_retargeting_apply_bridge_poses_line_414_522eba82_descriptor_json();
+const char* src_unreal_animation_retargeting_derived_target_bone_keys_line_478_60e92136_descriptor_json();
+const char* src_unreal_animation_retargeting_retarget_pose_line_505_27943e98_descriptor_json();
+const char* src_unreal_animation_retargeting_sample_retargeted_animation_line_584_3d21611c_descriptor_json();
+const char* src_unreal_animation_retargeting_scaled_position_values_line_662_401176f4_descriptor_json();
+const char* src_unreal_animation_retargeting_copy_retargeted_animation_line_674_c77e5569_descriptor_json();
+const char* src_unreal_animation_retargeting_retarget_animation_line_721_a8425bc0_descriptor_json();
+const char* src_unreal_quinn_fbx_clean_name_line_68_1d924e3e_descriptor_json();
+const char* src_unreal_quinn_fbx_child_value_line_72_620c744d_descriptor_json();
+const char* src_unreal_quinn_fbx_property70_line_79_4d1cc41a_descriptor_json();
+const char* src_unreal_quinn_quat_mul_xyzw_line_89_d1158bda_descriptor_json();
+const char* src_unreal_quinn_axis_angle_quat_line_100_e70e34c4_descriptor_json();
+const char* src_unreal_quinn_euler_xyz_to_quat_line_111_b1755802_descriptor_json();
+const char* src_unreal_quinn_yaw_180_point_line_124_d72a9d8d_descriptor_json();
+const char* src_unreal_quinn_fbx_model_lookup_line_128_f1fbc578_descriptor_json();
+const char* src_unreal_quinn_fbx_parent_map_line_141_5a8fc22f_descriptor_json();
+const char* src_unreal_quinn_fbx_children_map_line_154_127fa53c_descriptor_json();
+const char* src_unreal_quinn_infer_unreal_bone_side_line_165_2d5c54cc_descriptor_json();
+const char* src_unreal_quinn_infer_unreal_bone_group_line_174_be0ba3b4_descriptor_json();
+const char* src_unreal_quinn_infer_unreal_bone_role_line_189_37d9af3a_descriptor_json();
+const char* src_unreal_quinn_fbx_skeleton_bones_line_200_b723d6b0_descriptor_json();
+const char* src_unreal_quinn_build_fbx_skeleton_model_line_227_7c1a13b4_descriptor_json();
+const char* src_unreal_quinn_read_fbx_property_line_313_ff8c4d3e_descriptor_json();
+const char* src_unreal_quinn_read_fbx_node_line_360_264d7cbe_descriptor_json();
+const char* src_unreal_quinn_read_binary_fbx_line_391_4944b6ed_descriptor_json();
+const char* src_unreal_quinn_fbx_object_texture_names_line_408_08402480_descriptor_json();
+const char* src_unreal_quinn_fbx_geometry_to_mesh_node_line_442_beda15df_descriptor_json();
+const char* src_unreal_quinn_fbx_apply_skinning_line_529_a1ca7eca_descriptor_json();
+const char* src_unreal_quinn_load_unreal_bone_map_line_609_0a8e4248_descriptor_json();
+const char* src_unreal_quinn_load_quinn_skeleton_asset_line_637_b6f165fc_descriptor_json();
+const char* src_unreal_quinn_unreal_skeleton_model_line_660_14c9dfde_descriptor_json();
+const char* src_unreal_quinn_load_quinn_fbx_model_line_685_8be13da8_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_unreal

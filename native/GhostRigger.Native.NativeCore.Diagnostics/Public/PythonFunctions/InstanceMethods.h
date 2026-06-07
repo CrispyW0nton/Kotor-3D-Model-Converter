@@ -1,0 +1,33 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_native_nativecore_diagnostics {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_diagnostics_validation_service_validationissue_str_line_80_60e97a2e_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_init_line_169_9a802500_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_validate_line_183_932d2b00_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_add_line_231_53afb934_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_err_line_244_d0f8fc23_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_warn_line_247_cdc72eb5_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_info_line_250_8dd95131_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_check_scene_not_empty_line_255_e581716d_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_check_k1_k2_mismatch_line_273_77cc33d4_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_check_supermodel_consistency_line_285_754d90fd_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_get_node_map_line_311_7d6ec50e_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_check_hooks_line_321_55897384_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_check_facial_bones_line_340_bc73e4db_descriptor_json();
+const char* src_core_diagnostics_validation_service_validationservice_check_skin_weights_line_351_bfed3096_descriptor_json();
+
+const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_native_nativecore_diagnostics

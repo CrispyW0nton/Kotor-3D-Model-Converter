@@ -1,0 +1,183 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{56c53a9b-f073-808e-6cc9-f95f77618291}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{2323c554-a93c-15d1-2ecc-b3f2b1413a9f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{4c8fe84e-6fec-02c7-dd62-4e02e9eada6f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{ef35e681-7871-077a-4cac-f49399ec320a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{210841c1-0ef7-d34e-fd3c-9f8dfd8a81e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{7e0ebedc-908f-c1c8-377b-e5177c746893}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{76132743-b756-ce3c-abde-b6b257b26b08}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels">
+      <UniqueIdentifier>{68d6e7d2-8d05-06d3-e901-61bb88b48a22}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows">
+      <UniqueIdentifier>{a42eb60d-51dd-96ef-17d5-64c8c4f5108b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows\application_core">
+      <UniqueIdentifier>{6f29b3da-4636-3787-c73c-bdea6cc18724}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows\application_core\shared">
+      <UniqueIdentifier>{5426a899-7a01-dee1-f7e9-517664d044cf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\sequence">
+      <UniqueIdentifier>{dd3ba854-2310-0936-2c18-cd5cd4b498bc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\sequence\tracks">
+      <UniqueIdentifier>{f32fc312-5456-4c72-4f6d-e00d34c11fe8}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerToolsSequenceEditor.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerToolsSequenceEditor.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\sequence\__init__.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_asset.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_binding.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_clipboard.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_evaluator.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_interpolation.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_keyframe.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_manager.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_model.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_playback.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_render.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_serialization.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_track.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\sequence_undo.py">
+      <Filter>Python\src\sequence</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\__init__.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\audio_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\camera_cut_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\camera_property_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\character_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\event_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\light_property_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\material_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\rig_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\sub_sequence_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\transform_property_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\transform_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\sequence\tracks\visibility_track.py">
+      <Filter>Python\src\sequence\tracks</Filter>
+    </None>
+    <None Include="Python\src\gui\panels\qt_animation_panel.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\application_core\shared\animation_workflow.py">
+      <Filter>Python\src\gui\windows\application_core\shared</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

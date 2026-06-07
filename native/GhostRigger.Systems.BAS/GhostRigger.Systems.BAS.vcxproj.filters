@@ -1,0 +1,69 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{dc9daf98-69b1-4ec1-683f-d2b77fafe092}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{3539497a-7613-f291-63cc-cda5e7582369}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{91247668-fabe-5e3c-5ee8-02bac18d4512}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{bda82859-a1a7-7ddd-7aa4-129089a5e98d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{cd71509d-fc20-fde0-4181-0e36fcc82f7b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{44fcf0d5-3963-92a5-34e0-52c0ad4c44cf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\systems">
+      <UniqueIdentifier>{05a095aa-ea25-3a05-cfea-64f06fcda44b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\systems\bas">
+      <UniqueIdentifier>{d7c89ef9-1235-b183-e151-7e8e7af33c7d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerSystemsBAS.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerSystemsBAS.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\systems\bas\attachment_alignment.py">
+      <Filter>Python\src\systems\bas</Filter>
+    </None>
+    <None Include="Python\src\systems\bas\head_resolution.py">
+      <Filter>Python\src\systems\bas</Filter>
+    </None>
+    <None Include="Python\src\systems\bas\model_recipe.py">
+      <Filter>Python\src\systems\bas</Filter>
+    </None>
+    <None Include="Python\src\systems\bas\preview_composer.py">
+      <Filter>Python\src\systems\bas</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

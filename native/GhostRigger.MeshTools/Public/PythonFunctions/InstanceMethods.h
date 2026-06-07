@@ -1,0 +1,44 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_meshtools {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_mesh_tools_mesh_edit_types_meshvalidationreport_finalize_line_83_c99f7a66_descriptor_json();
+const char* src_mesh_tools_mesh_history_meshhistory_snapshot_line_48_d6274781_descriptor_json();
+const char* src_mesh_tools_mesh_history_meshhistory_record_line_51_351c6448_descriptor_json();
+const char* src_mesh_tools_mesh_history_meshhistory_undo_line_59_b74df69f_descriptor_json();
+const char* src_mesh_tools_mesh_history_meshhistory_redo_line_68_ff39d3ad_descriptor_json();
+const char* src_mesh_tools_mesh_selection_state_meshselectionstate_clear_subobject_selection_line_24_8a10cd0c_descriptor_json();
+const char* src_mesh_tools_mesh_selection_state_meshselectionstate_set_mode_line_32_278d09e2_descriptor_json();
+const char* src_mesh_tools_mesh_selection_state_meshselectionstate_set_edges_line_37_c08aaf4a_descriptor_json();
+const char* src_mesh_tools_mesh_selection_state_meshselectionstate_counts_line_40_7c95153d_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_build_line_75_e822ad39_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_build_face_adjacency_line_121_7b560c9d_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_build_border_loops_line_128_1087851e_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_build_connected_elements_line_155_3ecc8f6d_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_build_vertex_normals_line_172_64dce9e4_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_edges_line_187_d800dee9_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_border_edges_line_190_ba421b9e_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_border_loops_line_193_a0637b95_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_connected_elements_line_196_783e3810_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_faces_for_edge_line_199_138099a8_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_edges_for_face_line_202_349b2e7f_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_get_faces_for_vertex_line_208_87320bbf_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_border_index_for_edge_line_211_84d28637_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_find_edge_loop_line_221_0e9d42e9_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_find_edge_ring_line_234_b1276bf9_descriptor_json();
+const char* src_mesh_tools_mesh_topology_meshtopology_validate_manifold_state_line_246_fe75a94e_descriptor_json();
+
+const PythonFunctionDescriptorEntry* instancemethods_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_meshtools

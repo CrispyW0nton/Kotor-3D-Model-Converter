@@ -1,0 +1,34 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_tools_nodesskeletonbrowser {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_animation_animation_engine_animationengine_current_animation_line_723_88f811ab_descriptor_json();
+const char* src_core_animation_animation_engine_animationengine_is_playing_line_727_e5083a0f_descriptor_json();
+const char* src_core_animation_animation_engine_animationengine_current_time_line_731_855c8502_descriptor_json();
+const char* src_core_animation_animation_engine_danglysimulator_num_free_vertices_line_2146_19ba6b23_descriptor_json();
+const char* src_core_animation_animation_engine_danglysimulator_num_pinned_vertices_line_2151_d92c35d6_descriptor_json();
+const char* src_core_animation_animation_engine_animstatemachine_current_state_name_line_2447_1507cbb8_descriptor_json();
+const char* src_core_animation_animation_engine_animstatemachine_previous_state_name_line_2452_4a1f55f6_descriptor_json();
+const char* src_core_animation_animation_engine_animstatemachine_is_running_line_2457_5f5aa3b4_descriptor_json();
+const char* src_core_animation_animation_engine_animstatemachine_state_names_line_2461_e4e92a4d_descriptor_json();
+const char* src_core_animation_animation_library_animationentry_display_name_line_76_1d16f456_descriptor_json();
+const char* src_core_animation_animation_library_animationentry_fps_estimate_line_80_579d268d_descriptor_json();
+const char* src_core_animation_animation_library_animationlibrary_stats_line_271_a4dd43f9_descriptor_json();
+const char* src_core_animation_gpu_skinning_matrixpaletteuploader_bone_count_line_1303_7e088645_descriptor_json();
+const char* src_core_animation_gpu_skinning_matrixpaletteuploader_palette_line_1307_cff75296_descriptor_json();
+const char* src_core_animation_gpu_skinning_tbnresult_vertex_count_line_1375_ca0235eb_descriptor_json();
+
+const PythonFunctionDescriptorEntry* properties_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_tools_nodesskeletonbrowser

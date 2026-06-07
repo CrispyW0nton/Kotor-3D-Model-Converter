@@ -1,0 +1,93 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_native_nativecore_math {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_math_camera_math_vec3_line_12_da706aff_descriptor_json();
+const char* src_math_camera_math_quat_line_20_bfeb5cfe_descriptor_json();
+const char* src_math_camera_math_clamp_line_28_964ba430_descriptor_json();
+const char* src_math_camera_math_normalize_line_32_73cf2afa_descriptor_json();
+const char* src_math_camera_math_cross_line_40_0f4881f7_descriptor_json();
+const char* src_math_camera_math_dot_line_46_fded9f72_descriptor_json();
+const char* src_math_camera_math_add_line_52_3eb313f3_descriptor_json();
+const char* src_math_camera_math_sub_line_58_d3dabbe7_descriptor_json();
+const char* src_math_camera_math_mul_line_64_4e651ed0_descriptor_json();
+const char* src_math_camera_math_length_line_69_51ada62f_descriptor_json();
+const char* src_math_camera_math_normalize_quat_line_74_d07494f2_descriptor_json();
+const char* src_math_camera_math_multiply_quat_line_82_fa8b2261_descriptor_json();
+const char* src_math_camera_math_quat_to_euler_degrees_line_95_271d5fa6_descriptor_json();
+const char* src_math_camera_math_euler_degrees_to_quat_line_112_2ae0e9b6_descriptor_json();
+const char* src_math_camera_math_rotate_vector_line_134_fddb0fc9_descriptor_json();
+const char* src_math_camera_math_quaternion_from_basis_line_148_6e0ad258_descriptor_json();
+const char* src_math_camera_math_look_at_quaternion_line_170_c86ad5f7_descriptor_json();
+const char* src_math_camera_math_camera_forward_line_182_97f0cbf6_descriptor_json();
+const char* src_math_camera_math_focal_length_to_fov_line_186_216a6bb7_descriptor_json();
+const char* src_math_camera_math_fov_to_focal_length_line_192_d95c176d_descriptor_json();
+const char* src_math_frame_math_normalize_line_12_5e7a1d95_descriptor_json();
+const char* src_math_frame_math_clean_tex_name_line_17_fa59d26b_descriptor_json();
+const char* src_math_frame_math_cross_line_32_a7ce3031_descriptor_json();
+const char* src_math_frame_math_dot_line_35_a3016288_descriptor_json();
+const char* src_math_frame_math_sub_line_38_5f8962f1_descriptor_json();
+const char* src_math_frame_math_add_line_41_cacfb5f6_descriptor_json();
+const char* src_math_frame_math_clamp_line_44_a86ae5fa_descriptor_json();
+const char* src_math_frame_math_lerp_line_60_2ecd30dc_descriptor_json();
+const char* src_math_frame_math_uwrap_global_line_69_0be67044_descriptor_json();
+const char* src_math_frame_math_edge_has_seam_global_line_76_a959f027_descriptor_json();
+const char* src_math_frame_math_vflip_nontiled_line_83_bb0f7bb3_descriptor_json();
+const char* src_math_frame_math_vflip_tiled_line_87_b741c262_descriptor_json();
+const char* src_math_frame_math_float_to_sort_key_line_104_acaed1dd_descriptor_json();
+const char* src_math_frame_math_compute_screen_size_ratio_line_124_7c27ba50_descriptor_json();
+const char* src_math_gpu_math_matrix_from_pos_quat_np_line_9_6668c9bb_descriptor_json();
+const char* src_math_gpu_math_mat4_perspective_line_35_f4ed5d7e_descriptor_json();
+const char* src_math_gpu_math_mat4_lookat_line_58_e7dc6c4c_descriptor_json();
+const char* src_math_gpu_math_mat4_identity_line_84_76645c93_descriptor_json();
+const char* src_math_gpu_math_mat4_tobytes_line_88_9ca84932_descriptor_json();
+const char* src_math_gpu_math_mat4_mul_line_97_f7982823_descriptor_json();
+const char* src_math_gpu_math_mat3_normal_line_102_2ab1c881_descriptor_json();
+const char* src_math_gpu_math_scene_gpu_root_for_node_line_111_eedf9620_descriptor_json();
+const char* src_math_gpu_math_mat4_from_pos_quat_scale_line_122_6ac44af9_descriptor_json();
+const char* src_math_gpu_math_scene_gpu_model_matrix_line_134_b2f2d97f_descriptor_json();
+const char* src_math_gpu_math_bas_attachment_local_transform_np_line_145_94d9b84c_descriptor_json();
+const char* src_math_gpu_math_quat_multiply_xyzw_line_187_99bda164_descriptor_json();
+const char* src_math_gpu_math_scene_authored_world_transform_line_198_200339fa_descriptor_json();
+const char* src_math_gpu_math_quat_rotate_batch_line_240_b1a560c8_descriptor_json();
+const char* src_math_module_layout_math_module_anchor_relative_position_line_8_52247966_descriptor_json();
+const char* src_math_transform_math_as_vec3_line_20_345b457a_descriptor_json();
+const char* src_math_transform_math_normalize_line_24_ceecad54_descriptor_json();
+const char* src_math_transform_math_ray_from_mouse_line_32_81b9804f_descriptor_json();
+const char* src_math_transform_math_closest_point_on_ray_line_48_cf5b387a_descriptor_json();
+const char* src_math_transform_math_closest_point_between_rays_line_56_2846b051_descriptor_json();
+const char* src_math_transform_math_project_point_to_screen_line_83_7dc10361_descriptor_json();
+const char* src_math_transform_math_screen_space_distance_line_88_40ef8610_descriptor_json();
+const char* src_math_transform_math_axis_drag_delta_line_94_6097c784_descriptor_json();
+const char* src_math_transform_math_rotation_angle_from_mouse_delta_line_123_2cd65e6d_descriptor_json();
+const char* src_math_transform_math_axis_quaternion_line_137_9ff6dddc_descriptor_json();
+const char* src_math_transform_math_multiply_quaternions_line_148_87a2989b_descriptor_json();
+const char* src_math_transform_math_rotate_vector_line_163_a9ade386_descriptor_json();
+const char* src_math_transform_math_build_translation_matrix_line_179_4dd3de4a_descriptor_json();
+const char* src_math_transform_math_build_rotation_matrix_line_185_0bd655cc_descriptor_json();
+const char* src_math_transform_math_build_scale_matrix_line_201_c8302f11_descriptor_json();
+const char* src_math_viewcube_math_normalize_line_80_83d9037c_descriptor_json();
+const char* src_math_viewcube_math_cross_line_88_23256461_descriptor_json();
+const char* src_math_viewcube_math_dot_line_99_fe1e43f0_descriptor_json();
+const char* src_math_viewcube_math_azimuth_elevation_from_direction_line_103_3a4f7690_descriptor_json();
+const char* src_math_viewcube_math_action_from_view_name_line_112_0a304fd2_descriptor_json();
+const char* src_math_viewcube_math_target_for_action_line_138_9b1666fa_descriptor_json();
+const char* src_math_viewcube_math_target_for_region_line_145_7affcdba_descriptor_json();
+const char* src_math_viewcube_math_view_direction_from_angles_line_153_320edb52_descriptor_json();
+const char* src_math_viewcube_math_camera_basis_from_angles_line_162_173ba890_descriptor_json();
+const char* src_math_viewcube_math_view_orientation_quaternion_line_178_65a32831_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_native_nativecore_math

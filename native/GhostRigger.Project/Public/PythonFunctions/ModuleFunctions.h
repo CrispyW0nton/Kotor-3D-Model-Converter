@@ -1,0 +1,40 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::phase15::ghostrigger_project {
+
+using PythonFunctionDescriptorJson = const char* (*)();
+
+struct PythonFunctionDescriptorEntry {
+    const char* python_file;
+    const char* qualname;
+    const char* function_type;
+    PythonFunctionDescriptorJson descriptor_json;
+};
+
+const char* src_core_project_ghostrigger_project_utc_now_iso_line_19_f56c2155_descriptor_json();
+const char* src_core_project_ghostrigger_project_stable_project_id_line_23_7a314c4a_descriptor_json();
+const char* src_core_project_ghostrigger_project_dict_line_27_05502939_descriptor_json();
+const char* src_core_project_ghostrigger_project_address_or_none_line_31_e1291f2f_descriptor_json();
+const char* src_core_project_ghostrigger_project_address_to_dict_line_37_7a27551c_descriptor_json();
+const char* src_core_project_ghostrigger_project_addresses_from_list_line_41_12888262_descriptor_json();
+const char* src_core_project_ghostrigger_project_addresses_to_list_line_45_8d494fb6_descriptor_json();
+const char* src_core_project_ghostrigger_project_save_ghostrigger_project_line_431_68be8512_descriptor_json();
+const char* src_core_project_ghostrigger_project_load_ghostrigger_project_line_442_87956209_descriptor_json();
+const char* src_core_project_project_validation_json_issue_line_76_c4c51223_descriptor_json();
+const char* src_core_project_project_validation_require_line_90_c6a6e140_descriptor_json();
+const char* src_core_project_project_validation_validate_resource_address_line_95_47324977_descriptor_json();
+const char* src_core_project_project_validation_validate_ghostrigger_project_line_146_1d5d45bd_descriptor_json();
+const char* src_core_project_project_validation_validate_resref_line_240_cc257424_descriptor_json();
+const char* src_core_project_project_validation_validate_duplicate_ids_line_269_5216a590_descriptor_json();
+const char* src_core_project_project_validation_append_json_issue_line_289_343a3960_descriptor_json();
+const char* src_core_project_project_validation_validate_address_field_line_295_196f1665_descriptor_json();
+const char* src_core_project_project_validation_validate_optional_address_field_line_307_255a9d07_descriptor_json();
+const char* src_core_project_project_validation_validate_address_list_line_317_9a2cac4f_descriptor_json();
+const char* src_core_project_project_validation_validate_export_candidate_line_327_6f5d7247_descriptor_json();
+const char* src_core_project_resource_address_clean_optional_text_line_25_9d764858_descriptor_json();
+
+const PythonFunctionDescriptorEntry* modulefunctions_descriptors(std::size_t& count);
+
+} // namespace ghostrigger::phase15::ghostrigger_project
