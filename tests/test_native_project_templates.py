@@ -511,6 +511,37 @@ def test_renderer_d3d12_exports_command_recording_dry_run_frame_boundary() -> No
     assert "gr_renderer_d3d12_command_recording_dry_run_frame_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_guarded_command_recording_diagnostics_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_guarded_command_recording_diagnostics_json" in header
+    assert "renderer_d3d12_guarded_command_recording_diagnostics.v1" in implementation
+    assert "command_allocator->Reset()" in implementation
+    assert "command_list->Reset" in implementation
+    assert "command_list->Close()" in implementation
+    assert '"draw_calls_recorded":0' in implementation
+    assert '"command_list_executed":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "gr_renderer_d3d12_guarded_command_recording_diagnostics_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

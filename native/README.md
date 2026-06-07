@@ -106,9 +106,10 @@ diagnostic retained device/queue lifetime metadata, diagnostic descriptor heaps,
 direct command allocator, closed direct command-list readiness metadata, and
 native surface/swap-chain handle readiness metadata, render-target/back-buffer
 metadata, resource-barrier/clear-pass metadata, and failure-diagnostic metadata,
-command-recording dry-run frame metadata, but it does not create a swap chain,
-acquire back buffers, create RTVs, reset command lists, record barriers, clears,
-or draws, present, execute a command list, or create a draw submission path yet.
+command-recording dry-run frame metadata, and guarded command-list reset/close
+diagnostics, but it does not create a swap chain, acquire back buffers, create
+RTVs, record barriers, clears, or draws, present, execute a command list, or
+create a draw submission path yet.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
@@ -260,7 +261,8 @@ queue/swap-chain readiness export, diagnostic context create/destroy/export,
 descriptor-heap/command-allocator readiness export, command-list readiness
 export, native surface/swap-chain readiness export, render-target/back-buffer
 metadata export, resource-barrier/clear-pass metadata export,
-command-recording dry-run frame metadata export, failure-diagnostic export, and
+command-recording dry-run frame metadata export, guarded command-list
+reset/close diagnostics export, failure-diagnostic export, and
 device-requirement metadata without starting Python or the GUI:
 
 ```text

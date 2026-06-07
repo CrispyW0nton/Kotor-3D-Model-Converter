@@ -198,6 +198,45 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 36;
     }
+    const char* guarded_recording_json = gr_renderer_d3d12_guarded_command_recording_diagnostics_json(context);
+    if (std::strstr(
+            guarded_recording_json,
+            R"("schema":"renderer_d3d12_guarded_command_recording_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 37;
+    }
+    if (std::strstr(guarded_recording_json, R"("allocator_reset":true)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording did not reset allocator" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 38;
+    }
+    if (std::strstr(guarded_recording_json, R"("command_list_reset":true)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording did not reset command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 39;
+    }
+    if (std::strstr(guarded_recording_json, R"("command_list_closed":true)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording did not close command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 40;
+    }
+    if (std::strstr(guarded_recording_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 41;
+    }
+    if (std::strstr(guarded_recording_json, R"("command_list_executed":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording executed a command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 42;
+    }
+    if (std::strstr(guarded_recording_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded command-recording enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 43;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
