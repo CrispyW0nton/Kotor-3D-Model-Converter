@@ -98,6 +98,72 @@ def test_native_toolbox_window_migration_candidates_define_first_phase_one_surfa
     assert "Visible app check: required only when" in candidates
 
 
+def test_tools_retargeting_project_scaffold_matches_phase_one_boundary() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Retargeting"
+        / "GhostRigger.Tools.Retargeting.vcxproj"
+    ).read_text(encoding="utf-8")
+    debug_project = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Retargeting.DEBUG"
+        / "GhostRigger.Tools.Retargeting.DEBUG.vcxproj"
+    ).read_text(encoding="utf-8")
+    readme = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Retargeting"
+        / "README.md"
+    ).read_text(encoding="utf-8")
+
+    assert "GhostRigger.Tools.Retargeting" in solution
+    assert "GhostRigger.Tools.Retargeting.DEBUG" in solution
+    assert "<TargetName>GhostRigger.Tools.Retargeting</TargetName>" in project
+    assert "GHOSTRIGGER_TOOLS_RETARGETING_EXPORTS" in project
+    assert "<TargetName>GhostRigger.Tools.Retargeting.DEBUG</TargetName>" in debug_project
+    assert "Owner surface: Retarget Workbench" in readme
+    assert "Bridge method: C ABI DLL" in readme
+
+
+def test_tools_retargeting_exports_diagnostic_c_abi_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Retargeting"
+        / "GhostRiggerToolsRetargeting.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Retargeting"
+        / "GhostRiggerToolsRetargeting.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Tools.Retargeting.DEBUG"
+        / "GhostRiggerToolsRetargetingDEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_tools_retargeting_version" in header
+    assert "gr_tools_retargeting_capabilities_json" in header
+    assert "gr_tools_retargeting_owner_boundary_json" in header
+    assert "gr_tools_retargeting_solve_packet_schema_json" in header
+    assert '"tool_package":true' in implementation
+    assert '"owner_surface":"Retarget Workbench"' in implementation
+    assert '"bridge_method":"C ABI DLL"' in implementation
+    assert '"native_solve_enabled":false' in implementation
+    assert '"python_fallback_required":true' in implementation
+    assert "tools_retargeting_owner_boundary.v1" in implementation
+    assert "tools_retargeting_solve_packet_schema.v1" in implementation
+    assert '"solve_attempted":false' in implementation
+    assert '"solve_result_count":0' in implementation
+    assert "gr_tools_retargeting_solve_packet_schema_json()" in validator
+
+
 def test_native_dll_template_keeps_release_output_shippable_only() -> None:
     template = (TEMPLATE_DIR / "native_dll.vcxproj.template").read_text(encoding="utf-8")
 
@@ -1367,6 +1433,7 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{3309ACB6-2BE0-4C54-BA13-412310A65888}",
         "{6BAA4B32-55DD-4A3B-8440-C15A47B83423}",
         "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}",
+        "{8225E261-C091-40A6-8386-D68B6A43FC02}",
     }
 
     for guid in debug_project_guids:

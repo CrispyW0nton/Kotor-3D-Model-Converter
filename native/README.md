@@ -75,6 +75,11 @@ The first toolbox and window candidates are recorded in
 before implementing a `GhostRigger.Tools.*` or `GhostRigger.Windows.MainWindow`
 package.
 
+`GhostRigger.Tools.Retargeting` is the first native toolbox package boundary.
+It is diagnostic-only in Phase 1: it reports package capabilities, owner
+boundary metadata, and a solve-packet schema placeholder while keeping native
+retarget solving disabled and requiring the Python Retarget Workbench fallback.
+
 `GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
 descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes

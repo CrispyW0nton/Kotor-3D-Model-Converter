@@ -90,6 +90,14 @@ RENDERER_D3D12_PACKAGE = NativePackageSpec(
     capabilities_export="gr_renderer_d3d12_capabilities_json",
 )
 
+TOOLS_RETARGETING_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Tools.Retargeting",
+    dll_name="GhostRigger.Tools.Retargeting.dll",
+    env_var="GHOSTRIGGER_TOOLS_RETARGETING",
+    version_export="gr_tools_retargeting_version",
+    capabilities_export="gr_tools_retargeting_capabilities_json",
+)
+
 RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES = (
     "descriptor_allocator_readiness",
     "command_list_readiness",
@@ -266,6 +274,12 @@ def query_renderer_d3d12_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(RENDERER_D3D12_PACKAGE, search_paths)
+
+
+def query_tools_retargeting_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(TOOLS_RETARGETING_PACKAGE, search_paths)
 
 
 def renderer_d3d12_guarded_metadata_capabilities(

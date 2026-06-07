@@ -14,6 +14,7 @@ from src.adapters.native_core.package_registry import (
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     RUNTIME_SHARED_RESOURCES_PACKAGE,
+    TOOLS_RETARGETING_PACKAGE,
     NativePackageSpec,
     NativePackageStatus,
     query_native_core_diagnostics_status,
@@ -26,6 +27,7 @@ from src.adapters.native_core.package_registry import (
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
     query_runtime_shared_resources_status,
+    query_tools_retargeting_status,
     renderer_d3d12_guarded_metadata_capabilities,
 )
 
@@ -72,6 +74,18 @@ class _FakeRendererD3D12Dll:
             b'"guarded_draw_command_recording_metadata",'
             b'"guarded_draw_submission_readiness_metadata",'
             b'"guarded_post_draw_frame_accounting_readiness_metadata"]}'
+        )
+    )
+
+
+class _FakeToolsRetargetingDll:
+    gr_tools_retargeting_version = _FakeNativeExport(b"0.1.0")
+    gr_tools_retargeting_capabilities_json = _FakeNativeExport(
+        (
+            b'{"name":"GhostRigger.Tools.Retargeting","version":"0.1.0",'
+            b'"tool_package":true,"owner_surface":"Retarget Workbench",'
+            b'"bridge_method":"C ABI DLL","diagnostic_only":true,'
+            b'"native_solve_enabled":false,"python_fallback_required":true}'
         )
     )
 
@@ -164,6 +178,17 @@ def test_renderer_d3d12_status_uses_shared_registry_path(tmp_path: Path) -> None
     assert status.available is False
     assert (
         "GhostRigger.Renderer.D3D12.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_tools_retargeting_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_tools_retargeting_status([tmp_path])
+
+    assert status.name == "GhostRigger.Tools.Retargeting"
+    assert status.available is False
+    assert (
+        "GhostRigger.Tools.Retargeting.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -290,6 +315,14 @@ def test_renderer_d3d12_package_spec_names_current_contract() -> None:
     assert RENDERER_D3D12_PACKAGE.capabilities_export == "gr_renderer_d3d12_capabilities_json"
 
 
+def test_tools_retargeting_package_spec_names_current_contract() -> None:
+    assert TOOLS_RETARGETING_PACKAGE.name == "GhostRigger.Tools.Retargeting"
+    assert TOOLS_RETARGETING_PACKAGE.dll_name == "GhostRigger.Tools.Retargeting.dll"
+    assert TOOLS_RETARGETING_PACKAGE.env_var == "GHOSTRIGGER_TOOLS_RETARGETING"
+    assert TOOLS_RETARGETING_PACKAGE.version_export == "gr_tools_retargeting_version"
+    assert TOOLS_RETARGETING_PACKAGE.capabilities_export == "gr_tools_retargeting_capabilities_json"
+
+
 def test_renderer_d3d12_guarded_metadata_capabilities_name_complete_phase_1_surface() -> None:
     assert RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES == (
         "descriptor_allocator_readiness",
@@ -345,3 +378,28 @@ def test_renderer_d3d12_status_reports_guarded_metadata_capabilities(
         renderer_d3d12_guarded_metadata_capabilities(status)
         == RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES
     )
+
+
+def test_tools_retargeting_status_reports_diagnostic_capabilities(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    dll_path = tmp_path / "GhostRigger.Tools.Retargeting.dll"
+    dll_path.write_bytes(b"fake")
+
+    monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        package_registry,
+        "_load_library",
+        lambda path: _FakeToolsRetargetingDll(),
+    )
+
+    status = query_tools_retargeting_status([tmp_path])
+
+    assert status.available is True
+    assert status.version == "0.1.0"
+    assert status.capabilities is not None
+    assert status.capabilities["tool_package"] is True
+    assert status.capabilities["owner_surface"] == "Retarget Workbench"
+    assert status.capabilities["native_solve_enabled"] is False
+    assert status.capabilities["python_fallback_required"] is True

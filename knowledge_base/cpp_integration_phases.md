@@ -284,6 +284,13 @@ Current completed foundation:
   and `GhostRigger.Renderer.D3D12.dll` availability and capabilities from
   Python without starting the GUI. The D3D12 registry entry exposes the complete
   guarded Phase 1 metadata capability set advertised by the native DLL.
+- `GhostRigger.Tools.Retargeting.dll` exists as the first native toolbox package
+  boundary. It reports Retarget Workbench owner metadata, package capabilities,
+  and a solve-packet schema placeholder while keeping native solve execution
+  disabled and requiring the Python Retarget Workbench fallback.
+- `GhostRigger.Tools.Retargeting.DEBUG.exe` validates the Retargeting toolbox
+  package ABI, owner-boundary metadata, capabilities export, and solve-packet
+  schema placeholder without Python or the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -479,9 +486,8 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Choose the next Phase 1 slice from either a shared native-core extraction or
-   the first `GhostRigger.Tools.{Toolname}` DLL candidate documented in
-   `knowledge_base/native_toolbox_window_migration_candidates.md`.
+5. Extend the Python-side native package registry entries as each native
+   toolbox, renderer, or shared package gains version/capability exports.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`

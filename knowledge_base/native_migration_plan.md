@@ -124,6 +124,13 @@ a launcher and native workspace first, not a rewrite of the application.
   `GhostRigger.Runtime.Shared.*`, and `GhostRigger.Renderer.*` packages can be
   added consistently. The D3D12 registry entry reports the complete guarded
   Phase 1 D3D12 metadata capability set advertised by the native DLL.
+- `native/GhostRigger.Tools.Retargeting/` owns the first native toolbox package
+  boundary for the Retarget Workbench. It reports package capabilities,
+  owner-boundary metadata, and a solve-packet schema placeholder while keeping
+  native solve execution disabled and requiring Python fallback.
+- `native/GhostRigger.Tools.Retargeting.DEBUG/` verifies the Retargeting toolbox
+  package ABI, capabilities export, owner-boundary metadata, and solve-packet
+  schema placeholder from Visual Studio without requiring Python.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental
