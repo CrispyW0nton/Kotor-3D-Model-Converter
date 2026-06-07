@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerNativeCoreMath.h"
 
 #include <algorithm>
@@ -98,6 +99,20 @@ GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_point(
     out_xyz[2] = matrix4x4_row_major[8] * x + matrix4x4_row_major[9] * y +
         matrix4x4_row_major[10] * z + matrix4x4_row_major[11];
     return 1;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

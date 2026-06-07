@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerGame.h"
 
 namespace {
@@ -48,6 +49,20 @@ GHOSTRIGGER_GAME_API const char* gr_game_owner_boundary_json() {
 
 GHOSTRIGGER_GAME_API const char* gr_game_dependency_schema_json() {
     return kDependencySchema;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerRuntimeSharedContracts.h"
 
 #include "GhostRigger.Native.NativeCore.h"
@@ -18,6 +19,20 @@ const char* gr_runtime_shared_contracts_renderer_descriptor_json()
 {
     (void)gr_native_core_version();
     return R"json({"contract":"renderer_neutral","version":"0.1.0","owns_device":false,"owns_window":false,"payloads":["version","capabilities","renderer_descriptor"],"future_payloads":["scene_handles","resource_residency","draw_submission","frame_statistics"]})json";
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

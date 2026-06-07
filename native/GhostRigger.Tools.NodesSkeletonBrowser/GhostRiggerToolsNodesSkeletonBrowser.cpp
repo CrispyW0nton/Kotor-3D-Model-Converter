@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerToolsNodesSkeletonBrowser.h"
 
 namespace {
@@ -45,6 +46,20 @@ GR_TOOLS_NODES_SKELETON_BROWSER_API const char* gr_tools_nodes_skeleton_browser_
 
 GR_TOOLS_NODES_SKELETON_BROWSER_API const char* gr_tools_nodes_skeleton_browser_node_tree_schema_json() {
     return kNodeTreeSchema;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

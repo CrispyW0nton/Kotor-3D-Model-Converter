@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -75,3 +77,55 @@ def test_python_payloads_are_included_in_visual_studio_projects() -> None:
         for source in entry["files"]:
             include_path = f"python_payload\\{source}"
             assert f'<None Include="{include_path}" />' in vcxproj
+
+
+def test_payload_dlls_export_common_python_payload_abi() -> None:
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        cpp_text = "\n".join(path.read_text(encoding="utf-8") for path in project_dir.glob("*.cpp"))
+
+        assert "GhostRiggerPythonPayloadResource.h" in cpp_text
+        assert "gr_python_payload_manifest_json" in cpp_text
+        assert "gr_python_payload_file_count" in cpp_text
+        assert "manifest_json_from_module_symbol" in cpp_text
+
+
+def test_native_host_depends_on_every_payload_dll_project_without_linking_libs() -> None:
+    entries = _payload_entries()
+    host_project = ROOT / "native" / "GhostRigger.Native" / "GhostRigger.Native.vcxproj"
+    tree = ET.parse(host_project)
+    ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
+
+    refs = {
+        Path(node.attrib["Include"]).stem: node
+        for node in tree.findall(".//msb:ItemGroup[@Label='NativePayloadDependencies']/msb:ProjectReference", ns)
+    }
+
+    assert set(refs) == {str(entry["project"]) for entry in entries}
+    for node in refs.values():
+        link_node = node.find("msb:LinkLibraryDependencies", ns)
+        assert link_node is not None
+        assert link_node.text == "false"
+
+
+def test_native_host_dependency_table_covers_every_payload_project() -> None:
+    entries = _payload_entries()
+    dependency_header = (
+        ROOT / "native" / "GhostRigger.Native" / "GhostRiggerNativeDependencies.h"
+    ).read_text(encoding="utf-8")
+
+    dependency_names = set(re.findall(r'\{L"(GhostRigger[^"]+)", L"GhostRigger[^"]+\.dll"', dependency_header))
+
+    assert dependency_names == {str(entry["project"]) for entry in entries}
+    assert "kNativeDependencySpecs" in dependency_header
+    assert "kNativeDependencySpecCount" in dependency_header
+
+
+def test_main_py_logs_native_dependency_audit_from_host_environment() -> None:
+    main_source = (ROOT / "main.py").read_text(encoding="utf-8")
+
+    assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" in main_source
+    assert "Native DLL dependency audit:" in main_source
+    assert "Native DLL dependency %0*d/%0*d" in main_source
+    assert "_log_native_dependency_audit(log)" in main_source

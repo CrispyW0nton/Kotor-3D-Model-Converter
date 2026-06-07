@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerRuntimeSharedDescriptors.h"
 
 namespace {
@@ -40,6 +41,20 @@ GR_RUNTIME_SHARED_DESCRIPTORS_API const char* gr_runtime_shared_descriptors_mate
 
 GR_RUNTIME_SHARED_DESCRIPTORS_API const char* gr_runtime_shared_descriptors_frame_schema_json() {
     return kFrameSchema;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

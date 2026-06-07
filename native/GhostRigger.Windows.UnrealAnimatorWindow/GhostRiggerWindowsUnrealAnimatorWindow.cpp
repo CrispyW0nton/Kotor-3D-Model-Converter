@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerWindowsUnrealAnimatorWindow.h"
 
 namespace {
@@ -45,6 +46,20 @@ GR_WINDOWS_UNREAL_ANIMATOR_WINDOW_API const char* gr_windows_unreal_animator_win
 
 GR_WINDOWS_UNREAL_ANIMATOR_WINDOW_API const char* gr_windows_unreal_animator_window_host_service_schema_json() {
     return kHostServiceSchema;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

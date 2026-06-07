@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerNativeCoreDiagnostics.h"
 
 #include <algorithm>
@@ -75,6 +76,20 @@ GR_NATIVE_CORE_DIAGNOSTICS_API const char* gr_native_core_diagnostics_make_recor
         R"(","code":")" + escape_json(safe_text(code)) +
         R"(","message":")" + escape_json(safe_text(message)) + R"("})";
     return g_record_buffer.c_str();
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

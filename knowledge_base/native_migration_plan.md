@@ -233,9 +233,17 @@ a launcher and native workspace first, not a rewrite of the application.
   manifest and `GhostRiggerPythonPayload.rc` resource script. The `.rc` files
   compile the manifest and copied Python files into the DLLs as `RCDATA`
   resources while leaving the original Python application files in place.
-- Phase 1.5 is packaging foundation only. The active embedded Python runtime
-  still imports the original `src/` files until a later bridge, extraction, or
-  import path is implemented and verified.
+- Phase 1.5 now exposes a native payload ABI from every payload DLL:
+  `gr_python_payload_manifest_json()` reads the embedded manifest resource and
+  `gr_python_payload_file_count()` reports its file count. This is a
+  verification bridge only; the active embedded Python runtime still imports
+  the original `src/` files until a later extraction/import path is implemented
+  and verified.
+- `GhostRigger.exe` depends on every payload DLL project for build order and
+  probes the DLL set before Python starts. The host checks DLL load state,
+  version/capability exports, and payload file counts, then publishes the audit
+  to `main.py` through `GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON` so the visible
+  startup log cycles through the native DLL dependencies before Qt startup.
 - Renderer selection is isolated behind `src.adapters.rendering.renderer_factory`
   and `src.core.ports.viewport_renderer`.
 - Existing renderer adapters include ModernGL, WGPU, pygfx/WGPU, experimental

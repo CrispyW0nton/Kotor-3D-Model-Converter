@@ -396,6 +396,18 @@ Current completed foundation:
   are byte-identical DLL payload copies; the active application still imports
   originals from `src/` until a later native bridge, extraction, or import path
   is deliberately enabled.
+- Every payload DLL exposes the shared Phase 1.5 C ABI
+  `gr_python_payload_manifest_json()` and `gr_python_payload_file_count()` so
+  native code and embedded Python can verify the DLL-owned Python payload
+  boundary without executing copied Python files.
+- `GhostRigger.exe` has build-order project references to every payload DLL and
+  runs a startup dependency audit before embedded Python executes `main.py`.
+  The host loads each DLL, checks version/capability exports, reads the payload
+  file count, and passes a compact audit JSON through
+  `GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON`.
+- `main.py` logs that native dependency cycle in the visible startup log window
+  before Qt startup, including loaded state, version ABI, capabilities ABI, and
+  payload file counts for each DLL.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.

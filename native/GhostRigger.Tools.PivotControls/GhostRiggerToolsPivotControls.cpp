@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerToolsPivotControls.h"
 
 namespace {
@@ -45,6 +46,20 @@ GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_owner_boundary_j
 
 GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_pivot_packet_schema_json() {
     return kPivotPacketSchema;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }

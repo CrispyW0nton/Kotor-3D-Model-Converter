@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#include "GhostRiggerNativeDependencies.h"
+
 #include <cwchar>
 #include <cwctype>
 #include <cstdio>
@@ -173,6 +175,151 @@ bool env_disabled(const wchar_t* name) {
         lowered.push_back(static_cast<wchar_t>(towlower(ch)));
     }
     return lowered == L"0" || lowered == L"false" || lowered == L"no" || lowered == L"off" || lowered == L"never";
+}
+
+std::string json_escape(const std::string& value) {
+    std::string result;
+    result.reserve(value.size() + 8);
+    for (unsigned char ch : value) {
+        switch (ch) {
+        case '\\':
+            result += "\\\\";
+            break;
+        case '"':
+            result += "\\\"";
+            break;
+        case '\b':
+            result += "\\b";
+            break;
+        case '\f':
+            result += "\\f";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        case '\r':
+            result += "\\r";
+            break;
+        case '\t':
+            result += "\\t";
+            break;
+        default:
+            if (ch < 0x20) {
+                char buffer[7] = {};
+                std::snprintf(buffer, sizeof(buffer), "\\u%04x", ch);
+                result += buffer;
+            } else {
+                result.push_back(static_cast<char>(ch));
+            }
+            break;
+        }
+    }
+    return result;
+}
+
+std::string json_escape_wide(const std::wstring& value) {
+    return json_escape(utf8_from_wstring(value));
+}
+
+std::string last_win32_error_text(DWORD error_code) {
+    if (error_code == 0) {
+        return "";
+    }
+    return "win32_error_" + std::to_string(error_code);
+}
+
+using StringExport = const char* (*)();
+using FileCountExport = unsigned int (*)();
+
+std::string read_string_export(HMODULE module, const char* export_name, bool& present) {
+    present = false;
+    if (module == nullptr || export_name == nullptr || export_name[0] == '\0') {
+        return "";
+    }
+    FARPROC proc = GetProcAddress(module, export_name);
+    if (proc == nullptr) {
+        return "";
+    }
+    present = true;
+    const char* value = reinterpret_cast<StringExport>(proc)();
+    return value == nullptr ? "" : std::string(value);
+}
+
+unsigned int read_file_count_export(HMODULE module, bool& present) {
+    present = false;
+    if (module == nullptr) {
+        return 0;
+    }
+    FARPROC proc = GetProcAddress(module, "gr_python_payload_file_count");
+    if (proc == nullptr) {
+        return 0;
+    }
+    present = true;
+    return reinterpret_cast<FileCountExport>(proc)();
+}
+
+std::string probe_native_dependencies_json(const fs::path& output_dir) {
+    std::ostringstream rows;
+    std::size_t available_count = 0;
+    std::size_t payload_ready_count = 0;
+
+    rows << "{\"schema\":\"ghostrigger_native_dependency_audit.v1\",";
+    rows << "\"dependency_count\":" << ghostrigger::native_host::kNativeDependencySpecCount << ',';
+    rows << "\"dependencies\":[";
+
+    for (std::size_t index = 0; index < ghostrigger::native_host::kNativeDependencySpecCount; ++index) {
+        const auto& spec = ghostrigger::native_host::kNativeDependencySpecs[index];
+        const fs::path dll_path = output_dir / spec.dll_name;
+        if (index != 0) {
+            rows << ',';
+        }
+
+        HMODULE module = LoadLibraryExW(dll_path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        const bool available = module != nullptr;
+        if (available) {
+            ++available_count;
+        }
+
+        bool version_present = false;
+        bool capabilities_present = false;
+        bool payload_count_present = false;
+        const std::string version = read_string_export(module, spec.version_export, version_present);
+        const std::string capabilities = read_string_export(module, spec.capabilities_export, capabilities_present);
+        const unsigned int file_count = read_file_count_export(module, payload_count_present);
+        const bool payload_ready = payload_count_present && file_count > 0;
+        if (payload_ready) {
+            ++payload_ready_count;
+        }
+
+        rows << '{';
+        rows << "\"name\":\"" << json_escape_wide(spec.name) << "\",";
+        rows << "\"dll\":\"" << json_escape_wide(spec.dll_name) << "\",";
+        rows << "\"available\":" << (available ? "true" : "false") << ',';
+        rows << "\"path\":\"" << json_escape_wide(dll_path.wstring()) << "\",";
+        rows << "\"version_export\":\"" << json_escape(spec.version_export ? spec.version_export : "") << "\",";
+        rows << "\"version_export_present\":" << (version_present ? "true" : "false") << ',';
+        rows << "\"version\":\"" << json_escape(version) << "\",";
+        rows << "\"capabilities_export_present\":" << (capabilities_present ? "true" : "false") << ',';
+        rows << "\"capabilities_bytes\":" << capabilities.size() << ',';
+        rows << "\"python_payload_export_present\":" << (payload_count_present ? "true" : "false") << ',';
+        rows << "\"python_payload_file_count\":" << file_count << ',';
+        rows << "\"python_payload_ready\":" << (payload_ready ? "true" : "false");
+        if (!available) {
+            rows << ",\"reason\":\"" << json_escape(last_win32_error_text(GetLastError())) << "\"";
+        }
+        rows << '}';
+    }
+
+    rows << "],";
+    rows << "\"available_count\":" << available_count << ',';
+    rows << "\"payload_ready_count\":" << payload_ready_count;
+    rows << '}';
+    return rows.str();
+}
+
+void publish_native_dependency_audit(const fs::path& output_dir) {
+    const std::string audit_json = probe_native_dependencies_json(output_dir);
+    SetEnvironmentVariableA("GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON", audit_json.c_str());
 }
 
 void open_log_console() {
@@ -406,6 +553,10 @@ int run_hosted_python(int argc, wchar_t* argv[]) {
 
     if (!has_arg(argc, argv, kNativeEmbedInitDebugArg)) {
         open_log_console();
+    }
+
+    if (auto exe_dir = executable_directory()) {
+        publish_native_dependency_audit(*exe_dir);
     }
 
     return run_embedded_python(argc, argv, *repo_root, *python_home);

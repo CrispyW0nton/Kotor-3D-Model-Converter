@@ -1,3 +1,4 @@
+#include "../GhostRigger.Native.NativeCore/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerRendererContracts.h"
 
 namespace {
@@ -51,6 +52,20 @@ GR_RENDERER_CONTRACTS_API const char* gr_renderer_contracts_draw_item_schema_jso
 
 GR_RENDERER_CONTRACTS_API const char* gr_renderer_contracts_frame_stats_schema_json() {
     return kFrameStatsSchema;
+}
+
+}
+
+extern "C" {
+
+__declspec(dllexport) const char* gr_python_payload_manifest_json() {
+    return ghostrigger::native_payload::manifest_json_from_module_symbol(
+        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
+    );
+}
+
+__declspec(dllexport) unsigned int gr_python_payload_file_count() {
+    return ghostrigger::native_payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
 }
 
 }
