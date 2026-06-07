@@ -289,6 +289,11 @@ Acceptance:
   palettes, and retained vertex/index/texture/palette byte counts. This is the
   D3D/WGPU-style residency gate before command recording becomes backed by real
   GPU resources.
+- `native/GhostRigger.Runtime.Shared.Descriptors/` owns the first renderer-neutral
+  runtime descriptor schema package for mesh, material, and frame descriptor
+  metadata that future runtime and renderer DLLs can share.
+- `native/GhostRigger.Runtime.Shared.Descriptors.DEBUG/` verifies the shared
+  runtime descriptor ABI from Visual Studio without requiring Python.
 
 ### N2: Native Retained Scene DEBUG
 

@@ -61,6 +61,11 @@ The anchor C++ projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore
 so output folders, warning levels, dependency shape, ownership metadata, and
 DEBUG executable expectations stay consistent.
 
+`GhostRigger.Runtime.Shared.Descriptors` is the first renderer-neutral runtime
+descriptor package. It publishes stable schema metadata for mesh, material, and
+frame descriptors so future runtime and renderer DLLs can share payload shapes
+instead of redefining descriptor contracts locally.
+
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
 construction it opens the startup log console by default before Python starts,
@@ -164,3 +169,13 @@ build\vs\x64\Debug\GhostRigger.Native.NativeCore.Math.DEBUG.exe
 
 Python can query the math package through
 `src.adapters.native_core.package_registry.query_native_core_math_status()`.
+
+Build and run `GhostRigger.Runtime.Shared.Descriptors.DEBUG` to verify the
+shared runtime descriptor ABI without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Runtime.Shared.Descriptors.DEBUG.exe
+```
+
+Python can query the descriptor package through
+`src.adapters.native_core.package_registry.query_runtime_shared_descriptors_status()`.

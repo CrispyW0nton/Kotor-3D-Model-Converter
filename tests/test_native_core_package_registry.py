@@ -7,6 +7,7 @@ from src.adapters.native_core.package_registry import (
     NATIVE_CORE_MATH_PACKAGE,
     NATIVE_CORE_PACKAGE,
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
+    RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
     NativePackageSpec,
     NativePackageStatus,
     query_native_core_diagnostics_status,
@@ -14,6 +15,7 @@ from src.adapters.native_core.package_registry import (
     query_native_core_status,
     query_native_package_status,
     query_runtime_shared_contracts_status,
+    query_runtime_shared_descriptors_status,
 )
 
 
@@ -50,6 +52,17 @@ def test_runtime_shared_contracts_status_uses_shared_registry_path(tmp_path: Pat
     assert status.available is False
     assert (
         "GhostRigger.Runtime.Shared.Contracts.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_runtime_shared_descriptors_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_runtime_shared_descriptors_status([tmp_path])
+
+    assert status.name == "GhostRigger.Runtime.Shared.Descriptors"
+    assert status.available is False
+    assert (
+        "GhostRigger.Runtime.Shared.Descriptors.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -127,4 +140,15 @@ def test_runtime_shared_contracts_package_spec_names_current_contract() -> None:
     assert (
         RUNTIME_SHARED_CONTRACTS_PACKAGE.capabilities_export
         == "gr_runtime_shared_contracts_capabilities_json"
+    )
+
+
+def test_runtime_shared_descriptors_package_spec_names_current_contract() -> None:
+    assert RUNTIME_SHARED_DESCRIPTORS_PACKAGE.name == "GhostRigger.Runtime.Shared.Descriptors"
+    assert RUNTIME_SHARED_DESCRIPTORS_PACKAGE.dll_name == "GhostRigger.Runtime.Shared.Descriptors.dll"
+    assert RUNTIME_SHARED_DESCRIPTORS_PACKAGE.env_var == "GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS"
+    assert RUNTIME_SHARED_DESCRIPTORS_PACKAGE.version_export == "gr_runtime_shared_descriptors_version"
+    assert (
+        RUNTIME_SHARED_DESCRIPTORS_PACKAGE.capabilities_export
+        == "gr_runtime_shared_descriptors_capabilities_json"
     )

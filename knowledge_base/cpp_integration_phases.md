@@ -190,6 +190,9 @@ Current completed foundation:
 - `GhostRigger.Runtime.Shared.Contracts.dll` exists as the first `GhostRigger.Runtime.Shared.*`
   package for renderer-neutral contract metadata shared by future runtime and
   renderer packages.
+- `GhostRigger.Runtime.Shared.Descriptors.dll` exists as the first renderer-neutral
+  runtime descriptor package for shared mesh, material, and frame descriptor
+  schema metadata.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -198,6 +201,8 @@ Current completed foundation:
   math ABI without Python or the GUI.
 - `GhostRigger.Runtime.Shared.Contracts.DEBUG.exe` validates the shared runtime contract ABI
   without Python or the GUI.
+- `GhostRigger.Runtime.Shared.Descriptors.DEBUG.exe` validates the shared
+  runtime descriptor ABI without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -205,8 +210,9 @@ Current completed foundation:
   `GhostRigger.Native.NativeCore.dll`,
   `GhostRigger.Native.NativeCore.Diagnostics.dll`, and
   `GhostRigger.Native.NativeCore.Math.dll`, and
-  `GhostRigger.Runtime.Shared.Contracts.dll` availability and capabilities from
-  Python without starting the GUI.
+  `GhostRigger.Runtime.Shared.Contracts.dll`, and
+  `GhostRigger.Runtime.Shared.Descriptors.dll` availability and capabilities
+  from Python without starting the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -384,13 +390,16 @@ Before making any native system authoritative, confirm:
 2. Move the next renderer-neutral payload contract from `GhostRigger.Runtime`
    into `GhostRigger.Runtime.Shared.Contracts` once another runtime/renderer package needs
    it.
-3. Define the first renderer package boundary before adding real D3D12/WGPU
+3. Extend `GhostRigger.Runtime.Shared.Descriptors` when future renderer-neutral
+   mesh, material, frame, draw-list, or resource-residency payloads need stable
+   shared schema metadata.
+4. Define the first renderer package boundary before adding real D3D12/WGPU
    draw submission.
-4. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
+5. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
    when another package needs them.
-5. Extend the Python-side native package registry entries as each native package
+6. Extend the Python-side native package registry entries as each native package
    gains version/capability exports.
-6. Document the first concrete toolbox DLL candidate before implementing it,
+7. Document the first concrete toolbox DLL candidate before implementing it,
    including its owner, bridge surface, tests, and fallback path.
