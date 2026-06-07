@@ -202,6 +202,9 @@ Current completed foundation:
 - `GhostRigger.Renderer.Null.dll` exists as the first concrete renderer backend
   package behind `GhostRigger.Renderer.Contracts`; it is diagnostic-only and
   proves backend package shape without owning a real GPU device.
+- `GhostRigger.Renderer.D3D12.dll` exists as the first hardware renderer backend
+  package boundary behind `GhostRigger.Renderer.Contracts`; it is still
+  diagnostic-only in Phase 1 and does not create a D3D12 device or submit draws.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -218,6 +221,8 @@ Current completed foundation:
   without Python or the GUI.
 - `GhostRigger.Renderer.Null.DEBUG.exe` validates the diagnostic renderer
   backend ABI without Python or the GUI.
+- `GhostRigger.Renderer.D3D12.DEBUG.exe` validates the D3D12 renderer package
+  ABI and device-requirement metadata without Python or the GUI.
 - `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
@@ -228,8 +233,9 @@ Current completed foundation:
   `GhostRigger.Runtime.Shared.Contracts.dll`, and
   `GhostRigger.Runtime.Shared.Descriptors.dll`, and
   `GhostRigger.Runtime.Shared.Resources.dll`, and
-  `GhostRigger.Renderer.Contracts.dll`, and `GhostRigger.Renderer.Null.dll`
-  availability and capabilities from Python without starting the GUI.
+  `GhostRigger.Renderer.Contracts.dll`, and `GhostRigger.Renderer.Null.dll`,
+  and `GhostRigger.Renderer.D3D12.dll` availability and capabilities from
+  Python without starting the GUI.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
   native DLL packages and DEBUG executables, with ownership metadata and
   changelog requirements.
@@ -265,8 +271,8 @@ Required remaining foundation work:
   descriptors, math, resource residency, diagnostics, and common runtime
   helpers.
 - Create one renderer DLL package per renderer backend, with
-  `GhostRigger.Renderer.Null` as the diagnostic backend pattern and D3D12/WGPU
-  still pending.
+  `GhostRigger.Renderer.Null` as the diagnostic backend pattern and
+  `GhostRigger.Renderer.D3D12` as the first hardware backend boundary.
 - Use the native project templates for native toolbox DLLs, renderer DLLs, and
   native DEBUG executables so future agents add projects consistently.
 - Add version and capability negotiation to every native package that Python can
@@ -425,9 +431,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Add the first hardware renderer backend package, such as
-   `GhostRigger.Renderer.D3D12`, behind `GhostRigger.Renderer.Contracts` before
-   adding real draw submission.
+5. Extend `GhostRigger.Renderer.D3D12` from diagnostic package metadata into
+   explicit device-adapter enumeration and failure diagnostics before adding
+   real draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`

@@ -7,6 +7,7 @@ from src.adapters.native_core.package_registry import (
     NATIVE_CORE_MATH_PACKAGE,
     NATIVE_CORE_PACKAGE,
     RENDERER_CONTRACTS_PACKAGE,
+    RENDERER_D3D12_PACKAGE,
     RENDERER_NULL_PACKAGE,
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
@@ -18,6 +19,7 @@ from src.adapters.native_core.package_registry import (
     query_native_core_status,
     query_native_package_status,
     query_renderer_contracts_status,
+    query_renderer_d3d12_status,
     query_renderer_null_status,
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
@@ -102,6 +104,17 @@ def test_renderer_null_status_uses_shared_registry_path(tmp_path: Path) -> None:
     assert status.available is False
     assert (
         "GhostRigger.Renderer.Null.dll was not found." in status.reason
+        or "Windows native package" in status.reason
+    )
+
+
+def test_renderer_d3d12_status_uses_shared_registry_path(tmp_path: Path) -> None:
+    status = query_renderer_d3d12_status([tmp_path])
+
+    assert status.name == "GhostRigger.Renderer.D3D12"
+    assert status.available is False
+    assert (
+        "GhostRigger.Renderer.D3D12.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -218,3 +231,11 @@ def test_renderer_null_package_spec_names_current_contract() -> None:
     assert RENDERER_NULL_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_NULL"
     assert RENDERER_NULL_PACKAGE.version_export == "gr_renderer_null_version"
     assert RENDERER_NULL_PACKAGE.capabilities_export == "gr_renderer_null_capabilities_json"
+
+
+def test_renderer_d3d12_package_spec_names_current_contract() -> None:
+    assert RENDERER_D3D12_PACKAGE.name == "GhostRigger.Renderer.D3D12"
+    assert RENDERER_D3D12_PACKAGE.dll_name == "GhostRigger.Renderer.D3D12.dll"
+    assert RENDERER_D3D12_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_D3D12"
+    assert RENDERER_D3D12_PACKAGE.version_export == "gr_renderer_d3d12_version"
+    assert RENDERER_D3D12_PACKAGE.capabilities_export == "gr_renderer_d3d12_capabilities_json"

@@ -97,6 +97,11 @@ is diagnostic-only, depends on `GhostRigger.Renderer.Contracts`, and proves the
 backend DLL/DEBUG-validator pattern before a hardware renderer such as
 `GhostRigger.Renderer.D3D12` owns a real device.
 
+`GhostRigger.Renderer.D3D12` is the first hardware renderer backend package
+boundary. In Phase 1 it is diagnostic-only: it reports D3D12 package
+capabilities, backend metadata, and device requirements, but it does not create
+a D3D12 device, swap chain, command queue, or draw submission path yet.
+
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
 construction it opens the startup log console by default before Python starts,
@@ -240,3 +245,13 @@ build\vs\x64\Debug\GhostRigger.Renderer.Null.DEBUG.exe
 
 Python can query the diagnostic renderer backend package through
 `src.adapters.native_core.package_registry.query_renderer_null_status()`.
+
+Build and run `GhostRigger.Renderer.D3D12.DEBUG` to verify the D3D12 renderer
+package ABI and device-requirement metadata without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Renderer.D3D12.DEBUG.exe
+```
+
+Python can query the D3D12 renderer package through
+`src.adapters.native_core.package_registry.query_renderer_d3d12_status()`.

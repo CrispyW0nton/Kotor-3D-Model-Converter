@@ -82,6 +82,14 @@ RENDERER_NULL_PACKAGE = NativePackageSpec(
     capabilities_export="gr_renderer_null_capabilities_json",
 )
 
+RENDERER_D3D12_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Renderer.D3D12",
+    dll_name="GhostRigger.Renderer.D3D12.dll",
+    env_var="GHOSTRIGGER_RENDERER_D3D12",
+    version_export="gr_renderer_d3d12_version",
+    capabilities_export="gr_renderer_d3d12_capabilities_json",
+)
+
 NATIVE_CORE_DIAGNOSTICS_PACKAGE = NativePackageSpec(
     name="GhostRigger.Native.NativeCore.Diagnostics",
     dll_name="GhostRigger.Native.NativeCore.Diagnostics.dll",
@@ -223,3 +231,9 @@ def query_renderer_null_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(RENDERER_NULL_PACKAGE, search_paths)
+
+
+def query_renderer_d3d12_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(RENDERER_D3D12_PACKAGE, search_paths)
