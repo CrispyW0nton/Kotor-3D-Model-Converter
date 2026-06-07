@@ -237,6 +237,50 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 43;
     }
+    const char* no_draw_execution_json = gr_renderer_d3d12_no_draw_execution_fence_diagnostics_json(context);
+    if (std::strstr(
+            no_draw_execution_json,
+            R"("schema":"renderer_d3d12_no_draw_execution_fence_diagnostics.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution/fence diagnostics mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 44;
+    }
+    if (std::strstr(no_draw_execution_json, R"("no_draw_command_list_executed":true)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution did not submit the closed command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 45;
+    }
+    if (std::strstr(no_draw_execution_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 46;
+    }
+    if (std::strstr(no_draw_execution_json, R"("command_lists_submitted":1)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution did not report one submitted command list" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 47;
+    }
+    if (std::strstr(no_draw_execution_json, R"("fence_signaled":true)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution did not signal the fence" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 48;
+    }
+    if (std::strstr(no_draw_execution_json, R"("fence_completed":true)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution did not complete the fence" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 49;
+    }
+    if (std::strstr(no_draw_execution_json, R"("present_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution enabled present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 50;
+    }
+    if (std::strstr(no_draw_execution_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 no-draw execution enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 51;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

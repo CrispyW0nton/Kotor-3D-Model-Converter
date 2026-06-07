@@ -107,9 +107,9 @@ direct command allocator, closed direct command-list readiness metadata, and
 native surface/swap-chain handle readiness metadata, render-target/back-buffer
 metadata, resource-barrier/clear-pass metadata, and failure-diagnostic metadata,
 command-recording dry-run frame metadata, and guarded command-list reset/close
-diagnostics, but it does not create a swap chain, acquire back buffers, create
-RTVs, record barriers, clears, or draws, present, execute a command list, or
-create a draw submission path yet.
+diagnostics, and guarded no-draw command execution/fence readiness diagnostics,
+but it does not create a swap chain, acquire back buffers, create RTVs, record
+barriers, clears, or draws, present, or create a real draw submission path yet.
 
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active

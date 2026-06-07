@@ -2,6 +2,8 @@
 
 #include "GhostRiggerRendererContracts.h"
 
+#include <windows.h>
+
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
@@ -60,6 +62,7 @@ struct DiagnosticContext {
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsv_heap;
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator;
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> command_list;
+    Microsoft::WRL::ComPtr<ID3D12Fence> no_draw_fence;
     std::string adapter_description;
     HRESULT device_hr = E_FAIL;
     HRESULT queue_hr = E_FAIL;
@@ -72,6 +75,11 @@ struct DiagnosticContext {
     HRESULT guarded_allocator_reset_hr = E_FAIL;
     HRESULT guarded_command_list_reset_hr = E_FAIL;
     HRESULT guarded_command_list_close_hr = E_FAIL;
+    HRESULT no_draw_fence_hr = E_FAIL;
+    HRESULT no_draw_signal_hr = E_FAIL;
+    HRESULT no_draw_set_event_hr = E_FAIL;
+    DWORD no_draw_wait_result = WAIT_FAILED;
+    UINT64 no_draw_fence_value = 1;
     bool device_ready = false;
     bool command_queue_ready = false;
     bool descriptor_heaps_ready = false;
@@ -86,6 +94,11 @@ struct DiagnosticContext {
     bool guarded_allocator_reset = false;
     bool guarded_command_list_reset = false;
     bool guarded_command_list_closed = false;
+    bool no_draw_command_list_executed = false;
+    bool no_draw_fence_ready = false;
+    bool no_draw_fence_signaled = false;
+    bool no_draw_fence_completed = false;
+    bool no_draw_fence_waited = false;
     bool draw_submission_enabled = false;
 };
 
@@ -526,6 +539,99 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_guarded_command_recording_di
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_no_draw_execution_fence_diagnostics_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_no_draw_execution_fence_diagnostics.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_command_queue":false,"retained_command_list":false,"no_draw_command_list_executed":false,"draw_calls_recorded":0,"command_lists_submitted":0,"fence_created":false,"fence_signaled":false,"fence_completed":false,"fence_waited":false,"present_enabled":false,"draw_submission_enabled":false})";
+    }
+
+    if (target->command_queue && target->command_list && !target->no_draw_fence_completed) {
+        if (!target->guarded_command_list_closed && !target->command_list_closed) {
+            HRESULT hr = target->command_list->Close();
+            target->guarded_command_list_close_hr = hr;
+            target->guarded_command_list_closed = SUCCEEDED(hr);
+            target->command_list_closed = target->guarded_command_list_closed;
+        }
+
+        if (target->guarded_command_list_closed || target->command_list_closed) {
+            ID3D12CommandList* command_lists[] = { target->command_list.Get() };
+            target->command_queue->ExecuteCommandLists(1, command_lists);
+            target->no_draw_command_list_executed = true;
+
+            HRESULT hr = target->device
+                ? target->device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&target->no_draw_fence))
+                : E_FAIL;
+            target->no_draw_fence_hr = hr;
+            target->no_draw_fence_ready = SUCCEEDED(hr);
+
+            if (target->no_draw_fence_ready) {
+                hr = target->command_queue->Signal(target->no_draw_fence.Get(), target->no_draw_fence_value);
+                target->no_draw_signal_hr = hr;
+                target->no_draw_fence_signaled = SUCCEEDED(hr);
+            }
+
+            if (
+                target->no_draw_fence_signaled &&
+                target->no_draw_fence->GetCompletedValue() < target->no_draw_fence_value
+            ) {
+                HANDLE fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+                if (fence_event != nullptr) {
+                    hr = target->no_draw_fence->SetEventOnCompletion(target->no_draw_fence_value, fence_event);
+                    target->no_draw_set_event_hr = hr;
+                    if (SUCCEEDED(hr)) {
+                        target->no_draw_wait_result = WaitForSingleObject(fence_event, 2000);
+                        target->no_draw_fence_waited = target->no_draw_wait_result == WAIT_OBJECT_0;
+                    }
+                    CloseHandle(fence_event);
+                } else {
+                    target->no_draw_set_event_hr = HRESULT_FROM_WIN32(GetLastError());
+                }
+            } else if (target->no_draw_fence_signaled) {
+                target->no_draw_set_event_hr = S_OK;
+                target->no_draw_wait_result = WAIT_OBJECT_0;
+            }
+
+            target->no_draw_fence_completed =
+                target->no_draw_fence_signaled &&
+                target->no_draw_fence->GetCompletedValue() >= target->no_draw_fence_value;
+        }
+    }
+
+    payload =
+        R"({"schema":"renderer_d3d12_no_draw_execution_fence_diagnostics.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_command_queue":)";
+    payload += target->command_queue ? "true" : "false";
+    payload += R"(,"retained_command_list":)";
+    payload += target->command_list ? "true" : "false";
+    payload += R"(,"no_draw_command_list_executed":)";
+    payload += target->no_draw_command_list_executed ? "true" : "false";
+    payload += R"(,"draw_calls_recorded":0,"command_lists_submitted":)";
+    payload += target->no_draw_command_list_executed ? "1" : "0";
+    payload += R"(,"fence_created":)";
+    payload += target->no_draw_fence_ready ? "true" : "false";
+    payload += R"(,"fence_signaled":)";
+    payload += target->no_draw_fence_signaled ? "true" : "false";
+    payload += R"(,"fence_completed":)";
+    payload += target->no_draw_fence_completed ? "true" : "false";
+    payload += R"(,"fence_waited":)";
+    payload += target->no_draw_fence_waited ? "true" : "false";
+    payload += R"(,"present_enabled":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"fence_value":)";
+    payload += std::to_string(static_cast<unsigned long long>(target->no_draw_fence_value));
+    payload += R"(,"wait_result":)";
+    payload += std::to_string(static_cast<unsigned long>(target->no_draw_wait_result));
+    payload += R"(,"fence_hresult":")";
+    payload += hresult_hex(target->no_draw_fence_hr);
+    payload += R"(","signal_hresult":")";
+    payload += hresult_hex(target->no_draw_signal_hr);
+    payload += R"(","set_event_hresult":")";
+    payload += hresult_hex(target->no_draw_set_event_hr);
+    payload += R"(","phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -534,7 +640,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("failure_points":["dxgi_factory","adapter_enumeration","feature_level",)"
         R"("device_creation","command_queue","native_window_handle","swap_chain",)"
         R"("render_target_metadata","barrier_clear_pass_metadata",)"
-        R"("command_recording_dry_run","guarded_command_recording"],)"
+        R"("command_recording_dry_run","guarded_command_recording",)"
+        R"("no_draw_execution_fence"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -699,6 +806,10 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->guarded_command_list_reset ? "true" : "false";
     payload += R"(,"guarded_command_list_closed":)";
     payload += target->guarded_command_list_closed ? "true" : "false";
+    payload += R"(,"no_draw_command_list_executed":)";
+    payload += target->no_draw_command_list_executed ? "true" : "false";
+    payload += R"(,"no_draw_fence_completed":)";
+    payload += target->no_draw_fence_completed ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
@@ -721,6 +832,12 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += hresult_hex(target->guarded_command_list_reset_hr);
     payload += R"(","guarded_command_list_close_hresult":")";
     payload += hresult_hex(target->guarded_command_list_close_hr);
+    payload += R"(","no_draw_fence_hresult":")";
+    payload += hresult_hex(target->no_draw_fence_hr);
+    payload += R"(","no_draw_signal_hresult":")";
+    payload += hresult_hex(target->no_draw_signal_hr);
+    payload += R"(","no_draw_set_event_hresult":")";
+    payload += hresult_hex(target->no_draw_set_event_hr);
     payload += R"("})";
     return payload.c_str();
 }

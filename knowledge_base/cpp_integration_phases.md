@@ -213,10 +213,11 @@ Current completed foundation:
   metadata, report native surface/swap-chain handle readiness metadata, report
   render-target/back-buffer metadata, report resource-barrier/clear-pass
   metadata, report command-recording dry-run frame metadata, run guarded
-  command-list reset/close diagnostics, and report failure-diagnostic schema
+  command-list reset/close diagnostics, run guarded no-draw command
+  execution/fence readiness diagnostics, and report failure-diagnostic schema
   metadata, but it is still diagnostic-only in Phase 1 and does not create swap
   chains, acquire back buffers, create RTVs, record barriers, clears, or draws,
-  present, execute command lists, or submit draws.
+  present, or enable real draw submission.
 - `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
   Python or the GUI.
 - `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
@@ -450,9 +451,9 @@ Before making any native system authoritative, confirm:
 4. Extend `GhostRigger.Runtime.Shared.Resources` when future renderer-neutral
    upload, residency, transition, or resource-handle payloads need stable shared
    schema metadata.
-5. Extend `GhostRigger.Renderer.D3D12` from guarded command-list reset/close
-   diagnostics into guarded no-draw command execution/fence readiness
-   diagnostics before adding present or real draw submission.
+5. Extend `GhostRigger.Renderer.D3D12` from guarded no-draw command
+   execution/fence readiness diagnostics into present-readiness metadata
+   diagnostics before enabling real present or draw submission.
 6. Move reusable handle code into `GhostRigger.Native.NativeCore`, reusable
    diagnostic record/schema code into `GhostRigger.Native.NativeCore.Diagnostics`,
    and reusable bounds/matrix helpers into `GhostRigger.Native.NativeCore.Math`
