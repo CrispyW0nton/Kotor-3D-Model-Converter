@@ -58,6 +58,14 @@ RUNTIME_SHARED_DESCRIPTORS_PACKAGE = NativePackageSpec(
     capabilities_export="gr_runtime_shared_descriptors_capabilities_json",
 )
 
+RUNTIME_SHARED_RESOURCES_PACKAGE = NativePackageSpec(
+    name="GhostRigger.Runtime.Shared.Resources",
+    dll_name="GhostRigger.Runtime.Shared.Resources.dll",
+    env_var="GHOSTRIGGER_RUNTIME_SHARED_RESOURCES",
+    version_export="gr_runtime_shared_resources_version",
+    capabilities_export="gr_runtime_shared_resources_capabilities_json",
+)
+
 NATIVE_CORE_DIAGNOSTICS_PACKAGE = NativePackageSpec(
     name="GhostRigger.Native.NativeCore.Diagnostics",
     dll_name="GhostRigger.Native.NativeCore.Diagnostics.dll",
@@ -181,3 +189,9 @@ def query_runtime_shared_descriptors_status(
     search_paths: Iterable[Path] | None = None,
 ) -> NativePackageStatus:
     return query_native_package_status(RUNTIME_SHARED_DESCRIPTORS_PACKAGE, search_paths)
+
+
+def query_runtime_shared_resources_status(
+    search_paths: Iterable[Path] | None = None,
+) -> NativePackageStatus:
+    return query_native_package_status(RUNTIME_SHARED_RESOURCES_PACKAGE, search_paths)

@@ -6,6 +6,7 @@ from .package_registry import (
     NATIVE_CORE_PACKAGE,
     RUNTIME_SHARED_CONTRACTS_PACKAGE,
     RUNTIME_SHARED_DESCRIPTORS_PACKAGE,
+    RUNTIME_SHARED_RESOURCES_PACKAGE,
     NativePackageSpec,
     NativePackageStatus,
     query_native_core_diagnostics_status,
@@ -14,6 +15,7 @@ from .package_registry import (
     query_native_package_status,
     query_runtime_shared_contracts_status,
     query_runtime_shared_descriptors_status,
+    query_runtime_shared_resources_status,
 )
 
 __all__ = [
@@ -22,6 +24,7 @@ __all__ = [
     "NATIVE_CORE_PACKAGE",
     "RUNTIME_SHARED_CONTRACTS_PACKAGE",
     "RUNTIME_SHARED_DESCRIPTORS_PACKAGE",
+    "RUNTIME_SHARED_RESOURCES_PACKAGE",
     "NativePackageSpec",
     "NativePackageStatus",
     "query_native_core_diagnostics_status",
@@ -30,4 +33,5 @@ __all__ = [
     "query_native_package_status",
     "query_runtime_shared_contracts_status",
     "query_runtime_shared_descriptors_status",
+    "query_runtime_shared_resources_status",
 ]

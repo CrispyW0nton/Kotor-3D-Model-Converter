@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{7CC3F1DC-0B6A-4F41-9663-BE78C7BB3A78}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{8E453865-C1D0-40BE-8C0E-61677C2F9E2D}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup><ClCompile Include="GhostRiggerRuntimeSharedResources.cpp"><Filter>Source Files</Filter></ClCompile></ItemGroup>
+  <ItemGroup><ClInclude Include="GhostRiggerRuntimeSharedResources.h"><Filter>Header Files</Filter></ClInclude></ItemGroup>
+</Project>

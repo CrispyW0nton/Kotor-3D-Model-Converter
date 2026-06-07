@@ -47,6 +47,9 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     assert "GhostRigger.Runtime.Shared.Descriptors" in (ROOT / "native" / "README.md").read_text(
         encoding="utf-8"
     )
+    assert "GhostRigger.Runtime.Shared.Resources" in (ROOT / "native" / "README.md").read_text(
+        encoding="utf-8"
+    )
     assert "Owner surface" in readme
     assert "Owner package" in readme
     assert "Bridge method" in readme
@@ -170,6 +173,34 @@ def test_runtime_shared_descriptors_project_uses_phase_one_naming_and_release_hy
     assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
 
 
+def test_runtime_shared_resources_project_uses_phase_one_naming_and_release_hygiene() -> None:
+    project_path = (
+        ROOT
+        / "native"
+        / "GhostRigger.Runtime.Shared.Resources"
+        / "GhostRigger.Runtime.Shared.Resources.vcxproj"
+    )
+    tree = ET.parse(project_path)
+    ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
+
+    target_names = [node.text for node in tree.findall(".//msb:TargetName", ns)]
+    project_refs = [node.attrib["Include"] for node in tree.findall(".//msb:ProjectReference", ns)]
+    release_debug_info = tree.findall(
+        ".//msb:ItemDefinitionGroup[@Condition=\"'$(Configuration)'=='Release'\"]"
+        "/msb:Link/msb:GenerateDebugInformation",
+        ns,
+    )
+    post_build_commands = [
+        node.text or "" for node in tree.findall(".//msb:PostBuildEvent/msb:Command", ns)
+    ]
+
+    assert target_names == ["GhostRigger.Runtime.Shared.Resources"]
+    assert any("GhostRigger.Native.NativeCore.vcxproj" in ref for ref in project_refs)
+    assert [node.text for node in release_debug_info] == ["false"]
+    assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
+    assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 
@@ -179,6 +210,7 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
         "{19928EC9-FCAB-4DC0-B798-5512563F99D6}",
         "{3F23681A-26CC-4C2D-B4F3-C766223FE004}",
         "{15144CB5-C12B-4183-951F-4CE841E89B9B}",
+        "{243B0BA6-B5CA-4DB7-8131-09158549818A}",
         "{B56D386B-6E3A-48F7-A2FE-166B8D2AA730}",
     }
 

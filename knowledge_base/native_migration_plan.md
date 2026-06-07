@@ -294,6 +294,11 @@ Acceptance:
   metadata that future runtime and renderer DLLs can share.
 - `native/GhostRigger.Runtime.Shared.Descriptors.DEBUG/` verifies the shared
   runtime descriptor ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Runtime.Shared.Resources/` owns the renderer-neutral
+  resource residency schema package for resource identifiers, residency records,
+  upload packets, and transition packets.
+- `native/GhostRigger.Runtime.Shared.Resources.DEBUG/` verifies the shared
+  runtime resource ABI from Visual Studio without requiring Python.
 
 ### N2: Native Retained Scene DEBUG
 

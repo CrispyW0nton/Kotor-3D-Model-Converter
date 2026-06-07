@@ -66,6 +66,12 @@ descriptor package. It publishes stable schema metadata for mesh, material, and
 frame descriptors so future runtime and renderer DLLs can share payload shapes
 instead of redefining descriptor contracts locally.
 
+`GhostRigger.Runtime.Shared.Resources` owns renderer-neutral resource residency
+schema metadata for resource identifiers, residency records, upload packets,
+and transition packets. Future D3D12/WGPU renderer packages should depend on
+this package for resource-state payload shapes instead of inventing local queue
+schemas.
+
 Build `GhostRigger.Native` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
 construction it opens the startup log console by default before Python starts,
@@ -179,3 +185,13 @@ build\vs\x64\Debug\GhostRigger.Runtime.Shared.Descriptors.DEBUG.exe
 
 Python can query the descriptor package through
 `src.adapters.native_core.package_registry.query_runtime_shared_descriptors_status()`.
+
+Build and run `GhostRigger.Runtime.Shared.Resources.DEBUG` to verify the shared
+runtime resource ABI without starting Python or the GUI:
+
+```text
+build\vs\x64\Debug\GhostRigger.Runtime.Shared.Resources.DEBUG.exe
+```
+
+Python can query the resource package through
+`src.adapters.native_core.package_registry.query_runtime_shared_resources_status()`.
