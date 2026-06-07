@@ -691,6 +691,51 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 123;
     }
+    const char* pipeline_state_json =
+        gr_renderer_d3d12_pipeline_state_readiness_metadata_json(context);
+    if (std::strstr(
+            pipeline_state_json,
+            R"("schema":"renderer_d3d12_pipeline_state_readiness_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 124;
+    }
+    if (std::strstr(pipeline_state_json, R"("pipeline_state_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 125;
+    }
+    if (std::strstr(pipeline_state_json, R"("root_signature_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness created a root signature" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 126;
+    }
+    if (std::strstr(pipeline_state_json, R"("pipeline_state_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness created a PSO" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 127;
+    }
+    if (std::strstr(pipeline_state_json, R"("vertex_shader_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness compiled a vertex shader" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 128;
+    }
+    if (std::strstr(pipeline_state_json, R"("pixel_shader_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness compiled a pixel shader" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 129;
+    }
+    if (std::strstr(pipeline_state_json, R"("draw_calls_recorded":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness recorded draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 130;
+    }
+    if (std::strstr(pipeline_state_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 pipeline-state readiness enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 131;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

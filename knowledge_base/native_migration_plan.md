@@ -83,7 +83,8 @@ a launcher and native workspace first, not a rewrite of the application.
   clear-pass command execution/fence diagnostics, report post-clear
   present-readiness diagnostics, run guarded present-call diagnostics, report
   post-present frame/accounting diagnostics, report native draw-list readiness
-  metadata, report native resource-binding readiness metadata, and report
+  metadata, report native resource-binding readiness metadata, report
+  pipeline-state/root-signature readiness metadata, and report
   failure-diagnostic metadata, but it is diagnostic-only in Phase 1 and does
   not record draws or enable real draw submission yet.
   `Present` is only reachable through the guarded present-call diagnostic after
@@ -103,8 +104,8 @@ a launcher and native workspace first, not a rewrite of the application.
   present-readiness diagnostics export, guarded present-call diagnostics export,
   post-present frame/accounting diagnostics export, failure-diagnostic export,
   native draw-list readiness metadata export, native resource-binding readiness
-  metadata export, and device-requirement metadata from Visual Studio without
-  requiring Python.
+  metadata export, pipeline-state/root-signature readiness metadata export, and
+  device-requirement metadata from Visual Studio without requiring Python.
 - `native/templates/` owns the Phase 1 scaffolding for future native DLL and
   DEBUG executable projects.
 - `src.adapters.native_core.package_registry` detects native package

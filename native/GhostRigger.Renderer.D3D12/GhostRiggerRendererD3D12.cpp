@@ -141,6 +141,7 @@ struct DiagnosticContext {
     bool post_present_frame_accounting_ready = false;
     bool draw_list_readiness_metadata_ready = false;
     bool resource_binding_readiness_metadata_ready = false;
+    bool pipeline_state_readiness_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -1275,6 +1276,41 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_resource_binding_readiness_m
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_pipeline_state_readiness_metadata_json(
+    void* context
+) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_pipeline_state_readiness_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"pipeline_state_ready":false,"root_signature_created":false,"pipeline_state_created":false,"vertex_shader_ready":false,"pixel_shader_ready":false,"draw_submission_enabled":false})";
+    }
+
+    target->pipeline_state_readiness_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_pipeline_state_readiness_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"resource_binding_ready":false,"pipeline_state_ready":false,)"
+               R"("root_signature_created":false,"root_parameters_declared":0,)"
+               R"("descriptor_ranges_declared":0,"static_samplers_declared":0,)"
+               R"("pipeline_state_created":false,"input_layout_ready":false,)"
+               R"("input_layout_semantics":["POSITION","NORMAL","TEXCOORD","BLENDINDICES","BLENDWEIGHT"],)"
+               R"("vertex_shader_ready":false,"pixel_shader_ready":false,)"
+               R"("skinning_shader_variant_ready":false,"sprite_shader_variant_ready":false,)"
+               R"("depth_stencil_state_ready":false,"rasterizer_state_ready":false,)"
+               R"("blend_state_ready":false,"render_target_format":"DXGI_FORMAT_R8G8B8A8_UNORM",)"
+               R"("depth_stencil_format":"DXGI_FORMAT_D24_UNORM_S8_UINT",)"
+               R"("primitive_topology_type":"D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE",)"
+               R"("command_list_recorded_for_draws":false,"draw_calls_recorded":0,)"
+               R"("draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"failure_points":["root_signature_missing","pipeline_state_missing",)"
+               R"("vertex_shader_missing","pixel_shader_missing","input_layout_missing",)"
+               R"("draw_submission_disabled"],"phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -1289,7 +1325,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("guarded_barrier_clear_recording","guarded_clear_pass_execution_fence",)"
         R"("post_clear_present_readiness","guarded_present_call",)"
         R"("post_present_frame_accounting","draw_list_readiness_metadata",)"
-        R"("resource_binding_readiness_metadata"],)"
+        R"("resource_binding_readiness_metadata","pipeline_state_readiness_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -1488,6 +1524,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->draw_list_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"resource_binding_readiness_metadata_ready":)";
     payload += target->resource_binding_readiness_metadata_ready ? "true" : "false";
+    payload += R"(,"pipeline_state_readiness_metadata_ready":)";
+    payload += target->pipeline_state_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"diagnostic_frame_index":)";
     payload += std::to_string(static_cast<unsigned long long>(target->diagnostic_frame_index));
     payload += R"(,"diagnostic_presented_frame_count":)";
