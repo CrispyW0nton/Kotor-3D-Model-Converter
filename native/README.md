@@ -117,8 +117,9 @@ and post-present frame/accounting diagnostics, and native draw-list readiness
 metadata, and native resource-binding readiness metadata, and
 pipeline-state/root-signature readiness metadata, and guarded shader-bytecode
 metadata, and shader reflection/input-layout metadata, and guarded
-root-signature metadata, and guarded pipeline-state object metadata, but it
-does not record draws or create a real draw submission path yet.
+root-signature metadata, guarded pipeline-state object metadata, and guarded
+draw-command recording metadata, but it does not record draws or create a real
+draw submission path yet.
 `Present` is only reachable through the guarded present-call diagnostic after
 prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
 
@@ -274,8 +275,9 @@ export, native surface/swap-chain readiness export, render-target/back-buffer
 metadata export, resource-barrier/clear-pass metadata export,
 command-recording dry-run frame metadata export, guarded command-list
 reset/close diagnostics export, guarded root-signature metadata export,
-guarded pipeline-state object metadata export, failure-diagnostic export, and
-device-requirement metadata without starting Python or the GUI:
+guarded pipeline-state object metadata export, guarded draw-command recording
+metadata export, failure-diagnostic export, and device-requirement metadata
+without starting Python or the GUI:
 
 ```text
 build\vs\x64\Debug\GhostRigger.Renderer.D3D12.DEBUG.exe

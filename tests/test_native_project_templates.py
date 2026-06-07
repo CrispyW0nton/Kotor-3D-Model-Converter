@@ -1168,6 +1168,58 @@ def test_renderer_d3d12_exports_guarded_pipeline_state_object_metadata_boundary(
     assert "gr_renderer_d3d12_guarded_pipeline_state_object_metadata_json(context)" in validator
 
 
+def test_renderer_d3d12_exports_guarded_draw_command_recording_metadata_boundary() -> None:
+    header = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.h"
+    ).read_text(encoding="utf-8")
+    implementation = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12"
+        / "GhostRiggerRendererD3D12.cpp"
+    ).read_text(encoding="utf-8")
+    validator = (
+        ROOT
+        / "native"
+        / "GhostRigger.Renderer.D3D12.DEBUG"
+        / "GhostRiggerRendererD3D12DEBUG.cpp"
+    ).read_text(encoding="utf-8")
+
+    assert "gr_renderer_d3d12_guarded_draw_command_recording_metadata_json" in header
+    assert "renderer_d3d12_guarded_draw_command_recording_metadata.v1" in implementation
+    assert '"draw_list_ready":false' in implementation
+    assert '"resource_binding_ready":false' in implementation
+    assert '"root_signature_ready":false' in implementation
+    assert '"pipeline_state_ready":false' in implementation
+    assert '"vertex_buffers_ready":false' in implementation
+    assert '"index_buffers_ready":false' in implementation
+    assert '"descriptor_tables_ready":false' in implementation
+    assert '"command_list_reset_for_draws":false' in implementation
+    assert '"command_list_recorded_for_draws":false' in implementation
+    assert '"command_list_closed_for_draws":false' in implementation
+    assert '"render_targets_bound_for_draws":false' in implementation
+    assert '"viewport_bound":false' in implementation
+    assert '"scissor_bound":false' in implementation
+    assert '"primitive_topology_bound":false' in implementation
+    assert '"draw_command_count":0' in implementation
+    assert '"indexed_draw_command_count":0' in implementation
+    assert '"instanced_draw_command_count":0' in implementation
+    assert '"skinned_draw_command_count":0' in implementation
+    assert '"sprite_draw_command_count":0' in implementation
+    assert '"submitted_vertex_count":0' in implementation
+    assert '"submitted_index_count":0' in implementation
+    assert '"submitted_instance_count":0' in implementation
+    assert '"draw_packets":[]' in implementation
+    assert '"present_after_draws_enabled":false' in implementation
+    assert '"draw_submission_enabled":false' in implementation
+    assert "DrawIndexedInstanced" not in implementation
+    assert "DrawInstanced" not in implementation
+    assert "gr_renderer_d3d12_guarded_draw_command_recording_metadata_json(context)" in validator
+
+
 def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 

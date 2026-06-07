@@ -926,6 +926,46 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 165;
     }
+    const char* draw_command_json =
+        gr_renderer_d3d12_guarded_draw_command_recording_metadata_json(context);
+    if (std::strstr(
+            draw_command_json,
+            R"("schema":"renderer_d3d12_guarded_draw_command_recording_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 guarded draw-command metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 166;
+    }
+    if (std::strstr(draw_command_json, R"("command_list_recorded_for_draws":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 recorded draw commands" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 167;
+    }
+    if (std::strstr(draw_command_json, R"("draw_command_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 counted draw commands" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 168;
+    }
+    if (std::strstr(draw_command_json, R"("indexed_draw_command_count":0)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 counted indexed draw commands" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 169;
+    }
+    if (std::strstr(draw_command_json, R"("draw_packets":[])") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 emitted draw packets" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 170;
+    }
+    if (std::strstr(draw_command_json, R"("present_after_draws_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 enabled present after draws" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 171;
+    }
+    if (std::strstr(draw_command_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 draw commands enabled submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 172;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;
