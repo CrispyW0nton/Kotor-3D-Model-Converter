@@ -1522,6 +1522,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                             mesh_data,
                             self._active_anim_pose,
                             self._active_scene,
+                            anim_base_pose=self._active_anim_base_pose,
                         )
                     except Exception as exc:
                         self.last_skinning_error = f"WGPU skin palette upload failed: {exc}"
@@ -1671,6 +1672,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
                                 mesh_data,
                                 self._active_anim_pose,
                                 self._active_scene,
+                                anim_base_pose=self._active_anim_base_pose,
                             )
                         except Exception as exc:
                             self.last_skinning_error = f"WGPU edge skin palette upload failed: {exc}"

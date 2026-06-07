@@ -1115,7 +1115,8 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
 
     source = inspect.getsource(GpuRenderer._render_gpu)
 
-    assert "compute_skin_node_palette(node, anim_pose)" in source
+    assert "compute_skin_node_palette(" in source
+    assert "anim_base_pose=anim_base_pose" in source
     assert "self._skin_uploader.bone_index(_bmname)" not in source
 
 

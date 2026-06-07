@@ -137,7 +137,7 @@ class WgpuResourceCache:
         self._recount()
         return resource
 
-    def get_or_update_skin_palette(self, mesh_data, anim_pose, model) -> WgpuSkinResource | None:
+    def get_or_update_skin_palette(self, mesh_data, anim_pose, model, anim_base_pose=None) -> WgpuSkinResource | None:
         import wgpu
 
         if not bool(getattr(mesh_data, "is_skinned", False)) or anim_pose is None:
@@ -189,10 +189,14 @@ class WgpuResourceCache:
             )
             self.skins[mesh_id] = cached
 
-        pose_revision = self._pose_revision(anim_pose, mesh_data)
+        pose_revision = self._pose_revision(anim_pose, mesh_data, anim_base_pose=anim_base_pose)
         if cached.pose_revision != pose_revision:
             started = time.perf_counter()
-            palette = cached.uploader.compute_skin_node_palette(mesh_data.source, anim_pose)
+            palette = cached.uploader.compute_skin_node_palette(
+                mesh_data.source,
+                anim_pose,
+                anim_base_pose=anim_base_pose,
+            )
             payload = cached.uploader.as_flat_bytes()
             if not payload:
                 self.last_skinning_error = f"empty WGPU skin palette for {getattr(mesh_data.source, 'name', mesh_id)}"
@@ -346,11 +350,14 @@ class WgpuResourceCache:
             return fixed
         return fixed
 
-    def _pose_revision(self, anim_pose, mesh_data) -> int:
+    def _pose_revision(self, anim_pose, mesh_data, *, anim_base_pose=None) -> int:
         return hash(
             (
                 id(anim_pose),
+                id(anim_base_pose),
                 int(round(float(getattr(anim_pose, "time", 0.0) or 0.0) * 100000.0)),
+                int(round(float(getattr(anim_base_pose, "time", 0.0) or 0.0) * 100000.0))
+                if anim_base_pose is not None else 0,
                 int(getattr(mesh_data, "skin_revision", 0) or 0),
                 int(mesh_data.mesh_id),
             )

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from src.core.characters.character_builder import apply_template_rig
 from src.core.characters.character_rig_state import get_character_rig_state
-from src.core.animation.animation_engine import AnimPose
+from src.core.animation.animation_engine import AnimPose, NodePose
 from src.core.animation.gpu_skinning import MatrixPaletteUploader
 from src.core.geometry.model_data import (
     BoneWeight,
@@ -312,6 +312,64 @@ def test_apply_template_rig_generated_skin_bind_palette_survives_kotor_parent_fl
     palette = uploader.compute_skin_node_palette(rigged_mesh, AnimPose(time=0.0))
 
     assert len(palette) == 1
+    identity_col_major = [
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ]
+    for actual, expected in zip(palette[0].flat_col, identity_col_major):
+        assert math.isclose(actual, expected, abs_tol=1.0e-6)
+
+
+def test_apply_template_rig_live_palette_uses_animation_base_pose_for_imported_skin() -> None:
+    src_root = _node("Bendak_UE")
+    mesh = _node("BendakFit", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(2.0, 0.0, 0.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh._gr_vertices_in_kotor_world = True
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Male02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("BendakFit")
+    assert rigged_mesh is not None
+    rigged_mesh.qbone_list = []
+    rigged_mesh.tbone_list = []
+    assert rigged_mesh.qbone_list == []
+    assert rigged_mesh.tbone_list == []
+
+    base_pose = AnimPose(
+        time=0.0,
+        nodes={
+            "rootdummy": NodePose(
+                name="rootdummy",
+                position=(0.5, 0.0, 0.0),
+            )
+        },
+    )
+    current_pose = AnimPose(
+        time=0.5,
+        nodes={
+            "rootdummy": NodePose(
+                name="rootdummy",
+                position=(0.5, 0.0, 0.0),
+            )
+        },
+    )
+    uploader = MatrixPaletteUploader()
+    uploader.build_inverse_bind_pose(result["model"])
+    palette = uploader.compute_skin_node_palette(
+        rigged_mesh,
+        current_pose,
+        anim_base_pose=base_pose,
+    )
+
     identity_col_major = [
         1.0, 0.0, 0.0, 0.0,
         0.0, 1.0, 0.0, 0.0,
