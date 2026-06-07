@@ -281,6 +281,45 @@ int main()
         gr_renderer_d3d12_destroy_diagnostic_context(context);
         return 51;
     }
+    const char* present_readiness_json = gr_renderer_d3d12_present_readiness_metadata_json(context);
+    if (std::strstr(
+            present_readiness_json,
+            R"("schema":"renderer_d3d12_present_readiness_metadata.v1")"
+        ) == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata mismatch" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 52;
+    }
+    if (std::strstr(present_readiness_json, R"("swap_chain_created":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata created a swap chain" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 53;
+    }
+    if (std::strstr(present_readiness_json, R"("back_buffers_acquired":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata acquired back buffers" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 54;
+    }
+    if (std::strstr(present_readiness_json, R"("present_ready":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata reported ready too early" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 55;
+    }
+    if (std::strstr(present_readiness_json, R"("present_called":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata called present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 56;
+    }
+    if (std::strstr(present_readiness_json, R"("present_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata enabled present" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 57;
+    }
+    if (std::strstr(present_readiness_json, R"("draw_submission_enabled":false)") == nullptr) {
+        std::cerr << "GhostRigger.Renderer.D3D12 present-readiness metadata enabled draw submission" << std::endl;
+        gr_renderer_d3d12_destroy_diagnostic_context(context);
+        return 58;
+    }
     gr_renderer_d3d12_destroy_diagnostic_context(context);
 
     std::cout << "GhostRigger.Renderer.D3D12.DEBUG OK: " << version << std::endl;

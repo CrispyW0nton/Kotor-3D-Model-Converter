@@ -99,6 +99,7 @@ struct DiagnosticContext {
     bool no_draw_fence_signaled = false;
     bool no_draw_fence_completed = false;
     bool no_draw_fence_waited = false;
+    bool present_readiness_metadata_ready = false;
     bool draw_submission_enabled = false;
 };
 
@@ -632,6 +633,42 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_no_draw_execution_fence_diag
     return payload.c_str();
 }
 
+GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_present_readiness_metadata_json(void* context) {
+    static thread_local std::string payload;
+    auto* target = context_from_handle(context);
+    if (target == nullptr) {
+        return R"({"schema":"renderer_d3d12_present_readiness_metadata.v1","backend_id":"renderer_d3d12","status":"null_context","diagnostic_only":true,"retained_command_queue":false,"swap_chain_created":false,"back_buffers_acquired":false,"present_ready":false,"present_called":false,"present_enabled":false,"draw_submission_enabled":false})";
+    }
+
+    const bool retained_command_queue = target->command_queue != nullptr;
+    const bool fence_completed = target->no_draw_fence_completed;
+    const bool present_ready = false;
+    target->present_readiness_metadata_ready = true;
+
+    payload =
+        R"({"schema":"renderer_d3d12_present_readiness_metadata.v1",)"
+        R"("backend_id":"renderer_d3d12","diagnostic_only":true,"retained_device":)";
+    payload += target->device ? "true" : "false";
+    payload += R"(,"retained_command_queue":)";
+    payload += retained_command_queue ? "true" : "false";
+    payload += R"(,"no_draw_fence_completed":)";
+    payload += fence_completed ? "true" : "false";
+    payload += R"(,"swap_chain_created":false,"swap_chain_ready":false,)"
+               R"("back_buffers_acquired":false,"render_target_views_created":false,)"
+               R"("back_buffer_index_known":false,"present_ready":)";
+    payload += present_ready ? "true" : "false";
+    payload += R"(,"present_called":false,"present_enabled":false,"draw_submission_enabled":)";
+    payload += target->draw_submission_enabled ? "true" : "false";
+    payload += R"(,"present_desc":{"sync_interval":1,"flags":"DXGI_PRESENT_NONE",)"
+               R"("swap_effect":"DXGI_SWAP_EFFECT_FLIP_DISCARD",)"
+               R"("requires_transition_to_present":true},)"
+               R"("failure_points":["swap_chain_missing","back_buffers_missing",)"
+               R"("rtv_missing","resource_transition_not_recorded",)"
+               R"("present_call_disabled"],)"
+               R"("phase":"P1 diagnostic boundary"})";
+    return payload.c_str();
+}
+
 GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
     static thread_local std::string payload;
     payload =
@@ -641,7 +678,7 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_failure_diagnostics_json() {
         R"("device_creation","command_queue","native_window_handle","swap_chain",)"
         R"("render_target_metadata","barrier_clear_pass_metadata",)"
         R"("command_recording_dry_run","guarded_command_recording",)"
-        R"("no_draw_execution_fence"],)"
+        R"("no_draw_execution_fence","present_readiness_metadata"],)"
         R"("draw_submission_enabled":false,"phase":"P1 diagnostic boundary"})";
     return payload.c_str();
 }
@@ -810,6 +847,8 @@ GR_RENDERER_D3D12_API const char* gr_renderer_d3d12_diagnostic_context_json(void
     payload += target->no_draw_command_list_executed ? "true" : "false";
     payload += R"(,"no_draw_fence_completed":)";
     payload += target->no_draw_fence_completed ? "true" : "false";
+    payload += R"(,"present_readiness_metadata_ready":)";
+    payload += target->present_readiness_metadata_ready ? "true" : "false";
     payload += R"(,"device_hresult":")";
     payload += hresult_hex(target->device_hr);
     payload += R"(","command_queue_hresult":")";
