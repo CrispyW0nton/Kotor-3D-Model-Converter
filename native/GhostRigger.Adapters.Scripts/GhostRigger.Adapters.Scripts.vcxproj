@@ -14,7 +14,14 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_ADAPTERS_SCRIPTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="Private\GhostRiggerAdaptersScripts.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerAdaptersScripts.h" /></ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerAdaptersScripts.cpp" />
+    <ClCompile Include="Private\UnavailableScriptCompiler.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerAdaptersScripts.h" />
+    <ClInclude Include="Public\UnavailableScriptCompiler.h" />
+  </ItemGroup>
   <ItemGroup Label="NativeFunctionImplementations">
     <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
