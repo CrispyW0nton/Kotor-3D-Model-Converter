@@ -27,6 +27,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Private\CameraContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\GhostRiggerCamera.cpp">
       <Filter>Private</Filter>
     </ClCompile>
@@ -44,6 +47,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Public\CameraContracts.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="Public\GhostRiggerCamera.h">
       <Filter>Public</Filter>
     </ClInclude>

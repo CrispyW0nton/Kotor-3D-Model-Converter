@@ -11,19 +11,20 @@ constexpr const char* kOwnerBoundary =
     R"("owner_surface":"Camera services",)"
     R"("owner_package":"native/GhostRigger.Camera",)"
     R"("bridge_method":"C ABI DLL",)"
-    R"("diagnostic_only":true,)"
-    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
-    R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("diagnostic_only":false,)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","camera_math_contracts","camera_validation_contracts","render_settings_contracts","preset_contracts"],)"
+    R"("python_owns":["image_save_encoding","render_manifest_writes","camera_manager_object_lifetime","viewport_adapter_state","qt_workflow_orchestration"],)"
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"camera_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Camera",)"
     R"("source_package":"src/core/camera",)"
-    R"("diagnostic_only":true,)"
+    R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true,)"
+    R"("python_fallback_reason":"Image encoding, manifest persistence, live camera object ownership, viewport adapter state, and Qt workflow orchestration remain Python-owned until dedicated runtime slices are ported"})";
 
 } // namespace
 
@@ -38,8 +39,9 @@ GHOSTRIGGER_CAMERA_API const char* gr_camera_capabilities_json() {
            R"("phase":"P1 module sweep","module_package":true,)"
            R"("source_package":"src/core/camera",)"
            R"("owner_surface":"Camera services","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("camera_contracts_native":true,"camera_runtime_python_fallback":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","camera_math_contracts","camera_validation_contracts","render_settings_contracts","preset_contracts"],)"
            R"("python_fallback_required":true})";
 }
 
