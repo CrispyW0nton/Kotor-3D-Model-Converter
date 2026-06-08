@@ -943,7 +943,21 @@ class MatrixPaletteUploader:
         self._skin_local_direct_bind_by_slot = {}
         self._skin_bind_matrix = None
         self._skin_bind_inverse_matrix = None
+        force_anim_base_bind = (
+            anim_base_pose is not None
+            and bool(getattr(
+                skin_node,
+                "_gr_use_animation_base_bind_for_preview",
+                False,
+            ))
+        )
         active_formula = self._resolve_skin_formula_for_skin_node(skin_node)
+        if force_anim_base_bind:
+            active_formula = _SKIN_FORMULA_F1
+            self._skin_profile_reason = (
+                "character_builder:animation_base_bind_preview "
+                f"model={self._model_name or '?'}"
+            )
         self._skin_palette_formula = active_formula
         self._skin_inverse_bind_source = "qBone_tBone_inverse_TR"
         pose_nodes = {k.lower(): v for k, v in getattr(anim_pose, 'nodes', {}).items()} if anim_pose is not None else {}
@@ -977,7 +991,9 @@ class MatrixPaletteUploader:
         qbones = list(getattr(skin_node, 'qbone_list', []) or [])
         tbones = list(getattr(skin_node, 'tbone_list', []) or [])
         formula_env_raw = os.environ.get(_SKIN_FORMULA_ENV, '').strip()
-        if active_formula == _SKIN_FORMULA_G5 and not formula_env_raw and (not qbones or not tbones):
+        if force_anim_base_bind:
+            self._skin_inverse_bind_source = "animation_base_pose_imported_payload"
+        elif active_formula == _SKIN_FORMULA_G5 and not formula_env_raw and (not qbones or not tbones):
             # Imported FBX skin meshes, such as the Unreal Animator Quinn target,
             # have normal bone maps and skin weights but no KotOR qBone/tBone
             # arrays. G5 would otherwise use identity inverse-bind matrices and
@@ -1016,14 +1032,21 @@ class MatrixPaletteUploader:
                     inv_bind = _mat4_identity_py()
                     direct_bind = _mat4_identity_py()
             else:
-                inv_bind = (
-                    self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
-                    if idx < len(qbones) and idx < len(tbones)
-                    else active_inv_bind.get(bkey, _mat4_identity_py())
-                )
+                if force_anim_base_bind:
+                    inv_bind = active_inv_bind.get(bkey, _mat4_identity_py())
+                else:
+                    inv_bind = (
+                        self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
+                        if idx < len(qbones) and idx < len(tbones)
+                        else active_inv_bind.get(bkey, _mat4_identity_py())
+                    )
                 direct_bind = (
                     self.qbone_direct_bind_matrix(qbones[idx], tbones[idx])
-                    if idx < len(qbones) and idx < len(tbones)
+                    if (
+                        not force_anim_base_bind
+                        and idx < len(qbones)
+                        and idx < len(tbones)
+                    )
                     else _mat4_invert_py(inv_bind)
                 )
             self._skin_local_inv_bind_by_slot[idx] = inv_bind

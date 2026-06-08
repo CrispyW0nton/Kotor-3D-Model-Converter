@@ -1022,6 +1022,7 @@ def apply_template_rig(
                 setattr(mesh_node, "_gr_bound_to_kotor_skeleton", True)
                 setattr(mesh_node, "_gr_kotor_skeleton_root", str(getattr(skel_root, "name", "") or ""))
                 setattr(mesh_node, "_gr_kotor_bone_map_source", "character_builder_template_rig")
+                setattr(mesh_node, "_gr_use_animation_base_bind_for_preview", True)
             metadata = getattr(result_model, "metadata", None)
             if not isinstance(metadata, dict):
                 metadata = {}

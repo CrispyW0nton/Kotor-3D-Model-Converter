@@ -343,9 +343,11 @@ def cpu_skin_positions(node, positions, skinning: SkinningArrays, anim_pose, mod
     try:
         uploader = MatrixPaletteUploader(max_bones=MAX_BONES)
         uploader.build_inverse_bind_pose(source_model)
-        if anim_base_pose is not None:
-            uploader.set_bind_pose_from_anim(anim_base_pose)
-        uploader.compute_skin_node_palette(node, anim_pose)
+        uploader.compute_skin_node_palette(
+            node,
+            anim_pose,
+            anim_base_pose=anim_base_pose,
+        )
         palette = uploader.as_numpy_array()
         if palette is None or len(palette) == 0:
             return positions
