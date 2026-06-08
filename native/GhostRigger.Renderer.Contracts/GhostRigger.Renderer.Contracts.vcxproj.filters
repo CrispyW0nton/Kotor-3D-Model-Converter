@@ -39,6 +39,9 @@
     <ClCompile Include="Private\GhostRiggerRendererContracts.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\RendererCapabilityContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -57,6 +60,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerRendererContracts.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\RendererCapabilityContracts.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ClassMethods.h">

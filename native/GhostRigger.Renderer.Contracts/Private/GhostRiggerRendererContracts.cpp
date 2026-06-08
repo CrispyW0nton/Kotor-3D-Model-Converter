@@ -10,7 +10,10 @@ constexpr const char* kCapabilities =
     R"("renderer_neutral":true,"backend_schema":"renderer_backend.v1",)"
     R"("surface_schema":"renderer_surface.v1",)"
     R"("draw_item_schema":"renderer_draw_item.v1",)"
-    R"("frame_stats_schema":"renderer_frame_stats.v1"})";
+    R"("frame_stats_schema":"renderer_frame_stats.v1",)"
+    R"("renderer_capability_contracts_native":true,)"
+    R"("renderer_runtime_python_fallback":true,)"
+    R"("python_fallback_required":true})";
 constexpr const char* kBackendSchema =
     R"({"schema":"renderer_backend.v1","fields":["backend_id","backend_name",)"
     R"("api","device_luid","supports_hardware_rasterization","supports_texture_arrays",)"
