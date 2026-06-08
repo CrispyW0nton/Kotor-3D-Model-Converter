@@ -30,6 +30,9 @@
     <ClCompile Include="Private\GhostRiggerAnimationRetargeting.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\RetargetingContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -42,6 +45,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerAnimationRetargeting.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\RetargetingContracts.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">

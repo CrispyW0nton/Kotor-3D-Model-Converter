@@ -14,7 +14,7 @@ constexpr const char* kOwnerBoundary =
     R"("diagnostic_only":true,)"
     R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
     R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"animation_retargeting_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.AnimationRetargeting",)"
@@ -23,7 +23,7 @@ constexpr const char* kDependencySchema =
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true})";
 
 } // namespace
 
@@ -38,8 +38,10 @@ GHOSTRIGGER_ANIMATION_RETARGETING_API const char* gr_animation_retargeting_capab
            R"("phase":"P1 module sweep","module_package":true,)"
            R"("source_package":"src/core/animation_retargeting",)"
            R"("owner_surface":"Animation retargeting compatibility","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("retargeting_alias_native":true,"retargeting_math_native":true,)"
+           R"("retargeting_runtime_python_fallback":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","retargeting_alias","retargeting_math"],)"
            R"("python_fallback_required":true})";
 }
 
