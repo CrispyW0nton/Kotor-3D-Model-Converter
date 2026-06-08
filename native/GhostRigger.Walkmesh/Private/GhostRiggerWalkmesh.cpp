@@ -11,19 +11,21 @@ constexpr const char* kOwnerBoundary =
     R"("owner_surface":"Walkmesh editing",)"
     R"("owner_package":"native/GhostRigger.Walkmesh",)"
     R"("bridge_method":"C ABI DLL",)"
-    R"("diagnostic_only":true,)"
-    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
-    R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("diagnostic_only":false,)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","walkmesh_surface_contracts"],)"
+    R"("python_owns":["WOK object traversal","walkmesh face mutation","walkmesh validation","walkmesh roundtrip serialization","overlay draw-list generation","FBX face grouping"],)"
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"walkmesh_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Walkmesh",)"
     R"("source_package":"src/core/walkmesh",)"
-    R"("diagnostic_only":true,)"
+    R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true,)"
+    R"("native_scope":["walkmesh_surface_contracts"])"
+    R"(})";
 
 } // namespace
 
@@ -35,12 +37,14 @@ GHOSTRIGGER_WALKMESH_API const char* gr_walkmesh_version() {
 
 GHOSTRIGGER_WALKMESH_API const char* gr_walkmesh_capabilities_json() {
     return R"({"name":"GhostRigger.Walkmesh","version":"0.1.0",)"
-           R"("phase":"P1 module sweep","module_package":true,)"
+           R"("phase":"P2 native semantic port","module_package":true,)"
            R"("source_package":"src/core/walkmesh",)"
            R"("owner_surface":"Walkmesh editing","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
-           R"("python_fallback_required":true})";
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","walkmesh_surface_contracts"],)"
+           R"("native_scope":["surface names","overlay colors","walkability flags","FBX material metadata"],)"
+           R"("python_fallback_required":true,)"
+           R"("python_fallback_reason":"WOK traversal, mutation, validation, serialization, draw-list construction, and export grouping remain Python-owned until game-file walkmesh fixtures validate their native ports"})";
 }
 
 GHOSTRIGGER_WALKMESH_API const char* gr_walkmesh_owner_boundary_json() {

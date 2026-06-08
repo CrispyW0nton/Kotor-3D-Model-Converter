@@ -30,6 +30,9 @@
     <ClCompile Include="Private\GhostRiggerWalkmesh.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\WalkmeshSurface.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -48,6 +51,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerWalkmesh.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\WalkmeshSurface.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
