@@ -1055,6 +1055,7 @@ def apply_template_rig(
                 for mesh_node in mesh_payloads
             )
             donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
+            source_skin_remap = bool(getattr(bind_report, "source_skin_remap", False))
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
@@ -1091,8 +1092,14 @@ def apply_template_rig(
                         "fallback_first_pass",
                     ),
                     "donor_weight_transfer": donor_weight_transfer,
+                    "source_skin_remap": source_skin_remap,
                     "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
                     "note": (
+                        "Imported source skin weights were remapped onto the "
+                        "selected native KOTOR skeleton by semantic bone role. "
+                        "Preview inherited animations before claiming "
+                        "launch-quality deformation."
+                        if source_skin_remap else
                         "Native-template donor weights were transferred by nearest "
                         "surface vertex. Preview inherited animations before "
                         "claiming launch-quality deformation."
@@ -1323,6 +1330,8 @@ def _clean_mesh_payload_node(node: Any) -> Any:
         from src.core.geometry.model_data import NodeFlags  # type: ignore
 
     cleaned = copy.deepcopy(node)
+    source_bone_map = list(getattr(node, "bone_map", []) or [])
+    source_skin_data = copy.deepcopy(list(getattr(node, "skin_data", []) or []))
     vertices_are_world = bool(getattr(node, "_gr_vertices_in_kotor_world", False))
     if vertices_are_world:
         world_pos = (0.0, 0.0, 0.0)
@@ -1375,6 +1384,10 @@ def _clean_mesh_payload_node(node: Any) -> Any:
     cleaned.qbone_list = []
     cleaned.tbone_list = []
     setattr(cleaned, "_external_imported", True)
+    if source_bone_map and source_skin_data:
+        setattr(cleaned, "_gr_source_bone_map", source_bone_map)
+        setattr(cleaned, "_gr_source_skin_data", source_skin_data)
+        setattr(cleaned, "_gr_source_skin_weight_role", "imported_fbx_payload")
     if vertices_are_world:
         setattr(cleaned, "_gr_vertices_in_kotor_world", True)
     try:

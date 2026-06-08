@@ -67,6 +67,16 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert result.apply_result.get("replaced_native_render_nodes")
     built_model = result.apply_result.get("model")
     assert built_model is not None
+    skin_binding = built_model.metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "imported_source_skin_remap"
+    assert skin_binding["quality_stage"] == "source_skin_remap_first_pass"
+    assert skin_binding["source_skin_remap"] is True
+    assert skin_binding["donor_weight_transfer"] is False
+    mesh_reports = skin_binding["mesh_reports"]
+    assert mesh_reports
+    assert mesh_reports[0]["source_skin_vertices"] == mesh_reports[0]["vertex_count"]
+    assert mesh_reports[0]["fallback_vertices"] == 0
+    assert mesh_reports[0]["bone_map_count"] >= 12
     leaked_guides = [
         node for node in built_model.all_nodes()
         if getattr(node, "_gr_imported_armature_joint", False)

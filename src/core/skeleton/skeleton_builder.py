@@ -36,6 +36,7 @@ class SkinBindingReport:
     weighting_method: str = "nearest_kotor_bone_segment"
     quality_stage: str = "fallback_first_pass"
     donor_weight_transfer: bool = False
+    source_skin_remap: bool = False
     mesh_reports: List[dict] | None = None
 
 
@@ -82,6 +83,7 @@ def bind_imported_meshes_to_skeleton(
         bone_slots,
         max_influences=max_influences,
     )
+    source_skin_vertices_used = 0
     donor_vertices_used = 0
     fallback_vertices_used = 0
     skinned_meshes = 0
@@ -97,17 +99,35 @@ def bind_imported_meshes_to_skeleton(
         mesh.qbone_list = [slot[2] for slot in bone_slots]
         mesh.tbone_list = [slot[3] for slot in bone_slots]
         mesh.skin_data = []
+        source_skin_rows = _source_skin_rows_for_mesh(
+            mesh,
+            bone_slots,
+            max_influences=max_influences,
+        )
+        mesh_source_skin_vertices = 0
         mesh_donor_vertices = 0
         mesh_fallback_vertices = 0
-        for vertex in verts:
-            skin_row, used_donor = _weights_for_vertex_with_donor(
-                _vec3(vertex),
-                bone_slots,
-                donor_index,
-                max_influences=max_influences,
+        for vertex_index, vertex in enumerate(verts):
+            source_row = (
+                source_skin_rows[vertex_index]
+                if vertex_index < len(source_skin_rows) else
+                None
             )
+            used_source_skin = source_row is not None
+            if used_source_skin:
+                skin_row = source_row
+                used_donor = False
+            else:
+                skin_row, used_donor = _weights_for_vertex_with_donor(
+                    _vec3(vertex),
+                    bone_slots,
+                    donor_index,
+                    max_influences=max_influences,
+                )
             mesh.skin_data.append(skin_row)
-            if used_donor:
+            if used_source_skin:
+                mesh_source_skin_vertices += 1
+            elif used_donor:
                 mesh_donor_vertices += 1
             else:
                 mesh_fallback_vertices += 1
@@ -123,6 +143,10 @@ def bind_imported_meshes_to_skeleton(
         mesh_report = _mesh_binding_report(
             mesh,
             weighting_method=(
+                "imported_source_skin_remap"
+                if mesh_source_skin_vertices and not mesh_donor_vertices and not mesh_fallback_vertices else
+                "imported_source_skin_remap_with_fallback"
+                if mesh_source_skin_vertices else
                 "native_template_nearest_vertex_donor"
                 if mesh_donor_vertices and not mesh_fallback_vertices else
                 "native_template_nearest_vertex_donor_with_fallback"
@@ -130,6 +154,10 @@ def bind_imported_meshes_to_skeleton(
                 "nearest_kotor_bone_segment"
             ),
             quality_stage=(
+                "source_skin_remap_first_pass"
+                if mesh_source_skin_vertices and not mesh_donor_vertices and not mesh_fallback_vertices else
+                "source_skin_remap_partial"
+                if mesh_source_skin_vertices else
                 "donor_transfer_first_pass"
                 if mesh_donor_vertices and not mesh_fallback_vertices else
                 "donor_transfer_partial"
@@ -138,6 +166,8 @@ def bind_imported_meshes_to_skeleton(
             ),
             max_influences=max_influences,
             donor_weight_transfer=bool(mesh_donor_vertices),
+            source_skin_remap=bool(mesh_source_skin_vertices),
+            source_skin_vertices=mesh_source_skin_vertices,
             donor_vertices=mesh_donor_vertices,
             fallback_vertices=mesh_fallback_vertices,
             donor_vertex_count=len(donor_index),
@@ -145,6 +175,7 @@ def bind_imported_meshes_to_skeleton(
         )
         mesh_reports.append(mesh_report)
         setattr(mesh, "_gr_skin_binding_report", mesh_report)
+        source_skin_vertices_used += mesh_source_skin_vertices
         donor_vertices_used += mesh_donor_vertices
         fallback_vertices_used += mesh_fallback_vertices
         generated_bone_slot_counts.append(len(list(getattr(mesh, "bone_map", []) or [])))
@@ -153,6 +184,16 @@ def bind_imported_meshes_to_skeleton(
 
     if skinned_meshes == 0:
         warnings.append("Imported mesh payloads had no vertices to weight.")
+    elif source_skin_vertices_used and not donor_vertices_used and not fallback_vertices_used:
+        warnings.append(
+            "Remapped imported source skin weights onto the selected native "
+            "KOTOR skeleton by semantic bone role."
+        )
+    elif source_skin_vertices_used:
+        warnings.append(
+            "Partially remapped imported source skin weights onto the selected "
+            "native KOTOR skeleton; remaining vertices used donor/fallback weights."
+        )
     elif donor_vertices_used and not fallback_vertices_used:
         warnings.append(
             "Transferred skin weights from the selected native KOTOR template "
@@ -169,6 +210,10 @@ def bind_imported_meshes_to_skeleton(
             "Use native-template/donor weight transfer for launch-quality deformation."
         )
     weighting_method = (
+        "imported_source_skin_remap"
+        if source_skin_vertices_used and not donor_vertices_used and not fallback_vertices_used else
+        "imported_source_skin_remap_with_fallback"
+        if source_skin_vertices_used else
         "native_template_nearest_vertex_donor"
         if donor_vertices_used and not fallback_vertices_used else
         "native_template_nearest_vertex_donor_with_fallback"
@@ -176,6 +221,10 @@ def bind_imported_meshes_to_skeleton(
         "nearest_kotor_bone_segment"
     )
     quality_stage = (
+        "source_skin_remap_first_pass"
+        if source_skin_vertices_used and not donor_vertices_used and not fallback_vertices_used else
+        "source_skin_remap_partial"
+        if source_skin_vertices_used else
         "donor_transfer_first_pass"
         if donor_vertices_used and not fallback_vertices_used else
         "donor_transfer_partial"
@@ -193,6 +242,7 @@ def bind_imported_meshes_to_skeleton(
         weighting_method=weighting_method,
         quality_stage=quality_stage,
         donor_weight_transfer=bool(donor_vertices_used),
+        source_skin_remap=bool(source_skin_vertices_used),
         mesh_reports=mesh_reports,
         message=(
             f"Skinned {skinned_meshes} mesh(es), {weighted_vertices} vertices, "
@@ -302,6 +352,146 @@ def _weights_for_vertex_with_donor(
         if influences:
             return VertexSkinData(influences), True
     return _weights_for_vertex(vertex, slots, max_influences=max_influences), False
+
+
+def _source_skin_rows_for_mesh(
+    mesh: Any,
+    slots: Sequence[Any],
+    *,
+    max_influences: int,
+) -> List[VertexSkinData | None]:
+    """Map imported FBX skin rows onto native KOTOR bone-map slots.
+
+    Character Builder imports such as Bendak already carry useful DCC/FBX skin
+    weights.  The selected KOTOR skeleton remains authoritative, but throwing
+    those rows away makes hands, wrists, ankles, and armor edges much worse than
+    necessary.  This first-pass remap folds source twist bones into the closest
+    native Odyssey deformation node and leaves unmapped vertices for the donor
+    or nearest-segment fallback.
+    """
+
+    source_bone_map = list(getattr(mesh, "_gr_source_bone_map", []) or [])
+    source_skin_data = list(getattr(mesh, "_gr_source_skin_data", []) or [])
+    if not source_bone_map or not source_skin_data:
+        return []
+
+    slot_by_name = {
+        str(slot[0] or "").strip().lower(): index
+        for index, slot in enumerate(slots)
+        if str(slot[0] or "").strip()
+    }
+    source_to_slot: dict[int, int] = {}
+    for source_index, source_name in enumerate(source_bone_map):
+        target_name = _map_imported_source_bone_to_kotor(str(source_name or ""))
+        if not target_name:
+            continue
+        target_index = slot_by_name.get(target_name.lower())
+        if target_index is None:
+            continue
+        source_to_slot[source_index] = target_index
+    if not source_to_slot:
+        return []
+
+    mapped_rows: List[VertexSkinData | None] = []
+    for row in source_skin_data:
+        remapped: List[BoneWeight] = []
+        for influence in list(getattr(row, "influences", []) or []):
+            try:
+                source_index = int(getattr(influence, "bone_index", -1))
+                weight = float(getattr(influence, "weight", 0.0))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            target_index = source_to_slot.get(source_index)
+            if target_index is None or weight <= 0.0:
+                continue
+            remapped.append(BoneWeight(target_index, weight))
+        normalized = _normalize_influences(
+            remapped,
+            max_influences=max_influences,
+        )
+        mapped_rows.append(VertexSkinData(normalized) if normalized else None)
+    return mapped_rows
+
+
+def _map_imported_source_bone_to_kotor(source_name: str) -> str:
+    """Return the closest native KOTOR deformation node for an FBX bone name."""
+
+    compact = (
+        str(source_name or "")
+        .strip()
+        .lower()
+        .replace("mixamorig:", "")
+        .replace(" ", "")
+        .replace("-", "_")
+    )
+    compact_no_sep = compact.replace("_", "")
+    direct = {
+        "hip": "pelvis_g",
+        "hips": "pelvis_g",
+        "pelvis": "pelvis_g",
+        "waist": "torso_g",
+        "spine": "torso_g",
+        "spine01": "torso_g",
+        "spine1": "torso_g",
+        "spine02": "torsoUpr_g",
+        "spine2": "torsoUpr_g",
+        "neck": "neck_g",
+        "necktwist01": "neck_g",
+        "necktwist1": "neck_g",
+        "necktwist02": "neck_g",
+        "necktwist2": "neck_g",
+        "head": "head_g",
+    }
+    mapped = direct.get(compact_no_sep)
+    if mapped:
+        return mapped
+
+    side = ""
+    rest = compact_no_sep
+    if rest.startswith("left"):
+        side = "l"
+        rest = rest[4:]
+    elif rest.startswith("right"):
+        side = "r"
+        rest = rest[5:]
+    elif rest.startswith("l"):
+        side = "l"
+        rest = rest[1:]
+    elif rest.startswith("r"):
+        side = "r"
+        rest = rest[1:]
+    if not side:
+        return ""
+
+    upper = "L" if side == "l" else "R"
+    lower = "l" if side == "l" else "r"
+    if rest.startswith("clavicle") or rest.startswith("collar") or rest.startswith("shoulder"):
+        return f"{lower}collar_g"
+    if rest.startswith("upperarm") or rest.startswith("bicep"):
+        return f"{lower}bicep_g"
+    if rest.startswith("forearm") or rest.startswith("lowerarm"):
+        return f"{upper}forearm_g"
+    if rest.startswith("hand") or rest.startswith("wrist"):
+        return f"{upper}hand_g"
+    if rest.startswith("thumb"):
+        return f"{upper}ThumbB_g"
+    if rest.startswith("index") or rest.startswith("fngra") or rest.startswith("finger1"):
+        return f"{upper}aFngrB_g"
+    if rest.startswith("middle") or rest.startswith("fngrb") or rest.startswith("finger2"):
+        return f"{upper}bFngrB_g"
+    if rest.startswith("ring") or rest.startswith("fngrc") or rest.startswith("finger3"):
+        return f"{upper}cFngrB_g"
+    if rest.startswith("pinky") or rest.startswith("little") or rest.startswith("fngrd") or rest.startswith("finger4"):
+        return f"{upper}dFngrB_g"
+    if rest.startswith("thigh") or rest.startswith("upleg"):
+        return f"{lower}thigh_g"
+    if rest.startswith("calf") or rest.startswith("shin") or rest.startswith("leg"):
+        return f"{lower}shin_g"
+    if rest.startswith("foot") or rest.startswith("ankle"):
+        return f"{lower}foot_g"
+    if rest.startswith("toe"):
+        return f"{lower}footT_g"
+    return ""
 
 
 def _build_donor_vertex_index(
@@ -520,6 +710,8 @@ def _mesh_binding_report(
     quality_stage: str,
     max_influences: int,
     donor_weight_transfer: bool = False,
+    source_skin_remap: bool = False,
+    source_skin_vertices: int = 0,
     donor_vertices: int = 0,
     fallback_vertices: int = 0,
     donor_vertex_count: int = 0,
@@ -564,6 +756,8 @@ def _mesh_binding_report(
         "normalization": "normalized_rows",
         "max_influences_requested": max(1, min(4, int(max_influences or 4))),
         "donor_weight_transfer": bool(donor_weight_transfer),
+        "source_skin_remap": bool(source_skin_remap),
+        "source_skin_vertices": int(source_skin_vertices),
         "donor_vertices": int(donor_vertices),
         "fallback_vertices": int(fallback_vertices),
         "donor_vertex_count": int(donor_vertex_count),
