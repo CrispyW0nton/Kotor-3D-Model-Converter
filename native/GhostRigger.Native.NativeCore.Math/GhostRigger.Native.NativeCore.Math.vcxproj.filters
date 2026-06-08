@@ -51,6 +51,15 @@
     <ClCompile Include="Private\ModuleLayoutMath.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\TransformMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ViewcubeMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\GpuMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -69,6 +78,15 @@
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\ModuleLayoutMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\TransformMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ViewcubeMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GpuMath.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">

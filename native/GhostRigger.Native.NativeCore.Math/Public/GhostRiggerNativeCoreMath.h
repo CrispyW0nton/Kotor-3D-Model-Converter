@@ -134,5 +134,126 @@ GR_NATIVE_CORE_MATH_API int gr_native_core_math_module_anchor_relative_position(
     const double* anchor_lyt_xyz,
     const double* anchor_scene_xyz,
     double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_matrix_from_pos_quat_np(
+    const double* pos_xyz,
+    const double* quat_xyzw,
+    double* out_matrix
+);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_mat4_perspective(
+    double fov_y,
+    double aspect,
+    double near,
+    double far,
+    double* out_matrix
+);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_mat4_lookat(
+    const double* eye_xyz,
+    const double* center_xyz,
+    const double* up_xyz,
+    double* out_matrix
+);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_mat4_identity(
+    double* out_matrix
+);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_mat4_mul(
+    const double* a_matrix,
+    const double* b_matrix,
+    double* out_matrix
+);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_mat3_normal(
+    const double* model_matrix,
+    double* out_matrix
+);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_as_vec3(
+    const double* values,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_normalize(
+    const double* value_xyz,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_closest_point_on_ray(
+    const double* origin_xyz,
+    const double* direction_xyz,
+    const double* point_xyz,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_closest_point_between_rays(
+    const double* origin_a_xyz,
+    const double* direction_a_xyz,
+    const double* origin_b_xyz,
+    const double* direction_b_xyz,
+    double* out_point_a_xyz,
+    double* out_point_b_xyz);
+GR_NATIVE_CORE_MATH_API double gr_native_core_math_transform_screen_space_distance(
+    double ax,
+    double ay,
+    double bx,
+    double by);
+GR_NATIVE_CORE_MATH_API double gr_native_core_math_transform_rotation_angle_from_mouse_delta(
+    double start_x,
+    double start_y,
+    double x,
+    double y,
+    double center_x,
+    double center_y,
+    int has_center);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_axis_quaternion(
+    char axis,
+    double angle,
+    double* out_xyzw);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_multiply_quaternions(
+    const double* a_xyzw,
+    const double* b_xyzw,
+    double* out_xyzw);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_rotate_vector(
+    const double* rotation_xyzw,
+    const double* vector_xyz,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_build_translation_matrix(
+    const double* delta_xyz,
+    double* out_matrix);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_build_rotation_matrix(
+    char axis,
+    double angle,
+    double* out_matrix);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_build_scale_matrix_scalar(
+    double scale,
+    double* out_matrix);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_transform_build_scale_matrix_vector(
+    const double* scale_xyz,
+    double* out_matrix);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_normalize(
+    const double* value_xyz,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_cross(
+    const double* a_xyz,
+    const double* b_xyz,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API double gr_native_core_math_viewcube_dot(
+    const double* a_xyz,
+    const double* b_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_azimuth_elevation_from_direction(
+    const double* direction_xyz,
+    double* out_azimuth_degrees,
+    double* out_elevation_degrees);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_action_from_view_name(
+    const char* view_name,
+    int* out_action);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_target_for_action(
+    int action,
+    double* out_azimuth_degrees,
+    double* out_elevation_degrees);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_view_direction_from_angles(
+    double azimuth,
+    double elevation,
+    double* out_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_camera_basis_from_angles(
+    double azimuth,
+    double elevation,
+    double* out_right_xyz,
+    double* out_up_xyz,
+    double* out_forward_xyz);
+GR_NATIVE_CORE_MATH_API int gr_native_core_math_viewcube_view_orientation_quaternion(
+    double azimuth,
+    double elevation,
+    double* out_xyzw);
 
 }
