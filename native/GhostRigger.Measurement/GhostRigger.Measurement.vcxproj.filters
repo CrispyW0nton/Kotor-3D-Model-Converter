@@ -27,6 +27,9 @@
     <ClCompile Include="Private\GhostRiggerMeasurement.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\MeasurementContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -45,6 +48,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerMeasurement.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\MeasurementContracts.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
