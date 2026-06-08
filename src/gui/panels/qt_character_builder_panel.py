@@ -3336,11 +3336,34 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if body is None:
             return None
         self._ensure_game_resource_manager()
+        _wf = self._workflow_module()
+        engine_model = body
+        try:
+            motion_state = getattr(self.scene, "motion_assignment", None)
+            if isinstance(motion_state, dict):
+                source = str(motion_state.get("source") or "")
+                preview_supermodel = str(
+                    motion_state.get("preview_supermodel")
+                    or motion_state.get("supermodel")
+                    or ""
+                ).strip()
+                body_supermodel = str(getattr(body, "supermodel", "") or "").strip()
+                if (
+                    source == getattr(_wf, "MOTION_SOURCE_INHERITED", "inherited_supermodel")
+                    and preview_supermodel
+                    and preview_supermodel.lower() != body_supermodel.lower()
+                ):
+                    import copy
+
+                    engine_model = copy.copy(body)
+                    setattr(engine_model, "supermodel", preview_supermodel)
+        except Exception:                                  # pragma: no cover
+            log.debug("Could not prepare preview supermodel proxy", exc_info=True)
         try:
             from src.core.animation.animation_engine import AnimationEngine
         except ImportError:                                 # pragma: no cover
             from core.animation.animation_engine import AnimationEngine  # type: ignore
-        engine = AnimationEngine(body)
+        engine = AnimationEngine(engine_model)
         if not engine.play(str(anim_name or ""), loop=True, blend=False):
             return None
         self._animation_engine = engine
@@ -3360,7 +3383,6 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 length=length,
             )
         self._animation_timer.start()
-        _wf = self._workflow_module()
         return _wf.CheckActorResult(
             ok=True,
             playing=str(getattr(anim, "name", anim_name) if anim else anim_name),

@@ -164,3 +164,46 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     ]
     assert packaged_alignment["similarity_transform_accepted"] is True
     assert packaged_alignment["rotation_basis"] == "paired_skeleton_similarity"
+
+
+def test_t1205_local_bendak_smale02_preview_preserves_native_export_supermodel(
+    tmp_path: Path,
+) -> None:
+    """Previewing S_Male02 clips must not poison the n_mandalorian export DAG."""
+    mesh_path = _bendak_fixture_path()
+    if not mesh_path.exists():
+        pytest.skip(f"Local Bendak fixture not present: {mesh_path}")
+
+    native_base = character_builder.load_game_skeleton_source(
+        "n_mandalorian",
+        game="K1",
+    )
+    if native_base is None:
+        pytest.skip("Configured K1 install cannot load n_mandalorian")
+
+    result = run_external_mesh_native_template_launch_workflow(
+        str(mesh_path),
+        "n_mandalorian",
+        game_version="K1",
+        out_dir=str(tmp_path),
+        formats=["kotor"],
+        motion_supermodel="S_Male02",
+    )
+
+    assert result.ok is True
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.supermodel == "S_Female02"
+    assert result.motion_result is not None
+    assert result.motion_result.supermodel == "S_Male02"
+    assert "export keeps the native KOTOR base supermodel S_Female02" in (
+        result.motion_result.message
+    )
+    assert result.animation_library_result is not None
+    assert result.animation_library_result.code == "listed"
+    animation_names = {
+        name for _label, name in result.animation_library_result.available
+    }
+    assert {"animloop01", "walk", "tlknorm"}.issubset(animation_names)
+    assert Path(result.mdl_path).exists()
+    assert Path(result.mdx_path).exists()
