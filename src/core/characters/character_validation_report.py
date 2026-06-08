@@ -553,6 +553,7 @@ def character_builder_evidence_gates(
     quality_stage = str(skin_binding.get("quality_stage") or "")
     donor_weight_transfer = bool(skin_binding.get("donor_weight_transfer"))
     source_skin_remap = bool(skin_binding.get("source_skin_remap"))
+    source_hand_refinement = bool(skin_binding.get("source_hand_refinement"))
     weight_stage = _weight_gate_stage(
         weight_codes,
         skin_binding_present=bool(skin_binding),
@@ -568,6 +569,7 @@ def character_builder_evidence_gates(
         "quality_stage": quality_stage,
         "donor_weight_transfer": donor_weight_transfer,
         "source_skin_remap": source_skin_remap,
+        "source_hand_refinement": source_hand_refinement,
         "mesh_report_count": len(list(skin_binding.get("mesh_reports") or [])),
         "blocking_issue_codes": weight_codes["blocking"],
         "warning_issue_codes": weight_codes["warning"],

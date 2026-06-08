@@ -71,12 +71,14 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert skin_binding["weighting_method"] == "imported_source_skin_remap"
     assert skin_binding["quality_stage"] == "source_skin_remap_first_pass"
     assert skin_binding["source_skin_remap"] is True
+    assert skin_binding["source_hand_refinement"] is True
     assert skin_binding["donor_weight_transfer"] is False
     mesh_reports = skin_binding["mesh_reports"]
     assert mesh_reports
     assert mesh_reports[0]["source_skin_vertices"] == mesh_reports[0]["vertex_count"]
+    assert mesh_reports[0]["source_hand_refinement_vertices"] > 0
     assert mesh_reports[0]["fallback_vertices"] == 0
-    assert mesh_reports[0]["bone_map_count"] >= 12
+    assert mesh_reports[0]["bone_map_count"] >= 20
     leaked_guides = [
         node for node in built_model.all_nodes()
         if getattr(node, "_gr_imported_armature_joint", False)

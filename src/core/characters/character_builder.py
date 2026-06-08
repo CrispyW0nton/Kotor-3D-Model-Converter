@@ -1056,6 +1056,7 @@ def apply_template_rig(
             )
             donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
             source_skin_remap = bool(getattr(bind_report, "source_skin_remap", False))
+            source_hand_refinement = bool(getattr(bind_report, "source_hand_refinement", False))
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
@@ -1093,8 +1094,15 @@ def apply_template_rig(
                     ),
                     "donor_weight_transfer": donor_weight_transfer,
                     "source_skin_remap": source_skin_remap,
+                    "source_hand_refinement": source_hand_refinement,
                     "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
                     "note": (
+                        "Imported source skin weights were remapped onto the "
+                        "selected native KOTOR skeleton by semantic bone role. "
+                        "Native hand/finger refinement was applied. "
+                        "Preview inherited animations before claiming "
+                        "launch-quality deformation."
+                        if source_skin_remap and source_hand_refinement else
                         "Imported source skin weights were remapped onto the "
                         "selected native KOTOR skeleton by semantic bone role. "
                         "Preview inherited animations before claiming "

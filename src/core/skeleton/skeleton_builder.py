@@ -37,6 +37,7 @@ class SkinBindingReport:
     quality_stage: str = "fallback_first_pass"
     donor_weight_transfer: bool = False
     source_skin_remap: bool = False
+    source_hand_refinement: bool = False
     mesh_reports: List[dict] | None = None
 
 
@@ -84,6 +85,7 @@ def bind_imported_meshes_to_skeleton(
         max_influences=max_influences,
     )
     source_skin_vertices_used = 0
+    source_hand_refinement_vertices_used = 0
     donor_vertices_used = 0
     fallback_vertices_used = 0
     skinned_meshes = 0
@@ -102,9 +104,11 @@ def bind_imported_meshes_to_skeleton(
         source_skin_rows = _source_skin_rows_for_mesh(
             mesh,
             bone_slots,
+            vertices=verts,
             max_influences=max_influences,
         )
         mesh_source_skin_vertices = 0
+        mesh_source_hand_refinement_vertices = 0
         mesh_donor_vertices = 0
         mesh_fallback_vertices = 0
         for vertex_index, vertex in enumerate(verts):
@@ -127,6 +131,8 @@ def bind_imported_meshes_to_skeleton(
             mesh.skin_data.append(skin_row)
             if used_source_skin:
                 mesh_source_skin_vertices += 1
+                if bool(getattr(skin_row, "_gr_source_hand_refined", False)):
+                    mesh_source_hand_refinement_vertices += 1
             elif used_donor:
                 mesh_donor_vertices += 1
             else:
@@ -168,6 +174,8 @@ def bind_imported_meshes_to_skeleton(
             donor_weight_transfer=bool(mesh_donor_vertices),
             source_skin_remap=bool(mesh_source_skin_vertices),
             source_skin_vertices=mesh_source_skin_vertices,
+            source_hand_refinement=bool(mesh_source_hand_refinement_vertices),
+            source_hand_refinement_vertices=mesh_source_hand_refinement_vertices,
             donor_vertices=mesh_donor_vertices,
             fallback_vertices=mesh_fallback_vertices,
             donor_vertex_count=len(donor_index),
@@ -176,6 +184,7 @@ def bind_imported_meshes_to_skeleton(
         mesh_reports.append(mesh_report)
         setattr(mesh, "_gr_skin_binding_report", mesh_report)
         source_skin_vertices_used += mesh_source_skin_vertices
+        source_hand_refinement_vertices_used += mesh_source_hand_refinement_vertices
         donor_vertices_used += mesh_donor_vertices
         fallback_vertices_used += mesh_fallback_vertices
         generated_bone_slot_counts.append(len(list(getattr(mesh, "bone_map", []) or [])))
@@ -243,6 +252,7 @@ def bind_imported_meshes_to_skeleton(
         quality_stage=quality_stage,
         donor_weight_transfer=bool(donor_vertices_used),
         source_skin_remap=bool(source_skin_vertices_used),
+        source_hand_refinement=bool(source_hand_refinement_vertices_used),
         mesh_reports=mesh_reports,
         message=(
             f"Skinned {skinned_meshes} mesh(es), {weighted_vertices} vertices, "
@@ -358,6 +368,7 @@ def _source_skin_rows_for_mesh(
     mesh: Any,
     slots: Sequence[Any],
     *,
+    vertices: Sequence[Any],
     max_influences: int,
 ) -> List[VertexSkinData | None]:
     """Map imported FBX skin rows onto native KOTOR bone-map slots.
@@ -393,7 +404,7 @@ def _source_skin_rows_for_mesh(
         return []
 
     mapped_rows: List[VertexSkinData | None] = []
-    for row in source_skin_data:
+    for vertex_index, row in enumerate(source_skin_data):
         remapped: List[BoneWeight] = []
         for influence in list(getattr(row, "influences", []) or []):
             try:
@@ -409,8 +420,131 @@ def _source_skin_rows_for_mesh(
             remapped,
             max_influences=max_influences,
         )
-        mapped_rows.append(VertexSkinData(normalized) if normalized else None)
+        if normalized:
+            refined, hand_refined = _refine_source_hand_weights_with_native_fingers(
+                _vec3(vertices[vertex_index]) if vertex_index < len(vertices) else (0.0, 0.0, 0.0),
+                normalized,
+                slots,
+                max_influences=max_influences,
+            )
+            mapped_row = VertexSkinData(refined)
+            if hand_refined:
+                setattr(mapped_row, "_gr_source_hand_refined", True)
+            mapped_rows.append(mapped_row)
+        else:
+            mapped_rows.append(None)
     return mapped_rows
+
+
+def _refine_source_hand_weights_with_native_fingers(
+    vertex: Vec3,
+    influences: Sequence[BoneWeight],
+    slots: Sequence[Any],
+    *,
+    max_influences: int,
+) -> tuple[List[BoneWeight], bool]:
+    """Blend KOTOR finger influence into coarse imported hand weights.
+
+    Bendak's FBX carries useful hand-region weights but no individual finger
+    bones.  The native KOTOR skeleton does have finger/thumb nodes, so leaving
+    every source hand vertex on ``Lhand_g``/``Rhand_g`` prevents inherited
+    finger channels from ever reaching the payload.  This refinement keeps the
+    imported row dominant and adds a limited spatial hand-family contribution.
+    """
+
+    by_index = {
+        int(getattr(influence, "bone_index", -1)): float(getattr(influence, "weight", 0.0))
+        for influence in influences
+    }
+    hand_hits: List[tuple[str, int, float]] = []
+    for index, weight in by_index.items():
+        if weight < 0.45 or index < 0 or index >= len(slots):
+            continue
+        name = str(slots[index][0] or "").strip().lower()
+        if name == "lhand_g":
+            hand_hits.append(("l", index, weight))
+        elif name == "rhand_g":
+            hand_hits.append(("r", index, weight))
+    if not hand_hits:
+        return list(influences), False
+
+    merged = dict(by_index)
+    refined = False
+    for side, _hand_index, hand_weight in hand_hits:
+        family = _hand_family_spatial_weights(
+            side,
+            vertex,
+            slots,
+            max_influences=max_influences,
+        )
+        if not family or not any(_is_native_finger_slot(side, slots[index][0]) for index, _w in family):
+            continue
+        blend = min(0.35, max(0.18, hand_weight * 0.30))
+        for index, weight in list(merged.items()):
+            merged[index] = weight * (1.0 - blend)
+        for index, weight in family:
+            merged[index] = merged.get(index, 0.0) + weight * blend
+        refined = True
+
+    normalized = _normalize_influences(
+        [BoneWeight(index, weight) for index, weight in merged.items()],
+        max_influences=max_influences,
+    )
+    return normalized or list(influences), refined
+
+
+def _hand_family_spatial_weights(
+    side: str,
+    vertex: Vec3,
+    slots: Sequence[Any],
+    *,
+    max_influences: int,
+) -> List[tuple[int, float]]:
+    distances: List[tuple[float, int]] = []
+    for index, slot in enumerate(slots):
+        name = str(slot[0] or "")
+        if not _is_native_hand_family_slot(side, name):
+            continue
+        origin = slot[3]
+        children = slot[5]
+        dist = min(
+            (_distance_point_segment(vertex, origin, child) for child in children),
+            default=_distance(vertex, origin),
+        )
+        distances.append((max(dist, 1.0e-5), index))
+    if not distances:
+        return []
+    distances.sort(key=lambda item: item[0])
+    chosen = distances[:max(1, min(4, int(max_influences or 4)))]
+    raw = [(index, 1.0 / (dist * dist)) for dist, index in chosen]
+    total = sum(weight for _index, weight in raw)
+    if not isfinite(total) or total <= 1.0e-12:
+        return []
+    return [(index, weight / total) for index, weight in raw]
+
+
+def _is_native_hand_family_slot(side: str, name: Any) -> bool:
+    text = str(name or "").strip().lower()
+    if side == "l":
+        return (
+            text in {"lhand_g", "lhand"}
+            or text.startswith(("lafngr", "lbfngr", "lcfngr", "ldfngr", "lthumb"))
+        )
+    if side == "r":
+        return (
+            text in {"rhand_g", "rhand"}
+            or text.startswith(("rafngr", "rbfngr", "rcfngr", "rdfngr", "rthumb"))
+        )
+    return False
+
+
+def _is_native_finger_slot(side: str, name: Any) -> bool:
+    text = str(name or "").strip().lower()
+    if side == "l":
+        return text.startswith(("lafngr", "lbfngr", "lcfngr", "ldfngr", "lthumb"))
+    if side == "r":
+        return text.startswith(("rafngr", "rbfngr", "rcfngr", "rdfngr", "rthumb"))
+    return False
 
 
 def _map_imported_source_bone_to_kotor(source_name: str) -> str:
@@ -712,6 +846,8 @@ def _mesh_binding_report(
     donor_weight_transfer: bool = False,
     source_skin_remap: bool = False,
     source_skin_vertices: int = 0,
+    source_hand_refinement: bool = False,
+    source_hand_refinement_vertices: int = 0,
     donor_vertices: int = 0,
     fallback_vertices: int = 0,
     donor_vertex_count: int = 0,
@@ -758,6 +894,8 @@ def _mesh_binding_report(
         "donor_weight_transfer": bool(donor_weight_transfer),
         "source_skin_remap": bool(source_skin_remap),
         "source_skin_vertices": int(source_skin_vertices),
+        "source_hand_refinement": bool(source_hand_refinement),
+        "source_hand_refinement_vertices": int(source_hand_refinement_vertices),
         "donor_vertices": int(donor_vertices),
         "fallback_vertices": int(fallback_vertices),
         "donor_vertex_count": int(donor_vertex_count),

@@ -494,6 +494,43 @@ def test_apply_template_rig_remaps_imported_source_skin_weights_to_kotor_bones()
     assert skin_binding["mesh_reports"][0]["fallback_vertices"] == 0
 
 
+def test_apply_template_rig_refines_source_hand_weights_with_native_fingers() -> None:
+    src_root = _node("import_root")
+    mesh = _node(
+        "bendak_hand_payload",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=src_root,
+    )
+    mesh.vertices = [(-0.62, 0.1, 1.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh.bone_map = ["L_Hand"]
+    mesh.skin_data = [VertexSkinData([BoneWeight(0, 1.0)])]
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    hand = _node("Lhand_g", parent=kotor_root)
+    hand.position = (-0.50, 0.0, 1.0)
+    finger = _node("LaFngrB_g", parent=hand)
+    finger.position = (-0.10, 0.1, 0.0)
+    finger_tip = _node("LaFngrT_g", parent=finger)
+    finger_tip.position = (-0.10, 0.1, 0.0)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("bendak_hand_payload")
+    assert rigged_mesh is not None
+    assert "Lhand_g" in rigged_mesh.bone_map
+    assert "LaFngrB_g" in rigged_mesh.bone_map
+    finger_index = rigged_mesh.bone_map.index("LaFngrB_g")
+    assert any(inf.bone_index == finger_index for inf in rigged_mesh.skin_data[0].influences)
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["source_skin_remap"] is True
+    assert skin_binding["source_hand_refinement"] is True
+    assert skin_binding["mesh_reports"][0]["source_hand_refinement_vertices"] == 1
+
+
 def test_apply_template_rig_records_replaced_native_render_payload_nodes() -> None:
     src_root = _node("import_root")
     mesh = _node("bendak_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
