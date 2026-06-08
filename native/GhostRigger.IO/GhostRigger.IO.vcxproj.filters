@@ -30,6 +30,9 @@
     <ClCompile Include="Private\GhostRiggerIO.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\FbxSdkSettings.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -45,6 +48,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerIO.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\FbxSdkSettings.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
