@@ -27,6 +27,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Private\DiagnosticsContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\GhostRiggerDiagnostics.cpp">
       <Filter>Private</Filter>
     </ClCompile>
@@ -44,6 +47,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Public\DiagnosticsContracts.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="Public\GhostRiggerDiagnostics.h">
       <Filter>Public</Filter>
     </ClInclude>
