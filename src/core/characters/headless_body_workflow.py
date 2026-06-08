@@ -670,6 +670,7 @@ def _scale_for_landmark_fit(
     landmark_alignment: Optional[Dict[str, Any]],
     min_pair_count: int = 8,
     max_similarity_height_ratio: float = 1.35,
+    max_similarity_scale_refinement_ratio: float = 1.02,
     max_rms_error: float = 0.15,
     max_pair_error: float = 0.16,
 ) -> Tuple[float, str]:
@@ -697,6 +698,18 @@ def _scale_for_landmark_fit(
         solved_scale = float(landmark_alignment.get("scale"))
     except Exception:
         return scale, basis
+    if scale > 1.0e-8 and math.isfinite(scale):
+        refinement_ratio = solved_scale / scale
+        max_refine = float(max_similarity_scale_refinement_ratio)
+        if (
+            math.isfinite(refinement_ratio)
+            and max_refine > 1.0
+            and (
+                refinement_ratio < 1.0 / max_refine
+                or refinement_ratio > max_refine
+            )
+        ):
+            return scale, basis
     return solved_scale, "paired_skeleton_similarity_scale"
 
 
@@ -1015,6 +1028,8 @@ _RIGHT_SIDE_ALIASES = (
 )
 _LEFT_FOOT_ALIASES = ("lfoot_g", "lfootg", "lfoot", "leftfoot")
 _RIGHT_FOOT_ALIASES = ("rfoot_g", "rfootg", "rfoot", "rightfoot")
+_LEFT_HAND_ALIASES = ("lhand", "lhand_g", "lhandg", "lefthand", "lwrist", "handl")
+_RIGHT_HAND_ALIASES = ("rhand", "rhand_g", "rhandg", "righthand", "rwrist", "handr")
 _LEFT_TOE_ALIASES = (
     "lfoot_t_g", "lfoottg", "lfoot_t", "lfoott",
     "lefttoebase", "lefttoe", "ltoe", "toel", "ball_l", "balll",
@@ -1272,6 +1287,8 @@ def _infer_humanoid_fit_frame(
     head = _find_landmark(positions, _HEAD_ALIASES)
     left_foot = _find_landmark(positions, _LEFT_FOOT_ALIASES)
     right_foot = _find_landmark(positions, _RIGHT_FOOT_ALIASES)
+    left_hand = _find_landmark(positions, _LEFT_HAND_ALIASES)
+    right_hand = _find_landmark(positions, _RIGHT_HAND_ALIASES)
     left_toe = _find_landmark(positions, _LEFT_TOE_ALIASES)
     right_toe = _find_landmark(positions, _RIGHT_TOE_ALIASES)
 
@@ -1335,6 +1352,10 @@ def _infer_humanoid_fit_frame(
         landmarks["left_foot"] = left_foot[0]
     if right_foot is not None:
         landmarks["right_foot"] = right_foot[0]
+    if left_hand is not None:
+        landmarks["left_hand"] = left_hand[0]
+    if right_hand is not None:
+        landmarks["right_hand"] = right_hand[0]
     if left_toe is not None:
         landmarks["left_toe"] = left_toe[0]
     if right_toe is not None:
@@ -1350,6 +1371,10 @@ def _infer_humanoid_fit_frame(
         landmark_sources["left_foot"] = left_foot[2]
     if right_foot is not None:
         landmark_sources["right_foot"] = right_foot[2]
+    if left_hand is not None:
+        landmark_sources["left_hand"] = left_hand[2]
+    if right_hand is not None:
+        landmark_sources["right_hand"] = right_hand[2]
     if left_toe is not None:
         landmark_sources["left_toe"] = left_toe[2]
     if right_toe is not None:
@@ -1365,6 +1390,10 @@ def _infer_humanoid_fit_frame(
         landmark_positions["left_foot"] = left_foot[1]
     if right_foot is not None:
         landmark_positions["right_foot"] = right_foot[1]
+    if left_hand is not None:
+        landmark_positions["left_hand"] = left_hand[1]
+    if right_hand is not None:
+        landmark_positions["right_hand"] = right_hand[1]
     if left_toe is not None:
         landmark_positions["left_toe"] = left_toe[1]
     if right_toe is not None:
@@ -1379,7 +1408,8 @@ def _infer_humanoid_fit_frame(
             landmark_sources.get(role, "")
             for role in (
                 "left", "right", "head", "pelvis",
-                "left_foot", "right_foot", "left_toe", "right_toe",
+                "left_foot", "right_foot", "left_hand", "right_hand",
+                "left_toe", "right_toe",
             )
         }
         if any(source in {"imported_skeleton", "skeleton_node"} for source in core_sources):

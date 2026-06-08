@@ -91,14 +91,14 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert target_frame.get("toe_forward_alignment") > 0.90
     fit_transform = fit_report.get("fit_transform", {})
     alignment = fit_transform.get("landmark_alignment", {})
-    assert fit_report.get("scale_basis") == "paired_skeleton_similarity_scale"
+    assert fit_report.get("scale_basis") == "paired_skeleton_landmark_height"
     assert fit_transform.get("scale") == pytest.approx(
-        alignment.get("solved_scale")
+        alignment.get("height_scale")
     )
     assert alignment.get("height_scale_basis") == "paired_skeleton_landmark_height"
-    assert alignment.get("applied_scale_basis") == "paired_skeleton_similarity_scale"
+    assert alignment.get("applied_scale_basis") == "paired_skeleton_landmark_height"
     assert alignment.get("applied_scale") == pytest.approx(
-        alignment.get("solved_scale")
+        alignment.get("height_scale")
     )
     assert alignment.get("similarity_transform_accepted") is True
     assert alignment.get("rotation_basis") == "paired_skeleton_similarity"
