@@ -27,6 +27,9 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Private\AxisMode.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\GhostRiggerScene.cpp">
       <Filter>Private</Filter>
     </ClCompile>
@@ -50,6 +53,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Public\AxisMode.h">
+      <Filter>Public</Filter>
+    </ClInclude>
     <ClInclude Include="Public\GhostRiggerScene.h">
       <Filter>Public</Filter>
     </ClInclude>
