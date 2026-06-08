@@ -27,6 +27,9 @@
     <ClCompile Include="Private\GhostRiggerConverters.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\NormalMapMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -45,6 +48,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerConverters.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\NormalMapMath.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ClassMethods.h">

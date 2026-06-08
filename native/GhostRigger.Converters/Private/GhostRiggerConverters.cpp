@@ -11,19 +11,20 @@ constexpr const char* kOwnerBoundary =
     R"("owner_surface":"Asset converters",)"
     R"("owner_package":"native/GhostRigger.Converters",)"
     R"("bridge_method":"C ABI DLL",)"
-    R"("diagnostic_only":true,)"
-    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
-    R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("diagnostic_only":false,)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","normal_map_math_contracts"],)"
+    R"("python_owns":["txi_file_output","software_normal_baker_image_writes","tga_tpc_conversion","external_converter_runtime_integration","blender_fbx_bridge"],)"
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"converters_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Converters",)"
     R"("source_package":"src/converters",)"
-    R"("diagnostic_only":true,)"
+    R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true,)"
+    R"("native_converters_scope":"normal_map_math_contracts"})";
 
 } // namespace
 
@@ -35,11 +36,13 @@ GHOSTRIGGER_CONVERTERS_API const char* gr_converters_version() {
 
 GHOSTRIGGER_CONVERTERS_API const char* gr_converters_capabilities_json() {
     return R"({"name":"GhostRigger.Converters","version":"0.1.0",)"
-           R"("phase":"P1 module sweep","module_package":true,)"
+           R"("phase":"P2 native semantic port","module_package":true,)"
            R"("source_package":"src/converters",)"
            R"("owner_surface":"Asset converters","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","normal_map_math_contracts"],)"
+           R"("native_scope":"normal-map vector math, UV barycentric solve, tangent basis, world-to-tangent conversion, and ray-triangle intersection",)"
+           R"("python_fallback_reason":"TXI file output, software image baking, TGA/TPC conversion, external converter runtime integration, and Blender/FBX bridge behavior remain Python-owned",)"
            R"("python_fallback_required":true})";
 }
 
