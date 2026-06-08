@@ -2604,12 +2604,20 @@ class WgpuRenderer(NullDiagnosticRenderer):
         force_no_lightmaps: bool,
     ) -> tuple:
         anim_active = self._active_anim_pose is not None
+        anim_pose_time = 0
+        if anim_active:
+            try:
+                anim_pose_time = int(round(float(getattr(self._active_anim_pose, "time", 0.0) or 0.0) * 100000.0))
+            except Exception:
+                anim_pose_time = 0
         texture_key = tuple(
             sorted((str(key), id(value)) for key, value in (self._active_textures or {}).items())
         )
         return (
             id(self._active_scene),
             bool(anim_active),
+            id(self._active_anim_pose) if anim_active else 0,
+            anim_pose_time,
             id(self._active_anim_base_pose),
             texture_key,
             str(getattr(display_options.display_mode, "value", display_options.display_mode)),

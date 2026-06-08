@@ -5866,7 +5866,7 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
     assert animated_row.source_revision[-1] == 1
 
 
-def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
+def test_wgpu_animation_queue_key_tracks_pose_time_for_character_builder_skinning() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
@@ -5895,7 +5895,7 @@ def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
         force_no_lightmaps=True,
     )
 
-    assert first == second
+    assert first != second
     assert first != stopped
 
 
