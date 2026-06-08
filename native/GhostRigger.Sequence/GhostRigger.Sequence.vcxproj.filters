@@ -30,6 +30,9 @@
     <ClCompile Include="Private\GhostRiggerSequence.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\SequenceContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -48,6 +51,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerSequence.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\SequenceContracts.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ClassMethods.h">

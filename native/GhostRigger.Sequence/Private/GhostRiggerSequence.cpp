@@ -11,19 +11,21 @@ constexpr const char* kOwnerBoundary =
     R"("owner_surface":"Sequence editor runtime",)"
     R"("owner_package":"native/GhostRigger.Sequence",)"
     R"("bridge_method":"C ABI DLL",)"
-    R"("diagnostic_only":true,)"
-    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
-    R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("diagnostic_only":false,)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","sequence_contracts"],)"
+    R"("python_owns":["recursive value interpolation","keyframe object sorting/evaluation","track mutation","sequence serialization","asset file IO","viewport/object evaluator application","render output"],)"
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"sequence_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Sequence",)"
     R"("source_package":"src/sequence",)"
-    R"("diagnostic_only":true,)"
+    R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true,)"
+    R"("native_scope":["sequence_contracts"])"
+    R"(})";
 
 } // namespace
 
@@ -35,12 +37,14 @@ GHOSTRIGGER_SEQUENCE_API const char* gr_sequence_version() {
 
 GHOSTRIGGER_SEQUENCE_API const char* gr_sequence_capabilities_json() {
     return R"({"name":"GhostRigger.Sequence","version":"0.1.0",)"
-           R"("phase":"P1 module sweep","module_package":true,)"
+           R"("phase":"P2 native semantic port","module_package":true,)"
            R"("source_package":"src/sequence",)"
            R"("owner_surface":"Sequence editor runtime","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
-           R"("python_fallback_required":true})";
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","sequence_contracts"],)"
+           R"("native_scope":["interpolation modes","easing curves","numeric/boolean interpolation","frame-time math"],)"
+           R"("python_fallback_required":true,)"
+           R"("python_fallback_reason":"Recursive values, keyframe objects, track mutation, serialization, file IO, viewport evaluator application, and rendering remain Python-owned until those runtime objects are ported together"})";
 }
 
 GHOSTRIGGER_SEQUENCE_API const char* gr_sequence_owner_boundary_json() {
