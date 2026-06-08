@@ -1,5 +1,8 @@
 #include "GhostRiggerPythonPayloadResource.h"
+#include "GizmoMode.h"
 #include "GhostRiggerGizmo.h"
+
+namespace gizmo_mode = ghostrigger::gizmo::core::gizmo::gizmo_mode;
 
 namespace {
 
@@ -11,19 +14,20 @@ constexpr const char* kOwnerBoundary =
     R"("owner_surface":"Transform gizmo services",)"
     R"("owner_package":"native/GhostRigger.Gizmo",)"
     R"("bridge_method":"C ABI DLL",)"
-    R"("diagnostic_only":true,)"
-    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
-    R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("diagnostic_only":false,)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","gizmo_mode_contracts","transform_space_contracts"],)"
+    R"("python_owns":["transform_gizmo_object_state","transform_controller_drag_math","viewport_event_routing","gizmo_draw_data","runtime_object_mutation"],)"
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"gizmo_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Gizmo",)"
     R"("source_package":"src/core/gizmo",)"
-    R"("diagnostic_only":true,)"
+    R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true,)"
+    R"("native_gizmo_scope":"mode_and_transform_space_contracts"})";
 
 } // namespace
 
@@ -35,11 +39,13 @@ GHOSTRIGGER_GIZMO_API const char* gr_gizmo_version() {
 
 GHOSTRIGGER_GIZMO_API const char* gr_gizmo_capabilities_json() {
     return R"({"name":"GhostRigger.Gizmo","version":"0.1.0",)"
-           R"("phase":"P1 module sweep","module_package":true,)"
+           R"("phase":"P2 native semantic port","module_package":true,)"
            R"("source_package":"src/core/gizmo",)"
            R"("owner_surface":"Transform gizmo services","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","gizmo_mode_contracts","transform_space_contracts"],)"
+           R"("native_scope":"gizmo mode values, transform space values, defaults, and mode cycle order",)"
+           R"("python_fallback_reason":"TransformGizmo state, TransformController drag math, viewport event routing, draw data, picking, and object mutation remain Python-owned until those subsystems are ported",)"
            R"("python_fallback_required":true})";
 }
 
@@ -49,6 +55,34 @@ GHOSTRIGGER_GIZMO_API const char* gr_gizmo_owner_boundary_json() {
 
 GHOSTRIGGER_GIZMO_API const char* gr_gizmo_dependency_schema_json() {
     return kDependencySchema;
+}
+
+GHOSTRIGGER_GIZMO_API const char* gr_gizmo_normalize_mode(const char* mode) {
+    return gizmo_mode::gizmo_mode_to_string(gizmo_mode::normalize_gizmo_mode(mode == nullptr ? "" : mode));
+}
+
+GHOSTRIGGER_GIZMO_API const char* gr_gizmo_cycle_mode(const char* mode) {
+    return gizmo_mode::gizmo_mode_to_string(
+        gizmo_mode::cycle_gizmo_mode(gizmo_mode::normalize_gizmo_mode(mode == nullptr ? "" : mode))
+    );
+}
+
+GHOSTRIGGER_GIZMO_API const char* gr_gizmo_mode_values_json() {
+    return gizmo_mode::gizmo_mode_values_json();
+}
+
+GHOSTRIGGER_GIZMO_API const char* gr_gizmo_normalize_transform_space(const char* space) {
+    return gizmo_mode::transform_space_to_string(
+        gizmo_mode::normalize_transform_space(space == nullptr ? "" : space)
+    );
+}
+
+GHOSTRIGGER_GIZMO_API const char* gr_gizmo_transform_space_values_json() {
+    return gizmo_mode::transform_space_values_json();
+}
+
+GHOSTRIGGER_GIZMO_API const char* gr_gizmo_mode_contracts_schema_json() {
+    return gizmo_mode::gizmo_mode_contracts_schema_json();
 }
 
 }

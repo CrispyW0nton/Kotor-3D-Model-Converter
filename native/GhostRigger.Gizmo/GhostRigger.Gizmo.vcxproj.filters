@@ -30,6 +30,9 @@
     <ClCompile Include="Private\GhostRiggerGizmo.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\GizmoMode.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -42,6 +45,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerGizmo.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GizmoMode.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
