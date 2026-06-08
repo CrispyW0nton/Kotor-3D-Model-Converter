@@ -901,6 +901,98 @@ class ViewportSelectionMeshMixin:
                 best_node = node
         return best_node
 
+    def _nearest_visible_bone_dot_at(
+        self,
+        sx: int,
+        sy: int,
+        *,
+        radius: int = 18,
+        exclude_nodes: tuple = (),
+    ):
+        """Return the closest visible joint/bone dot near the cursor.
+
+        Used for Maya-style hold-V snapping while manually aligning Character
+        Builder guide bones.  The renderer already owns the screen-space caches;
+        this helper keeps snapping tied to what the user can actually see.
+        """
+
+        excluded = {id(node) for node in exclude_nodes if node is not None}
+        best_node = None
+        best_d2 = radius * radius
+        for entry in self._joint_hit_positions():
+            if not entry or len(entry) < 4:
+                continue
+            sx_entry, sy_entry, _depth, node = entry[0], entry[1], entry[2], entry[3]
+            if sx_entry is None or sy_entry is None or node is None:
+                continue
+            if id(node) in excluded:
+                continue
+            name = getattr(node, "name", "") or ""
+            if not name:
+                continue
+            d2 = (float(sx_entry) - float(sx)) ** 2 + (float(sy_entry) - float(sy)) ** 2
+            if d2 < best_d2:
+                best_d2 = d2
+                best_node = node
+        return best_node
+
+    def _move_node_by_overlay_world_delta(
+        self,
+        node,
+        delta_world: tuple[float, float, float],
+    ) -> bool:
+        if node is None:
+            return False
+        if self._is_external_skeleton_node(node):
+            delta = self._external_world_delta_to_local(delta_world)
+        else:
+            delta = delta_world
+        try:
+            pos = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0)))
+            node.position = (
+                pos[0] + float(delta[0]),
+                pos[1] + float(delta[1]),
+                pos[2] + float(delta[2]),
+            )
+            self._evict_transform_cache(node)
+            return True
+        except Exception:
+            return False
+
+    def _snap_joint_drag_to_visible_bone_at_cursor(self, sx: int, sy: int) -> bool:
+        primary = self._joint_drag_node
+        if primary is None:
+            return False
+        drag_nodes = list(self._joint_drag_nodes or [primary])
+        mirror_nodes = list(self._joint_drag_mirror_nodes)
+        target = self._nearest_visible_bone_dot_at(
+            sx,
+            sy,
+            exclude_nodes=tuple(drag_nodes + mirror_nodes),
+        )
+        if target is None:
+            return False
+        try:
+            primary_world = self._node_overlay_world_position(primary)
+            target_world = self._node_overlay_world_position(target)
+        except Exception:
+            return False
+        delta_world = (
+            float(target_world[0]) - float(primary_world[0]),
+            float(target_world[1]) - float(primary_world[1]),
+            float(target_world[2]) - float(primary_world[2]),
+        )
+        moved = False
+        for node in drag_nodes:
+            moved = self._move_node_by_overlay_world_delta(node, delta_world) or moved
+        if mirror_nodes:
+            mirrored_delta = (-delta_world[0], delta_world[1], delta_world[2])
+            for mirror in mirror_nodes:
+                moved = self._move_node_by_overlay_world_delta(mirror, mirrored_delta) or moved
+        if moved:
+            self._request_render(fast=True)
+        return moved
+
     def _snap_selected_external_bones_to_imported_at_cursor(self, sx: int, sy: int) -> bool:
         target = self._nearest_imported_bone_at(sx, sy)
         if target is None:

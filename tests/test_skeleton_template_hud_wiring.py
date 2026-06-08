@@ -417,9 +417,12 @@ def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:
     assert "self.auto_snap_external_skeleton_to_imported_unreal()" not in viewport
     assert "def _nearest_imported_bone_at" in viewport
     assert "def _snap_selected_external_bones_to_imported_at_cursor" in viewport
+    assert "def _nearest_visible_bone_dot_at" in viewport
+    assert "def _snap_joint_drag_to_visible_bone_at_cursor" in viewport
     assert "self._snap_key_down = True" in viewport
     assert "self._snap_key_down = False" in viewport
     assert "_snap_selected_external_bones_to_imported_at_cursor(x, y)" in viewport
+    assert "_snap_joint_drag_to_visible_bone_at_cursor(x, y)" in viewport
 
 
 def test_gimbal_translation_uses_projected_visible_axis_direction() -> None:
