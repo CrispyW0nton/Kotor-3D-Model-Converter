@@ -34,6 +34,18 @@ std::string normalized_key(std::string_view value) {
     return result;
 }
 
+std::string normalized_navigation_key(std::string_view value) {
+    std::string result;
+    const std::string stripped = strip_ascii_whitespace(value);
+    result.reserve(stripped.size());
+    for (const unsigned char character : stripped) {
+        if (character != ' ' && character != '_') {
+            result.push_back(static_cast<char>(std::tolower(character)));
+        }
+    }
+    return result;
+}
+
 bool parse_hex_byte(std::string_view value, int& output) noexcept {
     unsigned int parsed = 0;
     const char* first = value.data();
@@ -182,6 +194,68 @@ const char* display_mode_values_json() noexcept {
     return kJson;
 }
 
+ViewportNavigationProfile normalize_viewport_navigation_profile(std::string_view value) noexcept {
+    const std::string key = normalized_navigation_key(value);
+    if (key == "3dmax" || key == "3ds" || key == "max" || key == "3dsmax") {
+        return ViewportNavigationProfile::ThreeDsMax;
+    }
+    if (key == "blender") {
+        return ViewportNavigationProfile::Blender;
+    }
+    if (key == "maya") {
+        return ViewportNavigationProfile::Maya;
+    }
+    return ViewportNavigationProfile::Maya;
+}
+
+const char* viewport_navigation_profile_to_string(ViewportNavigationProfile profile) noexcept {
+    switch (profile) {
+    case ViewportNavigationProfile::ThreeDsMax:
+        return "3dsmax";
+    case ViewportNavigationProfile::Blender:
+        return "blender";
+    case ViewportNavigationProfile::Maya:
+        return "maya";
+    default:
+        return "maya";
+    }
+}
+
+const char* viewport_navigation_profile_label(ViewportNavigationProfile profile) noexcept {
+    switch (profile) {
+    case ViewportNavigationProfile::ThreeDsMax:
+        return "3ds Max";
+    case ViewportNavigationProfile::Blender:
+        return "Blender";
+    case ViewportNavigationProfile::Maya:
+        return "Maya";
+    default:
+        return "Maya";
+    }
+}
+
+const char* viewport_navigation_profile_summary(ViewportNavigationProfile profile) noexcept {
+    switch (profile) {
+    case ViewportNavigationProfile::ThreeDsMax:
+        return "Alt+MMB orbit, MMB pan, Alt+RMB zoom, mouse wheel zoom";
+    case ViewportNavigationProfile::Blender:
+        return "MMB orbit, Shift+MMB pan, Ctrl+MMB zoom, mouse wheel zoom";
+    case ViewportNavigationProfile::Maya:
+        return "Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, mouse wheel zoom";
+    default:
+        return "Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, mouse wheel zoom";
+    }
+}
+
+const char* viewport_navigation_profiles_json() noexcept {
+    static constexpr const char* kJson =
+        R"({"default":"maya","profiles":[)"
+        R"({"key":"3dsmax","label":"3ds Max","summary":"Alt+MMB orbit, MMB pan, Alt+RMB zoom, mouse wheel zoom"},)"
+        R"({"key":"blender","label":"Blender","summary":"MMB orbit, Shift+MMB pan, Ctrl+MMB zoom, mouse wheel zoom"},)"
+        R"({"key":"maya","label":"Maya","summary":"Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, mouse wheel zoom"}]})";
+    return kJson;
+}
+
 std::array<double, 3> hex_to_rgb_float(std::string_view value, std::array<double, 3> fallback) noexcept {
     std::string raw = strip_ascii_whitespace(value);
     while (!raw.empty() && raw.front() == '#') {
@@ -204,9 +278,9 @@ std::array<double, 3> hex_to_rgb_float(std::string_view value, std::array<double
 const char* rendering_contracts_schema_json() noexcept {
     static constexpr const char* kJson =
         R"({"schema":"rendering_contracts_native.v1",)"
-        R"("sources":["src/core/rendering/renderer_backend.py","src/core/rendering/viewport_display.py","src/core/rendering/color_utils.py"],)"
-        R"("native_scope":["renderer backend normalization","renderer backend labels","viewport display mode normalization","display mode values","hex color to RGB float conversion"],)"
-        R"("python_fallback":["ViewportDisplayOptions dataclass state","GPU device/resource ownership","mesh/skeleton render data extraction","picking providers","WGPU/ModernGL/PyGFX runtime adapters","software rasterizer pipelines"],)"
+        R"("sources":["src/core/rendering/renderer_backend.py","src/core/rendering/viewport_display.py","src/core/rendering/viewport_navigation.py","src/core/rendering/color_utils.py"],)"
+        R"("native_scope":["renderer backend normalization","renderer backend labels","viewport display mode normalization","display mode values","viewport navigation profile normalization","viewport navigation profile labels","viewport navigation profile summaries","hex color to RGB float conversion"],)"
+        R"("python_fallback":["ViewportDisplayOptions dataclass state","ViewportNavigationProfile dataclass object construction","full viewport navigation help text","GPU device/resource ownership","mesh/skeleton render data extraction","picking providers","WGPU/ModernGL/PyGFX runtime adapters","software rasterizer pipelines"],)"
         R"("reason_python_fallback":"runtime renderer objects, GPU resources, Python dataclasses, and model-bound render data are still owned by Python or dedicated renderer projects until their subsystems are ported"})";
     return kJson;
 }

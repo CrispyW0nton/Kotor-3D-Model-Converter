@@ -17,8 +17,8 @@ constexpr const char* kOwnerBoundary =
     R"("owner_package":"native/GhostRigger.Rendering",)"
     R"("bridge_method":"C ABI DLL",)"
     R"("diagnostic_only":false,)"
-    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","renderer_backend_contracts","viewport_display_contracts","color_conversion_helpers"],)"
-    R"("python_owns":["viewport_display_dataclass_state","gpu_resource_runtime","mesh_render_data_extraction","picking_providers","software_rasterizer_pipelines"],)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","renderer_backend_contracts","viewport_display_contracts","viewport_navigation_contracts","color_conversion_helpers"],)"
+    R"("python_owns":["viewport_display_dataclass_state","viewport_navigation_dataclass_state","viewport_navigation_help_text","gpu_resource_runtime","mesh_render_data_extraction","picking_providers","software_rasterizer_pipelines"],)"
     R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"rendering_dependency_schema.v1",)"
@@ -29,7 +29,7 @@ constexpr const char* kDependencySchema =
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
     R"("native_implementation_enabled":true,)"
-    R"("native_rendering_scope":"backend_display_color_contracts"})";
+    R"("native_rendering_scope":"backend_display_navigation_color_contracts"})";
 
 } // namespace
 
@@ -45,9 +45,9 @@ GHOSTRIGGER_RENDERING_API const char* gr_rendering_capabilities_json() {
            R"("source_package":"src/core/rendering",)"
            R"("owner_surface":"Renderer-neutral core services","bridge_method":"C ABI DLL",)"
            R"("diagnostic_only":false,"native_implementation_enabled":true,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","renderer_backend_contracts","viewport_display_contracts","color_conversion_helpers"],)"
-           R"("native_scope":"renderer backend, viewport display, and color conversion contracts",)"
-           R"("python_fallback_reason":"GPU resources, renderer adapters, Python display dataclasses, picking providers, and mesh/skeleton render data remain Python-owned or renderer-project-owned until those subsystems are ported",)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","renderer_backend_contracts","viewport_display_contracts","viewport_navigation_contracts","color_conversion_helpers"],)"
+           R"("native_scope":"renderer backend, viewport display, viewport navigation profile, and color conversion contracts",)"
+           R"("python_fallback_reason":"GPU resources, renderer adapters, Python display/navigation dataclasses, full navigation help text, picking providers, and mesh/skeleton render data remain Python-owned or renderer-project-owned until those subsystems are ported",)"
            R"("python_fallback_required":true})";
 }
 
@@ -79,6 +79,28 @@ GHOSTRIGGER_RENDERING_API const char* gr_rendering_normalize_display_mode(const 
 
 GHOSTRIGGER_RENDERING_API const char* gr_rendering_display_mode_values_json() {
     return rendering_contracts::display_mode_values_json();
+}
+
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_normalize_viewport_navigation_profile(const char* profile) {
+    return rendering_contracts::viewport_navigation_profile_to_string(
+        rendering_contracts::normalize_viewport_navigation_profile(profile == nullptr ? "" : profile)
+    );
+}
+
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_viewport_navigation_profile_label(const char* profile) {
+    return rendering_contracts::viewport_navigation_profile_label(
+        rendering_contracts::normalize_viewport_navigation_profile(profile == nullptr ? "" : profile)
+    );
+}
+
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_viewport_navigation_profile_summary(const char* profile) {
+    return rendering_contracts::viewport_navigation_profile_summary(
+        rendering_contracts::normalize_viewport_navigation_profile(profile == nullptr ? "" : profile)
+    );
+}
+
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_viewport_navigation_profiles_json() {
+    return rendering_contracts::viewport_navigation_profiles_json();
 }
 
 GHOSTRIGGER_RENDERING_API int gr_rendering_hex_to_rgb_float(

@@ -5,7 +5,7 @@ import json
 import math
 from pathlib import Path
 
-from src.core.rendering import color_utils, renderer_backend, viewport_display
+from src.core.rendering import color_utils, renderer_backend, viewport_display, viewport_navigation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +26,14 @@ def _load_rendering_dll() -> ctypes.CDLL:
     dll.gr_rendering_normalize_display_mode.restype = ctypes.c_char_p
     dll.gr_rendering_display_mode_values_json.argtypes = []
     dll.gr_rendering_display_mode_values_json.restype = ctypes.c_char_p
+    dll.gr_rendering_normalize_viewport_navigation_profile.argtypes = [ctypes.c_char_p]
+    dll.gr_rendering_normalize_viewport_navigation_profile.restype = ctypes.c_char_p
+    dll.gr_rendering_viewport_navigation_profile_label.argtypes = [ctypes.c_char_p]
+    dll.gr_rendering_viewport_navigation_profile_label.restype = ctypes.c_char_p
+    dll.gr_rendering_viewport_navigation_profile_summary.argtypes = [ctypes.c_char_p]
+    dll.gr_rendering_viewport_navigation_profile_summary.restype = ctypes.c_char_p
+    dll.gr_rendering_viewport_navigation_profiles_json.argtypes = []
+    dll.gr_rendering_viewport_navigation_profiles_json.restype = ctypes.c_char_p
     dll.gr_rendering_hex_to_rgb_float.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_double), ctypes.POINTER(ctypes.c_double)]
     dll.gr_rendering_hex_to_rgb_float.restype = ctypes.c_int
     dll.gr_rendering_capabilities_json.argtypes = []
@@ -56,6 +64,7 @@ def test_rendering_project_declares_contract_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_rendering_normalize_renderer_backend" in package_header
+    assert "gr_rendering_normalize_viewport_navigation_profile" in package_header
     assert "namespace ghostrigger::rendering::core::rendering::rendering_contracts" in public_header
     assert "namespace ghostrigger::rendering::core::rendering::rendering_contracts" in implementation
     assert "phase15" not in public_header
@@ -108,6 +117,38 @@ def test_native_viewport_display_contracts_match_python() -> None:
     assert tuple(native_values) == viewport_display.display_mode_values(viewport_display.ViewportDisplayMode)
 
 
+def test_native_viewport_navigation_contracts_match_python() -> None:
+    assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
+    dll = _load_rendering_dll()
+
+    for value in [
+        "",
+        "3dmax",
+        "3ds",
+        "max",
+        "3dsmax",
+        "3ds max",
+        "3ds_max",
+        "3ds-max",
+        "blender",
+        "maya",
+        "not-real",
+    ]:
+        expected = viewport_navigation.normalize_viewport_navigation_profile(value)
+        actual = dll.gr_rendering_normalize_viewport_navigation_profile(value.encode("utf-8")).decode("utf-8")
+        label = dll.gr_rendering_viewport_navigation_profile_label(value.encode("utf-8")).decode("utf-8")
+        summary = dll.gr_rendering_viewport_navigation_profile_summary(value.encode("utf-8")).decode("utf-8")
+        assert actual == expected
+        assert label == viewport_navigation.viewport_profile_label(value)
+        assert summary == viewport_navigation.VIEWPORT_NAVIGATION_PROFILES[expected].summary
+
+    native_profiles = json.loads(dll.gr_rendering_viewport_navigation_profiles_json().decode("utf-8"))
+    assert native_profiles["default"] == viewport_navigation.DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+    assert tuple(profile["key"] for profile in native_profiles["profiles"]) == tuple(
+        viewport_navigation.VIEWPORT_NAVIGATION_PROFILES
+    )
+
+
 def test_native_hex_to_rgb_float_matches_python_color_utils() -> None:
     assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
     dll = _load_rendering_dll()
@@ -129,5 +170,7 @@ def test_native_rendering_capabilities_document_python_fallback_scope() -> None:
     assert capabilities["native_implementation_enabled"] is True
     assert capabilities["python_fallback_required"] is True
     assert "renderer_backend_contracts" in capabilities["capabilities"]
+    assert "viewport_navigation_contracts" in capabilities["capabilities"]
     assert "viewport display mode normalization" in schema["native_scope"]
+    assert "viewport navigation profile normalization" in schema["native_scope"]
     assert "GPU device/resource ownership" in schema["python_fallback"]

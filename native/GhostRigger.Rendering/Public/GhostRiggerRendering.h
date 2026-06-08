@@ -15,6 +15,10 @@ GHOSTRIGGER_RENDERING_API const char* gr_rendering_normalize_renderer_backend(co
 GHOSTRIGGER_RENDERING_API const char* gr_rendering_renderer_backend_label(const char* backend);
 GHOSTRIGGER_RENDERING_API const char* gr_rendering_normalize_display_mode(const char* mode);
 GHOSTRIGGER_RENDERING_API const char* gr_rendering_display_mode_values_json();
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_normalize_viewport_navigation_profile(const char* profile);
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_viewport_navigation_profile_label(const char* profile);
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_viewport_navigation_profile_summary(const char* profile);
+GHOSTRIGGER_RENDERING_API const char* gr_rendering_viewport_navigation_profiles_json();
 GHOSTRIGGER_RENDERING_API int gr_rendering_hex_to_rgb_float(
     const char* value,
     const double* fallback_rgb,
