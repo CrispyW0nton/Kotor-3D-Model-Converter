@@ -30,6 +30,9 @@
     <ClCompile Include="Private\GhostRiggerGame.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\ResourceTypes.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
@@ -45,6 +48,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerGame.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ResourceTypes.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
