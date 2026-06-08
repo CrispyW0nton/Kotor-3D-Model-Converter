@@ -30,12 +30,18 @@
     <ClCompile Include="Private\GhostRiggerAdaptersFiles.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\LocalFileWriter.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerAdaptersFiles.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\LocalFileWriter.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">

@@ -1,4 +1,4 @@
-#include "GhostRiggerPythonPayloadResource.h"
+#include "../../GhostRigger.Native.NativeCore/Public/GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerAdaptersFiles.h"
 
 namespace {
@@ -14,7 +14,7 @@ constexpr const char* kOwnerBoundary =
     R"("diagnostic_only":true,)"
     R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
     R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"adapters_files_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Adapters.Files",)"
@@ -23,7 +23,7 @@ constexpr const char* kDependencySchema =
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
-    R"("native_implementation_enabled":false})";
+    R"("native_implementation_enabled":true})";
 
 } // namespace
 
@@ -38,8 +38,9 @@ GHOSTRIGGER_ADAPTERS_FILES_API const char* gr_adapters_files_capabilities_json()
            R"("phase":"P1 module sweep","module_package":true,)"
            R"("source_package":"src/adapters/files",)"
            R"("owner_surface":"File adapters","bridge_method":"C ABI DLL",)"
-           R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("local_file_writer_native":true,"local_file_writer_utf8_only":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","local_file_writer"],)"
            R"("python_fallback_required":true})";
 }
 
