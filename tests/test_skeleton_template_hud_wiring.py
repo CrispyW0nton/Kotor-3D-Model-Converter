@@ -106,6 +106,20 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "scene.assign" in src
 
 
+def test_template_apply_replaces_scene_and_viewport_with_rigged_model() -> None:
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
+    start = src.index("def _on_apply_skeleton_template_requested")
+    end = src.index("\n    @QtCore.Slot()\n    def _on_validate_requested", start)
+    block = src[start:end]
+
+    assert 'rigged_model = result.get("model")' in block
+    assert "_md.PartSlot.HEADLESS_BODY" in block
+    assert "self.scene.assign(\n            _md.PartSlot.HEADLESS_BODY,\n            rigged_model," in block
+    assert "_load_model_in_viewport_with_textures(\n                    rigged_model," in block
+    assert "self._push_import_fit_report_to_inspector(rigged_model)" in block
+    assert 'self._schedule_live_validation("skeleton_template_applied")' in block
+
+
 def test_humanoid_mode_uses_five_step_character_builder_rail() -> None:
     rail = _read("src/gui/panels/qt_workflow_rail.py")
     humanoid_start = rail.index("_STEPS_HUMANOID")
