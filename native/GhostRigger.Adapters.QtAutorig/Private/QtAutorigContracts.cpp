@@ -132,7 +132,7 @@ bool run_preset_task_dialog(
         should_unload = true;
     }
 
-    const auto* task_dialog = reinterpret_cast<TaskDialogFn>(GetProcAddress(comctl, "TaskDialogIndirect"));
+    TaskDialogFn task_dialog = reinterpret_cast<TaskDialogFn>(GetProcAddress(comctl, "TaskDialogIndirect"));
     if (task_dialog == nullptr) {
         if (should_unload) {
             FreeLibrary(comctl);
@@ -191,7 +191,7 @@ bool run_confirm_task_dialog(const std::wstring& title_wide, const std::wstring&
         should_unload = true;
     }
 
-    const auto* task_dialog = reinterpret_cast<TaskDialogFn>(GetProcAddress(comctl, "TaskDialogIndirect"));
+    TaskDialogFn task_dialog = reinterpret_cast<TaskDialogFn>(GetProcAddress(comctl, "TaskDialogIndirect"));
     if (task_dialog == nullptr) {
         if (should_unload) {
             FreeLibrary(comctl);
