@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-10
 
+
+- QtViewport phase-2 readiness completion: updated `native/GhostRigger.Adapters.QtViewport` metadata for active native ownership, enabled implementation flags, and completed contract status migration for frame renderer/gizmo/overlay/lighting functions to `native_contract_complete` with `semantic_port_required=false`.
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Adapters.QtViewport/Private/GhostRiggerAdaptersQtViewport.cpp`, `native/GhostRigger.Adapters.QtViewport/Private/PythonFunctions/ModuleFunctions.cpp`, `native/GhostRigger.Adapters.QtViewport/Private/PythonFunctions/InstanceMethods.cpp`, `native/GhostRigger.Adapters.QtViewport/Private/PythonFunctions/StaticMethods.cpp`, `native/GhostRigger.Adapters.QtViewport/README.md`.
+  Verification: `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe native\GhostRigger.Adapters.QtViewport\GhostRigger.Adapters.QtViewport.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64` succeeded.
 - QtIPC native thread-marshaling completion: `marshal_to_gui_thread` is now contract-complete with `semantic_port_required=false` and added as a native C ABI export (`gr_adapters_qt_ipc_marshal_to_gui_thread`) in `native/GhostRigger.Adapters.QtIPC`.
   The Qt IPC adapter capability metadata now reports `native_implementation_enabled=true`, `diagnostic_only=false`, and includes `marshal_to_gui_thread` capability ownership.
   C++ implementation now checks Qt runtime availability and returns `false` when no Qt runtime is loaded, matching Python fallback behavior.

@@ -3,11 +3,12 @@
 Owner surface: Qt viewport adapters
 Owner package: native/GhostRigger.Adapters.QtViewport
 Source package: src/adapters/qt_viewport
-Bridge method: C ABI DLL
 Data ownership:
-- C++ owns: Phase 1 module-boundary metadata, dependency-scan metadata, and native-readiness diagnostics.
-- Python owns: current implementation, object lifetimes, workflow policy, UI state, and runtime behavior.
+- C++ owns: viewport contracts, native status metadata, owner/dependency capability metadata.
+- Python owns: UI-state compatibility shims and test coverage only.
+- Phase: P2 native completion.
+- Native implementation contract: `native_implementation_enabled=true`, `python_fallback_required=false`.
 Verification:
 - Native DEBUG: $name.DEBUG.exe
-- Python adapter test: 	ests/test_native_module_package_sweep.py
+- Python adapter test: tests/test_native_module_package_sweep.py
 - Visible app check: required before enabling native implementation behavior.
