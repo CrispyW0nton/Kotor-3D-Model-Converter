@@ -5,8 +5,12 @@
 #include <string_view>
 #include <vector>
 
-#include <commctrl.h>
+// Win32 TaskDialogIndirect types require Windows SDK constants defined before including commctrl.
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600
+#endif
 #include <windows.h>
+#include <commctrl.h>
 
 namespace ghostrigger::adapters::qtautorig {
 
