@@ -30,12 +30,18 @@
     <ClCompile Include="Private\GhostRiggerAdaptersQtAutorig.cpp">
       <Filter>Private</Filter>
     </ClCompile>
+    <ClCompile Include="Private\QtAutorigContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
       <Filter>Private\PythonFunctions</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerAdaptersQtAutorig.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\QtAutorigContracts.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">

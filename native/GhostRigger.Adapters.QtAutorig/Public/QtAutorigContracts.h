@@ -5,6 +5,8 @@
 namespace ghostrigger::adapters::qtautorig {
 
 bool qt_application_running();
+// run_cloth_preset_dialog returns JSON in thread-local storage.
+// Caller must copy the returned value before any subsequent call on the same thread.
 const char* run_cloth_preset_dialog(
     const void* parent,
     const char* default_preset,
@@ -12,6 +14,7 @@ const char* run_cloth_preset_dialog(
     const char* message
 );
 bool confirm_cloth_action(const void* parent, const char* title, const char* message);
+// Returns false only when native UI confirms "No"; returns true when UI is unavailable.
 
 } // namespace ghostrigger::adapters::qtautorig
 

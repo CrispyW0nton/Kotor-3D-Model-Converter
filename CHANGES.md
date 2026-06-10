@@ -11,6 +11,14 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-10
 
+- QtAutorig Phase 2 contract completion: finalized native metadata and payload semantics for `qt_autorig` C++ contracts.
+  `run_cloth_preset_dialog` now returns a native payload with `schema`, `preset_name`, `accepted`, `ui_available`, and full `available` preset list aligned to `ClothRigPreset.names()`.
+  `confirm_cloth_action` remains boolean and documents UI-unavailable fallback-to-accept behavior.
+  `native_implementation_enabled` flags were switched to `true` for ownership/capability metadata, and `semantic_port_required` was set to `false` for fully implemented QtAutorig contracts.
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Adapters.QtAutorig/Private/PythonFunctions/ModuleFunctions.cpp`, `native/GhostRigger.Adapters.QtAutorig/Private/GhostRiggerAdaptersQtAutorig.cpp`, `native/GhostRigger.Adapters.QtAutorig/Public/QtAutorigContracts.h`, `native/GhostRigger.Adapters.QtAutorig/Private/QtAutorigContracts.cpp`, `native/GhostRigger.Adapters.QtAutorig/GhostRigger.Adapters.QtAutorig.vcxproj.filters`.
+  Verification: changes were applied and inspected in-place; full rebuild pending after current pass.
+
 - Phase 2 native Adapters.QtAutorig contract port: added native C++ implementations for
   `ghostrigger::adapters::qtautorig::qt_autorig::cloth_dialogs`-aligned
   contracts under `native/GhostRigger.Adapters.QtAutorig`, including `QtAutorigContracts`
