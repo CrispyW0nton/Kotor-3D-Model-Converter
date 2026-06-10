@@ -11,4 +11,5 @@ GHOSTRIGGER_ADAPTERS_QT_IPC_API const char* gr_adapters_qt_ipc_version();
 GHOSTRIGGER_ADAPTERS_QT_IPC_API const char* gr_adapters_qt_ipc_capabilities_json();
 GHOSTRIGGER_ADAPTERS_QT_IPC_API const char* gr_adapters_qt_ipc_owner_boundary_json();
 GHOSTRIGGER_ADAPTERS_QT_IPC_API const char* gr_adapters_qt_ipc_dependency_schema_json();
+GHOSTRIGGER_ADAPTERS_QT_IPC_API int gr_adapters_qt_ipc_marshal_to_gui_thread(void (*callback)(void*), void* user_data);
 }

@@ -11,6 +11,13 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-10
 
+- QtIPC native thread-marshaling completion: `marshal_to_gui_thread` is now contract-complete with `semantic_port_required=false` and added as a native C ABI export (`gr_adapters_qt_ipc_marshal_to_gui_thread`) in `native/GhostRigger.Adapters.QtIPC`.
+  The Qt IPC adapter capability metadata now reports `native_implementation_enabled=true`, `diagnostic_only=false`, and includes `marshal_to_gui_thread` capability ownership.
+  C++ implementation now checks Qt runtime availability and returns `false` when no Qt runtime is loaded, matching Python fallback behavior.
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Adapters.QtIPC/Public/GhostRiggerAdaptersQtIPC.h`, `native/GhostRigger.Adapters.QtIPC/Private/GhostRiggerAdaptersQtIPC.cpp`, `native/GhostRigger.Adapters.QtIPC/Private/PythonFunctions/ModuleFunctions.cpp`, `CHANGES.md`.
+  Verification: `F:\\Unreal VS\\MSBuild\\Current\\Bin\\MSBuild.exe native\\GhostRigger.Adapters.QtIPC\\GhostRigger.Adapters.QtIPC.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:SolutionDir="P:\\OAI\\Agent\\GhostRiggerGH\\/"` succeeded.
+
 - QtAutorig Phase 2 contract completion: finalized native metadata and payload semantics for `qt_autorig` C++ contracts.
   `run_cloth_preset_dialog` now returns a native payload with `schema`, `preset_name`, `accepted`, `ui_available`, and full `available` preset list aligned to `ClothRigPreset.names()`.
   `confirm_cloth_action` remains boolean and documents UI-unavailable fallback-to-accept behavior.
