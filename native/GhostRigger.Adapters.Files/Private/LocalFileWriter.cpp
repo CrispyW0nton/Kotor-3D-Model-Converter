@@ -1,5 +1,7 @@
 #include "LocalFileWriter.h"
 
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 
@@ -44,6 +46,23 @@ bool write_text_utf8(const std::string& path, const std::string& text) {
     );
 }
 
+bool write_text(const std::string& path, const std::string& text, const std::string& encoding) {
+    if (path.empty()) {
+        return false;
+    }
+    if (encoding.empty()) {
+        return write_text_utf8(path, text);
+    }
+    std::string normalized;
+    normalized.reserve(encoding.size());
+    for (const char ch : encoding) {
+        if (ch != '-') {
+            normalized.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+        }
+    }
+    return normalized == "utf8" && write_text_utf8(path, text);
+}
+
 } // namespace ghostrigger::adapters::files::local_file_writer
 
 extern "C" {
@@ -57,6 +76,18 @@ GHOSTRIGGER_ADAPTERS_FILES_API int gr_adapters_files_write_bytes(
         path == nullptr ? std::string{} : std::string(path),
         data,
         data_size
+    ) ? 1 : 0;
+}
+
+GHOSTRIGGER_ADAPTERS_FILES_API int gr_adapters_files_write_text(
+    const char* path,
+    const char* text,
+    const char* encoding
+) {
+    return ghostrigger::adapters::files::local_file_writer::write_text(
+        path == nullptr ? std::string{} : std::string(path),
+        text == nullptr ? std::string{} : std::string(text),
+        encoding == nullptr ? std::string{} : std::string(encoding)
     ) ? 1 : 0;
 }
 

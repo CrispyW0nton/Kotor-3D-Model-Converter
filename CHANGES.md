@@ -9,7 +9,12 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
-## 2026-06-08
+## 2026-06-10
+
+- Native Adapters.Files parity hardening: added an encoding-aware native text-write helper path in `GhostRigger.Adapters.Files` so UTF-8 behavior is explicit at the C++ layer while preserving the existing UTF-8-only fast path (`write_text_utf8`). Added local validation for missing paths/encodings and preserved empty-string/parent-directory write semantics, then extended native writer tests with an encoding-argument check (skipping cleanly when symbol export is unavailable in older artifacts).
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Adapters.Files/Public/LocalFileWriter.h`, `native/GhostRigger.Adapters.Files/Private/LocalFileWriter.cpp`, `tests/test_native_adapters_files_writer.py`, `CHANGES.md`.
+  Verification: `P:\OAI\Agent\GhostRiggerGH\build\vs\x64\Release\GhostRigger.Adapters.Files.dll` smoke tests: `python -m pytest tests/test_native_adapters_files_writer.py -q` (`3 passed, 1 skipped`). `msbuild` and `cl` were not available in this environment, so native rebuild/recompile was not executed in this session; existing release artifact was used for runtime checks.
 
 - Phase 2 native Templates contract port: added C++ implementations for stable template and 2DA utility helpers from `src/core/templates/template_builder.py` and `src/core/templates/twoda.py` under `GhostRigger.Templates`, including game-version normalization, K1/K2 humanoid bone counts, K1/K2 animation-slot counts, rig-source classification, 2DA format detection, 2DA blank-cell defaulting, ASCII 2DA line tokenization, C ABI exports, and native capability flags. KotorModel construction, placeholder mesh construction, manifest file writes, PyKotor animation validation, eyeball node inspection, full 2DA table parsing, and TwoDA cache filesystem/GameLibrary access remain Python fallback until those geometry, game-file, and filesystem paths are ported as dedicated validated slices. No roadmap task ID applies.
   Owner: LordVaderCW.
