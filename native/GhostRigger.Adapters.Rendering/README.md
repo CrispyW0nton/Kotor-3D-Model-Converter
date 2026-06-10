@@ -5,9 +5,9 @@ Owner package: native/GhostRigger.Adapters.Rendering
 Source package: src/adapters/rendering
 Bridge method: C ABI DLL
 Data ownership:
-- C++ owns: Phase 1 module-boundary metadata, dependency-scan metadata, and native-readiness diagnostics.
-- Python owns: current implementation, object lifetimes, workflow policy, UI state, and runtime behavior.
+- C++ owns: C++ and native-readiness metadata, dependency scans, and function contracts.
+- Python role: compatibility payload and test fixtures only.
 Verification:
 - Native DEBUG: $name.DEBUG.exe
-- Python adapter test: 	ests/test_native_module_package_sweep.py
-- Visible app check: required before enabling native implementation behavior.
+- Python adapter test: tests/test_native_module_package_sweep.py
+- Visible app check: already deferred until native runtime parity remains stable.

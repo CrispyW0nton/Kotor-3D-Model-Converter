@@ -12,6 +12,11 @@ For each completed change, add a dated entry with:
 ## 2026-06-10
 
 
+- Rendering adapter phase-2 metadata completion: migrated all `native/GhostRigger.Adapters.Rendering` function descriptors to `native_contract_complete` with `semantic_port_required=false`, switched adapter capabilities to `P2 native completion`, `diagnostic_only=false`, `native_implementation_enabled=true`, and `python_fallback_required=false`, and updated ownership docs to reflect native readiness ownership.
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Adapters.Rendering/Private/GhostRiggerAdaptersRendering.cpp`, `native/GhostRigger.Adapters.Rendering/Private/PythonFunctions/ClassMethods.cpp`, `native/GhostRigger.Adapters.Rendering/Private/PythonFunctions/InstanceMethods.cpp`, `native/GhostRigger.Adapters.Rendering/Private/PythonFunctions/ModuleFunctions.cpp`, `native/GhostRigger.Adapters.Rendering/Private/PythonFunctions/NestedFunctions.cpp`, `native/GhostRigger.Adapters.Rendering/Private/PythonFunctions/Properties.cpp`, `native/GhostRigger.Adapters.Rendering/Private/PythonFunctions/StaticMethods.cpp`, `native/GhostRigger.Adapters.Rendering/README.md`.
+  Verification: fixed missing `GhostRiggerNativeCore` include path in `private/GhostRiggerAdaptersRendering.cpp` and confirmed successful `F:\\Unreal VS\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe native\\GhostRigger.Adapters.Rendering\\GhostRigger.Adapters.Rendering.vcxproj /p:Configuration=Debug /p:Platform=x64`.
+
 - QtViewport phase-2 readiness completion: updated `native/GhostRigger.Adapters.QtViewport` metadata for active native ownership, enabled implementation flags, and completed contract status migration for frame renderer/gizmo/overlay/lighting functions to `native_contract_complete` with `semantic_port_required=false`.
   Owner: LordVaderCW.
   Affected areas: `native/GhostRigger.Adapters.QtViewport/Private/GhostRiggerAdaptersQtViewport.cpp`, `native/GhostRigger.Adapters.QtViewport/Private/PythonFunctions/ModuleFunctions.cpp`, `native/GhostRigger.Adapters.QtViewport/Private/PythonFunctions/InstanceMethods.cpp`, `native/GhostRigger.Adapters.QtViewport/Private/PythonFunctions/StaticMethods.cpp`, `native/GhostRigger.Adapters.QtViewport/README.md`.
