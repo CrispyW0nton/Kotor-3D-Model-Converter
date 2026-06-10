@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-10
 
+- Phase 2 native Adapters.QtAutorig contract port: added native C++ implementations for
+  `ghostrigger::adapters::qtautorig::qt_autorig::cloth_dialogs`-aligned
+  contracts under `native/GhostRigger.Adapters.QtAutorig`, including `QtAutorigContracts`
+  with `qt_application_running`, `run_cloth_preset_dialog`, and `confirm_cloth_action` C ABI
+  exports, plus `native_contract_complete` migration in
+  `native/GhostRigger.Adapters.QtAutorig/Private/PythonFunctions/ModuleFunctions.cpp`.
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Adapters.QtAutorig/Public/QtAutorigContracts.h`, `native/GhostRigger.Adapters.QtAutorig/Private/QtAutorigContracts.cpp`, `native/GhostRigger.Adapters.QtAutorig/Public/GhostRiggerAdaptersQtAutorig.h`, `native/GhostRigger.Adapters.QtAutorig/GhostRigger.Adapters.QtAutorig.vcxproj`, `native/GhostRigger.Adapters.QtAutorig/Private/PythonFunctions/ModuleFunctions.cpp`, `CHANGES.md`.
+  Verification: `F:\\Unreal VS\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe` on
+  `native\\GhostRigger.Adapters.QtAutorig\\GhostRigger.Adapters.QtAutorig.vcxproj`
+  with `Configuration=Debug` and `Platform=x64` succeeded.
+
 - Native Adapters.Files parity hardening: added an encoding-aware native text-write helper path in `GhostRigger.Adapters.Files` so UTF-8 behavior is explicit at the C++ layer while preserving the existing UTF-8-only fast path (`write_text_utf8`). Added local validation for missing paths/encodings and preserved empty-string/parent-directory write semantics, then extended native writer tests with an encoding-argument check (skipping cleanly when symbol export is unavailable in older artifacts).
   Owner: LordVaderCW.
   Affected areas: `native/GhostRigger.Adapters.Files/Public/LocalFileWriter.h`, `native/GhostRigger.Adapters.Files/Private/LocalFileWriter.cpp`, `tests/test_native_adapters_files_writer.py`, `CHANGES.md`.
