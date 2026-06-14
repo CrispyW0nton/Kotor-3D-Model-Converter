@@ -17,4 +17,6 @@ GHOSTRIGGER_IPC_API const char* gr_ipc_endpoint_url(int port, const char* action
 GHOSTRIGGER_IPC_API const char* gr_ipc_request_body_json(const char* sender, const char* action, const char* payload_json);
 GHOSTRIGGER_IPC_API int gr_ipc_response_is_ok(const char* status);
 GHOSTRIGGER_IPC_API const char* gr_ipc_ping_status_message(const char* program_name, int port, const char* status);
+GHOSTRIGGER_IPC_API int gr_ipc_supports_action(const char* action);
+GHOSTRIGGER_IPC_API const char* gr_ipc_tool_command_routes_json();
 }

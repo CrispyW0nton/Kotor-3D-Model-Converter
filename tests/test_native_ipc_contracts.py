@@ -28,6 +28,10 @@ def _load_dll() -> ctypes.CDLL:
     dll.gr_ipc_response_is_ok.restype = ctypes.c_int
     dll.gr_ipc_ping_status_message.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p]
     dll.gr_ipc_ping_status_message.restype = ctypes.c_char_p
+    dll.gr_ipc_supports_action.argtypes = [ctypes.c_char_p]
+    dll.gr_ipc_supports_action.restype = ctypes.c_int
+    dll.gr_ipc_tool_command_routes_json.argtypes = []
+    dll.gr_ipc_tool_command_routes_json.restype = ctypes.c_char_p
     return dll
 
 
@@ -88,5 +92,23 @@ def test_native_ipc_capabilities_document_contract_scope() -> None:
     dll = _load_dll()
     capabilities = json.loads(dll.gr_ipc_capabilities_json().decode("utf-8"))
     assert capabilities["ipc_contracts_native"] is True
+    assert capabilities["native_tool_command_routes"] is True
     assert capabilities["ipc_runtime_python_fallback"] is True
     assert capabilities["python_fallback_required"] is True
+
+
+def test_native_ipc_advertises_mesh_and_pivot_tool_routes() -> None:
+    dll = _load_dll()
+
+    assert dll.gr_ipc_supports_action(b"mesh_tool_command") == 1
+    assert dll.gr_ipc_supports_action(b"pivot_command") == 1
+    assert dll.gr_ipc_supports_action(b"unknown_tool_command") == 0
+
+    routes = json.loads(dll.gr_ipc_tool_command_routes_json().decode("utf-8"))
+    assert routes["native_route_contract_enabled"] is True
+    route_actions = {route["action"] for route in routes["routes"]}
+    assert {"mesh_tool_command", "pivot_command"} <= route_actions
+    mesh_route = next(route for route in routes["routes"] if route["action"] == "mesh_tool_command")
+    pivot_route = next(route for route in routes["routes"] if route["action"] == "pivot_command")
+    assert mesh_route["owner_package"] == "native/GhostRigger.Domain.Core.MeshTools"
+    assert pivot_route["owner_package"] == "native/GhostRigger.Tools.Workflow.PivotControls"

@@ -25,8 +25,8 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\main.py">
-      <Filter>..\..</Filter>
+    <None Include="main.py">
+      <Filter>..</Filter>
     </None>
     <None Include="..\..\pyproject.toml">
       <Filter>..\..</Filter>

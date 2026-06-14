@@ -11,4 +11,5 @@ GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_version();
 GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_capabilities_json();
 GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_owner_boundary_json();
 GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_dependency_schema_json();
+GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_command_schema_json();
 }

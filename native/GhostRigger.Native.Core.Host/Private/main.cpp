@@ -439,7 +439,7 @@ bool set_python_config_string(PyConfig& config, wchar_t** field, const std::wstr
 }
 
 bool configure_embedded_python(PyConfig& config, const fs::path& repo_root, const fs::path& python_home, int argc, wchar_t* argv[]) {
-    const fs::path main_py = repo_root / L"main.py";
+    const fs::path main_py = executable_directory().value_or(repo_root) / L"main.py";
     const fs::path python_exe = python_home / L"python.exe";
 
     PyConfig_InitPythonConfig(&config);
@@ -492,6 +492,13 @@ int initialize_embedded_python(const fs::path& repo_root, const fs::path& python
     SetDllDirectoryW(python_home.c_str());
     SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_HOST", L"1");
     SetEnvironmentVariableW(L"GHOSTRIGGER_EMBEDDED_PYTHON", L"1");
+    SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_REPO_ROOT", repo_root.c_str());
+    const fs::path native_main_py = executable_directory().value_or(repo_root) / L"main.py";
+    SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_PYTHON_ENTRYPOINT", native_main_py.c_str());
+    SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_PAYLOAD_AUDIT_REQUIRED", L"1");
+    if (auto exe_dir = executable_directory()) {
+        SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR", exe_dir->c_str());
+    }
 
     PyStatus status;
     PyConfig config;
@@ -518,7 +525,12 @@ int run_embedded_python(int argc, wchar_t* argv[], const fs::path& repo_root, co
         return Py_FinalizeEx() == 0 ? 0 : 8;
     }
 
-    const fs::path main_py = repo_root / L"main.py";
+    const fs::path main_py = executable_directory().value_or(repo_root) / L"main.py";
+    if (!fs::exists(main_py)) {
+        Py_FinalizeEx();
+        show_error(L"GhostRigger.Native.Core.Host could not find its native main.py beside GhostRigger.exe.");
+        return 6;
+    }
     const std::string main_py_utf8 = utf8_from_wstring(main_py.wstring());
     if (main_py_utf8.empty()) {
         Py_FinalizeEx();

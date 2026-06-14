@@ -93,7 +93,8 @@
     </Link>
     <PostBuildEvent>
       <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
-copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul</Command>
+copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
+copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
@@ -118,6 +119,7 @@ copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dl
     <PostBuildEvent>
       <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
 copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
+copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
 del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -502,7 +504,7 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\main.py" />
+    <None Include="main.py" />
     <None Include="..\..\pyproject.toml" />
     <None Include="..\..\requirements.txt" />
     <None Include="..\..\README.md" />

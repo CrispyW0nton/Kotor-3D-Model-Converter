@@ -16,5 +16,6 @@ GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_version();
 GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_capabilities_json();
 GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_owner_boundary_json();
 GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_pivot_packet_schema_json();
+GR_TOOLS_PIVOT_CONTROLS_API const char* gr_tools_pivot_controls_command_schema_json();
 
 }

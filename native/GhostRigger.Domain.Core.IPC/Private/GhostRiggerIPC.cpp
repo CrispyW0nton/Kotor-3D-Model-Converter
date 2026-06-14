@@ -40,8 +40,9 @@ GHOSTRIGGER_IPC_API const char* gr_ipc_capabilities_json() {
            R"("owner_surface":"IPC services","bridge_method":"C ABI DLL",)"
            R"("diagnostic_only":false,"native_implementation_enabled":true,)"
            R"("ipc_contracts_native":true,)"
+           R"("native_tool_command_routes":true,)"
            R"("ipc_runtime_python_fallback":true,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","program_ports","endpoint_url","request_envelope","response_status","ping_status_message"],)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","program_ports","endpoint_url","request_envelope","response_status","ping_status_message","supports_action","tool_command_routes"],)"
            R"("python_fallback_required":true})";
 }
 

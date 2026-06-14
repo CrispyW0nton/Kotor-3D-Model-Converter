@@ -24,6 +24,19 @@ constexpr const char* kDependencySchema =
     R"("native_dependencies_declared":[],)"
     R"("python_owner_active":true,)"
     R"("native_implementation_enabled":false})";
+constexpr const char* kCommandSchema =
+    R"({"schema":"mesh_tools_command_schema.v1",)"
+    R"("module_package":"GhostRigger.Domain.Core.MeshTools",)"
+    R"("owner_package":"native/GhostRigger.Domain.Core.MeshTools",)"
+    R"("source_package":"src/mesh_tools",)"
+    R"("native_command_contract_enabled":true,)"
+    R"("runtime_bridge":"ipc:mesh_tool_command",)"
+    R"("selection_modes":["object","vertex","edge","border","face","polygon","element"],)"
+    R"("selection_commands":["status","set_mode","select_all","clear_selection","invert_selection","grow","shrink","loop","ring","convert_to_vertex","convert_to_edge","convert_to_border","convert_to_face","convert_to_polygon","convert_to_element"],)"
+    R"("geometry_operations":["attach","detach","weld","target_weld","bridge","connect","cap","delete","remove_isolated","flip_normals","recalculate_normals"],)"
+    R"("packet_keys":["command","mode","operation","options"],)"
+    R"("result_keys":["ok","command","mode","active_mesh","counts","message","warnings","errors"],)"
+    R"("requires_visible_app":true})";
 
 } // namespace
 
@@ -39,7 +52,8 @@ GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_capabilities_json() {
            R"("source_package":"src/mesh_tools",)"
            R"("owner_surface":"Mesh editing tools","bridge_method":"C ABI DLL",)"
            R"("diagnostic_only":true,"native_implementation_enabled":false,)"
-           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"
+           R"("native_command_contract_enabled":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","mesh_tool_command_schema"],)"
            R"("python_fallback_required":true})";
 }
 
@@ -49,6 +63,10 @@ GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_owner_boundary_json() {
 
 GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_dependency_schema_json() {
     return kDependencySchema;
+}
+
+GHOSTRIGGER_MESH_TOOLS_API const char* gr_mesh_tools_command_schema_json() {
+    return kCommandSchema;
 }
 
 }

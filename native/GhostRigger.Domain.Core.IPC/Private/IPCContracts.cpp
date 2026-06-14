@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <array>
 #include <sstream>
 #include <string>
 
@@ -135,6 +136,55 @@ std::string ping_status_message(const char* program_name, int port, const char* 
     return out.str();
 }
 
+bool supports_action(const char* action) {
+    const std::string key = lower_trimmed(action);
+    constexpr std::array<const char*, 31> kActions = {
+        "ping",
+        "health",
+        "state",
+        "reload",
+        "load_model",
+        "new_scene",
+        "open_scene",
+        "save_scene",
+        "create_scene_camera",
+        "create_scene_light",
+        "select_scene_object",
+        "set_scene_object_visibility",
+        "scene_object_command",
+        "scene_object_properties",
+        "show_panel",
+        "show_window",
+        "open_tool",
+        "viewport_command",
+        "appearance",
+        "animation_command",
+        "library_search",
+        "library_select",
+        "resource_search",
+        "resource_select",
+        "select_module_mesh",
+        "mesh_tool_command",
+        "pivot_command",
+        "set_renderer_backend",
+        "set_dummy_helpers",
+        "set_light_helpers",
+        "select_helper",
+    };
+    return std::find(kActions.begin(), kActions.end(), key) != kActions.end();
+}
+
+const char* tool_command_routes_json() {
+    return R"({"schema":"ipc_tool_command_routes.v1",)"
+           R"("module_package":"GhostRigger.Domain.Core.IPC",)"
+           R"("owner_package":"native/GhostRigger.Domain.Core.IPC",)"
+           R"("native_route_contract_enabled":true,)"
+           R"("routes":[)"
+           R"({"action":"mesh_tool_command","method":"POST","owner_package":"native/GhostRigger.Domain.Core.MeshTools","payload_keys":["command","mode","operation","options"],"synchronous_result":true},)"
+           R"({"action":"pivot_command","method":"POST","owner_package":"native/GhostRigger.Tools.Workflow.PivotControls","payload_keys":["command","mode","action"],"synchronous_result":true})"
+           R"(]})";
+}
+
 } // namespace ghostrigger::domain::core::ipc::contracts
 
 extern "C" {
@@ -167,6 +217,14 @@ GHOSTRIGGER_IPC_API const char* gr_ipc_ping_status_message(const char* program_n
     static thread_local std::string message;
     message = ghostrigger::domain::core::ipc::contracts::ping_status_message(program_name, port, status);
     return message.c_str();
+}
+
+GHOSTRIGGER_IPC_API int gr_ipc_supports_action(const char* action) {
+    return ghostrigger::domain::core::ipc::contracts::supports_action(action) ? 1 : 0;
+}
+
+GHOSTRIGGER_IPC_API const char* gr_ipc_tool_command_routes_json() {
+    return ghostrigger::domain::core::ipc::contracts::tool_command_routes_json();
 }
 
 }

@@ -731,6 +731,40 @@ def test_native_host_embedded_program_name_matches_product_executable() -> None:
 
     assert 'L"GhostRigger.exe"' in main_cpp
     assert 'L"GhostRigger.Native.exe"' not in main_cpp
+    assert 'executable_directory().value_or(repo_root) / L"main.py"' in main_cpp
+    assert 'repo_root / L"main.py"' not in main_cpp
+
+
+def test_native_host_project_owns_and_copies_its_entrypoint() -> None:
+    project_path = ROOT / "native" / "GhostRigger.Native.Core.Host" / "GhostRigger.Native.Core.Host.vcxproj"
+    project = project_path.read_text(encoding="utf-8")
+    host_main = ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.py"
+
+    assert host_main.exists()
+    assert '<None Include="main.py" />' in project
+    assert '<None Include="..\\..\\main.py" />' not in project
+    assert 'copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py"' in project
+
+
+def test_native_host_python_entrypoint_is_not_root_main_wrapper() -> None:
+    host_main = (ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.py").read_text(encoding="utf-8")
+
+    assert "import main" not in host_main
+    assert "runpy.run_path" not in host_main
+    assert "GhostRigger Native Host starting" in host_main
+    assert "from src.gui.qt_lib.windows.qt_main_window import run as run_qt" in host_main
+
+
+def test_native_host_marks_visual_studio_runtime_provenance() -> None:
+    main_cpp = (ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.cpp").read_text(encoding="utf-8")
+
+    assert 'SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_HOST", L"1")' in main_cpp
+    assert 'SetEnvironmentVariableW(L"GHOSTRIGGER_EMBEDDED_PYTHON", L"1")' in main_cpp
+    assert 'GHOSTRIGGER_NATIVE_REPO_ROOT' in main_cpp
+    assert 'GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR' in main_cpp
+    assert 'GHOSTRIGGER_NATIVE_PYTHON_ENTRYPOINT' in main_cpp
+    assert 'GHOSTRIGGER_NATIVE_PAYLOAD_AUDIT_REQUIRED' in main_cpp
+    assert "log_native_dependency_audit_to_console(*exe_dir)" in main_cpp
 
 
 def test_native_core_diagnostics_project_uses_phase_one_naming_and_release_hygiene() -> None:
