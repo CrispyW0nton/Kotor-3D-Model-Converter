@@ -1,0 +1,89 @@
+<theme id="default_matrix" name="Default Matrix" version="1" highContrast="true">
+    <metadata>
+        <author>GhostRigger</author>
+        <description>Default native UI geometry with Matrix colors.</description>
+        <mode>dark</mode>
+        <highContrast>true</highContrast>
+    </metadata>
+    <styles>
+        <style name="application.paletteOnly" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
+    <colors>
+        <color name="window.background" value="#0B0F0D"/>
+        <color name="panel.background" value="#111916"/>
+        <color name="panel.altBackground" value="#151D1A"/>
+        <color name="panel.border" value="#1B2A22"/>
+        <color name="viewport.background" value="#07100C"/>
+        <color name="viewport.border" value="#34383F"/>
+        <color name="viewport.text" value="#8F9AAA"/>
+        <color name="viewport.helper.meshHover" value="#00D7B5"/>
+        <color name="viewport.helper.light" value="#FFD24A"/>
+        <color name="viewport.helper.lightSelected" value="#E6F2FF"/>
+        <color name="viewport.helper.camera" value="#B4D2DC"/>
+        <color name="viewport.helper.cameraSelected" value="#FFD658"/>
+        <color name="viewport.helper.null" value="#A3B8D1"/>
+        <color name="viewport.helper.nullSelected" value="#FFD658"/>
+        <color name="toolbar.background" value="#111916"/>
+        <color name="toolbar.border" value="#102019"/>
+        <color name="button.background" value="#151D1A"/>
+        <color name="button.hover" value="#183428"/>
+        <color name="button.checked" value="#00FF7A"/>
+        <color name="button.text" value="#E8F0EC"/>
+        <color name="button.accentText" value="#001A0E"/>
+        <color name="input.background" value="#151D1A"/>
+        <color name="input.text" value="#E8F0EC"/>
+        <color name="input.border" value="#1B2A22"/>
+        <color name="spinbox.buttonBackground" value="#26312C"/>
+        <color name="spinbox.buttonHover" value="#183428"/>
+        <color name="spinbox.buttonPressed" value="#102019"/>
+        <color name="spinbox.buttonBorder" value="#3B5147"/>
+        <color name="spinbox.arrow" value="#E8F0EC"/>
+        <color name="selection.background" value="#00FF7A"/>
+        <color name="selection.text" value="#001A0E"/>
+        <color name="text.primary" value="#E8F0EC"/>
+        <color name="text.secondary" value="#7A9A88"/>
+        <color name="text.disabled" value="#55665B"/>
+        <color name="text.gold" value="#D8C66A"/>
+        <color name="accent.primary" value="#00FF7A"/>
+        <color name="accent.secondary" value="#00D7B5"/>
+        <color name="axis.x" value="#FF4B5E"/>
+        <color name="axis.y" value="#00FF7A"/>
+        <color name="axis.z" value="#45B7FF"/>
+        <color name="axis.text" value="#001A0E"/>
+        <color name="matrixBar.background" value="#050A08"/>
+        <color name="matrixBar.glyph" value="#00FF7A"/>
+        <color name="matrixBar.text" value="#00FF7A"/>
+        <color name="matrixBar.subtext" value="#7A9A88"/>
+        <color name="matrixBar.metaText" value="#7A9A88"/>
+        <color name="matrixBar.ipcText" value="#00D7B5"/>
+        <color name="warning" value="#FFAA00"/>
+        <color name="error" value="#FF4444"/>
+        <color name="success" value="#00FF7A"/>
+    </colors>
+    <fonts>
+        <font role="default" family="Segoe UI" size="9"/>
+        <font role="monospace" family="Consolas" size="9"/>
+        <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+        <font role="matrix" family="Aurebesh AF" size="9"/>
+    </fonts>
+    <icons>
+        <provider>qtawesome</provider>
+        <defaultMode>iconText</defaultMode>
+        <size role="toolbar" value="18"/>
+        <size role="largeToolbar" value="24"/>
+    </icons>
+    <metrics>
+        <metric name="toolbar.height" value="34"/>
+        <metric name="toolbar.iconSize" value="18"/>
+        <metric name="toolbar.spacing" value="4"/>
+        <metric name="button.height" value="16"/>
+        <metric name="button.minWidth" value="64"/>
+        <metric name="button.paddingH" value="6"/>
+        <metric name="button.paddingV" value="1"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
+    </metrics>
+</theme>

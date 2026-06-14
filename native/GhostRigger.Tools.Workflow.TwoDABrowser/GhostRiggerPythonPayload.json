@@ -1,77 +1,69 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "project":  "GhostRigger.Tools.Workflow.TwoDABrowser",
-    "file_count":  10,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src\\gui\\panels\\qt_resource_panel.py",
-                      "packaged_path":  "Python\\src\\gui\\panels\\qt_resource_panel.py",
-                      "sha256":  "2e71bacd24f7af651f7b6498850e4505778871fe998abdbb64056192b88e48b2",
-                      "byte_count":  5216
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src\\gui\\windows\\application_core\\shared\\resource_panels.py",
-                      "packaged_path":  "Python\\src\\gui\\windows\\application_core\\shared\\resource_panels.py",
-                      "sha256":  "70cbf8e647157a1c33c9787b37dde2c156370f88075e01fd336b51f9108b6326",
-                      "byte_count":  24155
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src\\core\\templates\\twoda.py",
-                      "packaged_path":  "Python\\src\\core\\templates\\twoda.py",
-                      "sha256":  "a949235d71af5efe95706622f3d94f8de8af273e67e5533d29b576e17754dc7b",
-                      "byte_count":  19060
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0004",
-                      "source_path":  "src\\core\\templates\\__init__.py",
-                      "packaged_path":  "Python\\src\\core\\templates\\__init__.py",
-                      "sha256":  "d8fe86c4b6e1067449bcb182b7ecbd208943cdb1a85b617595454171e29741d2",
-                      "byte_count":  38
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0005",
-                      "source_path":  "src\\resources\\__init__.py",
-                      "packaged_path":  "Python\\src\\resources\\__init__.py",
-                      "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                      "byte_count":  0
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0006",
-                      "source_path":  "src\\resources\\game_detector.py",
-                      "packaged_path":  "Python\\src\\resources\\game_detector.py",
-                      "sha256":  "082f707ced2f16da2dc487d709fd9883edba96b484e6a19301abb041754502ab",
-                      "byte_count":  24744
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0007",
-                      "source_path":  "src\\resources\\game_library.py",
-                      "packaged_path":  "Python\\src\\resources\\game_library.py",
-                      "sha256":  "0ac39f73154c06826230aa2272393a8641c7b435354994950b227a690625924b",
-                      "byte_count":  65836
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0008",
-                      "source_path":  "src\\core\\resources\\__init__.py",
-                      "packaged_path":  "Python\\src\\core\\resources\\__init__.py",
-                      "sha256":  "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76",
-                      "byte_count":  806
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0009",
-                      "source_path":  "src\\core\\resources\\game_resource_provider.py",
-                      "packaged_path":  "Python\\src\\core\\resources\\game_resource_provider.py",
-                      "sha256":  "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6",
-                      "byte_count":  26333
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0010",
-                      "source_path":  "src\\core\\game\\game_library_ext.py",
-                      "packaged_path":  "Python\\src\\core\\game\\game_library_ext.py",
-                      "sha256":  "82f2a553b60f85630f8136b3a772e375fd3254c55dbc1193b1da8bf6827a47fc",
-                      "byte_count":  19142
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Tools.Workflow.TwoDABrowser",
+    "file_count": 10,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/gui/panels/qt_resource_panel.py",
+            "packaged_path": "Python/src/gui/panels/qt_resource_panel.py",
+            "sha256": "2e71bacd24f7af651f7b6498850e4505778871fe998abdbb64056192b88e48b2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/gui/windows/application_core/shared/resource_panels.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/resource_panels.py",
+            "sha256": "70cbf8e647157a1c33c9787b37dde2c156370f88075e01fd336b51f9108b6326"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/templates/twoda.py",
+            "packaged_path": "Python/src/core/templates/twoda.py",
+            "sha256": "36c1faf87de1e4f7360f9bc6438c1aa5d328094149938b41c512bae8520b9435"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/templates/__init__.py",
+            "packaged_path": "Python/src/core/templates/__init__.py",
+            "sha256": "d8fe86c4b6e1067449bcb182b7ecbd208943cdb1a85b617595454171e29741d2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/resources/__init__.py",
+            "packaged_path": "Python/src/resources/__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/resources/game_detector.py",
+            "packaged_path": "Python/src/resources/game_detector.py",
+            "sha256": "082f707ced2f16da2dc487d709fd9883edba96b484e6a19301abb041754502ab"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/resources/game_library.py",
+            "packaged_path": "Python/src/resources/game_library.py",
+            "sha256": "0ac39f73154c06826230aa2272393a8641c7b435354994950b227a690625924b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/core/resources/__init__.py",
+            "packaged_path": "Python/src/core/resources/__init__.py",
+            "sha256": "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/core/resources/game_resource_provider.py",
+            "packaged_path": "Python/src/core/resources/game_resource_provider.py",
+            "sha256": "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0010",
+            "source_path": "src/core/game/game_library_ext.py",
+            "packaged_path": "Python/src/core/game/game_library_ext.py",
+            "sha256": "82f2a553b60f85630f8136b3a772e375fd3254c55dbc1193b1da8bf6827a47fc"
+        }
+    ]
 }

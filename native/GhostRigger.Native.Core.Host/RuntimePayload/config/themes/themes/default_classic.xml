@@ -1,0 +1,118 @@
+<theme id="default_classic" name="Default Classic" version="1">
+    <metadata>
+        <author>GhostRigger</author>
+        <description>Default native UI geometry with classic desktop colors.</description>
+        <mode>light</mode>
+    </metadata>
+    <styles>
+        <style name="application.paletteOnly" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
+    <colors>
+        <color name="window.background" value="#ECE9D8"/>
+        <color name="window.text" value="#1F1E1A"/>
+        <color name="panel.background" value="#F7F5EA"/>
+        <color name="panel.backgroundAlt" value="#E6E2D0"/>
+        <color name="panel.altBackground" value="#E6E2D0"/>
+        <color name="panel.border" value="#A9A28B"/>
+        <color name="panel.headerBackground" value="#D9D3BC"/>
+        <color name="panel.headerText" value="#1F1E1A"/>
+        <color name="groupbox.border" value="#8F8874"/>
+        <color name="groupbox.title" value="#5E4B12"/>
+        <color name="viewport.background" value="#D8D4C6"/>
+        <color name="viewport.border" value="#9E9888"/>
+        <color name="viewport.text" value="#4F4A3E"/>
+        <color name="viewport.gridMajor" value="#AAA38F"/>
+        <color name="viewport.gridMinor" value="#C7C1AD"/>
+        <color name="viewport.helper.meshHover" value="#008C7E"/>
+        <color name="viewport.helper.light" value="#A36B00"/>
+        <color name="viewport.helper.lightSelected" value="#3F6FA8"/>
+        <color name="viewport.helper.camera" value="#4F4A3E"/>
+        <color name="viewport.helper.cameraSelected" value="#A36B00"/>
+        <color name="viewport.helper.null" value="#6D6758"/>
+        <color name="viewport.helper.nullSelected" value="#3F6FA8"/>
+        <color name="toolbar.background" value="#E6E2D0"/>
+        <color name="toolbar.border" value="#A9A28B"/>
+        <color name="button.background" value="#F7F5EA"/>
+        <color name="button.hover" value="#DDD7BD"/>
+        <color name="button.pressed" value="#C9C0A4"/>
+        <color name="button.checked" value="#3F6FA8"/>
+        <color name="button.checkedText" value="#FFFFFF"/>
+        <color name="button.text" value="#1F1E1A"/>
+        <color name="button.accentText" value="#FFFFFF"/>
+        <color name="button.disabledBackground" value="#E8E3D1"/>
+        <color name="button.disabledText" value="#6D6758"/>
+        <color name="input.background" value="#FFFFFF"/>
+        <color name="input.text" value="#1F1E1A"/>
+        <color name="input.border" value="#A9A28B"/>
+        <color name="input.focusBorder" value="#3F6FA8"/>
+        <color name="spinbox.buttonBackground" value="#D9D3BC"/>
+        <color name="spinbox.buttonHover" value="#C9C0A4"/>
+        <color name="spinbox.buttonPressed" value="#B8AE90"/>
+        <color name="spinbox.buttonBorder" value="#8F8874"/>
+        <color name="spinbox.arrow" value="#1F1E1A"/>
+        <color name="tab.background" value="#E6E2D0"/>
+        <color name="tab.selectedBackground" value="#F7F5EA"/>
+        <color name="tab.inactiveBackground" value="#DED8C3"/>
+        <color name="tab.text" value="#4D493D"/>
+        <color name="tab.selectedText" value="#1F1E1A"/>
+        <color name="table.background" value="#FFFFFF"/>
+        <color name="table.text" value="#1F1E1A"/>
+        <color name="table.headerBackground" value="#D9D3BC"/>
+        <color name="table.headerText" value="#1F1E1A"/>
+        <color name="table.grid" value="#B8B09A"/>
+        <color name="tree.background" value="#FFFFFF"/>
+        <color name="tree.text" value="#1F1E1A"/>
+        <color name="scrollbar.background" value="#E6E2D0"/>
+        <color name="scrollbar.handle" value="#9D9580"/>
+        <color name="selection.background" value="#3F6FA8"/>
+        <color name="selection.text" value="#FFFFFF"/>
+        <color name="text.primary" value="#1F1E1A"/>
+        <color name="text.secondary" value="#4D493D"/>
+        <color name="text.disabled" value="#6D6758"/>
+        <color name="text.gold" value="#8A6E20"/>
+        <color name="accent.primary" value="#3F6FA8"/>
+        <color name="accent.secondary" value="#6B7F39"/>
+        <color name="axis.x" value="#B43C3C"/>
+        <color name="axis.y" value="#2F7D46"/>
+        <color name="axis.z" value="#3F6FA8"/>
+        <color name="axis.text" value="#FFFFFF"/>
+        <color name="transformBar.background" value="#E6E2D0"/>
+        <color name="transformBar.border" value="#A9A28B"/>
+        <color name="matrixBar.background" value="#D9D3BC"/>
+        <color name="matrixBar.glyph" value="#6B7F39"/>
+        <color name="matrixBar.text" value="#5E4B12"/>
+        <color name="matrixBar.subtext" value="#4D493D"/>
+        <color name="matrixBar.metaText" value="#5E594C"/>
+        <color name="matrixBar.ipcText" value="#3F6FA8"/>
+        <color name="info" value="#2F678B"/>
+        <color name="warning" value="#A36B00"/>
+        <color name="error" value="#B43C3C"/>
+        <color name="success" value="#2F7D46"/>
+    </colors>
+    <fonts>
+        <font role="default" family="Segoe UI" size="9"/>
+        <font role="monospace" family="Consolas" size="9"/>
+        <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+        <font role="matrix" family="Aurebesh AF" size="9"/>
+    </fonts>
+    <icons>
+        <provider>qtawesome</provider>
+        <defaultMode>iconText</defaultMode>
+        <size role="toolbar" value="18"/>
+        <size role="largeToolbar" value="24"/>
+    </icons>
+    <metrics>
+        <metric name="toolbar.height" value="34"/>
+        <metric name="toolbar.iconSize" value="18"/>
+        <metric name="toolbar.spacing" value="4"/>
+        <metric name="button.height" value="16"/>
+        <metric name="button.minWidth" value="64"/>
+        <metric name="button.paddingH" value="6"/>
+        <metric name="button.paddingV" value="1"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
+    </metrics>
+</theme>

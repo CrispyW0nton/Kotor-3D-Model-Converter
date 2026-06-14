@@ -1,4 +1,4 @@
-﻿"""ModernGL context factory adapter."""
+"""ModernGL context factory adapter."""
 
 from __future__ import annotations
 

@@ -1,51 +1,57 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "phase":  "P1.5 embedded python payload",
-    "project":  "GhostRigger.Domain.Core.Validation",
-    "file_count":  7,
-    "originals_remain_in_src":  true,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src/core/validation/__init__.py",
-                      "packaged_path":  "Python/src/core/validation/__init__.py",
-                      "sha256":  "f15413c969631800b5105bb26384ee7d3432b86ea1116eb5ddaa5c499eb1b862"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src/core/validation/animation_block_validator.py",
-                      "packaged_path":  "Python/src/core/validation/animation_block_validator.py",
-                      "sha256":  "8ccd1e69f0c5cddd2a922dfc0c631b0f2a95eb9e7405b4216e2315ee20daedd9"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src/core/validation/animation_roundtrip_validator.py",
-                      "packaged_path":  "Python/src/core/validation/animation_roundtrip_validator.py",
-                      "sha256":  "d72c42a33408c333012e253d5a1cbe1cc481a0dbbb59f5735a8e08cdce496dbf"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0004",
-                      "source_path":  "src/core/validation/capture_specs.py",
-                      "packaged_path":  "Python/src/core/validation/capture_specs.py",
-                      "sha256":  "a5d05008156f4c96bec8bcd342d902fb9f4d679f373a1963b4dd5f23aac0fe4c"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0005",
-                      "source_path":  "src/core/validation/validation_adapters.py",
-                      "packaged_path":  "Python/src/core/validation/validation_adapters.py",
-                      "sha256":  "759bf93a81b2ee309cd4c92ed3559e00059663a904fa512fe8e3fca86d8f8fed"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0006",
-                      "source_path":  "src/core/validation/validation_bus.py",
-                      "packaged_path":  "Python/src/core/validation/validation_bus.py",
-                      "sha256":  "1ec2a3767ef94b5b844a27e3de88b03f64c7c4ba399386319bf1aef7f90fde50"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0007",
-                      "source_path":  "src/core/validation/viewport_validator.py",
-                      "packaged_path":  "Python/src/core/validation/viewport_validator.py",
-                      "sha256":  "a7ded18ac94fc5a8ad9976d2a8658da3d6931dc03bf32fa0455402190fa49398"
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Validation",
+    "file_count": 8,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/validation/__init__.py",
+            "packaged_path": "Python/src/core/validation/__init__.py",
+            "sha256": "f15413c969631800b5105bb26384ee7d3432b86ea1116eb5ddaa5c499eb1b862"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/validation/_native.py",
+            "packaged_path": "Python/src/core/validation/_native.py",
+            "sha256": "a1429407167f28d98714cbe0bd6bb312a9aa93dca40c49504c6a60c0c057e4c2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/validation/animation_block_validator.py",
+            "packaged_path": "Python/src/core/validation/animation_block_validator.py",
+            "sha256": "8ccd1e69f0c5cddd2a922dfc0c631b0f2a95eb9e7405b4216e2315ee20daedd9"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/validation/animation_roundtrip_validator.py",
+            "packaged_path": "Python/src/core/validation/animation_roundtrip_validator.py",
+            "sha256": "d72c42a33408c333012e253d5a1cbe1cc481a0dbbb59f5735a8e08cdce496dbf"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/validation/capture_specs.py",
+            "packaged_path": "Python/src/core/validation/capture_specs.py",
+            "sha256": "a5d05008156f4c96bec8bcd342d902fb9f4d679f373a1963b4dd5f23aac0fe4c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/validation/validation_adapters.py",
+            "packaged_path": "Python/src/core/validation/validation_adapters.py",
+            "sha256": "759bf93a81b2ee309cd4c92ed3559e00059663a904fa512fe8e3fca86d8f8fed"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/core/validation/validation_bus.py",
+            "packaged_path": "Python/src/core/validation/validation_bus.py",
+            "sha256": "1ec2a3767ef94b5b844a27e3de88b03f64c7c4ba399386319bf1aef7f90fde50"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/core/validation/viewport_validator.py",
+            "packaged_path": "Python/src/core/validation/viewport_validator.py",
+            "sha256": "a7ded18ac94fc5a8ad9976d2a8658da3d6931dc03bf32fa0455402190fa49398"
+        }
+    ]
 }

@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_0004",
             "source_path": "src/adapters/gpu/moderngl_context.py",
             "packaged_path": "Python/src/adapters/gpu/moderngl_context.py",
-            "sha256": "fdd96907d0bbd96024d0125b800e6eca7e1ec792fb91be0c9b790a3be882d5a9"
+            "sha256": "8f72281e25534258baa203b0847149145b3b13105ce7d3f7ad9481215fbd6a0f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0005",

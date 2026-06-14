@@ -1,2 +1,0 @@
-"""Viewport renderer adapter implementations."""
-

@@ -1,93 +1,99 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "phase":  "P1.5 embedded python payload",
-    "project":  "GhostRigger.Domain.Core.Scene",
-    "file_count":  14,
-    "originals_remain_in_src":  true,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src/core/scene/__init__.py",
-                      "packaged_path":  "Python/src/core/scene/__init__.py",
-                      "sha256":  "57ac6af68b34ae778edc783f000a54a622eb48169281211faed7e84db22ae63a"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src/core/scene/axis_mode.py",
-                      "packaged_path":  "Python/src/core/scene/axis_mode.py",
-                      "sha256":  "6e8d439f3f4afb99eafc8271fb0e07cfbd89cc01c76b1f289e33a23e32d8746b"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src/core/scene/kmax_scene.py",
-                      "packaged_path":  "Python/src/core/scene/kmax_scene.py",
-                      "sha256":  "cc8c5ed14d78a48896fbdb3dae75c628deadca36ade53c6c3db371c7c89a29fa"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0004",
-                      "source_path":  "src/core/scene/kmax_scene_manager.py",
-                      "packaged_path":  "Python/src/core/scene/kmax_scene_manager.py",
-                      "sha256":  "7f2ef49797f03c5a9a9756bcefb4a0a4e015246484bc861b8844234bfe085df1"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0005",
-                      "source_path":  "src/core/scene/kmax_serializer.py",
-                      "packaged_path":  "Python/src/core/scene/kmax_serializer.py",
-                      "sha256":  "c71f8c41e635189d704221b7ccf7c64a6b1e751bfa32622ac7c77cadc0d41bca"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0006",
-                      "source_path":  "src/core/scene/kmax_validator.py",
-                      "packaged_path":  "Python/src/core/scene/kmax_validator.py",
-                      "sha256":  "1665ec51006d7e75516ed64f5d85810854737fbb870890e11314e7aaa044b12d"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0007",
-                      "source_path":  "src/core/scene/lyt_room_graph.py",
-                      "packaged_path":  "Python/src/core/scene/lyt_room_graph.py",
-                      "sha256":  "938539f9610e6e7712b08df0f11b510036672c55f75613cc0425946e9d42251b"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0008",
-                      "source_path":  "src/core/scene/module_scene_import.py",
-                      "packaged_path":  "Python/src/core/scene/module_scene_import.py",
-                      "sha256":  "a61d17cae1b87f046d0f7c26c3beaec58829c0c0f73fffbcd12f54f960bdd197"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0009",
-                      "source_path":  "src/core/scene/scene_manager.py",
-                      "packaged_path":  "Python/src/core/scene/scene_manager.py",
-                      "sha256":  "fa912e9787a70d0439c511820aa295e9f76087be1c85d28e88dc9349eeb3c146"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0010",
-                      "source_path":  "src/core/scene/scene_manifest.py",
-                      "packaged_path":  "Python/src/core/scene/scene_manifest.py",
-                      "sha256":  "318d369ed9ab56aaf4ecd2315241ea64cdd32f471ca7c10e9ca8625f29fe00e7"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0011",
-                      "source_path":  "src/core/scene/scene_object.py",
-                      "packaged_path":  "Python/src/core/scene/scene_object.py",
-                      "sha256":  "14626cf8fbbfc33a08335b4db8204c9aa2d54a26a3599cc3b850f781de1d967b"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0012",
-                      "source_path":  "src/core/scene/scene_object_instance.py",
-                      "packaged_path":  "Python/src/core/scene/scene_object_instance.py",
-                      "sha256":  "4fc6e407607d5194c24be429ae3f180e785fc4bd412dfe922972134d8ac5bf8e"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0013",
-                      "source_path":  "src/core/scene/scene_resource_ref.py",
-                      "packaged_path":  "Python/src/core/scene/scene_resource_ref.py",
-                      "sha256":  "a650bfe1855ba7495461ae9737a1ac57de1bc019efb2c2b09fd73322259af912"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0014",
-                      "source_path":  "src/core/scene/vis_editor.py",
-                      "packaged_path":  "Python/src/core/scene/vis_editor.py",
-                      "sha256":  "4ff04cf367780937d7525465e855273cf2d1ce509cc95148e9f2eaa9998a2345"
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Scene",
+    "file_count": 15,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/scene/__init__.py",
+            "packaged_path": "Python/src/core/scene/__init__.py",
+            "sha256": "57ac6af68b34ae778edc783f000a54a622eb48169281211faed7e84db22ae63a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/scene/_native.py",
+            "packaged_path": "Python/src/core/scene/_native.py",
+            "sha256": "fe05689d8e2de3359a02a9d7989c56ee7a9c287fe11883947f4288172dcbcc88"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/scene/axis_mode.py",
+            "packaged_path": "Python/src/core/scene/axis_mode.py",
+            "sha256": "6e8d439f3f4afb99eafc8271fb0e07cfbd89cc01c76b1f289e33a23e32d8746b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/scene/kmax_scene.py",
+            "packaged_path": "Python/src/core/scene/kmax_scene.py",
+            "sha256": "cc8c5ed14d78a48896fbdb3dae75c628deadca36ade53c6c3db371c7c89a29fa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/scene/kmax_scene_manager.py",
+            "packaged_path": "Python/src/core/scene/kmax_scene_manager.py",
+            "sha256": "7f2ef49797f03c5a9a9756bcefb4a0a4e015246484bc861b8844234bfe085df1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/scene/kmax_serializer.py",
+            "packaged_path": "Python/src/core/scene/kmax_serializer.py",
+            "sha256": "c71f8c41e635189d704221b7ccf7c64a6b1e751bfa32622ac7c77cadc0d41bca"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/core/scene/kmax_validator.py",
+            "packaged_path": "Python/src/core/scene/kmax_validator.py",
+            "sha256": "1665ec51006d7e75516ed64f5d85810854737fbb870890e11314e7aaa044b12d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/core/scene/lyt_room_graph.py",
+            "packaged_path": "Python/src/core/scene/lyt_room_graph.py",
+            "sha256": "938539f9610e6e7712b08df0f11b510036672c55f75613cc0425946e9d42251b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/core/scene/module_scene_import.py",
+            "packaged_path": "Python/src/core/scene/module_scene_import.py",
+            "sha256": "a61d17cae1b87f046d0f7c26c3beaec58829c0c0f73fffbcd12f54f960bdd197"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0010",
+            "source_path": "src/core/scene/scene_manager.py",
+            "packaged_path": "Python/src/core/scene/scene_manager.py",
+            "sha256": "fa912e9787a70d0439c511820aa295e9f76087be1c85d28e88dc9349eeb3c146"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0011",
+            "source_path": "src/core/scene/scene_manifest.py",
+            "packaged_path": "Python/src/core/scene/scene_manifest.py",
+            "sha256": "318d369ed9ab56aaf4ecd2315241ea64cdd32f471ca7c10e9ca8625f29fe00e7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0012",
+            "source_path": "src/core/scene/scene_object.py",
+            "packaged_path": "Python/src/core/scene/scene_object.py",
+            "sha256": "14626cf8fbbfc33a08335b4db8204c9aa2d54a26a3599cc3b850f781de1d967b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0013",
+            "source_path": "src/core/scene/scene_object_instance.py",
+            "packaged_path": "Python/src/core/scene/scene_object_instance.py",
+            "sha256": "4fc6e407607d5194c24be429ae3f180e785fc4bd412dfe922972134d8ac5bf8e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0014",
+            "source_path": "src/core/scene/scene_resource_ref.py",
+            "packaged_path": "Python/src/core/scene/scene_resource_ref.py",
+            "sha256": "a650bfe1855ba7495461ae9737a1ac57de1bc019efb2c2b09fd73322259af912"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0015",
+            "source_path": "src/core/scene/vis_editor.py",
+            "packaged_path": "Python/src/core/scene/vis_editor.py",
+            "sha256": "4ff04cf367780937d7525465e855273cf2d1ce509cc95148e9f2eaa9998a2345"
+        }
+    ]
 }

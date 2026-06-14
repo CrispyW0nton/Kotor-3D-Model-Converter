@@ -20,8 +20,84 @@ import traceback
 
 _HOST_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = Path(os.environ.get("GHOSTRIGGER_NATIVE_REPO_ROOT", "") or _HOST_DIR).resolve()
+
+
+def _extract_native_python_payloads() -> Path | None:
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        import json
+    except Exception:
+        return None
+
+    build_dir = Path(os.environ.get("GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR", "") or _HOST_DIR)
+    payload_root = Path(os.environ.get("GHOSTRIGGER_NATIVE_PAYLOAD_ROOT", "") or (build_dir / "GhostRiggerPythonPayload"))
+    if (payload_root / "src").is_dir():
+        return payload_root
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.FindResourceA.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
+    kernel32.FindResourceA.restype = ctypes.c_void_p
+    kernel32.LoadResource.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.LoadResource.restype = ctypes.c_void_p
+    kernel32.LockResource.argtypes = [ctypes.c_void_p]
+    kernel32.LockResource.restype = ctypes.c_void_p
+    kernel32.SizeofResource.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.SizeofResource.restype = ctypes.c_uint32
+
+    extracted = 0
+    skipped = 0
+    for dll_path in build_dir.glob("*.dll"):
+        try:
+            dll = ctypes.CDLL(str(dll_path), winmode=8)
+            manifest_fn = dll.gr_python_payload_manifest_json
+            manifest_fn.restype = ctypes.c_char_p
+            manifest = json.loads((manifest_fn() or b"{}").decode("utf-8-sig"))
+        except Exception:
+            continue
+
+        for row in manifest.get("files", []):
+            resource_name = str(row.get("resource_name") or "").encode("ascii", errors="ignore")
+            packaged_path = str(row.get("packaged_path") or "").replace("\\", "/")
+            if not resource_name or not packaged_path:
+                continue
+            if packaged_path.startswith("Python/"):
+                packaged_path = packaged_path[len("Python/"):]
+            parts = [part for part in packaged_path.split("/") if part]
+            if not parts or ".." in parts:
+                continue
+
+            resource = kernel32.FindResourceA(dll._handle, resource_name, ctypes.c_void_p(10))
+            if not resource:
+                continue
+            handle = kernel32.LoadResource(dll._handle, resource)
+            data_ptr = kernel32.LockResource(handle) if handle else None
+            size = int(kernel32.SizeofResource(dll._handle, resource))
+            if not data_ptr or size <= 0:
+                continue
+
+            target = payload_root.joinpath(*parts)
+            if target.exists():
+                skipped += 1
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(ctypes.string_at(data_ptr, size))
+            extracted += 1
+
+    if (extracted or skipped) and (payload_root / "src").is_dir():
+        os.environ["GHOSTRIGGER_NATIVE_PAYLOAD_ROOT"] = str(payload_root)
+        return payload_root
+    return None
+
+
+_NATIVE_PAYLOAD_ROOT = Path(os.environ.get("GHOSTRIGGER_NATIVE_PAYLOAD_ROOT", "") or "")
+if not (_NATIVE_PAYLOAD_ROOT and (_NATIVE_PAYLOAD_ROOT / "src").is_dir()):
+    _NATIVE_PAYLOAD_ROOT = _extract_native_python_payloads()
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+if _NATIVE_PAYLOAD_ROOT and (_NATIVE_PAYLOAD_ROOT / "src").is_dir():
+    sys.path.insert(0, str(_NATIVE_PAYLOAD_ROOT))
 
 _LOG_DIR = _REPO_ROOT / "Logs"
 _CURRENT_LOGFILE: str | None = None

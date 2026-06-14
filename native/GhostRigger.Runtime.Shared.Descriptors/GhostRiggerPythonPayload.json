@@ -1,49 +1,45 @@
 {
-  "schema": "ghostrigger_python_payload.v1",
-  "project": "GhostRigger.Runtime.Shared.Descriptors",
-  "file_count": 6,
-  "files": [
-    {
-      "resource_name": "PYTHON_PAYLOAD_0001",
-      "source_path": "src\\core\\rendering\\mesh_render_data.py",
-      "packaged_path": "Python\\src\\core\\rendering\\mesh_render_data.py",
-      "sha256": "bb5e9179f212a7d993a86abc03089a7b17b4c04770046beddf189b7e9044e785",
-      "byte_count": 50423
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0002",
-      "source_path": "src\\adapters\\rendering\\mesh_render_data.py",
-      "packaged_path": "Python\\src\\adapters\\rendering\\mesh_render_data.py",
-      "sha256": "814a3f05ade45e4633af530e96da1b38e59e86339700b6e26eb820fd8d684a82",
-      "byte_count": 1407
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0003",
-      "source_path": "src\\core\\rendering\\skeleton_render_data.py",
-      "packaged_path": "Python\\src\\core\\rendering\\skeleton_render_data.py",
-      "sha256": "7c20aceaf14db1a74e2571d6f8ff0f71cc04aca224b12a06db8a67a3445f0e2a",
-      "byte_count": 26026
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0004",
-      "source_path": "src\\core\\scene\\scene_object.py",
-      "packaged_path": "Python\\src\\core\\scene\\scene_object.py",
-      "sha256": "dd135258657ec980d7bfca7da68cc863d691ee0b311130716b52594ae8465037",
-      "byte_count": 3591
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0005",
-      "source_path": "src\\core\\scene\\scene_object_instance.py",
-      "packaged_path": "Python\\src\\core\\scene\\scene_object_instance.py",
-      "sha256": "f9daafaa8812d475f3bae1475333c9582b615a92c8ab960fbf4c7219d3a73da4",
-      "byte_count": 2364
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0006",
-      "source_path": "src\\core\\project\\resource_address.py",
-      "packaged_path": "Python\\src\\core\\project\\resource_address.py",
-      "sha256": "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56",
-      "byte_count": 5704
-    }
-  ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Runtime.Shared.Descriptors",
+    "file_count": 6,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
+            "sha256": "bb5e9179f212a7d993a86abc03089a7b17b4c04770046beddf189b7e9044e785"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/adapters/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/adapters/rendering/mesh_render_data.py",
+            "sha256": "fe44594971e6df6790c324b28aea3381cf447d5b3f3ec5ee618251a587a9cb54"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/rendering/skeleton_render_data.py",
+            "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
+            "sha256": "bd641d24cd96058659311383fcf295880702c59e03f87e204c3410d02470965d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/scene/scene_object.py",
+            "packaged_path": "Python/src/core/scene/scene_object.py",
+            "sha256": "14626cf8fbbfc33a08335b4db8204c9aa2d54a26a3599cc3b850f781de1d967b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/scene/scene_object_instance.py",
+            "packaged_path": "Python/src/core/scene/scene_object_instance.py",
+            "sha256": "4fc6e407607d5194c24be429ae3f180e785fc4bd412dfe922972134d8ac5bf8e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/project/resource_address.py",
+            "packaged_path": "Python/src/core/project/resource_address.py",
+            "sha256": "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56"
+        }
+    ]
 }

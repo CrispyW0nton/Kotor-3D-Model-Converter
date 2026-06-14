@@ -11,6 +11,62 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-14
 
+### [2026-06-14] Native Python Payload Coverage Audit
+
+Owner: LordVaderCW
+Subsystem: Native Python payload packaging
+
+- Added the four `_native.py` bridge modules to the native Python payload manifest coverage for rendering, scene, templates, and validation.
+- Refreshed native packaged Python payload metadata/resources and normalized UTF-8 BOM drift in the payload manifest plus two source bridge files.
+- Updated the focused payload coverage contract to expect 1,274 packaged Python payload entries.
+
+Verification:
+- `python -m py_compile tests\test_native_python_payloads.py tests\test_native_module_package_sweep.py src\adapters\gpu\moderngl_context.py src\adapters\native_core\package_registry.py`
+- `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_module_package_sweep.py -q --basetemp .pytest_tmp_native_payload_check` passed (`7 passed`).
+- Full `tests\test_native_python_payloads.py tests\test_native_module_package_sweep.py` still has a separate native-function-stub drift failure in `test_native_projects_have_python_function_migration_sources`; raw payload coverage checks pass.
+
+### [2026-06-14] Native Host Payload Startup
+
+Owner: LordVaderCW
+Subsystem: Native host startup
+
+- Updated the native C++ host to discover the solution/project root without requiring repo-root `main.py`, since the Visual Studio build owns the native launcher.
+- Added native Python payload extraction and import-path mounting for the built `GhostRigger.exe` startup path so `src.*` imports resolve from `build\vs\x64\Debug\GhostRiggerPythonPayload`.
+- Updated the native-host Python launcher copied beside `GhostRigger.exe` to prefer the extracted payload root over the repository root.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Native.Core.Host\main.py`
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched `build\vs\x64\Debug\GhostRigger.exe` visibly after repo-root `main.py` and `src` were absent; startup reached Qt, renderer/resource scans, ModernGL initialization, theme/layout apply, and IPC server bind on port 7001.
+
+### [2026-06-14] Native Host Runtime Asset Payload
+
+Owner: LordVaderCW
+Subsystem: Native host runtime assets
+
+- Added a native host `RuntimePayload` containing tracked non-Python runtime files from `src` and `config`, including GUI icons, PNGs, fonts, theme/layout XML, JSON settings, shader files, and Unreal skeleton assets.
+- Updated the native host Visual Studio project to copy `RuntimePayload` into `build\vs\x64\Debug\GhostRiggerPythonPayload` during Debug/Release post-build steps so package-relative asset lookups keep working without repo-root `src`.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Native.Core.Host\main.py`
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Confirmed `GhostRiggerPythonPayload` contains representative runtime assets such as `src\gui\icons\open.svg`, `src\gui\icons\logo_24.png`, `config\themes\themes\default_matrix.xml`, and `src\gui\fonts\AurebeshAF\AurebeshAF-Canon.otf`.
+- Launched `build\vs\x64\Debug\GhostRigger.exe`; startup reached theme/icon hook application, layout application, resource indexing, and ModernGL renderer initialization from the native payload. Desktop screenshot capture was unavailable on this host due to a Windows `CopyFromScreen` invalid-handle error.
+
+### [2026-06-14] Native Payload Idempotent Startup
+
+Owner: LordVaderCW
+Subsystem: Native host payload extraction
+
+- Updated the native C++ host payload extractor to skip embedded Python payload files that already exist in `GhostRiggerPythonPayload` instead of truncating and rewriting them on every launch.
+- Updated the Python fallback extractor to skip existing files as well, while still treating an already-present payload tree as a valid startup payload.
+- Made the native runtime asset post-build copy date-aware with `xcopy /D` so unchanged runtime assets are not recopied on every rebuild.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Native.Core.Host\main.py`
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed after a transient parallel MSVC PDB collision on the first build attempt.
+- Relaunched `build\vs\x64\Debug\GhostRigger.exe` with an existing `GhostRiggerPythonPayload`; `src\adapters\gpu\moderngl_context.py` kept the same `LastWriteTimeUtc` (`2026-06-14T11:44:55.4830229Z`) after launch.
+
 ### [2026-06-14] Application Testing Fixture Docs
 
 Owner: LordVaderCW

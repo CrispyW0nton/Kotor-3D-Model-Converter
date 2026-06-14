@@ -1,4 +1,4 @@
-﻿[
+[
     {
         "project": "GhostRigger.Adapters.IO.Files",
         "python_file_count": 2,
@@ -983,9 +983,10 @@
     },
     {
         "project": "GhostRigger.Domain.Core.Rendering",
-        "python_file_count": 38,
+        "python_file_count": 39,
         "files": [
             "src\\core\\rendering\\__init__.py",
+            "src\\core\\rendering\\_native.py",
             "src\\core\\rendering\\accel.py",
             "src\\core\\rendering\\color_utils.py",
             "src\\core\\rendering\\frame_core\\__init__.py",
@@ -1141,9 +1142,10 @@
     },
     {
         "project": "GhostRigger.Domain.Core.Scene",
-        "python_file_count": 14,
+        "python_file_count": 15,
         "files": [
             "src\\core\\scene\\__init__.py",
+            "src\\core\\scene\\_native.py",
             "src\\core\\scene\\axis_mode.py",
             "src\\core\\scene\\kmax_scene.py",
             "src\\core\\scene\\kmax_scene_manager.py",
@@ -1223,9 +1225,10 @@
     },
     {
         "project": "GhostRigger.Domain.Core.Templates",
-        "python_file_count": 3,
+        "python_file_count": 4,
         "files": [
             "src\\core\\templates\\__init__.py",
+            "src\\core\\templates\\_native.py",
             "src\\core\\templates\\template_builder.py",
             "src\\core\\templates\\twoda.py"
         ]
@@ -1717,9 +1720,10 @@
     },
     {
         "project": "GhostRigger.Domain.Core.Validation",
-        "python_file_count": 7,
+        "python_file_count": 8,
         "files": [
             "src\\core\\validation\\__init__.py",
+            "src\\core\\validation\\_native.py",
             "src\\core\\validation\\animation_block_validator.py",
             "src\\core\\validation\\animation_roundtrip_validator.py",
             "src\\core\\validation\\capture_specs.py",

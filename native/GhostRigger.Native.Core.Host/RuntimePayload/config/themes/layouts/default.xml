@@ -1,0 +1,77 @@
+<layout id="default" name="Default" version="1">
+    <mainWindow width="1650" height="920" maximized="false"/>
+    <toolbars>
+        <toolbar id="main" visible="true" buttonMode="iconText" iconSize="18" height="40"/>
+        <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="16" height="34"/>
+    </toolbars>
+    <panels>
+        <panel id="contentBrowser" region="left" visible="true" minWidth="280" preferredWidth="430" minHeight="280" preferredHeight="470"/>
+        <panel id="scene" region="left" visible="true" minWidth="240" preferredWidth="320" minHeight="180" preferredHeight="230"/>
+        <panel id="library" region="left" visible="true" minWidth="280" preferredWidth="390"/>
+        <panel id="modules" region="left" visible="true" minWidth="280" preferredWidth="390"/>
+        <panel id="properties" region="right" visible="true" minWidth="300" preferredWidth="390"/>
+        <panel id="animationLibrary" region="right" visible="true" minWidth="300" preferredWidth="390"/>
+        <panel id="meshTools" region="farRight" visible="true" minWidth="260" preferredWidth="380"/>
+        <panel id="nodes" region="left" visible="true" minWidth="260" preferredWidth="360"/>
+        <panel id="lighting" region="right" visible="false" minWidth="320" preferredWidth="420"/>
+        <panel id="cameras" region="right" visible="false" minWidth="340" preferredWidth="440"/>
+        <panel id="moduleMeshes" region="right" visible="false" minWidth="360" preferredWidth="560"/>
+        <panel id="spriteMaterials" region="right" visible="false" minWidth="360" preferredWidth="520"/>
+        <panel id="adjustPivot" region="right" visible="true" minWidth="260" preferredWidth="320"/>
+        <panel id="2das" region="left" visible="false" minWidth="420" preferredWidth="720"/>
+        <panel id="resources" region="left" visible="false" minWidth="420" preferredWidth="720"/>
+        <panel id="outputLog" region="bottom" visible="true" minHeight="130" preferredHeight="220"/>
+        <panel id="pythonTerminal" region="bottom" visible="true" minHeight="130" preferredHeight="220"/>
+    </panels>
+    <dockLayout>
+        <group id="libraryProperties" area="left" mode="vertical" visible="true" active="content_browser">
+            <dock id="scene"/>
+            <dock id="content_browser"/>
+        </group>
+        <group id="inspector" area="right" mode="tabbed" visible="true" active="properties">
+            <dock id="properties"/>
+            <dock id="animations"/>
+        </group>
+        <group id="meshTools" area="right" mode="tabbed" visible="true" active="mesh_tools">
+            <dock id="mesh_tools"/>
+            <dock id="adjust_pivot"/>
+        </group>
+        <group id="dataBrowsers" area="left" mode="tabbed" visible="false" active="nodes">
+            <dock id="nodes"/>
+            <dock id="2das"/>
+            <dock id="resources"/>
+        </group>
+        <group id="lightingCameras" area="right" mode="tabbed" visible="false" active="lighting">
+            <dock id="lighting"/>
+            <dock id="cameras"/>
+        </group>
+    </dockLayout>
+    <viewport>
+        <region id="mainViewport" minWidth="520" preferredWidth="880"/>
+        <toolbar visible="true" buttonMode="textBesideIcon" compact="false"/>
+    </viewport>
+    <spacing>
+        <margin value="4"/>
+        <panelSpacing value="5"/>
+        <toolbarSpacing value="4"/>
+        <splitterHandleWidth value="8"/>
+        <inputHeight value="26"/>
+        <comboHeight value="26"/>
+        <spinboxHeight value="26"/>
+        <tabHeight value="14"/>
+        <tabWidth value="78"/>
+        <tabPadding value="8"/>
+        <tabPaddingX value="12"/>
+        <tabPaddingY value="6"/>
+        <tabMargin value="0"/>
+        <tabMarginX value="0"/>
+        <tabMarginY value="0"/>
+        <tableRowHeight value="23"/>
+        <treeRowHeight value="23"/>
+        <groupboxMargin value="8"/>
+        <groupboxSpacing value="5"/>
+        <panelHeaderHeight value="28"/>
+        <viewportToolbarHeight value="34"/>
+        <transformBarHeight value="30"/>
+    </spacing>
+</layout>

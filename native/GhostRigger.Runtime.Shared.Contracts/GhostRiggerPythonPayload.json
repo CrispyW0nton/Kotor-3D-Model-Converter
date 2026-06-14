@@ -1,91 +1,81 @@
 {
-  "schema": "ghostrigger_python_payload.v1",
-  "project": "GhostRigger.Runtime.Shared.Contracts",
-  "file_count": 12,
-  "files": [
-    {
-      "resource_name": "PYTHON_PAYLOAD_0001",
-      "source_path": "src\\core\\ports\\__init__.py",
-      "packaged_path": "Python\\src\\core\\ports\\__init__.py",
-      "sha256": "1f5292fbd07fa3b75751fd2443f43e51a7e73815da4cb5ff3dc28fe51f70f372",
-      "byte_count": 670
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0002",
-      "source_path": "src\\core\\ports\\files.py",
-      "packaged_path": "Python\\src\\core\\ports\\files.py",
-      "sha256": "4e7caeebbc1f8b876f1bd61efd569d187ccbb026fe1d9b7fbdfd352a46a06103",
-      "byte_count": 489
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0003",
-      "source_path": "src\\core\\ports\\resources.py",
-      "packaged_path": "Python\\src\\core\\ports\\resources.py",
-      "sha256": "98a6d2f2831a56dba275cec060a9cf5c3af80bcb0d7c781c34a0468d5132c0e4",
-      "byte_count": 376
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0004",
-      "source_path": "src\\core\\ports\\scripts.py",
-      "packaged_path": "Python\\src\\core\\ports\\scripts.py",
-      "sha256": "72ee8adaebcb53d79b2b52680b0504c7c5151235f0f80513c7431076d83a5bbd",
-      "byte_count": 964
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0005",
-      "source_path": "src\\core\\ports\\textures.py",
-      "packaged_path": "Python\\src\\core\\ports\\textures.py",
-      "sha256": "c5e9335bd44a4329c048f655a576d8965e46656cb6f68e9b7084856088ac1efe",
-      "byte_count": 863
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0006",
-      "source_path": "src\\core\\ports\\viewport_renderer.py",
-      "packaged_path": "Python\\src\\core\\ports\\viewport_renderer.py",
-      "sha256": "2f9fec364d8209c91e396178846fc6d11371de3220d5a1fde79d13e142ddbeec",
-      "byte_count": 236
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0007",
-      "source_path": "src\\core\\rendering\\renderer_interface.py",
-      "packaged_path": "Python\\src\\core\\rendering\\renderer_interface.py",
-      "sha256": "ffefc8924c1a278b83ace1916a5d67778162ef2d10f99a764e7765bf4f9509f7",
-      "byte_count": 1727
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0008",
-      "source_path": "src\\core\\rendering\\renderer_backend.py",
-      "packaged_path": "Python\\src\\core\\rendering\\renderer_backend.py",
-      "sha256": "78a1fbd06137abb78557f9b9f2374f2642060504c33313b6fc4dd20c0ac5117b",
-      "byte_count": 3218
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0009",
-      "source_path": "src\\core\\rendering\\renderer_capabilities.py",
-      "packaged_path": "Python\\src\\core\\rendering\\renderer_capabilities.py",
-      "sha256": "c6b53f08fb6bd4960ab1d1681da3703a273667b0cc146b376089842bbcfd8051",
-      "byte_count": 10591
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0010",
-      "source_path": "src\\adapters\\rendering\\native_core\\__init__.py",
-      "packaged_path": "Python\\src\\adapters\\rendering\\native_core\\__init__.py",
-      "sha256": "72f27d931591ae36819a6fd71860e3f2ea301fef13d2e11623563ee8b324e72b",
-      "byte_count": 314
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0011",
-      "source_path": "src\\adapters\\rendering\\native_core\\binding.py",
-      "packaged_path": "Python\\src\\adapters\\rendering\\native_core\\binding.py",
-      "sha256": "a9bef326b5375d6601dab8c3f0b421fe25b155547e8845738c23071140c30c98",
-      "byte_count": 97204
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0012",
-      "source_path": "src\\adapters\\rendering\\native_core\\renderer.py",
-      "packaged_path": "Python\\src\\adapters\\rendering\\native_core\\renderer.py",
-      "sha256": "33bd6ee7215824283d7cee0d91808a37417a8178e692df6cbef4a9b089a8fb96",
-      "byte_count": 39198
-    }
-  ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Runtime.Shared.Contracts",
+    "file_count": 12,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/ports/__init__.py",
+            "packaged_path": "Python/src/core/ports/__init__.py",
+            "sha256": "abd617e8b9df76a4da82d53425e93f67974cd84160f4be784ae79b4f290e8933"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/ports/files.py",
+            "packaged_path": "Python/src/core/ports/files.py",
+            "sha256": "7c8ecd808d150a69e2a2874694a00dc99c5d73813e8e2efc688777716c86c079"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/ports/resources.py",
+            "packaged_path": "Python/src/core/ports/resources.py",
+            "sha256": "33b10817016f640bb8e7b89fa3a891d8ac40b230a3d5dccd1d7df17812ee939c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/ports/scripts.py",
+            "packaged_path": "Python/src/core/ports/scripts.py",
+            "sha256": "9fb60a7a79c0d41efb84886dcd64f3b3abe36e6417b5cdf18e2f507e647321ac"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/ports/textures.py",
+            "packaged_path": "Python/src/core/ports/textures.py",
+            "sha256": "8494c46dcb8276a71da7711a1f8747b98ac4e0ddb85088d341f18cdbaf4d5177"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/ports/viewport_renderer.py",
+            "packaged_path": "Python/src/core/ports/viewport_renderer.py",
+            "sha256": "4f6a5959df29e859afb29ad79ccf14d434e440102aa86818c66ab594a7d28ab5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/core/rendering/renderer_interface.py",
+            "packaged_path": "Python/src/core/rendering/renderer_interface.py",
+            "sha256": "d3ddda6533de69b0596b85159c75f0984910fb8e28e56cd6a43953252f95886d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/core/rendering/renderer_backend.py",
+            "packaged_path": "Python/src/core/rendering/renderer_backend.py",
+            "sha256": "5862294435bb68600831270de0e602670afbe3f99cf819cd7a39fd5a5cebedf3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/core/rendering/renderer_capabilities.py",
+            "packaged_path": "Python/src/core/rendering/renderer_capabilities.py",
+            "sha256": "6b1008086fb5b79ee1ecadcb6df8d7d4ad9cdcb2432cf8e151ce25c6df793539"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0010",
+            "source_path": "src/adapters/rendering/native_core/__init__.py",
+            "packaged_path": "Python/src/adapters/rendering/native_core/__init__.py",
+            "sha256": "7a70653b5dc27b6547fc4141bdddf5c94314169b581b51a4a1c2fd42f422cdce"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0011",
+            "source_path": "src/adapters/rendering/native_core/binding.py",
+            "packaged_path": "Python/src/adapters/rendering/native_core/binding.py",
+            "sha256": "ab8f4a5fb092d45920163ba5b6dd7b801941de7fa7c931378e3326d925c4f83a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0012",
+            "source_path": "src/adapters/rendering/native_core/renderer.py",
+            "packaged_path": "Python/src/adapters/rendering/native_core/renderer.py",
+            "sha256": "01d5ad12de4f0f8a83f57647b01a704bb61288e681f3c0308543b638f840609c"
+        }
+    ]
 }

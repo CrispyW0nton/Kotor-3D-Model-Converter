@@ -1,2 +1,0 @@
-"""GPU-backed adapter implementations."""
-

@@ -94,7 +94,8 @@
     <PostBuildEvent>
       <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
 copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
-copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul</Command>
+copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
+if exist "$(ProjectDir)RuntimePayload" xcopy /D /E /I /Y "$(ProjectDir)RuntimePayload" "$(OutDir)GhostRiggerPythonPayload" &gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
@@ -120,6 +121,7 @@ copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul</Command>
       <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
 copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
 copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
+if exist "$(ProjectDir)RuntimePayload" xcopy /D /E /I /Y "$(ProjectDir)RuntimePayload" "$(OutDir)GhostRiggerPythonPayload" &gt;nul
 del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>

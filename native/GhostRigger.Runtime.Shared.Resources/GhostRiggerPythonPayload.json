@@ -1,70 +1,63 @@
 {
-  "schema": "ghostrigger_python_payload.v1",
-  "project": "GhostRigger.Runtime.Shared.Resources",
-  "file_count": 9,
-  "files": [
-    {
-      "resource_name": "PYTHON_PAYLOAD_0001",
-      "source_path": "src\\core\\resources\\__init__.py",
-      "packaged_path": "Python\\src\\core\\resources\\__init__.py",
-      "sha256": "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76",
-      "byte_count": 806
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0002",
-      "source_path": "src\\core\\resources\\game_resource_provider.py",
-      "packaged_path": "Python\\src\\core\\resources\\game_resource_provider.py",
-      "sha256": "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6",
-      "byte_count": 26333
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0003",
-      "source_path": "src\\resources\\__init__.py",
-      "packaged_path": "Python\\src\\resources\\__init__.py",
-      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "byte_count": 0
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0004",
-      "source_path": "src\\resources\\game_detector.py",
-      "packaged_path": "Python\\src\\resources\\game_detector.py",
-      "sha256": "6b8ac9c8ae95f6c024acaee655782112ec87db27777f99eec15a958cbeb590e6",
-      "byte_count": 24122
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0005",
-      "source_path": "src\\resources\\game_library.py",
-      "packaged_path": "Python\\src\\resources\\game_library.py",
-      "sha256": "f7c1bcb2e6c4807dbd9f3a67cda832082f2d361e7ad3ced9e14d17220f4bc7ac",
-      "byte_count": 65835
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0006",
-      "source_path": "src\\core\\assets\\resource_manager.py",
-      "packaged_path": "Python\\src\\core\\assets\\resource_manager.py",
-      "sha256": "1a3d51e23af5a20e7e132ed8fc46b7fd1d550e7d085e4e8e057a2a6a2112f091",
-      "byte_count": 55045
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0007",
-      "source_path": "src\\core\\assets\\override_layer.py",
-      "packaged_path": "Python\\src\\core\\assets\\override_layer.py",
-      "sha256": "57a2dad5684e552c3e29a893212f2c424cb99098ff4e1b76bfcc6514715cf868",
-      "byte_count": 11137
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0008",
-      "source_path": "src\\core\\ports\\resources.py",
-      "packaged_path": "Python\\src\\core\\ports\\resources.py",
-      "sha256": "98a6d2f2831a56dba275cec060a9cf5c3af80bcb0d7c781c34a0468d5132c0e4",
-      "byte_count": 376
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0009",
-      "source_path": "src\\core\\ports\\textures.py",
-      "packaged_path": "Python\\src\\core\\ports\\textures.py",
-      "sha256": "c5e9335bd44a4329c048f655a576d8965e46656cb6f68e9b7084856088ac1efe",
-      "byte_count": 863
-    }
-  ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Runtime.Shared.Resources",
+    "file_count": 9,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/resources/__init__.py",
+            "packaged_path": "Python/src/core/resources/__init__.py",
+            "sha256": "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/resources/game_resource_provider.py",
+            "packaged_path": "Python/src/core/resources/game_resource_provider.py",
+            "sha256": "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/resources/__init__.py",
+            "packaged_path": "Python/src/resources/__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/resources/game_detector.py",
+            "packaged_path": "Python/src/resources/game_detector.py",
+            "sha256": "082f707ced2f16da2dc487d709fd9883edba96b484e6a19301abb041754502ab"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/resources/game_library.py",
+            "packaged_path": "Python/src/resources/game_library.py",
+            "sha256": "0ac39f73154c06826230aa2272393a8641c7b435354994950b227a690625924b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/assets/resource_manager.py",
+            "packaged_path": "Python/src/core/assets/resource_manager.py",
+            "sha256": "241924f5173be137adabc645dc16edb02dde1725eca423cc0f71d11bf96a36fa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/core/assets/override_layer.py",
+            "packaged_path": "Python/src/core/assets/override_layer.py",
+            "sha256": "446065473cd665658dc8b33f9ef59837375a516e488f73426c615e9919cfc1b5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/core/ports/resources.py",
+            "packaged_path": "Python/src/core/ports/resources.py",
+            "sha256": "33b10817016f640bb8e7b89fa3a891d8ac40b230a3d5dccd1d7df17812ee939c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/core/ports/textures.py",
+            "packaged_path": "Python/src/core/ports/textures.py",
+            "sha256": "8494c46dcb8276a71da7711a1f8747b98ac4e0ddb85088d341f18cdbaf4d5177"
+        }
+    ]
 }

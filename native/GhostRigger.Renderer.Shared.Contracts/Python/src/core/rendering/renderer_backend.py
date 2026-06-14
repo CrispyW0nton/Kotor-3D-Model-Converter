@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from enum import Enum
 
+from src.core.rendering._native import native_rendering
+
 
 class RendererBackend(str, Enum):
     AUTOMATIC = "automatic"
@@ -63,25 +65,61 @@ _ALIASES = {
 }
 
 
-def normalize_renderer_backend(value: object) -> RendererBackend:
+def _python_normalize_renderer_backend(value: object) -> RendererBackend:
     if isinstance(value, RendererBackend):
         value = value.value
     key = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     return _ALIASES.get(key, RendererBackend.MODERNGL_GL330)
 
 
-def supported_renderer_backend(value: object) -> RendererBackend:
-    backend = normalize_renderer_backend(value)
+def normalize_renderer_backend(value: object) -> RendererBackend:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_normalize_renderer_backend(str(value or "").encode("utf-8"))
+            if raw:
+                return RendererBackend(raw.decode("utf-8"))
+        except (OSError, ValueError):
+            pass
+    return _python_normalize_renderer_backend(value)
+
+
+def _python_supported_renderer_backend(value: object) -> RendererBackend:
+    backend = _python_normalize_renderer_backend(value)
     if backend in SUPPORTED_RENDERER_BACKENDS or backend == RendererBackend.NULL_DIAGNOSTIC:
         return backend
     return RendererBackend.WGPU_D3D12 if backend.value.startswith("wgpu") else RendererBackend.MODERNGL_GL330
 
 
-def renderer_backend_label(backend: RendererBackend) -> str:
-    backend = supported_renderer_backend(backend)
+def supported_renderer_backend(value: object) -> RendererBackend:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_normalize_renderer_backend(str(value or "").encode("utf-8"))
+            if raw:
+                return RendererBackend(raw.decode("utf-8"))
+        except (OSError, ValueError):
+            pass
+    return _python_supported_renderer_backend(value)
+
+
+def _python_renderer_backend_label(backend: object) -> str:
+    backend = _python_supported_renderer_backend(backend)
     return {
         RendererBackend.MODERNGL_GL330: "ModernGL",
         RendererBackend.WGPU_D3D12: "Direct3D (WGPU)",
         RendererBackend.PYGFX_WGPU: "pygfx (WGPU)",
         RendererBackend.NULL_DIAGNOSTIC: "Null Diagnostic",
     }[backend]
+
+
+def renderer_backend_label(backend: RendererBackend) -> str:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_renderer_backend_label(str(backend or "").encode("utf-8"))
+            if raw:
+                return raw.decode("utf-8")
+        except OSError:
+            pass
+    return _python_renderer_backend_label(backend)

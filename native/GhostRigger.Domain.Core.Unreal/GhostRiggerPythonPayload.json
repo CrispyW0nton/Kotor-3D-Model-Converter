@@ -1,27 +1,27 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "phase":  "P1.5 embedded python payload",
-    "project":  "GhostRigger.Domain.Core.Unreal",
-    "file_count":  3,
-    "originals_remain_in_src":  true,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src/unreal/__init__.py",
-                      "packaged_path":  "Python/src/unreal/__init__.py",
-                      "sha256":  "ef7102b03a4418213e742f3a914c689b95bf9a56d01d4244138c6cb0dd4de336"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src/unreal/animation_retargeting.py",
-                      "packaged_path":  "Python/src/unreal/animation_retargeting.py",
-                      "sha256":  "6271efd1c3b58f5413d4a3a2cbcb7bc0b0db73f7900d698776054ce28339007d"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src/unreal/quinn.py",
-                      "packaged_path":  "Python/src/unreal/quinn.py",
-                      "sha256":  "e4d0645be017a7e5fd7a29565801c14451325e4798b2f9c7658ee355d51ba5f2"
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Unreal",
+    "file_count": 3,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/unreal/__init__.py",
+            "packaged_path": "Python/src/unreal/__init__.py",
+            "sha256": "ef7102b03a4418213e742f3a914c689b95bf9a56d01d4244138c6cb0dd4de336"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/unreal/animation_retargeting.py",
+            "packaged_path": "Python/src/unreal/animation_retargeting.py",
+            "sha256": "6271efd1c3b58f5413d4a3a2cbcb7bc0b0db73f7900d698776054ce28339007d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/unreal/quinn.py",
+            "packaged_path": "Python/src/unreal/quinn.py",
+            "sha256": "e4d0645be017a7e5fd7a29565801c14451325e4798b2f9c7658ee355d51ba5f2"
+        }
+    ]
 }

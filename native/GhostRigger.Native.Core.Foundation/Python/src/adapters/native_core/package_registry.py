@@ -1,4 +1,4 @@
-﻿"""Thin native package availability checks for Phase 1 C++ integration."""
+"""Thin native package availability checks for Phase 1 C++ integration."""
 
 from __future__ import annotations
 

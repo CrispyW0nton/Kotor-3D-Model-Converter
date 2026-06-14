@@ -6,7 +6,18 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .scene_object import PivotData, Transform
+from ._native import native_scene
 from .scene_resource_ref import SceneResourceRef
+
+
+def _metadata_key_is_persisted(key: object) -> bool:
+    dll = native_scene()
+    if dll is not None:
+        try:
+            return bool(dll.gr_scene_metadata_key_is_persisted(str(key or "").encode("utf-8")))
+        except OSError:
+            pass
+    return not str(key).startswith("_runtime")
 
 
 @dataclass
@@ -28,7 +39,7 @@ class SceneObjectInstance:
         metadata = {
             key: value
             for key, value in self.metadata.items()
-            if not str(key).startswith("_runtime")
+            if _metadata_key_is_persisted(key)
         }
         return {
             "id": self.id,

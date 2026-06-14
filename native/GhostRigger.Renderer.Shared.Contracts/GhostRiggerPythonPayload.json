@@ -1,63 +1,57 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "project":  "GhostRigger.Renderer.Shared.Contracts",
-    "file_count":  8,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src\\core\\ports\\viewport_renderer.py",
-                      "packaged_path":  "Python\\src\\core\\ports\\viewport_renderer.py",
-                      "sha256":  "4f6a5959df29e859afb29ad79ccf14d434e440102aa86818c66ab594a7d28ab5",
-                      "byte_count":  243
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src\\core\\rendering\\renderer_backend.py",
-                      "packaged_path":  "Python\\src\\core\\rendering\\renderer_backend.py",
-                      "sha256":  "209f74b5e2fdbec9dad6bad5455d83f40cf19b7274d83b0cad4de6189c5bd4ab",
-                      "byte_count":  3299
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src\\core\\rendering\\renderer_capabilities.py",
-                      "packaged_path":  "Python\\src\\core\\rendering\\renderer_capabilities.py",
-                      "sha256":  "6b1008086fb5b79ee1ecadcb6df8d7d4ad9cdcb2432cf8e151ce25c6df793539",
-                      "byte_count":  10603
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0004",
-                      "source_path":  "src\\core\\rendering\\renderer_interface.py",
-                      "packaged_path":  "Python\\src\\core\\rendering\\renderer_interface.py",
-                      "sha256":  "d3ddda6533de69b0596b85159c75f0984910fb8e28e56cd6a43953252f95886d",
-                      "byte_count":  1794
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0005",
-                      "source_path":  "src\\core\\rendering\\renderer_settings.py",
-                      "packaged_path":  "Python\\src\\core\\rendering\\renderer_settings.py",
-                      "sha256":  "d7f97a166135042a21245b23f2b88029945f6464d54c36e45729ebb8317836f3",
-                      "byte_count":  9050
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0006",
-                      "source_path":  "src\\core\\rendering\\mesh_render_data.py",
-                      "packaged_path":  "Python\\src\\core\\rendering\\mesh_render_data.py",
-                      "sha256":  "bb5e9179f212a7d993a86abc03089a7b17b4c04770046beddf189b7e9044e785",
-                      "byte_count":  50423
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0007",
-                      "source_path":  "src\\adapters\\rendering\\mesh_render_data.py",
-                      "packaged_path":  "Python\\src\\adapters\\rendering\\mesh_render_data.py",
-                      "sha256":  "fe44594971e6df6790c324b28aea3381cf447d5b3f3ec5ee618251a587a9cb54",
-                      "byte_count":  1454
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0008",
-                      "source_path":  "src\\adapters\\rendering\\renderer_factory.py",
-                      "packaged_path":  "Python\\src\\adapters\\rendering\\renderer_factory.py",
-                      "sha256":  "f748a1b6459e2e2a62ad4314c6aab904b8edc7ad3ca5e396d9fa1103bb708d79",
-                      "byte_count":  15277
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Renderer.Shared.Contracts",
+    "file_count": 8,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/ports/viewport_renderer.py",
+            "packaged_path": "Python/src/core/ports/viewport_renderer.py",
+            "sha256": "4f6a5959df29e859afb29ad79ccf14d434e440102aa86818c66ab594a7d28ab5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/rendering/renderer_backend.py",
+            "packaged_path": "Python/src/core/rendering/renderer_backend.py",
+            "sha256": "5862294435bb68600831270de0e602670afbe3f99cf819cd7a39fd5a5cebedf3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/rendering/renderer_capabilities.py",
+            "packaged_path": "Python/src/core/rendering/renderer_capabilities.py",
+            "sha256": "6b1008086fb5b79ee1ecadcb6df8d7d4ad9cdcb2432cf8e151ce25c6df793539"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/rendering/renderer_interface.py",
+            "packaged_path": "Python/src/core/rendering/renderer_interface.py",
+            "sha256": "d3ddda6533de69b0596b85159c75f0984910fb8e28e56cd6a43953252f95886d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/rendering/renderer_settings.py",
+            "packaged_path": "Python/src/core/rendering/renderer_settings.py",
+            "sha256": "d7f97a166135042a21245b23f2b88029945f6464d54c36e45729ebb8317836f3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
+            "sha256": "bb5e9179f212a7d993a86abc03089a7b17b4c04770046beddf189b7e9044e785"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/adapters/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/adapters/rendering/mesh_render_data.py",
+            "sha256": "fe44594971e6df6790c324b28aea3381cf447d5b3f3ec5ee618251a587a9cb54"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/adapters/rendering/renderer_factory.py",
+            "packaged_path": "Python/src/adapters/rendering/renderer_factory.py",
+            "sha256": "f748a1b6459e2e2a62ad4314c6aab904b8edc7ad3ca5e396d9fa1103bb708d79"
+        }
+    ]
 }

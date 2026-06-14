@@ -1,33 +1,33 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "phase":  "P1.5 embedded python payload",
-    "project":  "GhostRigger.Domain.Core.Project",
-    "file_count":  4,
-    "originals_remain_in_src":  true,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src/core/project/__init__.py",
-                      "packaged_path":  "Python/src/core/project/__init__.py",
-                      "sha256":  "e9a3dec6c8c91d93bc58527ebc0ea5b3873a5b6dc56a2cbc5f71520469358896"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src/core/project/ghostrigger_project.py",
-                      "packaged_path":  "Python/src/core/project/ghostrigger_project.py",
-                      "sha256":  "0f6bb76767529476060ba1272a0ef0ddff88861076ab80959935b8b0e3b39e5d"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src/core/project/project_validation.py",
-                      "packaged_path":  "Python/src/core/project/project_validation.py",
-                      "sha256":  "0b5abbb63d894f3e14ff3083304eb0413a403368edd441d3ed831fc3159a9581"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0004",
-                      "source_path":  "src/core/project/resource_address.py",
-                      "packaged_path":  "Python/src/core/project/resource_address.py",
-                      "sha256":  "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56"
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Project",
+    "file_count": 4,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/project/__init__.py",
+            "packaged_path": "Python/src/core/project/__init__.py",
+            "sha256": "e9a3dec6c8c91d93bc58527ebc0ea5b3873a5b6dc56a2cbc5f71520469358896"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/project/ghostrigger_project.py",
+            "packaged_path": "Python/src/core/project/ghostrigger_project.py",
+            "sha256": "0f6bb76767529476060ba1272a0ef0ddff88861076ab80959935b8b0e3b39e5d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/project/project_validation.py",
+            "packaged_path": "Python/src/core/project/project_validation.py",
+            "sha256": "0b5abbb63d894f3e14ff3083304eb0413a403368edd441d3ed831fc3159a9581"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/project/resource_address.py",
+            "packaged_path": "Python/src/core/project/resource_address.py",
+            "sha256": "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56"
+        }
+    ]
 }

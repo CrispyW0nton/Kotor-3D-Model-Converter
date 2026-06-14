@@ -1,0 +1,64 @@
+<layout id="profile_cinegraphics" name="Cinegraphics" version="1">
+    <mainWindow width="1760" height="980" maximized="false"/>
+    <toolbars>
+        <toolbar id="main" visible="true" buttonMode="iconText" iconSize="18" height="40"/>
+        <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="16" height="34"/>
+    </toolbars>
+    <panels>
+        <panel id="contentBrowser" region="left" visible="false" minWidth="260" preferredWidth="340" minHeight="260" preferredHeight="420"/>
+        <panel id="scene" region="left" visible="true" minWidth="240" preferredWidth="300" minHeight="180" preferredHeight="320"/>
+        <panel id="library" region="left" visible="false" minWidth="280" preferredWidth="390"/>
+        <panel id="modules" region="left" visible="false" minWidth="280" preferredWidth="390"/>
+        <panel id="properties" region="right" visible="true" minWidth="300" preferredWidth="360"/>
+        <panel id="animationLibrary" region="right" visible="false" minWidth="320" preferredWidth="410"/>
+        <panel id="meshTools" region="right" visible="false" minWidth="260" preferredWidth="340"/>
+        <panel id="nodes" region="left" visible="false" minWidth="260" preferredWidth="360"/>
+        <panel id="lighting" region="right" visible="true" minWidth="320" preferredWidth="420"/>
+        <panel id="cameras" region="right" visible="true" minWidth="360" preferredWidth="460"/>
+        <panel id="moduleMeshes" region="right" visible="false" minWidth="360" preferredWidth="520"/>
+        <panel id="spriteMaterials" region="right" visible="true" minWidth="360" preferredWidth="520"/>
+        <panel id="adjustPivot" region="right" visible="false" minWidth="260" preferredWidth="320"/>
+        <panel id="2das" region="left" visible="false" minWidth="420" preferredWidth="720"/>
+        <panel id="resources" region="left" visible="false" minWidth="420" preferredWidth="720"/>
+        <panel id="outputLog" region="bottom" visible="false" minHeight="100" preferredHeight="140"/>
+        <panel id="pythonTerminal" region="bottom" visible="false" minHeight="100" preferredHeight="140"/>
+    </panels>
+    <dockLayout>
+        <group id="shotScene" area="left" mode="tabbed" visible="true" active="scene">
+            <dock id="scene"/>
+        </group>
+        <group id="cameraLighting" area="right" mode="tabbed" visible="true" active="cameras">
+            <dock id="cameras"/>
+            <dock id="lighting"/>
+            <dock id="properties"/>
+        </group>
+    </dockLayout>
+    <viewport>
+        <region id="mainViewport" minWidth="760" preferredWidth="1120"/>
+        <toolbar visible="true" buttonMode="textBesideIcon" compact="false"/>
+    </viewport>
+    <spacing>
+        <margin value="4"/>
+        <panelSpacing value="5"/>
+        <toolbarSpacing value="4"/>
+        <splitterHandleWidth value="8"/>
+        <inputHeight value="26"/>
+        <comboHeight value="26"/>
+        <spinboxHeight value="26"/>
+        <tabHeight value="14"/>
+        <tabWidth value="90"/>
+        <tabPadding value="8"/>
+        <tabPaddingX value="12"/>
+        <tabPaddingY value="6"/>
+        <tabMargin value="0"/>
+        <tabMarginX value="0"/>
+        <tabMarginY value="0"/>
+        <tableRowHeight value="23"/>
+        <treeRowHeight value="23"/>
+        <groupboxMargin value="8"/>
+        <groupboxSpacing value="5"/>
+        <panelHeaderHeight value="28"/>
+        <viewportToolbarHeight value="34"/>
+        <transformBarHeight value="30"/>
+    </spacing>
+</layout>

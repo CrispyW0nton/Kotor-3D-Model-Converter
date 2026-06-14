@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Iterable
 
 
-_DLL_NAME = "GhostRigger.Runtime.Core.Host.dll"
+_DLL_NAMES = (
+    "GhostRigger.Runtime.Core.Host.dll",
+    "GhostRigger.Runtime.dll",
+)
 
 
 class GrMeshResourceDesc(ctypes.Structure):
@@ -673,9 +676,12 @@ def _candidate_paths() -> Iterable[Path]:
     root = _repo_root()
     for platform_name in ("x64", "Win32"):
         for configuration in ("Debug", "Release"):
-            yield root / "build" / "vs" / platform_name / configuration / _DLL_NAME
-    yield root / "native" / "GhostRigger.Runtime.Core.Host" / _DLL_NAME
-    yield Path(__file__).resolve().parent / _DLL_NAME
+            for dll_name in _DLL_NAMES:
+                yield root / "build" / "vs" / platform_name / configuration / dll_name
+    for dll_name in _DLL_NAMES:
+        yield root / "native" / "GhostRigger.Runtime.Core.Host" / dll_name
+        yield root / "native" / "GhostRigger.Runtime" / dll_name
+        yield Path(__file__).resolve().parent / dll_name
 
 
 def _decode_json(raw: bytes | str | None) -> dict:
@@ -716,7 +722,7 @@ class NativeRuntimeBinding:
             return binding
 
         detail = "; ".join(errors[-3:]) if errors else "no candidate paths"
-        raise OSError(f"{_DLL_NAME} was not found or could not be loaded ({detail})")
+        raise OSError(f"{_DLL_NAMES[0]} was not found or could not be loaded ({detail})")
 
     def _configure_abi(self) -> None:
         self.dll.gr_runtime_version.restype = ctypes.c_char_p

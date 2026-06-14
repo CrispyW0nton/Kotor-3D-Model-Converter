@@ -19,7 +19,11 @@ Usage:
 
 import struct
 import logging
+import ctypes
+import json
 from typing import Any, Dict, Iterator, List, Optional, Tuple
+
+from src.core.templates._native import native_templates
 
 log = logging.getLogger(__name__)
 
@@ -54,7 +58,7 @@ class TwoDARow:
 
     def get(self, key: str, default: str = '') -> str:
         v = self[key]
-        return v if v not in ('', '****') else default
+        return _twoda_cell_or_default(v, default)
 
     def as_dict(self) -> Dict[str, str]:
         return {c: (self._data[i] if i < len(self._data) else '')
@@ -89,6 +93,11 @@ class TwoDA:
         """Auto-detect binary or ASCII format and parse."""
         if not data:
             raise ValueError("Empty data")
+        native_format = _detect_twoda_format(data)
+        if native_format == "binary_v2b":
+            return cls._parse_binary(data, name)
+        if native_format == "ascii_v2":
+            return cls._parse_ascii(data, name)
         # Peek at magic
         header = data[:10]
         if header[:3] == b'2DA':
@@ -257,7 +266,7 @@ class TwoDA:
         for i, c in enumerate(self.columns):
             if c.lower() == col_l:
                 v = row_data[i] if i < len(row_data) else ''
-                return v if v not in ('', self.BLANK) else default
+                return _twoda_cell_or_default(v, default)
         return default
 
     def get_int(self, row: int, col: str, default: int = -1) -> int:
@@ -342,7 +351,53 @@ class TwoDA:
 # Internal helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _split_2da_line(line: str) -> List[str]:
+def _detect_twoda_format(data: bytes) -> str:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            payload = bytes(data or b"")
+            array = (ctypes.c_ubyte * len(payload)).from_buffer_copy(payload)
+            raw = dll.gr_templates_detect_twoda_format(array, len(payload))
+            if raw:
+                return raw.decode("utf-8")
+        except (OSError, ValueError):
+            pass
+    return _python_detect_twoda_format(data)
+
+
+def _python_detect_twoda_format(data: bytes) -> str:
+    if not data:
+        return "empty"
+    header = data[:10]
+    if header[:3] == b'2DA':
+        ver = header[4:9]
+        if ver == b'V2.b\n':
+            return "binary_v2b"
+        if ver.startswith(b'V2.'):
+            return "ascii_v2"
+    return "unknown"
+
+
+def _twoda_cell_or_default(value: str, fallback: str) -> str:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            raw = dll.gr_templates_twoda_cell_or_default(
+                str(value or "").encode("utf-8"),
+                str(fallback or "").encode("utf-8"),
+            )
+            if raw is not None:
+                return raw.decode("utf-8")
+        except OSError:
+            pass
+    return _python_twoda_cell_or_default(value, fallback)
+
+
+def _python_twoda_cell_or_default(value: str, fallback: str) -> str:
+    return value if value not in ('', '****') else fallback
+
+
+def _python_split_2da_line(line: str) -> List[str]:
     """
     Split a 2DA ASCII data line, respecting quoted strings.
     Empty tokens (****) are kept as empty string.
@@ -367,6 +422,20 @@ def _split_2da_line(line: str) -> List[str]:
         tok = ''.join(current)
         tokens.append('' if tok == '****' else tok)
     return tokens
+
+
+def _split_2da_line(line: str) -> List[str]:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            raw = dll.gr_templates_split_twoda_line_json(str(line or "").encode("utf-8"))
+            if raw:
+                values = json.loads(raw.decode("utf-8"))
+                if isinstance(values, list) and all(isinstance(value, str) for value in values):
+                    return values
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+    return _python_split_2da_line(line)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

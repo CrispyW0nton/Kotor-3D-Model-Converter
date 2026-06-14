@@ -1,117 +1,117 @@
 {
-    "schema":  "ghostrigger_python_payload.v1",
-    "phase":  "P1.5 embedded python payload",
-    "project":  "GhostRigger.GUI.Boundary.Camera",
-    "file_count":  18,
-    "originals_remain_in_src":  true,
-    "files":  [
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0001",
-                      "source_path":  "src/gui/camera/__init__.py",
-                      "packaged_path":  "Python/src/gui/camera/__init__.py",
-                      "sha256":  "d03509407f9c8617d9fb59a9820848bd6ef019f0b1835d54d8551d232c138418"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0002",
-                      "source_path":  "src/gui/camera/arcball_camera.py",
-                      "packaged_path":  "Python/src/gui/camera/arcball_camera.py",
-                      "sha256":  "92af210f4b2fb9b920d8f2aba937df79de0f01b59c0d88af9c06db2464c77ba7"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0003",
-                      "source_path":  "src/gui/camera/camera_controller.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_controller.py",
-                      "sha256":  "4324fdf578e1f58a7733355ce057e4dc40830855711801fa5701fe01dbf740da"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0004",
-                      "source_path":  "src/gui/camera/camera_gizmo_renderer.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_gizmo_renderer.py",
-                      "sha256":  "d18d2b91dbe2c0a32890a333d9ce4ea5846f899dd0ed6e55ff6f254f17d61292"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0005",
-                      "source_path":  "src/gui/camera/camera_manager.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_manager.py",
-                      "sha256":  "4d45a39c19be258bc52edb8ee0d7142e9cf547fd2cf33ee7e5897250f65574de"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0006",
-                      "source_path":  "src/gui/camera/camera_math.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_math.py",
-                      "sha256":  "7d54879cf4c89324d145ae209af390a68297d5fe62d61d9cd4dc2012a38db2e7"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0007",
-                      "source_path":  "src/gui/camera/camera_model.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_model.py",
-                      "sha256":  "300e1efd0e49078f6264e3699e82fc1b843de0f137f9c4cc0d1282abeecc8ad4"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0008",
-                      "source_path":  "src/gui/camera/camera_overlays.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_overlays.py",
-                      "sha256":  "f256f260e7698dc096fc215b9a3bc63faf438665804077beff6a4ab59a8255df"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0009",
-                      "source_path":  "src/gui/camera/camera_picker.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_picker.py",
-                      "sha256":  "9a8b33e78bbee3d9e7d541eadb81e233dc5dbc50dcac91315008a99a5cfae224"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0010",
-                      "source_path":  "src/gui/camera/camera_presets.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_presets.py",
-                      "sha256":  "09ff55541029cf1114cd21452ca91c73d2273be50a2ac445408915e1aafeaf0f"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0011",
-                      "source_path":  "src/gui/camera/camera_render_settings.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_render_settings.py",
-                      "sha256":  "d733e0bfbd26896eba9907a608ab73638a1f6111ed317abb6c70fc488bc663f3"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0012",
-                      "source_path":  "src/gui/camera/camera_rig.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_rig.py",
-                      "sha256":  "fea252e061e1b34dcdd258731cc850ae583ccb345a9809b385b6ff169b9c8078"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0013",
-                      "source_path":  "src/gui/camera/camera_selection.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_selection.py",
-                      "sha256":  "c7b9a483d48950afcd1854d42bdc5d8ee5f396435c4da0c9a6f980a96f7eef9f"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0014",
-                      "source_path":  "src/gui/camera/camera_target.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_target.py",
-                      "sha256":  "9fc7565a85e0c68a436cefd65d7db495f3440a3d0330e16d306e3068198aac9c"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0015",
-                      "source_path":  "src/gui/camera/camera_viewport_adapter.py",
-                      "packaged_path":  "Python/src/gui/camera/camera_viewport_adapter.py",
-                      "sha256":  "715964e827ad56c219b65922b747337d973d9765175cbb802790836698bbb3a7"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0016",
-                      "source_path":  "src/gui/camera/frame_renderer.py",
-                      "packaged_path":  "Python/src/gui/camera/frame_renderer.py",
-                      "sha256":  "1f77ea2771f312d6d715637863e798fa226529dde1e6d54a68f94ba29916d18e"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0017",
-                      "source_path":  "src/gui/camera/render_manifest.py",
-                      "packaged_path":  "Python/src/gui/camera/render_manifest.py",
-                      "sha256":  "1daadbf63e944f4d7281b5c93933dd2dc01b5a55f149eee446d96d0384b38cc1"
-                  },
-                  {
-                      "resource_name":  "PYTHON_PAYLOAD_0018",
-                      "source_path":  "src/gui/camera/render_output.py",
-                      "packaged_path":  "Python/src/gui/camera/render_output.py",
-                      "sha256":  "a23e818d8b0d76e33787a0e9c1b9712521914099431f7df55c48adbba99b0d20"
-                  }
-              ]
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.GUI.Boundary.Camera",
+    "file_count": 18,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/gui/camera/__init__.py",
+            "packaged_path": "Python/src/gui/camera/__init__.py",
+            "sha256": "d03509407f9c8617d9fb59a9820848bd6ef019f0b1835d54d8551d232c138418"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/gui/camera/arcball_camera.py",
+            "packaged_path": "Python/src/gui/camera/arcball_camera.py",
+            "sha256": "92af210f4b2fb9b920d8f2aba937df79de0f01b59c0d88af9c06db2464c77ba7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/gui/camera/camera_controller.py",
+            "packaged_path": "Python/src/gui/camera/camera_controller.py",
+            "sha256": "4324fdf578e1f58a7733355ce057e4dc40830855711801fa5701fe01dbf740da"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/gui/camera/camera_gizmo_renderer.py",
+            "packaged_path": "Python/src/gui/camera/camera_gizmo_renderer.py",
+            "sha256": "d18d2b91dbe2c0a32890a333d9ce4ea5846f899dd0ed6e55ff6f254f17d61292"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/gui/camera/camera_manager.py",
+            "packaged_path": "Python/src/gui/camera/camera_manager.py",
+            "sha256": "4d45a39c19be258bc52edb8ee0d7142e9cf547fd2cf33ee7e5897250f65574de"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/gui/camera/camera_math.py",
+            "packaged_path": "Python/src/gui/camera/camera_math.py",
+            "sha256": "7d54879cf4c89324d145ae209af390a68297d5fe62d61d9cd4dc2012a38db2e7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/gui/camera/camera_model.py",
+            "packaged_path": "Python/src/gui/camera/camera_model.py",
+            "sha256": "300e1efd0e49078f6264e3699e82fc1b843de0f137f9c4cc0d1282abeecc8ad4"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/gui/camera/camera_overlays.py",
+            "packaged_path": "Python/src/gui/camera/camera_overlays.py",
+            "sha256": "f256f260e7698dc096fc215b9a3bc63faf438665804077beff6a4ab59a8255df"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/gui/camera/camera_picker.py",
+            "packaged_path": "Python/src/gui/camera/camera_picker.py",
+            "sha256": "9a8b33e78bbee3d9e7d541eadb81e233dc5dbc50dcac91315008a99a5cfae224"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0010",
+            "source_path": "src/gui/camera/camera_presets.py",
+            "packaged_path": "Python/src/gui/camera/camera_presets.py",
+            "sha256": "09ff55541029cf1114cd21452ca91c73d2273be50a2ac445408915e1aafeaf0f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0011",
+            "source_path": "src/gui/camera/camera_render_settings.py",
+            "packaged_path": "Python/src/gui/camera/camera_render_settings.py",
+            "sha256": "d733e0bfbd26896eba9907a608ab73638a1f6111ed317abb6c70fc488bc663f3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0012",
+            "source_path": "src/gui/camera/camera_rig.py",
+            "packaged_path": "Python/src/gui/camera/camera_rig.py",
+            "sha256": "fea252e061e1b34dcdd258731cc850ae583ccb345a9809b385b6ff169b9c8078"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0013",
+            "source_path": "src/gui/camera/camera_selection.py",
+            "packaged_path": "Python/src/gui/camera/camera_selection.py",
+            "sha256": "c7b9a483d48950afcd1854d42bdc5d8ee5f396435c4da0c9a6f980a96f7eef9f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0014",
+            "source_path": "src/gui/camera/camera_target.py",
+            "packaged_path": "Python/src/gui/camera/camera_target.py",
+            "sha256": "9fc7565a85e0c68a436cefd65d7db495f3440a3d0330e16d306e3068198aac9c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0015",
+            "source_path": "src/gui/camera/camera_viewport_adapter.py",
+            "packaged_path": "Python/src/gui/camera/camera_viewport_adapter.py",
+            "sha256": "715964e827ad56c219b65922b747337d973d9765175cbb802790836698bbb3a7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0016",
+            "source_path": "src/gui/camera/frame_renderer.py",
+            "packaged_path": "Python/src/gui/camera/frame_renderer.py",
+            "sha256": "1f77ea2771f312d6d715637863e798fa226529dde1e6d54a68f94ba29916d18e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0017",
+            "source_path": "src/gui/camera/render_manifest.py",
+            "packaged_path": "Python/src/gui/camera/render_manifest.py",
+            "sha256": "1daadbf63e944f4d7281b5c93933dd2dc01b5a55f149eee446d96d0384b38cc1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0018",
+            "source_path": "src/gui/camera/render_output.py",
+            "packaged_path": "Python/src/gui/camera/render_output.py",
+            "sha256": "a23e818d8b0d76e33787a0e9c1b9712521914099431f7df55c48adbba99b0d20"
+        }
+    ]
 }

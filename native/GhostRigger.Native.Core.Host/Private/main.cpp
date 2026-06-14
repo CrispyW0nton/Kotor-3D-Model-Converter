@@ -9,6 +9,7 @@
 #include <cwchar>
 #include <cwctype>
 #include <cstdio>
+#include <fstream>
 #include <filesystem>
 #include <optional>
 #include <sstream>
@@ -79,6 +80,35 @@ std::string utf8_from_wstring(const std::wstring& value) {
     return result;
 }
 
+std::wstring wstring_from_utf8(const std::string& value) {
+    if (value.empty()) {
+        return {};
+    }
+
+    const int required = MultiByteToWideChar(
+        CP_UTF8,
+        0,
+        value.c_str(),
+        static_cast<int>(value.size()),
+        nullptr,
+        0
+    );
+    if (required <= 0) {
+        return {};
+    }
+
+    std::wstring result(static_cast<std::size_t>(required), L'\0');
+    MultiByteToWideChar(
+        CP_UTF8,
+        0,
+        value.c_str(),
+        static_cast<int>(value.size()),
+        result.data(),
+        required
+    );
+    return result;
+}
+
 std::string python_string_literal(const std::string& value) {
     std::string result = "'";
     for (char ch : value) {
@@ -121,7 +151,10 @@ std::optional<fs::path> find_repo_root() {
     for (const fs::path& start : starts) {
         fs::path cursor = fs::weakly_canonical(start);
         for (int depth = 0; depth < 10; ++depth) {
-            if (fs::exists(cursor / L"main.py") && fs::exists(cursor / L"pyproject.toml")) {
+            if (
+                fs::exists(cursor / L"GhostRigger.sln") ||
+                (fs::exists(cursor / L"pyproject.toml") && fs::exists(cursor / L"native"))
+            ) {
                 return cursor;
             }
             if (!cursor.has_parent_path() || cursor.parent_path() == cursor) {
@@ -188,6 +221,89 @@ std::string last_win32_error_text(DWORD error_code) {
 using StringExport = const char* (*)();
 using FileCountExport = unsigned int (*)();
 
+void print_native_log_line(
+    const char* level,
+    const char* source,
+    const std::string& message,
+    WORD message_color = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE
+);
+
+struct PythonPayloadRow {
+    std::string resource_name;
+    std::string packaged_path;
+};
+
+std::string json_string_value(const std::string& object_text, const std::string& key) {
+    const std::string needle = "\"" + key + "\"";
+    const std::size_t key_pos = object_text.find(needle);
+    if (key_pos == std::string::npos) {
+        return "";
+    }
+    const std::size_t colon = object_text.find(':', key_pos + needle.size());
+    if (colon == std::string::npos) {
+        return "";
+    }
+    std::size_t cursor = object_text.find('"', colon + 1);
+    if (cursor == std::string::npos) {
+        return "";
+    }
+    ++cursor;
+
+    std::string result;
+    bool escaped = false;
+    for (; cursor < object_text.size(); ++cursor) {
+        const char ch = object_text[cursor];
+        if (escaped) {
+            result.push_back(ch == '\\' ? '\\' : ch);
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            break;
+        }
+        result.push_back(ch);
+    }
+    return result;
+}
+
+std::vector<PythonPayloadRow> parse_payload_rows(const std::string& manifest) {
+    std::vector<PythonPayloadRow> rows;
+    const std::size_t files_key = manifest.find("\"files\"");
+    if (files_key == std::string::npos) {
+        return rows;
+    }
+    const std::size_t array_start = manifest.find('[', files_key);
+    if (array_start == std::string::npos) {
+        return rows;
+    }
+
+    std::size_t cursor = array_start + 1;
+    while (cursor < manifest.size()) {
+        const std::size_t object_start = manifest.find('{', cursor);
+        if (object_start == std::string::npos) {
+            break;
+        }
+        const std::size_t object_end = manifest.find('}', object_start + 1);
+        if (object_end == std::string::npos) {
+            break;
+        }
+        const std::string object_text = manifest.substr(object_start, object_end - object_start + 1);
+        PythonPayloadRow row{
+            json_string_value(object_text, "resource_name"),
+            json_string_value(object_text, "packaged_path")
+        };
+        if (!row.resource_name.empty() && !row.packaged_path.empty()) {
+            rows.push_back(row);
+        }
+        cursor = object_end + 1;
+    }
+    return rows;
+}
+
 std::string read_string_export(HMODULE module, const char* export_name, bool& present) {
     present = false;
     if (module == nullptr || export_name == nullptr || export_name[0] == '\0') {
@@ -200,6 +316,121 @@ std::string read_string_export(HMODULE module, const char* export_name, bool& pr
     present = true;
     const char* value = reinterpret_cast<StringExport>(proc)();
     return value == nullptr ? "" : std::string(value);
+}
+
+enum class PayloadWriteStatus {
+    Failed,
+    Written,
+    AlreadyExists,
+};
+
+PayloadWriteStatus extract_rcdata_resource(HMODULE module, const std::string& resource_name, const fs::path& destination) {
+    if (module == nullptr || resource_name.empty()) {
+        return PayloadWriteStatus::Failed;
+    }
+    std::error_code exists_error;
+    if (fs::exists(destination, exists_error)) {
+        return exists_error ? PayloadWriteStatus::Failed : PayloadWriteStatus::AlreadyExists;
+    }
+    HRSRC resource = FindResourceA(module, resource_name.c_str(), MAKEINTRESOURCEA(10));
+    if (resource == nullptr) {
+        return PayloadWriteStatus::Failed;
+    }
+    HGLOBAL handle = LoadResource(module, resource);
+    if (handle == nullptr) {
+        return PayloadWriteStatus::Failed;
+    }
+    const DWORD size = SizeofResource(module, resource);
+    const void* data = LockResource(handle);
+    if (data == nullptr || size == 0) {
+        return PayloadWriteStatus::Failed;
+    }
+
+    std::error_code error;
+    fs::create_directories(destination.parent_path(), error);
+    if (error) {
+        return PayloadWriteStatus::Failed;
+    }
+    std::ofstream stream(destination, std::ios::binary | std::ios::trunc);
+    if (!stream) {
+        return PayloadWriteStatus::Failed;
+    }
+    stream.write(static_cast<const char*>(data), static_cast<std::streamsize>(size));
+    return static_cast<bool>(stream) ? PayloadWriteStatus::Written : PayloadWriteStatus::Failed;
+}
+
+bool extract_python_payloads_to_import_root(const fs::path& output_dir, const fs::path& payload_root) {
+    std::size_t dll_count = 0;
+    std::size_t written_count = 0;
+    std::size_t skipped_count = 0;
+
+    for (std::size_t index = 0; index < ghostrigger::native::core::host::kNativeDependencySpecCount; ++index) {
+        const auto& spec = ghostrigger::native::core::host::kNativeDependencySpecs[index];
+        const fs::path dll_path = output_dir / spec.dll_name;
+        HMODULE module = LoadLibraryExW(dll_path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (module == nullptr) {
+            continue;
+        }
+
+        bool manifest_present = false;
+        const std::string manifest = read_string_export(module, "gr_python_payload_manifest_json", manifest_present);
+        if (!manifest_present || manifest.empty()) {
+            continue;
+        }
+
+        std::size_t prepared_for_dll = 0;
+        for (const PythonPayloadRow& row : parse_payload_rows(manifest)) {
+            std::string relative = row.packaged_path;
+            for (char& ch : relative) {
+                if (ch == '\\') {
+                    ch = '/';
+                }
+            }
+            constexpr const char* prefix = "Python/";
+            if (relative.rfind(prefix, 0) == 0) {
+                relative.erase(0, std::char_traits<char>::length(prefix));
+            }
+            if (relative.empty() || relative.find("..") != std::string::npos) {
+                continue;
+            }
+            const std::wstring relative_wide = wstring_from_utf8(relative);
+            if (relative_wide.empty()) {
+                continue;
+            }
+            const PayloadWriteStatus status = extract_rcdata_resource(
+                module,
+                row.resource_name,
+                payload_root / fs::path(relative_wide)
+            );
+            if (status == PayloadWriteStatus::Written) {
+                ++prepared_for_dll;
+                ++written_count;
+            } else if (status == PayloadWriteStatus::AlreadyExists) {
+                ++prepared_for_dll;
+                ++skipped_count;
+            }
+        }
+        if (prepared_for_dll > 0) {
+            ++dll_count;
+        }
+    }
+
+    if (dll_count == 0 || (written_count + skipped_count) == 0) {
+        print_native_log_line(
+            "WARN",
+            "ghostrigger.native",
+            "No embedded Python payload files were prepared; startup may still depend on repo src.",
+            FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY
+        );
+        return false;
+    }
+
+    std::ostringstream message;
+    message << "Prepared embedded Python payloads from " << dll_count << " DLL(s): " << written_count
+        << " written, " << skipped_count << " already present, into "
+        << utf8_from_wstring(payload_root.wstring());
+    print_native_log_line("INFO", "ghostrigger.native", message.str(), FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+    return true;
 }
 
 unsigned int read_file_count_export(HMODULE module, bool& present) {
@@ -257,7 +488,7 @@ void print_native_log_line(
     const char* level,
     const char* source,
     const std::string& message,
-    WORD message_color = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE
+    WORD message_color
 ) {
     const WORD normal = default_console_attributes();
     const std::string time = current_time_hhmmss();
@@ -498,6 +729,10 @@ int initialize_embedded_python(const fs::path& repo_root, const fs::path& python
     SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_PAYLOAD_AUDIT_REQUIRED", L"1");
     if (auto exe_dir = executable_directory()) {
         SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR", exe_dir->c_str());
+        const fs::path payload_root = *exe_dir / L"GhostRiggerPythonPayload";
+        if (extract_python_payloads_to_import_root(*exe_dir, payload_root)) {
+            SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_PAYLOAD_ROOT", payload_root.c_str());
+        }
     }
 
     PyStatus status;
@@ -565,7 +800,7 @@ int run_hosted_python(int argc, wchar_t* argv[]) {
 
     auto repo_root = find_repo_root();
     if (!repo_root) {
-        show_error(L"GhostRigger.Native.Core.Host could not find main.py and pyproject.toml.");
+        show_error(L"GhostRigger.Native.Core.Host could not find GhostRigger.sln or pyproject.toml/native.");
         return 2;
     }
 
