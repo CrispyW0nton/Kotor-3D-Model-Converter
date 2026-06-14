@@ -9,6 +9,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from src.core.project.resource_address import ResourceAddress
+from src.core.validation._native import native_validation
 
 
 class ValidationSeverity(str, Enum):
@@ -169,8 +170,20 @@ class ValidationBus:
             callback(snapshot)
 
 
-def severity_rank(severity: ValidationSeverity | str) -> int:
+def _python_severity_rank(severity: ValidationSeverity | str) -> int:
     return _SEVERITY_RANK[_coerce_severity(severity)]
+
+
+def severity_rank(severity: ValidationSeverity | str) -> int:
+    dll = native_validation()
+    if dll is not None:
+        try:
+            raw = dll.gr_validation_severity_rank(str(getattr(severity, "value", severity) or "").encode("utf-8"))
+            if raw >= 0:
+                return int(raw)
+        except OSError:
+            pass
+    return _python_severity_rank(severity)
 
 
 def make_issue_id(issue: ValidationIssue) -> str:
@@ -305,16 +318,44 @@ def _dedupe_issues(issues: list[ValidationIssue]) -> list[ValidationIssue]:
     return deduped
 
 
-def _coerce_severity(value: ValidationSeverity | str) -> ValidationSeverity:
+def _python_coerce_severity(value: ValidationSeverity | str) -> ValidationSeverity:
     if isinstance(value, ValidationSeverity):
         return value
     return ValidationSeverity(str(value or ValidationSeverity.ERROR.value).lower())
 
 
-def _coerce_subsystem(value: ValidationSubsystem | str) -> ValidationSubsystem:
+def _coerce_severity(value: ValidationSeverity | str) -> ValidationSeverity:
+    if isinstance(value, ValidationSeverity):
+        return value
+    raw_value = str(value or ValidationSeverity.ERROR.value)
+    dll = native_validation()
+    if dll is not None:
+        try:
+            if dll.gr_validation_is_valid_severity(raw_value.encode("utf-8")):
+                return ValidationSeverity(raw_value.lower())
+        except OSError:
+            pass
+    return _python_coerce_severity(value)
+
+
+def _python_coerce_subsystem(value: ValidationSubsystem | str) -> ValidationSubsystem:
     if isinstance(value, ValidationSubsystem):
         return value
     return ValidationSubsystem(str(value or ValidationSubsystem.PROJECT.value).lower())
+
+
+def _coerce_subsystem(value: ValidationSubsystem | str) -> ValidationSubsystem:
+    if isinstance(value, ValidationSubsystem):
+        return value
+    raw_value = str(value or ValidationSubsystem.PROJECT.value)
+    dll = native_validation()
+    if dll is not None:
+        try:
+            if dll.gr_validation_is_valid_subsystem(raw_value.encode("utf-8")):
+                return ValidationSubsystem(raw_value.lower())
+        except OSError:
+            pass
+    return _python_coerce_subsystem(value)
 
 
 def _ensure_json_serializable(value: Any, context: str) -> None:

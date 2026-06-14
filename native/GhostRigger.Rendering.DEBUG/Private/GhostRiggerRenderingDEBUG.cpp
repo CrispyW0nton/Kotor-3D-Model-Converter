@@ -13,7 +13,7 @@ int main()
     if (std::strstr(capabilities, R"("module_package":true)") == nullptr) {
         return 2;
     }
-    if (std::strstr(capabilities, R"("native_implementation_enabled":false)") == nullptr) {
+    if (std::strstr(capabilities, R"("native_implementation_enabled":true)") == nullptr) {
         return 3;
     }
     if (std::strstr(gr_rendering_owner_boundary_json(), R"("schema":"rendering_owner_boundary.v1")") == nullptr) {
@@ -25,6 +25,15 @@ int main()
     }
     if (std::strstr(dependency_schema, R"("python_owner_active":true)") == nullptr) {
         return 6;
+    }
+    if (std::strcmp(gr_rendering_normalize_display_mode("hidden-line"), "hidden_line") != 0) {
+        return 7;
+    }
+    if (std::strcmp(gr_rendering_normalize_renderer_backend("pygfx"), "pygfx_wgpu") != 0) {
+        return 8;
+    }
+    if (std::strcmp(gr_rendering_viewport_navigation_profile_label("3ds max"), "3ds Max") != 0) {
+        return 9;
     }
     std::cout << "GhostRigger.Rendering.DEBUG OK: " << version << std::endl;
     return 0;

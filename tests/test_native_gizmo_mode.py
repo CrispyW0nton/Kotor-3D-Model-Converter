@@ -4,6 +4,7 @@ import ctypes
 import json
 from pathlib import Path
 
+from src.core.gizmo import gizmo_mode
 from src.core.gizmo.gizmo_mode import GizmoMode, TransformGizmoMode, TransformSpace
 
 
@@ -99,3 +100,39 @@ def test_native_gizmo_capabilities_document_python_fallback_scope() -> None:
     assert "gizmo_mode_contracts" in capabilities["capabilities"]
     assert "TransformSpace values" in schema["native_scope"]
     assert "TransformController drag math" in schema["python_fallback"]
+
+
+def test_python_gizmo_mode_helpers_prefer_native_contract(monkeypatch) -> None:
+    class _NativeGizmoProbe:
+        def gr_gizmo_normalize_mode(self, value: bytes) -> bytes:
+            return b"scale"
+
+        def gr_gizmo_cycle_mode(self, value: bytes) -> bytes:
+            return b"rotate"
+
+        def gr_gizmo_mode_values_json(self) -> bytes:
+            return b'["native-translate","native-rotate"]'
+
+        def gr_gizmo_normalize_transform_space(self, value: bytes) -> bytes:
+            return b"local"
+
+        def gr_gizmo_transform_space_values_json(self) -> bytes:
+            return b'["native-world","native-local"]'
+
+    monkeypatch.setattr(gizmo_mode, "_native_gizmo", lambda: _NativeGizmoProbe())
+
+    assert gizmo_mode.normalize_gizmo_mode("anything") is GizmoMode.SCALE
+    assert gizmo_mode.cycle_gizmo_mode(GizmoMode.TRANSLATE) is GizmoMode.ROTATE
+    assert gizmo_mode.gizmo_mode_values() == ("native-translate", "native-rotate")
+    assert gizmo_mode.normalize_transform_space("anything") is TransformSpace.LOCAL
+    assert gizmo_mode.transform_space_values() == ("native-world", "native-local")
+
+
+def test_python_gizmo_mode_helpers_fall_back_when_native_missing(monkeypatch) -> None:
+    monkeypatch.setattr(gizmo_mode, "_native_gizmo", lambda: None)
+
+    assert gizmo_mode.normalize_gizmo_mode("not-real") is GizmoMode.TRANSLATE
+    assert gizmo_mode.cycle_gizmo_mode(GizmoMode.SCALE) is GizmoMode.TRANSLATE
+    assert gizmo_mode.gizmo_mode_values() == tuple(mode.value for mode in GizmoMode)
+    assert gizmo_mode.normalize_transform_space("not-real") is TransformSpace.WORLD
+    assert gizmo_mode.transform_space_values() == tuple(space.value for space in TransformSpace)

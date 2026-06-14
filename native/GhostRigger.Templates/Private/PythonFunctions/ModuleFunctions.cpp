@@ -121,11 +121,11 @@ const NativeFunctionImplementation& split_2da_line_line_345_e1fcb025_native() {
         "src/core/templates/twoda.py",
         "_split_2da_line",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Templates","namespace":"ghostrigger::templates::core::templates::twoda","python_file":"src/core/templates/twoda.py","qualname":"_split_2da_line","name":"_split_2da_line","callable_type":"module_functions","line":345,"end_line":369,"signature":{"args":["line"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Templates","namespace":"ghostrigger::templates::core::templates::twoda","python_file":"src/core/templates/twoda.py","qualname":"_split_2da_line","name":"_split_2da_line","callable_type":"module_functions","line":345,"end_line":369,"signature":{"args":["line"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }

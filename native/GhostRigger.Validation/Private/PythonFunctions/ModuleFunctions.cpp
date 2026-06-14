@@ -553,11 +553,11 @@ const NativeFunctionImplementation& severity_rank_line_172_cf55f224_native() {
         "src/core/validation/validation_bus.py",
         "severity_rank",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Validation","namespace":"ghostrigger::validation::core::validation::validation_bus","python_file":"src/core/validation/validation_bus.py","qualname":"severity_rank","name":"severity_rank","callable_type":"module_functions","line":172,"end_line":173,"signature":{"args":["severity"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Validation","namespace":"ghostrigger::validation::core::validation::validation_bus","python_file":"src/core/validation/validation_bus.py","qualname":"severity_rank","name":"severity_rank","callable_type":"module_functions","line":172,"end_line":173,"signature":{"args":["severity"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }

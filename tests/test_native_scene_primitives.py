@@ -5,6 +5,7 @@ import json
 import math
 from pathlib import Path
 
+from src.core.scene import scene_object, scene_object_instance, scene_resource_ref
 from src.core.scene.scene_object import PivotData, Transform
 from src.core.scene.scene_object_instance import SceneObjectInstance
 from src.core.scene.scene_resource_ref import SceneResourceRef
@@ -141,6 +142,34 @@ def test_native_scene_metadata_persistence_rule_matches_scene_object_instance() 
     assert dll.gr_scene_metadata_key_is_persisted(b"artist") == 1
     assert dll.gr_scene_metadata_key_is_persisted(b"_runtime_model") == 0
     assert dll.gr_scene_metadata_key_is_persisted(b"_runtime_cache") == 0
+
+
+def test_python_scene_primitives_prefer_native_contract(monkeypatch) -> None:
+    assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
+    dll = _load_scene_dll()
+    monkeypatch.setattr(scene_object, "native_scene", lambda: dll)
+    monkeypatch.setattr(scene_resource_ref, "native_scene", lambda: dll)
+    monkeypatch.setattr(scene_object_instance, "native_scene", lambda: dll)
+
+    assert scene_object._vec3((1.0, math.inf, 3.0), (9.0, 8.0, 7.0)) == (9.0, 8.0, 7.0)
+    assert Transform.from_dict({"scale": (2.0, 2.0, 2.0)}).scale == (2.0, 2.0, 2.0)
+    assert PivotData((0.0, math.nan, 2.0), (3.0, 4.0, 5.0)).is_valid() is False
+    assert SceneResourceRef.from_dict({"game": " custom "}).game == " CUSTOM "
+    obj = SceneObjectInstance(id="obj-1", name="Scene", metadata={"artist": "LordVaderCW", "_runtime_model": "x"})
+    assert obj.to_dict()["metadata"] == {"artist": "LordVaderCW"}
+
+
+def test_python_scene_primitives_fall_back_when_native_missing(monkeypatch) -> None:
+    monkeypatch.setattr(scene_object, "native_scene", lambda: None)
+    monkeypatch.setattr(scene_resource_ref, "native_scene", lambda: None)
+    monkeypatch.setattr(scene_object_instance, "native_scene", lambda: None)
+
+    assert scene_object._vec3((1.0, math.inf, 3.0), (9.0, 8.0, 7.0)) == (9.0, 8.0, 7.0)
+    assert Transform.from_dict({"scale": (2.0, 2.0, 2.0)}).scale == (2.0, 2.0, 2.0)
+    assert PivotData((0.0, math.nan, 2.0), (3.0, 4.0, 5.0)).is_valid() is False
+    assert SceneResourceRef.from_dict({"game": " custom "}).game == " CUSTOM "
+    obj = SceneObjectInstance(id="obj-1", name="Scene", metadata={"artist": "LordVaderCW", "_runtime_model": "x"})
+    assert obj.to_dict()["metadata"] == {"artist": "LordVaderCW"}
 
 
 def test_native_scene_primitive_capabilities_document_python_fallback_scope() -> None:

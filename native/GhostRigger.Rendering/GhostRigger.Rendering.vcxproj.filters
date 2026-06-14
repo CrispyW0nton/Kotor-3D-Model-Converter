@@ -86,6 +86,9 @@
     <None Include="Python\src\core\rendering\__init__.py">
       <Filter>Python\src\core\rendering</Filter>
     </None>
+    <None Include="Python\src\core\rendering\_native.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
     <None Include="Python\src\core\rendering\accel.py">
       <Filter>Python\src\core\rendering</Filter>
     </None>

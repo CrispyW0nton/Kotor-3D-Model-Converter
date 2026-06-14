@@ -76,11 +76,11 @@ def test_native_axis_mode_values_labels_and_fallback_match_python() -> None:
     dll = _load_scene_dll()
 
     for value in ["view", "SCREEN", "world", "parent", "local", "gimbal", "grid", "working", "pick", "", "bogus"]:
-        expected = axis_mode.AxisMode.from_value(value)
+        expected = axis_mode._python_axis_mode_from_value(value)
         actual = dll.gr_scene_normalize_axis_mode(value.encode("utf-8")).decode("utf-8")
         label = dll.gr_scene_axis_mode_label(value.encode("utf-8")).decode("utf-8")
         assert actual == expected.value
-        assert label == expected.label
+        assert label == axis_mode._python_axis_mode_label(expected)
 
     native_values = json.loads(dll.gr_scene_axis_mode_values_json().decode("utf-8"))
     assert tuple(native_values) == tuple(mode.value for mode in axis_mode.AxisMode)
@@ -116,7 +116,7 @@ def test_native_quat_to_basis_matches_python_transform_controller_local_basis() 
     ]:
         selected = type("Selected", (), {"rotation": quat})()
         controller = axis_mode.TransformReferenceController(axis_mode.AxisMode.LOCAL)
-        expected = controller.get_transform_basis(selected)
+        expected = axis_mode._python_quat_to_basis(quat)
 
         out = Double9()
         assert dll.gr_scene_quat_to_basis(Double4(*quat), out) == 1
@@ -135,3 +135,29 @@ def test_native_axis_mode_capabilities_document_python_fallback_scope() -> None:
     assert "axis_mode_contracts" in capabilities["capabilities"]
     assert "AxisMode normalization" in schema["native_scope"]
     assert "TransformReferenceController object ownership" in schema["python_fallback"]
+
+
+def test_python_axis_mode_helpers_prefer_native_scene_contract(monkeypatch) -> None:
+    class _NativeSceneProbe:
+        def gr_scene_normalize_axis_mode(self, value: bytes) -> bytes:
+            return b"local"
+
+        def gr_scene_axis_mode_label(self, value: bytes) -> bytes:
+            return b"Native Local"
+
+        def gr_scene_axis_mode_values_json(self) -> bytes:
+            return b'["native-world","native-local"]'
+
+    monkeypatch.setattr(axis_mode, "_native_scene", lambda: _NativeSceneProbe())
+
+    assert axis_mode.AxisMode.from_value("anything") is axis_mode.AxisMode.LOCAL
+    assert axis_mode.AxisMode.LOCAL.label == "Native Local"
+    assert axis_mode.axis_mode_values() == ("native-world", "native-local")
+
+
+def test_python_axis_mode_helpers_fall_back_when_native_scene_missing(monkeypatch) -> None:
+    monkeypatch.setattr(axis_mode, "_native_scene", lambda: None)
+
+    assert axis_mode.AxisMode.from_value("bogus") is axis_mode.AxisMode.WORLD
+    assert axis_mode.AxisMode.LOCAL.label == "Local"
+    assert axis_mode.axis_mode_values() == tuple(mode.value for mode in axis_mode.AxisMode)

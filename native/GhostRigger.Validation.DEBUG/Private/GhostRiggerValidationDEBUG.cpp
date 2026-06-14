@@ -13,7 +13,7 @@ int main()
     if (std::strstr(capabilities, R"("module_package":true)") == nullptr) {
         return 2;
     }
-    if (std::strstr(capabilities, R"("native_implementation_enabled":false)") == nullptr) {
+    if (std::strstr(capabilities, R"("native_implementation_enabled":true)") == nullptr) {
         return 3;
     }
     if (std::strstr(gr_validation_owner_boundary_json(), R"("schema":"validation_owner_boundary.v1")") == nullptr) {
@@ -25,6 +25,15 @@ int main()
     }
     if (std::strstr(dependency_schema, R"("python_owner_active":true)") == nullptr) {
         return 6;
+    }
+    if (gr_validation_severity_rank("blocking") != 3 || gr_validation_severity_rank("not-real") != -1) {
+        return 7;
+    }
+    if (gr_validation_is_valid_severity("WARNING") != 1 || gr_validation_is_valid_severity(" warning ") != 0) {
+        return 8;
+    }
+    if (gr_validation_is_valid_subsystem("viewport") != 1 || gr_validation_is_valid_subsystem("module-editor") != 0) {
+        return 9;
     }
     std::cout << "GhostRigger.Validation.DEBUG OK: " << version << std::endl;
     return 0;

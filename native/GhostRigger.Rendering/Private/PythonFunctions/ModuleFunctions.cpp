@@ -9,7 +9,7 @@ const NativeFunctionImplementation& project_vertices_np_line_86_3ca949f7_native(
         "src/core/rendering/accel.py",
         "project_vertices_np",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
@@ -217,11 +217,11 @@ const NativeFunctionImplementation& hex_to_rgb_float_line_6_d961967c_native() {
         "src/core/rendering/color_utils.py",
         "_hex_to_rgb_float",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::color_utils","python_file":"src/core/rendering/color_utils.py","qualname":"_hex_to_rgb_float","name":"_hex_to_rgb_float","callable_type":"module_functions","line":6,"end_line":17,"signature":{"args":["value","fallback"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::color_utils","python_file":"src/core/rendering/color_utils.py","qualname":"_hex_to_rgb_float","name":"_hex_to_rgb_float","callable_type":"module_functions","line":6,"end_line":17,"signature":{"args":["value","fallback"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -233,7 +233,7 @@ const NativeFunctionImplementation& hex_to_rgb_tuple_line_24_2755e159_native() {
         "src/core/rendering/frame_core/colors.py",
         "_hex_to_rgb_tuple",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
@@ -2313,11 +2313,11 @@ const NativeFunctionImplementation& normalize_renderer_backend_line_66_6420bbbf_
         "src/core/rendering/renderer_backend.py",
         "normalize_renderer_backend",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::renderer_backend","python_file":"src/core/rendering/renderer_backend.py","qualname":"normalize_renderer_backend","name":"normalize_renderer_backend","callable_type":"module_functions","line":66,"end_line":70,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::renderer_backend","python_file":"src/core/rendering/renderer_backend.py","qualname":"normalize_renderer_backend","name":"normalize_renderer_backend","callable_type":"module_functions","line":66,"end_line":70,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -2329,11 +2329,11 @@ const NativeFunctionImplementation& supported_renderer_backend_line_73_e099ca56_
         "src/core/rendering/renderer_backend.py",
         "supported_renderer_backend",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::renderer_backend","python_file":"src/core/rendering/renderer_backend.py","qualname":"supported_renderer_backend","name":"supported_renderer_backend","callable_type":"module_functions","line":73,"end_line":77,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::renderer_backend","python_file":"src/core/rendering/renderer_backend.py","qualname":"supported_renderer_backend","name":"supported_renderer_backend","callable_type":"module_functions","line":73,"end_line":77,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -2345,11 +2345,11 @@ const NativeFunctionImplementation& renderer_backend_label_line_80_7ea56790_nati
         "src/core/rendering/renderer_backend.py",
         "renderer_backend_label",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::renderer_backend","python_file":"src/core/rendering/renderer_backend.py","qualname":"renderer_backend_label","name":"renderer_backend_label","callable_type":"module_functions","line":80,"end_line":87,"signature":{"args":["backend"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::renderer_backend","python_file":"src/core/rendering/renderer_backend.py","qualname":"renderer_backend_label","name":"renderer_backend_label","callable_type":"module_functions","line":80,"end_line":87,"signature":{"args":["backend"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -2361,7 +2361,7 @@ const NativeFunctionImplementation& material_texture_key_line_262_2ea67722_nativ
         "src/core/rendering/renderer_performance.py",
         "material_texture_key",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
@@ -2921,11 +2921,11 @@ const NativeFunctionImplementation& normalize_display_mode_line_82_fd5baebd_nati
         "src/core/rendering/viewport_display.py",
         "normalize_display_mode",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_display","python_file":"src/core/rendering/viewport_display.py","qualname":"normalize_display_mode","name":"normalize_display_mode","callable_type":"module_functions","line":82,"end_line":110,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_display","python_file":"src/core/rendering/viewport_display.py","qualname":"normalize_display_mode","name":"normalize_display_mode","callable_type":"module_functions","line":82,"end_line":110,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -2937,11 +2937,11 @@ const NativeFunctionImplementation& display_mode_values_line_113_303ced51_native
         "src/core/rendering/viewport_display.py",
         "display_mode_values",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_display","python_file":"src/core/rendering/viewport_display.py","qualname":"display_mode_values","name":"display_mode_values","callable_type":"module_functions","line":113,"end_line":114,"signature":{"args":["modes"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_display","python_file":"src/core/rendering/viewport_display.py","qualname":"display_mode_values","name":"display_mode_values","callable_type":"module_functions","line":113,"end_line":114,"signature":{"args":["modes"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -2953,11 +2953,11 @@ const NativeFunctionImplementation& normalize_viewport_navigation_profile_line_7
         "src/core/rendering/viewport_navigation.py",
         "normalize_viewport_navigation_profile",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_navigation","python_file":"src/core/rendering/viewport_navigation.py","qualname":"normalize_viewport_navigation_profile","name":"normalize_viewport_navigation_profile","callable_type":"module_functions","line":78,"end_line":88,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_navigation","python_file":"src/core/rendering/viewport_navigation.py","qualname":"normalize_viewport_navigation_profile","name":"normalize_viewport_navigation_profile","callable_type":"module_functions","line":78,"end_line":88,"signature":{"args":["value"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }
@@ -2969,11 +2969,11 @@ const NativeFunctionImplementation& viewport_profile_label_line_91_a83aba40_nati
         "src/core/rendering/viewport_navigation.py",
         "viewport_profile_label",
         "module_functions",
-        "native_contract_pending_semantic_port",
+        "native_contract_complete",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_navigation","python_file":"src/core/rendering/viewport_navigation.py","qualname":"viewport_profile_label","name":"viewport_profile_label","callable_type":"module_functions","line":91,"end_line":93,"signature":{"args":["key"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Rendering","namespace":"ghostrigger::rendering::core::rendering::viewport_navigation","python_file":"src/core/rendering/viewport_navigation.py","qualname":"viewport_profile_label","name":"viewport_profile_label","callable_type":"module_functions","line":91,"end_line":93,"signature":{"args":["key"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_complete","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":false})grjson"
     };
     return implementation;
 }

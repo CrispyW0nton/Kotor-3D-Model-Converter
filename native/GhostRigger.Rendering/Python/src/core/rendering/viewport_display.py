@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from enum import Enum
+import json
 from typing import Iterable
+
+from src.core.rendering._native import native_rendering
 
 
 class ViewportDisplayMode(str, Enum):
@@ -79,7 +82,7 @@ class ViewportDisplayOptions:
         }
 
 
-def normalize_display_mode(value: object) -> ViewportDisplayMode:
+def _python_normalize_display_mode(value: object) -> ViewportDisplayMode:
     if isinstance(value, ViewportDisplayMode):
         return value
     key = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
@@ -110,5 +113,27 @@ def normalize_display_mode(value: object) -> ViewportDisplayMode:
     return aliases.get(key, ViewportDisplayMode.FULL_MATERIAL)
 
 
+def normalize_display_mode(value: object) -> ViewportDisplayMode:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_normalize_display_mode(str(value or "").encode("utf-8"))
+            if raw:
+                return ViewportDisplayMode(raw.decode("utf-8"))
+        except (OSError, ValueError):
+            pass
+    return _python_normalize_display_mode(value)
+
+
 def display_mode_values(modes: Iterable[ViewportDisplayMode]) -> tuple[str, ...]:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_display_mode_values_json()
+            if raw:
+                values = json.loads(raw.decode("utf-8"))
+                if isinstance(values, list) and all(isinstance(value, str) for value in values):
+                    return tuple(values)
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
     return tuple(mode.value for mode in modes)

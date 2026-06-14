@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .gizmo_mode import GizmoMode, TransformSpace
+from .gizmo_mode import GizmoMode, TransformSpace, cycle_gizmo_mode, normalize_gizmo_mode
 from .gizmo_picker import GizmoPicker
 from .gizmo_renderer import GizmoRenderer
 from .transform_controller import TransformController
@@ -50,13 +50,12 @@ class TransformGizmo:
         self.renderer.handles = []
 
     def cycle_mode(self) -> GizmoMode:
-        order = (GizmoMode.TRANSLATE, GizmoMode.ROTATE, GizmoMode.SCALE)
-        self.mode = order[(order.index(self.mode) + 1) % len(order)]
+        self.mode = cycle_gizmo_mode(self.mode)
         self.hovered_handle = None
         return self.mode
 
     def set_mode(self, mode: GizmoMode | str) -> None:
-        self.mode = mode if isinstance(mode, GizmoMode) else GizmoMode(str(mode).lower())
+        self.mode = normalize_gizmo_mode(mode)
         self.hovered_handle = None
 
     def update_from_selection(self) -> None:

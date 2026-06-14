@@ -4,6 +4,7 @@ import ctypes
 import json
 from pathlib import Path
 
+from src.core.validation import validation_bus
 from src.core.validation.validation_bus import ValidationSeverity, ValidationSubsystem, severity_rank
 
 
@@ -59,7 +60,7 @@ def test_native_validation_severity_rank_matches_python_validation_bus() -> None
     dll = _load_validation_dll()
 
     for severity in ValidationSeverity:
-        assert dll.gr_validation_severity_rank(severity.value.encode("utf-8")) == severity_rank(severity)
+        assert dll.gr_validation_severity_rank(severity.value.encode("utf-8")) == validation_bus._python_severity_rank(severity)
         assert dll.gr_validation_is_valid_severity(severity.value.encode("utf-8")) == 1
         assert dll.gr_validation_is_valid_severity(severity.value.upper().encode("utf-8")) == 1
 
@@ -99,3 +100,21 @@ def test_native_validation_capabilities_document_python_fallback_scope() -> None
         "severity_subsystem_coercion",
     ]
     assert "ValidationReport object graph" in schema["python_fallback"]
+
+
+def test_python_validation_helpers_prefer_native_contract(monkeypatch) -> None:
+    assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
+    dll = _load_validation_dll()
+    monkeypatch.setattr(validation_bus, "native_validation", lambda: dll)
+
+    assert validation_bus.severity_rank("blocking") == 3
+    assert validation_bus._coerce_severity("WARNING") is ValidationSeverity.WARNING
+    assert validation_bus._coerce_subsystem("VIEWPORT") is ValidationSubsystem.VIEWPORT
+
+
+def test_python_validation_helpers_fall_back_when_native_missing(monkeypatch) -> None:
+    monkeypatch.setattr(validation_bus, "native_validation", lambda: None)
+
+    assert validation_bus.severity_rank("blocking") == 3
+    assert validation_bus._coerce_severity("WARNING") is ValidationSeverity.WARNING
+    assert validation_bus._coerce_subsystem("VIEWPORT") is ValidationSubsystem.VIEWPORT

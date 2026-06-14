@@ -38,6 +38,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\core\templates\__init__.py" />
+    <None Include="Python\src\core\templates\_native.py" />
     <None Include="Python\src\core\templates\template_builder.py" />
     <None Include="Python\src\core\templates\twoda.py" />
   </ItemGroup>

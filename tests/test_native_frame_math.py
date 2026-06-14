@@ -98,29 +98,29 @@ def test_native_frame_vector_and_scalar_helpers_match_python_frame_math() -> Non
 
     out = Double3()
     assert dll.gr_native_core_math_frame_normalize_vec3(_vec3(a), out) == 1
-    _assert_close_tuple(_tuple3(out), frame_math._normalize(a))
+    _assert_close_tuple(_tuple3(out), frame_math._python_normalize(a))
     assert dll.gr_native_core_math_frame_cross(_vec3(a), _vec3(b), out) == 1
-    _assert_close_tuple(_tuple3(out), frame_math._cross(a, b))
+    _assert_close_tuple(_tuple3(out), frame_math._python_cross(a, b))
     assert dll.gr_native_core_math_frame_sub(_vec3(a), _vec3(b), out) == 1
-    _assert_close_tuple(_tuple3(out), frame_math._sub(a, b))
+    _assert_close_tuple(_tuple3(out), frame_math._python_sub(a, b))
     assert dll.gr_native_core_math_frame_add(_vec3(a), _vec3(b), out) == 1
-    _assert_close_tuple(_tuple3(out), frame_math._add(a, b))
-    assert math.isclose(dll.gr_native_core_math_frame_dot(_vec3(a), _vec3(b)), frame_math._dot(a, b))
-    assert math.isclose(dll.gr_native_core_math_frame_clamp(8.0, -2.0, 5.0), frame_math._clamp(8.0, -2.0, 5.0))
-    assert math.isclose(dll.gr_native_core_math_frame_lerp(10.0, 20.0, 0.25), frame_math._lerp(10.0, 20.0, 0.25))
+    _assert_close_tuple(_tuple3(out), frame_math._python_add(a, b))
+    assert math.isclose(dll.gr_native_core_math_frame_dot(_vec3(a), _vec3(b)), frame_math._python_dot(a, b))
+    assert math.isclose(dll.gr_native_core_math_frame_clamp(8.0, -2.0, 5.0), frame_math._python_clamp(8.0, -2.0, 5.0))
+    assert math.isclose(dll.gr_native_core_math_frame_lerp(10.0, 20.0, 0.25), frame_math._python_lerp(10.0, 20.0, 0.25))
 
 
 def test_native_frame_texture_uv_and_sort_helpers_match_python_frame_math() -> None:
     assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
     dll = _load_math_dll()
 
-    assert dll.gr_native_core_math_frame_clean_texture_name(b"  PLC_Floor01\x00junk  ").decode("utf-8") == frame_math._clean_tex_name("  PLC_Floor01\x00junk  ")
-    assert math.isclose(dll.gr_native_core_math_frame_unwrap_uv(0.1, 1.2), frame_math._uwrap_global(0.1, 1.2))
-    assert dll.gr_native_core_math_frame_edge_has_seam(0.1, 1.2) == int(frame_math._edge_has_seam_global(0.1, 1.2))
-    assert math.isclose(dll.gr_native_core_math_frame_vflip_nontiled(0.25, 256.0), frame_math._vflip_nontiled(0.25, 256.0))
-    assert math.isclose(dll.gr_native_core_math_frame_vflip_tiled(2.25, 4.0, 128.0), frame_math._vflip_tiled(2.25, 4.0, 128.0))
+    assert dll.gr_native_core_math_frame_clean_texture_name(b"  PLC_Floor01\x00junk  ").decode("utf-8") == frame_math._python_clean_tex_name("  PLC_Floor01\x00junk  ")
+    assert math.isclose(dll.gr_native_core_math_frame_unwrap_uv(0.1, 1.2), frame_math._python_uwrap_global(0.1, 1.2))
+    assert dll.gr_native_core_math_frame_edge_has_seam(0.1, 1.2) == int(frame_math._python_edge_has_seam_global(0.1, 1.2))
+    assert math.isclose(dll.gr_native_core_math_frame_vflip_nontiled(0.25, 256.0), frame_math._python_vflip_nontiled(0.25, 256.0))
+    assert math.isclose(dll.gr_native_core_math_frame_vflip_tiled(2.25, 4.0, 128.0), frame_math._python_vflip_tiled(2.25, 4.0, 128.0))
     for value in (-100.5, -0.0, 0.0, 0.25, 50.0, 1000.125):
-        assert dll.gr_native_core_math_frame_float_to_sort_key(value) == frame_math._float_to_sort_key(value)
+        assert dll.gr_native_core_math_frame_float_to_sort_key(value) == frame_math._python_float_to_sort_key(value)
 
 
 def test_native_frame_screen_size_ratio_matches_python_frame_math() -> None:
@@ -140,7 +140,23 @@ def test_native_frame_screen_size_ratio_matches_python_frame_math() -> None:
             fov,
             viewport_height,
         ),
-        frame_math._compute_screen_size_ratio(bounds_min, bounds_max, view_origin, fov, viewport_height),
+        frame_math._python_compute_screen_size_ratio(bounds_min, bounds_max, view_origin, fov, viewport_height),
         rel_tol=1.0e-9,
         abs_tol=1.0e-9,
     )
+
+
+def test_python_frame_math_prefers_native_core_math_when_available(monkeypatch) -> None:
+    class _NativeMathProbe:
+        def gr_native_core_math_frame_lerp(self, a: float, b: float, t: float) -> float:
+            return 123.5
+
+    monkeypatch.setattr(frame_math, "_native_core_math", lambda: _NativeMathProbe())
+
+    assert frame_math._lerp(10.0, 20.0, 0.25) == 123.5
+
+
+def test_python_frame_math_falls_back_when_native_core_math_missing(monkeypatch) -> None:
+    monkeypatch.setattr(frame_math, "_native_core_math", lambda: None)
+
+    assert frame_math._lerp(10.0, 20.0, 0.25) == frame_math._python_lerp(10.0, 20.0, 0.25)

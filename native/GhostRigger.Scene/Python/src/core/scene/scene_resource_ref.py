@@ -5,6 +5,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.core.scene._native import native_scene
+
+
+def _sanitize_resource_game(game: Any) -> str:
+    dll = native_scene()
+    if dll is not None:
+        try:
+            raw = dll.gr_scene_sanitize_resource_game(str(game or "").encode("utf-8"))
+            if raw:
+                return raw.decode("utf-8")
+        except OSError:
+            pass
+    return str(game or "K1").upper()
+
 
 @dataclass
 class SceneResourceRef:
@@ -39,7 +53,7 @@ class SceneResourceRef:
         payload = data or {}
         return cls(
             resource_type=str(payload.get("resource_type") or "model"),
-            game=str(payload.get("game") or "K1").upper(),
+            game=_sanitize_resource_game(payload.get("game")),
             resref=str(payload.get("resref") or ""),
             source_path=str(payload.get("source_path") or ""),
             source_module=str(payload.get("source_module") or ""),

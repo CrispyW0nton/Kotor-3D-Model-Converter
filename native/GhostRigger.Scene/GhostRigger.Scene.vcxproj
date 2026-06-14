@@ -33,6 +33,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\core\scene\__init__.py" />
+    <None Include="Python\src\core\scene\_native.py" />
     <None Include="Python\src\core\scene\axis_mode.py" />
     <None Include="Python\src\core\scene\kmax_scene.py" />
     <None Include="Python\src\core\scene\kmax_scene_manager.py" />

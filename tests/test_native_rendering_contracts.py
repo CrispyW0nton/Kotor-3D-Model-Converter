@@ -86,11 +86,11 @@ def test_native_renderer_backend_contracts_match_python() -> None:
         "null",
         "not-real",
     ]:
-        expected = renderer_backend.supported_renderer_backend(value)
+        expected = renderer_backend._python_supported_renderer_backend(value)
         actual = dll.gr_rendering_normalize_renderer_backend(value.encode("utf-8")).decode("utf-8")
         label = dll.gr_rendering_renderer_backend_label(value.encode("utf-8")).decode("utf-8")
         assert actual == expected.value
-        assert label == renderer_backend.renderer_backend_label(expected)
+        assert label == renderer_backend._python_renderer_backend_label(expected)
 
 
 def test_native_viewport_display_contracts_match_python() -> None:
@@ -111,7 +111,7 @@ def test_native_viewport_display_contracts_match_python() -> None:
         "not-real",
     ]:
         actual = dll.gr_rendering_normalize_display_mode(value.encode("utf-8")).decode("utf-8")
-        assert actual == viewport_display.normalize_display_mode(value).value
+        assert actual == viewport_display._python_normalize_display_mode(value).value
 
     native_values = json.loads(dll.gr_rendering_display_mode_values_json().decode("utf-8"))
     assert tuple(native_values) == viewport_display.display_mode_values(viewport_display.ViewportDisplayMode)
@@ -134,12 +134,12 @@ def test_native_viewport_navigation_contracts_match_python() -> None:
         "maya",
         "not-real",
     ]:
-        expected = viewport_navigation.normalize_viewport_navigation_profile(value)
+        expected = viewport_navigation._python_normalize_viewport_navigation_profile(value)
         actual = dll.gr_rendering_normalize_viewport_navigation_profile(value.encode("utf-8")).decode("utf-8")
         label = dll.gr_rendering_viewport_navigation_profile_label(value.encode("utf-8")).decode("utf-8")
         summary = dll.gr_rendering_viewport_navigation_profile_summary(value.encode("utf-8")).decode("utf-8")
         assert actual == expected
-        assert label == viewport_navigation.viewport_profile_label(value)
+        assert label == viewport_navigation._python_viewport_profile_label(value)
         assert summary == viewport_navigation.VIEWPORT_NAVIGATION_PROFILES[expected].summary
 
     native_profiles = json.loads(dll.gr_rendering_viewport_navigation_profiles_json().decode("utf-8"))
@@ -157,7 +157,39 @@ def test_native_hex_to_rgb_float_matches_python_color_utils() -> None:
     for value in ["#112233", "AABBCC", "bad", "#123", "#GGGGGG"]:
         out = Double3()
         assert dll.gr_rendering_hex_to_rgb_float(value.encode("utf-8"), Double3(*fallback), out) == 1
-        _assert_close_tuple(_tuple3(out), color_utils._hex_to_rgb_float(value, fallback))
+        _assert_close_tuple(_tuple3(out), color_utils._python_hex_to_rgb_float(value, fallback))
+
+
+def test_python_rendering_helpers_prefer_native_contract(monkeypatch) -> None:
+    assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
+    dll = _load_rendering_dll()
+    monkeypatch.setattr(renderer_backend, "native_rendering", lambda: dll)
+    monkeypatch.setattr(viewport_display, "native_rendering", lambda: dll)
+    monkeypatch.setattr(viewport_navigation, "native_rendering", lambda: dll)
+    monkeypatch.setattr(color_utils, "native_rendering", lambda: dll)
+
+    assert renderer_backend.supported_renderer_backend("native/d3d12") is renderer_backend.RendererBackend.WGPU_D3D12
+    assert renderer_backend.renderer_backend_label("pygfx") == "pygfx (WGPU)"
+    assert viewport_display.normalize_display_mode("hidden-line") is viewport_display.ViewportDisplayMode.HIDDEN_LINE
+    assert viewport_display.display_mode_values(viewport_display.ViewportDisplayMode)[0] == "wireframe"
+    assert viewport_navigation.normalize_viewport_navigation_profile("3ds max") == "3dsmax"
+    assert viewport_navigation.viewport_profile_label("blender") == "Blender"
+    _assert_close_tuple(color_utils._hex_to_rgb_float("#112233", (0.0, 0.0, 0.0)), (17 / 255.0, 34 / 255.0, 51 / 255.0))
+
+
+def test_python_rendering_helpers_fall_back_when_native_missing(monkeypatch) -> None:
+    monkeypatch.setattr(renderer_backend, "native_rendering", lambda: None)
+    monkeypatch.setattr(viewport_display, "native_rendering", lambda: None)
+    monkeypatch.setattr(viewport_navigation, "native_rendering", lambda: None)
+    monkeypatch.setattr(color_utils, "native_rendering", lambda: None)
+
+    assert renderer_backend.supported_renderer_backend("native/d3d12") is renderer_backend.RendererBackend.WGPU_D3D12
+    assert renderer_backend.renderer_backend_label("pygfx") == "pygfx (WGPU)"
+    assert viewport_display.normalize_display_mode("hidden-line") is viewport_display.ViewportDisplayMode.HIDDEN_LINE
+    assert viewport_display.display_mode_values(viewport_display.ViewportDisplayMode)[0] == "wireframe"
+    assert viewport_navigation.normalize_viewport_navigation_profile("3ds max") == "3dsmax"
+    assert viewport_navigation.viewport_profile_label("blender") == "Blender"
+    _assert_close_tuple(color_utils._hex_to_rgb_float("#112233", (0.0, 0.0, 0.0)), (17 / 255.0, 34 / 255.0, 51 / 255.0))
 
 
 def test_native_rendering_capabilities_document_python_fallback_scope() -> None:

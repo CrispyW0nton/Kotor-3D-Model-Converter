@@ -89,6 +89,9 @@
     <None Include="Python\src\core\scene\__init__.py">
       <Filter>Python\src\core\scene</Filter>
     </None>
+    <None Include="Python\src\core\scene\_native.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
     <None Include="Python\src\core\scene\axis_mode.py">
       <Filter>Python\src\core\scene</Filter>
     </None>

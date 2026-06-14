@@ -77,6 +77,9 @@
     <None Include="Python\src\core\templates\__init__.py">
       <Filter>Python\src\core\templates</Filter>
     </None>
+    <None Include="Python\src\core\templates\_native.py">
+      <Filter>Python\src\core\templates</Filter>
+    </None>
     <None Include="Python\src\core\templates\template_builder.py">
       <Filter>Python\src\core\templates</Filter>
     </None>

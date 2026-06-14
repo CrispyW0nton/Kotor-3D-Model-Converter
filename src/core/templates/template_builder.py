@@ -35,6 +35,8 @@ import logging
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 
+from src.core.templates._native import native_templates
+
 log = logging.getLogger(__name__)
 
 # ── Standard KotOR K1 humanoid bone hierarchy ────────────────────────────────
@@ -322,16 +324,78 @@ _ANIM_SLOTS_K2_EXTRA: List[Tuple[str, float]] = [
 ]
 
 
+def _python_normalize_game_version(game_version: str) -> str:
+    return "K2" if str(game_version or "").upper() == "K2" else "K1"
+
+
+def normalize_game_version(game_version: str) -> str:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            raw = dll.gr_templates_normalize_game_version(str(game_version or "").encode("utf-8"))
+            if raw:
+                return raw.decode("utf-8")
+        except OSError:
+            pass
+    return _python_normalize_game_version(game_version)
+
+
+def _python_humanoid_bone_count(game_version: str) -> int:
+    return len(_HUMANOID_BONES_K2 if _python_normalize_game_version(game_version) == "K2" else _HUMANOID_BONES_K1)
+
+
+def humanoid_bone_count(game_version: str) -> int:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            return int(dll.gr_templates_humanoid_bone_count(str(game_version or "").encode("utf-8")))
+        except (OSError, ValueError):
+            pass
+    return _python_humanoid_bone_count(game_version)
+
+
+def _python_humanoid_animation_slot_count(game_version: str) -> int:
+    return len(_ANIM_SLOTS + _ANIM_SLOTS_K2_EXTRA) if _python_normalize_game_version(game_version) == "K2" else len(_ANIM_SLOTS)
+
+
+def humanoid_animation_slot_count(game_version: str) -> int:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            return int(dll.gr_templates_humanoid_animation_slot_count(str(game_version or "").encode("utf-8")))
+        except (OSError, ValueError):
+            pass
+    return _python_humanoid_animation_slot_count(game_version)
+
+
+def _python_humanoid_rig_source(game_version: str) -> str:
+    if _python_normalize_game_version(game_version) == "K2":
+        return "Based on KotOR 2 c_female02 / S_Female02 skeleton"
+    return "Based on KotOR 1 S_Male02 / S_Female02 skeleton"
+
+
+def humanoid_rig_source(game_version: str) -> str:
+    dll = native_templates()
+    if dll is not None:
+        try:
+            raw = dll.gr_templates_humanoid_rig_source(str(game_version or "").encode("utf-8"))
+            if raw:
+                return raw.decode("utf-8")
+        except OSError:
+            pass
+    return _python_humanoid_rig_source(game_version)
+
+
 def get_bones_for_version(game_version: str) -> List[Tuple[str, str, Tuple[float,float,float]]]:
     """Return the bone list for the given game version ('K1' or 'K2')."""
-    if game_version.upper() == 'K2':
+    if normalize_game_version(game_version) == 'K2':
         return _HUMANOID_BONES_K2
     return _HUMANOID_BONES_K1
 
 
 def get_anim_slots_for_version(game_version: str) -> List[Tuple[str, float]]:
     """Return the animation slots for the given game version ('K1' or 'K2')."""
-    if game_version.upper() == 'K2':
+    if normalize_game_version(game_version) == 'K2':
         return _ANIM_SLOTS + _ANIM_SLOTS_K2_EXTRA
     return _ANIM_SLOTS
 
@@ -358,7 +422,7 @@ def build_humanoid_template(
     """
     from ..geometry.model_data import Animation, GameVersion, KotorModel, ModelNode, NodeFlags
 
-    gv = GameVersion.K2 if game_version.upper() == 'K2' else GameVersion.K1
+    gv = GameVersion.K2 if normalize_game_version(game_version) == 'K2' else GameVersion.K1
 
     model = KotorModel(name=name, game_version=gv)
     model.supermodel     = 'NULL'

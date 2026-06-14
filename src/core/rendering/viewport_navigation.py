@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
+from src.core.rendering._native import native_rendering
+
 
 @dataclass(frozen=True)
 class ViewportNavigationProfile:
@@ -75,7 +77,7 @@ A or F: Frame all
 """
 
 
-def normalize_viewport_navigation_profile(value: object) -> str:
+def _python_normalize_viewport_navigation_profile(value: object) -> str:
     key = str(value or "").strip().lower().replace(" ", "").replace("_", "")
     aliases = {
         "3dmax": "3dsmax",
@@ -88,9 +90,35 @@ def normalize_viewport_navigation_profile(value: object) -> str:
     return aliases.get(key, DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
 
 
-def viewport_profile_label(key: object) -> str:
-    profile_key = normalize_viewport_navigation_profile(key)
+def normalize_viewport_navigation_profile(value: object) -> str:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_normalize_viewport_navigation_profile(str(value or "").encode("utf-8"))
+            if raw:
+                profile_key = raw.decode("utf-8")
+                if profile_key in VIEWPORT_NAVIGATION_PROFILES:
+                    return profile_key
+        except OSError:
+            pass
+    return _python_normalize_viewport_navigation_profile(value)
+
+
+def _python_viewport_profile_label(key: object) -> str:
+    profile_key = _python_normalize_viewport_navigation_profile(key)
     return VIEWPORT_NAVIGATION_PROFILES[profile_key].label
+
+
+def viewport_profile_label(key: object) -> str:
+    dll = native_rendering()
+    if dll is not None:
+        try:
+            raw = dll.gr_rendering_viewport_navigation_profile_label(str(key or "").encode("utf-8"))
+            if raw:
+                return raw.decode("utf-8")
+        except OSError:
+            pass
+    return _python_viewport_profile_label(key)
 
 
 def has_modifier(modifiers, modifier) -> bool:

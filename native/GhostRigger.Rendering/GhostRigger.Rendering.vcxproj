@@ -33,6 +33,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="Python\src\core\rendering\__init__.py" />
+    <None Include="Python\src\core\rendering\_native.py" />
     <None Include="Python\src\core\rendering\accel.py" />
     <None Include="Python\src\core\rendering\color_utils.py" />
     <None Include="Python\src\core\rendering\frame_core\__init__.py" />
