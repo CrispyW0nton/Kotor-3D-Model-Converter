@@ -40,7 +40,7 @@ Data ownership:
 
 Verification gates:
 
-- Native DEBUG: `GhostRigger.Tools.Retargeting.DEBUG`.
+- Native Debug target: build `GhostRigger.Tools.Retargeting` in `Debug|x64`.
 - Python adapter test: targeted adapter/package availability and solve-packet
   fallback checks.
 - Backend truth check: MCP animation fixture comparison when native retargeting
@@ -66,7 +66,7 @@ Data ownership:
 
 Verification gates:
 
-- Native DEBUG: `GhostRigger.Tools.Export.DEBUG`.
+- Native Debug target: build `GhostRigger.Tools.Export` in `Debug|x64`.
 - Python adapter test: targeted export-helper fallback checks.
 - Backend truth check: PyKotor/GhostRigger reload comparison before any native
   helper becomes authoritative.
@@ -89,7 +89,7 @@ Data ownership:
 
 Verification gates:
 
-- Native DEBUG: `GhostRigger.Tools.CharacterBuilder.DEBUG`.
+- Native Debug target: build `GhostRigger.Tools.CharacterBuilder` in `Debug|x64`.
 - Python adapter test: targeted helper availability and missing-DLL fallback.
 - Backend truth check: representative character fixtures before native helper
   output replaces Python behavior.
@@ -113,7 +113,7 @@ Data ownership:
 
 Verification gates:
 
-- Native DEBUG: `GhostRigger.Windows.MainWindow.DEBUG`.
+- Native Debug target: build `GhostRigger.Windows.MainWindow` in `Debug|x64`.
 - Python adapter test: targeted host-service discovery and fallback checks.
 - Backend truth check: not applicable unless the slice touches model/data
   pipelines.

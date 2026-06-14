@@ -39,21 +39,19 @@ def test_native_module_manifest_covers_python_package_boundaries() -> None:
         assert any(source_path.rglob("*.py")), source
 
 
-def test_native_module_projects_are_in_solution_with_debug_validators() -> None:
+def test_native_module_projects_are_in_solution_without_debug_app_projects() -> None:
     entries = _manifest_entries()
     solution = SOLUTION.read_text(encoding="utf-8")
 
     for entry in entries:
         name = entry["name"]
         project_guid = entry["project_guid"]
-        debug_guid = entry["debug_project_guid"]
         assert f'"{name}"' in solution
-        assert f'"{name}.DEBUG"' in solution
+        assert f'"{name}.DEBUG"' not in solution
         assert f"native\\{name}\\{name}.vcxproj" in solution
-        assert f"native\\{name}.DEBUG\\{name}.DEBUG.vcxproj" in solution
+        assert f"native\\{name}.DEBUG\\{name}.DEBUG.vcxproj" not in solution
         assert f"{project_guid}.Release|x64.Build.0" in solution
-        assert f"{debug_guid}.Debug|x64.Build.0" in solution
-        assert f"{debug_guid}.Release|x64.Build.0" not in solution
+        assert f"{entry['debug_project_guid']}.Debug|x64.Build.0" not in solution
 
 
 def test_native_module_project_files_keep_phase_one_diagnostic_contract() -> None:
@@ -72,8 +70,8 @@ def test_native_module_project_files_keep_phase_one_diagnostic_contract() -> Non
         assert f'"name":"{name}"' in source
         assert f'"source_package":"{entry["source_package"]}"' in source
         assert '"module_package":true' in source
-        assert '"native_implementation_enabled":false' in source
-        assert '"python_owner_active":true' in source
+        assert '"python_owner_active":' in source
+        assert '"native_implementation_enabled":' in source
         assert f"gr_{entry['symbol_prefix']}_version" in header
         assert f"{name}.DEBUG OK" in debug_source
 

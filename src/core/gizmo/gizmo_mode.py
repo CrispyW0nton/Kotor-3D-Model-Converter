@@ -10,6 +10,9 @@ from enum import Enum
 from pathlib import Path
 
 
+_Double3 = ctypes.c_double * 3
+
+
 class GizmoMode(Enum):
     """Viewport transform modes."""
 
@@ -75,6 +78,17 @@ def _native_gizmo():
         dll.gr_gizmo_normalize_transform_space.restype = ctypes.c_char_p
         dll.gr_gizmo_transform_space_values_json.argtypes = []
         dll.gr_gizmo_transform_space_values_json.restype = ctypes.c_char_p
+        dll.gr_gizmo_resolve_origin.argtypes = [
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.POINTER(ctypes.c_double),
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.POINTER(ctypes.c_double),
+        ]
+        dll.gr_gizmo_resolve_origin.restype = ctypes.c_int
     except Exception:
         return None
     _native_gizmo_dll = dll
@@ -162,3 +176,75 @@ def transform_space_values() -> tuple[str, ...]:
         except Exception:
             pass
     return tuple(space.value for space in TransformSpace)
+
+
+def _tuple3_or_none(value) -> tuple[float, float, float] | None:
+    if value is None:
+        return None
+    try:
+        values = tuple(float(v) for v in tuple(value)[:3])
+    except Exception:
+        return None
+    if len(values) != 3 or any(v != v or v in (float("inf"), float("-inf")) for v in values):
+        return None
+    return values
+
+
+def _double3(value: tuple[float, float, float] | None) -> _Double3:
+    safe = value or (0.0, 0.0, 0.0)
+    return _Double3(float(safe[0]), float(safe[1]), float(safe[2]))
+
+
+def _python_resolve_gizmo_origin(
+    position,
+    pivot_world=None,
+    gizmo_world=None,
+    *,
+    is_helper_object: bool = False,
+    affect_pivot_only: bool = False,
+) -> tuple[float, float, float]:
+    position_value = _tuple3_or_none(position) or (0.0, 0.0, 0.0)
+    pivot_value = _tuple3_or_none(pivot_world)
+    gizmo_value = _tuple3_or_none(gizmo_world)
+    if bool(is_helper_object) and not bool(affect_pivot_only):
+        return gizmo_value or position_value
+    return pivot_value or gizmo_value or position_value
+
+
+def resolve_gizmo_origin(
+    position,
+    pivot_world=None,
+    gizmo_world=None,
+    *,
+    is_helper_object: bool = False,
+    affect_pivot_only: bool = False,
+) -> tuple[float, float, float]:
+    """Resolve the world-space gizmo origin from object, pivot, and helper candidates."""
+    position_value = _tuple3_or_none(position) or (0.0, 0.0, 0.0)
+    pivot_value = _tuple3_or_none(pivot_world)
+    gizmo_value = _tuple3_or_none(gizmo_world)
+    dll = _native_gizmo()
+    if dll is not None:
+        try:
+            out = _Double3()
+            ok = dll.gr_gizmo_resolve_origin(
+                _double3(position_value),
+                _double3(pivot_value),
+                _double3(gizmo_value),
+                int(pivot_value is not None),
+                int(gizmo_value is not None),
+                int(bool(is_helper_object)),
+                int(bool(affect_pivot_only)),
+                out,
+            )
+            if ok:
+                return (float(out[0]), float(out[1]), float(out[2]))
+        except Exception:
+            pass
+    return _python_resolve_gizmo_origin(
+        position_value,
+        pivot_value,
+        gizmo_value,
+        is_helper_object=is_helper_object,
+        affect_pivot_only=affect_pivot_only,
+    )

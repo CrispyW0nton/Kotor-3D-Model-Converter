@@ -11,6 +11,11 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-14
 
+- ModernGL tools native-preferred gizmo slice: `GhostRigger.Gizmo.dll` now exports a thin C ABI for gizmo-origin resolution so pivot/local-center/helper selection rules are native-preferred while TransformGizmo state, drag math, picking, draw data, and object mutation remain Python-owned. The Python bridge uses the native contract with a pure-Python fallback, the embedded `GhostRigger.Gizmo` Python payload copy was kept in sync, and native package/test documentation now treats `Debug|x64` on the real project as the debug path instead of standalone `.DEBUG` solution apps.
+  Owner: LordVaderCW.
+  Affected areas: `native/GhostRigger.Gizmo`, `src/core/gizmo`, native package README/debug-target documentation, `tests/test_native_gizmo_mode.py`, `tests/test_gizmo_follows_object.py`, `tests/test_native_module_package_sweep.py`, `tests/test_native_project_templates.py`.
+  Verification: `python -m py_compile src\core\gizmo\gizmo_mode.py src\core\gizmo\transform_gizmo.py native\GhostRigger.Gizmo\Python\src\core\gizmo\gizmo_mode.py native\GhostRigger.Gizmo\Python\src\core\gizmo\transform_gizmo.py tests\test_native_gizmo_mode.py tests\test_gizmo_follows_object.py tests\test_gizmo_mode_state.py`; `python -m pytest tests\test_native_module_package_sweep.py tests\test_native_project_templates.py tests\test_native_gizmo_mode.py tests\test_gizmo_follows_object.py tests\test_gizmo_mode_state.py -q`; Visual Studio solution targets `GhostRigger_Gizmo` Debug x64 and Release x64 rebuilt with `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe`; Visual Studio solution target `GhostRigger_Native` Debug x64 rebuilt with `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe`; `git diff --check`.
+
 - Solution cleanup: removed the standalone `.DEBUG` application/validator projects from `GhostRigger.sln` so Visual Studio Debug builds use the real project Debug configurations instead of parallel debug-named projects. The `.DEBUG` project folders/files were left on disk for now; only solution membership and stale GUID references were removed.
   Owner: LordVaderCW.
   Affected areas: `GhostRigger.sln`.

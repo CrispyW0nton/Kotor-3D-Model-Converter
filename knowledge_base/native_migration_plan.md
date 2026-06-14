@@ -22,6 +22,10 @@ a launcher and native workspace first, not a rewrite of the application.
 ## Current State
 
 - `GhostRigger.sln` opens the native Visual Studio workspace.
+- Debug validation uses the real package projects in `Debug|x64` plus targeted
+  Python/ctypes ABI checks. Standalone `.DEBUG` application projects are retired
+  from `GhostRigger.sln`; historical `.DEBUG` folders or references describe
+  legacy validator artifacts only, not solution membership.
 - `native/GhostRigger.Native/` builds a C++ launcher that starts the existing
   Python Qt application.
 - `native/GhostRigger.Native.NativeCore/` owns the first shared native core package for
@@ -33,12 +37,12 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.Native.NativeCore.Math/` owns the first shared native math
   package for renderer/toolbox-neutral bounds, center, and matrix point-transform
   helpers.
-- `native/GhostRigger.Native.NativeCore.DEBUG/` verifies the shared native core ABI from
-  Visual Studio without requiring Python.
-- `native/GhostRigger.Native.NativeCore.Diagnostics.DEBUG/` verifies the shared
-  native diagnostics ABI from Visual Studio without requiring Python.
-- `native/GhostRigger.Native.NativeCore.Math.DEBUG/` verifies the shared native
-  math ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Native.NativeCore/` verifies the shared native core ABI
+  from its real `Debug|x64` target without requiring the GUI.
+- `native/GhostRigger.Native.NativeCore.Diagnostics/` verifies the shared native
+  diagnostics ABI from its real `Debug|x64` target without requiring the GUI.
+- `native/GhostRigger.Native.NativeCore.Math/` verifies the shared native math
+  ABI from its real `Debug|x64` target without requiring the GUI.
 - `native/GhostRigger.Runtime/` owns the first native DLL boundary for renderer
   lifecycle, retained scene handles, mesh/texture-resource descriptors,
   mesh position/index buffer payloads, mesh vertex/index-range update payloads,
@@ -52,30 +56,30 @@ a launcher and native workspace first, not a rewrite of the application.
   mesh descriptors, retained-bounds query/culling diagnostics, and draw-list
   assembly statistics before triangle-accurate rendered picking and real draw
   submission are introduced.
-- `native/GhostRigger.Runtime.DEBUG/` verifies the native runtime ABI from
-  Visual Studio without requiring Python.
+- `native/GhostRigger.Runtime/` verifies the native runtime ABI from its real
+  `Debug|x64` target without requiring the GUI.
 - `native/GhostRigger.Renderer.Contracts/` owns the renderer-neutral backend,
   surface, draw-item, and frame-stat schema metadata that concrete renderer
   packages must share before D3D12/WGPU draw submission moves native.
-- `native/GhostRigger.Renderer.Contracts.DEBUG/` verifies the renderer contract
-  ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.Contracts/` verifies the renderer contract ABI
+  from its real `Debug|x64` target without requiring the GUI.
 - `native/GhostRigger.Renderer.Null/` owns the first concrete renderer backend
   package behind the renderer contract boundary. It is diagnostic-only and does
   not own GPU devices or draw submission.
-- `native/GhostRigger.Renderer.Null.DEBUG/` verifies the diagnostic renderer
-  backend ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.Null/` verifies the diagnostic renderer backend
+  ABI from its real `Debug|x64` target without requiring the GUI.
 - `native/GhostRigger.Renderer.ModernGL/` owns the Phase 1 renderer package
   boundary for the existing Python ModernGL adapter. It reports package
   capabilities, backend metadata, and adapter-bridge fallback metadata while
   keeping ModernGL context/device ownership in Python.
-- `native/GhostRigger.Renderer.ModernGL.DEBUG/` verifies the ModernGL renderer
-  package ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.ModernGL/` verifies the ModernGL renderer package
+  ABI from its real `Debug|x64` target without requiring the GUI.
 - `native/GhostRigger.Renderer.PyGFX/` owns the Phase 1 renderer package
   boundary for the existing Python PyGFX/WGPU adapter. It reports package
   capabilities, backend metadata, and adapter-bridge fallback metadata while
   keeping PyGFX/WGPU device ownership in Python.
-- `native/GhostRigger.Renderer.PyGFX.DEBUG/` verifies the PyGFX renderer
-  package ABI from Visual Studio without requiring Python.
+- `native/GhostRigger.Renderer.PyGFX/` verifies the PyGFX renderer package ABI
+  from its real `Debug|x64` target without requiring the GUI.
 - `native/GhostRigger.Renderer.D3D12/` owns the first hardware renderer backend
   package boundary behind the renderer contract boundary. It can probe DXGI
   adapters, probe D3D12 feature-level 12_0 device-readiness without retaining a
@@ -128,8 +132,8 @@ a launcher and native workspace first, not a rewrite of the application.
   recording metadata export, guarded draw-submission readiness metadata export,
   guarded post-draw frame/accounting readiness metadata export, and
   device-requirement metadata from Visual Studio without requiring Python.
-- `native/templates/` owns the Phase 1 scaffolding for future native DLL and
-  DEBUG executable projects.
+- `native/templates/` owns the Phase 1 scaffolding for future native DLL
+  projects and real-project Debug verification targets.
 - `src.adapters.native_core.package_registry` detects native package
   availability and capability metadata without starting the GUI. It now exposes
   a reusable package spec so future `GhostRigger.Native.NativeCore.*`,

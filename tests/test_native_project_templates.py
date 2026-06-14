@@ -137,7 +137,7 @@ def test_tools_retargeting_project_scaffold_matches_phase_one_boundary() -> None
     ).read_text(encoding="utf-8")
 
     assert "GhostRigger.Tools.Retargeting" in solution
-    assert "GhostRigger.Tools.Retargeting.DEBUG" in solution
+    assert "GhostRigger.Tools.Retargeting.DEBUG" not in solution
     assert "<TargetName>GhostRigger.Tools.Retargeting</TargetName>" in project
     assert "GHOSTRIGGER_TOOLS_RETARGETING_EXPORTS" in project
     assert "<TargetName>GhostRigger.Tools.Retargeting.DEBUG</TargetName>" in debug_project
@@ -203,7 +203,7 @@ def test_tools_export_project_scaffold_matches_phase_one_boundary() -> None:
     ).read_text(encoding="utf-8")
 
     assert "GhostRigger.Tools.Export" in solution
-    assert "GhostRigger.Tools.Export.DEBUG" in solution
+    assert "GhostRigger.Tools.Export.DEBUG" not in solution
     assert "<TargetName>GhostRigger.Tools.Export</TargetName>" in project
     assert "GHOSTRIGGER_TOOLS_EXPORT_EXPORTS" in project
     assert "<TargetName>GhostRigger.Tools.Export.DEBUG</TargetName>" in debug_project
@@ -269,7 +269,7 @@ def test_tools_character_builder_project_scaffold_matches_phase_one_boundary() -
     ).read_text(encoding="utf-8")
 
     assert "GhostRigger.Tools.CharacterBuilder" in solution
-    assert "GhostRigger.Tools.CharacterBuilder.DEBUG" in solution
+    assert "GhostRigger.Tools.CharacterBuilder.DEBUG" not in solution
     assert "<TargetName>GhostRigger.Tools.CharacterBuilder</TargetName>" in project
     assert "GHOSTRIGGER_TOOLS_CHARACTER_BUILDER_EXPORTS" in project
     assert "<TargetName>GhostRigger.Tools.CharacterBuilder.DEBUG</TargetName>" in debug_project
@@ -335,7 +335,7 @@ def test_windows_main_window_project_scaffold_matches_phase_one_boundary() -> No
     ).read_text(encoding="utf-8")
 
     assert "GhostRigger.Windows.MainWindow" in solution
-    assert "GhostRigger.Windows.MainWindow.DEBUG" in solution
+    assert "GhostRigger.Windows.MainWindow.DEBUG" not in solution
     assert "<TargetName>GhostRigger.Windows.MainWindow</TargetName>" in project
     assert "GHOSTRIGGER_WINDOWS_MAIN_WINDOW_EXPORTS" in project
     assert "<TargetName>GhostRigger.Windows.MainWindow.DEBUG</TargetName>" in debug_project
@@ -444,7 +444,7 @@ def test_extra_window_project_scaffolds_match_phase_one_boundaries() -> None:
         validator = (debug_dir / validator_name).read_text(encoding="utf-8")
 
         assert project_name in solution
-        assert f"{project_name}.DEBUG" in solution
+        assert f"{project_name}.DEBUG" not in solution
         assert f"<TargetName>{project_name}</TargetName>" in project
         assert export_define in project
         assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
@@ -507,7 +507,7 @@ def test_browser_tool_project_scaffolds_match_phase_one_boundaries() -> None:
         validator = (debug_dir / validator_name).read_text(encoding="utf-8")
 
         assert project_name in solution
-        assert f"{project_name}.DEBUG" in solution
+        assert f"{project_name}.DEBUG" not in solution
         assert f"<TargetName>{project_name}</TargetName>" in project
         assert export_define in project
         assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
@@ -597,7 +597,7 @@ def test_scene_workbench_tool_project_scaffolds_match_phase_one_boundaries() -> 
         validator = (debug_dir / validator_name).read_text(encoding="utf-8")
 
         assert project_name in solution
-        assert f"{project_name}.DEBUG" in solution
+        assert f"{project_name}.DEBUG" not in solution
         assert f"<TargetName>{project_name}</TargetName>" in project
         assert export_define in project
         assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
@@ -688,7 +688,7 @@ def test_final_phase_one_tool_project_scaffolds_match_phase_one_boundaries() -> 
         validator = (debug_dir / validator_name).read_text(encoding="utf-8")
 
         assert project_name in solution
-        assert f"{project_name}.DEBUG" in solution
+        assert f"{project_name}.DEBUG" not in solution
         assert f"<TargetName>{project_name}</TargetName>" in project
         assert export_define in project
         assert f"<TargetName>{project_name}.DEBUG</TargetName>" in debug_project
@@ -716,7 +716,7 @@ def test_native_template_readme_documents_release_output_rule() -> None:
     readme = (TEMPLATE_DIR / "README.md").read_text(encoding="utf-8")
 
     assert "Release output contains only `.exe`, `.dll`, and `.lib` files" in readme
-    assert "must not have `Release|Win32.Build.0`" in readme
+    assert "`.DEBUG` application projects must not be added to the solution" in readme
 
 
 def test_native_host_project_emits_product_executable_name() -> None:
@@ -2089,7 +2089,7 @@ def test_renderer_d3d12_exports_guarded_post_draw_frame_accounting_readiness_met
     )
 
 
-def test_native_debug_validator_projects_are_not_built_in_release() -> None:
+def test_native_debug_validator_projects_are_not_in_solution() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
 
     debug_project_guids = {
@@ -2129,5 +2129,4 @@ def test_native_debug_validator_projects_are_not_built_in_release() -> None:
     }
 
     for guid in debug_project_guids:
-        assert f"{guid}.Release|Win32.Build.0" not in solution
-        assert f"{guid}.Release|x64.Build.0" not in solution
+        assert guid not in solution

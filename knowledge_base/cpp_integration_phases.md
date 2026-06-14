@@ -75,7 +75,7 @@ The Visual Studio solution should grow as a set of deliberately small projects:
 | Shared native core | `.lib` or `.dll` | Math, memory helpers, handles, diagnostics packets, common resource descriptors | UI decisions, game-specific guesses |
 | Toolbox native package | `.dll` or `.pyd` | One feature system such as animation runtime, model runtime, skinning, picking, export/readback helper | Unrelated toolbox behavior |
 | Renderer package | `.dll` | One renderer backend and its GPU/device/resource implementation | Python UI state, non-renderer workflow policy |
-| DEBUG project | `.exe` | Native ABI and project-level regression checks without Python/GUI | Product workflow replacement |
+| Debug configuration | real package output | Native ABI and project-level regression checks without Python/GUI | Product workflow replacement or parallel `.DEBUG` solution app |
 
 Each new native project must declare:
 
@@ -87,7 +87,7 @@ Each new native project must declare:
   or `src/core/rendering`.
 - Python bridge method: C ABI, `.pyd`, host module, or shared-handle API.
 - Data ownership: which side owns allocation, mutation, lifetime, and cleanup.
-- Verification gate: native DEBUG executable, targeted Python test, MCP comparison, and
+- Verification gate: native Debug target, targeted Python test, MCP comparison, and
   visible app check where applicable.
 
 ## Shared-System Rule
@@ -232,35 +232,35 @@ Current completed foundation:
   and does not record draws or enable real draw submission. `Present` is only
   reachable through the guarded present-call diagnostic after prior swap-chain,
   back-buffer, RTV, clear-pass, and fence readiness gates pass.
-- `GhostRigger.Native.NativeCore.DEBUG.exe` validates the shared native core ABI without
+- `GhostRigger.Native.NativeCore` Debug-target ABI check validates the shared native core ABI without
   Python or the GUI.
-- `GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe` validates the shared
+- `GhostRigger.Native.NativeCore.Diagnostics` Debug-target ABI check validates the shared
   native diagnostics ABI without Python or the GUI.
-- `GhostRigger.Native.NativeCore.Math.DEBUG.exe` validates the shared native
+- `GhostRigger.Native.NativeCore.Math` Debug-target ABI check validates the shared native
   math ABI without Python or the GUI.
-- `GhostRigger.Runtime.Shared.Contracts.DEBUG.exe` validates the shared runtime contract ABI
+- `GhostRigger.Runtime.Shared.Contracts` Debug-target ABI check validates the shared runtime contract ABI
   without Python or the GUI.
-- `GhostRigger.Runtime.Shared.Descriptors.DEBUG.exe` validates the shared
+- `GhostRigger.Runtime.Shared.Descriptors` Debug-target ABI check validates the shared
   runtime descriptor ABI without Python or the GUI.
-- `GhostRigger.Runtime.Shared.Resources.DEBUG.exe` validates the shared runtime
+- `GhostRigger.Runtime.Shared.Resources` Debug-target ABI check validates the shared runtime
   resource ABI without Python or the GUI.
-- `GhostRigger.Renderer.Contracts.DEBUG.exe` validates the renderer contract ABI
+- `GhostRigger.Renderer.Contracts` Debug-target ABI check validates the renderer contract ABI
   without Python or the GUI.
-- `GhostRigger.Renderer.Null.DEBUG.exe` validates the diagnostic renderer
+- `GhostRigger.Renderer.Null` Debug-target ABI check validates the diagnostic renderer
   backend ABI without Python or the GUI.
 - `GhostRigger.Renderer.ModernGL.dll` exists as the Phase 1 renderer package
   boundary for the existing Python ModernGL adapter. It reports renderer package
   capabilities, backend metadata, and adapter-bridge fallback metadata while
   keeping ModernGL context/device ownership in Python.
-- `GhostRigger.Renderer.ModernGL.DEBUG.exe` validates the ModernGL renderer
+- `GhostRigger.Renderer.ModernGL` Debug-target ABI check validates the ModernGL renderer
   package ABI without Python or the GUI.
 - `GhostRigger.Renderer.PyGFX.dll` exists as the Phase 1 renderer package
   boundary for the existing Python PyGFX/WGPU adapter. It reports renderer
   package capabilities, backend metadata, and adapter-bridge fallback metadata
   while keeping PyGFX/WGPU device ownership in Python.
-- `GhostRigger.Renderer.PyGFX.DEBUG.exe` validates the PyGFX renderer package
+- `GhostRigger.Renderer.PyGFX` Debug-target ABI check validates the PyGFX renderer package
   ABI without Python or the GUI.
-- `GhostRigger.Renderer.D3D12.DEBUG.exe` validates the D3D12 renderer package
+- `GhostRigger.Renderer.D3D12` Debug-target ABI check validates the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
   queue/swap-chain readiness export, diagnostic context create/destroy/export,
   descriptor-heap/command-allocator readiness export, command-list readiness
@@ -282,7 +282,7 @@ Current completed foundation:
   guarded post-draw frame/accounting readiness metadata export,
   failure-diagnostic export, and device-requirement metadata
   without Python or the GUI.
-- `GhostRigger.Runtime.DEBUG.exe` validates the runtime ABI without Python.
+- `GhostRigger.Runtime` Debug-target ABI check validates the runtime ABI without Python.
 - Native handle/retained-scene bridge work has begun through the runtime
   contract.
 - `src.adapters.native_core.package_registry` can detect
@@ -301,14 +301,14 @@ Current completed foundation:
   boundary. It reports Retarget Workbench owner metadata, package capabilities,
   and a solve-packet schema placeholder while keeping native solve execution
   disabled and requiring the Python Retarget Workbench fallback.
-- `GhostRigger.Tools.Retargeting.DEBUG.exe` validates the Retargeting toolbox
+- `GhostRigger.Tools.Retargeting` Debug-target ABI check validates the Retargeting toolbox
   package ABI, owner-boundary metadata, capabilities export, and solve-packet
   schema placeholder without Python or the GUI.
 - `GhostRigger.Tools.Export.dll` exists as the native toolbox package boundary
   for export and validation helpers. It reports export workflow owner metadata,
   package capabilities, and a preflight-packet schema placeholder while keeping
   native file writes disabled and requiring the Python export fallback.
-- `GhostRigger.Tools.Export.DEBUG.exe` validates the Export toolbox package
+- `GhostRigger.Tools.Export` Debug-target ABI check validates the Export toolbox package
   ABI, owner-boundary metadata, capabilities export, and preflight-packet schema
   placeholder without Python or the GUI.
 - `GhostRigger.Tools.CharacterBuilder.dll` exists as the native toolbox package
@@ -316,7 +316,7 @@ Current completed foundation:
   metadata, package capabilities, and an autofit-packet schema placeholder while
   keeping native autofit disabled and requiring the Python Character Studio
   fallback.
-- `GhostRigger.Tools.CharacterBuilder.DEBUG.exe` validates the Character
+- `GhostRigger.Tools.CharacterBuilder` Debug-target ABI check validates the Character
   Builder toolbox package ABI, owner-boundary metadata, capabilities export, and
   autofit-packet schema placeholder without Python or the GUI.
 - `GhostRigger.Tools.ContentBrowser.dll`,
@@ -325,7 +325,7 @@ Current completed foundation:
   package boundaries. They report package capabilities, owner-boundary metadata,
   and catalogue/table schema placeholders while keeping native indexing and
   table queries disabled and requiring Python fallback.
-- Their `.DEBUG.exe` validators verify the browser/catalogue package ABIs,
+- Their Debug-target ABI checks verify the browser/catalogue package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders without
   Python or the GUI.
 - `GhostRigger.Tools.SceneInformation.dll`,
@@ -336,7 +336,7 @@ Current completed foundation:
   module-mesh packet schema placeholders while keeping native scene querying,
   property edits, light/camera evaluation, and module-mesh indexing disabled and
   requiring Python fallback.
-- Their `.DEBUG.exe` validators verify the scene/workbench package ABIs,
+- Their Debug-target ABI checks verify the scene/workbench package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders without
   Python or the GUI.
 - `GhostRigger.Tools.BodyAttachmentSystem.dll`,
@@ -349,14 +349,14 @@ Current completed foundation:
   packet schema placeholders while keeping native attachment evaluation,
   node-tree queries, sprite-material evaluation, pivot edits, and sequence
   evaluation disabled and requiring Python fallback.
-- Their `.DEBUG.exe` validators verify the remaining toolbox package ABIs,
+- Their Debug-target ABI checks verify the remaining toolbox package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders without
   Python or the GUI.
 - `GhostRigger.Windows.MainWindow.dll` exists as the Phase 1 native window
   package boundary for main-window host services. It reports main-window owner
   metadata, package capabilities, and a host-service schema placeholder while
   keeping the Python/Qt main window as the visible shell owner.
-- `GhostRigger.Windows.MainWindow.DEBUG.exe` validates the main-window package
+- `GhostRigger.Windows.MainWindow` Debug-target ABI check validates the main-window package
   ABI, owner-boundary metadata, capabilities export, and host-service schema
   placeholder without Python or the GUI.
 - `GhostRigger.Windows.LevelEditor.dll`,
@@ -366,7 +366,7 @@ Current completed foundation:
   package boundaries for the extra standalone/workbench windows. They report
   package capabilities, owner-boundary metadata, and host-service schema
   placeholders while keeping the Python/Qt windows as the visible shell owners.
-- Their `.DEBUG.exe` validators verify the extra window package ABIs,
+- Their Debug-target ABI checks verify the extra window package ABIs,
   owner-boundary metadata, capabilities exports, and host-service schema
   placeholders without Python or the GUI.
 - `native/GhostRigger.NativeModulePackages.json` records the full Phase 1
@@ -378,7 +378,7 @@ Current completed foundation:
   version/capability metadata, owner-boundary metadata, and dependency-scan
   schema metadata while keeping `native_implementation_enabled:false` and
   `python_fallback_required:true`.
-- Their `.DEBUG.exe` validators verify the generated module package ABIs,
+- Their Debug-target ABI checks verify the generated module package ABIs,
   owner-boundary metadata, and dependency-schema placeholders without Python or
   the GUI.
 - `native/GhostRigger.PythonPayloadManifest.json` records the Phase 1.5
@@ -407,8 +407,8 @@ Current completed foundation:
   audit directly to the console before Python emits the normal `main.py`
   startup log.
 - `native/templates/` contains Phase 1 Visual Studio project templates for
-  native DLL packages and DEBUG executables, with ownership metadata and
-  changelog requirements.
+  native DLL packages and real-project Debug verification targets, with
+  ownership metadata and changelog requirements.
 
 Native project naming foundation:
 
@@ -454,7 +454,8 @@ Required remaining foundation work:
   `GhostRigger.Renderer.Null` as the diagnostic backend pattern and
   `GhostRigger.Renderer.D3D12` as the first hardware backend boundary.
 - Use the native project templates for native toolbox DLLs, renderer DLLs, and
-  native DEBUG executables so future agents add projects consistently.
+  real-project Debug verification targets so future agents add projects
+  consistently.
 - Add version and capability negotiation to every native package that Python can
   load.
 - Add strict ownership documentation for all handle lifetimes crossing the
@@ -466,8 +467,8 @@ Phase 1 acceptance:
 
 - The solution builds Debug and Release x64.
 - Release solution output contains only shippable `.exe`, `.dll`, and `.lib`
-  files; it does not contain `.pdb`, `.exp`, or DEBUG validator executables.
-- Each native package has a DEBUG executable or a targeted ABI check.
+  files; it does not contain `.pdb`, `.exp`, or Debug-only validation artifacts.
+- Each native package has a real Debug target or a targeted ABI check.
 - Python can detect package availability and report capabilities for native
   packages without starting the GUI.
 - Missing native packages fall back cleanly.
@@ -507,7 +508,8 @@ Phase 2 acceptance:
   parsing or transform behavior replaces Python behavior.
 - Targeted Python tests cover adapters, fallback, diagnostics, and data
   marshalling.
-- Native DEBUG executables cover each DLL package independently.
+- Native Debug targets or targeted ABI checks cover each DLL package
+  independently.
 - Visible GhostRigger checks confirm viewport/workflow behavior for the affected
   surface.
 - Performance-sensitive paths show measurable improvement or lower frame-time
@@ -590,7 +592,7 @@ Before making any native system authoritative, confirm:
 - Handles have explicit lifetime rules.
 - Version/capability negotiation exists.
 - Missing-DLL and unsupported-feature fallback exists.
-- Targeted native DEBUG executable exists.
+- Targeted native Debug target or ABI check exists.
 - Targeted Python adapter test exists.
 - MCP comparison has been run for backend/model-pipeline truth when applicable.
 - Visible app workflow has been tested when UI/viewport/startup behavior is

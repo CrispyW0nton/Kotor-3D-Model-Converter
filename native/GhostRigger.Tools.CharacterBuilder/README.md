@@ -9,7 +9,7 @@ Phase 1 native toolbox package boundary for Character Studio helpers.
   validation metadata, and readback helper contracts. Python owns Character
   Studio UI, source asset selection, game semantics, save/export decisions, and
   MCP-backed validation.
-- Verification: `GhostRigger.Tools.CharacterBuilder.DEBUG`, targeted Python
+- Verification: `GhostRigger.Tools.CharacterBuilder` `Debug|x64` build, targeted Python
   package registry tests, backend truth checks before native helper output
   replaces Python behavior, and visible app checks only when UI/workflow
   behavior changes.

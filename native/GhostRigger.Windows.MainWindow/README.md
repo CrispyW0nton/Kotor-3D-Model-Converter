@@ -10,7 +10,7 @@ Phase 1 native window package boundary for main-window host services.
   routing metadata, and application-shell diagnostics. Python owns current Qt
   widgets, docks, menus, themes, layouts, window state, and user workflow
   orchestration.
-- Verification: `GhostRigger.Windows.MainWindow.DEBUG`, targeted Python package
+- Verification: `GhostRigger.Windows.MainWindow` `Debug|x64` build, targeted Python package
   registry tests, and visible app checks only when future slices change startup,
   theming, layout, docking, menus, or visible main-window workflow.
 

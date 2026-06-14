@@ -11,7 +11,7 @@ surface.
   selection metadata, and native bridge contracts. Python owns the current
   PyGFX/WGPU scene, Qt surface integration, renderer objects, and visible
   viewport workflow until a later parity gate moves ownership.
-- Verification: `GhostRigger.Renderer.PyGFX.DEBUG`, targeted Python package
+- Verification: `GhostRigger.Renderer.PyGFX` `Debug|x64` build, targeted Python package
   registry tests, and visible app checks only when future slices alter viewport
   behavior.
 

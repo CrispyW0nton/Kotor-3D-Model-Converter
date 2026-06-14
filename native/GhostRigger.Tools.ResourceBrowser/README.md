@@ -8,7 +8,7 @@ Phase 1 native toolbox package boundary for the Resource Browser.
 - Data ownership: C++ owns future resource catalogue diagnostics, resource row
   packet metadata, and filter helper contracts. Python owns resource discovery,
   game semantics, selections, previews, and visible workflow.
-- Verification: `GhostRigger.Tools.ResourceBrowser.DEBUG`, targeted Python
+- Verification: `GhostRigger.Tools.ResourceBrowser` `Debug|x64` build, targeted Python
   package registry tests, and visible app checks only when UI/workflow behavior
   changes.
 

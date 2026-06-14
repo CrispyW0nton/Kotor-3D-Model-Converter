@@ -3,14 +3,14 @@
 These templates are Phase 1 scaffolding for new C++ packages in
 `GhostRigger.sln`. They are intentionally small and explicit so future agents
 create native projects with the same output layout, warning level, language
-standard, ownership metadata, and DEBUG executable expectations.
+standard, ownership metadata, and Debug-configuration verification expectations.
 
 Use these templates when adding:
 
 - a shared native package used by multiple renderer/toolbox systems;
 - a renderer DLL package;
 - a toolbox DLL package;
-- a package DEBUG executable.
+- a package Debug-configuration verification contract.
 
 The anchor native projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore`,
 and `GhostRigger.Runtime`. Shared follow-on packages should use
@@ -47,13 +47,12 @@ matching template and replace every `{{TOKEN}}`.
 ## Mandatory New Project Checklist
 
 1. Add the project directory under `native/{{PROJECT_NAME}}/`.
-2. Add a DEBUG executable under `native/{{PROJECT_NAME}}DEBUG/` unless the
-   project is DEBUG-only.
+2. Do not add a parallel `.DEBUG` application project. Debug validation runs
+   through the real project's `Debug|x64` configuration in `GhostRigger.sln`.
 3. Put public headers in `Public/`, private implementation files in `Private/`,
    and embedded Python copies in `Python/`.
-4. Add both projects to `GhostRigger.sln` with Debug/Release and Win32/x64
-   mappings. DEBUG executable projects must not have `Release|Win32.Build.0`
-   or `Release|x64.Build.0` entries in the solution.
+4. Add the package project to `GhostRigger.sln` with Debug/Release and Win32/x64
+   mappings. `.DEBUG` application projects must not be added to the solution.
 5. Add `GhostRigger.Native.NativeCore` as a dependency when the package uses shared
    handles, diagnostics, or capability contracts.
 6. Add Python detection through `src.adapters.native_core.package_registry`
@@ -61,7 +60,7 @@ matching template and replace every `{{TOKEN}}`.
 7. Update `knowledge_base/cpp_integration_phases.md`, `native/README.md`, and
    `CHANGES.md`.
 8. Include `Owner: LordVaderCW` and `Intersects:` in the changelog entry.
-9. Run Debug x64 plus the package DEBUG executable, then run Release x64 and
+9. Run the real project in Debug x64, then run Release x64 and
    confirm the Release output contains only `.exe`, `.dll`, and `.lib` files.
 
 ## Ownership Header
@@ -76,7 +75,7 @@ Data ownership:
 - C++ owns:
 - Python owns:
 Verification:
-- Native DEBUG:
+- Native Debug target:
 - Python adapter test:
 - Visible app check:
 ```

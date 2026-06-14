@@ -8,7 +8,7 @@ Phase 1 native toolbox package boundary for the Content Browser.
 - Data ownership: C++ owns future catalogue query diagnostics, asset index
   packet metadata, and filter/sort helper contracts. Python owns the current UI,
   resource discovery policy, game semantics, selections, and visible workflow.
-- Verification: `GhostRigger.Tools.ContentBrowser.DEBUG`, targeted Python
+- Verification: `GhostRigger.Tools.ContentBrowser` `Debug|x64` build, targeted Python
   package registry tests, and visible app checks only when UI/workflow behavior
   changes.
 

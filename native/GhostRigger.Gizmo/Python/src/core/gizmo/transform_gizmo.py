@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .gizmo_mode import GizmoMode, TransformSpace, cycle_gizmo_mode, normalize_gizmo_mode
+from .gizmo_mode import GizmoMode, TransformSpace, cycle_gizmo_mode, normalize_gizmo_mode, resolve_gizmo_origin
 from .gizmo_picker import GizmoPicker
 from .gizmo_renderer import GizmoRenderer
 from .transform_controller import TransformController
@@ -64,20 +64,13 @@ class TransformGizmo:
             self.position = (0.0, 0.0, 0.0)
             self.orientation = (0.0, 0.0, 0.0, 1.0)
             return
-        if (
-            (bool(getattr(obj, "is_light", False)) or bool(getattr(obj, "is_camera", False)))
-            and str(getattr(obj, "_gr_pivot_edit_mode", "") or "") != "affect_pivot_only"
-        ):
-            position = getattr(obj, "_gr_gizmo_world_position", None)
-            if position is None:
-                position = getattr(obj, "position", (0.0, 0.0, 0.0))
-        else:
-            position = getattr(obj, "_gr_pivot_world", None)
-        if position is None:
-            position = getattr(obj, "_gr_gizmo_world_position", None)
-        if position is None:
-            position = getattr(obj, "position", (0.0, 0.0, 0.0))
-        self.position = tuple(float(v) for v in position)
+        self.position = resolve_gizmo_origin(
+            getattr(obj, "position", (0.0, 0.0, 0.0)),
+            getattr(obj, "_gr_pivot_world", None),
+            getattr(obj, "_gr_gizmo_world_position", None),
+            is_helper_object=bool(getattr(obj, "is_light", False)) or bool(getattr(obj, "is_camera", False)),
+            affect_pivot_only=str(getattr(obj, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only",
+        )
         self.orientation = tuple(float(v) for v in getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)))
         basis = getattr(obj, "_gr_axis_basis", None)
         if basis is not None:

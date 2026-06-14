@@ -8,7 +8,7 @@ Phase 1 native toolbox package boundary for export and validation helpers.
 - Data ownership: C++ owns diagnostic readback, packed-buffer validation, and
   export preflight packet metadata. Python owns export decisions, write prompts,
   file-format policy, game-resource semantics, and final writer orchestration.
-- Verification: `GhostRigger.Tools.Export.DEBUG`, targeted Python package
+- Verification: `GhostRigger.Tools.Export` `Debug|x64` build, targeted Python package
   registry tests, backend truth checks before any native helper becomes
   authoritative, and visible app checks only when UI/workflow behavior changes.
 

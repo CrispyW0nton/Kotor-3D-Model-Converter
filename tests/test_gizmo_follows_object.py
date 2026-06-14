@@ -49,6 +49,24 @@ def test_gizmo_origin_prefers_active_pivot_world() -> None:
     assert gizmo.get_gizmo_origin_world() == pytest.approx((12.0, 3.0, 0.0))
 
 
+def test_helper_gizmo_origin_prefers_helper_center_unless_pivot_editing() -> None:
+    light = SimpleNamespace(
+        position=(10.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        is_light=True,
+        _gr_pivot_world=(12.0, 3.0, 0.0),
+        _gr_gizmo_world_position=(14.0, 5.0, 1.0),
+    )
+    gizmo = TransformGizmo()
+    gizmo.set_selected_object(light)
+
+    assert gizmo.get_gizmo_origin_world() == pytest.approx((14.0, 5.0, 1.0))
+
+    light._gr_pivot_edit_mode = "affect_pivot_only"
+    gizmo.update_from_object_transform()
+    assert gizmo.get_gizmo_origin_world() == pytest.approx((12.0, 3.0, 0.0))
+
+
 def test_translate_drag_moves_object_and_gizmo_pivot_together() -> None:
     node = SimpleNamespace(
         position=(0.0, 0.0, 0.0),

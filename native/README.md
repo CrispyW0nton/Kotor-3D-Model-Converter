@@ -13,6 +13,11 @@ Python 3.13 runtime in `GhostRigger.exe` and runs the existing
 Python/Qt application, but the process, debugger target, and future graphics
 integration point now belong to the Visual Studio solution.
 
+Current Debug policy: `Debug` means the real project configuration run through
+Visual Studio. Do not add parallel `.DEBUG` application projects to
+`GhostRigger.sln`; use the owning package target in `Debug|x64` plus targeted
+Python/ctypes ABI tests for native verification.
+
 The first native runtime project is `GhostRigger.Runtime`, a DLL with a tiny C
 ABI used by Python to query native runtime version, lifecycle, retained scene
 handles, mesh/texture-resource descriptors, skin-palette descriptors,
@@ -59,7 +64,7 @@ The anchor C++ projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore
 `GhostRigger.Native.NativeCore.{System}`, while shared runtime contracts should be named
 `GhostRigger.Runtime.Shared.{System}`. Use `native/templates/` when adding those packages
 so output folders, warning levels, dependency shape, ownership metadata, and
-DEBUG executable expectations stay consistent.
+Debug target expectations stay consistent.
 
 Native toolbox migrations from Python must be named
 `GhostRigger.Tools.{Toolname}` and should stay focused on one product tool, such
@@ -263,14 +268,14 @@ build\vs\x64\Debug\GhostRigger.Runtime.dll
 ```
 
 Release builds are packaging-clean by default. The Release output folder should
-contain only shippable `.exe`, `.dll`, and `.lib` files. DEBUG validator
-executables, `.pdb`, and `.exp` files belong outside the Release output.
+contain only shippable `.exe`, `.dll`, and `.lib` files. Debug-only validation
+artifacts, `.pdb`, and `.exp` files belong outside the Release output.
 
 Set `GHOSTRIGGER_NATIVE_RUNTIME` to a specific DLL path when testing a runtime
 outside the default Visual Studio output folders.
 
-Build and run `GhostRigger.Runtime.DEBUG` to verify the exported C ABI without
-starting Python. It links against `GhostRigger.Runtime` and checks version,
+Build `GhostRigger.Runtime` in `Debug|x64` and run its targeted ABI checks to
+verify the exported C ABI without starting Python. The checks cover version,
 capabilities, lifecycle, retained scene lifecycle, mesh/texture descriptor
 add/remove, mesh bounds diagnostics, mesh position/index buffer payload,
 mesh vertex/index-range update diagnostics, transform payload with transformed bounds, retained skinning influence
@@ -292,90 +297,90 @@ selection, resource upload-plan payloads, diagnostic device-resource allocation
 payloads, diagnostic device-resource upload-commit payloads, diagnostic
 device-resource transition payloads, and diagnostics exports.
 
-Build and run `GhostRigger.Native.NativeCore.DEBUG` to verify the shared native core ABI
+Build `GhostRigger.Native.NativeCore` in `Debug|x64` to verify the shared native core ABI
 without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Native.NativeCore.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Native.NativeCore.dll
 ```
 
 Python can query the shared native core package without starting the GUI through
 `src.adapters.native_core.package_registry.query_native_core_status()`.
 
-Build and run `GhostRigger.Native.NativeCore.Diagnostics.DEBUG` to verify the
+Build `GhostRigger.Native.NativeCore.Diagnostics` in `Debug|x64` to verify the
 shared diagnostics ABI without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Native.NativeCore.Diagnostics.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Native.NativeCore.Diagnostics.dll
 ```
 
 Python can query the diagnostics package through
 `src.adapters.native_core.package_registry.query_native_core_diagnostics_status()`.
 
-Build and run `GhostRigger.Native.NativeCore.Math.DEBUG` to verify the shared
+Build `GhostRigger.Native.NativeCore.Math` in `Debug|x64` to verify the shared
 math ABI without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Native.NativeCore.Math.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Native.NativeCore.Math.dll
 ```
 
 Python can query the math package through
 `src.adapters.native_core.package_registry.query_native_core_math_status()`.
 
-Build and run `GhostRigger.Runtime.Shared.Descriptors.DEBUG` to verify the
+Build `GhostRigger.Runtime.Shared.Descriptors` in `Debug|x64` to verify the
 shared runtime descriptor ABI without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Runtime.Shared.Descriptors.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Runtime.Shared.Descriptors.dll
 ```
 
 Python can query the descriptor package through
 `src.adapters.native_core.package_registry.query_runtime_shared_descriptors_status()`.
 
-Build and run `GhostRigger.Runtime.Shared.Resources.DEBUG` to verify the shared
+Build `GhostRigger.Runtime.Shared.Resources` in `Debug|x64` to verify the shared
 runtime resource ABI without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Runtime.Shared.Resources.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Runtime.Shared.Resources.dll
 ```
 
 Python can query the resource package through
 `src.adapters.native_core.package_registry.query_runtime_shared_resources_status()`.
 
-Build and run `GhostRigger.Renderer.Contracts.DEBUG` to verify the renderer
+Build `GhostRigger.Renderer.Contracts` in `Debug|x64` to verify the renderer
 contract ABI without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Renderer.Contracts.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Renderer.Contracts.dll
 ```
 
 Python can query the renderer contract package through
 `src.adapters.native_core.package_registry.query_renderer_contracts_status()`.
 
-Build and run `GhostRigger.Renderer.Null.DEBUG` to verify the diagnostic
+Build `GhostRigger.Renderer.Null` in `Debug|x64` to verify the diagnostic
 renderer backend ABI without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Renderer.Null.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Renderer.Null.dll
 ```
 
 Python can query the diagnostic renderer backend package through
 `src.adapters.native_core.package_registry.query_renderer_null_status()`.
 
-Build and run `GhostRigger.Renderer.ModernGL.DEBUG` and
-`GhostRigger.Renderer.PyGFX.DEBUG` to verify the Python-adapter renderer package
+Build `GhostRigger.Renderer.ModernGL` and `GhostRigger.Renderer.PyGFX` in
+`Debug|x64` to verify the Python-adapter renderer package
 ABI boundaries without starting Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Renderer.ModernGL.DEBUG.exe
-build\vs\x64\Debug\GhostRigger.Renderer.PyGFX.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Renderer.ModernGL.dll
+build\vs\x64\Debug\GhostRigger.Renderer.PyGFX.dll
 ```
 
 Python can query those renderer packages through
 `src.adapters.native_core.package_registry.query_renderer_moderngl_status()` and
 `src.adapters.native_core.package_registry.query_renderer_pygfx_status()`.
 
-Build and run `GhostRigger.Renderer.D3D12.DEBUG` to verify the D3D12 renderer
+Build `GhostRigger.Renderer.D3D12` in `Debug|x64` to verify the D3D12 renderer
 package ABI, DXGI adapter-probe export, D3D12 device-readiness export,
 queue/swap-chain readiness export, diagnostic context create/destroy/export,
 descriptor-heap/command-allocator readiness export, command-list readiness
@@ -390,7 +395,7 @@ failure-diagnostic export, and device-requirement metadata without starting
 Python or the GUI:
 
 ```text
-build\vs\x64\Debug\GhostRigger.Renderer.D3D12.DEBUG.exe
+build\vs\x64\Debug\GhostRigger.Renderer.D3D12.dll
 ```
 
 Python can query the D3D12 renderer package through

@@ -5,9 +5,9 @@ Owner package: native/GhostRigger.Gizmo
 Source package: src/core/gizmo
 Bridge method: C ABI DLL
 Data ownership:
-- C++ owns: Phase 1 module-boundary metadata, dependency-scan metadata, and native-readiness diagnostics.
-- Python owns: current implementation, object lifetimes, workflow policy, UI state, and runtime behavior.
+- C++ owns: gizmo mode/space contracts, native gizmo-origin resolution, module-boundary metadata, dependency-scan metadata, and native-readiness diagnostics.
+- Python owns: TransformGizmo object state, TransformController drag math, viewport event routing, draw data, picking, object lifetimes, workflow policy, UI state, and runtime mutation.
 Verification:
-- Native DEBUG: $name.DEBUG.exe
-- Python adapter test: 	ests/test_native_module_package_sweep.py
-- Visible app check: required before enabling native implementation behavior.
+- Native Debug target: build this project in `Debug|x64` through `GhostRigger.sln`.
+- Python adapter test: `tests/test_native_gizmo_mode.py`, `tests/test_gizmo_follows_object.py`.
+- Visible app check: required before porting this behavior to D3D or PyGFX.

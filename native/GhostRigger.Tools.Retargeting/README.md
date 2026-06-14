@@ -9,6 +9,6 @@ Data ownership:
 - Python owns: KOTOR animation source selection, UI state, user workflow, export policy, project/session persistence, and MCP-backed truth checks.
 
 Verification:
-- Native DEBUG: `GhostRigger.Tools.Retargeting.DEBUG`.
+- Native Debug target: build `GhostRigger.Tools.Retargeting` in `Debug|x64` through `GhostRigger.sln`.
 - Python adapter test: targeted package availability and missing-DLL fallback checks.
 - Visible app check: skipped for this Phase 1 package-boundary slice because no UI/workflow behavior changes.

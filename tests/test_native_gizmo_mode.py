@@ -25,6 +25,17 @@ def _load_gizmo_dll() -> ctypes.CDLL:
     dll.gr_gizmo_normalize_transform_space.restype = ctypes.c_char_p
     dll.gr_gizmo_transform_space_values_json.argtypes = []
     dll.gr_gizmo_transform_space_values_json.restype = ctypes.c_char_p
+    dll.gr_gizmo_resolve_origin.argtypes = [
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.POINTER(ctypes.c_double),
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_double),
+    ]
+    dll.gr_gizmo_resolve_origin.restype = ctypes.c_int
     dll.gr_gizmo_capabilities_json.argtypes = []
     dll.gr_gizmo_capabilities_json.restype = ctypes.c_char_p
     dll.gr_gizmo_mode_contracts_schema_json.argtypes = []
@@ -88,6 +99,32 @@ def test_native_transform_space_values_match_python() -> None:
     assert dll.gr_gizmo_normalize_transform_space(b"not-real").decode("utf-8") == TransformSpace.WORLD.value
 
 
+def test_native_gizmo_origin_resolution_matches_python() -> None:
+    assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
+    dll = _load_gizmo_dll()
+    Vec3 = ctypes.c_double * 3
+
+    def resolve(position, pivot, gizmo, has_pivot, has_gizmo, helper, pivot_edit):
+        out = Vec3()
+        ok = dll.gr_gizmo_resolve_origin(
+            Vec3(*position),
+            Vec3(*(pivot or (0.0, 0.0, 0.0))),
+            Vec3(*(gizmo or (0.0, 0.0, 0.0))),
+            int(has_pivot),
+            int(has_gizmo),
+            int(helper),
+            int(pivot_edit),
+            out,
+        )
+        assert ok == 1
+        return (out[0], out[1], out[2])
+
+    assert resolve((1.0, 2.0, 3.0), (4.0, 5.0, 6.0), None, True, False, False, False) == (4.0, 5.0, 6.0)
+    assert resolve((1.0, 2.0, 3.0), (4.0, 5.0, 6.0), (7.0, 8.0, 9.0), True, True, True, False) == (7.0, 8.0, 9.0)
+    assert resolve((1.0, 2.0, 3.0), (4.0, 5.0, 6.0), (7.0, 8.0, 9.0), True, True, True, True) == (4.0, 5.0, 6.0)
+    assert resolve((1.0, 2.0, 3.0), None, (7.0, 8.0, 9.0), False, True, False, False) == (7.0, 8.0, 9.0)
+
+
 def test_native_gizmo_capabilities_document_python_fallback_scope() -> None:
     assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
     dll = _load_gizmo_dll()
@@ -97,8 +134,10 @@ def test_native_gizmo_capabilities_document_python_fallback_scope() -> None:
 
     assert capabilities["native_implementation_enabled"] is True
     assert capabilities["python_fallback_required"] is True
+    assert "gizmo_origin_resolution" in capabilities["capabilities"]
     assert "gizmo_mode_contracts" in capabilities["capabilities"]
     assert "TransformSpace values" in schema["native_scope"]
+    assert "gizmo origin resolution" in schema["native_scope"]
     assert "TransformController drag math" in schema["python_fallback"]
 
 
@@ -119,6 +158,12 @@ def test_python_gizmo_mode_helpers_prefer_native_contract(monkeypatch) -> None:
         def gr_gizmo_transform_space_values_json(self) -> bytes:
             return b'["native-world","native-local"]'
 
+        def gr_gizmo_resolve_origin(self, position, pivot, gizmo, has_pivot, has_gizmo, helper, pivot_edit, out) -> int:
+            out[0] = 31.0
+            out[1] = 32.0
+            out[2] = 33.0
+            return 1
+
     monkeypatch.setattr(gizmo_mode, "_native_gizmo", lambda: _NativeGizmoProbe())
 
     assert gizmo_mode.normalize_gizmo_mode("anything") is GizmoMode.SCALE
@@ -126,6 +171,7 @@ def test_python_gizmo_mode_helpers_prefer_native_contract(monkeypatch) -> None:
     assert gizmo_mode.gizmo_mode_values() == ("native-translate", "native-rotate")
     assert gizmo_mode.normalize_transform_space("anything") is TransformSpace.LOCAL
     assert gizmo_mode.transform_space_values() == ("native-world", "native-local")
+    assert gizmo_mode.resolve_gizmo_origin((1, 2, 3), (4, 5, 6), (7, 8, 9)) == (31.0, 32.0, 33.0)
 
 
 def test_python_gizmo_mode_helpers_fall_back_when_native_missing(monkeypatch) -> None:
@@ -136,3 +182,4 @@ def test_python_gizmo_mode_helpers_fall_back_when_native_missing(monkeypatch) ->
     assert gizmo_mode.gizmo_mode_values() == tuple(mode.value for mode in GizmoMode)
     assert gizmo_mode.normalize_transform_space("not-real") is TransformSpace.WORLD
     assert gizmo_mode.transform_space_values() == tuple(space.value for space in TransformSpace)
+    assert gizmo_mode.resolve_gizmo_origin((1, 2, 3), (4, 5, 6), (7, 8, 9)) == (4.0, 5.0, 6.0)

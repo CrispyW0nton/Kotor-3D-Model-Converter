@@ -11,7 +11,7 @@ surface.
   selection metadata, and native bridge contracts. Python owns the current
   ModernGL context, Qt surface integration, shader/runtime objects, and visible
   viewport workflow until a later parity gate moves ownership.
-- Verification: `GhostRigger.Renderer.ModernGL.DEBUG`, targeted Python package
+- Verification: `GhostRigger.Renderer.ModernGL` `Debug|x64` build, targeted Python package
   registry tests, and visible app checks only when future slices alter viewport
   behavior.
 

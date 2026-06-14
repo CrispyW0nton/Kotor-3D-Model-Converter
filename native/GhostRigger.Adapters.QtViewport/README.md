@@ -9,6 +9,6 @@ Data ownership:
 - Phase: P2 native completion.
 - Native implementation contract: `native_implementation_enabled=true`, `python_fallback_required=false`.
 Verification:
-- Native DEBUG: $name.DEBUG.exe
+- Native Debug target: build this project in `Debug|x64` through `GhostRigger.sln`.
 - Python adapter test: tests/test_native_module_package_sweep.py
 - Visible app check: required before enabling native implementation behavior.

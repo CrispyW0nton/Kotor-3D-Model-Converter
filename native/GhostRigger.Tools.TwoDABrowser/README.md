@@ -8,7 +8,7 @@ Phase 1 native toolbox package boundary for the 2DA Browser.
 - Data ownership: C++ owns future 2DA table query diagnostics, row/column
   packet metadata, and filter helper contracts. Python owns 2DA parsing policy,
   game semantics, editing workflow, selections, and visible UI.
-- Verification: `GhostRigger.Tools.TwoDABrowser.DEBUG`, targeted Python package
+- Verification: `GhostRigger.Tools.TwoDABrowser` `Debug|x64` build, targeted Python package
   registry tests, and visible app checks only when UI/workflow behavior changes.
 
 This package is diagnostic-only in Phase 1. It does not parse or edit 2DA files
