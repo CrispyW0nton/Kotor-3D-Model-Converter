@@ -12,6 +12,7 @@ from .sequence_manager import ensure_sequence_object_id
 from .sequence_model import GhostRiggerLevelSequence
 from .tracks.camera_cut_track import CameraCutTrack
 from .tracks.camera_property_track import CameraPropertyTrack
+from .tracks.character_track import CharacterTrack
 from .tracks.event_track import EventTrack
 from .tracks.light_property_track import LightPropertyTrack
 from .tracks.material_track import MaterialTrack
@@ -56,6 +57,7 @@ class SceneObjectResolver:
         objects: list[object] = []
         model = getattr(self.viewport, "model", None)
         if model is not None:
+            objects.append(model)
             try:
                 objects.extend(list(model.all_nodes()) if hasattr(model, "all_nodes") else [])
             except Exception:
@@ -104,6 +106,7 @@ class SequenceEvaluator:
         self.viewport = viewport
         self.resolver = SceneObjectResolver(viewport)
         self._captured: dict[str, ObjectState] = {}
+        self._character_engines: dict[tuple[int, str], Any] = {}
         self.restore_mode = "restore"
         self.last_warning = ""
         self.event_log: list[dict[str, Any]] = []
@@ -150,7 +153,7 @@ class SequenceEvaluator:
             for track in binding.tracks:
                 if track.locked or not track.enabled or track.muted:
                     continue
-                dirty.update(self._apply_track(binding, obj, track, frame))
+                dirty.update(self._apply_track(sequence, binding, obj, track, frame))
         if self._apply_master_tracks(sequence, frame):
             dirty.add("cameras")
         if fire_events and previous_frame is not None:
@@ -166,13 +169,15 @@ class SequenceEvaluator:
                     return sequence.binding_by_id(cut.camera_binding_id)
         return None
 
-    def _apply_track(self, binding: SequenceBinding, obj: object, track, frame: int) -> set[str]:
+    def _apply_track(self, sequence: GhostRiggerLevelSequence, binding: SequenceBinding, obj: object, track, frame: int) -> set[str]:
         value = track.evaluate(frame)
         if value is None:
             return set()
         if isinstance(track, TransformTrack):
             self._apply_transform(obj, value)
             return {"transforms"}
+        elif isinstance(track, CharacterTrack):
+            return self._apply_character_track(sequence, binding, obj, track, frame)
         elif isinstance(track, TransformPropertyTrack):
             self._apply_transform_property(obj, track.property_name, value)
             return {"transforms"}
@@ -189,6 +194,88 @@ class SequenceEvaluator:
             self._apply_material_property(obj, track.property_name, value)
             return {"materials"}
         return set()
+
+    def _apply_character_track(
+        self,
+        sequence: GhostRiggerLevelSequence,
+        binding: SequenceBinding,
+        obj: object,
+        track: CharacterTrack,
+        frame: int,
+    ) -> set[str]:
+        key = track.active_animation_key(frame)
+        if key is None or not isinstance(key.value, dict):
+            return set()
+        anim_name = str(key.value.get("animation") or "").strip()
+        if not anim_name:
+            return set()
+        viewport = self.viewport
+        if viewport is None or not hasattr(viewport, "set_animation_pose"):
+            return set()
+        model = self._character_animation_model(obj)
+        if model is None:
+            self.last_warning = f"No character model available for {binding.display_name}."
+            return set()
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            manager = self._resource_manager()
+            if manager is not None:
+                SuperModelResolver.configure(manager)
+            engine_key = (id(model), anim_name.lower())
+            engine = self._character_engines.get(engine_key)
+            if engine is None or getattr(engine, "model", None) is not model:
+                engine = AnimationEngine(model)
+                self._character_engines[engine_key] = engine
+            loop = bool(key.value.get("loop", True))
+            if getattr(getattr(engine, "current_animation", None), "name", "").lower() != anim_name.lower():
+                if not engine.play(anim_name, loop=loop, blend=False):
+                    self.last_warning = f"Animation '{anim_name}' is not available for {binding.display_name}."
+                    return set()
+                engine.stop()
+            seconds = max(0.0, (int(frame) - int(key.frame)) / max(0.001, float(sequence.frame_rate or 24.0)))
+            engine.seek(seconds)
+            pose = engine.evaluate()
+            current = engine.current_animation
+            length = float(getattr(current, "length", key.value.get("length", 0.0)) or 0.0)
+            self._tag_animation_pose(pose, model, anim_name)
+            viewport.set_animation_pose(pose, name=anim_name, time=engine.current_time, length=length)
+            return {"animation"}
+        except Exception as exc:
+            self.last_warning = f"Character animation failed for {binding.display_name}: {exc}"
+            return set()
+
+    def _character_animation_model(self, obj: object | None):
+        if obj is not None and any(hasattr(obj, attr) for attr in ("animations", "supermodel", "all_nodes", "root_node")):
+            return obj
+        return getattr(self.viewport, "model", None)
+
+    def _resource_manager(self):
+        for owner in (self.viewport, getattr(self.viewport, "parent", lambda: None)()):
+            if owner is None:
+                continue
+            getter = getattr(owner, "_get_resource_manager", None)
+            if callable(getter):
+                try:
+                    manager = getter()
+                    if manager is not None:
+                        return manager
+                except Exception:
+                    pass
+            manager = getattr(owner, "resource_manager", None)
+            if manager is not None:
+                return manager
+        return None
+
+    def _tag_animation_pose(self, pose, model, anim_name: str) -> None:
+        if pose is None:
+            return
+        try:
+            setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
+            setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
+            setattr(pose, "_gr_animation_name", str(anim_name or ""))
+        except Exception:
+            pass
 
     def _apply_master_tracks(self, sequence: GhostRiggerLevelSequence, frame: int) -> bool:
         dirty = False
@@ -440,7 +527,7 @@ class SequenceEvaluator:
             refresh_names.append("refresh_lighting")
         if "cameras" in dirty:
             refresh_names.append("refresh_cameras")
-        if dirty.intersection({"transforms", "visibility", "materials"}):
+        if dirty.intersection({"transforms", "visibility", "materials", "animation"}):
             if hasattr(viewport, "refresh_scene_transforms"):
                 refresh_names.append("refresh_scene_transforms")
             else:
@@ -462,7 +549,7 @@ class SequenceEvaluator:
                 request(
                     fast=True,
                     reason="sequence evaluation",
-                    scene=bool(dirty.intersection({"transforms", "visibility", "materials"})),
+                    scene=bool(dirty.intersection({"transforms", "visibility", "materials", "animation"})),
                     camera=bool("cameras" in dirty),
                     overlay=True,
                     lighting=bool("lighting" in dirty),

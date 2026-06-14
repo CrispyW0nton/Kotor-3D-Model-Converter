@@ -11,6 +11,36 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-14
 
+### [2026-06-14] Native DLL-backed Python Importer
+
+Owner: LordVaderCW
+Subsystem: Native host Python import/runtime payload
+
+- Removed C++ launch-time extraction of embedded Python payload files from the native host startup path.
+- Added a native-host Python `importlib` importer that indexes `gr_python_payload_manifest_json` exports from built DLLs and loads `.py` module source directly from DLL `RCDATA` resources.
+- Kept `GhostRiggerPythonPayload` as the runtime asset root only; it is no longer inserted into `sys.path`, so stale extracted Python files cannot satisfy imports.
+- Added empty-module handling for zero-byte `__init__.py` payload entries that are present in manifests but omitted as empty RCDATA by the resource toolchain.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Native.Core.Host\main.py`
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed.
+- Importer smoke against `build\vs\x64\Debug\main.py` indexed 800 DLL-backed Python modules, imported `src.sequence.sequence_model` and `src.gui.assets.qt_theme`, confirmed `GhostRiggerPythonPayload` is not on `sys.path`, and confirmed runtime icons still resolve from disk assets.
+- `build\vs\x64\Debug\GhostRigger.exe --native-embed-init-debug` exited successfully.
+- Launched `build\vs\x64\Debug\GhostRigger.exe` visibly; the process remained alive/responding after startup, but no window title or log output was available from this host during the check.
+
+### [2026-06-14] Sequence Editor Character Tracks
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Fixed sequence target inference so whole models are classified as Character, Creature, Droid, Prop, or Group before light/material attributes can mislabel them as Light.
+- Included the viewport model itself in sequence object resolution so whole-character tracks can bind to the loaded character, not only child nodes.
+- Added Character track animation keys and evaluator playback through the viewport animation pose path.
+- Updated the Sequence Editor add/key track workflow to offer available local and inherited animations when creating or keying character animation tracks.
+
+Verification:
+- Focused smoke check with native sequence/editor Python payload paths verified `N_DarthMalak` with `light_multiplier` classifies as Character, `C_Rancor` as Creature, `P_HK47` as Droid, explicit light objects as Light, and a Character track at frame 24 drives `viewport.set_animation_pose(... name='walk', time≈1.0)`.
+
 ### [2026-06-14] Native Python Payload Coverage Audit
 
 Owner: LordVaderCW

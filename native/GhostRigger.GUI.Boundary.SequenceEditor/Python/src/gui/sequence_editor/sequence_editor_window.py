@@ -9,6 +9,7 @@ from typing import Any
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.assets.qt_theme import C, apply_theme, update_legacy_palette
+from src.gui.qt_lib.panels.qt_animation_panel import animation_row_label
 from src.sequence.sequence_binding import SequenceTargetType
 from src.sequence.sequence_clipboard import SequenceClipboard
 from src.sequence.sequence_evaluator import SequenceEvaluator, quat_to_euler_degrees
@@ -497,7 +498,9 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if track_type == "Rig Control":
             return RigTrack(parent_binding_id=binding.binding_id)
         if track_type == "Character":
-            return CharacterTrack(parent_binding_id=binding.binding_id)
+            track = CharacterTrack(parent_binding_id=binding.binding_id)
+            self._configure_character_track(track, binding, prompt=True)
+            return track
         if track_type == "Sub Sequence":
             return SubSequenceTrack()
         return TransformTrack(parent_binding_id=getattr(binding, "binding_id", ""))
@@ -594,10 +597,101 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         elif isinstance(track, MaterialTrack) and obj is not None:
             attr = {"opacity": "alpha", "material_color": "diffuse"}.get(track.property_name, track.property_name)
             track.add_keyframe(frame, getattr(obj, attr, 0.0), select=True)
+        elif isinstance(track, CharacterTrack):
+            binding = self.sequence.binding_by_id(track.parent_binding_id)
+            self._configure_character_track(track, binding, prompt=True)
         elif isinstance(track, EventTrack):
             track.add_event_key(frame, "Custom Event", {})
         else:
             track.add_keyframe(frame, None, select=True)
+
+    def _configure_character_track(self, track: CharacterTrack, binding, *, prompt: bool) -> bool:
+        if self.sequence is None or binding is None:
+            return False
+        entries = self._character_animation_entries(binding)
+        if not entries:
+            self._set_status(f"No animations found for {getattr(binding, 'display_name', 'character')}.")
+            return False
+        labels = [entry["label"] for entry in entries]
+        default_name = self._selected_animation_name()
+        default_index = next(
+            (index for index, entry in enumerate(entries) if entry["name"].lower() == default_name.lower()),
+            0,
+        )
+        chosen_index = default_index
+        if prompt:
+            chosen, ok = QtWidgets.QInputDialog.getItem(
+                self,
+                "Character Animation",
+                "Animation",
+                labels,
+                default_index,
+                False,
+            )
+            if not ok:
+                return False
+            chosen_index = labels.index(chosen) if chosen in labels else default_index
+        entry = entries[chosen_index]
+        track.add_animation_key(
+            self.sequence.current_frame,
+            entry["name"],
+            source=entry.get("source", ""),
+            source_type=entry.get("source_type", ""),
+            length=float(entry.get("length", 0.0) or 0.0),
+            loop=True,
+            select=True,
+        )
+        track.name = f"Animation: {entry['name']}"
+        return True
+
+    def _selected_animation_name(self) -> str:
+        panel = getattr(self.main_window, "animations_panel", None)
+        selected = getattr(panel, "selected_animation", None)
+        if callable(selected):
+            try:
+                return str(selected() or "")
+            except Exception:
+                return ""
+        return ""
+
+    def _character_animation_entries(self, binding) -> list[dict[str, Any]]:
+        obj = self.evaluator.resolver.resolve(binding) if binding is not None else None
+        model = obj if obj is not None and any(hasattr(obj, attr) for attr in ("animations", "supermodel", "all_nodes", "root_node")) else getattr(self.source_viewport, "model", None)
+        if model is None:
+            return []
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+            getter = getattr(self.main_window, "_get_resource_manager", None)
+            manager = getter() if callable(getter) else getattr(self.main_window, "resource_manager", None)
+            if manager is not None:
+                SuperModelResolver.configure(manager)
+            engine = AnimationEngine(model)
+            rows = engine.list_all_animations()
+        except Exception:
+            rows = []
+        entries: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        game = str(getattr(self.main_window, "_current_game", "") or getattr(model, "game", "") or "")
+        for row in rows:
+            name = str(row.get("name") if isinstance(row, dict) else row[0] if row else "").strip()
+            if not name or name.lower() in seen:
+                continue
+            seen.add(name.lower())
+            inherited = bool(row.get("inherited", False)) if isinstance(row, dict) else False
+            source = str(row.get("source", row.get("source_model_name", "")) if isinstance(row, dict) else "")
+            source_type = str(row.get("source_type", "inherited" if inherited else "local") if isinstance(row, dict) else "")
+            length = float(row.get("length", 0.0) or 0.0) if isinstance(row, dict) else 0.0
+            entries.append(
+                {
+                    "name": name,
+                    "source": source,
+                    "source_type": source_type,
+                    "length": length,
+                    "label": animation_row_label(name, inherited=inherited, source=source, game=game),
+                }
+            )
+        return entries
 
     def _transform_property_value(self, obj, property_name: str):
         prop = str(property_name or "")

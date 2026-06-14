@@ -33,6 +33,58 @@ def ensure_sequence_object_id(obj: object | None) -> str:
     return value
 
 
+def _classify_model_target(obj: object | None) -> SequenceTargetType | None:
+    if obj is None:
+        return None
+
+    for attr in ("sequence_target_type", "_gr_sequence_target_type", "target_type"):
+        value = str(getattr(obj, attr, "") or "").strip()
+        if not value:
+            continue
+        try:
+            return SequenceTargetType(value)
+        except ValueError:
+            lowered = value.lower()
+            if lowered in {"character", "humanoid", "headless_body", "head", "supermodel"}:
+                return SequenceTargetType.CHARACTER
+            if lowered == "creature":
+                return SequenceTargetType.CREATURE
+            if lowered == "droid":
+                return SequenceTargetType.DROID
+
+    looks_like_model = any(
+        hasattr(obj, attr)
+        for attr in ("animations", "supermodel", "model_type", "root_node", "all_nodes")
+    )
+    if looks_like_model:
+        try:
+            from src.core.geometry.model_data import classify_kotor_model
+
+            category = classify_kotor_model(obj).category.name
+            if category == "CREATURE":
+                return SequenceTargetType.CREATURE
+            if category == "DROID":
+                return SequenceTargetType.DROID
+            if category in {"FULL_BODY_CHARACTER", "MODULAR_BODY", "HEAD", "SUPERMODEL"}:
+                return SequenceTargetType.CHARACTER
+            if category in {"PLACEABLE", "DOOR", "WEAPON"}:
+                return SequenceTargetType.PROP
+            if category in {"AREA", "MODULE"}:
+                return SequenceTargetType.GROUP
+        except Exception:
+            pass
+
+    name = str(getattr(obj, "name", "") or "").lower()
+    supermodel = str(getattr(obj, "supermodel", "") or "").lower()
+    if name.startswith(("c_",)):
+        return SequenceTargetType.CREATURE
+    if name.startswith(("p_hk", "p_t3", "n_t3", "n_droid")) or "droid" in name:
+        return SequenceTargetType.DROID
+    if name.startswith(("p", "n_")) or supermodel.startswith(("s_", "p_", "c_", "n_")):
+        return SequenceTargetType.CHARACTER
+    return None
+
+
 def infer_target_type(obj: object | None) -> SequenceTargetType:
     if obj is None:
         return SequenceTargetType.UNKNOWN
@@ -41,17 +93,22 @@ def infer_target_type(obj: object | None) -> SequenceTargetType:
         return SequenceTargetType.CAMERA
     if object_type == "light":
         return SequenceTargetType.LIGHT
+    model_target = _classify_model_target(obj)
+    if model_target is not None:
+        return model_target
     if bool(getattr(obj, "is_camera", False)) or bool(getattr(obj, "_gr_camera_id", "")):
         return SequenceTargetType.CAMERA
-    if bool(getattr(obj, "is_light", False)) or bool(getattr(obj, "_gr_light_id", "")) or hasattr(obj, "light_multiplier"):
+    if bool(getattr(obj, "vertices", [])):
+        return SequenceTargetType.MESH
+    if bool(getattr(obj, "is_light", False)) or bool(getattr(obj, "_gr_light_id", "")):
+        return SequenceTargetType.LIGHT
+    if hasattr(obj, "light_multiplier") and not any(hasattr(obj, attr) for attr in ("vertices", "animations", "supermodel", "all_nodes")):
         return SequenceTargetType.LIGHT
     name = str(getattr(obj, "name", "") or "").lower()
     if any(token in name for token in ("rig", "skeleton", "bone", "pelvis", "spine")):
         return SequenceTargetType.RIG
     if bool(getattr(obj, "is_skin", False)) or bool(getattr(obj, "skin_data", [])):
         return SequenceTargetType.CHARACTER
-    if bool(getattr(obj, "vertices", [])):
-        return SequenceTargetType.MESH
     return SequenceTargetType.PROP if obj is not None else SequenceTargetType.UNKNOWN
 
 
@@ -134,6 +191,8 @@ class SequenceManager:
                 SequenceTargetType.LIGHT: "#FFD400",
                 SequenceTargetType.MESH: "#00D7B5",
                 SequenceTargetType.CHARACTER: "#00FF7A",
+                SequenceTargetType.CREATURE: "#7CFFB2",
+                SequenceTargetType.DROID: "#65C8FF",
                 SequenceTargetType.RIG: "#00FF7A",
             }.get(target_type, "#7A9A88"),
         )

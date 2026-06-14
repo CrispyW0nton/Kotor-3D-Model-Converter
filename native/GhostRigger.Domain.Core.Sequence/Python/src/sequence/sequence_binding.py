@@ -15,6 +15,8 @@ class SequenceTargetType(str, Enum):
     CAMERA = "Camera"
     LIGHT = "Light"
     CHARACTER = "Character"
+    CREATURE = "Creature"
+    DROID = "Droid"
     RIG = "Rig"
     PROP = "Prop"
     HELPER = "Helper"
