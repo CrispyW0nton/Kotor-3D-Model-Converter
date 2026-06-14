@@ -1,0 +1,219 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Windows.Shell.Main",
+    "file_count": 35,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/gui/windows/__init__.py",
+            "packaged_path": "Python/src/gui/windows/__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/gui/windows/application_core/__init__.py",
+            "packaged_path": "Python/src/gui/windows/application_core/__init__.py",
+            "sha256": "3f414c8d68d83804d43aac647d8232577996bf9fb910af66a89ed0ff1a5af37e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/gui/windows/application_core/application_core_lib.py",
+            "packaged_path": "Python/src/gui/windows/application_core/application_core_lib.py",
+            "sha256": "09f97f3c162f12271e351e9832722deccbc8b81197d0b1339e3b2e69d7b1ccaa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/gui/windows/application_core/functions/__init__.py",
+            "packaged_path": "Python/src/gui/windows/application_core/functions/__init__.py",
+            "sha256": "b2799a2f1b259be9938c09f191c5354767b5c614dcbd7b90c5a5d87fafa561eb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/gui/windows/application_core/functions/app_runner.py",
+            "packaged_path": "Python/src/gui/windows/application_core/functions/app_runner.py",
+            "sha256": "f5aa0e518b167a48f4d9b3bd3c2b6b3356544ca4011970beafae19522416c1cb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/gui/windows/application_core/functions/geometry.py",
+            "packaged_path": "Python/src/gui/windows/application_core/functions/geometry.py",
+            "sha256": "e3285a035fa1f0fe1df4cd457c612470ace9a231e809ea10adcdd6b2410decfe"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/gui/windows/application_core/functions/qt_helpers.py",
+            "packaged_path": "Python/src/gui/windows/application_core/functions/qt_helpers.py",
+            "sha256": "cef719686f83b729dbe735911043bce3af5c857804fd3793488b50d7f0baa003"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/gui/windows/application_core/functions/splash_theme.py",
+            "packaged_path": "Python/src/gui/windows/application_core/functions/splash_theme.py",
+            "sha256": "7fe174b87c224c10f4661b0e8c2dd329398102362fbcba1d8849988bfc5f1dfa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/gui/windows/application_core/functions/startup_library.py",
+            "packaged_path": "Python/src/gui/windows/application_core/functions/startup_library.py",
+            "sha256": "689e09d3e9add486a7a5257cc6b5a61812382d9c12887acec4b3052ae92e7193"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0010",
+            "source_path": "src/gui/windows/application_core/shared/__init__.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/__init__.py",
+            "sha256": "c36b5653fe2ae8b5d4ce7cf381cef68fa3c5d429fe76e890f8d4376284b07f2a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0011",
+            "source_path": "src/gui/windows/application_core/shared/animation_workflow.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/animation_workflow.py",
+            "sha256": "4d14f8b4727a1ed41b6546316a9ebf54ee0476ff0a844ce7a8c8a87949323125"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0012",
+            "source_path": "src/gui/windows/application_core/shared/bas_workflow.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/bas_workflow.py",
+            "sha256": "3c1e689facc5e7829c82393ef01d4ba140eb672f46cf30f34c1cd59037956d4a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0013",
+            "source_path": "src/gui/windows/application_core/shared/dock_hosts.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/dock_hosts.py",
+            "sha256": "cd63738bbcc311eefa724479fb4125e441b222d6da87bd047b0e5fa94734a2fb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0014",
+            "source_path": "src/gui/windows/application_core/shared/editor_services.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/editor_services.py",
+            "sha256": "593834ea7b3dcf04f7d8e04fe6ed41ff36f31c70c871ddf60d8639e84f1322bf"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0015",
+            "source_path": "src/gui/windows/application_core/shared/geometry.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/geometry.py",
+            "sha256": "0eee7e211034e3bb0b27d998fd3aba54c454ef4dac8ac1eccad943dec001a8f8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0016",
+            "source_path": "src/gui/windows/application_core/shared/log_panel.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/log_panel.py",
+            "sha256": "4cc0507c5f33dec4d2697dcc5c05e1a5a9eab38041b0e45e4c00c16f6acc48ec"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0017",
+            "source_path": "src/gui/windows/application_core/shared/main_layout.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/main_layout.py",
+            "sha256": "b8f29c76b720327b4840d4c3d87a87bf4c623e61066690c6a11d372a223b4565"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0018",
+            "source_path": "src/gui/windows/application_core/shared/model_io.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/model_io.py",
+            "sha256": "a78cf9cc78c0c39fe7405bd0e2a4d02daf1260f363d7c36cc75b50a0f8eaefc8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0019",
+            "source_path": "src/gui/windows/application_core/shared/qt_helpers.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/qt_helpers.py",
+            "sha256": "ebbfecfc220b5faf54abf9e8f82db9f2e5eb8393d1cfde5ade09a26ab2764cfc"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0020",
+            "source_path": "src/gui/windows/application_core/shared/resource_loading.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/resource_loading.py",
+            "sha256": "9a8f876caa9083315c7b3fa21b63bef94e3694fa348b925ad77a8790a91ac0e8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0021",
+            "source_path": "src/gui/windows/application_core/shared/resource_panels.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/resource_panels.py",
+            "sha256": "70cbf8e647157a1c33c9787b37dde2c156370f88075e01fd336b51f9108b6326"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0022",
+            "source_path": "src/gui/windows/application_core/shared/retarget_window_workflow.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/retarget_window_workflow.py",
+            "sha256": "c699e7acfe988ac0ab50852040a28121ea860d7f059f05015ef7472c4f60af1c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0023",
+            "source_path": "src/gui/windows/application_core/shared/retarget_workflow.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/retarget_workflow.py",
+            "sha256": "1bdf6f70e64478fa1c2b07faf1e887eab1068ae35d565afd26d2fa5e161ceb14"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0024",
+            "source_path": "src/gui/windows/application_core/shared/scene_workflow.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/scene_workflow.py",
+            "sha256": "2a97f9900e7b7663be062de42ce3dae9ca4d1e8f9a3b1a7530bad91eb766295f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0025",
+            "source_path": "src/gui/windows/application_core/shared/splash.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/splash.py",
+            "sha256": "95505316432b2076d48a6441909c786b5f23d7318aaf168a6a40828c6e05dbdd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0026",
+            "source_path": "src/gui/windows/application_core/shared/startup_library.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/startup_library.py",
+            "sha256": "d5e2e9b3caea2712a530dbb2e16db8c96d45588870314df03a1be215a3c89ebd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0027",
+            "source_path": "src/gui/windows/application_core/shared/theme_layout.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/theme_layout.py",
+            "sha256": "49e8c9c2bb0e598ba8915364fdfe8fea04e0460a08a1b0b7f9ee48a5c152919c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0028",
+            "source_path": "src/gui/windows/application_core/shared/viewport_tools.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/viewport_tools.py",
+            "sha256": "a66d975f3879909cc2f8e7e27252dba975228ceb1a3c2d46bf9e0b2a42a2a008"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0029",
+            "source_path": "src/gui/windows/application_core/shared/window_chrome.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/window_chrome.py",
+            "sha256": "18b1e3d1b045b313d173913a2e131d8601b6c15be4e19bae37d9024d251cfa80"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0030",
+            "source_path": "src/gui/windows/application_core/shared/window_lifecycle.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/window_lifecycle.py",
+            "sha256": "fcea7d961789dafcf8f95a1c57e9e0bd657fd4f376550bfcf23cd9b898be7156"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0031",
+            "source_path": "src/gui/windows/application_core/shared/workers.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/workers.py",
+            "sha256": "e2fcf38a30a83bc7ef657d18dc84e25e07ab8fc51347bd565fe3dae8f384d0df"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0032",
+            "source_path": "src/gui/windows/application_core/toolboxes/__init__.py",
+            "packaged_path": "Python/src/gui/windows/application_core/toolboxes/__init__.py",
+            "sha256": "3ad992f2568310e0a257dd3ef056c3b45fcbcba958f357b13e483362876d94f0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0033",
+            "source_path": "src/gui/windows/application_core/toolboxes/workspace_docks.py",
+            "packaged_path": "Python/src/gui/windows/application_core/toolboxes/workspace_docks.py",
+            "sha256": "c32e36faeecbd3901b6bb3c9799b444daee42ef8df341e79d6fa289f20ca9e26"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0034",
+            "source_path": "src/gui/windows/progress_toast.py",
+            "packaged_path": "Python/src/gui/windows/progress_toast.py",
+            "sha256": "0723fa17227b6cb38186b1a9efcfa019bb9e639e672b5874ddd7eec73ce90bc8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0035",
+            "source_path": "src/gui/windows/qt_main_window.py",
+            "packaged_path": "Python/src/gui/windows/qt_main_window.py",
+            "sha256": "fedc8488289cb79c7918cac1d94d37d2f408be20b65dd3c459747bea9d275172"
+        }
+    ]
+}

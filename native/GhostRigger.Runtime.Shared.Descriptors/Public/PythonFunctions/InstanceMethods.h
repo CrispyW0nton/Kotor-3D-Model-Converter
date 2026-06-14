@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::descriptors {
+namespace ghostrigger::runtime::core::host::shared::descriptors {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -34,4 +34,4 @@ const NativeFunctionImplementation& sceneobjectinstance_to_dict_line_27_564c9705
 
 const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::descriptors
+} // namespace ghostrigger::runtime::core::host::shared::descriptors

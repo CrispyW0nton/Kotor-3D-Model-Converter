@@ -1,0 +1,112 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "project":  "GhostRigger.Tools.Workflow.CharacterBuilder",
+    "file_count":  15,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src\\gui\\panels\\qt_character_builder_panel.py",
+                      "packaged_path":  "Python\\src\\gui\\panels\\qt_character_builder_panel.py",
+                      "sha256":  "e9902efc3882eee8ca920887b944b5c097f2878ccb321ccd2f94f7ec598b610d",
+                      "byte_count":  195145
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src\\gui\\windows\\qt_character_builder_window.py",
+                      "packaged_path":  "Python\\src\\gui\\windows\\qt_character_builder_window.py",
+                      "sha256":  "bcb2f35b502fc5866be9f389ba0361bff70a16ab24db2cf8696f10ba59f22d0a",
+                      "byte_count":  464
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src\\core\\characters\\__init__.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\__init__.py",
+                      "sha256":  "ff138053bab9fee263434ab4f7d8e4506323306c87c04c86bc5bf20929d6be5b",
+                      "byte_count":  59
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src\\core\\characters\\character_autofit_report.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_autofit_report.py",
+                      "sha256":  "801dbe702f5b112963274cbfc5f15adf43e0f1123b9c2ce41a5416eb6135a4fa",
+                      "byte_count":  11340
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src\\core\\characters\\character_builder.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_builder.py",
+                      "sha256":  "170031acd119e80849480d0f055ae414d34f9e6f6b6f168d059060b157a9a15f",
+                      "byte_count":  62516
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src\\core\\characters\\character_export_preflight.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_export_preflight.py",
+                      "sha256":  "ffaf410af41f78fc10efe1607a2a4db2bd892d9580e149addbf32f195b4b0ec5",
+                      "byte_count":  103395
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src\\core\\characters\\character_export_transaction.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_export_transaction.py",
+                      "sha256":  "c86448672d4d3836b65d724de8a9d3ed35181b1939d29fe5065da28602b1e62e",
+                      "byte_count":  31365
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src\\core\\characters\\character_override_package.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_override_package.py",
+                      "sha256":  "483e842566563ececfa5b3196bd8102b05955d8b1d6770321ae4400157f8d547",
+                      "byte_count":  40567
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src\\core\\characters\\character_rig_state.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_rig_state.py",
+                      "sha256":  "28188503c5381adac97c4048925f789c708c1f16a98ca12aaa9716b7f425aced",
+                      "byte_count":  6442
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src\\core\\characters\\character_validation_report.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\character_validation_report.py",
+                      "sha256":  "040d4f12fedcedaa8bb7363a9659079b4ffd80339162ddae4e958c7e225582f2",
+                      "byte_count":  54210
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src\\core\\characters\\creature_appearance.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\creature_appearance.py",
+                      "sha256":  "1635d97278a232d3a986ea1451dfb1133e0c95841e92d6cac8aabafb4557810c",
+                      "byte_count":  102276
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0012",
+                      "source_path":  "src\\core\\characters\\head_workflow.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\head_workflow.py",
+                      "sha256":  "fb4d3a7bcad822cadcfaa790403b33fd472e099bed848d7bafc3e719ed278a5c",
+                      "byte_count":  61494
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0013",
+                      "source_path":  "src\\core\\characters\\headless_body_workflow.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\headless_body_workflow.py",
+                      "sha256":  "a3dcd786ac1b37c5ac347c0fbdd43a6d1fa3084b2658ec994064a9c6d9cbd7e3",
+                      "byte_count":  237904
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0014",
+                      "source_path":  "src\\core\\characters\\kotor_constants.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\kotor_constants.py",
+                      "sha256":  "3cb71a09e164da0a08eb8366ad085083c5637c2ffac08f3ac0b3ee9fe5195484",
+                      "byte_count":  7104
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0015",
+                      "source_path":  "src\\core\\characters\\native_skeleton.py",
+                      "packaged_path":  "Python\\src\\core\\characters\\native_skeleton.py",
+                      "sha256":  "fa7b792e13137273d319da8544f9a99b4836a6e690ba48a572f9c83224db9905",
+                      "byte_count":  14058
+                  }
+              ]
+}

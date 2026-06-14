@@ -1,0 +1,75 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Domain.Core.Level",
+    "file_count":  11,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/core/level/__init__.py",
+                      "packaged_path":  "Python/src/core/level/__init__.py",
+                      "sha256":  "ffe163c609d0cb627ef43a727afd917ef5e9ef62311be81e2555da37dea1db02"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/core/level/kmap_model.py",
+                      "packaged_path":  "Python/src/core/level/kmap_model.py",
+                      "sha256":  "d410d93bcd3db973d0d8b1742104cc39a2a7c2ec93008247f8bba8c20f81c01f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/core/level/kmap_project.py",
+                      "packaged_path":  "Python/src/core/level/kmap_project.py",
+                      "sha256":  "567d0e1ec33edb7e88ed215dce40a50d752f50be8a3f4745428a14762441e94a"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/core/level/kmap_serializer.py",
+                      "packaged_path":  "Python/src/core/level/kmap_serializer.py",
+                      "sha256":  "7b7baa18b9652f886d87d746ce225042ac4df05607378c67a75b423c37279577"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/core/level/kmap_validator.py",
+                      "packaged_path":  "Python/src/core/level/kmap_validator.py",
+                      "sha256":  "a70bff2fe1619d9e445d06af693b7369263a9eaca4bb3c4f38c0c5bc561f574f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/core/level/level_export_bridge.py",
+                      "packaged_path":  "Python/src/core/level/level_export_bridge.py",
+                      "sha256":  "bc97b65e0d9cbeac58789c1e556fd315385c0f24dab6c7cfc09be68de708aff0"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/core/level/level_manifest.py",
+                      "packaged_path":  "Python/src/core/level/level_manifest.py",
+                      "sha256":  "e32efaa9201a8f432b41886d8073973edc387c3c1ad67e3fc8a9679c276a6ca3"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/core/level/level_module_instance.py",
+                      "packaged_path":  "Python/src/core/level/level_module_instance.py",
+                      "sha256":  "3219429abe3394bc262cd5aad7c2488049f6c0155fb2be77cbaa779a8d39ee49"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/core/level/level_room_instance.py",
+                      "packaged_path":  "Python/src/core/level/level_room_instance.py",
+                      "sha256":  "3d132b93aa732c238b96533d35f1a380521ddd1707c43df51b248ba5670d0a46"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src/core/level/level_scene.py",
+                      "packaged_path":  "Python/src/core/level/level_scene.py",
+                      "sha256":  "0b5f8da45d5e666b964c375b4d861f6f8ef2ab71e26a96d19b392a79d6818103"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src/core/level/level_texture_resolver.py",
+                      "packaged_path":  "Python/src/core/level/level_texture_resolver.py",
+                      "sha256":  "62a57167a7f6a79a50e84f43e2824230013da302aea38859db79557dabd96e9b"
+                  }
+              ]
+}

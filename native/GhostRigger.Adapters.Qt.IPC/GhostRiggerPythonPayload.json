@@ -1,0 +1,21 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Adapters.Qt.IPC",
+    "file_count": 2,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/adapters/qt_ipc/__init__.py",
+            "packaged_path": "Python/src/adapters/qt_ipc/__init__.py",
+            "sha256": "063fba04c95351dbc394f4772c7aef66f09357d9548e8480ff6c531624efd604"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/adapters/qt_ipc/threading.py",
+            "packaged_path": "Python/src/adapters/qt_ipc/threading.py",
+            "sha256": "5bde764de5f7af4d0bf9ac9314623bc9be3da598eb1bda7b1e3ec40b6569e574"
+        }
+    ]
+}

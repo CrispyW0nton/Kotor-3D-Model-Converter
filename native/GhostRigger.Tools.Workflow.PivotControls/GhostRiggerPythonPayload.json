@@ -1,0 +1,49 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "project":  "GhostRigger.Tools.Workflow.PivotControls",
+    "file_count":  6,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src\\gui\\panels\\adjust_pivot_panel.py",
+                      "packaged_path":  "Python\\src\\gui\\panels\\adjust_pivot_panel.py",
+                      "sha256":  "c4673d8775ed5303eda30b1026c8e025e454a031c74f449ae598570b54efcb57",
+                      "byte_count":  6658
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src\\gui\\panels\\axis_mode_control.py",
+                      "packaged_path":  "Python\\src\\gui\\panels\\axis_mode_control.py",
+                      "sha256":  "3bfb82bc63a02fdc6fea3e3cbedd9e6c1da4624f41732a4170dc6b3fb3937c87",
+                      "byte_count":  3287
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src\\core\\scene\\axis_mode.py",
+                      "packaged_path":  "Python\\src\\core\\scene\\axis_mode.py",
+                      "sha256":  "17a6ecea4b48857af67dbbb4afe8f676cbb2df8d5ce3d735bfc5464928d290d6",
+                      "byte_count":  6143
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src\\core\\gizmo\\transform_controller.py",
+                      "packaged_path":  "Python\\src\\core\\gizmo\\transform_controller.py",
+                      "sha256":  "37fa23c159de7872948a8128081e5fa456aa3a0ab386fe17d7bfa3e7e91ae164",
+                      "byte_count":  19138
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src\\core\\gizmo\\transform_gizmo.py",
+                      "packaged_path":  "Python\\src\\core\\gizmo\\transform_gizmo.py",
+                      "sha256":  "98632feeebe96455330a0a708e9621faf73bb580e8309b2d25bd2f3ece6a754b",
+                      "byte_count":  6297
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src\\math\\transform_math.py",
+                      "packaged_path":  "Python\\src\\math\\transform_math.py",
+                      "sha256":  "b22c5dfafadc08011e83cb8539805ef365a1f895c8e2e2cf8f70fc3d43b76e6e",
+                      "byte_count":  7217
+                  }
+              ]
+}

@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::resources {
+namespace ghostrigger::runtime::core::host::shared::resources {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_RESOURCES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_RESOURCES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -24,4 +24,4 @@ const NativeFunctionImplementation& gamelibrary_detect_game_tag_line_815_80fc5b7
 
 const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::resources
+} // namespace ghostrigger::runtime::core::host::shared::resources

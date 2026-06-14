@@ -22,7 +22,7 @@
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{84FD3227-CED4-4497-9347-F6164D3CE003}</ProjectGuid>
-    <RootNamespace>GhostRiggerRuntimeSharedContracts</RootNamespace>
+    <RootNamespace>GhostRigger.Runtime.Shared.Contracts</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -80,7 +80,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;RUNTIME_SHARED_CONTRACTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -96,7 +96,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;RUNTIME_SHARED_CONTRACTS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.NativeCore\Public;$(SolutionDir)native\GhostRigger.Native.NativeCore;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -116,7 +116,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     <ClInclude Include="Public\GhostRiggerRuntimeSharedContracts.h" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\GhostRigger.Native.NativeCore\GhostRigger.Native.NativeCore.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Native.Core.Foundation\GhostRigger.Native.Core.Foundation.vcxproj">
       <Project>{f2d7b7d0-3d17-4d1d-a5b2-d7cb91fce001}</Project>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>

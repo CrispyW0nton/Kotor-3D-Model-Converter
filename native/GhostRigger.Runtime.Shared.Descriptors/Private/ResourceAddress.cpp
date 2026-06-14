@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace ghostrigger::runtime::shared::descriptors::resource_address {
+namespace ghostrigger::runtime::core::host::shared::descriptors::resource_address {
 namespace {
 
 constexpr std::array<std::string_view, 11> kSupportedSchemes = {
@@ -358,21 +358,21 @@ std::string supported_schemes_json() {
     return output.str();
 }
 
-} // namespace ghostrigger::runtime::shared::descriptors::resource_address
+} // namespace ghostrigger::runtime::core::host::shared::descriptors::resource_address
 
 extern "C" {
 
 GR_RUNTIME_SHARED_DESCRIPTORS_API const char*
 gr_runtime_shared_descriptors_resource_address_supported_schemes_json() {
     static const std::string schemes =
-        ghostrigger::runtime::shared::descriptors::resource_address::supported_schemes_json();
+        ghostrigger::runtime::core::host::shared::descriptors::resource_address::supported_schemes_json();
     return schemes.c_str();
 }
 
 GR_RUNTIME_SHARED_DESCRIPTORS_API int gr_runtime_shared_descriptors_resource_address_is_supported_scheme(
     const char* scheme
 ) {
-    return ghostrigger::runtime::shared::descriptors::resource_address::is_supported_scheme(
+    return ghostrigger::runtime::core::host::shared::descriptors::resource_address::is_supported_scheme(
         std::string(scheme == nullptr ? "" : scheme)
     ) ? 1 : 0;
 }
@@ -389,7 +389,7 @@ GR_RUNTIME_SHARED_DESCRIPTORS_API const char* gr_runtime_shared_descriptors_reso
     const char* fragment
 ) {
     thread_local std::string result;
-    result = ghostrigger::runtime::shared::descriptors::resource_address::make_address_from_c_args(
+    result = ghostrigger::runtime::core::host::shared::descriptors::resource_address::make_address_from_c_args(
         scheme,
         game,
         module_id,
@@ -415,7 +415,7 @@ GR_RUNTIME_SHARED_DESCRIPTORS_API const char* gr_runtime_shared_descriptors_reso
     const char* fragment
 ) {
     thread_local std::string result;
-    result = ghostrigger::runtime::shared::descriptors::resource_address::make_address_from_c_args(
+    result = ghostrigger::runtime::core::host::shared::descriptors::resource_address::make_address_from_c_args(
         scheme,
         game,
         module_id,
@@ -441,7 +441,7 @@ GR_RUNTIME_SHARED_DESCRIPTORS_API const char* gr_runtime_shared_descriptors_reso
     const char* fragment
 ) {
     thread_local std::string result;
-    result = ghostrigger::runtime::shared::descriptors::resource_address::make_address_from_c_args(
+    result = ghostrigger::runtime::core::host::shared::descriptors::resource_address::make_address_from_c_args(
         scheme,
         game,
         module_id,

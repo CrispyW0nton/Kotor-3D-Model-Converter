@@ -1,0 +1,49 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::domain::core::characters {
+
+#ifndef GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& lipplayback_is_playing_line_575_81977988_native();
+const NativeFunctionImplementation& lipplayback_elapsed_line_579_29f5bf16_native();
+const NativeFunctionImplementation& lipplayback_duration_line_583_9c4d1b72_native();
+const NativeFunctionImplementation& skeletonselector_selected_nodes_line_814_a8d99566_native();
+const NativeFunctionImplementation& skeletonselector_selected_names_line_824_fbedefbf_native();
+const NativeFunctionImplementation& skeletonselector_count_line_828_06c4a08b_native();
+const NativeFunctionImplementation& characterexportpreflightresult_export_allowed_line_112_99f50905_native();
+const NativeFunctionImplementation& characterbuilderexporttransactionresult_succeeded_line_82_551814e9_native();
+const NativeFunctionImplementation& characterbuilderexporttransactionresult_mdl_path_line_86_18384d89_native();
+const NativeFunctionImplementation& characterbuilderexporttransactionresult_mdx_path_line_90_f2c3ffcd_native();
+const NativeFunctionImplementation& characterbuilderexporttransactionresult_validation_report_json_path_line_94_9bb14de4_native();
+const NativeFunctionImplementation& characterbuilderexporttransactionresult_validation_report_txt_path_line_98_940918be_native();
+const NativeFunctionImplementation& characterbuilderoverridepackageresult_succeeded_line_105_e0460de1_native();
+const NativeFunctionImplementation& characterbuilderoverridepackageresult_mdl_path_line_109_8f6cd8bf_native();
+const NativeFunctionImplementation& characterbuilderoverridepackageresult_mdx_path_line_116_ab37777c_native();
+const NativeFunctionImplementation& characterbuilderoverridepackageresult_manifest_path_line_120_ac2a447e_native();
+const NativeFunctionImplementation& characterbuilderoverridepackageresult_readme_path_line_124_fe040bc7_native();
+const NativeFunctionImplementation& characterbuildervalidationreport_merged_report_line_1001_f4e1d21c_native();
+const NativeFunctionImplementation& characterbuildervalidationreport_capability_stage_line_1008_3013e082_native();
+const NativeFunctionImplementation& creatureappearance_primary_model_line_210_b53bb619_native();
+const NativeFunctionImplementation& creaturemodelset_primary_line_715_12a3fc44_native();
+const NativeFunctionImplementation& bodyguideedithistory_can_undo_line_3233_965ab5fb_native();
+const NativeFunctionImplementation& bodyguideedithistory_can_redo_line_3237_68214687_native();
+
+const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::domain::core::characters

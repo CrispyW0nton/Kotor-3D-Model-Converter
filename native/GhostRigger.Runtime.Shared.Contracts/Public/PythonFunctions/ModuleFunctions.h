@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::contracts {
+namespace ghostrigger::runtime::core::host::shared::contracts {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -64,4 +64,4 @@ const NativeFunctionImplementation& renderer_backend_label_line_80_7ea56790_nati
 
 const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::contracts
+} // namespace ghostrigger::runtime::core::host::shared::contracts

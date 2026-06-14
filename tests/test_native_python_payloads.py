@@ -108,7 +108,7 @@ def test_payload_dlls_export_common_python_payload_abi() -> None:
 
 def test_native_host_depends_on_every_payload_dll_project_without_linking_libs() -> None:
     entries = _payload_entries()
-    host_project = ROOT / "native" / "GhostRigger.Native" / "GhostRigger.Native.vcxproj"
+    host_project = ROOT / "native" / "GhostRigger.Native.Core.Host" / "GhostRigger.Native.Core.Host.vcxproj"
     tree = ET.parse(host_project)
     ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
 
@@ -127,7 +127,7 @@ def test_native_host_depends_on_every_payload_dll_project_without_linking_libs()
 def test_native_host_dependency_table_covers_every_payload_project() -> None:
     entries = _payload_entries()
     dependency_header = (
-        ROOT / "native" / "GhostRigger.Native" / "GhostRiggerNativeDependencies.h"
+        ROOT / "native" / "GhostRigger.Native.Core.Host" / "GhostRiggerNativeDependencies.h"
     )
     dependency_header_text = _native_text(dependency_header)
 
@@ -140,7 +140,7 @@ def test_native_host_dependency_table_covers_every_payload_project() -> None:
 
 def test_native_host_logs_dependency_audit_before_python_startup() -> None:
     main_source = (ROOT / "main.py").read_text(encoding="utf-8")
-    host_source = _native_text(ROOT / "native" / "GhostRigger.Native" / "main.cpp")
+    host_source = _native_text(ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.cpp")
 
     assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" not in main_source
     assert "_log_native_dependency_audit" not in main_source

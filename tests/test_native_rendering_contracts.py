@@ -9,8 +9,8 @@ from src.core.rendering import color_utils, renderer_backend, viewport_display, 
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Rendering"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Rendering.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Rendering"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Rendering.dll"
 
 
 Double3 = ctypes.c_double * 3
@@ -53,8 +53,8 @@ def _assert_close_tuple(actual: tuple[float, float, float], expected: tuple[floa
 
 
 def test_rendering_project_declares_contract_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Rendering.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Rendering.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Rendering.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Rendering.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerRendering.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "RenderingContracts.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "RenderingContracts.cpp").read_text(encoding="utf-8")
@@ -65,8 +65,8 @@ def test_rendering_project_declares_contract_files_and_exports() -> None:
     assert '<Filter>Private</Filter>' in filters
     assert "gr_rendering_normalize_renderer_backend" in package_header
     assert "gr_rendering_normalize_viewport_navigation_profile" in package_header
-    assert "namespace ghostrigger::rendering::core::rendering::rendering_contracts" in public_header
-    assert "namespace ghostrigger::rendering::core::rendering::rendering_contracts" in implementation
+    assert "namespace ghostrigger::domain::core::rendering::core::rendering::rendering_contracts" in public_header
+    assert "namespace ghostrigger::domain::core::rendering::core::rendering::rendering_contracts" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

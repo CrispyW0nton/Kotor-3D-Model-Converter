@@ -1,4 +1,4 @@
-# GhostRigger Native Toolbox And Window Migration Candidates
+﻿# GhostRigger Native Toolbox And Window Migration Candidates
 
 Date: 2026-06-07
 Branch: `qt-ghostrigger`
@@ -13,21 +13,21 @@ project, owner surface, bridge method, ownership boundary, and verification gate
 that must exist before implementation begins.
 
 Shared logic used by more than one candidate must be moved into
-`GhostRigger.Native.NativeCore.*` or `GhostRigger.Runtime.Shared.*` before a
+`GhostRigger.Native.Core.Foundation.*` or `GhostRigger.Runtime.Shared.*` before a
 toolbox or window package consumes it.
 
 ## Naming Rules
 
-- Toolbox packages use `GhostRigger.Tools.{Toolname}`.
-- The Phase 1 native main-window package uses `GhostRigger.Windows.MainWindow`.
-- Do not add a generic `GhostRigger.Windows.{WindowName}` project during Phase 1
+- Toolbox packages use `GhostRigger.Tools.Workflow.{Toolname}`.
+- The Phase 1 native main-window package uses `GhostRigger.Windows.Shell.Main`.
+- Do not add a generic `GhostRigger.Windows.<Type>.<WindowName>` project during Phase 1
   without first documenting the specific window owner and bridge boundary here.
 
 ## Candidate: Retargeting Tool
 
-Native project: `GhostRigger.Tools.Retargeting`
+Native project: `GhostRigger.Tools.Workflow.Retargeting`
 Owner surface: Retarget Workbench
-Owner package: `native/GhostRigger.Tools.Retargeting`
+Owner package: `native/GhostRigger.Tools.Workflow.Retargeting`
 Bridge method: C ABI DLL first; `.pyd` only if the retargeting API needs richer
 Python types after the C ABI contract proves too narrow.
 
@@ -40,7 +40,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Tools.Retargeting` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Tools.Workflow.Retargeting` in `Debug|x64`.
 - Python adapter test: targeted adapter/package availability and solve-packet
   fallback checks.
 - Backend truth check: MCP animation fixture comparison when native retargeting
@@ -50,9 +50,9 @@ Verification gates:
 
 ## Candidate: Export Tool
 
-Native project: `GhostRigger.Tools.Export`
+Native project: `GhostRigger.Tools.Workflow.Export`
 Owner surface: Export and validation workflow
-Owner package: `native/GhostRigger.Tools.Export`
+Owner package: `native/GhostRigger.Tools.Workflow.Export`
 Bridge method: C ABI DLL for validator/readback helpers before any writer
 replacement.
 
@@ -66,7 +66,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Tools.Export` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Tools.Workflow.Export` in `Debug|x64`.
 - Python adapter test: targeted export-helper fallback checks.
 - Backend truth check: PyKotor/GhostRigger reload comparison before any native
   helper becomes authoritative.
@@ -75,9 +75,9 @@ Verification gates:
 
 ## Candidate: Character Builder Tool
 
-Native project: `GhostRigger.Tools.CharacterBuilder`
+Native project: `GhostRigger.Tools.Workflow.CharacterBuilder`
 Owner surface: Character Studio
-Owner package: `native/GhostRigger.Tools.CharacterBuilder`
+Owner package: `native/GhostRigger.Tools.Workflow.CharacterBuilder`
 Bridge method: C ABI DLL for numeric autofit, skinning, and validation helpers.
 
 Data ownership:
@@ -89,7 +89,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Tools.CharacterBuilder` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Tools.Workflow.CharacterBuilder` in `Debug|x64`.
 - Python adapter test: targeted helper availability and missing-DLL fallback.
 - Backend truth check: representative character fixtures before native helper
   output replaces Python behavior.
@@ -98,9 +98,9 @@ Verification gates:
 
 ## Candidate: Main Window Host Surface
 
-Native project: `GhostRigger.Windows.MainWindow`
+Native project: `GhostRigger.Windows.Shell.Main`
 Owner surface: Main window composition shell
-Owner package: `native/GhostRigger.Windows.MainWindow`
+Owner package: `native/GhostRigger.Windows.Shell.Main`
 Bridge method: host module or C ABI bridge only after the Python/Qt main window
 has a narrow native service to call.
 
@@ -113,7 +113,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Windows.MainWindow` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Windows.Shell.Main` in `Debug|x64`.
 - Python adapter test: targeted host-service discovery and fallback checks.
 - Backend truth check: not applicable unless the slice touches model/data
   pipelines.

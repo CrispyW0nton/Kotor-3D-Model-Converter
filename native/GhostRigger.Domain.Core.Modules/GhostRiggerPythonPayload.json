@@ -1,0 +1,105 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Domain.Core.Modules",
+    "file_count":  16,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/core/modules/__init__.py",
+                      "packaged_path":  "Python/src/core/modules/__init__.py",
+                      "sha256":  "1ba382d59492bc927cdb93e267ceaa7af4271ef9c9936b29e7a099f0900fe51f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/core/modules/area_wok_integration.py",
+                      "packaged_path":  "Python/src/core/modules/area_wok_integration.py",
+                      "sha256":  "3ed68f0139e617ef0ad295d3046e289350e2c7fc0f9cc4de54f55aa385f7beb0"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/core/modules/custom_module_packager.py",
+                      "packaged_path":  "Python/src/core/modules/custom_module_packager.py",
+                      "sha256":  "672642986a2d0d3900a90f16da3a8f5daa035a1836685807d010a1d00de57bbe"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/core/modules/module_blueprint_service.py",
+                      "packaged_path":  "Python/src/core/modules/module_blueprint_service.py",
+                      "sha256":  "0ca499c6c034e274623d18d0393467ccd561a1bae32afa86a69442da989a78d7"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/core/modules/module_builder_service.py",
+                      "packaged_path":  "Python/src/core/modules/module_builder_service.py",
+                      "sha256":  "fb76b6a9694d1a81d706b854443dba028a581adc6d947bc7d5e5e1e1bb757bf8"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/core/modules/module_categories.py",
+                      "packaged_path":  "Python/src/core/modules/module_categories.py",
+                      "sha256":  "f075ba68308c78580aacd6b64d46a1bc275e6eb9247c1b4e4bd9a9482bfbf626"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/core/modules/module_editor_controller.py",
+                      "packaged_path":  "Python/src/core/modules/module_editor_controller.py",
+                      "sha256":  "b666431a4b03fe83d68ccf354cfe7813908bd370c8576c813acdacedbdcd8bf8"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/core/modules/module_editor_model.py",
+                      "packaged_path":  "Python/src/core/modules/module_editor_model.py",
+                      "sha256":  "e9d2e601896eb4450bc362de73284c3414cc67d96ad9cf89ea848fee36d854cb"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/core/modules/module_format.py",
+                      "packaged_path":  "Python/src/core/modules/module_format.py",
+                      "sha256":  "8b660b1cea7c646b57d17a7551762f761b74852ca176ca043a2985d38f7d8686"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src/core/modules/module_hydration.py",
+                      "packaged_path":  "Python/src/core/modules/module_hydration.py",
+                      "sha256":  "776802e0ba8551850f1d2c79fac35d6e2d77cd62dc1f9751f3add68482848037"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src/core/modules/module_layout_service.py",
+                      "packaged_path":  "Python/src/core/modules/module_layout_service.py",
+                      "sha256":  "3cca6c8545e461033563c562e74ac1b9339cbe8ff4ec1a33f66982962b337389"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0012",
+                      "source_path":  "src/core/modules/module_loader.py",
+                      "packaged_path":  "Python/src/core/modules/module_loader.py",
+                      "sha256":  "d632fbcdc58dcedcdfd701855188adab0b84f441fe98dfec5c3f36a9e94574b2"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0013",
+                      "source_path":  "src/core/modules/module_object_inspector.py",
+                      "packaged_path":  "Python/src/core/modules/module_object_inspector.py",
+                      "sha256":  "85f7e3429e29581621a4dd9af70595c3d93f4fb586c8ac67e7b20551bb3a63d0"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0014",
+                      "source_path":  "src/core/modules/module_porter_service.py",
+                      "packaged_path":  "Python/src/core/modules/module_porter_service.py",
+                      "sha256":  "ac01b07bf61dbd40d97892754dd8cafcc7085125954952739e936aba6737045e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0015",
+                      "source_path":  "src/core/modules/module_save_pipeline.py",
+                      "packaged_path":  "Python/src/core/modules/module_save_pipeline.py",
+                      "sha256":  "da56d9fbcf2c1fe526aa4a375c20129dd57a45e600b580029eb4fbd3df08cd91"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0016",
+                      "source_path":  "src/core/modules/module_walkmesh_service.py",
+                      "packaged_path":  "Python/src/core/modules/module_walkmesh_service.py",
+                      "sha256":  "140fe20bc2f0bc3f02ec06da573704878ba8d7f73540cbf94ee2195cdedc2aa4"
+                  }
+              ]
+}

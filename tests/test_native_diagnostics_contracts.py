@@ -15,11 +15,11 @@ from src.core.diagnostics.module_reference_safety import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Diagnostics.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Diagnostics" / "GhostRigger.Diagnostics.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Diagnostics" / "GhostRigger.Diagnostics.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Diagnostics" / "Public" / "DiagnosticsContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Diagnostics" / "Private" / "DiagnosticsContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Diagnostics.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Diagnostics" / "GhostRigger.Domain.Core.Diagnostics.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Diagnostics" / "GhostRigger.Domain.Core.Diagnostics.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Diagnostics" / "Public" / "DiagnosticsContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Diagnostics" / "Private" / "DiagnosticsContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -145,8 +145,8 @@ def test_diagnostics_contracts_are_explicit_in_visual_studio_project() -> None:
     assert 'ClInclude Include="Public\\DiagnosticsContracts.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::diagnostics::core::diagnostics::contracts" in source_text
-    assert "namespace ghostrigger::diagnostics::core::diagnostics::contracts" in header_text
+    assert "namespace ghostrigger::domain::core::diagnostics::core::diagnostics::contracts" in source_text
+    assert "namespace ghostrigger::domain::core::diagnostics::core::diagnostics::contracts" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

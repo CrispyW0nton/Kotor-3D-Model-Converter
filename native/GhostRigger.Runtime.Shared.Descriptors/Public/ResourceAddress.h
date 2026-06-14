@@ -6,7 +6,7 @@
 #include <optional>
 #include <string>
 
-namespace ghostrigger::runtime::shared::descriptors::resource_address {
+namespace ghostrigger::runtime::core::host::shared::descriptors::resource_address {
 
 struct ResourceAddress {
     std::string scheme;
@@ -41,7 +41,7 @@ struct ResourceAddress {
 bool is_supported_scheme(const std::string& scheme);
 std::string supported_schemes_json();
 
-} // namespace ghostrigger::runtime::shared::descriptors::resource_address
+} // namespace ghostrigger::runtime::core::host::shared::descriptors::resource_address
 
 extern "C" {
 

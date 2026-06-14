@@ -11,11 +11,11 @@ from src.sequence.sequence_model import SequenceTime
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Sequence.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Sequence" / "GhostRigger.Sequence.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Sequence" / "GhostRigger.Sequence.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Sequence" / "Public" / "SequenceContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Sequence" / "Private" / "SequenceContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Sequence.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "GhostRigger.Domain.Core.Sequence.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "GhostRigger.Domain.Core.Sequence.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "Public" / "SequenceContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "Private" / "SequenceContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -97,8 +97,8 @@ def test_sequence_contracts_are_explicit_in_visual_studio_project() -> None:
     assert 'ClInclude Include="Public\\SequenceContracts.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::sequence::core::sequence::contracts" in source_text
-    assert "namespace ghostrigger::sequence::core::sequence::contracts" in header_text
+    assert "namespace ghostrigger::domain::core::sequence::core::sequence::contracts" in source_text
+    assert "namespace ghostrigger::domain::core::sequence::core::sequence::contracts" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

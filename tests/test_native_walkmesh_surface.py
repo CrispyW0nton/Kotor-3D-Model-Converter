@@ -8,11 +8,11 @@ from src.core.walkmesh import walkmesh_renderer
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Walkmesh.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Walkmesh" / "GhostRigger.Walkmesh.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Walkmesh" / "GhostRigger.Walkmesh.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Walkmesh" / "Public" / "WalkmeshSurface.h"
-SOURCE = ROOT / "native" / "GhostRigger.Walkmesh" / "Private" / "WalkmeshSurface.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Walkmesh.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Walkmesh" / "GhostRigger.Domain.Core.Walkmesh.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Walkmesh" / "GhostRigger.Domain.Core.Walkmesh.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Walkmesh" / "Public" / "WalkmeshSurface.h"
+SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Walkmesh" / "Private" / "WalkmeshSurface.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -87,8 +87,8 @@ def test_walkmesh_surface_contracts_are_explicit_in_visual_studio_project() -> N
     assert 'ClInclude Include="Public\\WalkmeshSurface.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::walkmesh::core::walkmesh::surface" in source_text
-    assert "namespace ghostrigger::walkmesh::core::walkmesh::surface" in header_text
+    assert "namespace ghostrigger::domain::core::walkmesh::core::walkmesh::surface" in source_text
+    assert "namespace ghostrigger::domain::core::walkmesh::core::walkmesh::surface" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

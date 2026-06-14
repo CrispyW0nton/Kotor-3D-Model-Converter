@@ -1,6 +1,6 @@
-[
+﻿[
     {
-        "project": "GhostRigger.Adapters.Files",
+        "project": "GhostRigger.Adapters.IO.Files",
         "python_file_count": 2,
         "files": [
             "src\\adapters\\files\\__init__.py",
@@ -8,7 +8,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.GPU",
+        "project": "GhostRigger.Adapters.Hardware.GPU",
         "python_file_count": 6,
         "files": [
             "src\\adapters\\gpu\\__init__.py",
@@ -20,7 +20,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.QtAutorig",
+        "project": "GhostRigger.Adapters.Qt.Autorig",
         "python_file_count": 2,
         "files": [
             "src\\adapters\\qt_autorig\\__init__.py",
@@ -28,7 +28,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.QtIPC",
+        "project": "GhostRigger.Adapters.Qt.IPC",
         "python_file_count": 2,
         "files": [
             "src\\adapters\\qt_ipc\\__init__.py",
@@ -36,7 +36,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.QtViewport",
+        "project": "GhostRigger.Adapters.Qt.Viewport",
         "python_file_count": 6,
         "files": [
             "src\\adapters\\qt_viewport\\__init__.py",
@@ -48,7 +48,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.Rendering",
+        "project": "GhostRigger.Adapters.Rendering.Core",
         "python_file_count": 28,
         "files": [
             "src\\adapters\\rendering\\__init__.py",
@@ -82,7 +82,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.Scripts",
+        "project": "GhostRigger.Adapters.Scripting.Core",
         "python_file_count": 2,
         "files": [
             "src\\adapters\\scripts\\__init__.py",
@@ -90,7 +90,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Animation",
+        "project": "GhostRigger.Domain.Core.Animation",
         "python_file_count": 45,
         "files": [
             "src\\core\\animation\\__init__.py",
@@ -141,7 +141,7 @@
         ]
     },
     {
-        "project": "GhostRigger.AnimationRetargeting",
+        "project": "GhostRigger.Domain.Core.AnimationRetargeting",
         "python_file_count": 3,
         "files": [
             "src\\core\\animation_retargeting\\__init__.py",
@@ -150,7 +150,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Assets",
+        "project": "GhostRigger.Domain.Core.Assets",
         "python_file_count": 4,
         "files": [
             "src\\core\\assets\\__init__.py",
@@ -160,7 +160,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Autorig",
+        "project": "GhostRigger.Domain.Core.Autorig",
         "python_file_count": 6,
         "files": [
             "src\\autorig\\__init__.py",
@@ -172,7 +172,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Camera",
+        "project": "GhostRigger.Domain.Core.Camera",
         "python_file_count": 14,
         "files": [
             "src\\core\\camera\\__init__.py",
@@ -192,7 +192,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Characters",
+        "project": "GhostRigger.Domain.Core.Characters",
         "python_file_count": 13,
         "files": [
             "src\\core\\characters\\__init__.py",
@@ -211,7 +211,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Converters",
+        "project": "GhostRigger.Domain.Core.Converters",
         "python_file_count": 4,
         "files": [
             "src\\converters\\__init__.py",
@@ -221,7 +221,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Diagnostics",
+        "project": "GhostRigger.Domain.Core.Diagnostics",
         "python_file_count": 4,
         "files": [
             "src\\core\\diagnostics\\__init__.py",
@@ -231,7 +231,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Export",
+        "project": "GhostRigger.Domain.Core.Export",
         "python_file_count": 5,
         "files": [
             "src\\core\\export\\__init__.py",
@@ -242,7 +242,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Formats",
+        "project": "GhostRigger.Domain.Core.Formats",
         "python_file_count": 4,
         "files": [
             "src\\formats\\__init__.py",
@@ -252,7 +252,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Camera",
+        "project": "GhostRigger.GUI.Boundary.Camera",
         "python_file_count": 18,
         "files": [
             "src\\gui\\camera\\__init__.py",
@@ -276,7 +276,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Dialogs",
+        "project": "GhostRigger.GUI.Boundary.Dialogs",
         "python_file_count": 12,
         "files": [
             "src\\gui\\dialogs\\__init__.py",
@@ -294,7 +294,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Gizmo",
+        "project": "GhostRigger.GUI.Boundary.Gizmo",
         "python_file_count": 8,
         "files": [
             "src\\gui\\gizmo\\__init__.py",
@@ -308,7 +308,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Integration",
+        "project": "GhostRigger.GUI.Boundary.Integration",
         "python_file_count": 9,
         "files": [
             "src\\gui\\__init__.py",
@@ -323,7 +323,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Lighting",
+        "project": "GhostRigger.GUI.Boundary.Lighting",
         "python_file_count": 37,
         "files": [
             "src\\gui\\lighting\\__init__.py",
@@ -366,7 +366,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Panels",
+        "project": "GhostRigger.GUI.Boundary.Panels",
         "python_file_count": 43,
         "files": [
             "src\\gui\\panels\\__init__.py",
@@ -415,7 +415,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Rendering",
+        "project": "GhostRigger.GUI.Boundary.Rendering",
         "python_file_count": 54,
         "files": [
             "src\\gui\\rendering\\__init__.py",
@@ -475,7 +475,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.SequenceEditor",
+        "project": "GhostRigger.GUI.Boundary.SequenceEditor",
         "python_file_count": 11,
         "files": [
             "src\\gui\\sequence_editor\\__init__.py",
@@ -492,7 +492,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Textures",
+        "project": "GhostRigger.GUI.Boundary.Textures",
         "python_file_count": 7,
         "files": [
             "src\\gui\\textures\\__init__.py",
@@ -505,7 +505,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Theme",
+        "project": "GhostRigger.GUI.Boundary.Theme",
         "python_file_count": 22,
         "files": [
             "src\\gui\\libtheme\\__init__.py",
@@ -533,7 +533,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GUI.Viewports",
+        "project": "GhostRigger.GUI.Boundary.Viewports",
         "python_file_count": 39,
         "files": [
             "src\\gui\\viewports\\__init__.py",
@@ -578,7 +578,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Game",
+        "project": "GhostRigger.Domain.Core.Game",
         "python_file_count": 7,
         "files": [
             "src\\core\\game\\__init__.py",
@@ -591,7 +591,7 @@
         ]
     },
     {
-        "project": "GhostRigger.GameLibrary",
+        "project": "GhostRigger.Domain.Core.GameLibrary",
         "python_file_count": 3,
         "files": [
             "src\\resources\\__init__.py",
@@ -600,7 +600,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Geometry",
+        "project": "GhostRigger.Domain.Core.Geometry",
         "python_file_count": 5,
         "files": [
             "src\\core\\geometry\\__init__.py",
@@ -611,7 +611,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Gizmo",
+        "project": "GhostRigger.Domain.Core.Gizmo",
         "python_file_count": 7,
         "files": [
             "src\\core\\gizmo\\__init__.py",
@@ -624,7 +624,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Graphics",
+        "project": "GhostRigger.Domain.Core.Graphics",
         "python_file_count": 5,
         "files": [
             "src\\core\\graphics\\__init__.py",
@@ -635,7 +635,7 @@
         ]
     },
     {
-        "project": "GhostRigger.IO",
+        "project": "GhostRigger.Domain.Core.IO",
         "python_file_count": 9,
         "files": [
             "src\\io\\__init__.py",
@@ -650,7 +650,7 @@
         ]
     },
     {
-        "project": "GhostRigger.IPC",
+        "project": "GhostRigger.Domain.Core.IPC",
         "python_file_count": 3,
         "files": [
             "src\\ipc\\__init__.py",
@@ -659,7 +659,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Infra",
+        "project": "GhostRigger.Domain.Core.Infrastructure",
         "python_file_count": 2,
         "files": [
             "src\\infra\\__init__.py",
@@ -667,7 +667,7 @@
         ]
     },
     {
-        "project": "GhostRigger.KotorMCP",
+        "project": "GhostRigger.Domain.Core.KotorMCP",
         "python_file_count": 28,
         "files": [
             "src\\kotormcp\\__init__.py",
@@ -701,7 +701,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Level",
+        "project": "GhostRigger.Domain.Core.Level",
         "python_file_count": 11,
         "files": [
             "src\\core\\level\\__init__.py",
@@ -718,7 +718,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Lighting",
+        "project": "GhostRigger.Domain.Core.Lighting",
         "python_file_count": 35,
         "files": [
             "src\\core\\lighting\\__init__.py",
@@ -759,7 +759,7 @@
         ]
     },
     {
-        "project": "GhostRigger.MDL",
+        "project": "GhostRigger.Domain.Core.MDL",
         "python_file_count": 6,
         "files": [
             "src\\core\\mdl\\__init__.py",
@@ -771,7 +771,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Math",
+        "project": "GhostRigger.Domain.Core.Math",
         "python_file_count": 6,
         "files": [
             "src\\math\\camera_math.py",
@@ -783,7 +783,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Measurement",
+        "project": "GhostRigger.Domain.Core.Measurement",
         "python_file_count": 9,
         "files": [
             "src\\measurement\\__init__.py",
@@ -798,7 +798,7 @@
         ]
     },
     {
-        "project": "GhostRigger.MeshTools",
+        "project": "GhostRigger.Domain.Core.MeshTools",
         "python_file_count": 16,
         "files": [
             "src\\mesh_tools\\__init__.py",
@@ -820,7 +820,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Modules",
+        "project": "GhostRigger.Domain.Core.Modules",
         "python_file_count": 16,
         "files": [
             "src\\core\\modules\\__init__.py",
@@ -842,7 +842,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Native.NativeCore",
+        "project": "GhostRigger.Native.Core.Foundation",
         "python_file_count": 3,
         "files": [
             "src\\adapters\\__init__.py",
@@ -851,7 +851,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Native.NativeCore.Diagnostics",
+        "project": "GhostRigger.Native.Core.Diagnostics",
         "python_file_count": 7,
         "files": [
             "src\\core\\diagnostics\\__init__.py",
@@ -864,7 +864,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Native.NativeCore.Math",
+        "project": "GhostRigger.Native.Core.Math",
         "python_file_count": 8,
         "files": [
             "src\\math\\camera_math.py",
@@ -878,7 +878,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Ports",
+        "project": "GhostRigger.Domain.Core.Ports",
         "python_file_count": 6,
         "files": [
             "src\\core\\ports\\__init__.py",
@@ -890,7 +890,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Project",
+        "project": "GhostRigger.Domain.Core.Project",
         "python_file_count": 4,
         "files": [
             "src\\core\\project\\__init__.py",
@@ -900,7 +900,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Renderer.Contracts",
+        "project": "GhostRigger.Renderer.Shared.Contracts",
         "python_file_count": 8,
         "files": [
             "src\\core\\ports\\viewport_renderer.py",
@@ -914,7 +914,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Renderer.D3D12",
+        "project": "GhostRigger.Renderer.Backend.D3D12",
         "python_file_count": 10,
         "files": [
             "src\\adapters\\rendering\\direct3d_renderer.py",
@@ -930,7 +930,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Renderer.ModernGL",
+        "project": "GhostRigger.Renderer.Backend.ModernGL",
         "python_file_count": 10,
         "files": [
             "src\\adapters\\rendering\\moderngl_benchmark.py",
@@ -946,7 +946,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Renderer.Null",
+        "project": "GhostRigger.Renderer.Backend.Null",
         "python_file_count": 4,
         "files": [
             "src\\adapters\\rendering\\null_renderer.py",
@@ -956,7 +956,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Renderer.PyGFX",
+        "project": "GhostRigger.Renderer.Backend.PyGFX",
         "python_file_count": 20,
         "files": [
             "src\\adapters\\rendering\\pygfx_renderer_exports.py",
@@ -982,7 +982,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Rendering",
+        "project": "GhostRigger.Domain.Core.Rendering",
         "python_file_count": 38,
         "files": [
             "src\\core\\rendering\\__init__.py",
@@ -1026,7 +1026,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Resources",
+        "project": "GhostRigger.Domain.Core.Resources",
         "python_file_count": 2,
         "files": [
             "src\\core\\resources\\__init__.py",
@@ -1034,7 +1034,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Retargeting",
+        "project": "GhostRigger.Domain.Core.Retargeting",
         "python_file_count": 46,
         "files": [
             "src\\core\\retargeting\\__init__.py",
@@ -1086,7 +1086,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Runtime",
+        "project": "GhostRigger.Runtime.Core.Host",
         "python_file_count": 3,
         "files": [
             "src\\__init__.py",
@@ -1140,7 +1140,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Scene",
+        "project": "GhostRigger.Domain.Core.Scene",
         "python_file_count": 14,
         "files": [
             "src\\core\\scene\\__init__.py",
@@ -1160,7 +1160,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Sequence",
+        "project": "GhostRigger.Domain.Core.Sequence",
         "python_file_count": 27,
         "files": [
             "src\\sequence\\__init__.py",
@@ -1193,7 +1193,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Skeleton",
+        "project": "GhostRigger.Domain.Core.Skeleton",
         "python_file_count": 2,
         "files": [
             "src\\core\\skeleton\\__init__.py",
@@ -1201,7 +1201,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Special",
+        "project": "GhostRigger.Domain.Core.Special",
         "python_file_count": 5,
         "files": [
             "src\\core\\special\\__init__.py",
@@ -1212,7 +1212,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Systems.BAS",
+        "project": "GhostRigger.Systems.Feature.BAS",
         "python_file_count": 4,
         "files": [
             "src\\systems\\bas\\attachment_alignment.py",
@@ -1222,7 +1222,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Templates",
+        "project": "GhostRigger.Domain.Core.Templates",
         "python_file_count": 3,
         "files": [
             "src\\core\\templates\\__init__.py",
@@ -1231,7 +1231,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.BodyAttachmentSystem",
+        "project": "GhostRigger.Tools.Workflow.BodyAttachmentSystem",
         "python_file_count": 8,
         "files": [
             "src\\gui\\panels\\qt_body_attachment_panel.py",
@@ -1245,7 +1245,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.Camera",
+        "project": "GhostRigger.Tools.Workflow.Camera",
         "python_file_count": 35,
         "files": [
             "src\\gui\\panels\\qt_camera_panel.py",
@@ -1286,7 +1286,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.CharacterBuilder",
+        "project": "GhostRigger.Tools.Workflow.CharacterBuilder",
         "python_file_count": 15,
         "files": [
             "src\\gui\\panels\\qt_character_builder_panel.py",
@@ -1307,7 +1307,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.ContentBrowser",
+        "project": "GhostRigger.Tools.Workflow.ContentBrowser",
         "python_file_count": 9,
         "files": [
             "src\\gui\\panels\\qt_content_browser_panel.py",
@@ -1322,7 +1322,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.Export",
+        "project": "GhostRigger.Tools.Workflow.Export",
         "python_file_count": 9,
         "files": [
             "src\\core\\export\\__init__.py",
@@ -1337,7 +1337,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.Lighting",
+        "project": "GhostRigger.Tools.Workflow.Lighting",
         "python_file_count": 74,
         "files": [
             "src\\gui\\panels\\qt_lighting_panel.py",
@@ -1417,7 +1417,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.ModuleMeshes",
+        "project": "GhostRigger.Tools.Workflow.ModuleMeshes",
         "python_file_count": 43,
         "files": [
             "src\\gui\\panels\\module_editor\\__init__.py",
@@ -1466,7 +1466,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.NodesSkeletonBrowser",
+        "project": "GhostRigger.Tools.Workflow.NodeSkeletonBrowser",
         "python_file_count": 48,
         "files": [
             "src\\gui\\panels\\qt_skeleton_panel.py",
@@ -1520,7 +1520,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.PivotControls",
+        "project": "GhostRigger.Tools.Workflow.PivotControls",
         "python_file_count": 6,
         "files": [
             "src\\gui\\panels\\adjust_pivot_panel.py",
@@ -1532,7 +1532,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.Properties",
+        "project": "GhostRigger.Tools.Workflow.Properties",
         "python_file_count": 4,
         "files": [
             "src\\gui\\panels\\qt_properties_panel.py",
@@ -1542,7 +1542,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.ResourceBrowser",
+        "project": "GhostRigger.Tools.Workflow.ResourceBrowser",
         "python_file_count": 9,
         "files": [
             "src\\gui\\panels\\qt_resource_panel.py",
@@ -1557,7 +1557,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.Retargeting",
+        "project": "GhostRigger.Tools.Workflow.Retargeting",
         "python_file_count": 51,
         "files": [
             "src\\core\\retargeting\\__init__.py",
@@ -1614,7 +1614,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.SceneInformation",
+        "project": "GhostRigger.Tools.Workflow.SceneInformation",
         "python_file_count": 16,
         "files": [
             "src\\gui\\panels\\qt_scene_outliner_panel.py",
@@ -1636,7 +1636,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.SequenceEditor",
+        "project": "GhostRigger.Tools.Workflow.SequenceEditor",
         "python_file_count": 29,
         "files": [
             "src\\sequence\\__init__.py",
@@ -1671,7 +1671,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.SpriteMaterials",
+        "project": "GhostRigger.Tools.Workflow.SpriteMaterials",
         "python_file_count": 14,
         "files": [
             "src\\gui\\panels\\qt_sprite_material_panel.py",
@@ -1691,7 +1691,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Tools.TwoDABrowser",
+        "project": "GhostRigger.Tools.Workflow.TwoDABrowser",
         "python_file_count": 10,
         "files": [
             "src\\gui\\panels\\qt_resource_panel.py",
@@ -1707,7 +1707,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Unreal",
+        "project": "GhostRigger.Domain.Core.Unreal",
         "python_file_count": 3,
         "files": [
             "src\\unreal\\__init__.py",
@@ -1716,7 +1716,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Validation",
+        "project": "GhostRigger.Domain.Core.Validation",
         "python_file_count": 7,
         "files": [
             "src\\core\\validation\\__init__.py",
@@ -1729,7 +1729,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Walkmesh",
+        "project": "GhostRigger.Domain.Core.Walkmesh",
         "python_file_count": 3,
         "files": [
             "src\\core\\walkmesh\\__init__.py",
@@ -1738,7 +1738,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.AnimationRetargetWorkbench",
+        "project": "GhostRigger.Windows.Workbench.AnimationRetarget",
         "python_file_count": 4,
         "files": [
             "src\\gui\\windows\\qt_retarget_preview_controller.py",
@@ -1748,14 +1748,14 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.LegacyRiggingWindow",
+        "project": "GhostRigger.Windows.Legacy.Rigging",
         "python_file_count": 1,
         "files": [
             "src\\gui\\windows\\qt_character_builder_window.py"
         ]
     },
     {
-        "project": "GhostRigger.Windows.LevelEditor",
+        "project": "GhostRigger.Windows.Editor.Level",
         "python_file_count": 2,
         "files": [
             "src\\gui\\windows\\module_editor_window.py",
@@ -1763,7 +1763,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.MainWindow",
+        "project": "GhostRigger.Windows.Shell.Main",
         "python_file_count": 35,
         "files": [
             "src\\gui\\windows\\__init__.py",
@@ -1804,14 +1804,14 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.UnrealAnimatorWindow",
+        "project": "GhostRigger.Windows.Workbench.UnrealAnimator",
         "python_file_count": 1,
         "files": [
             "src\\gui\\windows\\qt_unreal_animator.py"
         ]
     },
     {
-        "project": "GhostRigger.Workbench",
+        "project": "GhostRigger.Domain.Core.Workbench",
         "python_file_count": 2,
         "files": [
             "src\\workbench\\__init__.py",
@@ -1819,7 +1819,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Workflow",
+        "project": "GhostRigger.Domain.Core.Workflow",
         "python_file_count": 3,
         "files": [
             "src\\core\\workflow\\__init__.py",

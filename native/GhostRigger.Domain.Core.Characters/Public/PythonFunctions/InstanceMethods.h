@@ -1,0 +1,66 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::domain::core::characters {
+
+#ifndef GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& autofitreport_to_dict_line_33_ee841977_native();
+const NativeFunctionImplementation& autofitoverride_is_active_line_59_9e6cf1ad_native();
+const NativeFunctionImplementation& kotorinstallsupermodelresourcemanager_construct_line_226_39b49e73_native();
+const NativeFunctionImplementation& kotorinstallsupermodelresourcemanager_load_model_line_230_b4f199f1_native();
+const NativeFunctionImplementation& lipplayback_construct_line_447_59f98da0_native();
+const NativeFunctionImplementation& lipplayback_load_lip_line_453_dc7169fc_native();
+const NativeFunctionImplementation& lipplayback_load_talk_animation_line_471_8a8e9b0f_native();
+const NativeFunctionImplementation& lipplayback_update_line_499_1fea2b3a_native();
+const NativeFunctionImplementation& lipplayback_play_line_556_6ab85370_native();
+const NativeFunctionImplementation& lipplayback_stop_line_561_e35fd591_native();
+const NativeFunctionImplementation& lipplayback_pause_line_566_0feaed5d_native();
+const NativeFunctionImplementation& lipplayback_resume_line_570_4b644eb0_native();
+const NativeFunctionImplementation& skeletonselector_construct_line_716_abb16a59_native();
+const NativeFunctionImplementation& skeletonselector_set_model_line_723_c20a00bd_native();
+const NativeFunctionImplementation& skeletonselector_build_node_map_line_730_dceba0e0_native();
+const NativeFunctionImplementation& skeletonselector_select_all_line_739_4a92a273_native();
+const NativeFunctionImplementation& skeletonselector_select_skeleton_only_line_745_3b91aa94_native();
+const NativeFunctionImplementation& skeletonselector_select_group_line_767_61782937_native();
+const NativeFunctionImplementation& skeletonselector_select_by_names_line_784_0174d57c_native();
+const NativeFunctionImplementation& skeletonselector_deselect_line_793_fa669a6c_native();
+const NativeFunctionImplementation& skeletonselector_clear_line_801_dcdb4351_native();
+const NativeFunctionImplementation& skeletonselector_toggle_line_805_395ce025_native();
+const NativeFunctionImplementation& skeletonselector_is_selected_line_831_fe1a2033_native();
+const NativeFunctionImplementation& skeletonselector_available_groups_line_834_585dfd94_native();
+const NativeFunctionImplementation& characterbuilderexporttransactionrequest_post_construct_line_67_ccaeb70b_native();
+const NativeFunctionImplementation& characterbuilderoverridepackagerequest_post_construct_line_83_2d712e87_native();
+const NativeFunctionImplementation& characterrigstate_to_dict_line_41_2be13f9c_native();
+const NativeFunctionImplementation& characterbuildervalidationreport_to_dict_line_1021_f662db65_native();
+const NativeFunctionImplementation& characterbuildervalidationreport_to_json_line_1101_1a171c49_native();
+const NativeFunctionImplementation& characterbuildervalidationreport_to_text_line_1104_d5a86722_native();
+const NativeFunctionImplementation& gffparser_construct_line_86_60a41e81_native();
+const NativeFunctionImplementation& gffparser_parse_line_91_6e71a31e_native();
+const NativeFunctionImplementation& creatureappearance_repr_line_216_e5c6d4f0_native();
+const NativeFunctionImplementation& creaturemodelset_all_models_line_719_9678b50d_native();
+const NativeFunctionImplementation& creatureassembly_construct_line_1181_92987777_native();
+const NativeFunctionImplementation& creatureassembly_export_separate_line_1314_ae15d588_native();
+const NativeFunctionImplementation& creatureassembly_get_viewport_preview_model_line_1422_553fadfc_native();
+const NativeFunctionImplementation& nativenodesnapshot_to_dict_line_73_2504d10c_native();
+const NativeFunctionImplementation& nativeskeletonsnapshot_to_dict_line_101_abe4546e_native();
+const NativeFunctionImplementation& nativeskeletonsnapshot_node_names_line_116_21d14856_native();
+
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::domain::core::characters

@@ -12,11 +12,11 @@ from src.measurement.unit_system import UnitSystem, normalize_unit
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Measurement.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Measurement" / "GhostRigger.Measurement.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Measurement" / "GhostRigger.Measurement.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Measurement" / "Public" / "MeasurementContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Measurement" / "Private" / "MeasurementContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Measurement.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Measurement" / "GhostRigger.Domain.Core.Measurement.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Measurement" / "GhostRigger.Domain.Core.Measurement.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Measurement" / "Public" / "MeasurementContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Measurement" / "Private" / "MeasurementContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -137,8 +137,8 @@ def test_measurement_contracts_are_explicit_in_visual_studio_project() -> None:
     assert 'ClInclude Include="Public\\MeasurementContracts.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::measurement::core::measurement::contracts" in source_text
-    assert "namespace ghostrigger::measurement::core::measurement::contracts" in header_text
+    assert "namespace ghostrigger::domain::core::measurement::core::measurement::contracts" in source_text
+    assert "namespace ghostrigger::domain::core::measurement::core::measurement::contracts" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

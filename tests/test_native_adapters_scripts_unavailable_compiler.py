@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import ctypes
 import json
@@ -8,7 +8,7 @@ from src.adapters.scripts.unavailable_compiler import UnavailableScriptCompiler
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.Scripts.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.Scripting.Core.dll"
 
 
 def _load_dll() -> ctypes.CDLL:

@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from src.adapters.native_core import python_module_package_specs
@@ -17,8 +18,24 @@ def _manifest_entries() -> list[dict[str, str]]:
     return entries
 
 
-def _pascal_name(project_name: str) -> str:
-    return "".join(part for part in project_name.replace(".", " ").split() if part)
+def _project_items(project_text: str, item_name: str) -> list[str]:
+    return re.findall(rf'<{item_name} Include="([^"]+)"', project_text)
+
+
+def _read_project_item_containing(
+    project_dir: Path,
+    project_text: str,
+    item_name: str,
+    needle: str,
+) -> str:
+    for relative in _project_items(project_text, item_name):
+        item_path = project_dir / relative
+        if item_path.suffix not in {".cpp", ".h", ".hpp"}:
+            continue
+        item_text = item_path.read_text(encoding="utf-8")
+        if needle in item_text:
+            return item_text
+    raise AssertionError(f"{project_dir.name} has no {item_name} item containing {needle!r}")
 
 
 def test_native_module_manifest_covers_python_package_boundaries() -> None:
@@ -27,11 +44,11 @@ def test_native_module_manifest_covers_python_package_boundaries() -> None:
     sources = {entry["source_package"] for entry in entries}
 
     assert len(entries) == 60
-    assert "GhostRigger.Modules" in names
-    assert "GhostRigger.Level" in names
-    assert "GhostRigger.Scene" in names
-    assert "GhostRigger.GUI.Viewports" in names
-    assert "GhostRigger.Systems.BAS" in names
+    assert "GhostRigger.Domain.Core.Modules" in names
+    assert "GhostRigger.Domain.Core.Level" in names
+    assert "GhostRigger.Domain.Core.Scene" in names
+    assert "GhostRigger.GUI.Boundary.Viewports" in names
+    assert "GhostRigger.Systems.Feature.BAS" in names
 
     for source in sources:
         source_path = ROOT / source
@@ -51,29 +68,31 @@ def test_native_module_projects_are_in_solution_without_debug_app_projects() -> 
         assert f"native\\{name}\\{name}.vcxproj" in solution
         assert f"native\\{name}.DEBUG\\{name}.DEBUG.vcxproj" not in solution
         assert f"{project_guid}.Release|x64.Build.0" in solution
-        assert f"{entry['debug_project_guid']}.Debug|x64.Build.0" not in solution
+        assert not (ROOT / "native" / f"{name}.DEBUG").exists()
 
 
 def test_native_module_project_files_keep_phase_one_diagnostic_contract() -> None:
     for entry in _manifest_entries():
         name = entry["name"]
-        pascal = _pascal_name(name)
         project_dir = ROOT / "native" / name
-        debug_dir = ROOT / "native" / f"{name}.DEBUG"
 
         project = (project_dir / f"{name}.vcxproj").read_text(encoding="utf-8")
-        source = (project_dir / f"{pascal}.cpp").read_text(encoding="utf-8")
-        header = (project_dir / f"{pascal}.h").read_text(encoding="utf-8")
-        debug_source = (debug_dir / f"{pascal}DEBUG.cpp").read_text(encoding="utf-8")
+        source = _read_project_item_containing(project_dir, project, "ClCompile", f'"name":"{name}"')
+        header = _read_project_item_containing(
+            project_dir,
+            project,
+            "ClInclude",
+            f"gr_{entry['symbol_prefix']}_version",
+        )
 
         assert f"<TargetName>{name}</TargetName>" in project
+        assert f"<RootNamespace>{name}</RootNamespace>" in project
         assert f'"name":"{name}"' in source
         assert f'"source_package":"{entry["source_package"]}"' in source
         assert '"module_package":true' in source
         assert '"python_owner_active":' in source
         assert '"native_implementation_enabled":' in source
         assert f"gr_{entry['symbol_prefix']}_version" in header
-        assert f"{name}.DEBUG OK" in debug_source
 
 
 def test_native_module_packages_are_exposed_through_registry_specs() -> None:
@@ -81,7 +100,7 @@ def test_native_module_packages_are_exposed_through_registry_specs() -> None:
     specs = python_module_package_specs()
 
     assert tuple(spec.name for spec in specs) == manifest_names
-    assert specs[0].name == "GhostRigger.Modules"
-    assert specs[0].dll_name == "GhostRigger.Modules.dll"
+    assert specs[0].name == "GhostRigger.Domain.Core.Modules"
+    assert specs[0].dll_name == "GhostRigger.Domain.Core.Modules.dll"
     assert specs[0].version_export == "gr_modules_version"
     assert all(spec.capabilities_export.endswith("_capabilities_json") for spec in specs)

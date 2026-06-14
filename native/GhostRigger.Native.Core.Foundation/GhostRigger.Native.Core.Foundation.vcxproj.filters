@@ -1,0 +1,60 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{f0ee64f4-6acc-a03d-edc2-3ab2b9a4d119}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{7434837e-4aec-e9aa-2492-bc0545d5a780}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{a45739b7-d1ad-cdae-8534-d24af548e01b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{3fcb4940-0861-ce3c-ba26-858892fc13a0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{97106c3b-349b-5f1c-9939-73ed49988cae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{ae95a0db-d007-a9d5-fdfa-633eddf12607}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{7e3200ad-7da6-5122-ec49-1f6554732fd9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\native_core">
+      <UniqueIdentifier>{ac3cd908-fef5-6240-c924-bdef3b98891e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerNativeCoreFoundation.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerNativeCoreFoundation.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\adapters\__init__.py">
+      <Filter>Python\src\adapters</Filter>
+    </None>
+    <None Include="Python\src\adapters\native_core\__init__.py">
+      <Filter>Python\src\adapters\native_core</Filter>
+    </None>
+    <None Include="Python\src\adapters\native_core\package_registry.py">
+      <Filter>Python\src\adapters\native_core</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

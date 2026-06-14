@@ -8,7 +8,7 @@ from src.ipc import client
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.IPC.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.IPC.dll"
 
 
 def _load_dll() -> ctypes.CDLL:

@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::contracts {
+namespace ghostrigger::runtime::core::host::shared::contracts {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -128,4 +128,4 @@ const NativeFunctionImplementation& iviewportrenderer_invalidate_all_line_66_8f6
 
 const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::contracts
+} // namespace ghostrigger::runtime::core::host::shared::contracts

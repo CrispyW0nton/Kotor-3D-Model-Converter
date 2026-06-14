@@ -1,4 +1,4 @@
-# GhostRigger Native Project Templates
+﻿# GhostRigger Native Project Templates
 
 These templates are Phase 1 scaffolding for new C++ packages in
 `GhostRigger.sln`. They are intentionally small and explicit so future agents
@@ -12,22 +12,22 @@ Use these templates when adding:
 - a toolbox DLL package;
 - a package Debug-configuration verification contract.
 
-The anchor native projects are `GhostRigger.Native`, `GhostRigger.Native.NativeCore`,
-and `GhostRigger.Runtime`. Shared follow-on packages should use
-`GhostRigger.Native.NativeCore.{System}` for core foundations and `GhostRigger.Runtime.Shared.{System}` for
+The anchor native projects are `GhostRigger.Native.Core.Host`, `GhostRigger.Native.Core.Foundation`,
+and `GhostRigger.Runtime.Core.Host`. Shared follow-on packages should use
+`GhostRigger.Native.Core.Foundation.{System}` for core foundations and `GhostRigger.Runtime.Shared.{System}` for
 runtime contracts consumed by multiple renderer/toolbox packages.
 
 Toolbox and window migrations must use product-surface namespaces rather than
 being folded into the host or runtime projects. Native toolbox packages use
-`GhostRigger.Tools.{Toolname}`, for example `GhostRigger.Tools.Retargeting` or
-`GhostRigger.Tools.Export`. The Phase 1 native main-window package is
-`GhostRigger.Windows.MainWindow`. Shared logic that more than one tool or
-window consumes still belongs in `GhostRigger.Native.NativeCore.*` or
+`GhostRigger.Tools.Workflow.{Toolname}`, for example `GhostRigger.Tools.Workflow.Retargeting` or
+`GhostRigger.Tools.Workflow.Export`. The Phase 1 native main-window package is
+`GhostRigger.Windows.Shell.Main`. Shared logic that more than one tool or
+window consumes still belongs in `GhostRigger.Native.Core.Foundation.*` or
 `GhostRigger.Runtime.Shared.*` first.
 
-Renderer contract packages use `GhostRigger.Renderer.Contracts`. Concrete
-renderer backend packages use `GhostRigger.Renderer.{Backend}`, for example
-`GhostRigger.Renderer.D3D12` or the diagnostic `GhostRigger.Renderer.Null`.
+Renderer contract packages use `GhostRigger.Renderer.Shared.Contracts`. Concrete
+renderer backend packages use `GhostRigger.Renderer.Backend.{Backend}`, for example
+`GhostRigger.Renderer.Backend.D3D12` or the diagnostic `GhostRigger.Renderer.Backend.Null`.
 
 Do not copy an existing feature project and then strip it down. Start from the
 matching template and replace every `{{TOKEN}}`.
@@ -36,7 +36,7 @@ matching template and replace every `{{TOKEN}}`.
 
 | Token | Meaning |
 |-------|---------|
-| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRigger.Tools.Retargeting`, `GhostRigger.Windows.MainWindow`, or `GhostRigger.Renderer.D3D12`. |
+| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRigger.Tools.Workflow.Retargeting`, `GhostRigger.Windows.Shell.Main`, or `GhostRigger.Renderer.Backend.D3D12`. |
 | `{{PROJECT_GUID}}` | New project GUID in braces. |
 | `{{ROOT_NAMESPACE}}` | C++ root namespace or project namespace. |
 | `{{EXPORT_DEFINE}}` | DLL export preprocessor define, such as `GHOSTRIGGER_RENDERER_D3D12_EXPORTS`. |
@@ -53,7 +53,7 @@ matching template and replace every `{{TOKEN}}`.
    and embedded Python copies in `Python/`.
 4. Add the package project to `GhostRigger.sln` with Debug/Release and Win32/x64
    mappings. `.DEBUG` application projects must not be added to the solution.
-5. Add `GhostRigger.Native.NativeCore` as a dependency when the package uses shared
+5. Add `GhostRigger.Native.Core.Foundation` as a dependency when the package uses shared
    handles, diagnostics, or capability contracts.
 6. Add Python detection through `src.adapters.native_core.package_registry`
    when Python must query the package without starting the GUI.

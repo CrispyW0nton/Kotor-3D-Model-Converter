@@ -1,11 +1,11 @@
 #include "PythonFunctions/StaticMethods.h"
 
-namespace ghostrigger::runtime::shared::resources {
+namespace ghostrigger::runtime::core::host::shared::resources {
 
 const NativeFunctionImplementation& gamelibrary_detect_game_tag_line_815_80fc5b7b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Runtime.Shared.Resources",
-        "ghostrigger::runtime::shared::resources::resources::game_library",
+        "ghostrigger::runtime::core::host::shared::resources::resources::game_library",
         "src/resources/game_library.py",
         "GameLibrary._detect_game_tag",
         "static_methods",
@@ -13,7 +13,7 @@ const NativeFunctionImplementation& gamelibrary_detect_game_tag_line_815_80fc5b7
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Shared.Resources","namespace":"ghostrigger::runtime::shared::resources::resources::game_library","python_file":"src/resources/game_library.py","qualname":"GameLibrary._detect_game_tag","name":"_detect_game_tag","callable_type":"static_methods","line":815,"end_line":859,"signature":{"args":["game_dir"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Shared.Resources","namespace":"ghostrigger::runtime::core::host::shared::resources::resources::game_library","python_file":"src/resources/game_library.py","qualname":"GameLibrary._detect_game_tag","name":"_detect_game_tag","callable_type":"static_methods","line":815,"end_line":859,"signature":{"args":["game_dir"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
@@ -26,4 +26,4 @@ const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& 
     return entries;
 }
 
-} // namespace ghostrigger::runtime::shared::resources
+} // namespace ghostrigger::runtime::core::host::shared::resources

@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::descriptors {
+namespace ghostrigger::runtime::core::host::shared::descriptors {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -25,4 +25,4 @@ const NativeFunctionImplementation& cached_world_position_resolver_world_positio
 
 const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::descriptors
+} // namespace ghostrigger::runtime::core::host::shared::descriptors

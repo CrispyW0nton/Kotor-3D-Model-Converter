@@ -9,8 +9,8 @@ from src.core.validation.validation_bus import ValidationSeverity, ValidationSub
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Validation"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Validation.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Validation"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Validation.dll"
 
 
 def _load_validation_dll() -> ctypes.CDLL:
@@ -37,8 +37,8 @@ def _json_from_bytes(value: bytes) -> object:
 
 
 def test_validation_project_declares_validation_bus_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Validation.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Validation.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Validation.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Validation.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerValidation.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "ValidationBus.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ValidationBus.cpp").read_text(encoding="utf-8")
@@ -48,8 +48,8 @@ def test_validation_project_declares_validation_bus_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_validation_severity_rank" in package_header
-    assert "namespace ghostrigger::validation::core::validation::validation_bus" in public_header
-    assert "namespace ghostrigger::validation::core::validation::validation_bus" in implementation
+    assert "namespace ghostrigger::domain::core::validation::core::validation::validation_bus" in public_header
+    assert "namespace ghostrigger::domain::core::validation::core::validation::validation_bus" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

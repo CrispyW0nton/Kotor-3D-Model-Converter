@@ -1,0 +1,27 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Runtime.Core.Host",
+    "file_count":  3,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/__init__.py",
+                      "packaged_path":  "Python/src/__init__.py",
+                      "sha256":  "7666dae71445511631bab7954ed1f00d528e3553b8c68777819d6c8cd025d981"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/core/__init__.py",
+                      "packaged_path":  "Python/src/core/__init__.py",
+                      "sha256":  "80641d957cfc3ddb19b50609d703af150297f2e6996dcefdecebd28fdae5fb26"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/core/qt_core.py",
+                      "packaged_path":  "Python/src/core/qt_core.py",
+                      "sha256":  "556af5130b94be5862a38229a382dfecf7c0d840316d5137afc1964bf684ea68"
+                  }
+              ]
+}

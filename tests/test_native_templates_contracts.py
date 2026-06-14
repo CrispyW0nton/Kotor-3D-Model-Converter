@@ -10,11 +10,11 @@ from src.core.templates.twoda import TwoDA, TwoDARow, _split_2da_line
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Templates.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Templates" / "GhostRigger.Templates.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Templates" / "GhostRigger.Templates.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Templates" / "Public" / "TemplateContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Templates" / "Private" / "TemplateContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Templates.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Templates" / "GhostRigger.Domain.Core.Templates.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Templates" / "GhostRigger.Domain.Core.Templates.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Templates" / "Public" / "TemplateContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Templates" / "Private" / "TemplateContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -134,8 +134,8 @@ def test_templates_contracts_are_explicit_in_visual_studio_project() -> None:
     assert 'ClInclude Include="Public\\TemplateContracts.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::templates::core::templates::contracts" in source_text
-    assert "namespace ghostrigger::templates::core::templates::contracts" in header_text
+    assert "namespace ghostrigger::domain::core::templates::core::templates::contracts" in source_text
+    assert "namespace ghostrigger::domain::core::templates::core::templates::contracts" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

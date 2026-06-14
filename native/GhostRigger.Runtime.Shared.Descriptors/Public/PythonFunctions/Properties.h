@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::descriptors {
+namespace ghostrigger::runtime::core::host::shared::descriptors {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_DESCRIPTORS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -25,4 +25,4 @@ const NativeFunctionImplementation& pivotdata_rotation_line_62_8f4a7cea_native()
 
 const NativeFunctionImplementation* properties_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::descriptors
+} // namespace ghostrigger::runtime::core::host::shared::descriptors

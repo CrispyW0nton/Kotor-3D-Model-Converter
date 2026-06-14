@@ -1,0 +1,74 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::domain::core::converters {
+
+#ifndef GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_CONVERTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& objimporter_import_obj_line_49_2a0b3397_native();
+const NativeFunctionImplementation& objimporter_import_file_line_57_65af3f3e_native();
+const NativeFunctionImplementation& objimporter_fv_line_129_b726d7b6_native();
+const NativeFunctionImplementation& objimporter_make_node_line_136_8c12fdf5_native();
+const NativeFunctionImplementation& objimporter_flat_normals_line_175_a8a92ef3_native();
+const NativeFunctionImplementation& objimporter_parse_mtl_line_193_b571b0d4_native();
+const NativeFunctionImplementation& fbximporter_import_file_line_219_aaf9dc8b_native();
+const NativeFunctionImplementation& fbximporter_load_assimp_line_276_8229498f_native();
+const NativeFunctionImplementation& fbximporter_load_assimp_py_line_294_cd182bb0_native();
+const NativeFunctionImplementation& fbximporter_walk_assimp_py_nodes_line_313_29bdf562_native();
+const NativeFunctionImplementation& fbximporter_assimp_py_mesh_line_339_7f6469b6_native();
+const NativeFunctionImplementation& fbximporter_walk_assimp_nodes_line_384_3ce3d08f_native();
+const NativeFunctionImplementation& fbximporter_assimp_mesh_line_407_a00d328e_native();
+const NativeFunctionImplementation& fbximporter_load_trimesh_line_451_270675e4_native();
+const NativeFunctionImplementation& objexporter_export_line_714_4bc38697_native();
+const NativeFunctionImplementation& fbxexporter_export_line_1167_add00c64_native();
+const NativeFunctionImplementation& fbxexporter_export_fbx_sdk_line_1247_d2d7a15c_native();
+const NativeFunctionImplementation& fbxexporter_add_fbx_mesh_line_1306_4cc38b38_native();
+const NativeFunctionImplementation& fbxexporter_export_assimp_line_1350_d43dd6c0_native();
+const NativeFunctionImplementation& fbxexporter_export_fbx_ascii_line_1364_438537dd_native();
+const NativeFunctionImplementation& gltfimporter_import_file_line_2927_a38b424d_native();
+const NativeFunctionImplementation& gltfimporter_load_pygltflib_line_2945_d2cfa7b7_native();
+const NativeFunctionImplementation& gltfimporter_load_trimesh_line_3179_1d1d39f4_native();
+const NativeFunctionImplementation& gltfexporter_export_line_3218_f2fcb98c_native();
+const NativeFunctionImplementation& gltfexporter_export_pygltflib_line_3280_ec58b6b7_native();
+const NativeFunctionImplementation& gltfexporter_export_manual_line_3632_9ef4eced_native();
+const NativeFunctionImplementation& gltfroundtripresult_construct_line_3901_359c0534_native();
+const NativeFunctionImplementation& gltfroundtripresult_summary_line_3913_0d7e3e5d_native();
+const NativeFunctionImplementation& txibuilder_construct_line_39_3c077d0e_native();
+const NativeFunctionImplementation& txibuilder_set_bumpmapped_line_43_988e81e0_native();
+const NativeFunctionImplementation& txibuilder_set_envmapped_line_51_7e02a03e_native();
+const NativeFunctionImplementation& txibuilder_set_bumpmap_scaling_line_59_e692ceb5_native();
+const NativeFunctionImplementation& txibuilder_set_specular_power_line_64_638cb06a_native();
+const NativeFunctionImplementation& txibuilder_set_alpha_blend_line_70_7275122b_native();
+const NativeFunctionImplementation& txibuilder_set_procedural_line_82_07c8868c_native();
+const NativeFunctionImplementation& txibuilder_set_clamp_line_88_bd5a86c5_native();
+const NativeFunctionImplementation& txibuilder_set_isbumpmap_line_96_4d57a0ae_native();
+const NativeFunctionImplementation& txibuilder_set_wateralpha_line_102_833b762c_native();
+const NativeFunctionImplementation& txibuilder_set_fps_line_106_234c7097_native();
+const NativeFunctionImplementation& txibuilder_set_numx_line_112_87c366fa_native();
+const NativeFunctionImplementation& txibuilder_set_numy_line_118_232d7402_native();
+const NativeFunctionImplementation& txibuilder_build_line_124_775c3b39_native();
+const NativeFunctionImplementation& txibuilder_save_txi_line_128_a4c6b53f_native();
+const NativeFunctionImplementation& softwarenormalbaker_construct_line_173_c5e84a5f_native();
+const NativeFunctionImplementation& softwarenormalbaker_bake_line_177_02808e6b_native();
+const NativeFunctionImplementation& softwarenormalbaker_build_triangle_data_line_284_4d351538_native();
+const NativeFunctionImplementation& softwarenormalbaker_build_uv_lookup_line_309_ed64a14c_native();
+const NativeFunctionImplementation& softwarenormalbaker_ray_cast_normal_line_328_7b9ab29f_native();
+
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::domain::core::converters

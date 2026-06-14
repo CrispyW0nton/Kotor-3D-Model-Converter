@@ -1,0 +1,63 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.GUI.Boundary.Integration",
+    "file_count":  9,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/gui/__init__.py",
+                      "packaged_path":  "Python/src/gui/__init__.py",
+                      "sha256":  "726ea3d6adf551b742eb8614b0579436be9ebf4c25a5870ee5be32c8e39b8727"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/gui/assets/__init__.py",
+                      "packaged_path":  "Python/src/gui/assets/__init__.py",
+                      "sha256":  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/gui/assets/qt_icon_manager.py",
+                      "packaged_path":  "Python/src/gui/assets/qt_icon_manager.py",
+                      "sha256":  "18b28a1db7e33a2c1358c68bfcaa681b368d1da613347f3a8853c373421b4bf7"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/gui/assets/qt_matrix_background.py",
+                      "packaged_path":  "Python/src/gui/assets/qt_matrix_background.py",
+                      "sha256":  "31210008f44960d8d876c0f30ad42dd5509925a05c87d26ea4a0f3e983a75f59"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/gui/assets/qt_theme.py",
+                      "packaged_path":  "Python/src/gui/assets/qt_theme.py",
+                      "sha256":  "3669796e798d8c990f71d701de0e5187f7b7908e354e7eb5c183ff4b72894c62"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src/gui/integration/__init__.py",
+                      "packaged_path":  "Python/src/gui/integration/__init__.py",
+                      "sha256":  "d276bfa821e3744b08e0b759416e6deb8c99a595f196bde003d3d427030a6a97"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src/gui/integration/editor_services.py",
+                      "packaged_path":  "Python/src/gui/integration/editor_services.py",
+                      "sha256":  "876c2f7e76cef7a082674f6dffa9a2e516ca3fc2f2d8077194681e974ac9094c"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src/gui/integration/tool_integration_registry.py",
+                      "packaged_path":  "Python/src/gui/integration/tool_integration_registry.py",
+                      "sha256":  "d7f205497deca2bcd7e9f54f6d77587d74d34db0f31243740dad1892690f14aa"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src/gui/qt_lib.py",
+                      "packaged_path":  "Python/src/gui/qt_lib.py",
+                      "sha256":  "9e3328b4f37c00fb148546644b9d03bcf8edd499ccfa63341c9af788e3b53ca5"
+                  }
+              ]
+}

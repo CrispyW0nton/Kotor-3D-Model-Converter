@@ -1,0 +1,39 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "phase":  "P1.5 embedded python payload",
+    "project":  "GhostRigger.Domain.Core.Geometry",
+    "file_count":  5,
+    "originals_remain_in_src":  true,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src/core/geometry/__init__.py",
+                      "packaged_path":  "Python/src/core/geometry/__init__.py",
+                      "sha256":  "a0a22627060292608bec4c6f26badde8edeedfcba27445938b91c67ba9d290f5"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src/core/geometry/lightsaber.py",
+                      "packaged_path":  "Python/src/core/geometry/lightsaber.py",
+                      "sha256":  "e746b3a9a119df9934ab83a05d6733533f120837a551750fc242ed3cc05d8252"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src/core/geometry/map_snap_tools.py",
+                      "packaged_path":  "Python/src/core/geometry/map_snap_tools.py",
+                      "sha256":  "080f3ed3b05762c4b7e98f53da08591675e947be6d50afbb007e80cc025dbf0f"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src/core/geometry/model_data.py",
+                      "packaged_path":  "Python/src/core/geometry/model_data.py",
+                      "sha256":  "aa12bc22123f64c8627d4a8d987b0bf2e6ff7311023baf7fc3397d547bafc57e"
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src/core/geometry/vertex_space.py",
+                      "packaged_path":  "Python/src/core/geometry/vertex_space.py",
+                      "sha256":  "3cd45cf2850af8d64339855857635c5df95b29b6dc4be4e1d27809486d115275"
+                  }
+              ]
+}

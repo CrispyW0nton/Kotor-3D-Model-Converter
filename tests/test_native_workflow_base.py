@@ -9,8 +9,8 @@ from src.core.workflow import _workflow_base as workflow_base
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Workflow"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Workflow.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Workflow"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Workflow.dll"
 
 
 def _load_workflow_dll() -> ctypes.CDLL:
@@ -50,8 +50,8 @@ def _issue(severity: str, code: str) -> SimpleNamespace:
 
 
 def test_workflow_project_declares_workflow_base_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Workflow.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Workflow.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Workflow.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Workflow.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerWorkflow.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "WorkflowBase.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "WorkflowBase.cpp").read_text(encoding="utf-8")
@@ -61,8 +61,8 @@ def test_workflow_project_declares_workflow_base_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_workflow_base_safe_resref" in package_header
-    assert "namespace ghostrigger::workflow::core::workflow::workflow_base" in public_header
-    assert "namespace ghostrigger::workflow::core::workflow::workflow_base" in implementation
+    assert "namespace ghostrigger::domain::core::workflow::core::workflow::workflow_base" in public_header
+    assert "namespace ghostrigger::domain::core::workflow::core::workflow::workflow_base" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

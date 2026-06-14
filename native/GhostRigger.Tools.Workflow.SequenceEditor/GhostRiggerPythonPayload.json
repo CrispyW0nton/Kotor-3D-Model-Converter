@@ -1,0 +1,210 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "project":  "GhostRigger.Tools.Workflow.SequenceEditor",
+    "file_count":  29,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src\\sequence\\__init__.py",
+                      "packaged_path":  "Python\\src\\sequence\\__init__.py",
+                      "sha256":  "b6555edb20732d35ea4dd2763f058e4299e3f4404c1a050862b2157fe401cd27",
+                      "byte_count":  1185
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src\\sequence\\sequence_asset.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_asset.py",
+                      "sha256":  "2792005a6450859d4c1328839efd6e544787883f8965e5385f0272bead2685fe",
+                      "byte_count":  1139
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src\\sequence\\sequence_binding.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_binding.py",
+                      "sha256":  "2bbd5bcc3e28709e942dcfe6eb8f27edd250997134d38a8f755fcc4cc60aa423",
+                      "byte_count":  4338
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src\\sequence\\sequence_clipboard.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_clipboard.py",
+                      "sha256":  "639953434741a29668b1a02d91d18042f99e290383b0bf567826e62f0b4debf4",
+                      "byte_count":  1440
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src\\sequence\\sequence_evaluator.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_evaluator.py",
+                      "sha256":  "dc4a7a91a14fa0d19fbdf0a5e80ee3e5dc55497b21683064f1ac89da518ff4a2",
+                      "byte_count":  21922
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src\\sequence\\sequence_interpolation.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_interpolation.py",
+                      "sha256":  "ae656c18fdc23805ee3887f3438202a33d1ba306d063cb3cdc09b3eb811f13d5",
+                      "byte_count":  2848
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src\\sequence\\sequence_keyframe.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_keyframe.py",
+                      "sha256":  "7b145bc118ed5dddb376320cad46d4a9e910a72131b7ebc48a8b9b14760be7c9",
+                      "byte_count":  2804
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src\\sequence\\sequence_manager.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_manager.py",
+                      "sha256":  "3ea6bf77f41fc789b39161c186efd65572a5c3d8c5d270ddb8bed15f92888252",
+                      "byte_count":  8017
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src\\sequence\\sequence_model.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_model.py",
+                      "sha256":  "3b62ba097d0a7f5e9186652b83947c72106d4f3a5be92493da26c7ee35e930d2",
+                      "byte_count":  11561
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src\\sequence\\sequence_playback.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_playback.py",
+                      "sha256":  "9b080df9e8614b09a1a4da4249d7e8b58154a55d1c381cbb11a407f628daa279",
+                      "byte_count":  3300
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0011",
+                      "source_path":  "src\\sequence\\sequence_render.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_render.py",
+                      "sha256":  "feae7994e7a18e005d3ea8247814ebb99d0e66754255e07c010815e89bd5e0a0",
+                      "byte_count":  4710
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0012",
+                      "source_path":  "src\\sequence\\sequence_serialization.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_serialization.py",
+                      "sha256":  "96b2e03ad0cdfaef669d69c6a8119300d93ea67d5a242d2c632e132203258e53",
+                      "byte_count":  1692
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0013",
+                      "source_path":  "src\\sequence\\sequence_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_track.py",
+                      "sha256":  "b331d25f3d805be7efb1d9f9be4757afbbc1f4034eb5d35efa2e51d936909af3",
+                      "byte_count":  6315
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0014",
+                      "source_path":  "src\\sequence\\sequence_undo.py",
+                      "packaged_path":  "Python\\src\\sequence\\sequence_undo.py",
+                      "sha256":  "06707727adc2e3b2b0bec5d72ff68b6608c664cf1e90bfebf3f0108e9fc25a60",
+                      "byte_count":  1219
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0015",
+                      "source_path":  "src\\sequence\\tracks\\__init__.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\__init__.py",
+                      "sha256":  "6ca5b0e6d7068bc0f51e44a2937a53938070bda07c2a62b79f90e1fdaca8e2ba",
+                      "byte_count":  982
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0016",
+                      "source_path":  "src\\sequence\\tracks\\audio_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\audio_track.py",
+                      "sha256":  "f0b56c32e71acc09f38745a2c0e28163a90db5dcadfe60951890d9e7d8bad7e3",
+                      "byte_count":  1307
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0017",
+                      "source_path":  "src\\sequence\\tracks\\camera_cut_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\camera_cut_track.py",
+                      "sha256":  "f690404bf55f2f8b0fc2ee93b3297508733d9c6d86b7360ddbfc6c1c26417485",
+                      "byte_count":  4798
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0018",
+                      "source_path":  "src\\sequence\\tracks\\camera_property_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\camera_property_track.py",
+                      "sha256":  "86c5f649e89a38415f1ff62bce951a58061f10451e30cabc3e16ae109adbe7e5",
+                      "byte_count":  2410
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0019",
+                      "source_path":  "src\\sequence\\tracks\\character_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\character_track.py",
+                      "sha256":  "375b8bfe88a7df5aa0bfa32b1f872b5d8d44348b91abb25417101d11531abf53",
+                      "byte_count":  1470
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0020",
+                      "source_path":  "src\\sequence\\tracks\\event_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\event_track.py",
+                      "sha256":  "b3d4da92b48dc27b1c4c340ca23647d189b67f9c07172b1dda2fb89879a7495b",
+                      "byte_count":  2767
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0021",
+                      "source_path":  "src\\sequence\\tracks\\light_property_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\light_property_track.py",
+                      "sha256":  "99dccf39644052c7824e98d6ba04ff3d302c7f6c31d53dc20b399936347d4f9e",
+                      "byte_count":  2569
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0022",
+                      "source_path":  "src\\sequence\\tracks\\material_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\material_track.py",
+                      "sha256":  "84378b0b19a57f62d195e7035a46f2c243ce2835b592caf45611a336910680bd",
+                      "byte_count":  2408
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0023",
+                      "source_path":  "src\\sequence\\tracks\\rig_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\rig_track.py",
+                      "sha256":  "47a3d2ef4a56a2ea8b5111e54d106318f2c89b04b65679c5c86e0c07b29dfc6a",
+                      "byte_count":  1471
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0024",
+                      "source_path":  "src\\sequence\\tracks\\sub_sequence_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\sub_sequence_track.py",
+                      "sha256":  "1dda0aa681237afcdacf2cc2220a049bb166d035445df998edb653029e44e0a4",
+                      "byte_count":  3465
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0025",
+                      "source_path":  "src\\sequence\\tracks\\transform_property_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\transform_property_track.py",
+                      "sha256":  "a1f90e78a0aadacd2107dfb74d794a1d5d3d81815395f43d15446a0ab63ac82d",
+                      "byte_count":  2804
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0026",
+                      "source_path":  "src\\sequence\\tracks\\transform_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\transform_track.py",
+                      "sha256":  "911e9d2b9ff72fbd79472b8a1b5203093c5f4f97201b6f7266c4a0ae365cfef9",
+                      "byte_count":  2056
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0027",
+                      "source_path":  "src\\sequence\\tracks\\visibility_track.py",
+                      "packaged_path":  "Python\\src\\sequence\\tracks\\visibility_track.py",
+                      "sha256":  "8a159fef057263f803cca3d9c033c619fa7521b295ddd0e0e145cbae066c2719",
+                      "byte_count":  1613
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0028",
+                      "source_path":  "src\\gui\\panels\\qt_animation_panel.py",
+                      "packaged_path":  "Python\\src\\gui\\panels\\qt_animation_panel.py",
+                      "sha256":  "c421f8f4684dfe0a6404df12cdc1d2986f01e2e7eb57d61ae0d403f0eee2bd4e",
+                      "byte_count":  43473
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0029",
+                      "source_path":  "src\\gui\\windows\\application_core\\shared\\animation_workflow.py",
+                      "packaged_path":  "Python\\src\\gui\\windows\\application_core\\shared\\animation_workflow.py",
+                      "sha256":  "4d14f8b4727a1ed41b6546316a9ebf54ee0476ff0a844ce7a8c8a87949323125",
+                      "byte_count":  44435
+                  }
+              ]
+}

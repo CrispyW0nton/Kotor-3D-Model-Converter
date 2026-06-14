@@ -1,0 +1,77 @@
+{
+    "schema":  "ghostrigger_python_payload.v1",
+    "project":  "GhostRigger.Renderer.Backend.D3D12",
+    "file_count":  10,
+    "files":  [
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0001",
+                      "source_path":  "src\\adapters\\rendering\\direct3d_renderer.py",
+                      "packaged_path":  "Python\\src\\adapters\\rendering\\direct3d_renderer.py",
+                      "sha256":  "c857e91f9d04b2021009bac10bfa292550881ea3062869802a8175f7cad53770",
+                      "byte_count":  1865
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0002",
+                      "source_path":  "src\\gui\\rendering\\direct3d_renderer.py",
+                      "packaged_path":  "Python\\src\\gui\\rendering\\direct3d_renderer.py",
+                      "sha256":  "4f3a47a9f0ffc89c8fee25c38fd971a003d21d80a92a87798fa0b86ac02ebe72",
+                      "byte_count":  265
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0003",
+                      "source_path":  "src\\core\\rendering\\gpu_debug_tables.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\gpu_debug_tables.py",
+                      "sha256":  "010a37feb0a63f95ca886576692b8ff0ef9efdfa512432d65590daf1fa9151c0",
+                      "byte_count":  14936
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0004",
+                      "source_path":  "src\\core\\rendering\\gpu_diagnostics_config.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\gpu_diagnostics_config.py",
+                      "sha256":  "fc8a5a7e33e971a3da4363b95609d6efc8b26259fcfb844850e28a7b802b9408",
+                      "byte_count":  1379
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0005",
+                      "source_path":  "src\\core\\rendering\\gpu_diagnostics_records.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\gpu_diagnostics_records.py",
+                      "sha256":  "5c2222453229f30dbadc87ca4776c4813c61dc16d7e0ba0de8857e9daec8ce43",
+                      "byte_count":  82799
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0006",
+                      "source_path":  "src\\core\\rendering\\gpu_scene_helpers.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\gpu_scene_helpers.py",
+                      "sha256":  "7924924e3f1f5462492337802f2f045d714f8f1061556e66c68fde0e4f71b19e",
+                      "byte_count":  11256
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0007",
+                      "source_path":  "src\\core\\rendering\\gpu_shaders.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\gpu_shaders.py",
+                      "sha256":  "7ddc031a9a0cc0d0641ba78f0dd212cfbb1e87f4ba64966e0b626bde11343210",
+                      "byte_count":  32243
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0008",
+                      "source_path":  "src\\core\\rendering\\gpu_vbo_layout.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\gpu_vbo_layout.py",
+                      "sha256":  "7c98f12f43618ebb4538e00cee32aa5cddecad357fdc16eab623e6a7b8f7e72d",
+                      "byte_count":  1106
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0009",
+                      "source_path":  "src\\core\\rendering\\hardware_info.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\hardware_info.py",
+                      "sha256":  "16bd5be71a7a302087b0bf7a9297902b0274ae777cffdbaa31e3db0df5f5e6ac",
+                      "byte_count":  12917
+                  },
+                  {
+                      "resource_name":  "PYTHON_PAYLOAD_0010",
+                      "source_path":  "src\\core\\rendering\\mesh_render_data.py",
+                      "packaged_path":  "Python\\src\\core\\rendering\\mesh_render_data.py",
+                      "sha256":  "bb5e9179f212a7d993a86abc03089a7b17b4c04770046beddf189b7e9044e785",
+                      "byte_count":  50423
+                  }
+              ]
+}

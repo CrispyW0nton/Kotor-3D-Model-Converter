@@ -1,0 +1,27 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Native.Core.Foundation",
+    "file_count": 3,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/adapters/__init__.py",
+            "packaged_path": "Python/src/adapters/__init__.py",
+            "sha256": "a44fb94ee12395f2615085b8a2abd28a24facb47cfc1ed053b7e3f30ebc4531a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/adapters/native_core/__init__.py",
+            "packaged_path": "Python/src/adapters/native_core/__init__.py",
+            "sha256": "fb7593faba08932ea23395f5959240442fa6b11dce2466624c90057c475eafa1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/adapters/native_core/package_registry.py",
+            "packaged_path": "Python/src/adapters/native_core/package_registry.py",
+            "sha256": "d749bd61a8013c5fb84a3c11b7edb690fbf92a475d83052635a86e7fbb1db483"
+        }
+    ]
+}

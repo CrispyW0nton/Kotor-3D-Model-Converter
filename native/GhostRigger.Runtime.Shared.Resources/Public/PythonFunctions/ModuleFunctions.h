@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace ghostrigger::runtime::shared::resources {
+namespace ghostrigger::runtime::core::host::shared::resources {
 
 #ifndef GHOSTRIGGER_RUNTIME_SHARED_RESOURCES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 #define GHOSTRIGGER_RUNTIME_SHARED_RESOURCES_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
@@ -74,4 +74,4 @@ const NativeFunctionImplementation& res_name_line_130_c437aa6c_native();
 
 const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 
-} // namespace ghostrigger::runtime::shared::resources
+} // namespace ghostrigger::runtime::core::host::shared::resources

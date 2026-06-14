@@ -8,8 +8,8 @@ from src.core.project.resource_address import ResourceAddress, SUPPORTED_RESOURC
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Project"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Project.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Project"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Project.dll"
 
 
 def _bytes(value: str | None) -> bytes | None:
@@ -36,8 +36,8 @@ def _load_project_dll() -> ctypes.CDLL:
 
 
 def test_project_declares_native_resource_address_files() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Project.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Project.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Project.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Project.vcxproj.filters").read_text(encoding="utf-8")
     header = (PROJECT_DIR / "Public" / "ResourceAddress.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ResourceAddress.cpp").read_text(encoding="utf-8")
 
@@ -45,8 +45,8 @@ def test_project_declares_native_resource_address_files() -> None:
     assert '<ClCompile Include="Private\\ResourceAddress.cpp" />' in project
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
-    assert "namespace ghostrigger::project::core::project::resource_address" in header
-    assert "namespace ghostrigger::project::core::project::resource_address" in implementation
+    assert "namespace ghostrigger::domain::core::project::core::project::resource_address" in header
+    assert "namespace ghostrigger::domain::core::project::core::project::resource_address" in implementation
     assert "using namespace" not in implementation
     assert "phase15" not in implementation
     assert "pyfn_" not in implementation
