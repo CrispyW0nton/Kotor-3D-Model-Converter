@@ -32,9 +32,9 @@ def test_native_gl_backend_candidates_match_python_for_platform_names(monkeypatc
     monkeypatch.delenv("GHOSTRIGGER_GL_BACKEND", raising=False)
     dll = _load_dll()
 
-    assert _candidates(dll, "nt") == list(moderngl_context._gl_context_backend_candidates("nt"))
-    assert _candidates(dll, "posix") == list(moderngl_context._gl_context_backend_candidates("posix"))
-    assert _candidates(dll, "java") == list(moderngl_context._gl_context_backend_candidates("java"))
+    assert _candidates(dll, "nt") == list(moderngl_context._python_gl_context_backend_candidates("nt"))
+    assert _candidates(dll, "posix") == list(moderngl_context._python_gl_context_backend_candidates("posix"))
+    assert _candidates(dll, "java") == list(moderngl_context._python_gl_context_backend_candidates("java"))
 
 
 def test_native_gl_backend_candidates_honor_env_override(monkeypatch) -> None:

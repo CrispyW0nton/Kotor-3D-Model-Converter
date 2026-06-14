@@ -9,6 +9,13 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-14
+
+- Native-first ModernGL GPU adapter selection: `src.adapters.gpu.moderngl_context` now prefers the existing `GhostRigger.Adapters.GPU.dll` C ABI for ModernGL standalone backend candidate selection, while preserving the explicit `GHOSTRIGGER_GL_BACKEND` override and clean Python fallback when the DLL is missing or invalid. The embedded Python payload copies in the GPU adapter and ModernGL renderer native packages were kept in sync, and the GPU adapter DEBUG validator now checks the native backend-candidate and light-kind contracts.
+  Owner: LordVaderCW.
+  Affected areas: `src/adapters/gpu/moderngl_context.py`, `native/GhostRigger.Adapters.GPU/Python/src/adapters/gpu/moderngl_context.py`, `native/GhostRigger.Renderer.ModernGL/Python/src/adapters/gpu/moderngl_context.py`, `native/GhostRigger.Adapters.GPU.DEBUG/Private/GhostRiggerAdaptersGPUDEBUG.cpp`, `tests/test_native_adapters_gpu_contracts.py`, `tests/test_regression.py`.
+  Verification: `python -m pytest tests\test_native_adapters_gpu_contracts.py tests\test_regression.py::test_gl_context_backend_candidates_are_platform_aware tests\test_regression.py::test_gl_context_backend_candidates_prefer_native_adapter tests\test_regression.py::test_gl_context_backend_candidates_fall_back_when_native_missing -q`; `python -m py_compile src\adapters\gpu\moderngl_context.py native\GhostRigger.Adapters.GPU\Python\src\adapters\gpu\moderngl_context.py native\GhostRigger.Renderer.ModernGL\Python\src\adapters\gpu\moderngl_context.py tests\test_native_adapters_gpu_contracts.py tests\test_regression.py`; `build\vs\x64\Debug\GhostRigger.Adapters.GPU.DEBUG.exe`; Visual Studio solution target `GhostRigger_Adapters_GPU_DEBUG` rebuilt with `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe`.
+
 ## 2026-06-10
 
 
