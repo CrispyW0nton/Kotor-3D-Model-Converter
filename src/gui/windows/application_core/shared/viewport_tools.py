@@ -507,6 +507,13 @@ class ViewportToolsMixin:
         current_theme = getattr(theme_manager, "current_theme", None) or (theme_manager.get_theme() if theme_manager is not None else None)
         current_layout = getattr(layout_manager, "current_layout", None) or (layout_manager.get_layout() if layout_manager is not None else None)
         return {
+            "window": {
+                "visible": bool(self.isVisible()),
+                "active": bool(self.isActiveWindow()),
+                "minimized": bool(self.isMinimized()),
+                "width": int(self.width()),
+                "height": int(self.height()),
+            },
             "scene": {
                 "name": str(getattr(scene, "display_name", getattr(scene, "name", "")) or ""),
                 "path": str(getattr(scene, "path", "") or ""),

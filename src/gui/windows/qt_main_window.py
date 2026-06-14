@@ -447,6 +447,15 @@ class QtGhostRiggerMainWindow(
         def refresh_viewport() -> None:
             self._refresh_all()
 
+        def show_window() -> None:
+            if self.isMinimized():
+                self.showNormal()
+            else:
+                self.show()
+            self.raise_()
+            self.activateWindow()
+            self._log("IPC show_window: main window raised.", "info")
+
         def show_panel(panel: str) -> None:
             self._show_workspace_dock(str(panel or ""))
 
@@ -608,6 +617,17 @@ class QtGhostRiggerMainWindow(
             else:
                 self._log(f"IPC viewport capture failed: {target}", "warning")
 
+        def capture_window(path: str) -> None:
+            target = Path(str(path or "")).expanduser()
+            if not target.is_absolute():
+                target = Path.cwd() / target
+            target.parent.mkdir(parents=True, exist_ok=True)
+            pixmap = self.grab()
+            if pixmap.save(str(target)):
+                self._log(f"IPC window capture: {target}", "info")
+            else:
+                self._log(f"IPC window capture failed: {target}", "warning")
+
         try:
             self._ipc_server = GhostRiggerIPCServer(
                 {
@@ -626,6 +646,7 @@ class QtGhostRiggerMainWindow(
                     "scene_object_command": scene_object_command,
                     "scene_object_properties": scene_object_properties,
                     "refresh_viewport": refresh_viewport,
+                    "show_window": show_window,
                     "show_panel": show_panel,
                     "open_tool": open_tool,
                     "viewport_command": viewport_command,
@@ -642,6 +663,7 @@ class QtGhostRiggerMainWindow(
                     "set_light_helpers": set_light_helpers,
                     "select_helper": select_helper,
                     "capture_viewport": capture_viewport,
+                    "capture_window": capture_window,
                 }
             )
             self._ipc_server.start()

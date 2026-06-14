@@ -412,6 +412,14 @@ class GhostRiggerIPCServer:
                 self._schedule_callback(cb, panel)
             return jsonify({"status": "ok", "showing": panel})
 
+        @app.route("/api/show_window", methods=["POST"])
+        def route_show_window():
+            """Raise the main GhostRigger window in the running UI for visual QA."""
+            cb = self.callbacks.get("show_window")
+            if cb is not None:
+                self._schedule_callback(cb)
+            return jsonify({"status": "ok", "showing": "main_window"})
+
         @app.route("/api/open_tool", methods=["POST"])
         def route_open_tool():
             """Open a GhostRigger workbench, standalone tool window, or dock."""
@@ -560,6 +568,20 @@ class GhostRiggerIPCServer:
                 return jsonify({"error": "missing path"}), 400
 
             cb = self.callbacks.get("capture_viewport")
+            if cb is not None:
+                self._schedule_callback(cb, path)
+            return jsonify({"status": "ok", "path": path})
+
+        @app.route("/api/capture_window", methods=["POST"])
+        def route_capture_window():
+            """Capture the running main window to a PNG path for visual QA."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            path = str(payload.get("path", body.get("path", "")) or "").strip()
+            if not path:
+                return jsonify({"error": "missing path"}), 400
+
+            cb = self.callbacks.get("capture_window")
             if cb is not None:
                 self._schedule_callback(cb, path)
             return jsonify({"status": "ok", "path": path})

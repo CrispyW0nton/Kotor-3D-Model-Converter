@@ -31,9 +31,25 @@ If you get an ImportError, fix the import path — don't ask the user to open Gh
 - Do not run broad suites such as `pytest tests/`, `pytest tests/ -x`, `pytest tests/ -m "not slow"`, or full-scan tests unless the user explicitly asks for them.
 - Do not run `pytest tests/test_mcp_full_scan.py` unless the user explicitly asks for the complete 6,078-model validation.
 - When testing whether application behavior works, launch the actual
-  GhostRigger application and test it on screen. Visible testing is required
-  for UI, startup, viewport, theme/layout, and workflow checks. Do not replace
-  this with MCP calls, direct widget screenshots, or backend-only probes.
+  GhostRigger Debug application from the active Visual Studio instance and test
+  it on screen. Visible testing is required for UI, startup, viewport,
+  theme/layout, and workflow checks. Do not replace this with MCP calls, direct
+  widget screenshots, or backend-only probes.
+
+## Core visible test fixtures
+
+When testing simple application behavior, prefer the smallest fixture that
+exercises the workflow:
+
+- Static-object workflows: use `PLC_bench` for selection, selection modes, mesh
+  tools, and pivot tools on static meshes. It is the fastest baseline for
+  object-tool testing.
+- Animation workflows: use `N_DarthMalak` as the whole-model animation baseline
+  with the `walk` animation looped unless the user explicitly names another
+  model or animation. For headless/body-part coverage, use Carth's body with
+  Carth's head attached. For cloth-model coverage, use Bastila's body and head.
+- Module and lighting workflows: use the Ebon Hawk module, preferably
+  `K2:001ebo1` / `001EBO1` unless the user explicitly names another module.
 
 ## Renderer module test fixture
 

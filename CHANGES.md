@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-14
 
+### [2026-06-14] Application Testing Fixture Docs
+
+Owner: LordVaderCW
+Subsystem: Testing documentation
+
+- Updated `AGENTS.md` visible-testing guidance so application workflow checks launch the Debug app from the active Visual Studio instance.
+- Added the core visible fixture matrix: `PLC_bench` for static-object selection, mesh, and pivot tools; `N_DarthMalak` looped `walk` plus Carth head/body and Bastila cloth head/body coverage for animation workflows; and the Ebon Hawk module / `K2:001ebo1` for module lighting checks.
+
+Verification:
+- Documentation-only change; inspected the updated `AGENTS.md` testing sections.
+
 ### [2026-06-14] Canonical Namespace Migration
 
 Owner: LordVaderCW
