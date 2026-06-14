@@ -222,6 +222,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.GUI.Integration
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Systems.BAS", "native\GhostRigger.Systems.BAS\GhostRigger.Systems.BAS.vcxproj", "{438F6370-60F0-444C-BC78-062E17D9BA37}"
 EndProject
+
+
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32

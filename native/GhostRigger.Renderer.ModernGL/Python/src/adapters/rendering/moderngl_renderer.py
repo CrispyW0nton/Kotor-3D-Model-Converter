@@ -2,9 +2,21 @@
 
 from __future__ import annotations
 
+import ctypes
+import json
+import os
+import platform
+from pathlib import Path
+
 from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer, moderngl_runtime_available
 from src.core.rendering.renderer_backend import RendererBackend
 from src.core.rendering.renderer_capabilities import MODERNGL_DISPLAY_MODES, RendererCapabilities
+
+
+_NATIVE_MODERNGL_ENV = "GHOSTRIGGER_RENDERER_MODERNGL"
+_NATIVE_MODERNGL_DLL = "GhostRigger.Renderer.ModernGL.dll"
+_native_moderngl_dll: ctypes.CDLL | None = None
+_native_moderngl_attempted = False
 
 
 class ModernGLRenderer(GpuRenderer):
@@ -72,26 +84,119 @@ class ModernGLRenderer(GpuRenderer):
         self.release()
 
     def get_diagnostics(self) -> dict:
+        global _native_moderngl_attempted, _native_moderngl_dll
         ctx = getattr(self, "_ctx", None)
         perf = dict(getattr(self, "perf", {}) or {})
+        info = getattr(ctx, "info", {}) if ctx is not None else {}
+        version_code = getattr(ctx, "version_code", None)
+        gpu = info.get("GL_RENDERER") if ctx is not None else None
+        vendor = info.get("GL_VENDOR") if ctx is not None else None
+        mesh_cache_size = len(getattr(self, "_mesh_cache", {}) or {})
+        texture_cache_size = len(getattr(getattr(self, "_tex_cache", None), "_cache", {}) or {})
+        viewport_display = getattr(getattr(self, "display_options", None), "diagnostics", lambda: {})()
+        try:
+            frame_time_ms = float(perf.get("last_frame_ms") or 0.0)
+        except (TypeError, ValueError):
+            frame_time_ms = 0.0
+        try:
+            upload_ms = float(perf.get("gpu_upload_ms") or 0.0)
+        except (TypeError, ValueError):
+            upload_ms = 0.0
+        try:
+            draw_ms = float(perf.get("draw_ms") or 0.0)
+        except (TypeError, ValueError):
+            draw_ms = 0.0
+        try:
+            readback_ms = float(perf.get("readback_ms") or 0.0)
+        except (TypeError, ValueError):
+            readback_ms = 0.0
+        try:
+            triangle_count = int(perf.get("tri_count") or 0)
+        except (TypeError, ValueError):
+            triangle_count = 0
+        try:
+            version_number = int(version_code or 0) if version_code is not None else -1
+        except (TypeError, ValueError):
+            version_number = -1
+
+        if not _native_moderngl_attempted and platform.system().lower() == "windows":
+            _native_moderngl_attempted = True
+            candidates: list[Path] = []
+            override = os.environ.get(_NATIVE_MODERNGL_ENV)
+            if override:
+                candidates.append(Path(override))
+            root = Path(__file__).resolve().parents[3]
+            candidates.extend(
+                [
+                    root / "build" / "vs" / "x64" / "Release" / _NATIVE_MODERNGL_DLL,
+                    root / "build" / "vs" / "x64" / "Debug" / _NATIVE_MODERNGL_DLL,
+                ]
+            )
+            for candidate in candidates:
+                if not candidate.exists():
+                    continue
+                try:
+                    dll = ctypes.CDLL(str(candidate))
+                    dll.gr_renderer_moderngl_frame_diagnostics_json.argtypes = [
+                        ctypes.c_int,
+                        ctypes.c_int,
+                        ctypes.c_char_p,
+                        ctypes.c_char_p,
+                        ctypes.c_double,
+                        ctypes.c_double,
+                        ctypes.c_double,
+                        ctypes.c_double,
+                        ctypes.c_int,
+                        ctypes.c_int,
+                        ctypes.c_int,
+                    ]
+                    dll.gr_renderer_moderngl_frame_diagnostics_json.restype = ctypes.c_char_p
+                except (AttributeError, OSError):
+                    continue
+                _native_moderngl_dll = dll
+                break
+
+        if _native_moderngl_dll is not None:
+            try:
+                raw = _native_moderngl_dll.gr_renderer_moderngl_frame_diagnostics_json(
+                    int(bool(getattr(self, "_gpu_available", False))),
+                    version_number,
+                    str(gpu or "").encode("utf-8", errors="replace"),
+                    str(vendor or "").encode("utf-8", errors="replace"),
+                    frame_time_ms,
+                    upload_ms,
+                    draw_ms,
+                    readback_ms,
+                    triangle_count,
+                    mesh_cache_size,
+                    texture_cache_size,
+                )
+                diagnostics = json.loads((raw or b"{}").decode("utf-8", errors="replace"))
+                diagnostics["name"] = self.name
+                diagnostics["backend_id"] = self.backend_id
+                diagnostics["viewport_display"] = viewport_display
+                return diagnostics
+            except Exception:
+                pass
+
         return {
             "name": self.name,
             "backend_id": self.backend_id,
             "available": bool(getattr(self, "_gpu_available", False)),
             "api": "OpenGL",
             "backend": "ModernGL",
-            "viewport_display": getattr(getattr(self, "display_options", None), "diagnostics", lambda: {})(),
+            "viewport_display": viewport_display,
             "mature_material_path": True,
-            "version_code": getattr(ctx, "version_code", None),
-            "gpu": getattr(ctx, "info", {}).get("GL_RENDERER") if ctx is not None else None,
-            "vendor": getattr(ctx, "info", {}).get("GL_VENDOR") if ctx is not None else None,
+            "version_code": version_code,
+            "gpu": gpu,
+            "vendor": vendor,
             "performance": {
-                "frame_time_ms": round(float(perf.get("last_frame_ms", 0.0) or 0.0), 3),
-                "upload_ms": round(float(perf.get("gpu_upload_ms", 0.0) or 0.0), 3),
-                "draw_ms": round(float(perf.get("draw_ms", 0.0) or 0.0), 3),
-                "readback_ms": round(float(perf.get("readback_ms", 0.0) or 0.0), 3),
+                "frame_time_ms": round(frame_time_ms, 3),
+                "upload_ms": round(upload_ms, 3),
+                "draw_ms": round(draw_ms, 3),
+                "readback_ms": round(readback_ms, 3),
             },
-            "triangle_count": int(perf.get("tri_count", 0) or 0),
-            "mesh_cache_size": len(getattr(self, "_mesh_cache", {}) or {}),
-            "texture_cache_size": len(getattr(getattr(self, "_tex_cache", None), "_cache", {}) or {}),
+            "triangle_count": triangle_count,
+            "mesh_cache_size": mesh_cache_size,
+            "texture_cache_size": texture_cache_size,
         }

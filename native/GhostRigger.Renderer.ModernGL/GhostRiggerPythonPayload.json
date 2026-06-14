@@ -7,36 +7,36 @@
       "resource_name": "PYTHON_PAYLOAD_0001",
       "source_path": "src\\adapters\\rendering\\moderngl_benchmark.py",
       "packaged_path": "Python\\src\\adapters\\rendering\\moderngl_benchmark.py",
-      "sha256": "6270218ee61693bf323dec11647e595929edd6b746370ad343f639ed3a10e7ea",
-      "byte_count": 4811
+      "sha256": "138d6865b7e10fb780a4db5c1836dab56678bbb2354f04ba7327573fd98ddbe0",
+      "byte_count": 4826
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0002",
       "source_path": "src\\adapters\\rendering\\moderngl_cli.py",
       "packaged_path": "Python\\src\\adapters\\rendering\\moderngl_cli.py",
-      "sha256": "7263f06e8322bcc5f6f687b370cd59c5d58c9c710fc3d7705c35e6165eefd786",
-      "byte_count": 1537
+      "sha256": "adbe94874147899505e785e4fd19c88d6ce355f6138efe2e73a11dd93c61c7bc",
+      "byte_count": 1583
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0003",
       "source_path": "src\\adapters\\rendering\\moderngl_legacy_bridge.py",
       "packaged_path": "Python\\src\\adapters\\rendering\\moderngl_legacy_bridge.py",
-      "sha256": "68e074f4f16b10b2aded0c1936caf87b347f0bb6a53f3d14a706cb9c3daab0c7",
-      "byte_count": 1253
+      "sha256": "b515da25cb96bb59d392d4b1ef152a85bf4f0efa70401017fc105a54455997c1",
+      "byte_count": 1292
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0004",
       "source_path": "src\\adapters\\rendering\\moderngl_renderer.py",
       "packaged_path": "Python\\src\\adapters\\rendering\\moderngl_renderer.py",
-      "sha256": "a5d496f3b1f51fb53cce8ba838c0cc9b924232ef4a6b8c60b5f5c2c5fd632305",
-      "byte_count": 4027
+      "sha256": "91a2da27371b1b562275f1362bbc25ae7f6fc98fa89dfc4066008c8895c6288e",
+      "byte_count": 8014
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0005",
       "source_path": "src\\adapters\\rendering\\moderngl_renderer_impl.py",
       "packaged_path": "Python\\src\\adapters\\rendering\\moderngl_renderer_impl.py",
-      "sha256": "48d9db2f9dce1868241b54e6b9e78609a719d4f1225ab5a7fb38053e9dbd9f40",
-      "byte_count": 145591
+      "sha256": "58575e8976546da42db383ad1f9d8a248242affcf90ebb1cd05e4c1f659d272e",
+      "byte_count": 145725
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0006",
@@ -49,29 +49,29 @@
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src\\adapters\\rendering\\moderngl_scene_helpers.py",
       "packaged_path": "Python\\src\\adapters\\rendering\\moderngl_scene_helpers.py",
-      "sha256": "a9fd8faa5f36f225c3867a7dcfc57cb1bafd705d239f202cbc22838251672a93",
-      "byte_count": 4416
+      "sha256": "9e151e636f608ac12773985cd45f3a96e4a853e56f5e3ee52f588cb33aba61f5",
+      "byte_count": 4547
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
       "source_path": "src\\adapters\\gpu\\moderngl_context.py",
       "packaged_path": "Python\\src\\adapters\\gpu\\moderngl_context.py",
-      "sha256": "9386e4c4dae64b308998af1fc83e91c2325b6f352cdfdc8d1088023ad8716f62",
-      "byte_count": 1904
+      "sha256": "fd35cc3f9821ea6759d4adc38681cfb9cf3f5fe9a7f83428543956214af176d9",
+      "byte_count": 4280
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0009",
       "source_path": "src\\adapters\\gpu\\moderngl_runtime.py",
       "packaged_path": "Python\\src\\adapters\\gpu\\moderngl_runtime.py",
-      "sha256": "680d563a6ec66047536d99f7b290aedb53b6e44af4ec8a28db42615616f4c8ca",
-      "byte_count": 1526
+      "sha256": "564cd83f05090a23fc4997fee7ba02e5a6f46f5749299da6add189412f10d1a7",
+      "byte_count": 1588
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0010",
       "source_path": "src\\gui\\rendering\\moderngl_renderer.py",
       "packaged_path": "Python\\src\\gui\\rendering\\moderngl_renderer.py",
-      "sha256": "98c2b7514364d74f9753abf52b3310d6cb7a80a6b7fc0b3be751ecf346172875",
-      "byte_count": 256
+      "sha256": "c4a8e885fd1b2c8fd537d44d4b82b775a58386b5c4903e7ab4fdf392a0c68a25",
+      "byte_count": 265
     }
   ]
 }

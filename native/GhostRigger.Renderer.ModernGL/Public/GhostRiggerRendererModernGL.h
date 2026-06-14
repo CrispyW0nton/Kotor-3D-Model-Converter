@@ -16,5 +16,18 @@ GR_RENDERER_MODERNGL_API const char* gr_renderer_moderngl_version();
 GR_RENDERER_MODERNGL_API const char* gr_renderer_moderngl_capabilities_json();
 GR_RENDERER_MODERNGL_API const char* gr_renderer_moderngl_backend_info_json();
 GR_RENDERER_MODERNGL_API const char* gr_renderer_moderngl_adapter_bridge_json();
+GR_RENDERER_MODERNGL_API const char* gr_renderer_moderngl_frame_diagnostics_json(
+    int available,
+    int version_code,
+    const char* gpu,
+    const char* vendor,
+    double frame_time_ms,
+    double upload_ms,
+    double draw_ms,
+    double readback_ms,
+    int triangle_count,
+    int mesh_cache_size,
+    int texture_cache_size
+);
 
 }

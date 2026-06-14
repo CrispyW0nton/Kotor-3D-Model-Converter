@@ -18,6 +18,13 @@ Visual Studio. Do not add parallel `.DEBUG` application projects to
 `GhostRigger.sln`; use the owning package target in `Debug|x64` plus targeted
 Python/ctypes ABI tests for native verification.
 
+Visual Studio project display names should follow the canonical
+`GhostRigger.Group.Type.ModuleName` shape directly in the solution. Do not use
+solution folders as a substitute for canonical project names. Keep ABI/package
+names stable during migration unless a batch explicitly updates project files,
+references, payload manifests, tests, bridge lookups, and compatibility shims
+together.
+
 The first native runtime project is `GhostRigger.Runtime`, a DLL with a tiny C
 ABI used by Python to query native runtime version, lifecycle, retained scene
 handles, mesh/texture-resource descriptors, skin-palette descriptors,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import xml.etree.ElementTree as ET
 
 
@@ -38,6 +39,39 @@ def _render_template(path: Path) -> str:
     for token, value in values.items():
         text = text.replace(token, value)
     return text
+
+
+def _solution_project_names(solution: str) -> list[str]:
+    pattern = re.compile(
+        r'Project\("\{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942\}"\) = '
+        r'"([^"]+)", "[^"]+", "\{[A-F0-9-]+\}"'
+    )
+    return [match.group(1) for match in pattern.finditer(solution)]
+
+
+def _solution_folder_names(solution: str) -> list[str]:
+    pattern = re.compile(
+        r'Project\("\{2150E333-8FDC-42A3-9474-1A3956D46DE8\}"\) = '
+        r'"([^"]+)", "[^"]+", "\{[A-F0-9-]+\}"'
+    )
+    return [match.group(1) for match in pattern.finditer(solution)]
+
+
+def _manifest_old_to_new() -> dict[str, str]:
+    manifest = (ROOT / "knowledge_base" / "native_project_namespace_manifest.md").read_text(
+        encoding="utf-8"
+    )
+    rows: dict[str, str] = {}
+    for line in manifest.splitlines():
+        if not line.startswith("| `GhostRigger."):
+            continue
+        columns = [column.strip() for column in line.strip("|").split("|")]
+        if len(columns) < 2:
+            continue
+        old_name = columns[0].strip("`")
+        new_name = columns[1].strip("`")
+        rows[old_name] = new_name
+    return rows
 
 
 def test_native_vcxproj_templates_parse_after_token_substitution() -> None:
@@ -83,6 +117,30 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     assert "Bridge method" in readme
     assert "Owner: LordVaderCW" in readme
     assert "Intersects:" in readme
+
+
+def test_native_solution_keeps_real_projects_without_solution_folders() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    assert len(_solution_project_names(solution)) == 94
+    assert _solution_folder_names(solution) == []
+    assert "GlobalSection(NestedProjects)" not in solution
+
+
+def test_native_namespace_manifest_covers_solution_projects() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    solution_names = set(_solution_project_names(solution))
+    manifest = _manifest_old_to_new()
+
+    assert len(manifest) == 94
+    assert set(manifest) == solution_names
+    assert manifest["GhostRigger.Native"] == "GhostRigger.Native.Core.Host"
+    assert manifest["GhostRigger.Skeleton"] == "GhostRigger.Domain.Core.Skeleton"
+    assert manifest["GhostRigger.Sequence"] == "GhostRigger.Domain.Core.Sequence"
+    assert (
+        manifest["GhostRigger.Tools.NodesSkeletonBrowser"]
+        == "GhostRigger.Tools.Workflow.NodeSkeletonBrowser"
+    )
+    assert "GhostRigger.Selection" not in solution_names
 
 
 def test_native_docs_define_toolbox_and_window_project_naming() -> None:
@@ -1016,23 +1074,17 @@ def test_renderer_moderngl_exports_diagnostic_bridge_boundary() -> None:
         / "GhostRigger.Renderer.ModernGL"
         / "GhostRiggerRendererModernGL.cpp"
     ).read_text(encoding="utf-8")
-    validator = (
-        ROOT
-        / "native"
-        / "GhostRigger.Renderer.ModernGL.DEBUG"
-        / "GhostRiggerRendererModernGLDEBUG.cpp"
-    ).read_text(encoding="utf-8")
-
     assert "gr_renderer_moderngl_version" in header
     assert "gr_renderer_moderngl_capabilities_json" in header
     assert "gr_renderer_moderngl_backend_info_json" in header
     assert "gr_renderer_moderngl_adapter_bridge_json" in header
+    assert "gr_renderer_moderngl_frame_diagnostics_json" in header
     assert '"renderer_backend":true' in implementation
     assert '"backend":"moderngl"' in implementation
     assert '"python_adapter_required":true' in implementation
     assert '"native_device_owner":false' in implementation
+    assert '"diagnostic_contracts":["frame_diagnostics"]' in implementation
     assert '"fallback_backend":"python_moderngl"' in implementation
-    assert "gr_renderer_moderngl_adapter_bridge_json()" in validator
 
 
 def test_renderer_pygfx_exports_diagnostic_bridge_boundary() -> None:

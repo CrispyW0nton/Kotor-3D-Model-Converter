@@ -11,6 +11,64 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-14
 
+### [2026-06-14] Canonical Namespace Migration Audit
+
+Owner: LordVaderCW
+Subsystem: Native project namespace manifest
+Files changed:
+- `GhostRigger.sln`
+- `native/README.md`
+- `tests/test_native_project_templates.py`
+- `knowledge_base/native_project_namespace_manifest.md`
+
+Reason:
+- Removed the temporary solution-folder organization and restored the 94 real C++ projects directly in `GhostRigger.sln`.
+- Added the rollback-safe old-to-new manifest for canonical `GhostRigger.Group.Type.ModuleName` project naming.
+- Blocked actual project renames until the manifest anomalies are resolved: `GhostRigger.Selection` is requested but absent from the solution, `GhostRigger.Tools.NodeSkeletonBrowser` differs from actual `GhostRigger.Tools.NodesSkeletonBrowser`, and `GhostRigger.Native`, `GhostRigger.Skeleton`, and `GhostRigger.Sequence` required missing-map entries.
+
+Verification:
+- `python -m py_compile tests\test_native_project_templates.py`
+- `python -m pytest tests\test_native_project_templates.py::test_native_solution_keeps_real_projects_without_solution_folders tests\test_native_project_templates.py::test_native_namespace_manifest_covers_solution_projects -q`
+- Solution sanity check confirmed 94 real C++ projects, 0 solution-folder projects, and no `NestedProjects` section.
+- `MSBuild.exe GhostRigger.sln /t:GhostRigger_Native /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- `git diff --check`
+
+ModernGL visual check:
+- Not applicable for this audit/manifest change; no runtime viewport behavior changed.
+
+Roadmap:
+- N/A
+
+### [2026-06-14] ModernGL Tools Native-Preferred Fix
+
+Owner: LordVaderCW
+Subsystem: ModernGL renderer diagnostics
+Files changed:
+- `native/GhostRigger.Renderer.ModernGL/Public/GhostRiggerRendererModernGL.h`
+- `native/GhostRigger.Renderer.ModernGL/Private/GhostRiggerRendererModernGL.cpp`
+- `src/adapters/rendering/moderngl_renderer.py`
+- `native/GhostRigger.Renderer.ModernGL/Python/src/adapters/rendering/moderngl_renderer.py`
+- `native/GhostRigger.Adapters.Rendering/Python/src/adapters/rendering/moderngl_renderer.py`
+- `tests/test_theme_layout_loading.py`
+- `tests/test_native_project_templates.py`
+
+Reason:
+- Promoted stable ModernGL frame diagnostics normalization into a thin C ABI helper while preserving Python renderer orchestration and pure-Python fallback behavior.
+
+Verification:
+- `python -m py_compile src\adapters\rendering\moderngl_renderer.py native\GhostRigger.Renderer.ModernGL\Python\src\adapters\rendering\moderngl_renderer.py tests\test_theme_layout_loading.py tests\test_native_project_templates.py`
+- `python -m pytest tests\test_theme_layout_loading.py::test_moderngl_renderer_diagnostics_include_renderer_stats tests\test_theme_layout_loading.py::test_moderngl_renderer_diagnostics_prefer_native_contract tests\test_native_project_templates.py::test_renderer_moderngl_exports_diagnostic_bridge_boundary -q`
+- Targeted embedded-payload byte/hash check for changed payload rows passed for 5 rows.
+- ctypes ABI probe of `gr_renderer_moderngl_frame_diagnostics_json` passed against `build\vs\x64\Debug\GhostRigger.Renderer.ModernGL.dll`.
+- Visual Studio solution targets `GhostRigger_Renderer_ModernGL` and `GhostRigger_Native` rebuilt in `Debug|x64`.
+- `git diff --check`.
+
+ModernGL visual check:
+- Blocked. The only existing `devenv` process is PID 15940 with `MainWindowHandle=0`; COM/DTE attach returns `MK_E_UNAVAILABLE`, and no `GhostRigger.exe` process is running to attach to. No new Visual Studio instance was spawned.
+
+Roadmap:
+- N/A
+
 - ModernGL tools native-preferred gizmo slice: `GhostRigger.Gizmo.dll` now exports a thin C ABI for gizmo-origin resolution so pivot/local-center/helper selection rules are native-preferred while TransformGizmo state, drag math, picking, draw data, and object mutation remain Python-owned. The Python bridge uses the native contract with a pure-Python fallback, the embedded `GhostRigger.Gizmo` Python payload copy was kept in sync, and native package/test documentation now treats `Debug|x64` on the real project as the debug path instead of standalone `.DEBUG` solution apps.
   Owner: LordVaderCW.
   Affected areas: `native/GhostRigger.Gizmo`, `src/core/gizmo`, native package README/debug-target documentation, `tests/test_native_gizmo_mode.py`, `tests/test_gizmo_follows_object.py`, `tests/test_native_module_package_sweep.py`, `tests/test_native_project_templates.py`.

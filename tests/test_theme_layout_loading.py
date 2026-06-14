@@ -919,6 +919,44 @@ def test_moderngl_renderer_diagnostics_include_renderer_stats() -> None:
     assert diagnostics["triangle_count"] == 3456
 
 
+def test_moderngl_renderer_diagnostics_prefer_native_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.adapters.rendering import moderngl_renderer
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    class FakeNativeModernGL:
+        def gr_renderer_moderngl_frame_diagnostics_json(self, *args):
+            return (
+                b'{"name":"ModernGL","backend_id":"moderngl_gl330","available":true,'
+                b'"api":"OpenGL","backend":"ModernGL","mature_material_path":true,'
+                b'"native_diagnostics":true,"version_code":450,'
+                b'"gpu":"Native GPU","vendor":"Native Vendor",'
+                b'"performance":{"frame_time_ms":9.500,"upload_ms":1.000,'
+                b'"draw_ms":2.000,"readback_ms":3.000},'
+                b'"triangle_count":77,"mesh_cache_size":2,"texture_cache_size":3}'
+            )
+
+    monkeypatch.setattr(moderngl_renderer, "_native_moderngl_attempted", True)
+    monkeypatch.setattr(moderngl_renderer, "_native_moderngl_dll", FakeNativeModernGL())
+
+    renderer = ModernGLRenderer()
+    renderer.perf.update(
+        {
+            "last_frame_ms": 12.25,
+            "gpu_upload_ms": 1.5,
+            "draw_ms": 4.75,
+            "readback_ms": 2.0,
+            "tri_count": 3456,
+        }
+    )
+
+    diagnostics = renderer.get_diagnostics()
+
+    assert diagnostics["native_diagnostics"] is True
+    assert diagnostics["performance"]["frame_time_ms"] == pytest.approx(9.5)
+    assert diagnostics["triangle_count"] == 77
+    assert diagnostics["viewport_display"] == {}
+
+
 def test_viewport_renderer_statistics_lines_include_active_renderer() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
