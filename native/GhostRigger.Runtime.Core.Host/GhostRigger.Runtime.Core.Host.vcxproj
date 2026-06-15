@@ -129,6 +129,12 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     <None Include="Python\src\__init__.py" />
     <None Include="Python\src\core\__init__.py" />
     <None Include="Python\src\core\qt_core.py" />
+    <None Include="Python\src\core\mdl\__init__.py" />
+    <None Include="Python\src\core\mdl\ghostrigger_mdl_reader.py" />
+    <None Include="Python\src\core\mdl\mdl_parser.py" />
+    <None Include="Python\src\core\mdl\mdl_porter.py" />
+    <None Include="Python\src\core\mdl\mdl_reader_wrapper.py" />
+    <None Include="Python\src\core\mdl\mdl_writer.py" />
   </ItemGroup>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Native Host MDL Payload Startup Fix
+
+Owner: Codex
+Task: T000
+Subsystem: native Visual Studio host / embedded Python payload packaging
+
+- Restored the `src.core.mdl` package that native startup imports through `kotor_loader`, retargeting, Character Builder, and export paths.
+- Added the MDL package to the `GhostRigger.Runtime.Core.Host` Python payload mirror, resource manifest, and project file so the native exe can import `src.core.mdl` from DLL resources.
+- Fixed the startup crash where the native host found Python but exited with `ModuleNotFoundError: No module named 'src.core.mdl'`.
+
+Verification:
+- `python -m py_compile src\core\mdl\__init__.py src\core\mdl\ghostrigger_mdl_reader.py src\core\mdl\mdl_parser.py src\core\mdl\mdl_porter.py src\core\mdl\mdl_reader_wrapper.py src\core\mdl\mdl_writer.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\__init__.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\ghostrigger_mdl_reader.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\mdl_parser.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\mdl_porter.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\mdl_reader_wrapper.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\mdl_writer.py`
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- `build\vs\x64\Debug\GhostRigger.exe --native-embed-init-debug`
+- Normal exe launch stayed alive past native startup for 12 seconds before being intentionally stopped.
+
 ### [2026-06-15] Native Host Python Discovery Fix
 
 Owner: Codex
