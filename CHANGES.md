@@ -9,6 +9,92 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-15
+
+### [2026-06-15] Sequence Editor Model-Only Animation Playback
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Added focused Sequence Editor IPC commands for binding objects, adding animation tracks, inserting the selected Animation Browser clip, seeking, playing, stopping, and returning sequence state from the running Debug UI.
+- Tightened sequence animation evaluation so animation tracks only resolve the bound actor's actual runtime model; the viewport scene composite is no longer considered a valid animation model fallback.
+- Passed the main window owner into the sequence evaluator so docked Sequence Editor playback can resolve scene-manager objects reliably instead of depending on the viewport parent chain.
+- Changed Add Clip to evaluate immediately and start Sequence Editor playback from the inserted clip.
+- Updated the header model pill to show the selected model/object name while preserving the scene document name in the tooltip.
+- Verified all touched Python files are present in their native Visual Studio `.vcxproj` and `.vcxproj.filters` project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\scene_workflow.py native\GhostRigger.Domain.Core.IPC\Python\src\ipc\server.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\qt_main_window.py`
+- `Select-String` verified `sequence_evaluator.py`, `sequence_editor_window.py`, `scene_workflow.py`, `server.py`, and `qt_main_window.py` are included in their native `.vcxproj` and `.vcxproj.filters` files.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed.
+- Live Debug IPC workflow loaded `K1:c_bantha`, selected `cwalk`, bound `C_Bantha` as `Creature`, added an Animation track, inserted the selected clip, started playback immediately, and sought frame 12 with no sequence warning.
+
+### [2026-06-15] Sequence Editor Instance-Scoped Animation Evaluation
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Fixed animation track evaluation in scene-based viewports so bindings resolve through the KMAX scene manager's scene objects before considering the viewport scene root.
+- Animation clips now persist `source_model_name`, allowing multi-model cinematics to keep each clip tied to the intended character, creature, droid, or animated prop model.
+- The sequence evaluator now prefers the bound scene object's `_runtime_model` and named clip source model before falling back to `viewport.model`, preventing animations from being looked up on the `Untitled Scene` wrapper.
+- Updated the editor-side animation model lookup to consider scene object `_runtime_model` values when offering or inserting animation clips.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\tracks\character_track.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\tracks\character_track.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py`
+- Focused smoke test with a fake scene manager containing `C_Bantha`, `N_DarthMalak`, and an `Untitled Scene` viewport root verified the Bantha binding resolves to the Bantha runtime model only.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` passed.
+
+### [2026-06-15] Sequence Editor Animation Clip Blocks
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Changed `Add Clip` so it first uses the currently selected Animation Browser clip as the source of truth, including source metadata and animation length when available, before falling back to binding-side animation discovery.
+- Added animation clip duration data to sequence animation keys and made the sequence evaluator time-stretch playback across the clip duration.
+- Changed animation tracks in the timeline from point-only key diamonds to visible clip blocks labelled with the animation name.
+- Added edge resizing for animation clip blocks; dragging a clip edge updates `duration_frames`, and Shift-drag snaps to whole frames.
+- Cleared the viewport animation pose after a finite animation clip ends so the preview does not hold a stale final pose outside the clip range.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\tracks\character_track.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\tracks\character_track.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_timeline_widget.py`
+- Focused source-level check verified selected Animation Browser clip selection, clip duration insertion, clip-block drawing, edge-resize handling, time-stretch evaluator logic, and pose clearing after clip end.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` produced the Debug host and updated DLLs; post-build cleanup reported one locked runtime log file from an already-running Debug app instance.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` passed.
+
+### [2026-06-15] Sequence Editor Animation Clip Insertion
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Added an explicit `Add Clip` toolbar action for sequence Animation tracks.
+- Added an `Add Animation Clip...` context-menu action on Animation tracks in the sequence outliner.
+- Wired both actions to the existing local/inherited animation picker so selecting a clip inserts an animation key at the current frame; when an object binding is selected without an Animation track, the action creates one and inserts the clip.
+- Added clearer status text after an animation clip is inserted.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_track_list_widget.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_toolbar.py`
+- Focused source-level wiring check verified the toolbar signal, toolbar button, track-list context action, window signal connections, and handler creation/keying path are present.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` passed.
+- Visible `build\vs\x64\Debug\GhostRigger.exe` startup check stayed alive/responding after launch.
+
+### [2026-06-15] Sequence Editor Animated Actor Tracks
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Generalized the sequence editor's animation-track UI so animated tracks are presented as `Animation` rather than character-only controls while keeping the existing `CharacterTrack` serialization type for compatibility with saved sequences.
+- Extended animation model resolution for sequence playback and animation selection to support bound scene objects directly as well as wrapper objects with `model`, `mdl_model`, or `source_model` references, covering creatures, droids, turrets, and other animated actors that expose local or inherited animations through their underlying model.
+- Updated actor-neutral status and warning text for sequence animation binding failures.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\tracks\character_track.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\tracks\character_track.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_track_list_widget.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_toolbar.py`
+- Focused fake-evaluator smoke verified Creature, Droid, and animated Prop/turret-wrapper bindings resolve local/inherited animation entries and drive `viewport.set_animation_pose`.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal` passed.
+- Visible `build\vs\x64\Debug\GhostRigger.exe` startup check stayed alive/responding after launch.
+
 ## 2026-06-14
 
 ### [2026-06-14] Native DLL-backed Python Importer

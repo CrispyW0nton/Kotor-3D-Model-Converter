@@ -536,6 +536,9 @@ class QtGhostRiggerMainWindow(
                 source=str(source or ""),
             )
 
+        def sequence_command(command: str, payload: object = None) -> dict:
+            return self._apply_sequence_command_from_ipc(str(command or ""), payload if isinstance(payload, dict) else {})
+
         def get_state() -> dict:
             return self._ipc_application_state_snapshot()
 
@@ -652,6 +655,7 @@ class QtGhostRiggerMainWindow(
                     "viewport_command": viewport_command,
                     "appearance": appearance,
                     "animation_command": animation_command,
+                    "sequence_command": sequence_command,
                     "get_state": get_state,
                     "library_search": library_search,
                     "library_select": library_select,

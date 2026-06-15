@@ -492,6 +492,24 @@ class GhostRiggerIPCServer:
                 "seek": seek,
             })
 
+        @app.route("/api/sequence_command", methods=["POST"])
+        def route_sequence_command():
+            """Run a focused Sequence Editor workflow command in the running UI."""
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            command = str(payload.get("command", payload.get("cmd", body.get("command", ""))) or "").strip()
+            if not command:
+                return jsonify({"error": "missing command"}), 400
+
+            cb = self.callbacks.get("sequence_command")
+            if cb is None:
+                return jsonify({"status": "error", "message": "sequence_command callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, command, payload, timeout=30.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            payload_result = result if isinstance(result, dict) else {"value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
+
         @app.route("/api/select_module_mesh", methods=["POST"])
         def route_select_module_mesh():
             """Select a module mesh by display name in the running viewport/list."""

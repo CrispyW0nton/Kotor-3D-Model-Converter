@@ -59,7 +59,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.app_root = Path(app_root or getattr(main_window, "app_root", Path.cwd()))
         self.settings_path = self.app_root / "config" / "sequence_editor_settings.json"
         self.manager = SequenceManager(self.app_root / "sequences")
-        self.evaluator = SequenceEvaluator(None)
+        self.evaluator = SequenceEvaluator(None, owner=main_window)
         self.playback = SequencePlaybackController()
         self.clipboard = SequenceClipboard()
         self.sequence: GhostRiggerLevelSequence | None = None
@@ -241,7 +241,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _sync_preview_target(self) -> None:
         if not self.docked_preview:
             self.viewport_panel.sync_from_source()
-        self.evaluator.set_viewport(self._preview_viewport())
+        self.evaluator.set_viewport(self._preview_viewport(), owner=self.main_window)
 
     def _connect(self) -> None:
         self.new_action.triggered.connect(self._new_sequence)
@@ -264,6 +264,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.toolbar.addTrack.connect(self._add_track)
         self.toolbar.addCameraCut.connect(self._add_camera_cut)
         self.toolbar.setKey.connect(self._set_key)
+        self.toolbar.addAnimationClip.connect(self._add_animation_clip_to_selected_track)
         self.toolbar.autoKeyChanged.connect(self._set_auto_key)
         self.timeline.frameChanged.connect(self._set_frame)
         self.timeline.keySelectionChanged.connect(self._refresh_properties)
@@ -282,6 +283,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.outliner.track_list.addSelectedObjectRequested.connect(self._add_selected_object)
         self.outliner.track_list.addTrackRequested.connect(self._add_track)
         self.outliner.track_list.addCameraCutRequested.connect(self._add_camera_cut)
+        self.outliner.track_list.addAnimationClipRequested.connect(self._add_animation_clip_to_selected_track)
         self.outliner.track_list.deleteSelectionRequested.connect(self._delete_selected_outliner_item)
         self.outliner.track_list.hierarchyChanged.connect(self._sync_timeline_rows)
         self.properties_panel.sequenceChanged.connect(self._sequence_changed)
@@ -454,7 +456,8 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         elif binding is not None:
             binding.add_track(track)
         self._sequence_changed()
-        self._set_status(f"Added {track.track_type} track")
+        track_label = "Animation" if isinstance(track, CharacterTrack) else track.track_type
+        self._set_status(f"Added {track_label} track")
 
     def _delete_selected_outliner_item(self) -> None:
         if self.sequence is None:
@@ -497,7 +500,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             return EventTrack(parent_binding_id=getattr(binding, "binding_id", ""))
         if track_type == "Rig Control":
             return RigTrack(parent_binding_id=binding.binding_id)
-        if track_type == "Character":
+        if track_type in {"Animation", "Character"}:
             track = CharacterTrack(parent_binding_id=binding.binding_id)
             self._configure_character_track(track, binding, prompt=True)
             return track
@@ -552,6 +555,31 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         obj = self.evaluator.resolver.resolve(binding) if binding is not None else self._selected_scene_object()
         self._key_track(track, obj)
         self._sequence_changed(evaluate=False)
+
+    def _add_animation_clip_to_selected_track(self) -> None:
+        if self.sequence is None:
+            return False
+        track = self.outliner.track_list.selected_track()
+        binding = self.outliner.track_list.selected_binding()
+        if track is not None and not isinstance(track, CharacterTrack):
+            self._set_status("Select an Animation track to add an animation clip.")
+            return False
+        if binding is None:
+            obj = self._selected_scene_object()
+            binding = self.manager.add_object_binding(self.sequence, obj) if obj is not None else None
+        if binding is None:
+            self._set_status("Select or bind an animated scene object before adding an animation clip.")
+            return False
+        if track is None:
+            track = next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+            if track is None:
+                track = CharacterTrack(parent_binding_id=binding.binding_id)
+                binding.add_track(track)
+        if self._configure_character_track(track, binding, prompt=True):
+            self._sequence_changed(evaluate=True)
+            self._play_from_current_animation_clip()
+            return True
+        return False
 
     def _key_track(self, track, obj) -> None:
         if self.sequence is None:
@@ -608,9 +636,12 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _configure_character_track(self, track: CharacterTrack, binding, *, prompt: bool) -> bool:
         if self.sequence is None or binding is None:
             return False
+        browser_entry = self._selected_animation_browser_entry()
+        if browser_entry is not None:
+            return self._add_animation_entry_to_track(track, browser_entry)
         entries = self._character_animation_entries(binding)
         if not entries:
-            self._set_status(f"No animations found for {getattr(binding, 'display_name', 'character')}.")
+            self._set_status(f"No animations found for {getattr(binding, 'display_name', 'actor')}.")
             return False
         labels = [entry["label"] for entry in entries]
         default_name = self._selected_animation_name()
@@ -622,7 +653,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if prompt:
             chosen, ok = QtWidgets.QInputDialog.getItem(
                 self,
-                "Character Animation",
+                "Animation Track",
                 "Animation",
                 labels,
                 default_index,
@@ -631,18 +662,103 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             if not ok:
                 return False
             chosen_index = labels.index(chosen) if chosen in labels else default_index
-        entry = entries[chosen_index]
+        return self._add_animation_entry_to_track(track, entries[chosen_index])
+
+    def _add_animation_entry_to_track(self, track: CharacterTrack, entry: dict[str, Any]) -> bool:
+        if self.sequence is None:
+            return False
+        length = float(entry.get("length", 0.0) or 0.0)
+        duration_frames = length * float(self.sequence.frame_rate or 24.0) if length > 0.0 else float(self.sequence.frame_rate or 24.0)
         track.add_animation_key(
             self.sequence.current_frame,
             entry["name"],
             source=entry.get("source", ""),
             source_type=entry.get("source_type", ""),
-            length=float(entry.get("length", 0.0) or 0.0),
-            loop=True,
+            source_model_name=entry.get("source_model_name", ""),
+            length=length,
+            duration_frames=duration_frames,
+            loop=False,
             select=True,
         )
         track.name = f"Animation: {entry['name']}"
+        self._set_status(f"Added animation clip '{entry['name']}' at frame {self.sequence.current_frame}.")
         return True
+
+    def _play_from_current_animation_clip(self) -> None:
+        if self.sequence is None:
+            return
+        self._set_preview_playback_active(True)
+        if not self.playback.playing:
+            self.playback.play()
+        self.transport.set_playing(self.playback.playing)
+        self.transport.set_frame(self.sequence.current_frame)
+        if self.playback.playing:
+            self._play_timer.start()
+
+    def _selected_animation_browser_entry(self) -> dict[str, Any] | None:
+        panel = getattr(self.main_window, "animations_panel", None)
+        selected = getattr(panel, "selected_animation", None)
+        anim_name = ""
+        if callable(selected):
+            try:
+                anim_name = str(selected() or "").strip()
+            except Exception:
+                anim_name = ""
+        if not anim_name:
+            return None
+        source = ""
+        source_type = ""
+        source_model_name = ""
+        length = 0.0
+        source_method = getattr(panel, "selected_animation_source", None)
+        if callable(source_method):
+            try:
+                source_type = str(source_method() or "")
+            except Exception:
+                source_type = ""
+        listbox = getattr(panel, "listbox", None)
+        item = listbox.currentItem() if listbox is not None and hasattr(listbox, "currentItem") else None
+        if item is not None:
+            try:
+                data = item.data(QtCore.Qt.UserRole + 1)
+            except Exception:
+                data = None
+            if isinstance(data, dict):
+                anim = data.get("animation")
+                entry = data
+                if isinstance(data.get("entry"), dict):
+                    entry = data["entry"]
+                source = str(entry.get("source") or source)
+                source_type = str(entry.get("source_type") or source_type)
+                source_model_name = str(entry.get("source_model") or entry.get("source_model_name") or source_model_name)
+                length = float(entry.get("length", 0.0) or 0.0)
+                if anim is not None:
+                    length = float(getattr(anim, "length", length) or 0.0)
+                    source_model_name = str(getattr(anim, "source_model_name", "") or source_model_name)
+        if not source_model_name:
+            source_model = None
+            source_model_getter = getattr(self.main_window, "_animation_source_model", None)
+            if callable(source_model_getter):
+                try:
+                    source_model = source_model_getter(getattr(self.main_window, "_current_model", None))
+                except Exception:
+                    source_model = None
+            for candidate in (
+                source_model,
+                getattr(self.main_window, "_current_model", None),
+            ):
+                if candidate is not None:
+                    source_model_name = str(getattr(candidate, "name", "") or "")
+                    if source_model_name:
+                        break
+        return {
+            "name": anim_name,
+            "label": anim_name,
+            "source": source,
+            "source_type": source_type,
+            "source_model_name": source_model_name,
+            "length": length,
+        }
 
     def _selected_animation_name(self) -> str:
         panel = getattr(self.main_window, "animations_panel", None)
@@ -656,7 +772,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
 
     def _character_animation_entries(self, binding) -> list[dict[str, Any]]:
         obj = self.evaluator.resolver.resolve(binding) if binding is not None else None
-        model = obj if obj is not None and any(hasattr(obj, attr) for attr in ("animations", "supermodel", "all_nodes", "root_node")) else getattr(self.source_viewport, "model", None)
+        model = self._animation_model_for_object(obj)
         if model is None:
             return []
         try:
@@ -692,6 +808,20 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                 }
             )
         return entries
+
+    def _animation_model_for_object(self, obj):
+        candidates = [
+            getattr(getattr(obj, "metadata", None), "get", lambda *_: None)("_runtime_model") if obj is not None else None,
+            obj,
+            getattr(obj, "model", None) if obj is not None else None,
+            getattr(obj, "mdl_model", None) if obj is not None else None,
+            getattr(obj, "source_model", None) if obj is not None else None,
+            getattr(self.source_viewport, "model", None),
+        ]
+        for candidate in candidates:
+            if candidate is not None and any(hasattr(candidate, attr) for attr in ("animations", "supermodel", "all_nodes", "root_node")):
+                return candidate
+        return None
 
     def _transform_property_value(self, obj, property_name: str):
         prop = str(property_name or "")

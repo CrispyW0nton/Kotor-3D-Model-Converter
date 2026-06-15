@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,11 +51,20 @@ class ObjectState:
 class SceneObjectResolver:
     """Resolve sequence bindings against the current GhostRigger viewport/model."""
 
-    def __init__(self, viewport=None) -> None:
+    def __init__(self, viewport=None, owner=None) -> None:
         self.viewport = viewport
+        self.owner = owner
 
     def all_objects(self) -> list[object]:
         objects: list[object] = []
+        parent = getattr(self.viewport, "parent", lambda: None)()
+        scene_manager = getattr(self.owner, "scene_manager", None) or getattr(parent, "scene_manager", None)
+        if scene_manager is not None:
+            try:
+                objects.extend(list(scene_manager.get_scene_objects()))
+            except Exception:
+                active_scene = getattr(scene_manager, "active_scene", None)
+                objects.extend(list(getattr(active_scene, "objects", []) or []))
         model = getattr(self.viewport, "model", None)
         if model is not None:
             objects.append(model)
@@ -67,7 +77,7 @@ class SceneObjectResolver:
             for camera in camera_manager.get_all_cameras():
                 if camera.original_ref is not None:
                     objects.append(camera.original_ref)
-        light_manager = getattr(getattr(self.viewport, "parent", lambda: None)(), "lighting_panel", None)
+        light_manager = getattr(parent, "lighting_panel", None)
         manager = getattr(light_manager, "manager", None)
         if manager is not None:
             for light in manager.all_lights():
@@ -102,18 +112,21 @@ class SceneObjectResolver:
 
 
 class SequenceEvaluator:
-    def __init__(self, viewport=None) -> None:
+    def __init__(self, viewport=None, owner=None) -> None:
         self.viewport = viewport
-        self.resolver = SceneObjectResolver(viewport)
+        self.owner = owner
+        self.resolver = SceneObjectResolver(viewport, owner)
         self._captured: dict[str, ObjectState] = {}
         self._character_engines: dict[tuple[int, str], Any] = {}
         self.restore_mode = "restore"
         self.last_warning = ""
         self.event_log: list[dict[str, Any]] = []
 
-    def set_viewport(self, viewport) -> None:
+    def set_viewport(self, viewport, owner=None) -> None:
         self.viewport = viewport
-        self.resolver = SceneObjectResolver(viewport)
+        if owner is not None:
+            self.owner = owner
+        self.resolver = SceneObjectResolver(viewport, self.owner)
 
     def capture_original_state(self, sequence: GhostRiggerLevelSequence) -> None:
         for binding in sequence.bindings:
@@ -205,6 +218,9 @@ class SequenceEvaluator:
     ) -> set[str]:
         key = track.active_animation_key(frame)
         if key is None or not isinstance(key.value, dict):
+            if self.viewport is not None and hasattr(self.viewport, "set_animation_pose"):
+                self.viewport.set_animation_pose(None)
+                return {"animation"}
             return set()
         anim_name = str(key.value.get("animation") or "").strip()
         if not anim_name:
@@ -212,9 +228,9 @@ class SequenceEvaluator:
         viewport = self.viewport
         if viewport is None or not hasattr(viewport, "set_animation_pose"):
             return set()
-        model = self._character_animation_model(obj)
+        model = self._character_animation_model(obj, binding=binding, key=key)
         if model is None:
-            self.last_warning = f"No character model available for {binding.display_name}."
+            self.last_warning = f"No animated model available for {binding.display_name}."
             return set()
         try:
             from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
@@ -222,36 +238,99 @@ class SequenceEvaluator:
             manager = self._resource_manager()
             if manager is not None:
                 SuperModelResolver.configure(manager)
-            engine_key = (id(model), anim_name.lower())
+            inheritance_game = self._animation_inheritance_game(model)
+            inheritance_supermodel = self._animation_inheritance_supermodel(model)
+            engine_key = (id(model), anim_name.lower(), inheritance_game, inheritance_supermodel)
             engine = self._character_engines.get(engine_key)
             if engine is None or getattr(engine, "model", None) is not model:
                 engine = AnimationEngine(model)
                 self._character_engines[engine_key] = engine
             loop = bool(key.value.get("loop", True))
-            if getattr(getattr(engine, "current_animation", None), "name", "").lower() != anim_name.lower():
-                if not engine.play(anim_name, loop=loop, blend=False):
-                    self.last_warning = f"Animation '{anim_name}' is not available for {binding.display_name}."
-                    return set()
-                engine.stop()
-            seconds = max(0.0, (int(frame) - int(key.frame)) / max(0.001, float(sequence.frame_rate or 24.0)))
-            engine.seek(seconds)
-            pose = engine.evaluate()
-            current = engine.current_animation
-            length = float(getattr(current, "length", key.value.get("length", 0.0)) or 0.0)
+            with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
+                if getattr(getattr(engine, "current_animation", None), "name", "").lower() != anim_name.lower():
+                    if not engine.play(anim_name, loop=loop, blend=False):
+                        self.last_warning = f"Animation '{anim_name}' is not available for {binding.display_name}."
+                        return set()
+                    engine.stop()
+                elapsed_frames = max(0.0, float(frame) - float(key.frame))
+                length = float(key.value.get("length", 0.0) or 0.0)
+                duration_frames = float(key.value.get("duration_frames", 0.0) or 0.0)
+                if length > 0.0 and duration_frames > 0.0:
+                    seconds = min(length, (elapsed_frames / max(0.001, duration_frames)) * length)
+                else:
+                    seconds = elapsed_frames / max(0.001, float(sequence.frame_rate or 24.0))
+                engine.seek(seconds)
+                pose = engine.evaluate()
+                current = engine.current_animation
+            length = float(getattr(current, "length", length) or 0.0)
             self._tag_animation_pose(pose, model, anim_name)
             viewport.set_animation_pose(pose, name=anim_name, time=engine.current_time, length=length)
             return {"animation"}
         except Exception as exc:
-            self.last_warning = f"Character animation failed for {binding.display_name}: {exc}"
+            self.last_warning = f"Animation track failed for {binding.display_name}: {exc}"
             return set()
 
-    def _character_animation_model(self, obj: object | None):
-        if obj is not None and any(hasattr(obj, attr) for attr in ("animations", "supermodel", "all_nodes", "root_node")):
-            return obj
-        return getattr(self.viewport, "model", None)
+    def _character_animation_model(self, obj: object | None, *, binding: SequenceBinding | None = None, key=None):
+        source_names = self._animation_source_names(binding, key)
+        named = self._find_named_animation_model(source_names)
+        if named is not None:
+            return named
+        metadata = getattr(obj, "metadata", None)
+        runtime_model = metadata.get("_runtime_model") if isinstance(metadata, dict) else None
+        candidates = [
+            runtime_model,
+            obj,
+            getattr(obj, "model", None) if obj is not None else None,
+            getattr(obj, "mdl_model", None) if obj is not None else None,
+            getattr(obj, "source_model", None) if obj is not None else None,
+        ]
+        for candidate in candidates:
+            if self._is_animation_model(candidate):
+                return candidate
+        return None
+
+    def _animation_source_names(self, binding: SequenceBinding | None, key) -> set[str]:
+        names: set[str] = set()
+        if binding is not None:
+            for value in (binding.display_name, binding.target_object_name):
+                clean = str(value or "").strip()
+                if clean:
+                    names.add(clean.lower())
+        value = getattr(key, "value", None)
+        if isinstance(value, dict):
+            for field in ("source_model", "source_model_name", "source", "model", "model_name"):
+                clean = str(value.get(field) or "").strip()
+                if clean and clean.lower() not in {"local", "body", "head", "attachment", "inherited"}:
+                    names.add(clean.lower())
+        return names
+
+    def _find_named_animation_model(self, names: set[str]):
+        if not names:
+            return None
+        for obj in self.resolver.all_objects():
+            metadata = getattr(obj, "metadata", None)
+            runtime_model = metadata.get("_runtime_model") if isinstance(metadata, dict) else None
+            for candidate in (runtime_model, obj, getattr(obj, "model", None), getattr(obj, "mdl_model", None), getattr(obj, "source_model", None)):
+                if candidate is None:
+                    continue
+                candidate_name = str(getattr(candidate, "name", "") or getattr(obj, "name", "") or "").strip().lower()
+                if candidate_name in names and self._is_animation_model(candidate):
+                    return candidate
+        return None
+
+    @staticmethod
+    def _is_animation_model(candidate) -> bool:
+        if candidate is None:
+            return False
+        if bool(getattr(candidate, "_gr_scene_composite", False)):
+            return False
+        name = str(getattr(candidate, "name", "") or "")
+        if name.lower() == "untitled scene":
+            return False
+        return any(hasattr(candidate, attr) for attr in ("animations", "supermodel", "all_nodes", "root_node"))
 
     def _resource_manager(self):
-        for owner in (self.viewport, getattr(self.viewport, "parent", lambda: None)()):
+        for owner in (self.viewport, self.owner, getattr(self.viewport, "parent", lambda: None)()):
             if owner is None:
                 continue
             getter = getattr(owner, "_get_resource_manager", None)
@@ -266,6 +345,67 @@ class SequenceEvaluator:
             if manager is not None:
                 return manager
         return None
+
+    def _animation_inheritance_game(self, model) -> str:
+        owner = self.owner or getattr(self.viewport, "parent", lambda: None)()
+        getter = getattr(owner, "_animation_inheritance_game", None)
+        if callable(getter):
+            try:
+                value = str(getter(model) or "").upper()
+                if value:
+                    return value
+            except Exception:
+                pass
+        game = getattr(model, "game_version", None)
+        try:
+            value = game.value if hasattr(game, "value") else str(game or "")
+        except Exception:
+            value = ""
+        value = str(value or "").upper()
+        return "K2" if "K2" in value else "K1"
+
+    def _animation_inheritance_supermodel(self, model) -> str:
+        owner = self.owner or getattr(self.viewport, "parent", lambda: None)()
+        getter = getattr(owner, "_animation_inheritance_supermodel", None)
+        if callable(getter):
+            try:
+                return str(getter(model) or "").strip()
+            except Exception:
+                pass
+        return str(getattr(model, "supermodel", "") or "").strip()
+
+    @contextmanager
+    def _animation_resolution_context(self, model, game: str, supermodel: str = ""):
+        if model is None:
+            yield
+            return
+        owner = self.owner or getattr(self.viewport, "parent", lambda: None)()
+        owner_context = getattr(owner, "_animation_resolution_context", None)
+        if callable(owner_context):
+            with owner_context(model, game, supermodel):
+                yield
+            return
+
+        had_game_version = hasattr(model, "game_version")
+        original_game_version = getattr(model, "game_version", None)
+        original_supermodel = getattr(model, "supermodel", None)
+        try:
+            game = str(game or "").upper()
+            if game in {"K1", "K2"}:
+                try:
+                    from src.core.geometry.model_data import GameVersion
+
+                    model.game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+                except Exception:
+                    pass
+            if supermodel:
+                model.supermodel = supermodel
+            yield
+        finally:
+            if original_supermodel is not None or hasattr(model, "supermodel"):
+                model.supermodel = original_supermodel
+            if had_game_version:
+                model.game_version = original_game_version
 
     def _tag_animation_pose(self, pose, model, anim_name: str) -> None:
         if pose is None:

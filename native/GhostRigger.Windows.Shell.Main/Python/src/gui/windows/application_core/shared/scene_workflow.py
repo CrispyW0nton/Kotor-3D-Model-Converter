@@ -860,12 +860,20 @@ class SceneWorkflowMixin:
         dirty = " *" if scene.dirty else ""
         self.setWindowTitle(f"GhostRigger - {scene.display_name}{dirty}")
         objects = len(scene.objects)
-        selected = len(self.scene_manager.get_selected_objects())
+        selected_objects = self.scene_manager.get_selected_objects()
+        selected = len(selected_objects)
         models = len(scene.model_instances)
         if hasattr(self, "model_pill"):
-            self.model_pill.setText(f"// {scene.display_name}{dirty}")
+            active = selected_objects[-1] if selected_objects else None
+            active_model = self._runtime_model_for_scene_object(active) if active is not None else None
+            active_name = (
+                str(getattr(active_model, "name", "") or "").strip()
+                or str(getattr(active, "name", "") or "").strip()
+                or scene.display_name
+            )
+            self.model_pill.setText(f"// {active_name}{dirty}")
             status = "Empty Scene" if objects == 0 else f"Objects: {objects} | Selected: {selected}"
-            self.model_pill.setToolTip(f"{status} | Models: {models}")
+            self.model_pill.setToolTip(f"{status} | Models: {models} | Scene: {scene.display_name}")
         try:
             self.statusBar().showMessage("Empty Scene" if objects == 0 else f"Objects: {objects} | Selected: {selected} | Models: {models}")
         except Exception:
@@ -1021,6 +1029,150 @@ class SceneWorkflowMixin:
         if item is not None:
             editor.outliner.track_list.setCurrentItem(item)
         editor._set_status(f"Bound {binding.display_name}")
+
+    def _sequence_editor_for_ipc(self):
+        editor = getattr(self, "sequence_editor_docked_window", None)
+        if editor is None:
+            self._show_sequence_editor_dock()
+            editor = getattr(self, "sequence_editor_docked_window", None)
+        else:
+            self._show_sequence_editor_dock()
+        return editor
+
+    def _sequence_track_item_for_ipc(self, editor, track_id: str):
+        tree = editor.outliner.track_list
+        for top_index in range(tree.topLevelItemCount()):
+            top = tree.topLevelItem(top_index)
+            for child_index in range(top.childCount()):
+                child = top.child(child_index)
+                if child.data(0, QtCore.Qt.UserRole) == ("track", track_id):
+                    return child
+        return None
+
+    def _sequence_binding_for_ipc(self, editor, payload: dict):
+        sequence = getattr(editor, "sequence", None)
+        if sequence is None:
+            return None
+        binding_id = str(payload.get("binding_id", "") or "")
+        if binding_id:
+            found = sequence.binding_by_id(binding_id)
+            if found is not None:
+                return found
+        object_id = str(payload.get("object_id", payload.get("id", "")) or "")
+        name = str(payload.get("name", "") or "")
+        for binding in sequence.bindings:
+            if object_id and binding.target_object_id == object_id:
+                return binding
+            if name and binding.display_name.lower() == name.lower():
+                return binding
+        return editor.outliner.track_list.selected_binding()
+
+    def _sequence_state_snapshot(self) -> dict:
+        editor = getattr(self, "sequence_editor_docked_window", None) or getattr(self, "sequence_editor_window", None)
+        sequence = getattr(editor, "sequence", None) if editor is not None else None
+        if editor is None or sequence is None:
+            return {"available": False}
+        bindings = []
+        for binding in sequence.bindings:
+            bindings.append(
+                {
+                    "id": binding.binding_id,
+                    "display_name": binding.display_name,
+                    "target_object_id": binding.target_object_id,
+                    "target_type": binding.target_type.value if hasattr(binding.target_type, "value") else str(binding.target_type),
+                    "tracks": [
+                        {
+                            "id": track.track_id,
+                            "name": track.name,
+                            "type": track.track_type,
+                            "keys": [
+                                {
+                                    "frame": int(key.frame),
+                                    "value": key.value,
+                                }
+                                for key in track.keyframes
+                            ],
+                        }
+                        for track in binding.tracks
+                    ],
+                }
+            )
+        return {
+            "available": True,
+            "name": sequence.name,
+            "current_frame": int(sequence.current_frame),
+            "frame_rate": float(sequence.frame_rate),
+            "playing": bool(getattr(editor.playback, "playing", False)),
+            "last_warning": str(getattr(editor.evaluator, "last_warning", "") or ""),
+            "bindings": bindings,
+        }
+
+    def _apply_sequence_command_from_ipc(self, command: str, payload: dict | None = None) -> dict:
+        payload = payload if isinstance(payload, dict) else {}
+        key = str(command or "").strip().lower().replace("-", "_").replace(" ", "_")
+        editor = self._sequence_editor_for_ipc()
+        if editor is None or getattr(editor, "sequence", None) is None:
+            return {"ok": False, "command": key, "error": "sequence editor unavailable", "sequence": self._sequence_state_snapshot()}
+
+        if key in {"state", "snapshot"}:
+            return {"ok": True, "command": key, "sequence": self._sequence_state_snapshot()}
+
+        if key in {"bind_object", "add_object", "add_selected_object"}:
+            obj = None
+            object_id = str(payload.get("object_id", payload.get("id", "")) or "")
+            name = str(payload.get("name", "") or "")
+            if object_id or name:
+                obj = self._find_scene_object_for_ipc(object_id, name)
+            if obj is None:
+                selected = self.scene_manager.get_selected_objects()
+                obj = selected[0] if selected else None
+            if obj is None:
+                return {"ok": False, "command": key, "error": "scene object not found", "sequence": self._sequence_state_snapshot()}
+            binding = editor.manager.add_object_binding(editor.sequence, obj)
+            editor._sequence_changed()
+            item = editor._find_binding_item(binding.binding_id)
+            if item is not None:
+                editor.outliner.track_list.setCurrentItem(item)
+            editor._set_status(f"Bound {binding.display_name}")
+            return {"ok": True, "command": key, "binding_id": binding.binding_id, "sequence": self._sequence_state_snapshot()}
+
+        if key in {"add_animation_track", "animation_track"}:
+            from src.sequence.tracks.character_track import CharacterTrack
+
+            binding = self._sequence_binding_for_ipc(editor, payload)
+            if binding is None:
+                return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
+            track = next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+            if track is None:
+                track = CharacterTrack(parent_binding_id=binding.binding_id)
+                binding.add_track(track)
+            editor._sequence_changed(evaluate=False)
+            item = self._sequence_track_item_for_ipc(editor, track.track_id)
+            if item is not None:
+                editor.outliner.track_list.setCurrentItem(item)
+            return {"ok": True, "command": key, "binding_id": binding.binding_id, "track_id": track.track_id, "sequence": self._sequence_state_snapshot()}
+
+        if key in {"add_selected_animation_clip", "add_clip"}:
+            ok = bool(editor._add_animation_clip_to_selected_track())
+            return {"ok": ok, "command": key, "sequence": self._sequence_state_snapshot()}
+
+        if key in {"set_frame", "seek"}:
+            frame = int(round(float(payload.get("frame", payload.get("value", 0)) or 0)))
+            editor._set_frame(frame)
+            return {"ok": True, "command": key, "sequence": self._sequence_state_snapshot()}
+
+        if key == "play":
+            if not bool(getattr(editor.playback, "playing", False)):
+                editor._toggle_play()
+            return {"ok": True, "command": key, "sequence": self._sequence_state_snapshot()}
+
+        if key == "stop":
+            if bool(getattr(editor.playback, "playing", False)):
+                editor._toggle_play()
+            return {"ok": True, "command": key, "sequence": self._sequence_state_snapshot()}
+
+        self._log(f"IPC sequence_command: unknown command {command}", "warning")
+        return {"ok": False, "command": key, "error": "unknown command", "sequence": self._sequence_state_snapshot()}
 
     def _set_scene_object_visible(self, object_id: str, visible: bool) -> None:
         if self.scene_manager.set_object_visibility(object_id, visible):

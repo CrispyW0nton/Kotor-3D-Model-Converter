@@ -1,4 +1,4 @@
-"""Character pose extension track stubs."""
+"""Animated model pose extension track."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ class CharacterTrack(SequenceTrack):
 
     def __post_init__(self) -> None:
         self.track_type = self.TRACK_TYPE
-        self.metadata.setdefault("implementation_status", "Character animation slot keys drive viewport pose evaluation.")
+        self.metadata.setdefault("implementation_status", "Animation slot keys drive viewport pose evaluation for animated actors.")
         if not self.name or self.name == "Track":
-            self.name = "Character"
+            self.name = "Animation"
         super().__post_init__()
 
     def default_interpolation(self) -> InterpolationMode:
@@ -31,7 +31,9 @@ class CharacterTrack(SequenceTrack):
         *,
         source: str = "",
         source_type: str = "",
+        source_model_name: str = "",
         length: float = 0.0,
+        duration_frames: float = 0.0,
         loop: bool = True,
         select: bool = True,
     ) -> SequenceKeyframe:
@@ -40,7 +42,9 @@ class CharacterTrack(SequenceTrack):
             "animation": name,
             "source": str(source or ""),
             "source_type": str(source_type or ""),
+            "source_model_name": str(source_model_name or ""),
             "length": float(length or 0.0),
+            "duration_frames": float(duration_frames or 0.0),
             "loop": bool(loop),
         }
         key = self.add_keyframe(frame, value, InterpolationMode.CONSTANT, select=select)
@@ -55,6 +59,10 @@ class CharacterTrack(SequenceTrack):
                 active = key
             else:
                 break
+        if active is not None and isinstance(active.value, dict):
+            duration = float(active.value.get("duration_frames", 0.0) or 0.0)
+            if duration > 0.0 and float(frame) > float(active.frame) + duration:
+                return None
         return active
 
     @classmethod
@@ -62,7 +70,7 @@ class CharacterTrack(SequenceTrack):
         payload = dict(data or {})
         return cls(
             track_id=str(payload.get("track_id") or ""),
-            name=str(payload.get("name") or "Character"),
+            name=str(payload.get("name") or "Animation"),
             track_type=cls.TRACK_TYPE,
             enabled=bool(payload.get("enabled", True)),
             muted=bool(payload.get("muted", False)),

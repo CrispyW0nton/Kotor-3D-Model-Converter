@@ -19,6 +19,7 @@ class SequenceToolbar(QtWidgets.QWidget):
     addTrack = QtCore.Signal(str)
     addCameraCut = QtCore.Signal()
     setKey = QtCore.Signal()
+    addAnimationClip = QtCore.Signal()
     autoKeyChanged = QtCore.Signal(bool)
 
     def __init__(self, parent=None) -> None:
@@ -35,13 +36,14 @@ class SequenceToolbar(QtWidgets.QWidget):
             ("Add Selected Object", "Bind the selected scene object", self.addSelectedObject, qt_icon_manager.I.SELECTALL),
             ("Add Camera Cut", "Add a camera cut section", self.addCameraCut, qt_icon_manager.I.CAMERA_CINEMATIC),
             ("Key", "Set key at current frame", self.setKey, qt_icon_manager.I.SEQUENCE),
+            ("Add Clip", "Add an animation clip key to the selected Animation track", self.addAnimationClip, qt_icon_manager.I.ANIMS),
         ]
         for label, tip, signal, icon_name in buttons:
             btn = QtWidgets.QPushButton(label)
             btn.setIcon(qt_icon_manager.get(icon_name, 18))
             btn.setToolTip(tip)
             btn.clicked.connect(signal.emit)
-            if label in {"Save", "Key"}:
+            if label in {"Save", "Key", "Add Clip"}:
                 btn.setProperty("accent", True)
             row.addWidget(btn)
         self.create_camera_btn = QtWidgets.QToolButton()
@@ -79,7 +81,7 @@ class SequenceToolbar(QtWidgets.QWidget):
         self.create_light_btn.setPopupMode(QtWidgets.QToolButton.InstantPopup)
         row.addWidget(self.create_light_btn)
         self.track_combo = QtWidgets.QComboBox()
-        for track_type in ("Transform", "Camera Property", "Light Property", "Visibility", "Material", "Event", "Rig Control", "Character", "Sub Sequence"):
+        for track_type in ("Transform", "Camera Property", "Light Property", "Visibility", "Material", "Event", "Rig Control", "Animation", "Sub Sequence"):
             self.track_combo.addItem(track_type)
         self.add_track_btn = QtWidgets.QPushButton("Add Track")
         self.add_track_btn.setToolTip("Add selected track type to the current binding")

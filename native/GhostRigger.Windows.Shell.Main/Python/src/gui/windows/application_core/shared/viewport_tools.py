@@ -543,6 +543,7 @@ class ViewportToolsMixin:
                 "layout_name": str(getattr(current_layout, "name", "") or ""),
             },
             "animation": self._animation_state_snapshot() if hasattr(self, "_animation_state_snapshot") else {},
+            "sequence": self._sequence_state_snapshot() if hasattr(self, "_sequence_state_snapshot") else {},
             "library": self._ipc_library_state_snapshot() if hasattr(self, "_ipc_library_state_snapshot") else {},
             "resources": self._ipc_resource_state_snapshot() if hasattr(self, "_ipc_resource_state_snapshot") else {},
             "docks": dock_visibility,

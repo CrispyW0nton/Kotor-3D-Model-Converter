@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.gui.assets.qt_theme import C
 from src.sequence.sequence_model import GhostRiggerLevelSequence
 from src.sequence.tracks.camera_cut_track import CameraCutTrack
+from src.sequence.tracks.character_track import CharacterTrack
 
 
 class SequenceTimelineWidget(QtWidgets.QWidget):
@@ -25,6 +26,7 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
         self.snap_keys = True
         self._dragging_playhead = False
         self._dragging_keys = False
+        self._resizing_animation_clip = None
         self._drag_start_frame = 0
         self._drag_last_frame = 0
         self.setMouseTracking(True)
@@ -88,6 +90,12 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
             return 0
         frame = int(round((int(x) - self.left_margin) / self.pixels_per_frame)) + int(self.sequence.start_frame)
         return self.sequence.clamp_frame(frame)
+
+    def x_to_frame_float(self, x: int) -> float:
+        if self.sequence is None:
+            return 0.0
+        frame = (float(x) - float(self.left_margin)) / max(0.001, float(self.pixels_per_frame)) + float(self.sequence.start_frame)
+        return max(float(self.sequence.start_frame), min(float(self.sequence.end_frame), frame))
 
     def row_at(self, y: int) -> int:
         return int((int(y) - self.ruler_height) // self.row_height)
@@ -176,6 +184,9 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
                     painter.fillRect(x1, y + 4, max(3, x2 - x1), self.row_height - 8, QtGui.QColor(cut.color))
                     painter.setPen(QtGui.QColor(C["text"]))
                     painter.drawText(x1 + 6, y + 18, cut.display_name)
+            if isinstance(track, CharacterTrack):
+                self._draw_animation_clips(painter, track, y)
+                continue
             for key in track.keyframes:
                 x = self.frame_to_x(key.frame)
                 points = [
@@ -187,6 +198,43 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
                 painter.setBrush(QtGui.QColor(C["accent"] if key.selected else track.color))
                 painter.setPen(QtGui.QColor(C["text"] if key.selected else C["border"]))
                 painter.drawPolygon(QtGui.QPolygon(points))
+
+    def _animation_clip_rect(self, key, y: int) -> QtCore.QRect:
+        duration = 1.0
+        if isinstance(getattr(key, "value", None), dict):
+            duration = max(1.0, float(key.value.get("duration_frames", 0.0) or 1.0))
+        x1 = self.frame_to_x(key.frame)
+        x2 = int(round(float(x1) + duration * float(self.pixels_per_frame)))
+        return QtCore.QRect(x1, y + 4, max(10, x2 - x1), self.row_height - 8)
+
+    def _draw_animation_clips(self, painter: QtGui.QPainter, track: CharacterTrack, y: int) -> None:
+        for key in track.keyframes:
+            rect = self._animation_clip_rect(key, y)
+            name = ""
+            if isinstance(key.value, dict):
+                name = str(key.value.get("animation") or "")
+            fill = QtGui.QColor(C["accent"] if key.selected else track.color)
+            fill.setAlpha(210 if key.selected else 150)
+            painter.setBrush(fill)
+            painter.setPen(QtGui.QPen(QtGui.QColor(C["text"] if key.selected else C["border"]), 1))
+            painter.drawRoundedRect(rect, 3, 3)
+            painter.fillRect(rect.left(), rect.top(), 4, rect.height(), QtGui.QColor(C["warning"] if key.selected else C["border"]))
+            painter.fillRect(rect.right() - 3, rect.top(), 4, rect.height(), QtGui.QColor(C["warning"] if key.selected else C["border"]))
+            painter.setPen(QtGui.QColor(C["text"]))
+            painter.drawText(rect.adjusted(7, 0, -7, 0), QtCore.Qt.AlignVCenter | QtCore.Qt.AlignLeft, name)
+
+    def _hit_animation_clip(self, frame: float, row_y: int, mouse_y: int, track: CharacterTrack):
+        for key in reversed(track.keyframes):
+            rect = self._animation_clip_rect(key, row_y)
+            x = int(round(self.left_margin + (float(frame) - float(self.sequence.start_frame)) * self.pixels_per_frame)) if self.sequence is not None else 0
+            if not rect.adjusted(-3, -2, 3, 2).contains(x, mouse_y):
+                continue
+            if abs(x - rect.right()) <= 6:
+                return key, "right"
+            if abs(x - rect.left()) <= 6:
+                return key, "left"
+            return key, "move"
+        return None, ""
 
     def _draw_markers(self, painter: QtGui.QPainter) -> None:
         assert self.sequence is not None
@@ -221,6 +269,26 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
         rows = self.tracks_with_rows()
         if 0 <= row < len(rows):
             _kind, _binding, track = rows[row]
+            if isinstance(track, CharacterTrack):
+                key, hit = self._hit_animation_clip(
+                    self.x_to_frame_float(int(event.position().x())),
+                    self.ruler_height + row * self.row_height,
+                    int(event.position().y()),
+                    track,
+                )
+                if key is not None:
+                    if not (event.modifiers() & QtCore.Qt.ControlModifier):
+                        self.clear_key_selection()
+                    key.selected = True
+                    self.keySelectionChanged.emit()
+                    if hit in {"left", "right"}:
+                        self._resizing_animation_clip = (track, key, hit, float(key.frame), float(key.value.get("duration_frames", 1.0) if isinstance(key.value, dict) else 1.0))
+                    else:
+                        self._dragging_keys = True
+                        self._drag_start_frame = frame
+                        self._drag_last_frame = frame
+                    self.update()
+                    return
             if track is not None and self.select_key_at(frame, track, additive=bool(event.modifiers() & QtCore.Qt.ControlModifier)):
                 self._dragging_keys = True
                 self._drag_start_frame = frame
@@ -238,6 +306,23 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
             self.sequence.set_current_frame(frame)
             self.frameChanged.emit(frame)
             self.update()
+        elif self._resizing_animation_clip is not None:
+            _track, key, edge, start_frame, start_duration = self._resizing_animation_clip
+            raw_frame = self.x_to_frame_float(int(event.position().x()))
+            if event.modifiers() & QtCore.Qt.ShiftModifier:
+                raw_frame = float(round(raw_frame))
+            if isinstance(key.value, dict):
+                if edge == "right":
+                    key.value["duration_frames"] = max(1.0, raw_frame - float(key.frame))
+                else:
+                    end_frame = start_frame + start_duration
+                    new_start = min(raw_frame, end_frame - 1.0)
+                    if event.modifiers() & QtCore.Qt.ShiftModifier:
+                        new_start = float(round(new_start))
+                    key.frame = int(round(new_start)) if not (event.modifiers() & QtCore.Qt.AltModifier) else int(new_start)
+                    key.value["duration_frames"] = max(1.0, end_frame - float(key.frame))
+                self.keyMoved.emit()
+                self.update()
         elif self._dragging_keys:
             delta = frame - self._drag_last_frame
             if delta:
@@ -250,6 +335,7 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
     def mouseReleaseEvent(self, event):  # noqa: N802
         self._dragging_playhead = False
         self._dragging_keys = False
+        self._resizing_animation_clip = None
 
     def wheelEvent(self, event):  # noqa: N802
         if event.modifiers() & QtCore.Qt.ControlModifier:

@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtWidgets
 from src.sequence.sequence_binding import SequenceTargetType
 from src.sequence.sequence_model import GhostRiggerLevelSequence
 from src.sequence.tracks.camera_property_track import CAMERA_PROPERTIES
+from src.sequence.tracks.character_track import CharacterTrack
 from src.sequence.tracks.light_property_track import LIGHT_PROPERTIES
 from src.sequence.tracks.transform_property_track import TRANSFORM_PROPERTY_LABELS
 
@@ -17,6 +18,7 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
     addSelectedObjectRequested = QtCore.Signal()
     addTrackRequested = QtCore.Signal(str)
     addCameraCutRequested = QtCore.Signal()
+    addAnimationClipRequested = QtCore.Signal()
     deleteSelectionRequested = QtCore.Signal()
     hierarchyChanged = QtCore.Signal()
 
@@ -63,7 +65,7 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
         master_expanded = bool(self.sequence.metadata.get("master_tracks_expanded", ("master", "master") in self._expanded_item_keys or True))
         self.addTopLevelItem(master)
         for track in self.sequence.master_tracks:
-            item = QtWidgets.QTreeWidgetItem([track.name, track.track_type])
+            item = QtWidgets.QTreeWidgetItem([track.name, self._track_type_label(track)])
             item.setData(0, QtCore.Qt.UserRole, ("track", track.track_id))
             self._configure_item(item)
             master.addChild(item)
@@ -78,7 +80,7 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
             expanded = bool(binding.metadata.get("expanded", binding_key in self._expanded_item_keys or not binding.missing))
             self.addTopLevelItem(item)
             for track in binding.tracks:
-                track_item = QtWidgets.QTreeWidgetItem([track.name, track.track_type])
+                track_item = QtWidgets.QTreeWidgetItem([track.name, self._track_type_label(track)])
                 track_item.setData(0, QtCore.Qt.UserRole, ("track", track.track_id))
                 self._configure_item(track_item)
                 item.addChild(track_item)
@@ -88,6 +90,11 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
 
     def header_height(self) -> int:
         return int(self._header_height)
+
+    @staticmethod
+    def _track_type_label(track) -> str:
+        track_type = str(getattr(track, "track_type", "") or "")
+        return "Animation" if track_type == "Character" else track_type
 
     def row_height(self) -> int:
         return int(self._row_height)
@@ -179,7 +186,7 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
         add_object = menu.addAction("Add Selected Scene Object")
         add_cut = menu.addAction("Add Camera Cut")
         track_menu = menu.addMenu("Add Track")
-        for track_type in ("Transform", "Visibility", "Material", "Event", "Rig Control", "Character", "Sub Sequence"):
+        for track_type in ("Transform", "Visibility", "Material", "Event", "Rig Control", "Animation", "Sub Sequence"):
             action = track_menu.addAction(track_type)
             action.setData(track_type)
         transform_menu = menu.addMenu("Add Transform Lane")
@@ -202,6 +209,9 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
         track_menu.setEnabled(binding is not None or item is None or not is_track)
         if is_track or is_binding:
             menu.addSeparator()
+        add_clip_action = menu.addAction("Add Animation Clip...")
+        selected_track = self.selected_track()
+        add_clip_action.setEnabled(isinstance(selected_track, CharacterTrack))
         delete_action = menu.addAction("Delete Track" if is_track else "Delete Object Binding")
         delete_action.setEnabled(is_track or is_binding)
         chosen = menu.exec(self.viewport().mapToGlobal(pos))
@@ -211,6 +221,8 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
             self.addSelectedObjectRequested.emit()
         elif chosen is add_cut:
             self.addCameraCutRequested.emit()
+        elif chosen is add_clip_action:
+            self.addAnimationClipRequested.emit()
         elif chosen is delete_action:
             self.deleteSelectionRequested.emit()
         elif chosen in track_menu.actions():
