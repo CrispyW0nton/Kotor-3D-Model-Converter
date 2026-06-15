@@ -51,7 +51,6 @@ inline constexpr NativeDependencySpec kNativeDependencySpecs[] = {
     {L"GhostRigger.Domain.Core.KotorMCP", L"GhostRigger.Domain.Core.KotorMCP.dll", "gr_kotor_mcp_version", "gr_kotor_mcp_capabilities_json"},
     {L"GhostRigger.Domain.Core.Level", L"GhostRigger.Domain.Core.Level.dll", "gr_level_version", "gr_level_capabilities_json"},
     {L"GhostRigger.Domain.Core.Lighting", L"GhostRigger.Domain.Core.Lighting.dll", "gr_lighting_version", "gr_lighting_capabilities_json"},
-    {L"GhostRigger.Domain.Core.MDL", L"GhostRigger.Domain.Core.MDL.dll", "gr_mdl_version", "gr_mdl_capabilities_json"},
     {L"GhostRigger.Domain.Core.Math", L"GhostRigger.Domain.Core.Math.dll", "gr_math_version", "gr_math_capabilities_json"},
     {L"GhostRigger.Domain.Core.Measurement", L"GhostRigger.Domain.Core.Measurement.dll", "gr_measurement_version", "gr_measurement_capabilities_json"},
     {L"GhostRigger.Domain.Core.MeshTools", L"GhostRigger.Domain.Core.MeshTools.dll", "gr_mesh_tools_version", "gr_mesh_tools_capabilities_json"},

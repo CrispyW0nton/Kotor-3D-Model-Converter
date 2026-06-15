@@ -11,6 +11,26 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Native Host Build Repair
+
+Owner: Codex
+Task: T000
+Subsystem: native Visual Studio host / embedded Python payload packaging
+
+- Restored the missing diagnostics, scripting, rendering diagnostics, FBX diagnostics, and diagnostics-panel Python payload files that the generated native resource manifests still embed.
+- Added native payload `.gitignore` exceptions so build-critical embedded Python files under `native/**/Python/src/**` are not hidden by broad diagnostics/scripts/debug-output ignore rules.
+- Removed the stale `GhostRigger.Domain.Core.MDL` solution and host project reference because that native project folder no longer exists in the current branch.
+- Replaced the hardcoded `C:\Users\KingJamesIX\...\Python313` host include/lib/DLL path with `$(LocalAppData)\Programs\Python\Python313` via the `GhostRiggerPythonHome` MSBuild property.
+- Added `native/Directory.Build.props` so generated native projects can find shared native foundation and renderer contract headers when building from either the solution or an individual project.
+
+Verification:
+- `python -m py_compile src\core\diagnostics\validation_service.py src\core\diagnostics\diagnostics.py src\core\diagnostics\module_reference_safety.py src\core\rendering\gpu_diagnostics_config.py src\core\rendering\gpu_diagnostics_records.py src\adapters\rendering\gpu_diagnostics_exports.py src\adapters\scripts\unavailable_compiler.py src\io\fbx\fbx_diagnostics.py src\gui\panels\qt_diagnostics_panel.py`
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- `build\vs\x64\Debug\GhostRigger.exe --native-host-debug`
+- `build\vs\x64\Debug\GhostRigger.exe --native-embed-init-debug`
+- `git diff --check`
+
 ### [2026-06-15] LordVader Native Payload Merge Preservation
 
 Owner: Codex

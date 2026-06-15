@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <GhostRiggerNativeRoot>$(MSBuildThisFileDirectory)</GhostRiggerNativeRoot>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(GhostRiggerNativeRoot)GhostRigger.Native.Core.Foundation\Public;$(GhostRiggerNativeRoot)GhostRigger.Native.Core.Foundation;$(GhostRiggerNativeRoot)GhostRigger.Renderer.Shared.Contracts\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

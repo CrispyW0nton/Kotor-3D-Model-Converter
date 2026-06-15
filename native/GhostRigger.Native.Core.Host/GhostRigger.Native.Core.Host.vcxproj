@@ -74,26 +74,27 @@
     <TargetName>GhostRigger</TargetName>
     <LocalDebuggerWorkingDirectory>$(SolutionDir)</LocalDebuggerWorkingDirectory>
     <LocalDebuggerCommandArguments>--gui qt</LocalDebuggerCommandArguments>
-    <LocalDebuggerEnvironment>GHOSTRIGGER_PYTHON=C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe</LocalDebuggerEnvironment>
+    <GhostRiggerPythonHome Condition="'$(GhostRiggerPythonHome)'==''">$(LocalAppData)\Programs\Python\Python313</GhostRiggerPythonHome>
+    <LocalDebuggerEnvironment>GHOSTRIGGER_PYTHON=$(GhostRiggerPythonHome)\python.exe</LocalDebuggerEnvironment>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;$(GhostRiggerPythonHome)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalLibraryDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(GhostRiggerPythonHome)\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>python313.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
-copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
+      <Command>copy /Y "$(GhostRiggerPythonHome)\python313.dll" "$(OutDir)python313.dll" &gt;nul
+copy /Y "$(GhostRiggerPythonHome)\python3.dll" "$(OutDir)python3.dll" &gt;nul
 copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
 if exist "$(OutDir)__pycache__" rmdir /S /Q "$(OutDir)__pycache__"
 if exist "$(OutDir)config" rmdir /S /Q "$(OutDir)config"
@@ -111,21 +112,21 @@ if exist "$(ProjectDir)RuntimePayload" xcopy /D /E /I /Y "$(ProjectDir)RuntimePa
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;$(GhostRiggerPythonHome)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <AdditionalLibraryDirectories>C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(GhostRiggerPythonHome)\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>python313.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
-copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
+      <Command>copy /Y "$(GhostRiggerPythonHome)\python313.dll" "$(OutDir)python313.dll" &gt;nul
+copy /Y "$(GhostRiggerPythonHome)\python3.dll" "$(OutDir)python3.dll" &gt;nul
 copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
 if exist "$(OutDir)__pycache__" rmdir /S /Q "$(OutDir)__pycache__"
 if exist "$(OutDir)config" rmdir /S /Q "$(OutDir)config"
@@ -298,10 +299,6 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </ProjectReference>
     <ProjectReference Include="..\GhostRigger.Domain.Core.Lighting\GhostRigger.Domain.Core.Lighting.vcxproj">
       <Project>{68CA1DA1-2D82-4E3F-8AD7-C04DF2DEEEA5}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.MDL\GhostRigger.Domain.Core.MDL.vcxproj">
-      <Project>{9B733388-ACF1-412C-BB32-A3D091C3000C}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
     <ProjectReference Include="..\GhostRigger.Domain.Core.Math\GhostRigger.Domain.Core.Math.vcxproj">
