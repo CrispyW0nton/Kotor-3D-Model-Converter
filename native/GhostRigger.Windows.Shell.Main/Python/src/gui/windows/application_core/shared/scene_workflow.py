@@ -1153,6 +1153,42 @@ class SceneWorkflowMixin:
                 editor.outliner.track_list.setCurrentItem(item)
             return {"ok": True, "command": key, "binding_id": binding.binding_id, "track_id": track.track_id, "sequence": self._sequence_state_snapshot()}
 
+        if key in {"add_transform_track", "transform_track"}:
+            from src.sequence.tracks.transform_track import TransformTrack
+
+            binding = self._sequence_binding_for_ipc(editor, payload)
+            if binding is None:
+                return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
+            track = next((item for item in binding.tracks if isinstance(item, TransformTrack)), None)
+            if track is None:
+                track = TransformTrack(parent_binding_id=binding.binding_id)
+                binding.add_track(track)
+            editor._sequence_changed(evaluate=False)
+            item = self._sequence_track_item_for_ipc(editor, track.track_id)
+            if item is not None:
+                editor.outliner.track_list.setCurrentItem(item)
+            return {"ok": True, "command": key, "binding_id": binding.binding_id, "track_id": track.track_id, "sequence": self._sequence_state_snapshot()}
+
+        if key in {"set_transform_key", "key_transform", "set_key"}:
+            from src.sequence.tracks.transform_track import TransformTrack
+
+            binding = self._sequence_binding_for_ipc(editor, payload)
+            if binding is None:
+                return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
+            track = next((item for item in binding.tracks if isinstance(item, TransformTrack)), None)
+            if track is None:
+                track = TransformTrack(parent_binding_id=binding.binding_id)
+                binding.add_track(track)
+            item = self._sequence_track_item_for_ipc(editor, track.track_id)
+            if item is not None:
+                editor.outliner.track_list.setCurrentItem(item)
+            obj = editor.evaluator.resolver.resolve(binding)
+            if obj is None:
+                return {"ok": False, "command": key, "error": "bound object not found", "sequence": self._sequence_state_snapshot()}
+            editor._key_track(track, obj)
+            editor._sequence_changed(evaluate=False)
+            return {"ok": True, "command": key, "binding_id": binding.binding_id, "track_id": track.track_id, "sequence": self._sequence_state_snapshot()}
+
         if key in {"add_selected_animation_clip", "add_clip"}:
             animation_name = str(payload.get("animation", payload.get("name", "")) or "").strip()
             if animation_name:

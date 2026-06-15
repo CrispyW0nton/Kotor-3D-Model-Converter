@@ -649,16 +649,18 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if self.sequence is None:
             return
         frame = self.sequence.current_frame
-        if isinstance(track, TransformTrack) and obj is not None:
+        binding = self.sequence.binding_by_id(getattr(track, "parent_binding_id", "")) if getattr(track, "parent_binding_id", "") else None
+        transform_obj = self._transform_key_target(binding, obj) if isinstance(track, (TransformTrack, TransformPropertyTrack)) else obj
+        if isinstance(track, TransformTrack) and transform_obj is not None:
             track.add_transform_key(
                 frame,
-                location=getattr(obj, "position", (0.0, 0.0, 0.0)),
-                rotation=quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))),
-                scale=getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))),
+                location=self._object_transform_position(transform_obj),
+                rotation=self._object_transform_rotation(transform_obj),
+                scale=self._object_transform_scale(transform_obj),
                 select=True,
             )
-        elif isinstance(track, TransformPropertyTrack) and obj is not None:
-            track.add_keyframe(frame, self._transform_property_value(obj, track.property_name), select=True)
+        elif isinstance(track, TransformPropertyTrack) and transform_obj is not None:
+            track.add_keyframe(frame, self._transform_property_value(transform_obj, track.property_name), select=True)
         elif isinstance(track, VisibilityTrack) and obj is not None:
             visible = not bool(getattr(obj, "_gr_hidden", getattr(obj, "_gr_light_hidden", getattr(obj, "_gr_camera_hidden", False))))
             track.add_keyframe(frame, visible, select=True)
@@ -925,9 +927,9 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
 
     def _transform_property_value(self, obj, property_name: str):
         prop = str(property_name or "")
-        position = tuple(float(v) for v in tuple(getattr(obj, "position", (0.0, 0.0, 0.0)))[:3])
-        rotation = quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)))
-        scale = tuple(float(v) for v in tuple(getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))))[:3])
+        position = self._object_transform_position(obj)
+        rotation = self._object_transform_rotation(obj)
+        scale = self._object_transform_scale(obj)
         values = {
             "position": position,
             "position_x": position[0],
@@ -943,6 +945,50 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             "scale_z": scale[2],
         }
         return values.get(prop, position)
+
+    def _transform_key_target(self, binding, obj):
+        object_id = str(getattr(binding, "target_object_id", "") or "")
+        viewport = self.source_viewport
+        if object_id and viewport is not None:
+            selected = getattr(getattr(viewport, "_renderer", None), "selected_node", None)
+            root_for_node = getattr(viewport, "_scene_root_for_node", None)
+            if selected is not None and str(getattr(selected, "_gr_scene_object_id", "") or "") == object_id:
+                root = root_for_node(selected) if callable(root_for_node) else selected
+                if root is not None:
+                    return root
+            getter = getattr(viewport, "_scene_node_for_object", None)
+            if callable(getter):
+                try:
+                    root = getter(object_id)
+                    if root is not None:
+                        return root
+                except Exception:
+                    pass
+        return obj
+
+    @staticmethod
+    def _object_transform_position(obj) -> tuple[float, float, float]:
+        transform = getattr(obj, "transform", None)
+        source = getattr(transform, "position", None) if transform is not None else None
+        if source is None:
+            source = getattr(obj, "position", (0.0, 0.0, 0.0))
+        return tuple(float(v) for v in tuple(source)[:3])
+
+    @staticmethod
+    def _object_transform_rotation(obj) -> tuple[float, float, float]:
+        transform = getattr(obj, "transform", None)
+        source = getattr(transform, "rotation", None) if transform is not None else None
+        if source is not None:
+            return tuple(float(v) for v in tuple(source)[:3])
+        return quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)))
+
+    @staticmethod
+    def _object_transform_scale(obj) -> tuple[float, float, float]:
+        transform = getattr(obj, "transform", None)
+        source = getattr(transform, "scale", None) if transform is not None else None
+        if source is None:
+            source = getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0)))
+        return tuple(float(v) for v in tuple(source)[:3])
 
     def _set_frame(self, frame: int) -> None:
         if self.sequence is None:

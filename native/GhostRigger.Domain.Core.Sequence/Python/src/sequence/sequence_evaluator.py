@@ -133,7 +133,7 @@ class SequenceEvaluator:
             obj = self.resolver.resolve(binding)
             if obj is None or binding.binding_id in self._captured:
                 continue
-            self._captured[binding.binding_id] = self._snapshot(obj)
+            self._captured[binding.binding_id] = self._snapshot(self._binding_transform_target(binding, obj))
 
     def restore_original_state(self, sequence: GhostRiggerLevelSequence) -> None:
         for binding in sequence.bindings:
@@ -162,7 +162,8 @@ class SequenceEvaluator:
             binding.metadata["missing"] = obj is None
             if obj is None or not binding.active:
                 continue
-            self._prepare_binding_transform_eval(binding, obj, frame)
+            transform_target = self._binding_transform_target(binding, obj)
+            self._prepare_binding_transform_eval(binding, transform_target, frame)
             character_tracks: list[CharacterTrack] = []
             for track in binding.tracks:
                 if track.locked or not track.enabled or track.muted:
@@ -170,7 +171,10 @@ class SequenceEvaluator:
                 if isinstance(track, CharacterTrack):
                     character_tracks.append(track)
                     continue
-                dirty.update(self._apply_track(sequence, binding, obj, track, frame))
+                target = transform_target if isinstance(track, (TransformTrack, TransformPropertyTrack)) else obj
+                dirty.update(self._apply_track(sequence, binding, target, track, frame))
+                if target is transform_target:
+                    self._sync_binding_transform_owner(obj, transform_target)
             if character_tracks:
                 dirty.update(self._apply_character_tracks(sequence, binding, obj, character_tracks, frame))
         if self._apply_master_tracks(sequence, frame):
@@ -647,15 +651,46 @@ class SequenceEvaluator:
                     self.event_log.append(safe_event)
 
     def _apply_transform(self, obj: object, value: dict[str, Any]) -> None:
-        location = value.get("location", getattr(obj, "position", (0.0, 0.0, 0.0)))
-        rotation = value.get("rotation", quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))))
-        scale = value.get("scale", getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))))
+        location = value.get("location", self._object_position(obj))
+        rotation = value.get("rotation", self._object_rotation_euler(obj))
+        scale = value.get("scale", self._object_scale(obj))
         try:
-            setattr(obj, "position", _vec3(location))
-            setattr(obj, "rotation", euler_degrees_to_quat(rotation))
-            setattr(obj, "_gr_scale", _vec3(scale, (1.0, 1.0, 1.0)))
-            setattr(obj, "_gr_sequence_eval_rotation_euler", _vec3(rotation))
+            self._set_object_transform(obj, position=location, rotation_euler=rotation, scale=scale)
             self._sync_object_transform_model(obj)
+        except Exception:
+            pass
+
+    def _binding_transform_target(self, binding: SequenceBinding, obj: object) -> object:
+        object_id = str(binding.target_object_id or ensure_sequence_object_id(obj) or "")
+        if object_id:
+            getter = getattr(self.viewport, "_scene_node_for_object", None)
+            if callable(getter):
+                try:
+                    node = getter(object_id)
+                    if node is not None:
+                        return node
+                except Exception:
+                    pass
+            model = getattr(self.viewport, "model", None)
+            root = getattr(model, "root_node", None)
+            for child in list(getattr(root, "children", []) or []):
+                if str(getattr(child, "_gr_scene_object_id", "") or "") == object_id:
+                    return child
+        return obj
+
+    def _sync_binding_transform_owner(self, obj: object, target: object) -> None:
+        if obj is target:
+            return
+        transform = getattr(obj, "transform", None)
+        if transform is None:
+            return
+        try:
+            transform.position = self._object_position(target)
+            transform.rotation = self._object_rotation_euler(target)
+            transform.scale = self._object_scale(target)
+            setattr(obj, "position", tuple(transform.position))
+            setattr(obj, "rotation", self._object_rotation_quat(target))
+            setattr(obj, "_gr_scale", tuple(transform.scale))
         except Exception:
             pass
 
@@ -670,33 +705,28 @@ class SequenceEvaluator:
         )
         if state is not None and has_transform_animation:
             try:
-                setattr(obj, "position", tuple(state.position))
-                setattr(obj, "rotation", tuple(state.rotation))
-                setattr(obj, "_gr_scale", tuple(state.scale))
+                self._set_object_transform(obj, position=state.position, rotation_quat=state.rotation, scale=state.scale)
                 self._sync_helper_pivot(obj)
             except Exception:
                 pass
-        rotation = getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))
         try:
             setattr(obj, "_gr_sequence_eval_rotation_frame", int(frame))
-            setattr(obj, "_gr_sequence_eval_rotation_euler", quat_to_euler_degrees(rotation))
+            setattr(obj, "_gr_sequence_eval_rotation_euler", self._object_rotation_euler(obj))
         except Exception:
             pass
 
     def _apply_transform_property(self, obj: object, property_name: str, value: Any) -> None:
         prop = str(property_name or "")
         if prop == "position":
-            setattr(obj, "position", _vec3(value, getattr(obj, "position", (0.0, 0.0, 0.0))))
+            self._set_object_transform(obj, position=_vec3(value, self._object_position(obj)))
             self._sync_object_transform_model(obj)
             return
         if prop == "rotation":
-            setattr(obj, "rotation", euler_degrees_to_quat(value))
-            setattr(obj, "_gr_sequence_eval_rotation_euler", _vec3(value))
+            self._set_object_transform(obj, rotation_euler=_vec3(value))
             self._sync_object_transform_model(obj)
             return
         if prop == "scale":
-            fallback = _vec3(getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))), (1.0, 1.0, 1.0))
-            setattr(obj, "_gr_scale", _vec3(value, fallback))
+            self._set_object_transform(obj, scale=_vec3(value, self._object_scale(obj)))
             self._sync_object_transform_model(obj)
             return
         component_map = {
@@ -718,36 +748,111 @@ class SequenceEvaluator:
             current = list(
                 _vec3(
                     getattr(obj, "_gr_sequence_eval_rotation_euler", None),
-                    quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))),
+                    self._object_rotation_euler(obj),
                 )
             )
             component = float(value)
             if abs(float(current[index]) - component) <= 1e-6:
                 return
             current[index] = component
-            setattr(obj, "rotation", euler_degrees_to_quat(current))
-            setattr(obj, "_gr_sequence_eval_rotation_euler", tuple(current))
+            self._set_object_transform(obj, rotation_euler=tuple(current))
             self._sync_object_transform_model(obj)
             return
-        raw = getattr(obj, attr, getattr(obj, "scale", fallback) if attr == "_gr_scale" else fallback)
+        if attr == "position":
+            raw = self._object_position(obj)
+        elif attr == "_gr_scale":
+            raw = self._object_scale(obj)
+        else:
+            raw = getattr(obj, attr, getattr(obj, "scale", fallback) if attr == "_gr_scale" else fallback)
         current = list(_vec3(raw, fallback))
         current[index] = float(value)
-        setattr(obj, attr, tuple(current))
+        if attr == "position":
+            self._set_object_transform(obj, position=tuple(current))
+        elif attr == "_gr_scale":
+            self._set_object_transform(obj, scale=tuple(current))
+        else:
+            setattr(obj, attr, tuple(current))
         self._sync_object_transform_model(obj)
+
+    def _object_position(self, obj: object) -> tuple[float, float, float]:
+        transform = getattr(obj, "transform", None)
+        if transform is not None and hasattr(transform, "position"):
+            return _vec3(getattr(transform, "position", None))
+        return _vec3(getattr(obj, "position", (0.0, 0.0, 0.0)))
+
+    def _object_rotation_euler(self, obj: object) -> tuple[float, float, float]:
+        transform = getattr(obj, "transform", None)
+        if transform is not None and hasattr(transform, "rotation"):
+            return _vec3(getattr(transform, "rotation", None))
+        cached = getattr(obj, "_gr_sequence_eval_rotation_euler", None)
+        if cached is not None:
+            return _vec3(cached)
+        return quat_to_euler_degrees(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)))
+
+    def _object_rotation_quat(self, obj: object) -> tuple[float, float, float, float]:
+        if hasattr(obj, "rotation"):
+            return _quat(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        return euler_degrees_to_quat(self._object_rotation_euler(obj))
+
+    def _object_scale(self, obj: object) -> tuple[float, float, float]:
+        transform = getattr(obj, "transform", None)
+        if transform is not None and hasattr(transform, "scale"):
+            return _vec3(getattr(transform, "scale", None), (1.0, 1.0, 1.0))
+        return _vec3(getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))), (1.0, 1.0, 1.0))
+
+    def _set_object_transform(
+        self,
+        obj: object,
+        *,
+        position: Any | None = None,
+        rotation_euler: Any | None = None,
+        rotation_quat: Any | None = None,
+        scale: Any | None = None,
+    ) -> None:
+        transform = getattr(obj, "transform", None)
+        if position is not None:
+            clean_position = _vec3(position)
+            setattr(obj, "position", clean_position)
+            if transform is not None and hasattr(transform, "position"):
+                transform.position = clean_position
+        if rotation_quat is not None:
+            clean_quat = _quat(rotation_quat)
+            clean_euler = quat_to_euler_degrees(clean_quat)
+        elif rotation_euler is not None:
+            clean_euler = _vec3(rotation_euler)
+            clean_quat = euler_degrees_to_quat(clean_euler)
+        else:
+            clean_euler = None
+            clean_quat = None
+        if clean_quat is not None and clean_euler is not None:
+            setattr(obj, "rotation", clean_quat)
+            setattr(obj, "_gr_sequence_eval_rotation_euler", clean_euler)
+            if transform is not None and hasattr(transform, "rotation"):
+                transform.rotation = clean_euler
+        if scale is not None:
+            clean_scale = _vec3(scale, (1.0, 1.0, 1.0))
+            setattr(obj, "_gr_scale", clean_scale)
+            if hasattr(obj, "scale"):
+                try:
+                    setattr(obj, "scale", clean_scale)
+                except Exception:
+                    pass
+            if transform is not None and hasattr(transform, "scale"):
+                transform.scale = clean_scale
 
     def _sync_object_transform_model(self, obj: object) -> None:
         self._sync_helper_pivot(obj)
         camera_manager = getattr(self.viewport, "camera_manager", None)
         camera = camera_manager.find_by_original(obj) if camera_manager is not None else None
         if camera is not None:
-            camera.position = _vec3(getattr(obj, "position", camera.position), camera.position)
-            camera.rotation = _quat(getattr(obj, "rotation", camera.rotation), camera.rotation)
+            camera.position = _vec3(self._object_position(obj), camera.position)
+            camera.rotation = _quat(self._object_rotation_quat(obj), camera.rotation)
             camera.apply_to_original()
         light_manager = getattr(getattr(getattr(self.viewport, "parent", lambda: None)(), "lighting_panel", None), "manager", None)
         light = light_manager.find_by_original(obj) if light_manager is not None else None
         if light is not None:
-            light.position = _vec3(getattr(obj, "position", light.position), light.position)
-            light.rotation = _quat(getattr(obj, "rotation", light.rotation), light.rotation)
+            light.position = _vec3(self._object_position(obj), light.position)
+            light.rotation = _quat(self._object_rotation_quat(obj), light.rotation)
             light.apply_to_original()
 
     def _sync_helper_pivot(self, obj: object) -> None:
@@ -755,7 +860,7 @@ class SequenceEvaluator:
             return
         if str(getattr(obj, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only":
             return
-        position = _vec3(getattr(obj, "position", (0.0, 0.0, 0.0)))
+        position = self._object_position(obj)
         for attr in ("_gr_pivot_world", "_gr_gizmo_world_position"):
             try:
                 setattr(obj, attr, position)
@@ -843,19 +948,19 @@ class SequenceEvaluator:
             if hasattr(obj, attr):
                 attrs[attr] = getattr(obj, attr)
         return ObjectState(
-            position=_vec3(getattr(obj, "position", (0.0, 0.0, 0.0))),
-            rotation=_quat(getattr(obj, "rotation", (0.0, 0.0, 0.0, 1.0))),
-            scale=_vec3(getattr(obj, "_gr_scale", getattr(obj, "scale", (1.0, 1.0, 1.0))), (1.0, 1.0, 1.0)),
+            position=self._object_position(obj),
+            rotation=self._object_rotation_quat(obj),
+            scale=self._object_scale(obj),
             hidden=bool(getattr(obj, "_gr_hidden", False)),
             attrs=attrs,
         )
 
     def _apply_snapshot(self, obj: object, state: ObjectState) -> None:
-        setattr(obj, "position", tuple(state.position))
-        setattr(obj, "rotation", tuple(state.rotation))
-        setattr(obj, "_gr_scale", tuple(state.scale))
+        target = self._binding_transform_target(SequenceBinding(target_object_id=ensure_sequence_object_id(obj)), obj)
+        self._set_object_transform(target, position=state.position, rotation_quat=state.rotation, scale=state.scale)
+        self._sync_binding_transform_owner(obj, target)
         for attr, value in state.attrs.items():
-            setattr(obj, attr, value)
+            setattr(target, attr, value)
 
     def _refresh_viewport(self, dirty: set[str] | None = None) -> None:
         viewport = self.viewport

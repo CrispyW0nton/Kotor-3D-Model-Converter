@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Sequence Editor Scene Transform Keyframes
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Fixed manual Transform track keyframing for KMAX scene models by sampling the bound model's live viewport root/gizmo node instead of skeletal animation nodes or stale wrapper-only attributes.
+- Updated sequence transform evaluation, reset, and restore paths to apply position, rotation, and scale to the imported model root that the gizmo moves, while mirroring the result back into the scene object's persisted transform.
+- Kept transform tracks independent of animation lanes, so baked animation clips and overlapping animation lanes can play while transform tracks drive world traversal.
+- Added focused Sequence Editor IPC commands for transform workflow checks: `add_transform_track` and `set_transform_key`.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\scene_workflow.py`
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m /v:minimal` passed.
+- Live Debug IPC workflow loaded `K1:C_Bantha`, inserted base `crun`, keyed the root/gizmo Transform at the origin and again at X=6 / Z rotation=45, scrubbed inside the animation clip and to an in-between transform frame, and confirmed root traversal interpolated while animation playback continued and `last_warning` stayed empty.
+
 ### [2026-06-15] Sequence Editor Overlapping Animation Lanes
 
 Owner: LordVaderCW
