@@ -451,6 +451,7 @@ bool configure_embedded_python(PyConfig& config, const fs::path& repo_root, cons
     config.use_environment = 1;
     config.site_import = 1;
     config.install_signal_handlers = 1;
+    config.write_bytecode = 0;
 
     if (!set_python_config_string(config, &config.home, python_home.wstring())) {
         return false;
@@ -495,6 +496,7 @@ int initialize_embedded_python(const fs::path& repo_root, const fs::path& python
     SetDllDirectoryW(python_home.c_str());
     SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_HOST", L"1");
     SetEnvironmentVariableW(L"GHOSTRIGGER_EMBEDDED_PYTHON", L"1");
+    SetEnvironmentVariableW(L"PYTHONDONTWRITEBYTECODE", L"1");
     SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_REPO_ROOT", repo_root.c_str());
     const fs::path native_main_py = executable_directory().value_or(repo_root) / L"main.py";
     SetEnvironmentVariableW(L"GHOSTRIGGER_NATIVE_PYTHON_ENTRYPOINT", native_main_py.c_str());

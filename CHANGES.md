@@ -20,11 +20,19 @@ Subsystem: Native host Python import/runtime payload
 - Added a native-host Python `importlib` importer that indexes `gr_python_payload_manifest_json` exports from built DLLs and loads `.py` module source directly from DLL `RCDATA` resources.
 - Kept `GhostRiggerPythonPayload` as the runtime asset root only; it is no longer inserted into `sys.path`, so stale extracted Python files cannot satisfy imports.
 - Added empty-module handling for zero-byte `__init__.py` payload entries that are present in manifests but omitted as empty RCDATA by the resource toolchain.
+- Added DLL-backed namespace package support for manifest folders without `__init__.py`, such as `src.math`.
+- Updated the native host post-build step to purge stale `.py`, `.pyc`, `.pyo`, and `__pycache__` entries from `GhostRiggerPythonPayload` before copying non-Python runtime assets.
+- Removed the duplicate native runtime `src\config` payload and added post-build cleanup for stale `GhostRiggerPythonPayload\src\config`; only the payload-root `config` directory is kept.
+- Split the native build output directory from the runtime app root so native Debug/Release launches use `GhostRiggerPythonPayload` for app-relative config/log/sequence state instead of creating sibling folders beside `GhostRigger.exe`.
+- Disabled embedded-Python bytecode writes and added post-build cleanup for stale output-root `__pycache__`, `config`, `Logs`, and `sequences` folders.
 
 Verification:
 - `python -m py_compile native\GhostRigger.Native.Core.Host\main.py`
 - `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m:1 /v:minimal` passed.
-- Importer smoke against `build\vs\x64\Debug\main.py` indexed 800 DLL-backed Python modules, imported `src.sequence.sequence_model` and `src.gui.assets.qt_theme`, confirmed `GhostRiggerPythonPayload` is not on `sys.path`, and confirmed runtime icons still resolve from disk assets.
+- Importer smoke against `build\vs\x64\Debug\main.py` indexed 800 DLL-backed Python modules, imported `src.sequence.sequence_model`, `src.sequence.sequence_evaluator`, `src.math.camera_math`, and `src.gui.assets.qt_theme`, confirmed `GhostRiggerPythonPayload` is not on `sys.path`, confirmed the payload contains zero `.py` files, and confirmed runtime icons still resolve from disk assets.
+- Verified `native\GhostRigger.Native.Core.Host\RuntimePayload\src\config` and `build\vs\x64\Debug\GhostRiggerPythonPayload\src\config` are absent, while `config` exists at both payload roots.
+- Rebuilt Debug and Release native hosts; both output roots contain only `GhostRiggerPythonPayload` as a directory, with no output-root `config`, `Logs`, `sequences`, or `__pycache__`.
+- Launched `build\vs\x64\Debug\GhostRigger.exe` and `build\vs\x64\Release\GhostRigger.exe`; startup created `GhostRiggerPythonPayload\Logs` and did not create output-root `config`, `Logs`, `sequences`, or `__pycache__` in either configuration.
 - `build\vs\x64\Debug\GhostRigger.exe --native-embed-init-debug` exited successfully.
 - Launched `build\vs\x64\Debug\GhostRigger.exe` visibly; the process remained alive/responding after startup, but no window title or log output was available from this host during the check.
 

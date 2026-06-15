@@ -20,6 +20,7 @@ import sys
 import traceback
 
 
+sys.dont_write_bytecode = True
 _HOST_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = Path(os.environ.get("GHOSTRIGGER_NATIVE_REPO_ROOT", "") or _HOST_DIR).resolve()
 
@@ -33,6 +34,7 @@ class _DllPythonPayloadImporter(importlib.abc.MetaPathFinder, importlib.abc.Load
         self._asset_root = Path(asset_root)
         self._modules: dict[str, dict[str, object]] = {}
         self._packages: set[str] = set()
+        self._namespace_packages: dict[str, str] = {}
         self._dlls: list[object] = []
         self._dll_directory_cookie = None
         if hasattr(os, "add_dll_directory") and self._build_dir.is_dir():
@@ -87,6 +89,7 @@ class _DllPythonPayloadImporter(importlib.abc.MetaPathFinder, importlib.abc.Load
                 }
                 if is_package:
                     self._packages.add(module_name)
+                self._register_namespace_parents(parts, module_name)
 
     @staticmethod
     def _module_name_for_parts(parts: list[str]) -> tuple[str, bool]:
@@ -100,6 +103,15 @@ class _DllPythonPayloadImporter(importlib.abc.MetaPathFinder, importlib.abc.Load
             return "", False
         return ".".join(names), is_package
 
+    def _register_namespace_parents(self, parts: list[str], module_name: str) -> None:
+        package_parts = parts[:-1] if parts[-1] != "__init__.py" else parts[:-2]
+        for index in range(1, len(package_parts) + 1):
+            package_name = ".".join(package_parts[:index])
+            if not package_name or package_name in self._modules:
+                continue
+            package_dir = self._asset_root.joinpath(*package_parts[:index])
+            self._namespace_packages.setdefault(package_name, str(package_dir))
+
     @property
     def module_count(self) -> int:
         return len(self._modules)
@@ -107,7 +119,12 @@ class _DllPythonPayloadImporter(importlib.abc.MetaPathFinder, importlib.abc.Load
     def find_spec(self, fullname: str, path=None, target=None):
         record = self._modules.get(fullname)
         if record is None:
-            return None
+            package_dir = self._namespace_packages.get(fullname)
+            if package_dir is None:
+                return None
+            spec = importlib.machinery.ModuleSpec(fullname, None, is_package=True)
+            spec.submodule_search_locations = [package_dir]
+            return spec
         spec = importlib.machinery.ModuleSpec(
             fullname,
             self,
@@ -207,7 +224,13 @@ if _DLL_PAYLOAD_ROOT is not None:
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-_LOG_DIR = _REPO_ROOT / "Logs"
+_APP_ROOT = (_NATIVE_PAYLOAD_ROOT if _NATIVE_PAYLOAD_ROOT is not None and _NATIVE_PAYLOAD_ROOT.is_dir() else _REPO_ROOT).resolve()
+os.environ["GHOSTRIGGER_NATIVE_APP_ROOT"] = str(_APP_ROOT)
+try:
+    os.chdir(_APP_ROOT)
+except OSError:
+    pass
+_LOG_DIR = _APP_ROOT / "Logs"
 _CURRENT_LOGFILE: str | None = None
 
 
@@ -322,6 +345,7 @@ def main(argv: list[str] | None = None):
     log.info("Native host entrypoint: %s", Path(__file__).resolve())
     log.info("Visual Studio build output: %s", os.environ.get("GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR", ""))
     log.info("Repository root: %s", _REPO_ROOT)
+    log.info("Native app root: %s", _APP_ROOT)
     log.info("Session log: %s", logfile or "DISABLED")
     log.info("=" * 60)
 
@@ -333,20 +357,20 @@ def main(argv: list[str] | None = None):
 
     try:
         from src.core.qt_core.diagnostics.diagnostics import log_session_start
-        log_session_start(str(_REPO_ROOT), logfile or "(no log file)")
+        log_session_start(str(_APP_ROOT), logfile or "(no log file)")
     except Exception as exc:
         log.debug("diagnostics.log_session_start failed: %s", exc)
 
     try:
         try:
-            _precache_themes(_REPO_ROOT, log)
+            _precache_themes(_APP_ROOT, log)
         except Exception as exc:
             log.warning("Theme precache skipped after an unexpected error: %s", exc, exc_info=True)
 
         from src.gui.qt_lib.windows.qt_main_window import run as run_qt
 
         log.info("Qt launcher starting from native host entrypoint.")
-        rc = run_qt(str(_REPO_ROOT), startup_input=vars(args))
+        rc = run_qt(str(_APP_ROOT), startup_input=vars(args))
         log.info("Qt main window exited cleanly.")
         _flush_all_handlers()
         return rc

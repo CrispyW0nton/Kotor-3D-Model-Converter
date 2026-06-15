@@ -95,6 +95,12 @@
       <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
 copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
 copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
+if exist "$(OutDir)__pycache__" rmdir /S /Q "$(OutDir)__pycache__"
+if exist "$(OutDir)config" rmdir /S /Q "$(OutDir)config"
+if exist "$(OutDir)Logs" rmdir /S /Q "$(OutDir)Logs"
+if exist "$(OutDir)sequences" rmdir /S /Q "$(OutDir)sequences"
+if exist "$(OutDir)GhostRiggerPythonPayload" powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '$(OutDir)GhostRiggerPythonPayload' -Recurse -Include *.py,*.pyc,*.pyo -File -ErrorAction SilentlyContinue | Remove-Item -Force; Get-ChildItem -LiteralPath '$(OutDir)GhostRiggerPythonPayload' -Recurse -Directory -Filter __pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force"
+if exist "$(OutDir)GhostRiggerPythonPayload\src\config" rmdir /S /Q "$(OutDir)GhostRiggerPythonPayload\src\config"
 if exist "$(ProjectDir)RuntimePayload" xcopy /D /E /I /Y "$(ProjectDir)RuntimePayload" "$(OutDir)GhostRiggerPythonPayload" &gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -121,6 +127,12 @@ if exist "$(ProjectDir)RuntimePayload" xcopy /D /E /I /Y "$(ProjectDir)RuntimePa
       <Command>copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python313.dll" "$(OutDir)python313.dll" &gt;nul
 copy /Y "C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python3.dll" "$(OutDir)python3.dll" &gt;nul
 copy /Y "$(ProjectDir)main.py" "$(OutDir)main.py" &gt;nul
+if exist "$(OutDir)__pycache__" rmdir /S /Q "$(OutDir)__pycache__"
+if exist "$(OutDir)config" rmdir /S /Q "$(OutDir)config"
+if exist "$(OutDir)Logs" rmdir /S /Q "$(OutDir)Logs"
+if exist "$(OutDir)sequences" rmdir /S /Q "$(OutDir)sequences"
+if exist "$(OutDir)GhostRiggerPythonPayload" powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -LiteralPath '$(OutDir)GhostRiggerPythonPayload' -Recurse -Include *.py,*.pyc,*.pyo -File -ErrorAction SilentlyContinue | Remove-Item -Force; Get-ChildItem -LiteralPath '$(OutDir)GhostRiggerPythonPayload' -Recurse -Directory -Filter __pycache__ -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force"
+if exist "$(OutDir)GhostRiggerPythonPayload\src\config" rmdir /S /Q "$(OutDir)GhostRiggerPythonPayload\src\config"
 if exist "$(ProjectDir)RuntimePayload" xcopy /D /E /I /Y "$(ProjectDir)RuntimePayload" "$(OutDir)GhostRiggerPythonPayload" &gt;nul
 del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </PostBuildEvent>
