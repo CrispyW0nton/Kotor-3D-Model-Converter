@@ -69,7 +69,7 @@
             "resource_name": "PYTHON_PAYLOAD_0011",
             "source_path": "src/gui/viewports/viewport_core/shared/icons.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/icons.py",
-            "sha256": "9206f2f149e24bf530a0aa5e235efa89868f77a401a7d246544caac96fc310d4"
+            "sha256": "c970bbbdcd500e427fd6f7f69e23dc50c0cff86b1646235fb9f9e637349a8d23"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0012",

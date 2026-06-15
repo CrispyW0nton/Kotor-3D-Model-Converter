@@ -2,28 +2,55 @@
 
 from __future__ import annotations
 
-from .dependencies import Path, QtGui, subprocess, normalize_viewport_navigation_profile
+from .dependencies import Path, QtGui, os, subprocess, normalize_viewport_navigation_profile
 
 _GUI_DIR = Path(__file__).resolve().parents[3]
 _ICON_DIR = _GUI_DIR / "icons"
 
 
+def _icon_dirs() -> tuple[Path, ...]:
+    dirs: list[Path] = [_ICON_DIR]
+    native_payload = os.environ.get("GHOSTRIGGER_NATIVE_PAYLOAD_ROOT", "").strip()
+    if native_payload:
+        dirs.append(Path(native_payload) / "src" / "gui" / "icons")
+    repo_root = os.environ.get("GHOSTRIGGER_NATIVE_REPO_ROOT", "").strip()
+    if repo_root:
+        root = Path(repo_root)
+        dirs.append(root / "src" / "gui" / "icons")
+        dirs.append(root / "native" / "GhostRigger.Native.Core.Host" / "RuntimePayload" / "src" / "gui" / "icons")
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in dirs:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return tuple(unique)
+
+
 def _icon(name: str) -> QtGui.QIcon:
-    for suffix in (".svg", "_16.png", "_24.png", ".png"):
-        path = _ICON_DIR / f"{name}{suffix}"
+    for icon_dir in _icon_dirs():
+        for suffix in (".svg", "_16.png", "_24.png", ".png"):
+            path = icon_dir / f"{name}{suffix}"
+            if path.exists():
+                return QtGui.QIcon(path.as_posix())
+    return QtGui.QIcon()
+
+
+def _gpu_brand_icon(brand: str) -> QtGui.QIcon:
+    for icon_dir in _icon_dirs():
+        path = icon_dir / "gpu_branding" / f"{brand}.png"
         if path.exists():
             return QtGui.QIcon(path.as_posix())
     return QtGui.QIcon()
 
 
-def _gpu_brand_icon(brand: str) -> QtGui.QIcon:
-    path = _ICON_DIR / "gpu_branding" / f"{brand}.png"
-    return QtGui.QIcon(path.as_posix()) if path.exists() else QtGui.QIcon()
-
-
 def _branded_control_icon(name: str) -> QtGui.QIcon:
-    path = _ICON_DIR / "branded_controls" / f"{name}.png"
-    return QtGui.QIcon(path.as_posix()) if path.exists() else QtGui.QIcon()
+    for icon_dir in _icon_dirs():
+        path = icon_dir / "branded_controls" / f"{name}.png"
+        if path.exists():
+            return QtGui.QIcon(path.as_posix())
+    return QtGui.QIcon()
 
 
 def _detect_gpu_brand() -> str:

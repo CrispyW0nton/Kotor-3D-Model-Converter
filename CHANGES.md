@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Native Viewport Toolbar Icon Recovery
+
+Owner: Codex
+Task: T000
+Subsystem: native Qt viewport toolbar / runtime assets
+
+- Made viewport toolbar icon loading resilient when modules are loaded from native DLL resources and `__file__` points at a virtual `GhostRiggerPythonPayload` path.
+- Added fallback icon search paths for `GHOSTRIGGER_NATIVE_PAYLOAD_ROOT`, the repository source tree, and the native host `RuntimePayload/src/gui/icons` asset folder.
+- Fixed missing toolbar icons for viewport controls such as GPU renderer, wireframe, solid, textured, bones, grid, dots, and heat-map when the build-output payload folder is absent or stale.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\shared\icons.py`
+- Direct PySide icon resolver smoke for `viewport_gpu`, `viewport_wire`, `viewport_solid`, `viewport_texture`, and `viewport_bones`
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- Confirmed `build\vs\x64\Debug\GhostRiggerPythonPayload\src\gui\icons` contains 102 icons, including `viewport_gpu.svg`, `viewport_wire.svg`, and `viewport_solid.svg`
+- `build\vs\x64\Debug\GhostRigger.exe --native-embed-init-debug`
+- Normal exe launch stayed alive past startup for 12 seconds before being intentionally stopped.
+
 ### [2026-06-15] Native Host MDL Payload Startup Fix
 
 Owner: Codex
