@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Sequence Editor Overlapping Animation Lanes
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Added a right-click `Add Overlapping Animation...` action for Sequence Editor animation tracks in both the outliner and timeline context menus.
+- Added overlay animation lanes as separate `CharacterTrack` rows above the base/root animation lane for the same bound actor, with overlay metadata persisted on the track and clip key.
+- Changed sequence animation evaluation to gather all active animation lanes for one binding and compose them once, so overlay lanes blend with the root lane instead of overwriting each other.
+- Added Sequence Editor IPC support for `add_overlap_clip` / `add_overlapping_animation` so visual workflow tests can insert named overlay clips without modal prompts.
+- Included sequence track metadata in IPC state snapshots to make overlay/root lane verification explicit.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_track_list_widget.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\scene_workflow.py`
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m /v:minimal` passed.
+- Live Debug IPC workflow loaded `K1:C_Bantha`, bound it as a `Creature`, added base `cwalk`, inserted overlay `chturnl` with `add_overlap_clip`, sought during playback, and returned two separate animation lanes with `last_warning` empty.
+- Captured visible Debug UI proof at `knowledge_base\test_artifacts\sequence_overlap_lane_debug.png`, showing `chturnl` on the upper overlay lane and `cwalk` on the base lane below.
+
 ### [2026-06-15] Sequence Editor Smart Animation Blending
 
 Owner: LordVaderCW

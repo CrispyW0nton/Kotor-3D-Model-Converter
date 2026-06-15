@@ -1085,6 +1085,7 @@ class SceneWorkflowMixin:
                             "id": track.track_id,
                             "name": track.name,
                             "type": track.track_type,
+                            "metadata": dict(getattr(track, "metadata", {}) or {}),
                             "keys": [
                                 {
                                     "frame": int(key.frame),
@@ -1142,7 +1143,7 @@ class SceneWorkflowMixin:
             binding = self._sequence_binding_for_ipc(editor, payload)
             if binding is None:
                 return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
-            track = next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+            track = editor._base_animation_track(binding) if hasattr(editor, "_base_animation_track") else next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
             if track is None:
                 track = CharacterTrack(parent_binding_id=binding.binding_id)
                 binding.add_track(track)
@@ -1160,7 +1161,7 @@ class SceneWorkflowMixin:
                 binding = self._sequence_binding_for_ipc(editor, payload)
                 if binding is None:
                     return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
-                track = next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+                track = editor._base_animation_track(binding) if hasattr(editor, "_base_animation_track") else next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
                 if track is None:
                     track = CharacterTrack(parent_binding_id=binding.binding_id)
                     binding.add_track(track)
@@ -1186,6 +1187,59 @@ class SceneWorkflowMixin:
                 return {"ok": ok, "command": key, "sequence": self._sequence_state_snapshot()}
             ok = bool(editor._add_animation_clip_to_selected_track())
             return {"ok": ok, "command": key, "sequence": self._sequence_state_snapshot()}
+
+        if key in {"add_overlapping_animation", "add_overlap_clip", "overlap_clip"}:
+            animation_name = str(payload.get("animation", payload.get("name", "")) or "").strip()
+            from src.sequence.tracks.character_track import CharacterTrack
+
+            binding = self._sequence_binding_for_ipc(editor, payload)
+            if binding is None:
+                return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
+            if not animation_name:
+                item = editor._find_binding_item(binding.binding_id)
+                if item is not None:
+                    editor.outliner.track_list.setCurrentItem(item)
+                ok = bool(editor._add_overlapping_animation_to_selected_track())
+                return {"ok": ok, "command": key, "sequence": self._sequence_state_snapshot()}
+            base_track = editor._base_animation_track(binding) if hasattr(editor, "_base_animation_track") else next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+            if base_track is None:
+                base_track = CharacterTrack(parent_binding_id=binding.binding_id)
+                binding.add_track(base_track)
+            entries = editor._character_animation_entries(binding)
+            match = next(
+                (
+                    entry for entry in entries
+                    if str(entry.get("name", "") or "").lower() == animation_name.lower()
+                    or str(entry.get("label", "") or "").lower().startswith(animation_name.lower())
+                ),
+                None,
+            )
+            if match is None:
+                return {"ok": False, "command": key, "error": f"animation not found: {animation_name}", "sequence": self._sequence_state_snapshot()}
+            track = editor._create_overlapping_animation_track(binding, base_track)
+            item = self._sequence_track_item_for_ipc(editor, track.track_id)
+            if item is not None:
+                editor.outliner.track_list.setCurrentItem(item)
+            ok = bool(
+                editor._add_animation_entry_to_track(
+                    track,
+                    match,
+                    blend_mode="overlay",
+                    mask="auto",
+                    priority=1,
+                    track_name_prefix="Overlap",
+                )
+            )
+            if ok:
+                editor._sequence_changed(evaluate=True)
+                item = self._sequence_track_item_for_ipc(editor, track.track_id)
+                if item is not None:
+                    editor.outliner.track_list.setCurrentItem(item)
+                if hasattr(editor, "_play_from_current_animation_clip"):
+                    editor._play_from_current_animation_clip()
+            else:
+                binding.remove_track(track.track_id)
+            return {"ok": ok, "command": key, "track_id": track.track_id, "sequence": self._sequence_state_snapshot()}
 
         if key in {"set_frame", "seek"}:
             frame = int(round(float(payload.get("frame", payload.get("value", 0)) or 0)))

@@ -163,10 +163,16 @@ class SequenceEvaluator:
             if obj is None or not binding.active:
                 continue
             self._prepare_binding_transform_eval(binding, obj, frame)
+            character_tracks: list[CharacterTrack] = []
             for track in binding.tracks:
                 if track.locked or not track.enabled or track.muted:
                     continue
+                if isinstance(track, CharacterTrack):
+                    character_tracks.append(track)
+                    continue
                 dirty.update(self._apply_track(sequence, binding, obj, track, frame))
+            if character_tracks:
+                dirty.update(self._apply_character_tracks(sequence, binding, obj, character_tracks, frame))
         if self._apply_master_tracks(sequence, frame):
             dirty.add("cameras")
         if fire_events and previous_frame is not None:
@@ -216,8 +222,22 @@ class SequenceEvaluator:
         track: CharacterTrack,
         frame: int,
     ) -> set[str]:
-        keys = track.active_animation_keys(frame) if hasattr(track, "active_animation_keys") else []
-        active_keys = [key for key in keys if isinstance(getattr(key, "value", None), dict) and str(key.value.get("animation") or "").strip()]
+        return self._apply_character_tracks(sequence, binding, obj, [track], frame)
+
+    def _apply_character_tracks(
+        self,
+        sequence: GhostRiggerLevelSequence,
+        binding: SequenceBinding,
+        obj: object,
+        tracks: list[CharacterTrack],
+        frame: int,
+    ) -> set[str]:
+        active_keys = []
+        for track in tracks:
+            keys = track.active_animation_keys(frame) if hasattr(track, "active_animation_keys") else []
+            for key in keys:
+                if isinstance(getattr(key, "value", None), dict) and str(key.value.get("animation") or "").strip():
+                    active_keys.append(key)
         if not active_keys:
             if self.viewport is not None and hasattr(self.viewport, "set_animation_pose"):
                 self.viewport.set_animation_pose(None)

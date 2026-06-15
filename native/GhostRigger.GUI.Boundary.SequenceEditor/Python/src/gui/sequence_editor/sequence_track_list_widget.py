@@ -19,6 +19,7 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
     addTrackRequested = QtCore.Signal(str)
     addCameraCutRequested = QtCore.Signal()
     addAnimationClipRequested = QtCore.Signal()
+    addOverlappingAnimationRequested = QtCore.Signal()
     deleteSelectionRequested = QtCore.Signal()
     hierarchyChanged = QtCore.Signal()
 
@@ -212,6 +213,8 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
         add_clip_action = menu.addAction("Add Animation Clip...")
         selected_track = self.selected_track()
         add_clip_action.setEnabled(isinstance(selected_track, CharacterTrack))
+        add_overlap_action = menu.addAction("Add Overlapping Animation...")
+        add_overlap_action.setEnabled(isinstance(selected_track, CharacterTrack))
         delete_action = menu.addAction("Delete Track" if is_track else "Delete Object Binding")
         delete_action.setEnabled(is_track or is_binding)
         chosen = menu.exec(self.viewport().mapToGlobal(pos))
@@ -223,6 +226,8 @@ class SequenceTrackListWidget(QtWidgets.QTreeWidget):
             self.addCameraCutRequested.emit()
         elif chosen is add_clip_action:
             self.addAnimationClipRequested.emit()
+        elif chosen is add_overlap_action:
+            self.addOverlappingAnimationRequested.emit()
         elif chosen is delete_action:
             self.deleteSelectionRequested.emit()
         elif chosen in track_menu.actions():

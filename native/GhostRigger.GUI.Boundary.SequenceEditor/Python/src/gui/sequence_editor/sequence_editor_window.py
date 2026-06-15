@@ -284,6 +284,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.outliner.track_list.addTrackRequested.connect(self._add_track)
         self.outliner.track_list.addCameraCutRequested.connect(self._add_camera_cut)
         self.outliner.track_list.addAnimationClipRequested.connect(self._add_animation_clip_to_selected_track)
+        self.outliner.track_list.addOverlappingAnimationRequested.connect(self._add_overlapping_animation_to_selected_track)
         self.outliner.track_list.deleteSelectionRequested.connect(self._delete_selected_outliner_item)
         self.outliner.track_list.hierarchyChanged.connect(self._sync_timeline_rows)
         self.properties_panel.sequenceChanged.connect(self._sequence_changed)
@@ -571,7 +572,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             self._set_status("Select or bind an animated scene object before adding an animation clip.")
             return False
         if track is None:
-            track = next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+            track = self._base_animation_track(binding)
             if track is None:
                 track = CharacterTrack(parent_binding_id=binding.binding_id)
                 binding.add_track(track)
@@ -580,6 +581,69 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             self._play_from_current_animation_clip()
             return True
         return False
+
+    def _add_overlapping_animation_to_selected_track(self) -> bool:
+        if self.sequence is None:
+            return False
+        selected_track = self.outliner.track_list.selected_track()
+        binding = self.outliner.track_list.selected_binding()
+        if selected_track is not None and not isinstance(selected_track, CharacterTrack):
+            self._set_status("Select an Animation track before adding an overlapping animation.")
+            return False
+        if binding is None:
+            self._set_status("Select or bind an animated scene object before adding an overlapping animation.")
+            return False
+        base_track = self._base_animation_track(binding) or selected_track
+        if base_track is None:
+            base_track = CharacterTrack(parent_binding_id=binding.binding_id)
+            binding.add_track(base_track)
+        overlay_track = self._create_overlapping_animation_track(binding, base_track)
+        if not self._configure_character_track(
+            overlay_track,
+            binding,
+            prompt=True,
+            blend_mode="overlay",
+            mask="auto",
+            priority=1,
+            track_name_prefix="Overlap",
+        ):
+            binding.remove_track(overlay_track.track_id)
+            return False
+        self._sequence_changed(evaluate=True)
+        self._restore_outliner_selection_key(("track", overlay_track.track_id))
+        self._play_from_current_animation_clip()
+        return True
+
+    def _create_overlapping_animation_track(self, binding, base_track: CharacterTrack | None = None) -> CharacterTrack:
+        track = CharacterTrack(parent_binding_id=binding.binding_id)
+        track.name = "Overlap"
+        track.color = "#2DD4FF"
+        track.metadata["blend_role"] = "overlay"
+        track.metadata["is_overlap_track"] = True
+        track.metadata["display_role"] = "overlap"
+        if base_track is not None and base_track in binding.tracks:
+            base_index = binding.tracks.index(base_track)
+        else:
+            base_index = next(
+                (index for index, item in enumerate(binding.tracks) if isinstance(item, CharacterTrack) and not self._is_overlapping_animation_track(item)),
+                len(binding.tracks),
+            )
+        track.parent_binding_id = binding.binding_id
+        binding.tracks.insert(base_index, track)
+        return track
+
+    @staticmethod
+    def _is_overlapping_animation_track(track) -> bool:
+        metadata = getattr(track, "metadata", {}) or {}
+        return bool(metadata.get("is_overlap_track")) or str(metadata.get("blend_role", "")).lower() == "overlay"
+
+    def _base_animation_track(self, binding) -> CharacterTrack | None:
+        if binding is None:
+            return None
+        for track in binding.tracks:
+            if isinstance(track, CharacterTrack) and not self._is_overlapping_animation_track(track):
+                return track
+        return next((track for track in binding.tracks if isinstance(track, CharacterTrack)), None)
 
     def _key_track(self, track, obj) -> None:
         if self.sequence is None:
@@ -633,12 +697,29 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         else:
             track.add_keyframe(frame, None, select=True)
 
-    def _configure_character_track(self, track: CharacterTrack, binding, *, prompt: bool) -> bool:
+    def _configure_character_track(
+        self,
+        track: CharacterTrack,
+        binding,
+        *,
+        prompt: bool,
+        blend_mode: str = "auto",
+        mask: str = "auto",
+        priority: int = 0,
+        track_name_prefix: str = "Animation",
+    ) -> bool:
         if self.sequence is None or binding is None:
             return False
         browser_entry = self._selected_animation_browser_entry()
         if browser_entry is not None:
-            return self._add_animation_entry_to_track(track, browser_entry)
+            return self._add_animation_entry_to_track(
+                track,
+                browser_entry,
+                blend_mode=blend_mode,
+                mask=mask,
+                priority=priority,
+                track_name_prefix=track_name_prefix,
+            )
         entries = self._character_animation_entries(binding)
         if not entries:
             self._set_status(f"No animations found for {getattr(binding, 'display_name', 'actor')}.")
@@ -662,9 +743,25 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             if not ok:
                 return False
             chosen_index = labels.index(chosen) if chosen in labels else default_index
-        return self._add_animation_entry_to_track(track, entries[chosen_index])
+        return self._add_animation_entry_to_track(
+            track,
+            entries[chosen_index],
+            blend_mode=blend_mode,
+            mask=mask,
+            priority=priority,
+            track_name_prefix=track_name_prefix,
+        )
 
-    def _add_animation_entry_to_track(self, track: CharacterTrack, entry: dict[str, Any]) -> bool:
+    def _add_animation_entry_to_track(
+        self,
+        track: CharacterTrack,
+        entry: dict[str, Any],
+        *,
+        blend_mode: str = "auto",
+        mask: str = "auto",
+        priority: int = 0,
+        track_name_prefix: str = "Animation",
+    ) -> bool:
         if self.sequence is None:
             return False
         length = float(entry.get("length", 0.0) or 0.0)
@@ -678,9 +775,12 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             length=length,
             duration_frames=duration_frames,
             loop=False,
+            blend_mode=blend_mode,
+            mask=mask,
+            priority=priority,
             select=True,
         )
-        track.name = f"Animation: {entry['name']}"
+        track.name = f"{track_name_prefix}: {entry['name']}"
         self._set_status(f"Added animation clip '{entry['name']}' at frame {self.sequence.current_frame}.")
         return True
 
@@ -1016,8 +1116,17 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             self._set_status(f"Pasted {count} key(s)")
 
     def _timeline_context_menu(self, point: QtCore.QPoint) -> None:
+        local_point = self.timeline.mapFromGlobal(point)
+        rows = self.timeline.tracks_with_rows()
+        row_index = self.timeline.row_at(int(local_point.y()))
+        if 0 <= row_index < len(rows):
+            _kind, _binding, row_track = rows[row_index]
+            if row_track is not None:
+                self._restore_outliner_selection_key(("track", row_track.track_id))
         menu = QtWidgets.QMenu(self)
         add_key = menu.addAction("Add Key")
+        add_clip = menu.addAction("Add Animation Clip...")
+        add_overlap = menu.addAction("Add Overlapping Animation...")
         delete_key = menu.addAction("Delete Key")
         copy = menu.addAction("Copy")
         paste = menu.addAction("Paste")
@@ -1025,10 +1134,16 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         marker = menu.addAction("Add Marker")
         mute_track = menu.addAction("Mute Track")
         lock_track = menu.addAction("Lock Track")
-        chosen = menu.exec(point)
         track = self.outliner.track_list.selected_track()
+        add_clip.setEnabled(isinstance(track, CharacterTrack))
+        add_overlap.setEnabled(isinstance(track, CharacterTrack))
+        chosen = menu.exec(point)
         if chosen is add_key:
             self._set_key()
+        elif chosen is add_clip:
+            self._add_animation_clip_to_selected_track()
+        elif chosen is add_overlap:
+            self._add_overlapping_animation_to_selected_track()
         elif chosen is delete_key:
             self.timeline.delete_selected_keys()
             self._sequence_changed()
