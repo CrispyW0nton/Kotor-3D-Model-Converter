@@ -1153,6 +1153,37 @@ class SceneWorkflowMixin:
             return {"ok": True, "command": key, "binding_id": binding.binding_id, "track_id": track.track_id, "sequence": self._sequence_state_snapshot()}
 
         if key in {"add_selected_animation_clip", "add_clip"}:
+            animation_name = str(payload.get("animation", payload.get("name", "")) or "").strip()
+            if animation_name:
+                from src.sequence.tracks.character_track import CharacterTrack
+
+                binding = self._sequence_binding_for_ipc(editor, payload)
+                if binding is None:
+                    return {"ok": False, "command": key, "error": "binding not found", "sequence": self._sequence_state_snapshot()}
+                track = next((item for item in binding.tracks if isinstance(item, CharacterTrack)), None)
+                if track is None:
+                    track = CharacterTrack(parent_binding_id=binding.binding_id)
+                    binding.add_track(track)
+                entries = editor._character_animation_entries(binding)
+                match = next(
+                    (
+                        entry for entry in entries
+                        if str(entry.get("name", "") or "").lower() == animation_name.lower()
+                        or str(entry.get("label", "") or "").lower().startswith(animation_name.lower())
+                    ),
+                    None,
+                )
+                if match is None:
+                    return {"ok": False, "command": key, "error": f"animation not found: {animation_name}", "sequence": self._sequence_state_snapshot()}
+                item = self._sequence_track_item_for_ipc(editor, track.track_id)
+                if item is not None:
+                    editor.outliner.track_list.setCurrentItem(item)
+                ok = bool(editor._add_animation_entry_to_track(track, match))
+                if ok:
+                    editor._sequence_changed(evaluate=True)
+                    if hasattr(editor, "_play_from_current_animation_clip"):
+                        editor._play_from_current_animation_clip()
+                return {"ok": ok, "command": key, "sequence": self._sequence_state_snapshot()}
             ok = bool(editor._add_animation_clip_to_selected_track())
             return {"ok": ok, "command": key, "sequence": self._sequence_state_snapshot()}
 

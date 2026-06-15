@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Sequence Editor Smart Animation Blending
+
+Owner: LordVaderCW
+Subsystem: Sequence editor animation workflow
+
+- Added multi-clip evaluation for sequence Animation tracks so overlapping clips on the same bound model can be composed instead of only the latest active key winning.
+- Added default blend metadata to animation clip keys: blend mode, weight, fade in/out, node mask, and priority.
+- Added a first-pass pose mixer that keeps locomotion/full-body clips as the base pose and blends partial clips over masked nodes.
+- Added auto partial/head masks for KOTOR-style clip names such as `turn`, `thurn`, `look`, `talk`, `listen`, and related head/gesture names so clips like `Chturnl` can blend over `cwalk`.
+- Added named Sequence Editor IPC clip insertion (`add_clip` with `animation`) so automated workflow tests can insert an exact clip without relying on Animation Browser selection state.
+- Verified the updated Python modules are already included in the native Visual Studio project files and filters.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\tracks\character_track.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\tracks\character_track.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py`
+- Focused blend smoke verified overlapping `cwalk` + `cthurnl` keeps `BTHips` from the base clip while blending `BTHead` from the overlay clip.
+- `Select-String` verified `sequence_evaluator.py`, `character_track.py`, and `sequence_editor_window.py` are present in their native `.vcxproj` and `.vcxproj.filters` files.
+- Live Debug IPC workflow loaded `K1:c_bantha`, inserted overlapping `cwalk` and `Chturnl` clips on the `C_Bantha` Creature animation track, sought frame 18, and returned no sequence warning.
+
 ### [2026-06-15] Sequence Editor Model-Only Animation Playback
 
 Owner: LordVaderCW

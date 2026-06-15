@@ -216,19 +216,17 @@ class SequenceEvaluator:
         track: CharacterTrack,
         frame: int,
     ) -> set[str]:
-        key = track.active_animation_key(frame)
-        if key is None or not isinstance(key.value, dict):
+        keys = track.active_animation_keys(frame) if hasattr(track, "active_animation_keys") else []
+        active_keys = [key for key in keys if isinstance(getattr(key, "value", None), dict) and str(key.value.get("animation") or "").strip()]
+        if not active_keys:
             if self.viewport is not None and hasattr(self.viewport, "set_animation_pose"):
                 self.viewport.set_animation_pose(None)
                 return {"animation"}
             return set()
-        anim_name = str(key.value.get("animation") or "").strip()
-        if not anim_name:
-            return set()
         viewport = self.viewport
         if viewport is None or not hasattr(viewport, "set_animation_pose"):
             return set()
-        model = self._character_animation_model(obj, binding=binding, key=key)
+        model = self._character_animation_model(obj, binding=binding, key=active_keys[0])
         if model is None:
             self.last_warning = f"No animated model available for {binding.display_name}."
             return set()
@@ -240,35 +238,218 @@ class SequenceEvaluator:
                 SuperModelResolver.configure(manager)
             inheritance_game = self._animation_inheritance_game(model)
             inheritance_supermodel = self._animation_inheritance_supermodel(model)
-            engine_key = (id(model), anim_name.lower(), inheritance_game, inheritance_supermodel)
-            engine = self._character_engines.get(engine_key)
-            if engine is None or getattr(engine, "model", None) is not model:
-                engine = AnimationEngine(model)
-                self._character_engines[engine_key] = engine
-            loop = bool(key.value.get("loop", True))
+            evaluated: list[dict[str, Any]] = []
             with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
-                if getattr(getattr(engine, "current_animation", None), "name", "").lower() != anim_name.lower():
-                    if not engine.play(anim_name, loop=loop, blend=False):
-                        self.last_warning = f"Animation '{anim_name}' is not available for {binding.display_name}."
-                        return set()
-                    engine.stop()
-                elapsed_frames = max(0.0, float(frame) - float(key.frame))
-                length = float(key.value.get("length", 0.0) or 0.0)
-                duration_frames = float(key.value.get("duration_frames", 0.0) or 0.0)
-                if length > 0.0 and duration_frames > 0.0:
-                    seconds = min(length, (elapsed_frames / max(0.001, duration_frames)) * length)
-                else:
-                    seconds = elapsed_frames / max(0.001, float(sequence.frame_rate or 24.0))
-                engine.seek(seconds)
-                pose = engine.evaluate()
-                current = engine.current_animation
-            length = float(getattr(current, "length", length) or 0.0)
-            self._tag_animation_pose(pose, model, anim_name)
-            viewport.set_animation_pose(pose, name=anim_name, time=engine.current_time, length=length)
+                for key in active_keys:
+                    anim_name = str(key.value.get("animation") or "").strip()
+                    engine_key = (id(model), anim_name.lower(), inheritance_game, inheritance_supermodel)
+                    engine = self._character_engines.get(engine_key)
+                    if engine is None or getattr(engine, "model", None) is not model:
+                        engine = AnimationEngine(model)
+                        self._character_engines[engine_key] = engine
+                    loop = bool(key.value.get("loop", True))
+                    if getattr(getattr(engine, "current_animation", None), "name", "").lower() != anim_name.lower():
+                        if not engine.play(anim_name, loop=loop, blend=False):
+                            self.last_warning = f"Animation '{anim_name}' is not available for {binding.display_name}."
+                            return set()
+                        engine.stop()
+                    seconds = self._animation_clip_seconds(sequence, key, frame)
+                    engine.seek(seconds)
+                    pose = engine.evaluate()
+                    current = engine.current_animation
+                    evaluated.append(
+                        {
+                            "key": key,
+                            "name": anim_name,
+                            "pose": pose,
+                            "time": float(getattr(engine, "current_time", seconds) or 0.0),
+                            "length": float(getattr(current, "length", key.value.get("length", 0.0)) or 0.0),
+                        }
+                    )
+            if not evaluated:
+                return set()
+            pose = self._compose_animation_poses(model, evaluated, frame)
+            names = [item["name"] for item in evaluated]
+            length = max((float(item.get("length", 0.0) or 0.0) for item in evaluated), default=0.0)
+            time_value = float(evaluated[0].get("time", 0.0) or 0.0)
+            self._tag_animation_pose(pose, model, " + ".join(names))
+            viewport.set_animation_pose(pose, name=" + ".join(names), time=time_value, length=length)
             return {"animation"}
         except Exception as exc:
             self.last_warning = f"Animation track failed for {binding.display_name}: {exc}"
             return set()
+
+    def _animation_clip_seconds(self, sequence: GhostRiggerLevelSequence, key, frame: int) -> float:
+        elapsed_frames = max(0.0, float(frame) - float(key.frame))
+        length = float(key.value.get("length", 0.0) or 0.0)
+        duration_frames = float(key.value.get("duration_frames", 0.0) or 0.0)
+        if length > 0.0 and duration_frames > 0.0:
+            return min(length, (elapsed_frames / max(0.001, duration_frames)) * length)
+        return elapsed_frames / max(0.001, float(sequence.frame_rate or 24.0))
+
+    def _compose_animation_poses(self, model, evaluated: list[dict[str, Any]], frame: int):
+        ordered = sorted(
+            evaluated,
+            key=lambda item: (
+                float(item["key"].frame),
+                int(item["key"].value.get("priority", 0) or 0),
+            ),
+        )
+        base_item = next((item for item in ordered if self._clip_blend_mode(item["key"], item["name"], 0) == "base"), ordered[0])
+        base_pose = base_item["pose"]
+        for item in ordered:
+            if item is base_item:
+                continue
+            key = item["key"]
+            mode = self._clip_blend_mode(key, item["name"], 1)
+            weight = self._clip_blend_weight(key, frame)
+            if weight <= 0.0:
+                continue
+            mask = self._clip_mask_nodes(model, key, item["name"], item["pose"], mode)
+            base_pose = self._blend_animation_pose(base_pose, item["pose"], weight, mask)
+        return base_pose
+
+    def _clip_blend_mode(self, key, anim_name: str, index: int) -> str:
+        mode = str(key.value.get("blend_mode", "auto") or "auto").strip().lower()
+        if mode in {"base", "replace", "overlay", "additive"}:
+            return "base" if mode == "replace" else mode
+        if index == 0 and not self._is_partial_animation_name(anim_name):
+            return "base"
+        return "overlay" if self._is_partial_animation_name(anim_name) else "base"
+
+    def _clip_blend_weight(self, key, frame: int) -> float:
+        value = key.value
+        base_weight = max(0.0, min(1.0, float(value.get("weight", 1.0) if value.get("weight", 1.0) is not None else 1.0)))
+        duration = float(value.get("duration_frames", 0.0) or 0.0)
+        if duration <= 0.0:
+            return base_weight
+        elapsed = max(0.0, float(frame) - float(key.frame))
+        fade_in = max(0.0, min(float(value.get("fade_in_frames", 0.0) or 0.0), duration))
+        fade_out = max(0.0, min(float(value.get("fade_out_frames", 0.0) or 0.0), duration))
+        factor = 1.0
+        if fade_in > 0.0:
+            factor = min(factor, elapsed / fade_in)
+        if fade_out > 0.0:
+            factor = min(factor, max(0.0, (duration - elapsed) / fade_out))
+        return max(0.0, min(1.0, base_weight * factor))
+
+    def _clip_mask_nodes(self, model, key, anim_name: str, pose, mode: str) -> set[str] | None:
+        raw_mask = str(key.value.get("mask", "auto") or "auto").strip().lower()
+        if raw_mask in {"", "full", "all", "none"} or mode == "base":
+            return None
+        custom = key.value.get("nodes") or key.value.get("mask_nodes")
+        if isinstance(custom, (list, tuple, set)):
+            return {str(item).lower() for item in custom if str(item).strip()}
+        if raw_mask == "auto":
+            raw_mask = "head" if self._is_head_animation_name(anim_name) else "upper"
+        hints = self._node_mask_hints(raw_mask)
+        if not hints:
+            return None
+        nodes = {
+            name
+            for name in getattr(pose, "nodes", {})
+            if any(hint in str(name).lower() for hint in hints)
+        }
+        return nodes or None
+
+    @staticmethod
+    def _is_partial_animation_name(anim_name: str) -> bool:
+        name = str(anim_name or "").lower()
+        return any(token in name for token in ("turn", "thurn", "hturn", "look", "talk", "listen", "head", "pause", "gesture", "point", "nod", "shake"))
+
+    @staticmethod
+    def _is_head_animation_name(anim_name: str) -> bool:
+        name = str(anim_name or "").lower()
+        return any(token in name for token in ("turn", "thurn", "hturn", "look", "talk", "listen", "head", "nod", "shake"))
+
+    @staticmethod
+    def _node_mask_hints(mask: str) -> tuple[str, ...]:
+        if mask == "head":
+            return ("head", "neck", "face", "jaw", "mouth", "lip", "eye", "brow", "tongue", "ear", "horn", "snout")
+        if mask == "upper":
+            return ("head", "neck", "face", "jaw", "mouth", "eye", "horn", "spine", "chest", "torso", "clav", "shldr", "shoulder", "arm", "fore", "hand", "wrist")
+        return tuple(str(mask or "").split())
+
+    def _blend_animation_pose(self, base_pose, overlay_pose, weight: float, mask: set[str] | None):
+        if base_pose is None:
+            return overlay_pose
+        if overlay_pose is None:
+            return base_pose
+        alpha = max(0.0, min(1.0, float(weight)))
+        if alpha <= 0.0:
+            return base_pose
+        for name, overlay_node in list(getattr(overlay_pose, "nodes", {}).items()):
+            node_key = str(name).lower()
+            if mask is not None and node_key not in mask:
+                continue
+            base_node = base_pose.nodes.get(node_key) if hasattr(base_pose, "nodes") else None
+            if base_node is None:
+                base_pose.nodes[node_key] = overlay_node
+                continue
+            base_pose.nodes[node_key] = self._blend_node_pose(base_node, overlay_node, alpha)
+        return base_pose
+
+    @staticmethod
+    def _blend_node_pose(base_node, overlay_node, alpha: float):
+        node_type = type(overlay_node)
+        bp = tuple(float(value) for value in getattr(base_node, "position", (0.0, 0.0, 0.0)))
+        op = tuple(float(value) for value in getattr(overlay_node, "position", bp))
+        position = (
+            bp[0] + (op[0] - bp[0]) * alpha,
+            bp[1] + (op[1] - bp[1]) * alpha,
+            bp[2] + (op[2] - bp[2]) * alpha,
+        )
+        rotation = SequenceEvaluator._slerp_quat(
+            tuple(float(value) for value in getattr(base_node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            tuple(float(value) for value in getattr(overlay_node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+            alpha,
+        )
+        scale = float(getattr(base_node, "scale", 1.0) or 1.0) + (float(getattr(overlay_node, "scale", 1.0) or 1.0) - float(getattr(base_node, "scale", 1.0) or 1.0)) * alpha
+        alpha_value = getattr(overlay_node, "alpha", None) if getattr(overlay_node, "alpha", None) is not None else getattr(base_node, "alpha", None)
+        selfillum = getattr(overlay_node, "selfillum", None) if getattr(overlay_node, "selfillum", None) is not None else getattr(base_node, "selfillum", None)
+        return node_type(
+            name=getattr(overlay_node, "name", getattr(base_node, "name", "")),
+            position=position,
+            rotation=rotation,
+            scale=scale,
+            alpha=alpha_value,
+            selfillum=selfillum,
+        )
+
+    @staticmethod
+    def _slerp_quat(q1, q2, t: float) -> tuple[float, float, float, float]:
+        import math
+
+        x1, y1, z1, w1 = q1
+        x2, y2, z2, w2 = q2
+        dot = x1 * x2 + y1 * y2 + z1 * z2 + w1 * w2
+        if dot < 0.0:
+            x2, y2, z2, w2 = -x2, -y2, -z2, -w2
+            dot = -dot
+        if dot > 0.9995:
+            result = (
+                x1 + (x2 - x1) * t,
+                y1 + (y2 - y1) * t,
+                z1 + (z2 - z1) * t,
+                w1 + (w2 - w1) * t,
+            )
+        else:
+            theta_0 = math.acos(max(-1.0, min(1.0, dot)))
+            sin_theta_0 = math.sin(theta_0)
+            theta = theta_0 * t
+            sin_theta = math.sin(theta)
+            s0 = math.cos(theta) - dot * sin_theta / max(1e-9, sin_theta_0)
+            s1 = sin_theta / max(1e-9, sin_theta_0)
+            result = (
+                s0 * x1 + s1 * x2,
+                s0 * y1 + s1 * y2,
+                s0 * z1 + s1 * z2,
+                s0 * w1 + s1 * w2,
+            )
+        mag = math.sqrt(sum(value * value for value in result))
+        if mag <= 1e-9:
+            return (0.0, 0.0, 0.0, 1.0)
+        return tuple(value / mag for value in result)
 
     def _character_animation_model(self, obj: object | None, *, binding: SequenceBinding | None = None, key=None):
         source_names = self._animation_source_names(binding, key)
