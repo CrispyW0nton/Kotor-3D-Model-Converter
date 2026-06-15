@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-15
 
+### [2026-06-15] Native Host Python Discovery Fix
+
+Owner: Codex
+Task: T000
+Subsystem: native Visual Studio host / embedded Python startup
+
+- Removed the stale hardcoded `C:\Users\KingJamesIX\...\Python313` runtime lookup from the native host executable.
+- Added portable Python 3.13 home discovery using `GHOSTRIGGER_PYTHON_HOME`, `GHOSTRIGGER_PYTHON`, `%LOCALAPPDATA%\Programs\Python\Python313`, and machine-level `Program Files` install candidates.
+- Kept the host strict about requiring a real Python 3.13 install with `python.exe`, `python313.dll`, and `Lib` so it does not accidentally initialize against an incomplete build-output DLL copy.
+
+Verification:
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- `build\vs\x64\Debug\GhostRigger.exe --native-host-debug`
+- `build\vs\x64\Debug\GhostRigger.exe --native-embed-init-debug`
+- `git diff --check`
+
 ### [2026-06-15] Native Host Build Repair
 
 Owner: Codex
