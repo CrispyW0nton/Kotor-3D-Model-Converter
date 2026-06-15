@@ -23,9 +23,11 @@ env/
 # ── Jupyter / IDE ─────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 .vscode/
+.vs/
 .idea/
 *.swp
 *~
+*.vcxproj.user
 
 # ── Game data (large extracted game files – not distributed) ──────────────────
 game_data/
@@ -54,6 +56,7 @@ game_data/
 !/tests/test_mcp_skinning.py
 !/tests/test_qt_only_imports.py
 !/tests/test_theme_layout_loading.py
+!/tests/test_pygfx_renderer_backend.py
 !/tests/test_pivot_data.py
 !/tests/test_axis_mode.py
 !/tests/test_gizmo_mode_state.py
@@ -241,12 +244,6 @@ scripts/
 !/scripts/export_kotor_model_for_unity.py
 !/scripts/run_malak_unity_smoke.py
 exports/
-!/exports/
-!/exports/scan_manifest.json
-!/exports/full_scan_results.json
-!/exports/full_scan_results_fast.json
-!/exports/full_scan_results_modules.json
-!/exports/failure_analysis.json
 exports/retargets/day4_mcp_smoke/
 .pytest_tmp_fbx_exporter/
 !/tests/test_ghostrigger_retarget_preview_controller.py
@@ -261,6 +258,8 @@ exports/retargets/day4_mcp_smoke/
 !/tests/test_retarget_workbench_readiness.py
 !/tests/test_secret_hygiene.py
 !/tests/test_retarget_workbench_ui_placement.py
+!/tests/test_native_core_package_registry.py
+!/tests/test_native_project_templates.py
 audit_deep.py
 audit_exhaustive.py
 _patch_viewport.py
@@ -277,3 +276,12 @@ SYSTEM_DESIGN.md
 TEXTBOOK_RESEARCH_REPORT.md
 /.cursor
 /artifacts
+knowledge_base/test_artifacts/*.zip
+/.vs
+*.user
+/tests
+/tests
+!/tests/
+!/tests/test_native_core_package_registry.py
+!/tests/test_native_project_templates.py
+/knowledge_base/books

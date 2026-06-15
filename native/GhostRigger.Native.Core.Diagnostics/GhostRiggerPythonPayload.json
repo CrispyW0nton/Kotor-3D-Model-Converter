@@ -1,0 +1,51 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Native.Core.Diagnostics",
+    "file_count": 7,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/diagnostics/__init__.py",
+            "packaged_path": "Python/src/core/diagnostics/__init__.py",
+            "sha256": "24162d6204016dcbc391f739696ab8aa9b6b860443277307fd3c35245548b839"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/diagnostics/diagnostics.py",
+            "packaged_path": "Python/src/core/diagnostics/diagnostics.py",
+            "sha256": "db6b1895f2130a82b685bb3f5d30b1c6f47d79a986c7c7ee321d30504747b498"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/diagnostics/module_reference_safety.py",
+            "packaged_path": "Python/src/core/diagnostics/module_reference_safety.py",
+            "sha256": "b67179531fc6523514f9a60a4a483400faa2307aba8ab9de4dafe9a8fb18bf2a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/diagnostics/validation_service.py",
+            "packaged_path": "Python/src/core/diagnostics/validation_service.py",
+            "sha256": "f872b684f7f0bf4197afbfbc02218eeb2d3eb81ce3c5ca446ba6cf395da26a05"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/rendering/gpu_diagnostics_config.py",
+            "packaged_path": "Python/src/core/rendering/gpu_diagnostics_config.py",
+            "sha256": "fc8a5a7e33e971a3da4363b95609d6efc8b26259fcfb844850e28a7b802b9408"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/rendering/gpu_diagnostics_records.py",
+            "packaged_path": "Python/src/core/rendering/gpu_diagnostics_records.py",
+            "sha256": "5c2222453229f30dbadc87ca4776c4813c61dc16d7e0ba0de8857e9daec8ce43"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/adapters/rendering/gpu_diagnostics_exports.py",
+            "packaged_path": "Python/src/adapters/rendering/gpu_diagnostics_exports.py",
+            "sha256": "433494fcc892f8acf5a5de363f95a32c6b472d843ec23fa0d8a1ec1642455e85"
+        }
+    ]
+}

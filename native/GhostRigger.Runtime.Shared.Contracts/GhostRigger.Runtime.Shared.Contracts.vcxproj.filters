@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{95d6a3c7-d41e-1e3a-d77e-5205e0ca0597}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{10013289-d9c6-1523-9289-63a97c212a4b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{644f7f6d-04b2-b859-e6fc-6b623a20bbf7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{b9949f88-801b-26d4-6f00-7cb700f6e10f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{9f533c5a-2265-d3f4-b109-4c89d9652987}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{6b93b51a-cece-bc63-e634-04ecaefdfdc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{3bfaa50e-2b04-37f5-539f-51307432d940}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\rendering">
+      <UniqueIdentifier>{1c98d37c-387c-70bf-4cab-dcd3a0f25619}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\rendering\native_core">
+      <UniqueIdentifier>{7acc7073-2d6d-060b-7505-81d01bbb82e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{ba306995-4c3d-4df6-67f6-4f66360b19b0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\ports">
+      <UniqueIdentifier>{b351a731-d04c-ed4e-bfdf-4d5e2a401fca}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\rendering">
+      <UniqueIdentifier>{06e44152-0a13-7702-e233-695a7c967c70}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerRuntimeSharedContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerRuntimeSharedContracts.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\ports\__init__.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\ports\files.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\ports\resources.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\ports\scripts.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\ports\textures.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\ports\viewport_renderer.py">
+      <Filter>Python\src\core\ports</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\renderer_interface.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\renderer_backend.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\renderer_capabilities.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\adapters\rendering\native_core\__init__.py">
+      <Filter>Python\src\adapters\rendering\native_core</Filter>
+    </None>
+    <None Include="Python\src\adapters\rendering\native_core\binding.py">
+      <Filter>Python\src\adapters\rendering\native_core</Filter>
+    </None>
+    <None Include="Python\src\adapters\rendering\native_core\renderer.py">
+      <Filter>Python\src\adapters\rendering\native_core</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

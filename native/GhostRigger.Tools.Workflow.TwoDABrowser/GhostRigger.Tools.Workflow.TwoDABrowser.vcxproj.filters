@@ -1,0 +1,135 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{ac0e106a-d998-04cd-b093-59a0d3147580}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{91ceb5be-11f9-ba8b-5f77-518c0c3e9936}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{32e11501-5aba-3980-a024-2e6698061cc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{ad7957e4-39d5-cc10-28ff-998d8425b1ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{37c83b4e-06d7-3029-9ac3-0575015955ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{fdab29bc-bf95-ce50-0a7c-6ccbbe7107ae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{5223d6ee-6586-128c-6b2d-8abd82da5247}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\game">
+      <UniqueIdentifier>{83f1a107-7a1a-ee68-4d24-63bd4ddc99e3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\resources">
+      <UniqueIdentifier>{554c4495-b423-bfe5-a96d-db8155d0ef2b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\templates">
+      <UniqueIdentifier>{a31d1f27-03d2-df5e-310f-79a2c67e206b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{5c794289-1246-1fc9-475a-4f33d474005e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels">
+      <UniqueIdentifier>{fb974842-4e1d-4beb-5c0b-3ccecba8b1b6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows">
+      <UniqueIdentifier>{1f7fd872-7263-f542-86b3-b6770c061ce7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows\application_core">
+      <UniqueIdentifier>{7fc55958-c819-499b-4482-4fb9b265d2b2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows\application_core\shared">
+      <UniqueIdentifier>{cbee86a2-6ad1-1f14-6891-f9f8bf7fb96f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\resources">
+      <UniqueIdentifier>{d41b9c31-8447-e46a-5293-fcd6ea4a91d2}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerToolsTwoDABrowser.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerToolsTwoDABrowser.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\panels\qt_resource_panel.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\application_core\shared\resource_panels.py">
+      <Filter>Python\src\gui\windows\application_core\shared</Filter>
+    </None>
+    <None Include="Python\src\core\templates\twoda.py">
+      <Filter>Python\src\core\templates</Filter>
+    </None>
+    <None Include="Python\src\core\templates\__init__.py">
+      <Filter>Python\src\core\templates</Filter>
+    </None>
+    <None Include="Python\src\resources\__init__.py">
+      <Filter>Python\src\resources</Filter>
+    </None>
+    <None Include="Python\src\resources\game_detector.py">
+      <Filter>Python\src\resources</Filter>
+    </None>
+    <None Include="Python\src\resources\game_library.py">
+      <Filter>Python\src\resources</Filter>
+    </None>
+    <None Include="Python\src\core\resources\__init__.py">
+      <Filter>Python\src\core\resources</Filter>
+    </None>
+    <None Include="Python\src\core\resources\game_resource_provider.py">
+      <Filter>Python\src\core\resources</Filter>
+    </None>
+    <None Include="Python\src\core\game\game_library_ext.py">
+      <Filter>Python\src\core\game</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

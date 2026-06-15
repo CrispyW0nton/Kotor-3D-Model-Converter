@@ -1,0 +1,138 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{2f660bfd-2802-f378-e111-33b0edf4b3ca}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{625f71ba-17d0-ff39-c463-d5cd27393bcc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{02c60cf6-9a3f-57d4-f8ee-7cc20d5ddfc3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{e0b84c00-16fc-5008-e042-51b71c61592f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{d9529bc2-075e-26e2-6dd0-6f7ed3f676e9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{f36e26a7-f823-2f6e-3204-a5cdc02b1f55}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{da660047-50dc-da06-94f8-9236c31f88cd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\scene">
+      <UniqueIdentifier>{bf2a3441-80ea-d8fd-862c-d42cea89c8e6}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\AxisMode.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\GhostRiggerScene.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ScenePrimitives.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\AxisMode.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GhostRiggerScene.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ScenePrimitives.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\scene\__init__.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\_native.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\axis_mode.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\kmax_scene.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\kmax_scene_manager.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\kmax_serializer.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\kmax_validator.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\lyt_room_graph.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\module_scene_import.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_manager.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_manifest.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_object.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_object_instance.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_resource_ref.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\vis_editor.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

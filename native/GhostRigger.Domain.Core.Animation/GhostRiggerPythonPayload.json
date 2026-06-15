@@ -1,0 +1,279 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Animation",
+    "file_count": 45,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/animation/__init__.py",
+            "packaged_path": "Python/src/core/animation/__init__.py",
+            "sha256": "3f01b7b623c752e225cd270de9e7465a342b597f0f405381f7b42918b78ab154"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/animation/animation_engine.py",
+            "packaged_path": "Python/src/core/animation/animation_engine.py",
+            "sha256": "c3cce5da92afc9f06a997a7a88bb2e1337830fd52d907539b0747e739d24149f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/animation/animation_library.py",
+            "packaged_path": "Python/src/core/animation/animation_library.py",
+            "sha256": "c0b8428cc0c641d507af3865933a8ac62ee3e229c8cb5dff34076311e56cbe23"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/animation/gpu_skinning.py",
+            "packaged_path": "Python/src/core/animation/gpu_skinning.py",
+            "sha256": "cba5a061fe5c2d3b5762aeffa5b9381a90caab4299ab30e0b445b5d94b0f1b39"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/animation/skinning_profiles/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/__init__.py",
+            "sha256": "5ad44a135472570327917cbd469b2694ba9a16e8b5729cdf909d4cf9dd9ec3e6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/animation/skinning_profiles/animation_supermodel_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/animation_supermodel_skinning.py",
+            "sha256": "266685f5e29914eb98e961811a97130906cab411107839db6a4f5399810098a0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/core/animation/skinning_profiles/creature_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/creature_skinning.py",
+            "sha256": "2dcde2dcbd52857d44b24d76d257dadc0fc0a5ad4c6d737623a50b20bf30ee31"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0008",
+            "source_path": "src/core/animation/skinning_profiles/default_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/default_skinning.py",
+            "sha256": "bbdd77d29ef34c49454cc6372b247713f8b7e2314bea0c2429a09751881b5b40"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0009",
+            "source_path": "src/core/animation/skinning_profiles/droid_rigid_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/droid_rigid_skinning.py",
+            "sha256": "929721299befedeb53ed1017552d5721867ed9426c0af299ef218fe419c0b345"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0010",
+            "source_path": "src/core/animation/skinning_profiles/droid_skinned_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/droid_skinned_skinning.py",
+            "sha256": "690068cb20ef182d5870dcbbae87bdb00f17ed47f299d85a89a7804c5d142058"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0011",
+            "source_path": "src/core/animation/skinning_profiles/generated_character_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/generated_character_skinning.py",
+            "sha256": "801f803550bd68487a95b4b7cb58db9cf68fe9b6927e14dabf84bcc666dbeeec"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0012",
+            "source_path": "src/core/animation/skinning_profiles/head_attachment_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/head_attachment_skinning.py",
+            "sha256": "0c2f158ca863cd23cc0aa00ebc48465c4a6c9931b6ae01abd694d7ca4ba9c39d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0013",
+            "source_path": "src/core/animation/skinning_profiles/humanoid_supermodel_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/humanoid_supermodel_skinning.py",
+            "sha256": "0a97ffa607b48568971dc8340050f2e1715b7e6133ee7fae756b7ce72c7dcf99"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0014",
+            "source_path": "src/core/animation/skinning_profiles/local_character_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/local_character_skinning.py",
+            "sha256": "99128c7eda8d6c5ccfb3bbac6bfc1bb107ae03a4249efdf2f20bf8768e1fdd10"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0015",
+            "source_path": "src/core/animation/skinning_profiles/modular_body_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/modular_body_skinning.py",
+            "sha256": "45a768b7912750e25f21aa896808a596428407668f2f0d80cdc4c656fb6c4a54"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0016",
+            "source_path": "src/core/animation/skinning_profiles/types/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/__init__.py",
+            "sha256": "ef2ede4daec06a720ca5107327f1163db98274b53f4acb91125e9773f57a5151"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0017",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/__init__.py",
+            "sha256": "81dcdec4e39fd385dcb4cbcaaf722419abcd890653519c389aa13af63202d53b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0018",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/bith.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/bith.py",
+            "sha256": "27b26de8ac5097bf11d520df192fb337c43801d58102de3a0443e0f5e960d7dc"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0019",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/duros.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/duros.py",
+            "sha256": "584f4d58794316b4ea88630e7f51119077ff77937dc463bde2cbbe6759746c13"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0020",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/hero.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/hero.py",
+            "sha256": "ea8c6fe9786fa7d4d9820b4633d1afdfc879954562006bb359420f737cc332e7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0021",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/human.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/human.py",
+            "sha256": "a7b3d3d25813c6b7a578b5626f7de5475c6268f9a1e5f4bd1ccf36648e6acca7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0022",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/mandalorian.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/mandalorian.py",
+            "sha256": "0d7104f93712aaf3ce85a0f6983191fa794c9d7bb7e1f5735bc44f343eb7ee8b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0023",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/party.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/party.py",
+            "sha256": "b3240bc45fe308778b00b28cfc6e7ae54e6b0419d9d8a6f022a9852bf1a32d9f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0024",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/sith.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/sith.py",
+            "sha256": "baeb22eca7c58e6c4ef00ad20b741b44b1056036b2363b59736c03e983869b21"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0025",
+            "source_path": "src/core/animation/skinning_profiles/types/characters/wookie.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/wookie.py",
+            "sha256": "ffb5461352f847ead2bad03999859b2c86293eb1a8ac83c2ce629edc0cbc855a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0026",
+            "source_path": "src/core/animation/skinning_profiles/types/creatures/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/creatures/__init__.py",
+            "sha256": "ee072c62f22cbefd469e91b33272223f6bbb9960b309a91d59c7c65ad7f93c16"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0027",
+            "source_path": "src/core/animation/skinning_profiles/types/creatures/selkath.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/creatures/selkath.py",
+            "sha256": "3b1a654a15076c484a18ff564059a6eb2e5bb80fcab2fde88573c6d7d372fc4e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0028",
+            "source_path": "src/core/animation/skinning_profiles/types/droids/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/__init__.py",
+            "sha256": "df2dd12c85a7fe00345af410e1deec5c216aeb0ebbc32e2cd0eb6955744f5b31"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0029",
+            "source_path": "src/core/animation/skinning_profiles/types/droids/battledroid.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/battledroid.py",
+            "sha256": "d803fb924b37d4617944641fa5372be735b46f166338c38482673159aaf7df54"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0030",
+            "source_path": "src/core/animation/skinning_profiles/types/droids/t3m3.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/t3m3.py",
+            "sha256": "1a542fcc8d71cd93be2d3426f486d8b8923b90ebaea29ea6bf9e3eb31213c6f3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0031",
+            "source_path": "src/core/animation/skinning_profiles/types/droids/t3m4.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/t3m4.py",
+            "sha256": "2947a7936150c8d849ced471ed4e00a907cdde0bd0ff2607d3888b9546e1210e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0032",
+            "source_path": "src/core/animation/skinning_profiles/types/droids/utilitydroid.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/utilitydroid.py",
+            "sha256": "571c8a8b2d3e1fc1c41ed663c9a744b913b88e6ef2d8e7e67779ba71cfe7d5d1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0033",
+            "source_path": "src/core/animation/skinning_profiles/types/generated_character_skinning.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/generated_character_skinning.py",
+            "sha256": "f2ac25160025e9a1246b0b85caf45ca58275b54b0c7e90a68aa8b6251e50d122"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0034",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/__init__.py",
+            "sha256": "93a8a543572e4594422b263881ab598658dbe4764822bd3380f67d62a4198b2c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0035",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/bastila.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/bastila.py",
+            "sha256": "552f8436f5ecc28abd1e00eb3e7060f16d150da51140787548e1450acf894fc2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0036",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/kreia.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/kreia.py",
+            "sha256": "ed1643628a1942f29562af7d4bf8c60d40f63eb88369db8b8c76df1f23b58653"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0037",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/malak.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/malak.py",
+            "sha256": "45e6da50547c55f162e4f5b4f599ec467f1eaed559c929029c65332fb5044de2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0038",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/nihlus.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/nihlus.py",
+            "sha256": "274acc670639301f43bfb64280aff1b313a2326f6a530633bc2fb62c8d0a5dbb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0039",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/revan.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/revan.py",
+            "sha256": "20b8379dbc35c3800acfb8adb56648996f84519162322b74d22359f3b2845409"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0040",
+            "source_path": "src/core/animation/skinning_profiles/types/specialcase/sion.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/sion.py",
+            "sha256": "4f35a74c67bd26ec98a80ab829006b3a3038abe94fb476c76a63ec4b3e5d20fc"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0041",
+            "source_path": "src/core/animation/skinning_profiles/types/supermodels/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/supermodels/__init__.py",
+            "sha256": "80818426c1c3a1adf52a025055a4203f7d835b9701af7838507f5a01f8df6ebb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0042",
+            "source_path": "src/core/animation/skinning_profiles/types/supermodels/supermodel_female.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/supermodels/supermodel_female.py",
+            "sha256": "7709a915d2cd9884ae04da86906d35eae1633fe512a62c41777834c55755ed44"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0043",
+            "source_path": "src/core/animation/skinning_profiles/types/supermodels/supermodel_male.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/supermodels/supermodel_male.py",
+            "sha256": "1815b7d361cc1f90766793beef37a6ce230cff2b907b19791ada593fb4970a2b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0044",
+            "source_path": "src/core/animation/skinning_profiles/types/turrets/__init__.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/turrets/__init__.py",
+            "sha256": "7c176e328b45b57fc6119c5adbb30273093ff22434c66a2000651f25bb4a9bed"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0045",
+            "source_path": "src/core/animation/skinning_profiles/types/turrets/turret_01.py",
+            "packaged_path": "Python/src/core/animation/skinning_profiles/types/turrets/turret_01.py",
+            "sha256": "5cac4cddb173bce965439efe8b59991c4d3da8addc2d9444c3012aae32268355"
+        }
+    ]
+}

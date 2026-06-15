@@ -13,6 +13,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_NATIVE_SOURCE_ROOTS = (
+    ROOT / "native" / "GhostRigger.GUI.Boundary.Integration" / "Python",
+    ROOT / "native" / "GhostRigger.GUI.Boundary.Viewports" / "Python",
+    ROOT / "native" / "GhostRigger.GUI.Boundary.Panels" / "Python",
+    ROOT / "native" / "GhostRigger.GUI.Rendering.Frame" / "Python",
+    ROOT / "native" / "GhostRigger.Adapters.Rendering.Core" / "Python",
+    ROOT / "native" / "GhostRigger.Domain.Core.Rendering" / "Python",
+    ROOT / "native" / "GhostRigger.Domain.Core.Animation" / "Python",
+    ROOT / "native" / "GhostRigger.Domain.Core.Characters" / "Python",
+)
+
 _VIEWPORT_SOURCE_FILES = (
     "src/gui/viewports/viewport_core/shared/dependencies.py",
     "src/gui/viewports/viewport_core/shared/icons.py",
@@ -52,9 +63,16 @@ _SPLIT_SOURCE_MAP = {
 
 def _read(relpath: str) -> str:
     if relpath == "src/gui/viewports/qt_viewport.py":
-        return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
+        return "\n".join(_read(path) for path in _VIEWPORT_SOURCE_FILES)
     relpath = _SPLIT_SOURCE_MAP.get(relpath, relpath)
-    return (ROOT / relpath).read_text(encoding="utf-8")
+    path = ROOT / relpath
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    for source_root in _NATIVE_SOURCE_ROOTS:
+        native_path = source_root / relpath
+        if native_path.exists():
+            return native_path.read_text(encoding="utf-8")
+    raise FileNotFoundError(relpath)
 
 
 def test_inspector_exposes_skeleton_template_picker_controls() -> None:

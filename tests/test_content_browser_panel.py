@@ -1200,6 +1200,72 @@ def test_content_browser_primary_activation_requests_clear_scene_load() -> None:
     assert legacy_loads == []
 
 
+def test_content_browser_context_menu_splits_scene_level_and_asset_actions() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "n_commm01", "category": "NPCs", "source": "swkotor"},
+    ])
+    asset = panel.visible_assets()[0]
+
+    menu, actions = panel._build_model_context_menu(asset)
+    top_level_labels = [action.text() for action in menu.actions() if not action.isSeparator()]
+    asset_menu = next(action.menu() for action in menu.actions() if action.text() == "Asset Actions")
+    asset_action_labels = [action.text() for action in asset_menu.actions()]
+
+    assert top_level_labels[:5] == [
+        "Open as New Scene",
+        "Add to Current Scene",
+        "Open In Level Editor (New)",
+        "Add to Level Editor (Existing Level)",
+        "Open in Character Builder (New)",
+    ]
+    assert asset_action_labels == [
+        "Extract (.MDL/.MDX)",
+        "Extract (.FBX) (openfbx)",
+        "Extract (.FBX) (autodesk if installed)",
+    ]
+    assert all(not action.icon().isNull() for action in actions.values())
+
+
+def test_content_browser_character_builder_context_action_is_model_limited() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([
+        {"game": "K1", "resref": "plc_backpack", "category": "Placeables", "source": "swkotor"},
+    ])
+    asset = panel.visible_assets()[0]
+
+    _menu, actions = panel._build_model_context_menu(asset)
+
+    assert "character_builder_new" not in actions
+
+
+def test_content_browser_add_to_current_scene_uses_explicit_signal() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows([{"game": "K2", "resref": "c_drdastro", "source": "swkotor2"}])
+    emitted = []
+    legacy_loads = []
+    panel.addToCurrentSceneRequested.connect(emitted.append)
+    panel.loadRequested.connect(lambda resref, game: legacy_loads.append((resref, game)))
+    panel.asset_view.setCurrentItem(panel.asset_view.topLevelItem(0))
+
+    panel.add_selected_to_current_scene()
+
+    assert emitted and emitted[0]["resref"] == "c_drdastro"
+    assert legacy_loads == []
+
+
 def test_content_browser_stop_button_emits_animation_stop_without_selection() -> None:
     _qapp()
 

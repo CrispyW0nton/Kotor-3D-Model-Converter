@@ -1,0 +1,90 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{8e201349-4784-9c62-6f75-8f95f3a74fbb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{7d7bda0b-6a49-23a8-e928-bff8461b9fa4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{d8e910c1-32b5-63ae-f077-b0d93afd2d12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{75963d48-02cc-16c2-a24d-b55f66c1dbb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{6cc7bcf4-1f0f-5d5d-fccf-754fbecd3160}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{7e1a0696-d0d7-348f-a4b5-67ab32cd7ec6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{874f231d-5829-44a3-48f8-13103e5b71ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\modules">
+      <UniqueIdentifier>{3843cc1c-779d-95d8-8559-4d35b6145169}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{338e6d78-8e60-51c0-2b0f-3085786e50f8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels">
+      <UniqueIdentifier>{aed5e5d8-9ed7-10a0-cc1e-908f8f8c15d0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels\module_editor">
+      <UniqueIdentifier>{503d5379-6e9e-44cf-4e91-51c3c9e32024}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerToolsProperties.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerToolsProperties.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\panels\qt_properties_panel.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+    <None Include="Python\src\gui\panels\qt_inspector_panel.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+    <None Include="Python\src\gui\panels\module_editor\module_editor_properties.py">
+      <Filter>Python\src\gui\panels\module_editor</Filter>
+    </None>
+    <None Include="Python\src\core\modules\module_object_inspector.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

@@ -213,7 +213,173 @@ def test_ipc_callback_dispatch_uses_qt_adapter_boundary() -> None:
 
     adapter_source = (ROOT / "src/adapters/qt_ipc/threading.py").read_text(encoding="utf-8")
     assert "from PySide6.QtCore import QCoreApplication, QTimer" in adapter_source
-    assert "QTimer.singleShot(0, lambda: cb(*args))" in adapter_source
+    assert "QTimer.singleShot(0, app, lambda: cb(*args))" in adapter_source
+
+
+def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
+    source = (ROOT / "src/gui/windows/qt_main_window.py").read_text(encoding="utf-8")
+    lifecycle_source = (ROOT / "src/gui/windows/application_core/shared/window_lifecycle.py").read_text(encoding="utf-8")
+    server_source = (ROOT / "src/ipc/server.py").read_text(encoding="utf-8")
+    client_source = (ROOT / "src/ipc/client.py").read_text(encoding="utf-8")
+
+    assert "from src.ipc.server import GhostRiggerIPCServer" in source
+    assert "self._ipc_server: Optional[GhostRiggerIPCServer] = None" in source
+    assert "def _start_ipc_server(self) -> None:" in source
+    assert '"open_utc": open_blueprint_resource("utc")' in source
+    assert '"open_utp": open_blueprint_resource("utp")' in source
+    assert '"open_utd": open_blueprint_resource("utd")' in source
+    assert '"open_mdl": open_mdl' in source
+    assert '"load_model_by_resref": load_model_by_resref' in source
+    assert '"new_scene": new_scene' in source
+    assert '"open_scene": open_scene' in source
+    assert '"save_scene": save_scene' in source
+    assert '"create_scene_camera": create_scene_camera' in source
+    assert '"create_scene_light": create_scene_light' in source
+    assert '"select_scene_object": select_scene_object' in source
+    assert '"set_scene_object_visibility": set_scene_object_visibility' in source
+    assert '"scene_object_command": scene_object_command' in source
+    assert '"scene_object_properties": scene_object_properties' in source
+    assert '"refresh_viewport": refresh_viewport' in source
+    assert '"show_panel": show_panel' in source
+    assert '"open_tool": open_tool' in source
+    assert '"viewport_command": viewport_command' in source
+    assert '"appearance": appearance' in source
+    assert '"animation_command": animation_command' in source
+    assert '"get_state": get_state' in source
+    assert '"library_search": library_search' in source
+    assert '"library_select": library_select' in source
+    assert '"resource_search": resource_search' in source
+    assert '"resource_select": resource_select' in source
+    assert '"select_module_mesh": select_module_mesh' in source
+    assert '"set_renderer_backend": set_renderer_backend' in source
+    assert '"set_dummy_helpers": set_dummy_helpers' in source
+    assert '"set_light_helpers": set_light_helpers' in source
+    assert '"select_helper": select_helper' in source
+    assert '"capture_viewport": capture_viewport' in source
+    assert "self._start_ipc_server()" in source
+    assert "ipc_server.stop()" in lifecycle_source
+    assert '@app.route("/api/new_scene", methods=["POST"])' in server_source
+    assert '@app.route("/api/open_scene", methods=["POST"])' in server_source
+    assert '@app.route("/api/save_scene", methods=["POST"])' in server_source
+    assert '@app.route("/api/create_scene_camera", methods=["POST"])' in server_source
+    assert '@app.route("/api/create_scene_light", methods=["POST"])' in server_source
+    assert '@app.route("/api/select_scene_object", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_scene_object_visibility", methods=["POST"])' in server_source
+    assert '@app.route("/api/scene_object_command", methods=["POST"])' in server_source
+    assert '@app.route("/api/scene_object_properties", methods=["POST"])' in server_source
+    assert '@app.route("/api/show_panel", methods=["POST"])' in server_source
+    assert '@app.route("/api/open_tool", methods=["POST"])' in server_source
+    assert '@app.route("/api/viewport_command", methods=["POST"])' in server_source
+    assert '@app.route("/api/appearance", methods=["POST"])' in server_source
+    assert '@app.route("/api/animation_command", methods=["POST"])' in server_source
+    assert '@app.route("/api/library_search", methods=["GET", "POST"])' in server_source
+    assert '@app.route("/api/library_select", methods=["POST"])' in server_source
+    assert '@app.route("/api/resource_search", methods=["GET", "POST"])' in server_source
+    assert '@app.route("/api/resource_select", methods=["POST"])' in server_source
+    assert '@app.route("/api/state", methods=["GET", "POST"])' in server_source
+    assert "def _invoke_callback_sync" in server_source
+    assert '@app.route("/api/select_module_mesh", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_renderer_backend", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_dummy_helpers", methods=["POST"])' in server_source
+    assert '@app.route("/api/set_light_helpers", methods=["POST"])' in server_source
+    assert '@app.route("/api/select_helper", methods=["POST"])' in server_source
+    assert '@app.route("/api/capture_viewport", methods=["POST"])' in server_source
+    assert '"module_editor": self._open_module_editor_window' in source
+    assert '"character_builder": self._open_qt_character_builder_window' in source
+    assert '"retarget_workbench": self._open_animation_retarget_window' in source
+    assert '"unreal_animator": self._open_unreal_animator_window' in source
+    assert '"sequence_editor": self._open_sequence_editor_window' in source
+    assert '"blueprint_editor": self._open_blueprint_editor_window' in source
+    assert '"resource_browser": "resources"' in source
+    scene_source = (ROOT / "src/gui/windows/application_core/shared/scene_workflow.py").read_text(encoding="utf-8")
+    assert "def _create_new_scene_from_ipc" in scene_source
+    assert "def _open_scene_from_ipc" in scene_source
+    assert "def _save_scene_from_ipc" in scene_source
+    assert "def _create_scene_camera_from_ipc" in scene_source
+    assert "def _create_scene_light_from_ipc" in scene_source
+    assert "def _select_scene_object_from_ipc" in scene_source
+    assert "def _set_scene_object_visibility_from_ipc" in scene_source
+    assert "def _apply_scene_object_command_from_ipc" in scene_source
+    assert "def _apply_scene_object_properties_from_ipc" in scene_source
+    assert "def create_ghostrigger_scene_camera" in client_source
+    assert "def create_ghostrigger_scene_light" in client_source
+    assert "def select_ghostrigger_scene_object" in client_source
+    assert "def set_ghostrigger_scene_object_visibility" in client_source
+    assert "def run_ghostrigger_scene_object_command" in client_source
+    assert "def set_ghostrigger_scene_object_properties" in client_source
+    viewport_source = (ROOT / "src/gui/windows/application_core/shared/viewport_tools.py").read_text(encoding="utf-8")
+    assert "def _apply_viewport_command_from_ipc" in viewport_source
+    assert "def _ipc_application_state_snapshot" in viewport_source
+    assert '"appearance": {' in viewport_source
+    assert '"animation": self._animation_state_snapshot()' in viewport_source
+    assert '"library": self._ipc_library_state_snapshot()' in viewport_source
+    assert '"resources": self._ipc_resource_state_snapshot()' in viewport_source
+    assert "set_shade_mode" in viewport_source
+    assert "toggle_grid" in viewport_source
+    assert "def run_ghostrigger_viewport_command" in client_source
+    assert "def get_ghostrigger_state" in client_source
+    theme_source = (ROOT / "src/gui/windows/application_core/shared/theme_layout.py").read_text(encoding="utf-8")
+    assert "def _apply_appearance_from_ipc" in theme_source
+    assert "self.theme_manager.select_theme" in theme_source
+    assert "self.layout_manager.select_layout" in theme_source
+    assert "def set_ghostrigger_appearance" in client_source
+    animation_source = (ROOT / "src/gui/windows/application_core/shared/animation_workflow.py").read_text(encoding="utf-8")
+    assert "def _apply_animation_command_from_ipc" in animation_source
+    assert "def _animation_state_snapshot" in animation_source
+    assert 'self._handle_animation_action("Play", selected)' in animation_source
+    assert "def run_ghostrigger_animation_command" in client_source
+    assert "def search_ghostrigger_library" in client_source
+    assert "def select_ghostrigger_library_asset" in client_source
+    assert "def search_ghostrigger_resources" in client_source
+    assert "def select_ghostrigger_resource" in client_source
+    resource_source = (ROOT / "src/gui/windows/application_core/shared/resource_loading.py").read_text(encoding="utf-8")
+    assert "def _ipc_library_search" in resource_source
+    assert "def _ipc_library_select" in resource_source
+    assert "def _ipc_library_state_snapshot" in resource_source
+    resource_panel_source = (ROOT / "src/gui/windows/application_core/shared/resource_panels.py").read_text(encoding="utf-8")
+    assert "def _ipc_resource_search" in resource_panel_source
+    assert "def _ipc_resource_select" in resource_panel_source
+    assert "def _ipc_resource_state_snapshot" in resource_panel_source
+
+
+def test_ipc_module_mesh_selector_uses_existing_panel_and_viewport_sync_paths() -> None:
+    from src.gui.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    viewport_mesh = SimpleNamespace(name="piece439", vertices=[1], faces=[1])
+    panel_mesh = SimpleNamespace(name="piece439", vertices=[1], faces=[1])
+    model = SimpleNamespace(mesh_nodes=[viewport_mesh], all_nodes=lambda: [viewport_mesh], _gr_extra_module_mesh_nodes=[])
+    shown = []
+    selected_panel = []
+    selected_viewport = []
+    shown_nodes = []
+    logs = []
+    call_order = []
+    window = SimpleNamespace(
+        _active_viewport_model=lambda: model,
+        _show_workspace_dock=lambda key: shown.append(key),
+        module_geometry_panel=SimpleNamespace(
+            _mesh_label=lambda node: getattr(node, "name", ""),
+            _mesh_items={object(): panel_mesh},
+            _wall_items={},
+            _null_mesh_items={},
+            _walkmesh_items={},
+            select_module_meshes=lambda nodes: selected_panel.append(list(nodes)),
+            select_module_mesh_by_label=lambda label: call_order.append(("panel", label)) or panel_mesh,
+        ),
+        viewport=SimpleNamespace(
+            set_selected_meshes=lambda nodes, source="": call_order.append(("viewport", source)) or selected_viewport.append((list(nodes), source))
+        ),
+        properties_panel=SimpleNamespace(show_node=lambda node: shown_nodes.append(node)),
+        _log=lambda message, level="info": logs.append((message, level)),
+    )
+
+    assert QtGhostRiggerMainWindow._select_module_mesh_by_name_from_ipc(window, "piece439") is True
+
+    assert shown == ["module_meshes"]
+    assert selected_panel == []
+    assert selected_viewport == [([viewport_mesh], "IPC select_module_mesh")]
+    assert shown_nodes == [viewport_mesh]
+    assert call_order == [("viewport", "IPC select_module_mesh"), ("panel", "piece439")]
 
 
 def test_tracked_non_contract_tests_use_backend_owners_not_gui_facades() -> None:
@@ -2603,6 +2769,7 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
 
     import src.adapters.rendering.direct3d_renderer as adapter_direct3d_module
     import src.adapters.rendering.moderngl_renderer as adapter_moderngl_module
+    import src.adapters.rendering.native_core.renderer as adapter_native_module
     import src.adapters.rendering.null_renderer as adapter_null_module
     import src.adapters.rendering.moderngl_resources as adapter_resources_module
     import src.adapters.rendering.moderngl_renderer_impl as adapter_gpu_impl_module
@@ -2646,6 +2813,7 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     from src.adapters.rendering.moderngl_resources import prebuild_static_gpu_mesh_data as adapter_prebuild_mesh
     from src.adapters.rendering.direct3d_renderer import Direct3DRenderer as AdapterDirect3DRenderer
     from src.adapters.rendering.moderngl_renderer import ModernGLRenderer as AdapterModernGLRenderer
+    from src.adapters.rendering.native_core.renderer import NativeViewportRenderer as AdapterNativeRenderer
     from src.adapters.rendering.null_renderer import NullDiagnosticRenderer as AdapterNullDiagnosticRenderer
     from src.adapters.rendering.renderer_factory import create_viewport_renderer as adapter_create_renderer
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer as AdapterWgpuRenderer
@@ -2669,9 +2837,11 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     assert gui_wgpu_renderer is adapter_wgpu_renderer
     assert GuiDirect3DRenderer is AdapterDirect3DRenderer
     assert GuiModernGLRenderer is AdapterModernGLRenderer
+    assert issubclass(AdapterNativeRenderer, AdapterNullDiagnosticRenderer)
     assert GuiNullDiagnosticRenderer is AdapterNullDiagnosticRenderer
     assert gui_direct3d_module is adapter_direct3d_module
     assert gui_moderngl_module is adapter_moderngl_module
+    assert adapter_native_module.NativeViewportRenderer is AdapterNativeRenderer
     assert gui_null_module is adapter_null_module
     assert gui_resources_module is adapter_resources_module
     assert gui_gpu_impl_module is adapter_gpu_impl_module
@@ -2702,10 +2872,13 @@ def test_viewport_renderer_adapters_have_explicit_owner() -> None:
     assert qt_gpu_create_renderer is adapter_create_renderer
 
     adapter_source = (ROOT / "src/adapters/rendering/renderer_factory.py").read_text(encoding="utf-8")
-    assert "from src.adapters.rendering.direct3d_renderer import Direct3DRenderer" in adapter_source
     assert "from src.adapters.rendering.moderngl_renderer import ModernGLRenderer" in adapter_source
     assert "from src.adapters.rendering.null_renderer import NullDiagnosticRenderer" in adapter_source
+    assert "from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer" in adapter_source
     assert "from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer" in adapter_source
+    assert "from src.adapters.rendering.direct3d_renderer import Direct3DRenderer" not in adapter_source
+    assert "from src.adapters.rendering.native_core.renderer import NativeViewportRenderer" not in adapter_source
+    assert "SUPPORTED_RENDERER_BACKENDS" in adapter_source
     for forbidden in (
         "from src.gui.rendering.direct3d_renderer",
         "from src.gui.rendering.moderngl_renderer",
@@ -3578,11 +3751,15 @@ def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
 
     load_model_source = inspect.getsource(QtViewportWidget.load_model)
     load_scene_source = inspect.getsource(QtViewportWidget.load_scene_instances)
+    append_scene_source = inspect.getsource(QtViewportWidget.append_scene_instance)
 
     assert 'getattr(root_node, "_gr_scene_composite_root", False)' in load_model_source
     assert "selected_id =" in load_scene_source
     assert "self.load_model(composite" in load_scene_source
     assert "self.select_scene_object(selected_id)" in load_scene_source
+    assert "clear_caches" not in append_scene_source
+    assert "root.children.append(node)" in append_scene_source
+    assert 'reason="scene object appended"' in append_scene_source
 
 
 def test_transform_cache_evict_clears_frame_and_gpu_child_caches() -> None:
@@ -3613,6 +3790,43 @@ def test_transform_cache_evict_clears_frame_and_gpu_child_caches() -> None:
     assert viewport._renderer._frame_verts_cache == {}
     assert viewport._renderer._frame_norms_cache == {}
     assert invalidated == [parent, child]
+
+
+def test_scene_root_transform_evict_keeps_gpu_mesh_resources_resident() -> None:
+    from types import SimpleNamespace
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    child = SimpleNamespace(children=[])
+    parent = SimpleNamespace(
+        children=[child],
+        _gr_scene_object_root=True,
+        _gr_scene_gpu_transform=True,
+    )
+
+    invalidated = []
+    transform_invalidations = []
+    viewport = SimpleNamespace(
+        _renderer=SimpleNamespace(
+            _wt_cache={id(parent): object(), id(child): object()},
+            _frame_view=object(),
+            _frame_verts_cache={id(child): [(0.0, 0.0, 0.0)]},
+            _frame_norms_cache={id(child): [(0.0, 0.0, 1.0)]},
+        ),
+        _gpu_renderer=SimpleNamespace(
+            invalidate_node=lambda node: invalidated.append(node),
+            invalidate_transform_cache=lambda reason: transform_invalidations.append(reason),
+        ),
+    )
+
+    QtViewportWidget._evict_transform_cache(viewport, parent)
+
+    assert viewport._renderer._wt_cache == {}
+    assert viewport._renderer._frame_view is None
+    assert viewport._renderer._frame_verts_cache == {}
+    assert viewport._renderer._frame_norms_cache == {}
+    assert invalidated == []
+    assert transform_invalidations == ["scene object transform changed"]
 
 
 def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
@@ -3861,6 +4075,8 @@ def test_module_mesh_panel_reports_when_node_exists_for_external_selection_sync(
     assert panel.has_module_mesh(helper) is False
     assert panel.select_module_meshes([mesh]) is True
     assert panel._selected_module_meshes() == [mesh]
+    assert panel.select_module_mesh_by_label("Object76") is mesh
+    assert panel._selected_module_meshes() == [mesh]
     assert panel.select_module_meshes([helper]) is False
     assert panel._selected_module_meshes() == []
 
@@ -3982,6 +4198,24 @@ def test_sprite_material_panel_detects_and_edits_alpha_card_meshes() -> None:
     assert getattr(blade, "_gr_revision", 0) > 0
     assert changed[-1] == [blade]
 
+    panel._set_combo_value(panel.category_combo, "hilt")
+    assert panel.mode_combo.currentData() == "opaque"
+    assert blade._gr_sprite_category == "hilt"
+    assert blade._gr_sprite_render_mode == "opaque"
+    assert blade.txi_blending == 0
+    assert blade.transparency_hint == 0
+    assert blade._gr_sprite_alpha_source == ""
+    assert blade._gr_sprite_glow == pytest.approx(0.0)
+
+    panel._set_combo_value(panel.category_combo, "glow_blade")
+    assert panel.mode_combo.currentData() == "lighten"
+    assert blade._gr_sprite_category == "glow_blade"
+    assert blade._gr_sprite_render_mode == "lighten"
+    assert blade.txi_blending == 3
+    assert blade.transparency_hint >= 1
+    assert blade._gr_sprite_alpha_source == "luminance"
+    assert blade._gr_sprite_glow == pytest.approx(1.6)
+
     panel.tree.topLevelItem(0).setCheckState(0, QtCore.Qt.Unchecked)
     assert blade._gr_hidden is True
     panel._reset_selected()
@@ -4044,6 +4278,151 @@ def test_wgpu_material_data_promotes_sprite_alpha_cards_to_alpha_queues() -> Non
     assert hilt_material.sprite_alpha_source == 0
     assert hilt_material.sprite_glow == 0.0
 
+    blade_forced_hilt = SimpleNamespace(
+        name="plane241",
+        texture="w_lsabreblue01",
+        is_mesh=True,
+        alpha=1.0,
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        transparency_hint=0,
+        _gr_sprite_category="hilt",
+        _gr_sprite_render_mode="opaque",
+        _gr_sprite_alpha_source="",
+        _gr_sprite_glow=0.0,
+        vertices=[],
+        faces=[],
+    )
+    forced_hilt_material = _material_data(blade_forced_hilt, {})
+    assert forced_hilt_material.alpha_mode == "OPAQUE"
+    assert forced_hilt_material.blend_mode == "ALPHA"
+    assert forced_hilt_material.sprite_alpha_source == 0
+    assert forced_hilt_material.sprite_glow == 0.0
+
+
+def test_moderngl_sprite_material_panel_state_reaches_renderer_shader() -> None:
+    import inspect
+
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
+
+    renderer = GpuRenderer()
+    blade = SimpleNamespace(
+        name="plane241",
+        texture="w_lsabreblue01",
+        is_mesh=True,
+        _gr_sprite_alpha_source="luminance",
+        _gr_sprite_glow=1.6,
+        _gr_sprite_render_mode="lighten",
+        _gr_revision=1,
+        _gr_hidden=False,
+        render=True,
+        txi_blending=3,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        alpha=1.0,
+        transparency_hint=1,
+    )
+    hilt = SimpleNamespace(
+        name="LghtSbr09",
+        texture="w_shortsbr_001",
+        is_mesh=True,
+        txi_blending=0,
+        txi_alpha_test=0.5,
+        txi_wateralpha=1.0,
+        txi_decal=False,
+        alpha=1.0,
+        transparency_hint=0,
+    )
+
+    assert renderer._sprite_alpha_source(blade) == 1
+    assert renderer._sprite_glow(blade) == pytest.approx(1.6)
+    assert renderer._sprite_alpha_source(hilt) == 0
+    assert renderer._sprite_glow(hilt) == 0.0
+    blade_forced_hilt = SimpleNamespace(
+        name="plane241",
+        texture="w_lsabreblue01",
+        _gr_sprite_category="hilt",
+        _gr_sprite_render_mode="opaque",
+        _gr_sprite_alpha_source="",
+        _gr_sprite_glow=0.0,
+    )
+    assert renderer._has_sprite_material_override(blade_forced_hilt)
+    assert renderer._is_sprite_hilt(blade_forced_hilt)
+    assert renderer._sprite_alpha_source(blade_forced_hilt) == 0
+    assert renderer._sprite_glow(blade_forced_hilt) == 0.0
+
+    before = renderer._node_classification_signature([blade])
+    blade._gr_hidden = True
+    hidden = renderer._node_classification_signature([blade])
+    blade._gr_hidden = False
+    blade._gr_revision += 1
+    revised = renderer._node_classification_signature([blade])
+
+    assert hidden != before
+    assert revised != before
+
+    init_source = inspect.getsource(GpuRenderer)
+    render_source = inspect.getsource(GpuRenderer._render_gpu)
+    invalidate_source = inspect.getsource(GpuRenderer.invalidate_node_cache)
+
+    assert "'u_sprite_alpha_source', 'u_sprite_glow'" in init_source
+    assert "u_sprite_alpha_source" in _FRAG_SRC
+    assert "u_sprite_glow" in _FRAG_SRC
+    assert "spriteKeyedAlpha" in _FRAG_SRC
+    assert "spriteEmissionTint" in _FRAG_SRC
+    assert "sprite_emissive" in _FRAG_SRC
+    assert "self._sprite_alpha_source(nd)" in render_source
+    assert "not self._has_sprite_material_override(node)" in render_source
+    assert "_node_classification_signature(nodes)" in render_source
+    assert "_node_cache_signature" in invalidate_source
+
+
+def test_kmax_scene_object_sprite_material_overrides_round_trip() -> None:
+    from src.core.scene.kmax_scene import KMaxScene
+    from src.core.scene.kmax_serializer import KMaxSerializer
+    from src.core.scene.scene_object_instance import SceneObjectInstance
+    from src.core.scene.scene_resource_ref import SceneResourceRef
+
+    scene = KMaxScene.new()
+    scene.objects.append(
+        SceneObjectInstance(
+            id="obj-1",
+            name="Blue Saber",
+            object_type="model",
+            source_ref=SceneResourceRef(game="K1", resref="w_lghtsbr_001"),
+            material_overrides={
+                "sprite_materials": {
+                    "plane241|w_lsabreblue01": {
+                        "mesh": "plane241",
+                        "texture": "w_lsabreblue01",
+                        "category": "glow_blade",
+                        "hidden": False,
+                        "render_mode": "lighten",
+                        "txi_blending": 3,
+                        "txi_alpha_test": 0.5,
+                        "txi_wateralpha": 1.0,
+                        "txi_decal": False,
+                        "transparency_hint": 1,
+                        "alpha": 1.0,
+                        "sprite_alpha_source": "luminance",
+                        "sprite_glow": 1.6,
+                    }
+                }
+            },
+        )
+    )
+
+    loaded = KMaxSerializer.from_dict(KMaxSerializer.to_dict(scene))
+    payload = loaded.objects[0].material_overrides["sprite_materials"]["plane241|w_lsabreblue01"]
+
+    assert payload["render_mode"] == "lighten"
+    assert payload["sprite_alpha_source"] == "luminance"
+    assert payload["sprite_glow"] == pytest.approx(1.6)
+
 
 def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -4082,14 +4461,23 @@ def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> No
         position=(0.0, 0.0, 0.0),
         rotation=(0.0, 0.0, 0.0, 1.0),
     )
+    wall_mesh = SimpleNamespace(
+        name="blocking_wall",
+        is_mesh=True,
+        vertices=[(0, 0, 0), (1, 0, 0), (0, 1, 0)],
+        faces=[(0, 1, 2)],
+        texture="lhr_wall07",
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
     model = SimpleNamespace(
         name="m01aa_01a",
         game_version="K1",
         supermodel="NULL",
         classification="tile",
         animations=[],
-        mesh_nodes=lambda: [regular_mesh, null_mesh],
-        all_nodes=lambda: [regular_mesh, null_mesh, grey_geometry],
+        mesh_nodes=lambda: [regular_mesh, wall_mesh, null_mesh],
+        all_nodes=lambda: [regular_mesh, wall_mesh, null_mesh, grey_geometry],
         bone_nodes=lambda: [],
         texture_list=lambda: ["wall"],
     )
@@ -4104,15 +4492,23 @@ def test_module_mesh_properties_panel_splits_meshes_nulls_and_walkmeshes() -> No
         panel.module_walkmesh_tree.topLevelItem(index).text(0)
         for index in range(panel.module_walkmesh_tree.topLevelItemCount())
     ]
+    wall_names = [
+        panel.module_wall_mesh_tree.topLevelItem(index).text(0)
+        for index in range(panel.module_wall_mesh_tree.topLevelItemCount())
+    ]
     null_names = [
         panel.module_null_mesh_tree.topLevelItem(index).text(0)
         for index in range(panel.module_null_mesh_tree.topLevelItemCount())
     ]
     assert mesh_names == ["regular_mesh"]
+    assert wall_names == ["blocking_wall"]
+    assert wall_mesh._gr_hidden is True
+    assert panel.module_wall_mesh_tree.topLevelItem(0).text(4) == "no"
     assert null_names == ["external_null"]
     assert walkmesh_names == ["walkmesh_12"]
-    assert panel.module_browser_tabs.tabText(1) == "NULL Meshes"
-    assert panel.module_browser_tabs.tabText(2) == "Walkmeshes"
+    assert panel.module_browser_tabs.tabText(1) == "Walls"
+    assert panel.module_browser_tabs.tabText(2) == "NULL Meshes"
+    assert panel.module_browser_tabs.tabText(3) == "Walkmeshes"
 
 
 def test_module_mesh_properties_panel_lists_coloaded_walkmesh_overlay_nodes() -> None:
@@ -4593,6 +4989,45 @@ def test_qt_viewport_preserves_module_mesh_node_selection_under_scene_root_tags(
         viewport.deleteLater()
 
 
+def test_qt_viewport_mirrors_mesh_selection_to_renderer_lists() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.geometry.model_data import ModelNode
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    mesh_a = ModelNode(
+        name="Object19",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2)],
+    )
+    mesh_b = ModelNode(
+        name="piece439",
+        vertices=[(0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)],
+        faces=[(0, 1, 2)],
+    )
+    viewport = QtViewportWidget()
+    viewport._gpu_renderer = SimpleNamespace(selected_node=None, selected_nodes=[])
+    try:
+        viewport.set_selected_meshes([mesh_a, mesh_b], source="module mesh panel")
+
+        assert viewport._renderer.selected_node is mesh_a
+        assert viewport._renderer.selected_nodes == [mesh_a, mesh_b]
+        assert viewport._gpu_renderer.selected_node is mesh_a
+        assert viewport._gpu_renderer.selected_nodes == [mesh_a, mesh_b]
+
+        viewport.set_selected_node(None)
+
+        assert viewport._renderer.selected_node is None
+        assert viewport._renderer.selected_nodes == []
+        assert viewport._gpu_renderer.selected_node is None
+        assert viewport._gpu_renderer.selected_nodes == []
+    finally:
+        viewport.deleteLater()
+
+
 def test_wgpu_gpu_pick_miss_falls_back_to_cpu_mesh_picker() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -4639,7 +5074,7 @@ def test_wgpu_gpu_pick_miss_falls_back_to_cpu_mesh_picker() -> None:
         viewport.deleteLater()
 
 
-def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> None:
+def test_gpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from PySide6 import QtWidgets
@@ -4668,6 +5103,36 @@ def test_wgpu_helper_hit_test_selects_screen_space_helpers_before_meshes() -> No
     try:
         assert viewport._helper_hit_test(104, 103) is helper
         assert viewport._helper_hit_test(150, 150) is None
+    finally:
+        viewport.deleteLater()
+
+
+def test_moderngl_helper_marker_overlay_draws_and_respects_toggle() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PIL import Image, ImageDraw
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    helper = SimpleNamespace(name="Waypoint_Helper", type_label="dummy", position=(1.0, 2.0, 3.0))
+    mesh = SimpleNamespace(name="CM_Floor", is_mesh=True, vertices=[(0, 0, 0)], faces=[(0, 0, 0)])
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(all_nodes=lambda: [mesh, helper])
+    viewport._gpu_renderer = SimpleNamespace(backend_id="modern_gl")
+    viewport._renderer._node_world_transform = lambda node: (node.position, (0, 0, 0, 1), True)
+    viewport._renderer._proj = lambda _x, _y, _z, _w, _h: (30, 30, 1.0)
+    try:
+        img = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+        viewport.set_dummy_helper_visibility(True)
+        viewport._draw_wgpu_helper_markers(ImageDraw.Draw(img, "RGBA"), 80, 80)
+        assert img.getbbox() is not None
+
+        img_hidden = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+        viewport.set_dummy_helper_visibility(False)
+        viewport._draw_wgpu_helper_markers(ImageDraw.Draw(img_hidden, "RGBA"), 80, 80)
+        assert img_hidden.getbbox() is None
     finally:
         viewport.deleteLater()
 
@@ -5496,6 +5961,7 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
 
     from src.adapters.rendering import mesh_render_data
     from src.adapters.rendering import moderngl_renderer_impl as gpu_renderer_impl
+    from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
 
     contract_path = Path(__file__).resolve().parents[1] / "src" / "systems" / "bas" / "README.md"
@@ -5514,6 +5980,10 @@ def test_bas_runtime_contract_is_documented_and_guarded() -> None:
     assert "_bas_attachment_local_transform_np" in modern_gl_source
     assert "not bool(getattr(node, \"_gr_bas_attachment_layer\", False))" in modern_gl_source
     assert "BAS attachment skins are socket followers" in modern_gl_source
+
+    wgpu_resource_source = inspect.getsource(WgpuResourceCache.get_or_update_skin_palette)
+    assert "bas_attachment_palette_model_for_node" in wgpu_resource_source
+    assert "bas_attachment_root_local_skin_palette" in wgpu_resource_source
 
     mesh_source = inspect.getsource(mesh_render_data._extract_skinning)
     assert "_gr_bas_attachment_layer" in mesh_source
@@ -7108,6 +7578,22 @@ def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable
     viewport.set_selected_node(light_node)
     assert getattr(viewport._renderer, "selected_node", None) is light_node
     assert tuple(viewport._gizmo_world_position(light_node)) == tuple(light_node.position)
+    module_root = SimpleNamespace(name="module_root")
+    imported_light = SimpleNamespace(
+        name="AuroraLightLocal",
+        is_light=True,
+        parent=module_root,
+        position=(1.0, 2.0, 3.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    original_world_transform = viewport._renderer._node_world_transform
+    viewport._renderer._node_world_transform = lambda node: ((9.0, 8.0, 7.0), (0.0, 0.0, 0.0, 1.0), None)
+    try:
+        assert tuple(viewport._gizmo_world_position(imported_light)) == (9.0, 8.0, 7.0)
+        viewport._transform_gizmo.set_selected_object(imported_light)
+        assert viewport._transform_gizmo.get_gizmo_origin_world() == pytest.approx((9.0, 8.0, 7.0))
+    finally:
+        viewport._renderer._node_world_transform = original_world_transform
     light_node._gr_pivot_edit_mode = "affect_pivot_only"
     light_node._gr_pivot_world = (3.0, 2.0, 1.0)
     assert tuple(viewport._gizmo_world_position(light_node)) == (3.0, 2.0, 1.0)
@@ -7447,6 +7933,61 @@ def test_qt_viewport_uses_profiled_navigation_actions() -> None:
     assert 'profile == "blender"' in source
     assert 'profile == "maya"' in source
     assert "QtCore.Qt.AltModifier" in source
+
+
+def test_qt_viewport_alt_middle_navigation_preempts_gizmo_drag() -> None:
+    from PySide6 import QtCore
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    viewport = SimpleNamespace(_navigation_profile="3dsmax")
+    viewport._navigation_action = MethodType(QtViewportWidget._navigation_action, viewport)
+    action, button = QtViewportWidget._navigation_action_for_buttons(
+        viewport,
+        QtCore.Qt.LeftButton | QtCore.Qt.MiddleButton,
+        QtCore.Qt.AltModifier,
+    )
+
+    assert action == "orbit"
+    assert button == QtCore.Qt.MiddleButton
+
+    calls = []
+
+    class _Position:
+        def x(self):
+            return 100
+
+        def y(self):
+            return 120
+
+    class _Event:
+        def button(self):
+            return QtCore.Qt.MiddleButton
+
+        def position(self):
+            return _Position()
+
+    nav_viewport = SimpleNamespace(
+        _transform_gizmo_dragging=True,
+        _cancel_transform_gizmo_drag=lambda: calls.append("cancel"),
+        _renderer=SimpleNamespace(_hovered_bone=object()),
+        _clear_mesh_hover=lambda **_kwargs: calls.append("clear-hover"),
+        _frame_governor=SimpleNamespace(begin_interaction=lambda reason: calls.append(reason)),
+    )
+
+    QtViewportWidget._press_navigation(nav_viewport, _Event(), "orbit", button=QtCore.Qt.MiddleButton)
+
+    assert calls[0] == "cancel"
+    assert nav_viewport._nav_dragging == "orbit"
+    assert nav_viewport._nav_button == QtCore.Qt.MiddleButton
+
+    gizmo_viewport = SimpleNamespace()
+    assert QtViewportWidget._begin_transform_gizmo_drag(
+        gizmo_viewport,
+        100,
+        120,
+        QtCore.Qt.AltModifier,
+    ) is False
 
 
 def test_qt_viewport_gpu_grid_is_native_and_xray_is_overlay_only() -> None:
@@ -7803,6 +8344,37 @@ def test_bas_weapon_alignment_defaults_keep_sabers_identity() -> None:
     assert default_bas_attachment_transform("left_weapon", "w_vbroswrd_001")["position"] == [0.0, 0.0, 0.055]
 
 
+def test_bas_head_resolution_normalizes_ui_labels_and_body_candidates() -> None:
+    from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
+
+    class FakeManager:
+        def __init__(self, available):
+            self.available = {str(value).lower() for value in available}
+
+        def get_mdl(self, resref, game="K1"):
+            return b"mdl" if str(resref).lower() in self.available else None
+
+    assert normalize_bas_model_resref("Player Male Head A 01 - pmha01") == "pmha01"
+    assert normalize_bas_model_resref("K1:PMHA01.mdl") == "pmha01"
+
+    explicit = resolve_bas_head_resref(
+        requested="Player Male Head A 01 - pmha01",
+        body_resref="p_carthbb",
+        manager=FakeManager({"pmha01", "p_carthbbh"}),
+        game="K1",
+    )
+    assert explicit.resolved_resref == "pmha01"
+    assert explicit.source == "requested"
+
+    derived = resolve_bas_head_resref(
+        body_resref="p_carthbb",
+        manager=FakeManager({"p_carthbbh"}),
+        game="K1",
+    )
+    assert derived.resolved_resref == "p_carthbbh"
+    assert derived.source == "body_resref"
+
+
 def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjustment() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -7833,6 +8405,45 @@ def test_bas_attach_seeds_weapon_alignment_without_overwriting_same_model_adjust
 
     QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "right_weapon", "w_lghtsbr_001")
     assert window._bas_attachment_transforms["right_weapon"]["position"] == [0.0, 0.0, 0.0]
+
+
+def test_bas_attach_head_loads_normalized_resolved_head_resref() -> None:
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    class FakeManager:
+        def get_mdl(self, resref, game="K1"):
+            return b"mdl" if str(resref).lower() == "pmha01" else None
+
+    calls = []
+    body = SimpleNamespace(name="P_CarthBB", _gr_source_resref="p_carthbb", _gr_source_game="K1")
+    head = SimpleNamespace(name="pmha01")
+    panel = SimpleNamespace(
+        set_status=lambda text: calls.append(("status", text)),
+        set_slot_model=lambda slot, model, resref="": calls.append(("slot", slot, resref)),
+    )
+    loaded = []
+    window = SimpleNamespace(
+        _bas_body_model=body,
+        _current_model=body,
+        _current_game="K1",
+        _bas_attachments={},
+        _bas_attachment_resrefs={},
+        _bas_attachment_transforms={},
+        body_attachment_panel=panel,
+        _get_resource_manager=lambda: FakeManager(),
+        _infer_game_from_model=lambda model: "K1",
+        _load_bas_attachment_model=lambda resref: loaded.append(resref) or head,
+        _rebuild_bas_preview=lambda: "BAS preview updated.",
+        _refresh_bas_animation_panel_after_layer_change=lambda slot: calls.append(("anim", slot)),
+    )
+
+    QtGhostRiggerMainWindow._handle_bas_attach_requested(window, "head", "Player Male Head A 01 - pmha01")
+
+    assert loaded == ["pmha01"]
+    assert window._current_head_model is head
+    assert window._bas_attachments == {"head": head}
+    assert window._bas_attachment_resrefs == {"head": "pmha01"}
+    assert ("slot", "head", "pmha01") in calls
 
 
 def test_bas_mask_goggles_and_belt_slots_use_socket_layers() -> None:
@@ -7954,6 +8565,7 @@ def test_bas_attachment_preview_parents_item_to_body_socket() -> None:
     assert rhand.children[0]._gr_bas_attachment_root is True
     assert rhand.children[0]._gr_bas_socket_name == "rhand"
     assert rhand.children[0]._gr_bas_attachment_layer is True
+    assert rhand.children[0]._gr_bas_attachment_source_model_ref is item
 
 
 def test_bas_attachment_socket_layer_follows_body_dummy_without_skinning() -> None:
@@ -8654,6 +9266,10 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
     assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
+    assert "self.viewport.meshVisibilityChanged.connect(self._on_viewport_mesh_visibility_changed)" in layout_source
+    assert "self.module_geometry_panel.moduleMeshVisibilityChanged.connect(self._on_module_mesh_visibility_changed)" in layout_source
+    assert "_invalidate_renderer_resources(\"module mesh visibility changed\")" not in layout_source
+    assert "_invalidate_renderer_resources(\"mesh visibility changed\")" not in layout_source
     assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
     assert (Path("src/gui/icons/module_meshes.svg")).exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
@@ -8672,21 +9288,40 @@ def test_main_window_exposes_sprite_materials_as_rendering_dock() -> None:
     refresh_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_all)
     changed_source = inspect.getsource(QtGhostRiggerMainWindow._on_sprite_materials_changed)
     persistence_source = inspect.getsource(QtGhostRiggerMainWindow._apply_sprite_material_overrides)
+    payload_apply_source = inspect.getsource(QtGhostRiggerMainWindow._apply_sprite_material_payload)
     scene_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_scene_view)
+    selection_source = inspect.getsource(QtGhostRiggerMainWindow._select_scene_object_impl)
+    viewport_selection_source = inspect.getsource(QtGhostRiggerMainWindow._on_viewport_scene_node_selected)
+    panel_context_source = inspect.getsource(QtGhostRiggerMainWindow._refresh_sprite_materials_panel_context)
+    scene_sync_source = inspect.getsource(QtGhostRiggerMainWindow._sync_sprite_material_nodes_to_scene)
+    scene_save_source = inspect.getsource(QtGhostRiggerMainWindow._save_scene)
 
     assert "self.sprite_materials_panel = QtSpriteMaterialPanel(self)" in layout_source
     assert '"sprite_materials"' in layout_source
     assert "self.sprite_materials_panel_action" in actions_source
     assert 'self._icon("sprite_materials")' in actions_source
     assert "modules_menu.addAction(self.sprite_materials_panel_action)" in menu_source
-    assert "self.sprite_materials_panel.set_model(self._active_viewport_model())" in refresh_source
+    assert "self._refresh_sprite_materials_panel_context()" in refresh_source
     assert "self.sprite_materials_panel.spriteRenderChanged.connect(self._on_sprite_materials_changed)" in layout_source
     assert "renderer.invalidate_node_cache()" in changed_source
-    assert "self.viewport.refresh_view()" in changed_source
-    assert "self._save_sprite_material_overrides()" in changed_source
+    assert "material=True" in changed_source
+    assert "resources=True" in changed_source
+    assert "visibility=True" in changed_source
+    assert "self._save_sprite_material_overrides(data)" in changed_source
+    assert "global_changed" in changed_source
+    assert "self._sync_sprite_material_nodes_to_scene(changed)" in changed_source
+    assert '"sprite_materials"' in scene_sync_source
+    assert "obj.material_overrides = overrides" in scene_sync_source
+    assert "self._sync_active_scene_sprite_material_overrides()" in scene_save_source
     assert "sprite_material_overrides.json" in inspect.getsource(QtGhostRiggerMainWindow._sprite_persistence_path)
-    assert "setattr(node, \"_gr_sprite_alpha_source\"" in persistence_source
+    assert "setattr(node, \"_gr_sprite_alpha_source\"" in payload_apply_source
     assert "self._apply_sprite_material_overrides(model)" in scene_source
+    assert "self._apply_scene_object_sprite_material_overrides(obj)" in scene_source
+    assert "self._refresh_sprite_materials_panel_context()" in scene_source
+    assert "self._refresh_sprite_materials_panel_context()" in selection_source
+    assert "self._refresh_sprite_materials_panel_context()" in viewport_selection_source
+    assert "self._selected_scene_model_object()" in panel_context_source
+    assert "panel.set_model(model)" in panel_context_source
     assert (Path("src/gui/icons/sprite_materials.svg")).exists()
     assert hasattr(QtSpriteMaterialPanel, "spriteRenderChanged")
 

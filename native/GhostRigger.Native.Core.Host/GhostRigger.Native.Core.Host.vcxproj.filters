@@ -1,0 +1,47 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="..">
+      <UniqueIdentifier>{6e20b1b7-cf40-a197-6f26-76186b54916f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="..\..">
+      <UniqueIdentifier>{6c7cad47-2229-c351-6cbd-6d591a3d1dbb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private">
+      <UniqueIdentifier>{47d1edf7-ba0d-18c1-3655-8e38db93bbcc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{8cc05691-e324-99e4-dabe-565b0b44d6be}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\main.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerNativeDependencies.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="main.py">
+      <Filter>..</Filter>
+    </None>
+    <None Include="..\..\pyproject.toml">
+      <Filter>..\..</Filter>
+    </None>
+    <None Include="..\..\requirements.txt">
+      <Filter>..\..</Filter>
+    </None>
+    <None Include="..\..\README.md">
+      <Filter>..\..</Filter>
+    </None>
+    <None Include="..\..\CHANGES.md">
+      <Filter>..\..</Filter>
+    </None>
+    <None Include="..\README.md">
+      <Filter>..</Filter>
+    </None>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,243 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{c878ce47-12e0-c053-855b-f4b4c2c1fb9d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{a42b8f1d-add8-af16-eb92-0dec155a894c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{d1765b98-f920-a9ce-3751-78771ff2d89d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{deff4099-25f6-f268-6194-055eda6d4c4c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{fe07b603-3dba-54d3-f2de-3c90175ebfaf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{388a8936-a133-33cf-b47f-2a1883fadb44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{7bc30133-1797-8866-5990-3ea3152821aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\retargeting">
+      <UniqueIdentifier>{3810fd95-9d04-b3eb-a135-7bf0554bb657}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{07fc257c-8300-c91d-a5d3-1a757bb74fb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels">
+      <UniqueIdentifier>{082941e2-0da5-8759-a89e-ef3e8d790311}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\windows">
+      <UniqueIdentifier>{348c0a5c-faa9-efcf-832e-4429353279a8}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerToolsRetargeting.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerToolsRetargeting.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\retargeting\__init__.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\animation_injector.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\apose_compatibility.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\aurora_animation_writer.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\baker.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\blender_animation_injection.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\coordinate.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\coordinate_converter.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\coordinate_normalizer.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\fbx_backend.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\fbx_exporter.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\fbx_importer.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\kotor_source_animation.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\kotor_to_kotor_preview.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\kotor_to_unreal_preview.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\kotor_to_unreal_solver.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\mesh_loader.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\mesh_rebinder.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\mixamo_companion_mesh.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\mixamo_source_adapter.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\reference_pose.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_calibration.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_frame_audit.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_frames.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_mapping.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_modes.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_output_naming.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_preview.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_preview_export.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_profile.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_solve_audit.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_solver.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\retarget_workbench_readiness.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\reverse_renamer.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\root_motion.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\sampler.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\skeleton_aligner.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\skeleton_renamer.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\source_animation.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\source_skeleton_audit.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\target_skeleton_audit.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\test_utils.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\ue5_source_adapter.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\ue5_to_aurora_r3b_preview.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\ue_fbx_exporter.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\core\retargeting\unreal_target_skeleton.py">
+      <Filter>Python\src\core\retargeting</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\qt_retarget_preview_controller.py">
+      <Filter>Python\src\gui\windows</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\qt_retarget_window.py">
+      <Filter>Python\src\gui\windows</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\qt_retarget_workbench_controller.py">
+      <Filter>Python\src\gui\windows</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\qt_source_clip_preview_model.py">
+      <Filter>Python\src\gui\windows</Filter>
+    </None>
+    <None Include="Python\src\gui\panels\qt_animation_panel.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

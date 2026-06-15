@@ -1,0 +1,121 @@
+﻿# GhostRigger Native Toolbox And Window Migration Candidates
+
+Date: 2026-06-07
+Branch: `qt-ghostrigger`
+Related: `knowledge_base/cpp_integration_phases.md`, `knowledge_base/native_migration_plan.md`, `native/README.md`
+
+## Purpose
+
+This document records the first concrete Phase 1 candidates for Python-to-C++
+toolbox and window migration. It is a planning foundation only: it does not
+move UI behavior or replace Python workflows. Each candidate names the native
+project, owner surface, bridge method, ownership boundary, and verification gate
+that must exist before implementation begins.
+
+Shared logic used by more than one candidate must be moved into
+`GhostRigger.Native.Core.Foundation.*` or `GhostRigger.Runtime.Shared.*` before a
+toolbox or window package consumes it.
+
+## Naming Rules
+
+- Toolbox packages use `GhostRigger.Tools.Workflow.{Toolname}`.
+- The Phase 1 native main-window package uses `GhostRigger.Windows.Shell.Main`.
+- Do not add a generic `GhostRigger.Windows.<Type>.<WindowName>` project during Phase 1
+  without first documenting the specific window owner and bridge boundary here.
+
+## Candidate: Retargeting Tool
+
+Native project: `GhostRigger.Tools.Workflow.Retargeting`
+Owner surface: Retarget Workbench
+Owner package: `native/GhostRigger.Tools.Workflow.Retargeting`
+Bridge method: C ABI DLL first; `.pyd` only if the retargeting API needs richer
+Python types after the C ABI contract proves too narrow.
+
+Data ownership:
+
+- C++ owns: hot pose-palette blending helpers, numeric retarget solve packets,
+  solver diagnostics, and future batch validation helpers.
+- Python owns: KOTOR animation source selection, UI state, user workflow,
+  export policy, project/session persistence, and MCP-backed truth checks.
+
+Verification gates:
+
+- Native Debug target: build `GhostRigger.Tools.Workflow.Retargeting` in `Debug|x64`.
+- Python adapter test: targeted adapter/package availability and solve-packet
+  fallback checks.
+- Backend truth check: MCP animation fixture comparison when native retargeting
+  begins changing model or animation outputs.
+- Visible app check: required only when a future slice changes Retarget
+  Workbench UI/workflow behavior.
+
+## Candidate: Export Tool
+
+Native project: `GhostRigger.Tools.Workflow.Export`
+Owner surface: Export and validation workflow
+Owner package: `native/GhostRigger.Tools.Workflow.Export`
+Bridge method: C ABI DLL for validator/readback helpers before any writer
+replacement.
+
+Data ownership:
+
+- C++ owns: optional native readback/validation helpers, packed buffer
+  diagnostics, and performance-sensitive export preflight checks.
+- Python owns: export decisions, file-format policy, game-resource semantics,
+  write prompts, dirty-scene safety, and final writer orchestration until native
+  parity is proven.
+
+Verification gates:
+
+- Native Debug target: build `GhostRigger.Tools.Workflow.Export` in `Debug|x64`.
+- Python adapter test: targeted export-helper fallback checks.
+- Backend truth check: PyKotor/GhostRigger reload comparison before any native
+  helper becomes authoritative.
+- Visible app check: required only when a future slice changes export dialogs or
+  user workflow.
+
+## Candidate: Character Builder Tool
+
+Native project: `GhostRigger.Tools.Workflow.CharacterBuilder`
+Owner surface: Character Studio
+Owner package: `native/GhostRigger.Tools.Workflow.CharacterBuilder`
+Bridge method: C ABI DLL for numeric autofit, skinning, and validation helpers.
+
+Data ownership:
+
+- C++ owns: hot autofit math helpers, native skinning validation packets, and
+  diagnostic readback helpers.
+- Python owns: Character Studio UI, source asset selection, game semantics,
+  save/export decisions, and MCP-backed validation.
+
+Verification gates:
+
+- Native Debug target: build `GhostRigger.Tools.Workflow.CharacterBuilder` in `Debug|x64`.
+- Python adapter test: targeted helper availability and missing-DLL fallback.
+- Backend truth check: representative character fixtures before native helper
+  output replaces Python behavior.
+- Visible app check: required only when a future slice changes Character Studio
+  UI/workflow behavior.
+
+## Candidate: Main Window Host Surface
+
+Native project: `GhostRigger.Windows.Shell.Main`
+Owner surface: Main window composition shell
+Owner package: `native/GhostRigger.Windows.Shell.Main`
+Bridge method: host module or C ABI bridge only after the Python/Qt main window
+has a narrow native service to call.
+
+Data ownership:
+
+- C++ owns: future host-owned native services that are genuinely shared by the
+  application shell, such as native command routing or host service discovery.
+- Python owns: current Qt widgets, docks, menus, themes, layouts, window state,
+  user workflow orchestration, and visible shell behavior.
+
+Verification gates:
+
+- Native Debug target: build `GhostRigger.Windows.Shell.Main` in `Debug|x64`.
+- Python adapter test: targeted host-service discovery and fallback checks.
+- Backend truth check: not applicable unless the slice touches model/data
+  pipelines.
+- Visible app check: required for any future slice that changes startup,
+  theming, layout, docking, menus, or visible main-window workflow.

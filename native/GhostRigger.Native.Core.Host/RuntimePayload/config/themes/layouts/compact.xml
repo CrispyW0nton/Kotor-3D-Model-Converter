@@ -1,0 +1,47 @@
+<layout id="compact" name="Compact" version="1">
+    <mainWindow width="1360" height="820" maximized="false"/>
+    <toolbars>
+        <toolbar id="main" visible="true" buttonMode="iconOnly" iconSize="16" height="30"/>
+        <toolbar id="viewport" visible="true" buttonMode="iconOnly" iconSize="15" height="28"/>
+    </toolbars>
+    <panels>
+        <panel id="contentBrowser" region="left" visible="true" minWidth="220" preferredWidth="300" minHeight="260" preferredHeight="420"/>
+        <panel id="scene" region="left" visible="true" minWidth="200" preferredWidth="260" minHeight="160" preferredHeight="220"/>
+        <panel id="library" region="left" visible="true" minWidth="220" preferredWidth="260"/>
+        <panel id="modules" region="left" visible="true" minWidth="220" preferredWidth="260"/>
+        <panel id="properties" region="right" visible="true" minWidth="230" preferredWidth="280"/>
+        <panel id="animationLibrary" region="right" visible="true" minWidth="230" preferredWidth="280"/>
+        <panel id="meshTools" region="farRight" visible="true" minWidth="220" preferredWidth="280"/>
+        <panel id="spriteMaterials" region="right" visible="false" minWidth="300" preferredWidth="380"/>
+        <panel id="outputLog" region="bottom" visible="true" minHeight="100" preferredHeight="150"/>
+        <panel id="pythonTerminal" region="bottom" visible="true" minHeight="100" preferredHeight="150"/>
+    </panels>
+    <viewport>
+        <region id="mainViewport" minWidth="620" preferredWidth="900"/>
+        <toolbar visible="true" buttonMode="iconOnly" compact="true"/>
+    </viewport>
+    <spacing>
+        <margin value="2"/>
+        <panelSpacing value="2"/>
+        <toolbarSpacing value="2"/>
+        <splitterHandleWidth value="5"/>
+        <inputHeight value="22"/>
+        <comboHeight value="22"/>
+        <spinboxHeight value="22"/>
+        <tabHeight value="14"/>
+        <tabWidth value="62"/>
+        <tabPadding value="4"/>
+        <tabPaddingX value="8"/>
+        <tabPaddingY value="3"/>
+        <tabMargin value="0"/>
+        <tabMarginX value="0"/>
+        <tabMarginY value="0"/>
+        <tableRowHeight value="20"/>
+        <treeRowHeight value="20"/>
+        <groupboxMargin value="5"/>
+        <groupboxSpacing value="2"/>
+        <panelHeaderHeight value="24"/>
+        <viewportToolbarHeight value="28"/>
+        <transformBarHeight value="26"/>
+    </spacing>
+</layout>

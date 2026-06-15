@@ -1,0 +1,117 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{027b226a-275d-27ad-3f91-182be0bdf34a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{8ecedd2d-c97d-19bd-a6ef-20f690bcedef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{6a865087-135e-6299-d150-804ecb433ba4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{8e3c08ab-2c54-f8e2-897c-617cac1d9f86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{11cb813e-9c17-553c-6128-350d9bf60ea3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{23b77dc6-d1d0-8b98-b96e-690232c406e5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{dcafcd62-d783-9352-c769-75d1433bcc2c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\camera">
+      <UniqueIdentifier>{86f93289-6789-c126-8f00-7e9a5c10bd73}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\CameraContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\GhostRiggerCamera.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\CameraContracts.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GhostRiggerCamera.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\camera\__init__.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\arcball_camera.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_controller.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_manager.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_model.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_picker.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_presets.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_render_settings.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_rig.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_selection.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_target.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\camera_viewport_adapter.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\render_manifest.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+    <None Include="Python\src\core\camera\render_output.py">
+      <Filter>Python\src\core\camera</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

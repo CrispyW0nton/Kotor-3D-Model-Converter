@@ -1858,6 +1858,32 @@ def test_gl_context_backend_candidates_are_platform_aware(monkeypatch) -> None:
     assert _gl_context_backend_candidates("posix") == ("wgl",)
 
 
+def test_gl_context_backend_candidates_prefer_native_adapter(monkeypatch) -> None:
+    from src.adapters.gpu import moderngl_context
+
+    monkeypatch.delenv("GHOSTRIGGER_GL_BACKEND", raising=False)
+    monkeypatch.setattr(
+        moderngl_context,
+        "_native_gl_context_backend_candidates",
+        lambda os_name=None: ("native_default", "native_wgl"),
+    )
+
+    assert moderngl_context._gl_context_backend_candidates("nt") == ("native_default", "native_wgl")
+
+
+def test_gl_context_backend_candidates_fall_back_when_native_missing(monkeypatch) -> None:
+    from src.adapters.gpu import moderngl_context
+
+    monkeypatch.delenv("GHOSTRIGGER_GL_BACKEND", raising=False)
+    monkeypatch.setattr(
+        moderngl_context,
+        "_native_gl_context_backend_candidates",
+        lambda os_name=None: (),
+    )
+
+    assert moderngl_context._gl_context_backend_candidates("posix") == ("egl", "default", "x11")
+
+
 def test_resource_manager_indexes_override_without_preloading(tmp_path) -> None:
     from src.core.assets.resource_manager import RES_TPC, _GameInstall, _key
 

@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{ed360d69-6e1d-3b9a-ad8a-2f22f54dbf64}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{9a88043d-5195-23d9-9a63-02bb2db44cf1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{5f24ea85-d54d-ddac-9b2a-14c84f1e8ba7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{59062d30-c91e-e80c-6a0c-e58e9cdb88f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{48bfbb75-3b72-9eca-ae0a-d60e1ca9b410}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{b5cdb945-47d8-d128-ac8f-757d37d5f29d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\measurement">
+      <UniqueIdentifier>{7c1cf0b2-af54-c4a8-f114-89632ec76b09}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerMeasurement.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\MeasurementContracts.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerMeasurement.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\MeasurementContracts.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\measurement\__init__.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\angle_snap.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\dimension_calculator.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\grid_measurement.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\measurement_controller.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\measurement_formatter.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\percent_snap.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\unit_settings.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+    <None Include="Python\src\measurement\unit_system.py">
+      <Filter>Python\src\measurement</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

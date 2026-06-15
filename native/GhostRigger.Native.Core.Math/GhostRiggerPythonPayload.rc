@@ -1,0 +1,10 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "Python/src/math/camera_math.py"
+PYTHON_PAYLOAD_0002 RCDATA "Python/src/math/frame_math.py"
+PYTHON_PAYLOAD_0003 RCDATA "Python/src/math/gpu_math.py"
+PYTHON_PAYLOAD_0004 RCDATA "Python/src/math/module_layout_math.py"
+PYTHON_PAYLOAD_0005 RCDATA "Python/src/math/transform_math.py"
+PYTHON_PAYLOAD_0006 RCDATA "Python/src/math/viewcube_math.py"
+PYTHON_PAYLOAD_0007 RCDATA "Python/src/core/rendering/frame_core/math_helpers.py"
+PYTHON_PAYLOAD_0008 RCDATA "Python/src/gui/gizmo/transform_math.py"

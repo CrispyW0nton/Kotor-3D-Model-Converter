@@ -1,0 +1,81 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{9ec5c0f1-8513-4e12-140a-0da33d62f201}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{08b6567e-96d2-2813-1b98-041756a7419a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{9f3e06a7-c4ab-1ee8-6e32-cd9d281aa2d2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{39b73563-bac7-9937-f4a4-59dc495732a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{ab081855-9351-5fcf-dc40-385aa9021cbe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{fa93491c-ddf9-dc87-ca37-ab0180ce7f84}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{0e342c3f-e935-fa31-929d-8b4efd371a7a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\assets">
+      <UniqueIdentifier>{b8cd5621-127e-cf49-c328-17cbb38dc466}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerAssets.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ResourceManager.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerAssets.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ResourceManager.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\assets\__init__.py">
+      <Filter>Python\src\core\assets</Filter>
+    </None>
+    <None Include="Python\src\core\assets\asset_preview.py">
+      <Filter>Python\src\core\assets</Filter>
+    </None>
+    <None Include="Python\src\core\assets\override_layer.py">
+      <Filter>Python\src\core\assets</Filter>
+    </None>
+    <None Include="Python\src\core\assets\resource_manager.py">
+      <Filter>Python\src\core\assets</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

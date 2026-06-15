@@ -1,0 +1,45 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Adapters.Hardware.GPU",
+    "file_count": 6,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/adapters/gpu/__init__.py",
+            "packaged_path": "Python/src/adapters/gpu/__init__.py",
+            "sha256": "0b85542225e0f57f7c84aa6c07a503936086b3d140e8715394d12c61903229c7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/adapters/gpu/lightmap_baker.py",
+            "packaged_path": "Python/src/adapters/gpu/lightmap_baker.py",
+            "sha256": "ac737a346ff12785218d352c3977a956430a80b518eec83301fc4eb51384b7f9"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/adapters/gpu/lightmap_gpu_solver.py",
+            "packaged_path": "Python/src/adapters/gpu/lightmap_gpu_solver.py",
+            "sha256": "7cdbf6d18017f82019c86df8545cc69939aa68f126159c44557b44b014dbba18"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/adapters/gpu/moderngl_context.py",
+            "packaged_path": "Python/src/adapters/gpu/moderngl_context.py",
+            "sha256": "8f72281e25534258baa203b0847149145b3b13105ce7d3f7ad9481215fbd6a0f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/adapters/gpu/moderngl_runtime.py",
+            "packaged_path": "Python/src/adapters/gpu/moderngl_runtime.py",
+            "sha256": "564cd83f05090a23fc4997fee7ba02e5a6f46f5749299da6add189412f10d1a7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/adapters/gpu/viewport_probe.py",
+            "packaged_path": "Python/src/adapters/gpu/viewport_probe.py",
+            "sha256": "dbf858e4c50b49de3445163dc06febb7b9741ffb7c58927faec0c173bc5fbc1d"
+        }
+    ]
+}

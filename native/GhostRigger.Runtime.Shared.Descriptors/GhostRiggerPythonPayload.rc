@@ -1,0 +1,8 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_0001 RCDATA "Python/src/core/rendering/mesh_render_data.py"
+PYTHON_PAYLOAD_0002 RCDATA "Python/src/adapters/rendering/mesh_render_data.py"
+PYTHON_PAYLOAD_0003 RCDATA "Python/src/core/rendering/skeleton_render_data.py"
+PYTHON_PAYLOAD_0004 RCDATA "Python/src/core/scene/scene_object.py"
+PYTHON_PAYLOAD_0005 RCDATA "Python/src/core/scene/scene_object_instance.py"
+PYTHON_PAYLOAD_0006 RCDATA "Python/src/core/project/resource_address.py"

@@ -1,0 +1,39 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Graphics",
+    "file_count": 5,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/graphics/__init__.py",
+            "packaged_path": "Python/src/core/graphics/__init__.py",
+            "sha256": "88717292667d0b45d643d4935f2b00611f9d6076628b7e11250703499346fef2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/graphics/tex_atlas.py",
+            "packaged_path": "Python/src/core/graphics/tex_atlas.py",
+            "sha256": "a112d35329aae05255263c4157dcad6590c6311186096e4194a976a03a730a83"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/graphics/tpc.py",
+            "packaged_path": "Python/src/core/graphics/tpc.py",
+            "sha256": "46c496a41200f578dd63926167d043c79cdf1975db45348d162ded932fa33787"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/graphics/tpc_render_utils.py",
+            "packaged_path": "Python/src/core/graphics/tpc_render_utils.py",
+            "sha256": "caaa170675b54196c9a0b3702656d4919af50d51d71fe2d8073309cc335a5796"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/graphics/txi.py",
+            "packaged_path": "Python/src/core/graphics/txi.py",
+            "sha256": "eed5f6d051903559910c99512e16e0da49fa8299bfe3625ac7852a3ec96c9191"
+        }
+    ]
+}

@@ -1,72 +1,33 @@
 from __future__ import annotations
 
-from src.gui.viewports.viewport_core.widgets.selection_mesh import ViewportSelectionMeshMixin
+from pathlib import Path
 
 
-class _Node:
-    def __init__(self, name: str, pos: tuple[float, float, float]) -> None:
-        self.name = name
-        self.position = pos
-
-    def bone_world_position(self) -> tuple[float, float, float]:
-        return tuple(float(v) for v in self.position)
+ROOT = Path(__file__).resolve().parents[1]
+VIEWPORT_PAYLOAD = ROOT / "native" / "GhostRigger.GUI.Boundary.Viewports" / "Python"
 
 
-class _Viewport(ViewportSelectionMeshMixin):
-    def __init__(self) -> None:
-        self._positions = []
-        self._evicted = []
-        self._render_requested = False
-        self._joint_drag_node = None
-        self._joint_drag_nodes = []
-        self._joint_drag_mirror_nodes = []
-
-    def _joint_hit_positions(self) -> list:
-        return list(self._positions)
-
-    def _is_external_skeleton_node(self, _node) -> bool:
-        return False
-
-    def _evict_transform_cache(self, node) -> None:
-        self._evicted.append(node)
-
-    def _request_render(self, **_kwargs) -> None:
-        self._render_requested = True
+def _read_viewport(relpath: str) -> str:
+    return (VIEWPORT_PAYLOAD / relpath).read_text(encoding="utf-8")
 
 
-def test_hold_v_joint_snap_excludes_dragged_node_and_moves_to_visible_target() -> None:
-    viewport = _Viewport()
-    dragged = _Node("lhand", (0.0, 0.0, 0.0))
-    target = _Node("bendak_lhand", (2.0, 3.0, 4.0))
-    viewport._joint_drag_node = dragged
-    viewport._joint_drag_nodes = [dragged]
-    viewport._positions = [
-        (100, 100, 0.5, dragged),
-        (112, 106, 0.5, target),
-    ]
+def test_hold_v_joint_drag_snap_is_wired_to_visible_bone_dots() -> None:
+    selection = _read_viewport("src/gui/viewports/viewport_core/widgets/selection_mesh.py")
+    drag = _read_viewport("src/gui/viewports/viewport_core/widgets/drag_interactions.py")
 
-    assert viewport._snap_joint_drag_to_visible_bone_at_cursor(112, 106) is True
-
-    assert dragged.position == (2.0, 3.0, 4.0)
-    assert viewport._evicted == [dragged]
-    assert viewport._render_requested is True
+    assert "def _nearest_visible_bone_dot_at" in selection
+    assert "exclude_nodes=tuple(drag_nodes + mirror_nodes)" in selection
+    assert "def _move_node_by_overlay_world_delta" in selection
+    assert "def _snap_joint_drag_to_visible_bone_at_cursor" in selection
+    assert "mirrored_delta = (-delta_world[0], delta_world[1], delta_world[2])" in selection
+    assert "self._snap_key_down" in drag
+    assert "self._snap_joint_drag_to_visible_bone_at_cursor(x, y)" in drag
 
 
-def test_hold_v_joint_snap_mirrors_delta_for_symmetry_partner() -> None:
-    viewport = _Viewport()
-    dragged = _Node("lhand", (0.0, 0.0, 0.0))
-    mirror = _Node("rhand", (10.0, 0.0, 0.0))
-    target = _Node("bendak_lhand", (2.0, 3.0, 4.0))
-    viewport._joint_drag_node = dragged
-    viewport._joint_drag_nodes = [dragged]
-    viewport._joint_drag_mirror_nodes = [mirror]
-    viewport._positions = [
-        (100, 100, 0.5, dragged),
-        (112, 106, 0.5, target),
-        (130, 106, 0.5, mirror),
-    ]
+def test_hold_v_joint_drag_snap_keeps_legacy_external_gimbal_snap() -> None:
+    selection = _read_viewport("src/gui/viewports/viewport_core/widgets/selection_mesh.py")
+    drag = _read_viewport("src/gui/viewports/viewport_core/widgets/drag_interactions.py")
 
-    assert viewport._snap_joint_drag_to_visible_bone_at_cursor(112, 106) is True
-
-    assert dragged.position == (2.0, 3.0, 4.0)
-    assert mirror.position == (8.0, 3.0, 4.0)
+    assert "def _nearest_imported_bone_at" in selection
+    assert "def _snap_selected_external_bones_to_imported_at_cursor" in selection
+    assert "_snap_selected_external_bones_to_imported_at_cursor(x, y)" in drag

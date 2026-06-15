@@ -1,0 +1,58 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::renderer::backend::pygfx {
+
+#ifndef GHOSTRIGGER_RENDERER_PYGFX_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_PYGFX_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_RENDERER_PYGFX_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& pygfxmeshcache_view_style_key_line_73_7d5864ce_native();
+const NativeFunctionImplementation& pygfxmeshcache_can_update_dynamic_skin_buffers_line_295_455a3519_native();
+const NativeFunctionImplementation& pygfxmeshcache_mesh_indices_line_499_a8d77474_native();
+const NativeFunctionImplementation& pygfxmeshcache_pygfx_uvs_line_524_0ab18777_native();
+const NativeFunctionImplementation& pygfxmeshcache_selection_color_line_611_82a53301_native();
+const NativeFunctionImplementation& pygfxmeshcache_sprite_proxy_color_line_744_308da1c3_native();
+const NativeFunctionImplementation& pygfxmeshcache_use_skinned_wire_overlay_line_832_529bcbfc_native();
+const NativeFunctionImplementation& pygfxmeshcache_copy_local_transform_line_911_d051e563_native();
+const NativeFunctionImplementation& pygfxmeshcache_uses_sprite_wire_hull_line_922_5f57c073_native();
+const NativeFunctionImplementation& pygfxmeshcache_build_geometric_boundary_edges_line_960_df42799a_native();
+const NativeFunctionImplementation& pygfxmeshcache_source_visible_line_996_1beca7d8_native();
+const NativeFunctionImplementation& pygfxmeshcache_set_material_color_line_1000_3972cc11_native();
+const NativeFunctionImplementation& pygfxmeshcache_set_material_attr_line_1007_60785737_native();
+const NativeFunctionImplementation& pygfxviewportrenderer_optional_module_line_83_b11e8b32_native();
+const NativeFunctionImplementation& pygfxviewportrenderer_theme_color_line_510_2da2905f_native();
+const NativeFunctionImplementation& pygfxviewportrenderer_set_object_color_line_534_b1d0cd8c_native();
+const NativeFunctionImplementation& pygfxscenebridge_vec3_line_534_e3f96754_native();
+const NativeFunctionImplementation& pygfxscenebridge_mesh_model_matrix_line_561_fad4b7d4_native();
+const NativeFunctionImplementation& wgpurenderer_probe_availability_line_290_ec0f0532_native();
+const NativeFunctionImplementation& wgpurenderer_capabilities_unavailable_line_423_e33a189d_native();
+const NativeFunctionImplementation& wgpurenderer_lighting_mode_id_line_1854_7cbdc5b5_native();
+const NativeFunctionImplementation& wgpurenderer_shader_complexity_id_line_1870_a358f0ee_native();
+const NativeFunctionImplementation& wgpurenderer_line_vertices_from_gizmo_command_line_2119_64e1ea82_native();
+const NativeFunctionImplementation& wgpurenderer_gizmo_command_cache_key_line_2132_f1ff6749_native();
+const NativeFunctionImplementation& wgpurenderer_pick_id_to_color_line_2543_a952e8de_native();
+const NativeFunctionImplementation& wgpurenderer_pick_id_from_rgba_line_2553_5942dfd3_native();
+const NativeFunctionImplementation& wgpurenderer_mesh_sort_depth_from_center_line_2587_8f5601b7_native();
+const NativeFunctionImplementation& wgpurenderer_scene_has_rigid_animation_meshes_line_2626_5d6cd13d_native();
+const NativeFunctionImplementation& wgpuresourcecache_uses_sprite_wire_hull_line_227_93a1c032_native();
+const NativeFunctionImplementation& wgpuresourcecache_build_geometric_boundary_edges_line_267_05339e70_native();
+const NativeFunctionImplementation& wgpuresourcecache_rgba8_mip_chain_line_555_9ee8d314_native();
+const NativeFunctionImplementation& wgpuresourcecache_texture_format_line_588_bf2090f3_native();
+
+const NativeFunctionImplementation* staticmethods_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::renderer::backend::pygfx

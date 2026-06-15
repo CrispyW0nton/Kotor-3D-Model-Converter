@@ -1,0 +1,117 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{cdba5c04-873e-5ae0-674f-d0c711ee636e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{854faa0a-db52-3e73-f9fc-e09e6936a25a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{6d99bda1-33c2-25c3-87bc-43ffe579e862}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{794d6c99-6a35-ad3e-2155-538b9f3fdc45}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{6e8730b1-3e6c-dabd-d7af-1a47e957a4d1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{2f91ced5-b90e-3ec9-9b4f-b96c86dd0e8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{cb1d5faa-0b64-f3c9-8248-c7a0fce18cb4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\characters">
+      <UniqueIdentifier>{c7575a3c-73fa-1efb-f889-24a55bc29ab5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\export">
+      <UniqueIdentifier>{228c82e1-9350-294d-af20-2b38714822b1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{2207a7a3-09d4-6709-7dd0-d93de0045714}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\dialogs">
+      <UniqueIdentifier>{f0350491-9a5d-11e7-f547-45eb0ef4e64d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels">
+      <UniqueIdentifier>{8cda680e-5a09-805e-4f6e-5258f278ca4b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels\module_editor">
+      <UniqueIdentifier>{280b70db-0f34-f6d3-46eb-81de83df0a0c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerToolsExport.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerToolsExport.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\export\__init__.py">
+      <Filter>Python\src\core\export</Filter>
+    </None>
+    <None Include="Python\src\core\export\export_job.py">
+      <Filter>Python\src\core\export</Filter>
+    </None>
+    <None Include="Python\src\core\export\gltf_importer.py">
+      <Filter>Python\src\core\export</Filter>
+    </None>
+    <None Include="Python\src\core\export\unity_export_bridge.py">
+      <Filter>Python\src\core\export</Filter>
+    </None>
+    <None Include="Python\src\core\export\unity_import_validator.py">
+      <Filter>Python\src\core\export</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\qt_export_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\panels\module_editor\export_panel.py">
+      <Filter>Python\src\gui\panels\module_editor</Filter>
+    </None>
+    <None Include="Python\src\core\characters\character_export_preflight.py">
+      <Filter>Python\src\core\characters</Filter>
+    </None>
+    <None Include="Python\src\core\characters\character_export_transaction.py">
+      <Filter>Python\src\core\characters</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

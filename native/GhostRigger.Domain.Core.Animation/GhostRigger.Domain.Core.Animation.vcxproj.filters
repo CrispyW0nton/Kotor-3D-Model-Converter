@@ -1,0 +1,240 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{e6a168bc-5158-546b-cdce-5c8ac0556761}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{b9dc164b-b7a7-b7b0-fa1c-9121ef9ccee5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{15ad0582-f875-5457-984c-3bd27e4735d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{85c02893-9843-e422-2f83-416705e2fef9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{6893b7b3-f1d1-52d6-1ac2-8dbf3277f2f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{06a7035b-fec2-22ed-fac1-e5c03e092662}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{b59f9018-333d-9f7e-2f9a-af01c274a3a4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation">
+      <UniqueIdentifier>{8fe69107-ce0b-a60a-c85b-1e009af067c8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles">
+      <UniqueIdentifier>{12792bde-2d29-277f-0e50-b79524e0bf38}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types">
+      <UniqueIdentifier>{1e6d38f5-d8aa-109a-9ee0-0abc45b3f72b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types\characters">
+      <UniqueIdentifier>{ccaf36fc-8d3e-2548-0817-5cdc2eb12326}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types\creatures">
+      <UniqueIdentifier>{deb1aa0e-2ec8-362d-09b2-7a5279770dbb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types\droids">
+      <UniqueIdentifier>{29e68c20-e34a-844c-fe87-0e17ce05db9f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types\specialcase">
+      <UniqueIdentifier>{d2f2063a-daac-33f8-7630-cd1d6f5611a2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types\supermodels">
+      <UniqueIdentifier>{d6750f99-b062-5f81-7c49-8f5a4b25d9ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\animation\skinning_profiles\types\turrets">
+      <UniqueIdentifier>{992e7209-0a62-dd4b-4860-cd53461dc155}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerAnimation.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerAnimation.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\animation\__init__.py">
+      <Filter>Python\src\core\animation</Filter>
+    </None>
+    <None Include="Python\src\core\animation\animation_engine.py">
+      <Filter>Python\src\core\animation</Filter>
+    </None>
+    <None Include="Python\src\core\animation\animation_library.py">
+      <Filter>Python\src\core\animation</Filter>
+    </None>
+    <None Include="Python\src\core\animation\gpu_skinning.py">
+      <Filter>Python\src\core\animation</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\animation_supermodel_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\creature_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\default_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\droid_rigid_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\droid_skinned_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\generated_character_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\head_attachment_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\humanoid_supermodel_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\local_character_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\modular_body_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\bith.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\duros.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\hero.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\human.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\mandalorian.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\party.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\sith.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\characters\wookie.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\characters</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\creatures\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\creatures</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\creatures\selkath.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\creatures</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\droids\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\droids</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\droids\battledroid.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\droids</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\droids\t3m3.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\droids</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\droids\t3m4.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\droids</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\droids\utilitydroid.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\droids</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\generated_character_skinning.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\bastila.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\kreia.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\malak.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\nihlus.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\revan.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\specialcase\sion.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\specialcase</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\supermodels\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\supermodels</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\supermodels\supermodel_female.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\supermodels</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\supermodels\supermodel_male.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\supermodels</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\turrets\__init__.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\turrets</Filter>
+    </None>
+    <None Include="Python\src\core\animation\skinning_profiles\types\turrets\turret_01.py">
+      <Filter>Python\src\core\animation\skinning_profiles\types\turrets</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

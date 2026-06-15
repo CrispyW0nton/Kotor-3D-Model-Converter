@@ -1,0 +1,51 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Domain.Core.Game",
+    "file_count": 7,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_0001",
+            "source_path": "src/core/game/__init__.py",
+            "packaged_path": "Python/src/core/game/__init__.py",
+            "sha256": "796c54db54fe1fed4e2166a2c49c3f1fd37f17b68b5fffc033c36bcfb8b2ecea"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0002",
+            "source_path": "src/core/game/game_library_ext.py",
+            "packaged_path": "Python/src/core/game/game_library_ext.py",
+            "sha256": "82f2a553b60f85630f8136b3a772e375fd3254c55dbc1193b1da8bf6827a47fc"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0003",
+            "source_path": "src/core/game/import_normalisation.py",
+            "packaged_path": "Python/src/core/game/import_normalisation.py",
+            "sha256": "3f69aa958b9efb90d56f97a1205e1dad5940f273d566bbd9b66777779869a2d1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0004",
+            "source_path": "src/core/game/kotor_install.py",
+            "packaged_path": "Python/src/core/game/kotor_install.py",
+            "sha256": "947e855a8fedb8fb2bd2c42277cfec49c068d3b837ee62986e52127864bc16f2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0005",
+            "source_path": "src/core/game/kotor_loader.py",
+            "packaged_path": "Python/src/core/game/kotor_loader.py",
+            "sha256": "a54e20a03a02ad366b7d80dbc274365f540e30fad8951d32ff8a58a9b20e9c98"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0006",
+            "source_path": "src/core/game/pykotor_bridge.py",
+            "packaged_path": "Python/src/core/game/pykotor_bridge.py",
+            "sha256": "39e373906d37968d202c34f40edbb4861656a2d659191e64d770c8c28918f924"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0007",
+            "source_path": "src/core/game/pykotor_mdl_io_fix.py",
+            "packaged_path": "Python/src/core/game/pykotor_mdl_io_fix.py",
+            "sha256": "b2cce61022a0e8cd15e49ddf5ac24dc25443f974b9f02ee11c83465b770cefe9"
+        }
+    ]
+}

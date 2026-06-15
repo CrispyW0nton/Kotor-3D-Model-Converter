@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{6137b035-7a3c-450e-5288-7bb2cc128a29}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{aecbe1fe-e210-691c-716e-c070da9b8cc5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{b07d7b47-301e-3a6e-5ca1-9ab38150b7ef}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{81c170ac-acec-da87-95ec-935ce2b7ca1f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{9573b3a3-4ed9-8183-02b5-1f904ddea70b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{0f3df5c0-fda4-d55c-b9d8-1629ddc8d4c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{a5c7b70d-bccb-01c8-1f2c-62ce329ec6f2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\dialogs">
+      <UniqueIdentifier>{8344bf21-dc6b-942e-a936-a7817c993a74}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerGUIDialogs.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerGUIDialogs.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\dialogs\__init__.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\add_model_to_scene_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\fbx_sdk_setup_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\lightmap_bake_worker.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\lightmap_preview_window.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\qt_dialogs.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\qt_export_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\qt_lightmap_baker_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\qt_render_frame_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\qt_settings_dialog.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\uv_geometry_preview_window.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+    <None Include="Python\src\gui\dialogs\uv_preview_window.py">
+      <Filter>Python\src\gui\dialogs</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

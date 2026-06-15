@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{a73026e9-ebfb-4c00-d2cc-b3289912cf46}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{4db3d61a-0625-aa65-85a9-2c17f8e9fb03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{ccd43102-8112-0810-84a5-42e058e55685}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{db4b5e6a-20d0-ccbc-6fea-8c465044d2ac}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{22cc018e-89b2-bba3-f216-415affaedcfb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{4dacd205-431a-1e83-f060-9dc0a7ff7021}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{ae45c8c0-4725-f42c-e545-b20ea4fa5e61}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\rendering">
+      <UniqueIdentifier>{65be9ca9-13d5-8f1b-7021-9393f1d36022}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{02ad7871-9f3b-65fd-7129-11dccf7a13a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\project">
+      <UniqueIdentifier>{0d11bf7d-d4a0-9cdb-0384-c148c47ee6de}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\rendering">
+      <UniqueIdentifier>{f20e03d5-7630-aff8-2c04-df57e1f6d587}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\scene">
+      <UniqueIdentifier>{ebe097c5-d549-b19c-229c-378330fa2e72}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerRuntimeSharedDescriptors.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ResourceAddress.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerRuntimeSharedDescriptors.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ResourceAddress.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\core\rendering\mesh_render_data.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\adapters\rendering\mesh_render_data.py">
+      <Filter>Python\src\adapters\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\skeleton_render_data.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_object.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\scene_object_instance.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\project\resource_address.py">
+      <Filter>Python\src\core\project</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

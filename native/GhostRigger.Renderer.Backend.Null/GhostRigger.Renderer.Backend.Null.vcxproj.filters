@@ -1,0 +1,81 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{2e473d34-7473-4de6-2430-fd3f01c9123a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{e1c70a69-7e8e-5590-411a-cd1e42ded84d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{ac5654d2-cf4b-9fe6-0916-072a3164fb43}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{1455dc5f-1469-2510-ef94-09f9b9727b06}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{bce50628-fd27-7fd7-9e8e-dfc2853ebc97}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{0dd23259-c427-601a-7366-f9f0d4dafd78}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{734b8774-aebb-6987-b28c-87cfe55c3d72}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\rendering">
+      <UniqueIdentifier>{4e12757a-b644-9711-982d-f23b3d369028}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{1212a5bc-6f18-9a65-1563-8743a0f2ed4f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\rendering">
+      <UniqueIdentifier>{47293f56-0582-5bbd-0eec-115f32550adf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{0f6e77c1-eadc-7ca7-b404-c7ab311594ac}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\rendering">
+      <UniqueIdentifier>{e4fa0062-fa0e-ee8d-3ddb-26d5d0e25b4d}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerRendererNull.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerRendererNull.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\adapters\rendering\null_renderer.py">
+      <Filter>Python\src\adapters\rendering</Filter>
+    </None>
+    <None Include="Python\src\gui\rendering\null_renderer.py">
+      <Filter>Python\src\gui\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\renderer_capabilities.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\renderer_interface.py">
+      <Filter>Python\src\core\rendering</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,128 @@
+<theme id="default" name="Default" version="1">
+    <metadata>
+        <author>GhostRigger</author>
+        <description>Pure platform/default Qt styling with no generated GhostRigger stylesheet.</description>
+        <mode>native</mode>
+    </metadata>
+    <styles>
+        <style name="application.native" value="true"/>
+        <style name="splash.surfaceStyle" value="matte"/>
+    </styles>
+    <colors>
+        <color name="window.background" value="#F3F3F3"/>
+        <color name="window.text" value="#20242A"/>
+        <color name="panel.background" value="#FFFFFF"/>
+        <color name="panel.backgroundAlt" value="#EEF1F5"/>
+        <color name="panel.altBackground" value="#EEF1F5"/>
+        <color name="panel.border" value="#B8C0CC"/>
+        <color name="panel.headerBackground" value="#E7EAF0"/>
+        <color name="panel.headerText" value="#20242A"/>
+        <color name="groupbox.border" value="#B8C0CC"/>
+        <color name="groupbox.title" value="#284C7E"/>
+        <color name="viewport.background" value="#F8F9FB"/>
+        <color name="viewport.border" value="#B8C0CC"/>
+        <color name="viewport.text" value="#5E6977"/>
+        <color name="viewport.gridMajor" value="#D5DAE1"/>
+        <color name="viewport.gridMinor" value="#E5E8EE"/>
+        <color name="viewport.helper.meshHover" value="#00D7B5"/>
+        <color name="viewport.helper.light" value="#FFD24A"/>
+        <color name="viewport.helper.lightSelected" value="#1F6FEB"/>
+        <color name="viewport.helper.camera" value="#52616F"/>
+        <color name="viewport.helper.cameraSelected" value="#9A6700"/>
+        <color name="viewport.helper.null" value="#5E6977"/>
+        <color name="viewport.helper.nullSelected" value="#1F6FEB"/>
+        <color name="toolbar.background" value="#F3F3F3"/>
+        <color name="toolbar.border" value="#C4CBD5"/>
+        <color name="button.background" value="#F7F8FA"/>
+        <color name="button.hover" value="#E8EEF6"/>
+        <color name="button.pressed" value="#D9E2EC"/>
+        <color name="button.checked" value="#1F6FEB"/>
+        <color name="button.checkedText" value="#FFFFFF"/>
+        <color name="button.text" value="#20242A"/>
+        <color name="button.accentText" value="#FFFFFF"/>
+        <color name="button.disabledBackground" value="#ECEFF3"/>
+        <color name="button.disabledText" value="#7A8490"/>
+        <color name="input.background" value="#FFFFFF"/>
+        <color name="input.text" value="#20242A"/>
+        <color name="input.border" value="#B8C0CC"/>
+        <color name="input.focusBorder" value="#1F6FEB"/>
+        <color name="spinbox.buttonBackground" value="#E1E7EF"/>
+        <color name="spinbox.buttonHover" value="#D4DEE9"/>
+        <color name="spinbox.buttonPressed" value="#C4D1DE"/>
+        <color name="spinbox.buttonBorder" value="#AEB8C4"/>
+        <color name="spinbox.arrow" value="#20242A"/>
+        <color name="tab.background" value="#ECEFF3"/>
+        <color name="tab.selectedBackground" value="#FFFFFF"/>
+        <color name="tab.inactiveBackground" value="#E5E9EF"/>
+        <color name="tab.text" value="#5E6977"/>
+        <color name="tab.selectedText" value="#20242A"/>
+        <color name="table.background" value="#FFFFFF"/>
+        <color name="table.text" value="#20242A"/>
+        <color name="table.headerBackground" value="#E7EAF0"/>
+        <color name="table.headerText" value="#20242A"/>
+        <color name="table.grid" value="#D2D8E0"/>
+        <color name="tree.background" value="#FFFFFF"/>
+        <color name="tree.text" value="#20242A"/>
+        <color name="scrollbar.background" value="#ECEFF3"/>
+        <color name="scrollbar.handle" value="#AEB8C4"/>
+        <color name="selection.background" value="#1F6FEB"/>
+        <color name="selection.text" value="#FFFFFF"/>
+        <color name="text.primary" value="#20242A"/>
+        <color name="text.secondary" value="#5E6977"/>
+        <color name="text.disabled" value="#7A8490"/>
+        <color name="text.gold" value="#8A6A00"/>
+        <color name="accent.primary" value="#1F6FEB"/>
+        <color name="accent.secondary" value="#008C7E"/>
+        <color name="axis.x" value="#C93434"/>
+        <color name="axis.y" value="#1B8F45"/>
+        <color name="axis.z" value="#1F6FEB"/>
+        <color name="axis.text" value="#FFFFFF"/>
+        <color name="transformBar.background" value="#F3F3F3"/>
+        <color name="transformBar.border" value="#C4CBD5"/>
+        <color name="splash.background" value="#F3F3F3"/>
+        <color name="splash.panel" value="#FFFFFF"/>
+        <color name="splash.brandBackground" value="#EEF1F5"/>
+        <color name="splash.progressBackground" value="#F8F9FB"/>
+        <color name="splash.border" value="#B8C0CC"/>
+        <color name="splash.text" value="#20242A"/>
+        <color name="splash.secondaryText" value="#5E6977"/>
+        <color name="splash.accent" value="#1F6FEB"/>
+        <color name="splash.progressTrack" value="#FFFFFF"/>
+        <color name="splash.progressFill" value="#1B8F45"/>
+        <color name="matrixBar.background" value="#EAF0F7"/>
+        <color name="matrixBar.glyph" value="#1F6FEB"/>
+        <color name="matrixBar.text" value="#1F4F8F"/>
+        <color name="matrixBar.subtext" value="#5E6977"/>
+        <color name="matrixBar.metaText" value="#5E6977"/>
+        <color name="matrixBar.ipcText" value="#008C7E"/>
+        <color name="info" value="#1670B7"/>
+        <color name="warning" value="#9A6700"/>
+        <color name="error" value="#C93434"/>
+        <color name="success" value="#1B8F45"/>
+    </colors>
+    <fonts>
+        <font role="default" family="Segoe UI" size="9"/>
+        <font role="monospace" family="Consolas" size="9"/>
+        <font role="heading" family="Segoe UI" size="10" weight="bold"/>
+        <font role="matrix" family="Aurebesh AF" size="9"/>
+    </fonts>
+    <icons>
+        <provider>qtawesome</provider>
+        <defaultMode>iconText</defaultMode>
+        <size role="toolbar" value="18"/>
+        <size role="largeToolbar" value="24"/>
+    </icons>
+    <metrics>
+        <metric name="toolbar.height" value="34"/>
+        <metric name="toolbar.iconSize" value="18"/>
+        <metric name="toolbar.spacing" value="4"/>
+        <metric name="button.height" value="16"/>
+        <metric name="button.minWidth" value="64"/>
+        <metric name="button.paddingH" value="6"/>
+        <metric name="button.paddingV" value="1"/>
+        <metric name="panel.margin" value="4"/>
+        <metric name="panel.spacing" value="4"/>
+        <metric name="splitter.handleWidth" value="6"/>
+        <metric name="tab.height" value="14"/>
+    </metrics>
+</theme>

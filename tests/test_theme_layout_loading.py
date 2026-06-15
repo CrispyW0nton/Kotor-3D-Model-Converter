@@ -133,7 +133,7 @@ def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
 
     class FakeViewport:
         def render_state_status_text(self) -> str:
-            return "Renderer: WGPU Direct3D 12 | Display: Textured"
+            return "Renderer: Direct3D (WGPU) | Display: Textured"
 
     class FakeThemeManager:
         def __init__(self):
@@ -168,7 +168,7 @@ def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
         assert dialog.minimumWidth() >= 900
         assert dialog.minimumHeight() >= 650
         assert version is not None and "6.1.0" in version.text()
-        assert renderer is not None and "WGPU Direct3D 12" in renderer.text()
+        assert renderer is not None and "Direct3D (WGPU)" in renderer.text()
         assert theme is not None and "default_matrix" in theme.text()
         assert "#00FF7A" in dialog.styleSheet()
         assert bioware is not None and bioware.property("creditUrl") == "https://www.bioware.com/"
@@ -181,7 +181,7 @@ def test_about_dialog_reports_runtime_details_and_copies_summary() -> None:
 
         dialog.copy_details()
         assert "GhostRigger-K1-K2" in app.clipboard().text()
-        assert "Renderer: WGPU Direct3D 12" in app.clipboard().text()
+        assert "Renderer: Direct3D (WGPU)" in app.clipboard().text()
     finally:
         dialog.deleteLater()
         parent.deleteLater()
@@ -428,6 +428,8 @@ def test_packaged_custom_themes_define_spinbox_stepper_tokens() -> None:
         assert required.issubset(theme.colors), theme_id
         stylesheet = QtStylesheetBuilder().build(theme)
         assert "QDoubleSpinBox::up-button" in stylesheet
+        assert "QTreeWidget::item:selected" in stylesheet
+        assert "QTreeWidget::item:selected:!active" in stylesheet
         assert theme.color("spinbox.buttonBorder") in stylesheet
         expected_arrow = "spin_up_light.svg" if theme.mode == "dark" else "spin_up_dark.svg"
         assert expected_arrow in stylesheet
@@ -837,7 +839,7 @@ def test_wgpu_renderer_uses_theme_tokens_for_viewport_overlays() -> None:
 
     theme = ThemeLoader().load_file(ROOT / "config" / "themes" / "themes" / "default_classic.xml")
     assert theme is not None
-    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer = WgpuRenderer(RendererBackend.WGPU_D3D12)
 
     renderer.set_theme_colors(theme)
 
@@ -856,7 +858,7 @@ def test_wgpu_renderer_uses_native_palette_for_viewport_overlays() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.renderer_backend import RendererBackend
 
-    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer = WgpuRenderer(RendererBackend.WGPU_D3D12)
 
     renderer.set_native_palette_colors(
         base=(235, 238, 242),
@@ -878,7 +880,7 @@ def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.renderer_backend import RendererBackend
 
-    renderer = WgpuRenderer(RendererBackend.WGPU_AUTO)
+    renderer = WgpuRenderer(RendererBackend.WGPU_D3D12)
     renderer.format = "bgra8unorm-srgb"
     background = (23 / 255.0, 25 / 255.0, 28 / 255.0)
 
@@ -892,6 +894,137 @@ def test_wgpu_renderer_linearizes_viewport_colours_for_srgb_surfaces() -> None:
 
     renderer.format = "bgra8unorm"
     assert renderer._target_rgb(background) == pytest.approx(background)
+
+
+def test_moderngl_renderer_diagnostics_include_renderer_stats() -> None:
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    renderer = ModernGLRenderer()
+    renderer.perf.update(
+        {
+            "last_frame_ms": 12.25,
+            "gpu_upload_ms": 1.5,
+            "draw_ms": 4.75,
+            "readback_ms": 2.0,
+            "tri_count": 3456,
+        }
+    )
+
+    diagnostics = renderer.get_diagnostics()
+
+    assert diagnostics["performance"]["frame_time_ms"] == pytest.approx(12.25)
+    assert diagnostics["performance"]["upload_ms"] == pytest.approx(1.5)
+    assert diagnostics["performance"]["draw_ms"] == pytest.approx(4.75)
+    assert diagnostics["performance"]["readback_ms"] == pytest.approx(2.0)
+    assert diagnostics["triangle_count"] == 3456
+
+
+def test_moderngl_renderer_diagnostics_prefer_native_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.adapters.rendering import moderngl_renderer
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    class FakeNativeModernGL:
+        def gr_renderer_moderngl_frame_diagnostics_json(self, *args):
+            return (
+                b'{"name":"ModernGL","backend_id":"moderngl_gl330","available":true,'
+                b'"api":"OpenGL","backend":"ModernGL","mature_material_path":true,'
+                b'"native_diagnostics":true,"version_code":450,'
+                b'"gpu":"Native GPU","vendor":"Native Vendor",'
+                b'"performance":{"frame_time_ms":9.500,"upload_ms":1.000,'
+                b'"draw_ms":2.000,"readback_ms":3.000},'
+                b'"triangle_count":77,"mesh_cache_size":2,"texture_cache_size":3}'
+            )
+
+    monkeypatch.setattr(moderngl_renderer, "_native_moderngl_attempted", True)
+    monkeypatch.setattr(moderngl_renderer, "_native_moderngl_dll", FakeNativeModernGL())
+
+    renderer = ModernGLRenderer()
+    renderer.perf.update(
+        {
+            "last_frame_ms": 12.25,
+            "gpu_upload_ms": 1.5,
+            "draw_ms": 4.75,
+            "readback_ms": 2.0,
+            "tri_count": 3456,
+        }
+    )
+
+    diagnostics = renderer.get_diagnostics()
+
+    assert diagnostics["native_diagnostics"] is True
+    assert diagnostics["performance"]["frame_time_ms"] == pytest.approx(9.5)
+    assert diagnostics["triangle_count"] == 77
+    assert diagnostics["viewport_display"] == {}
+
+
+def test_viewport_renderer_statistics_lines_include_active_renderer() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class FakeRenderer:
+        name = "ModernGL"
+        perf = {"tri_count": 1}
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    try:
+        lines = viewport._renderer_statistics_lines(
+            FakeRenderer(),
+            {
+                "name": "ModernGL",
+                "backend": "ModernGL",
+                "gpu": "NVIDIA Test GPU",
+                "triangle_count": 1234,
+                "mesh_cache_size": 12,
+                "texture_cache_size": 5,
+                "performance": {
+                    "frame_time_ms": 16.25,
+                    "draw_ms": 3.5,
+                    "upload_ms": 1.25,
+                    "readback_ms": 0.75,
+                },
+            },
+        )
+
+        assert lines[0] == "ModernGL"
+        assert "Frame 16.2 ms" in lines[1]
+        assert "Draw 3.5" in lines[1]
+        assert "Tris 1,234" in lines[1]
+        assert "NVIDIA Test GPU" in lines[2]
+        assert "Meshes 12" in lines[2]
+        assert "Textures 5" in lines[2]
+    finally:
+        viewport.deleteLater()
+        app.processEvents()
+
+
+def test_live_surface_diagnostics_sit_below_overlay_hud() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtGui, QtWidgets
+
+    from src.gui.qt_lib.viewports.viewport_host import RendererSurfaceHost
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    host = RendererSurfaceHost()
+    surface = QtWidgets.QLabel("surface")
+    try:
+        host.resize(640, 360)
+        host.show()
+        host.set_renderer_surface(surface, backend_id="pygfx_wgpu", live_surface=True)
+        host.set_overlay_pixmap(QtGui.QPixmap(64, 64))
+        host.set_diagnostics_text("Renderer\nFrame 16.0 ms\nTris 1")
+        app.processEvents()
+
+        label = host.findChild(QtWidgets.QLabel, "ViewportDiagnosticsOverlay")
+        assert label is not None
+        assert label.y() >= 90
+    finally:
+        host.deleteLater()
+        app.processEvents()
 
 
 def test_viewport_emits_persistent_render_state_status() -> None:
@@ -918,8 +1051,8 @@ def test_viewport_emits_persistent_render_state_status() -> None:
         assert "Renderer:" in seen[-1]
         assert "Display: Wireframe" in seen[-1]
 
-        viewport.set_renderer_settings(RendererSettings(backend=RendererBackend.WGPU_VULKAN))
-        assert "Renderer: WGPU Vulkan" in viewport.render_state_status_text()
+        viewport.set_renderer_settings(RendererSettings(backend=RendererBackend.WGPU_D3D12))
+        assert "Renderer: Direct3D (WGPU)" in viewport.render_state_status_text()
     finally:
         viewport.deleteLater()
         app.processEvents()
@@ -946,7 +1079,7 @@ def test_viewport_renderer_settings_noop_does_not_recreate_wgpu_surface() -> Non
             return self
 
         def get_diagnostics(self):
-            return {"backend_id": self.backend_id, "name": "WGPU Direct3D 12"}
+            return {"backend_id": self.backend_id, "name": "Direct3D (WGPU)"}
 
         def create_surface_widget(self, parent=None):
             self.created_surfaces += 1

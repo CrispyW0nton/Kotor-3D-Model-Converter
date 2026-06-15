@@ -1,0 +1,108 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::native::core::diagnostics {
+
+#ifndef GHOSTRIGGER_NATIVE_NATIVECORE_DIAGNOSTICS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_NATIVE_NATIVECORE_DIAGNOSTICS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_NATIVE_NATIVECORE_DIAGNOSTICS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& getattr_line_139_8e4ea95a_native();
+const NativeFunctionImplementation& dir_line_148_2084c3bf_native();
+const NativeFunctionImplementation& set_sentinel_dir_line_44_8ae827ec_native();
+const NativeFunctionImplementation& log_mdl_header_line_55_555985b6_native();
+const NativeFunctionImplementation& validate_mdl_preconditions_line_141_b19c0b38_native();
+const NativeFunctionImplementation& load_timer_line_184_838b14f5_native();
+const NativeFunctionImplementation& log_model_summary_line_210_51f13b57_native();
+const NativeFunctionImplementation& log_model_anomalies_line_260_d81498cb_native();
+const NativeFunctionImplementation& log_render_error_line_355_8784dfa8_native();
+const NativeFunctionImplementation& check_main_thread_line_390_c935d866_native();
+const NativeFunctionImplementation& log_thread_violation_line_406_d1d6f04c_native();
+const NativeFunctionImplementation& log_texture_resolution_line_424_15424580_native();
+const NativeFunctionImplementation& log_crash_report_line_456_4d715750_native();
+const NativeFunctionImplementation& write_crash_sentinel_line_517_62a85bcd_native();
+const NativeFunctionImplementation& run_model_diagnostics_line_545_133f9b6e_native();
+const NativeFunctionImplementation& log_session_start_line_678_715dbbf7_native();
+const NativeFunctionImplementation& report_old_sentinels_line_717_8dd23cec_native();
+const NativeFunctionImplementation& module_from_input_line_119_8faf9ef8_native();
+const NativeFunctionImplementation& normalise_resref_line_123_5bfdaeb7_native();
+const NativeFunctionImplementation& normalise_restype_line_132_5c829799_native();
+const NativeFunctionImplementation& record_key_line_136_d01ddfdd_native();
+const NativeFunctionImplementation& resources_from_input_line_149_50bc7de0_native();
+const NativeFunctionImplementation& available_index_line_162_9dfee9c1_native();
+const NativeFunctionImplementation& git_raw_line_196_a688d5a0_native();
+const NativeFunctionImplementation& core_raw_line_203_6ab0a473_native();
+const NativeFunctionImplementation& raw_list_line_213_a7111a0b_native();
+const NativeFunctionImplementation& script_field_line_221_fa440c9a_native();
+const NativeFunctionImplementation& dialog_field_line_226_58535f64_native();
+const NativeFunctionImplementation& iter_script_dialog_refs_line_230_de4ac179_native();
+const NativeFunctionImplementation& collect_module_references_line_260_b7f6bfe1_native();
+const NativeFunctionImplementation& has_reference_line_291_462c6d98_native();
+const NativeFunctionImplementation& issue_for_missing_line_309_e4fe892b_native();
+const NativeFunctionImplementation& validate_module_references_line_344_44437eb2_native();
+const NativeFunctionImplementation& validate_scene_line_462_4978dd75_native();
+const NativeFunctionImplementation& path_from_env_line_19_14f3c397_native();
+const NativeFunctionImplementation& int_env_clamped_line_23_d561e4b4_native();
+const NativeFunctionImplementation& gl_state_trace_path_line_31_dc7a1b70_native();
+const NativeFunctionImplementation& lm_data_dump_path_line_35_42ca528c_native();
+const NativeFunctionImplementation& skin_dump_path_line_39_fe55d8b8_native();
+const NativeFunctionImplementation& debug_visualize_mode_line_43_5b215ffd_native();
+const NativeFunctionImplementation& lm_composite_mode_line_47_d363b831_native();
+const NativeFunctionImplementation& jsonable_gl_value_line_34_1ede079b_native();
+const NativeFunctionImplementation& safe_gl_attr_line_46_f3c09db3_native();
+const NativeFunctionImplementation& uniform_trace_value_line_53_a664db23_native();
+const NativeFunctionImplementation& build_gl_state_trace_record_line_63_661c5f41_native();
+const NativeFunctionImplementation& append_gl_state_trace_line_124_86a67054_native();
+const NativeFunctionImplementation& first_uv_pairs_line_135_da46e2f2_native();
+const NativeFunctionImplementation& first_vbo_uv_pairs_line_145_8a1604a1_native();
+const NativeFunctionImplementation& texture_content_stats_line_155_f01bae93_native();
+const NativeFunctionImplementation& lightmap_role_info_line_209_0ccec99b_native();
+const NativeFunctionImplementation& build_lm_data_dump_record_line_248_50e702ce_native();
+const NativeFunctionImplementation& append_jsonl_record_line_295_860d61fe_native();
+const NativeFunctionImplementation& matrix4_json_line_306_ba4cf4dd_native();
+const NativeFunctionImplementation& matrix4_inverse_json_line_315_0b488bbd_native();
+const NativeFunctionImplementation& matrix4_mul_json_line_324_613234fd_native();
+const NativeFunctionImplementation& matrix4_det_value_line_333_10bbe3a5_native();
+const NativeFunctionImplementation& uploaded_palette_array_from_uploader_line_342_fddf1b89_native();
+const NativeFunctionImplementation& homogeneous_position_json_line_358_ac991133_native();
+const NativeFunctionImplementation& first_divergence_stage_line_369_c7da1b20_native();
+const NativeFunctionImplementation& matrix_max_abs_delta_line_383_59f01372_native();
+const NativeFunctionImplementation& matrix_translation_norm_line_394_e64780c0_native();
+const NativeFunctionImplementation& matrix_rotation_only_line_407_b4c89a01_native();
+const NativeFunctionImplementation& qbone_inverse_bind_json_line_423_dc625269_native();
+const NativeFunctionImplementation& qbone_direct_bind_json_line_452_87c34f93_native();
+const NativeFunctionImplementation& qbone_matrix_np_line_465_e2e68a5e_native();
+const NativeFunctionImplementation& node_world_matrix_for_pose_np_line_485_d8054911_native();
+const NativeFunctionImplementation& node_pose_chain_records_line_513_2a4aab68_native();
+const NativeFunctionImplementation& quat_xyzw_to_mat4_np_line_534_d9a3b5ee_native();
+const NativeFunctionImplementation& xoreos_first_frame_orientation_matrix_line_557_fce39b4e_native();
+const NativeFunctionImplementation& skin_3g_matrix_for_formula_line_618_9cc7f336_native();
+const NativeFunctionImplementation& skin_3g_role_for_bone_line_666_95ed8883_native();
+const NativeFunctionImplementation& skin_3g_role_priority_line_679_301987b6_native();
+const NativeFunctionImplementation& select_skin_3g_probe_vertices_line_704_12e70976_native();
+const NativeFunctionImplementation& skin_bind_equivalence_record_line_732_e3864866_native();
+const NativeFunctionImplementation& skin_3g_candidate_records_line_765_95075d52_native();
+const NativeFunctionImplementation& skin_live_slot_records_line_1233_88a63431_native();
+const NativeFunctionImplementation& build_skin_dump_record_line_1336_1e8ff3a1_native();
+const NativeFunctionImplementation& pose_node_transform_line_1669_c2989b35_native();
+const NativeFunctionImplementation& select_skin_probe_vertex_line_1687_bc6f7e2f_native();
+const NativeFunctionImplementation& node_parent_chain_names_line_1703_3065b3a0_native();
+const NativeFunctionImplementation& node_uses_single_tile_atlas_line_1712_7c035216_native();
+const NativeFunctionImplementation& should_auto_clamp_diffuse_line_1731_1c306c28_native();
+
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::native::core::diagnostics

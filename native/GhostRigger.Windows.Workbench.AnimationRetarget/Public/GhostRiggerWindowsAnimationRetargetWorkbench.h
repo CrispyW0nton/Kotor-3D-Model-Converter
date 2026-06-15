@@ -1,0 +1,20 @@
+#pragma once
+
+#if defined(_WIN32)
+#if defined(GHOSTRIGGER_WINDOWS_ANIMATION_RETARGET_WORKBENCH_EXPORTS)
+#define GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API __declspec(dllexport)
+#else
+#define GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API __declspec(dllimport)
+#endif
+#else
+#define GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API
+#endif
+
+extern "C" {
+
+GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API const char* gr_windows_animation_retarget_workbench_version();
+GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API const char* gr_windows_animation_retarget_workbench_capabilities_json();
+GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API const char* gr_windows_animation_retarget_workbench_owner_boundary_json();
+GR_WINDOWS_ANIMATION_RETARGET_WORKBENCH_API const char* gr_windows_animation_retarget_workbench_host_service_schema_json();
+
+}

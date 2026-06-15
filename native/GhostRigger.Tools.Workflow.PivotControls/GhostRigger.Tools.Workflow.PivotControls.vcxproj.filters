@@ -1,0 +1,105 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{e03db9ef-c43e-161a-b51e-d5644533cfa8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{67b084e5-f3ed-0355-a570-f61d3451c90c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{2f47b43c-87a9-73e4-0c7d-861c485ba2b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{29ff498b-3717-98e0-8977-9ed3ed225f16}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{211bc3b3-3bd4-cde4-bc3e-48d955690bf6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{85852749-0fa4-bddb-1944-3957c812e2c5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{fcaa9fda-71c7-20a8-f1b2-4a1ce58ff491}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\gizmo">
+      <UniqueIdentifier>{98615450-faa9-aa2e-8636-31646b2c52a9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\scene">
+      <UniqueIdentifier>{a6173f7c-19b1-20d5-06d6-d53b73d10b7d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{d51d28fa-9544-4c50-57bb-447eac51dc45}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\panels">
+      <UniqueIdentifier>{bd9fe5bc-a454-c300-b935-0486ce4377ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\math">
+      <UniqueIdentifier>{ef79f596-1255-f35d-51dc-2c106dfcde41}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerToolsPivotControls.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerToolsPivotControls.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\panels\adjust_pivot_panel.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+    <None Include="Python\src\gui\panels\axis_mode_control.py">
+      <Filter>Python\src\gui\panels</Filter>
+    </None>
+    <None Include="Python\src\core\scene\axis_mode.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\gizmo\transform_controller.py">
+      <Filter>Python\src\core\gizmo</Filter>
+    </None>
+    <None Include="Python\src\core\gizmo\transform_gizmo.py">
+      <Filter>Python\src\core\gizmo</Filter>
+    </None>
+    <None Include="Python\src\math\transform_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,75 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{5ae77dbb-6d9d-2958-a220-d5d308c03e6e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{24f4e2ad-eada-4ded-fedb-f7608d8d1843}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{1e0c2fa6-e90b-c93f-7e6e-b5e29259a740}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{109f41f0-19b9-da98-ace6-34b80dcddfdf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{b1808357-cd42-8b47-eb14-37d9d254df19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{855fe940-1169-57b5-64fc-0c015ffec1e7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{0b247c38-81e3-c644-c8c6-bf8524afdd17}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\gizmo">
+      <UniqueIdentifier>{405e2b1d-4df1-73ba-c46e-5593f762aa44}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerGUIGizmo.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerGUIGizmo.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\gui\gizmo\__init__.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\gizmo_draw_data.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\gizmo_mode.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\gizmo_picker.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\gizmo_renderer.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\transform_controller.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\transform_gizmo.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\transform_math.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,129 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{90872630-2923-7740-bfe9-aeb751d1e601}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{8c657d16-926a-f206-ee4b-dc65d9c077c9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{857a07d1-585b-cacf-2c73-b34195573049}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{75ac1328-9b59-fd60-c788-606a6b883607}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{06f7b119-6227-b1f5-7a43-70bb8bf6b1f1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{61f29689-f538-c2ef-65e7-a70cdeefa111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{ec6a0f99-822d-bab8-5788-74b7a2f1848b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\rendering">
+      <UniqueIdentifier>{bcdb6d16-ad9d-6533-b4c5-450d02644b59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\rendering\frame_core">
+      <UniqueIdentifier>{df5d5920-09e5-b996-83ee-e12bcbda202a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui">
+      <UniqueIdentifier>{61883dbe-9772-4e47-95cc-fcc92870819b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\gui\gizmo">
+      <UniqueIdentifier>{841ecc7d-9b79-5283-d0e7-c5de61882b3b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\math">
+      <UniqueIdentifier>{e13aefea-e52c-4b87-f503-cce8810b3a72}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerNativeCoreMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\CameraMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\FrameMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ModuleLayoutMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\TransformMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ViewcubeMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\GpuMath.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerNativeCoreMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\CameraMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\FrameMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ModuleLayoutMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\TransformMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ViewcubeMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\GpuMath.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="Python\src\math\camera_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+    <None Include="Python\src\math\frame_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+    <None Include="Python\src\math\gpu_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+    <None Include="Python\src\math\module_layout_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+    <None Include="Python\src\math\transform_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+    <None Include="Python\src\math\viewcube_math.py">
+      <Filter>Python\src\math</Filter>
+    </None>
+    <None Include="Python\src\core\rendering\frame_core\math_helpers.py">
+      <Filter>Python\src\core\rendering\frame_core</Filter>
+    </None>
+    <None Include="Python\src\gui\gizmo\transform_math.py">
+      <Filter>Python\src\gui\gizmo</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>
