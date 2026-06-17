@@ -28,6 +28,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
 <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\core\game\__init__.py" />
     <None Include="Python\src\core\game\game_library_ext.py" />
     <None Include="Python\src\core\game\import_normalisation.py" />
@@ -36,5 +37,13 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\game\pykotor_bridge.py" />
     <None Include="Python\src\core\game\pykotor_mdl_io_fix.py" />
   </ItemGroup>
+  <PropertyGroup Label="PythonPayloadBuild">
+    <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'=='' and '$(GHOSTRIGGER_PYTHON)'!=''">$(GHOSTRIGGER_PYTHON)</GhostRiggerPythonPayloadPython>
+    <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'==''">python</GhostRiggerPythonPayloadPython>
+  </PropertyGroup>
+  <Target Name="GenerateGhostRiggerPythonPayload" BeforeTargets="PrepareForBuild" Condition="Exists('$(ProjectDir)GeneratePythonPayload.py')">
+    <Message Importance="High" Text="Generating Python payload for $(MSBuildProjectName)" />
+    <Exec Command="&quot;$(GhostRiggerPythonPayloadPython)&quot; &quot;$(ProjectDir)GeneratePythonPayload.py&quot;" />
+  </Target>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

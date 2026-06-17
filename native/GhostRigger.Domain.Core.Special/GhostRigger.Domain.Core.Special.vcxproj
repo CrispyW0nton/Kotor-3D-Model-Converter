@@ -28,11 +28,20 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
 <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\core\special\__init__.py" />
     <None Include="Python\src\core\special\hooks.py" />
     <None Include="Python\src\core\special\lip_reader.py" />
     <None Include="Python\src\core\special\render_constants.py" />
     <None Include="Python\src\core\special\unity_malak_smoke.py" />
   </ItemGroup>
+  <PropertyGroup Label="PythonPayloadBuild">
+    <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'=='' and '$(GHOSTRIGGER_PYTHON)'!=''">$(GHOSTRIGGER_PYTHON)</GhostRiggerPythonPayloadPython>
+    <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'==''">python</GhostRiggerPythonPayloadPython>
+  </PropertyGroup>
+  <Target Name="GenerateGhostRiggerPythonPayload" BeforeTargets="PrepareForBuild" Condition="Exists('$(ProjectDir)GeneratePythonPayload.py')">
+    <Message Importance="High" Text="Generating Python payload for $(MSBuildProjectName)" />
+    <Exec Command="&quot;$(GhostRiggerPythonPayloadPython)&quot; &quot;$(ProjectDir)GeneratePythonPayload.py&quot;" />
+  </Target>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

@@ -113,12 +113,10 @@ class ViewportOverlayLayersMixin:
                 # Selected node gets a brighter outline so the user can
                 # still see selection state through the dot.
                 sel_node = getattr(self._renderer, "selected_node", None)
-                selected_ids = {id(n) for n in self._selected_joint_nodes}
-                outline_pen = QtGui.QPen(QtGui.QColor(0, 0, 0, alpha), 1.0)
-                sel_pen = QtGui.QPen(QtGui.QColor(255, 255, 255, alpha), 2.0)
-                key_color = QtGui.QColor(JOINT_DOT_COLOR_KEY)
-                key_color.setAlpha(alpha)
-                key_pen = QtGui.QPen(key_color, 2.0)
+                hovered_node = getattr(self._renderer, "_hovered_bone", None)
+                bones_active = bool(getattr(self._renderer, "show_bones", False))
+                joint_border = QtGui.QColor("#FFD400")
+                hover_border = QtGui.QColor("#FF8C00")
                 for entry in positions:
                     if not entry or len(entry) < 4:
                         continue
@@ -128,16 +126,10 @@ class ViewportOverlayLayersMixin:
                     name = getattr(node, "name", "") or ""
                     color = QtGui.QColor("#FFDA28") if node is sel_node else QtGui.QColor(_classify_joint_color(name))
                     color.setAlpha(alpha)
-                    if _is_key_joint_name(name):
-                        painter.setBrush(QtGui.QBrush(QtCore.Qt.NoBrush))
-                        painter.setPen(key_pen)
-                        painter.drawEllipse(
-                            QtCore.QPointF(float(sx), float(sy)),
-                            float(radius + 2),
-                            float(radius + 2),
-                        )
+                    border = QtGui.QColor(hover_border if bones_active and node is hovered_node else joint_border)
+                    border.setAlpha(alpha)
                     painter.setBrush(QtGui.QBrush(color))
-                    painter.setPen(sel_pen if node is sel_node or id(node) in selected_ids else outline_pen)
+                    painter.setPen(QtGui.QPen(border, 2.0))
                     painter.drawEllipse(
                         QtCore.QPointF(float(sx), float(sy)),
                         float(radius),
@@ -282,7 +274,8 @@ class ViewportOverlayLayersMixin:
             from PIL import ImageDraw
             draw = ImageDraw.Draw(img, "RGBA")
             sel_node = getattr(self._renderer, "selected_node", None)
-            selected_ids = {id(n) for n in self._selected_joint_nodes}
+            hovered_node = getattr(self._renderer, "_hovered_bone", None)
+            bones_active = bool(getattr(self._renderer, "show_bones", False))
             for entry in positions:
                 if not entry or len(entry) < 4:
                     continue
@@ -292,28 +285,57 @@ class ViewportOverlayLayersMixin:
                 name = getattr(node, "name", "") or ""
                 qc = QtGui.QColor("#FFDA28") if node is sel_node else _classify_joint_color(name)
                 fill = (qc.red(), qc.green(), qc.blue(), alpha)
-                is_selected = node is sel_node or id(node) in selected_ids
-                outline = (255, 255, 255, alpha) if is_selected else (0, 0, 0, alpha)
-                if _is_key_joint_name(name):
-                    key_outline = (
-                        JOINT_DOT_COLOR_KEY.red(),
-                        JOINT_DOT_COLOR_KEY.green(),
-                        JOINT_DOT_COLOR_KEY.blue(),
-                        alpha,
-                    )
-                    draw.ellipse(
-                        [sx - radius - 2, sy - radius - 2, sx + radius + 2, sy + radius + 2],
-                        outline=key_outline,
-                        width=2,
-                    )
+                outline = (255, 140, 0, alpha) if bones_active and node is hovered_node else (255, 212, 0, alpha)
                 draw.ellipse(
                     [sx - radius, sy - radius, sx + radius, sy + radius],
                     fill=fill,
                     outline=outline,
-                    width=2 if is_selected else 1,
+                    width=2,
                 )
         except Exception as exc:
             log.debug("Joint-dot PIL fallback failed: %s", exc)
+
+    def _draw_locomotion_discs(self, img, w: int, h: int) -> None:
+        """Paint adjustable compass/ruler locomotion discs around key joints."""
+        if not self._locomotion_disc_enabled:
+            return
+        positions = getattr(self._renderer, "_bone_screen_positions", None)
+        if not positions:
+            return
+        try:
+            from PIL import Image
+            size = int(max(32, min(256, int(getattr(self, "_locomotion_disc_size", 96)))))
+            cache = getattr(self, "_locomotion_disc_pixmap_cache", None)
+            if not cache or cache[0] != size:
+                asset = _ICON_DIR / "locomotion_disc.png"
+                disc = Image.open(asset).convert("RGBA").resize((size, size), Image.LANCZOS)
+                self._locomotion_disc_pixmap_cache = (size, disc)
+            else:
+                disc = cache[1]
+            axis_angles = getattr(self._renderer, "_bone_screen_axis_angles", {}) or {}
+            half = size * 0.5
+            for entry in positions:
+                if not entry or len(entry) < 4:
+                    continue
+                sx, sy, _depth, node = entry[0], entry[1], entry[2], entry[3]
+                if sx is None or sy is None:
+                    continue
+                if not _is_key_joint_name(getattr(node, "name", "") or ""):
+                    continue
+                node_disc = disc
+                angle = axis_angles.get(id(node))
+                if angle is not None:
+                    try:
+                        node_disc = disc.rotate(float(angle), resample=Image.BICUBIC, expand=False)
+                    except Exception:
+                        node_disc = disc
+                left = int(round(float(sx) - half))
+                top = int(round(float(sy) - half))
+                if left > w or top > h or left + size < 0 or top + size < 0:
+                    continue
+                img.alpha_composite(node_disc, (left, top))
+        except Exception as exc:
+            log.debug("Locomotion disc overlay failed: %s", exc)
 
     # ── T402: Joint-dot hit-test + symmetry ────────────────────────────
     def _joint_dot_hit_test(self, x: int, y: int):
@@ -469,6 +491,35 @@ class ViewportOverlayLayersMixin:
         self._joint_dot_opacity = new_op
         self._request_render()
 
+    def set_locomotion_disc_enabled(self, enabled: bool) -> None:
+        """Toggle the key-joint locomotion disc overlay on/off."""
+        new_val = bool(enabled)
+        if new_val == self._locomotion_disc_enabled:
+            if hasattr(self, "locomotion_disc_button"):
+                self.locomotion_disc_button.blockSignals(True)
+                self.locomotion_disc_button.setChecked(new_val)
+                self.locomotion_disc_button.blockSignals(False)
+            return
+        self._locomotion_disc_enabled = new_val
+        if hasattr(self, "locomotion_disc_button"):
+            self.locomotion_disc_button.blockSignals(True)
+            self.locomotion_disc_button.setChecked(new_val)
+            self.locomotion_disc_button.blockSignals(False)
+        self._request_render()
+
+    def set_locomotion_disc_size(self, size: int) -> None:
+        """Set locomotion disc size in screen pixels. Clamped to [32, 256]."""
+        new_size = int(max(32, min(256, int(size))))
+        if hasattr(self, "locomotion_disc_size_spin"):
+            self.locomotion_disc_size_spin.blockSignals(True)
+            self.locomotion_disc_size_spin.setValue(new_size)
+            self.locomotion_disc_size_spin.blockSignals(False)
+        if new_size == self._locomotion_disc_size:
+            return
+        self._locomotion_disc_size = new_size
+        self._locomotion_disc_pixmap_cache = None
+        self._request_render()
+
     @property
     def joint_dot_enabled(self) -> bool:
         return self._joint_dot_enabled
@@ -480,6 +531,14 @@ class ViewportOverlayLayersMixin:
     @property
     def joint_dot_opacity(self) -> float:
         return self._joint_dot_opacity
+
+    @property
+    def locomotion_disc_enabled(self) -> bool:
+        return self._locomotion_disc_enabled
+
+    @property
+    def locomotion_disc_size(self) -> int:
+        return self._locomotion_disc_size
 
     def _update_fps(self) -> None:
         now = time_module.perf_counter()

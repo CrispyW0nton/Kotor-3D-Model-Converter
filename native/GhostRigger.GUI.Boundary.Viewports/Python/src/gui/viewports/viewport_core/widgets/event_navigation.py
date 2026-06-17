@@ -53,6 +53,11 @@ class ViewportEventNavigationMixin:
                         return True
                     self._press_lmb(event)
                     return True
+            if et == QtCore.QEvent.MouseButtonDblClick:
+                self.canvas.setFocus()
+                if event.button() == QtCore.Qt.LeftButton:
+                    self._double_click_lmb(event)
+                    return True
             if et == QtCore.QEvent.MouseMove:
                 if self._nav_dragging:
                     self._drag_navigation(event)

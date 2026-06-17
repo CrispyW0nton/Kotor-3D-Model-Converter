@@ -1,6 +1,6 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "Python/src/gui/panels/qt_properties_panel.py"
-PYTHON_PAYLOAD_0002 RCDATA "Python/src/gui/panels/qt_inspector_panel.py"
-PYTHON_PAYLOAD_0003 RCDATA "Python/src/gui/panels/module_editor/module_editor_properties.py"
-PYTHON_PAYLOAD_0004 RCDATA "Python/src/core/modules/module_object_inspector.py"
+PYTHON_PAYLOAD_CORE_MODULES_MODULE_OBJECT_INSPECTOR RCDATA "Python/src/core/modules/module_object_inspector.py"
+PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_PROPERTIES RCDATA "Python/src/gui/panels/module_editor/module_editor_properties.py"
+PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL RCDATA "Python/src/gui/panels/qt_inspector_panel.py"
+PYTHON_PAYLOAD_GUI_PANELS_QT_PROPERTIES_PANEL RCDATA "Python/src/gui/panels/qt_properties_panel.py"

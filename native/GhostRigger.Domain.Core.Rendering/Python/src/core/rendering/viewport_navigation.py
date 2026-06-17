@@ -33,7 +33,7 @@ VIEWPORT_NAVIGATION_PROFILES: Mapping[str, ViewportNavigationProfile] = {
     ),
 }
 
-DEFAULT_VIEWPORT_NAVIGATION_PROFILE = "maya"
+DEFAULT_VIEWPORT_NAVIGATION_PROFILE = "3dsmax"
 
 VIEWPORT_NAVIGATION_HELP = """GhostRigger keeps global and viewport tool shortcuts reserved before profile keys are handled.
 

@@ -544,6 +544,8 @@ class ViewportRenderingPipelineMixin:
             native_skeleton = self._gpu_renderer_supports_native_skeleton_overlay()
             if self._renderer.show_bones and not native_skeleton:
                 self._renderer._draw_bones(draw, w, h)
+                if self._locomotion_disc_enabled:
+                    self._draw_locomotion_discs(img, w, h)
                 # T401: paint AccuRig-style color-coded joint dots on top.
                 # Runs only when the skeleton is visible — the dots are
                 # meant to make joints clickable/identifiable during rig

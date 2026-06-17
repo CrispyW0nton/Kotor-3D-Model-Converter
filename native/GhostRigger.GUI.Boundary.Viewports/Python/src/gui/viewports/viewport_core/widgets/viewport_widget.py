@@ -203,6 +203,9 @@ class QtViewportWidget(
         self._joint_dot_enabled: bool = True
         self._joint_dot_size: int = 3        # radius in screen pixels (1 .. 8)
         self._joint_dot_opacity: float = 0.90  # 0.0 (invisible) .. 1.0 (opaque)
+        self._locomotion_disc_enabled: bool = False
+        self._locomotion_disc_size: int = 96
+        self._locomotion_disc_pixmap_cache = None
         # ── T402: Joint-dot interaction state ──────────────────────────
         # Symmetry mirrors X-axis translations to the AccuRig MIRROR_PAIRS
         # partner when enabled (default on — matches AccuRig UX).

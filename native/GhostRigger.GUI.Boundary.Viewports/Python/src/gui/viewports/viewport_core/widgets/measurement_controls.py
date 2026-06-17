@@ -25,6 +25,11 @@ class ViewportMeasurementControlsMixin:
         enabled = bool(checked) if checked is not None else not self._joint_dot_enabled
         self.set_joint_dot_enabled(enabled)
 
+    def toggle_locomotion_discs(self, checked: Optional[bool] = None) -> None:
+        """Toolbar toggle for key-joint locomotion discs."""
+        enabled = bool(checked) if checked is not None else not self._locomotion_disc_enabled
+        self.set_locomotion_disc_enabled(enabled)
+
     def toggle_weight_heatmap(self, checked: Optional[bool] = None) -> None:
         """Toolbar toggle for the selected-bone weight heat-map HUD layer."""
         enabled = bool(checked) if checked is not None else not self._weight_heatmap_enabled

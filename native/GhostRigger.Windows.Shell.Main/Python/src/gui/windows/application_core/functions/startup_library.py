@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
 import traceback
@@ -118,34 +119,54 @@ def _build_prelaunch_library_input(
         preloaded["error"] = traceback.format_exc()
         status("Library scan failed", "GhostRigger will open; see the output log for details.")
     return payload
-def _collect_prewindow_startup_diagnostics(settings_data: dict) -> dict:
+def _collect_prewindow_startup_diagnostics(settings_data: dict, status_callback=None) -> dict:
     """Collect renderer/hardware diagnostics before the main window exists."""
 
     payload = {"renderer_capabilities": [], "hardware_diagnostics": {}}
     renderer_settings = RendererSettings.from_settings(settings_data)
-    log.info("Startup renderer scan beginning before Qt main-window initialization.")
-    try:
-        caps = renderer_capabilities_snapshot()
-        payload["renderer_capabilities"] = [entry.to_dict() for entry in caps]
-        for entry in caps:
-            status = "available" if entry.available else f"unavailable: {entry.reason or 'no reason reported'}"
-            log.info("Startup renderer scan: %s is %s.", entry.name, status)
-    except Exception as exc:
-        log.warning("Startup renderer scan failed before main-window initialization: %s", exc, exc_info=True)
 
-    log.info("Startup hardware scan beginning before Qt main-window initialization.")
-    try:
-        hardware = collect_hardware_diagnostics(
-            renderer_diagnostics={
-                "backend_id": renderer_settings.backend.value,
-                "name": renderer_settings.backend.value,
-            },
-            target_fps=renderer_settings.target_fps,
-        )
-        payload["hardware_diagnostics"] = hardware.to_dict()
-        for line in hardware.lines():
-            log.info("Startup hardware scan: %s", line)
-    except Exception as exc:
-        log.warning("Startup hardware scan failed before main-window initialization: %s", exc, exc_info=True)
-        payload["hardware_diagnostics"] = {"unavailable_reason": str(exc)}
+    def status(title: str, detail: str) -> None:
+        if status_callback is not None:
+            status_callback(title, detail)
+
+    def scan_renderer_capabilities() -> list[dict]:
+        status("Checking renderer backends", "Scanning native renderer capability exports...")
+        log.info("Startup renderer scan beginning before Qt main-window initialization.")
+        try:
+            caps = renderer_capabilities_snapshot()
+            for entry in caps:
+                state = "available" if entry.available else f"unavailable: {entry.reason or 'no reason reported'}"
+                log.info("Startup renderer scan: %s is %s.", entry.name, state)
+            status("Renderer backends ready", f"{len(caps)} renderer capability records collected.")
+            return [entry.to_dict() for entry in caps]
+        except Exception as exc:
+            log.warning("Startup renderer scan failed before main-window initialization: %s", exc, exc_info=True)
+            status("Renderer scan failed", "GhostRigger will open with fallback renderer capability data.")
+            return []
+
+    def scan_hardware_diagnostics() -> dict:
+        status("Checking graphics hardware", "Collecting GPU and viewport timing diagnostics...")
+        log.info("Startup hardware scan beginning before Qt main-window initialization.")
+        try:
+            hardware = collect_hardware_diagnostics(
+                renderer_diagnostics={
+                    "backend_id": renderer_settings.backend.value,
+                    "name": renderer_settings.backend.value,
+                },
+                target_fps=renderer_settings.target_fps,
+            )
+            for line in hardware.lines():
+                log.info("Startup hardware scan: %s", line)
+            status("Graphics hardware ready", "Startup hardware diagnostics collected.")
+            return hardware.to_dict()
+        except Exception as exc:
+            log.warning("Startup hardware scan failed before main-window initialization: %s", exc, exc_info=True)
+            status("Graphics hardware scan failed", "GhostRigger will open with hardware diagnostics marked unavailable.")
+            return {"unavailable_reason": str(exc)}
+
+    with ThreadPoolExecutor(max_workers=2, thread_name_prefix="GRStartupDiagnostics") as executor:
+        renderer_future = executor.submit(scan_renderer_capabilities)
+        hardware_future = executor.submit(scan_hardware_diagnostics)
+        payload["renderer_capabilities"] = renderer_future.result()
+        payload["hardware_diagnostics"] = hardware_future.result()
     return payload

@@ -217,6 +217,7 @@ Thumbs.db
 !src/gui/icons/*.png
 !src/gui/icons/branded_controls/*.png
 !src/gui/icons/gpu_branding/*.png
+!native/GhostRigger.Native.Core.Host/RuntimePayload/src/gui/icons/locomotion_disc.png
 !tests/golden/screens/*.png
 
 # ── Spreadsheets / audit scripts (inessential) ──────────────────────────────

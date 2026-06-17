@@ -205,7 +205,7 @@ ViewportNavigationProfile normalize_viewport_navigation_profile(std::string_view
     if (key == "maya") {
         return ViewportNavigationProfile::Maya;
     }
-    return ViewportNavigationProfile::Maya;
+    return ViewportNavigationProfile::ThreeDsMax;
 }
 
 const char* viewport_navigation_profile_to_string(ViewportNavigationProfile profile) noexcept {
@@ -215,7 +215,7 @@ const char* viewport_navigation_profile_to_string(ViewportNavigationProfile prof
     case ViewportNavigationProfile::Blender:
         return "blender";
     case ViewportNavigationProfile::Maya:
-        return "maya";
+        return "3dsmax";
     default:
         return "maya";
     }
@@ -228,7 +228,7 @@ const char* viewport_navigation_profile_label(ViewportNavigationProfile profile)
     case ViewportNavigationProfile::Blender:
         return "Blender";
     case ViewportNavigationProfile::Maya:
-        return "Maya";
+        return "3ds Max";
     default:
         return "Maya";
     }
@@ -241,7 +241,7 @@ const char* viewport_navigation_profile_summary(ViewportNavigationProfile profil
     case ViewportNavigationProfile::Blender:
         return "MMB orbit, Shift+MMB pan, Ctrl+MMB zoom, mouse wheel zoom";
     case ViewportNavigationProfile::Maya:
-        return "Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, mouse wheel zoom";
+        return "Alt+MMB orbit, MMB pan, Alt+RMB zoom, mouse wheel zoom";
     default:
         return "Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, mouse wheel zoom";
     }
@@ -249,7 +249,7 @@ const char* viewport_navigation_profile_summary(ViewportNavigationProfile profil
 
 const char* viewport_navigation_profiles_json() noexcept {
     static constexpr const char* kJson =
-        R"({"default":"maya","profiles":[)"
+        R"({"default":"3dsmax","profiles":[)"
         R"({"key":"3dsmax","label":"3ds Max","summary":"Alt+MMB orbit, MMB pan, Alt+RMB zoom, mouse wheel zoom"},)"
         R"({"key":"blender","label":"Blender","summary":"MMB orbit, Shift+MMB pan, Ctrl+MMB zoom, mouse wheel zoom"},)"
         R"({"key":"maya","label":"Maya","summary":"Alt+LMB orbit, Alt+MMB pan, Alt+RMB zoom, mouse wheel zoom"}]})";

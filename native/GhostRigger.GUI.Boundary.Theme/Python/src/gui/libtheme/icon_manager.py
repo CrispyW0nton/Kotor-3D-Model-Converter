@@ -27,6 +27,9 @@ _QTA_MAP = {
     "scene": "fa5s.layer-group",
     "lights": "fa5s.lightbulb",
     "cameras": "fa5s.camera",
+    "mesh_tools": "fa5s.draw-polygon",
+    "output_log": "fa5s.stream",
+    "python_terminal": "fa5s.terminal",
 }
 
 

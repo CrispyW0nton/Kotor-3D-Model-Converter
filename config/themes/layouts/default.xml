@@ -5,34 +5,34 @@
         <toolbar id="viewport" visible="true" buttonMode="textBesideIcon" iconSize="16" height="34"/>
     </toolbars>
     <panels>
-        <panel id="contentBrowser" region="left" visible="true" minWidth="280" preferredWidth="430" minHeight="280" preferredHeight="470"/>
-        <panel id="scene" region="left" visible="true" minWidth="240" preferredWidth="320" minHeight="180" preferredHeight="230"/>
-        <panel id="library" region="left" visible="true" minWidth="280" preferredWidth="390"/>
-        <panel id="modules" region="left" visible="true" minWidth="280" preferredWidth="390"/>
-        <panel id="properties" region="right" visible="true" minWidth="300" preferredWidth="390"/>
-        <panel id="animationLibrary" region="right" visible="true" minWidth="300" preferredWidth="390"/>
-        <panel id="meshTools" region="farRight" visible="true" minWidth="260" preferredWidth="380"/>
-        <panel id="nodes" region="left" visible="true" minWidth="260" preferredWidth="360"/>
+        <panel id="contentBrowser" region="left" visible="false" minWidth="300" preferredWidth="470" minHeight="280" preferredHeight="470"/>
+        <panel id="scene" region="left" visible="false" minWidth="240" preferredWidth="320" minHeight="150" preferredHeight="185"/>
+        <panel id="library" region="left" visible="false" minWidth="280" preferredWidth="390"/>
+        <panel id="modules" region="left" visible="false" minWidth="280" preferredWidth="390"/>
+        <panel id="properties" region="right" visible="false" minWidth="300" preferredWidth="390"/>
+        <panel id="animationLibrary" region="right" visible="false" minWidth="300" preferredWidth="390"/>
+        <panel id="meshTools" region="farRight" visible="false" minWidth="260" preferredWidth="380"/>
+        <panel id="nodes" region="left" visible="false" minWidth="260" preferredWidth="360"/>
         <panel id="lighting" region="right" visible="false" minWidth="320" preferredWidth="420"/>
         <panel id="cameras" region="right" visible="false" minWidth="340" preferredWidth="440"/>
         <panel id="moduleMeshes" region="right" visible="false" minWidth="360" preferredWidth="560"/>
         <panel id="spriteMaterials" region="right" visible="false" minWidth="360" preferredWidth="520"/>
-        <panel id="adjustPivot" region="right" visible="true" minWidth="260" preferredWidth="320"/>
+        <panel id="adjustPivot" region="right" visible="false" minWidth="260" preferredWidth="320"/>
         <panel id="2das" region="left" visible="false" minWidth="420" preferredWidth="720"/>
         <panel id="resources" region="left" visible="false" minWidth="420" preferredWidth="720"/>
-        <panel id="outputLog" region="bottom" visible="true" minHeight="130" preferredHeight="220"/>
-        <panel id="pythonTerminal" region="bottom" visible="true" minHeight="130" preferredHeight="220"/>
+        <panel id="outputLog" region="bottom" visible="false" minHeight="130" preferredHeight="220"/>
+        <panel id="pythonTerminal" region="bottom" visible="false" minHeight="130" preferredHeight="220"/>
     </panels>
     <dockLayout>
-        <group id="libraryProperties" area="left" mode="vertical" visible="true" active="content_browser">
+        <group id="libraryProperties" area="left" mode="vertical" visible="false" active="content_browser">
             <dock id="scene"/>
             <dock id="content_browser"/>
         </group>
-        <group id="inspector" area="right" mode="tabbed" visible="true" active="properties">
+        <group id="inspector" area="right" mode="tabbed" visible="false" active="properties">
             <dock id="properties"/>
             <dock id="animations"/>
         </group>
-        <group id="meshTools" area="right" mode="tabbed" visible="true" active="mesh_tools">
+        <group id="meshTools" area="right" mode="tabbed" visible="false" active="mesh_tools">
             <dock id="mesh_tools"/>
             <dock id="adjust_pivot"/>
         </group>
@@ -44,6 +44,10 @@
         <group id="lightingCameras" area="right" mode="tabbed" visible="false" active="lighting">
             <dock id="lighting"/>
             <dock id="cameras"/>
+        </group>
+        <group id="outputWorkspace" area="bottom" mode="horizontal" visible="false" active="output_log">
+            <dock id="output_log"/>
+            <dock id="python_terminal"/>
         </group>
     </dockLayout>
     <viewport>

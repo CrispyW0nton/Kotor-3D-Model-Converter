@@ -6,37 +6,37 @@
     "originals_remain_in_src": true,
     "files": [
         {
-            "resource_name": "PYTHON_PAYLOAD_0001",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_INIT",
             "source_path": "src/adapters/qt_viewport/__init__.py",
             "packaged_path": "Python/src/adapters/qt_viewport/__init__.py",
             "sha256": "7a1133c47f53bca0fc1f936a842abf06cab54772baece20fe756134e1cf48e7a"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0002",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_CAMERA_GIZMO_RENDERER",
             "source_path": "src/adapters/qt_viewport/camera_gizmo_renderer.py",
             "packaged_path": "Python/src/adapters/qt_viewport/camera_gizmo_renderer.py",
             "sha256": "1b4c871e0c7c8132cabcd93255e05c5fe23d334954a9fdd06782495e80f63a7b"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0003",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_CAMERA_OVERLAYS",
             "source_path": "src/adapters/qt_viewport/camera_overlays.py",
             "packaged_path": "Python/src/adapters/qt_viewport/camera_overlays.py",
             "sha256": "537e85a8fedd27efa6e443a6e56c8d3802c627012c5eefbeb8e26bd242aa5730"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0004",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_FRAME_RENDERER",
             "source_path": "src/adapters/qt_viewport/frame_renderer.py",
             "packaged_path": "Python/src/adapters/qt_viewport/frame_renderer.py",
             "sha256": "5117f4cafd3bf64a521ea2b11ea9bb5855129a125a2cdc253c8033fc1d72994d"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0005",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_LIGHTING_VIEWPORT_CONTROLLER",
             "source_path": "src/adapters/qt_viewport/lighting_viewport_controller.py",
             "packaged_path": "Python/src/adapters/qt_viewport/lighting_viewport_controller.py",
             "sha256": "53994138db661fe802e1b04226a8e5b4961d1a386242aaa8aca6ba8f968b3093"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0006",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_STILL_FRAME_RENDERER",
             "source_path": "src/adapters/qt_viewport/still_frame_renderer.py",
             "packaged_path": "Python/src/adapters/qt_viewport/still_frame_renderer.py",
             "sha256": "c2a4be2e31dfb72a709c223dc03f840c7821b0b98fc6963f73a00f4c95b15334"

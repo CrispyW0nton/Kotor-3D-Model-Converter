@@ -12,6 +12,7 @@ from src.core.lighting.light_model import GhostRiggerLight
 
 from .kmax_scene import KMaxScene
 from .kmax_serializer import KMaxSerializer
+from .node_identity import classify_scene_model
 from .scene_object import PivotData, Transform
 from .scene_object_instance import SceneObjectInstance
 from .scene_resource_ref import SceneResourceRef
@@ -74,8 +75,19 @@ class KMaxSceneManager:
             source_ref=resource_ref,
             transform=transform_obj,
         )
+        instance.metadata["scene_import_id"] = object_id
         if runtime_model is not None:
             instance.metadata["_runtime_model"] = runtime_model
+            identity = classify_scene_model(runtime_model, resource_ref)
+            instance.metadata["asset_kind"] = identity.asset_kind
+            instance.metadata["animation_kind"] = identity.animation_kind
+            instance.metadata["skeleton_kind"] = identity.skeleton_kind
+            instance.metadata["joint_count"] = len(identity.joint_names)
+            instance.metadata["animated_node_count"] = len(identity.animated_node_names)
+            instance.metadata["dummy_node_count"] = len(identity.dummy_node_names)
+            instance.metadata["joint_names"] = sorted(identity.joint_names)
+            instance.metadata["animated_node_names"] = sorted(identity.animated_node_names)
+            instance.metadata["dummy_node_names"] = sorted(identity.dummy_node_names)
         self.active_scene.objects.append(instance)
         self.active_scene.sync_collections()
         if select:

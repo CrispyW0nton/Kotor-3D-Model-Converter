@@ -11,6 +11,8 @@ class AxisModeControl(QtWidgets.QWidget):
     """Small toolbar widget for choosing the active transform axis mode."""
 
     axisModeChanged = QtCore.Signal(object)
+    TOOLBAR_HEIGHT = 22
+    TOOLBAR_VERTICAL_NUDGE = 0
 
     def __init__(self, parent: QtWidgets.QWidget | None = None, *, compact: bool = False) -> None:
         super().__init__(parent)
@@ -19,13 +21,22 @@ class AxisModeControl(QtWidgets.QWidget):
 
     def _build(self) -> None:
         row = QtWidgets.QHBoxLayout(self)
-        row.setContentsMargins(0, 0, 0, 0)
+        row.setContentsMargins(
+            0,
+            self.TOOLBAR_VERTICAL_NUDGE,
+            0,
+            -self.TOOLBAR_VERTICAL_NUDGE,
+        )
         row.setSpacing(3)
         self.label = QtWidgets.QLabel("Axis" if self._compact else "Reference Coordinate System")
         self.combo = QtWidgets.QComboBox()
+        self.combo.setObjectName("AxisModeComboBox")
         self.combo.setToolTip("Choose the transform reference coordinate system.")
-        self.combo.setFixedHeight(22)
+        self.combo.setFixedHeight(self.TOOLBAR_HEIGHT)
         self.combo.setMinimumWidth(72 if self._compact else 112)
+        self.combo.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        self.setFixedHeight(self.TOOLBAR_HEIGHT)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         for mode in AxisMode:
             self.combo.addItem(mode.label, mode.value)
         self.combo.currentIndexChanged.connect(self._emit_mode)
@@ -60,17 +71,20 @@ class AxisModeControl(QtWidgets.QWidget):
             return
         self.label.setStyleSheet(f"color:{theme.color('text.secondary')};")
         self.combo.setStyleSheet(
-            f"QComboBox {{ background:{theme.color('input.background')}; "
-            f"color:{theme.color('input.text')}; border:1px solid {theme.color('input.border')}; "
-            "padding:2px 18px 2px 7px; }"
-            f"QComboBox:hover {{ border-color:{theme.color('accent.secondary')}; }}"
-            "QComboBox::drop-down { border:0; width:16px; }"
-            f"QComboBox QAbstractItemView {{ background:{theme.color('panel.background')}; "
+            f"QComboBox#AxisModeComboBox {{ background:{theme.color('input.background')}; "
+            f"color:{theme.color('input.text')}; "
+            f"border:1px solid {theme.color('viewportToolbar.border', theme.color('input.border'))}; "
+            "border-radius:2px; min-height:22px; max-height:22px; padding:1px 18px 1px 7px; }"
+            f"QComboBox#AxisModeComboBox:hover {{ border-color:{theme.color('accent.secondary')}; }}"
+            "QComboBox#AxisModeComboBox::drop-down { border:0; width:16px; }"
+            f"QComboBox#AxisModeComboBox QAbstractItemView {{ background:{theme.color('panel.background')}; "
             f"color:{theme.color('text.primary')}; selection-background-color:{theme.color('selection.background')}; }}"
         )
 
     def apply_ghost_layout(self, layout) -> None:
         toolbar = layout.toolbar("viewport")
-        self.combo.setMinimumHeight(max(20, min(toolbar.height - 8, 26)))
+        combo_height = max(20, min(toolbar.height - 10, self.TOOLBAR_HEIGHT))
+        self.combo.setFixedHeight(combo_height)
+        self.setFixedHeight(combo_height)
         if self.layout() is not None:
             self.layout().setSpacing(layout.spacing_value("toolbarSpacing", 3))

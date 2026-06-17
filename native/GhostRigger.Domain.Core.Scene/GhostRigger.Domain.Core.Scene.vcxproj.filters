@@ -86,6 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\core\scene\__init__.py">
       <Filter>Python\src\core\scene</Filter>
     </None>
@@ -111,6 +112,9 @@
       <Filter>Python\src\core\scene</Filter>
     </None>
     <None Include="Python\src\core\scene\module_scene_import.py">
+      <Filter>Python\src\core\scene</Filter>
+    </None>
+    <None Include="Python\src\core\scene\node_identity.py">
       <Filter>Python\src\core\scene</Filter>
     </None>
     <None Include="Python\src\core\scene\scene_manager.py">

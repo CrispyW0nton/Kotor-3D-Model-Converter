@@ -89,6 +89,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\sequence\__init__.py">
       <Filter>Python\src\sequence</Filter>
     </None>

@@ -223,6 +223,19 @@ def test_packaged_layouts_load_and_affect_metrics() -> None:
     assert layouts["profile_clean"].panel("outputLog").visible is True
     assert layouts["profile_clean"].panel("pythonTerminal").visible is True
     assert layouts["profile_clean"].panel("outputLog").preferred_height < layouts["default"].panel("outputLog").preferred_height
+    for panel_id in (
+        "contentBrowser",
+        "scene",
+        "properties",
+        "animationLibrary",
+        "meshTools",
+        "nodes",
+        "adjustPivot",
+        "outputLog",
+        "pythonTerminal",
+    ):
+        assert layouts["default"].panel(panel_id).visible is False
+    assert all(group.visible is False for group in layouts["default"].dock_groups)
     assert layouts["profile_mesh_editing"].panel("nodes").visible is False
     assert layouts["default"].panel("spriteMaterials").visible is False
     assert layouts["profile_mesh_editing"].panel("spriteMaterials").visible is True
@@ -341,7 +354,8 @@ def test_layout_apply_leaves_content_browser_width_user_resizable() -> None:
     window.scene_dock = QtWidgets.QDockWidget("Scene", window)  # type: ignore[attr-defined]
     window.properties_dock = QtWidgets.QDockWidget("Properties", window)  # type: ignore[attr-defined]
     window.properties_dock.setMaximumWidth(510)  # type: ignore[attr-defined]
-    window.log_panel = QtWidgets.QWidget(window)  # type: ignore[attr-defined]
+    window.output_log_dock = QtWidgets.QDockWidget("Output Log", window)  # type: ignore[attr-defined]
+    window.python_terminal_dock = QtWidgets.QDockWidget("Python Terminal", window)  # type: ignore[attr-defined]
 
     LayoutApplier()._apply_panels(layout, window)
 
@@ -610,6 +624,40 @@ def test_collapsible_group_toggle_stays_small_under_theme_and_layout() -> None:
     finally:
         container.deleteLater()
         app.setStyleSheet(old_stylesheet)
+
+
+def test_toolbar_button_mode_override_controls_command_buttons() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtGui, QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    container = QtWidgets.QWidget()
+    layout = QtWidgets.QHBoxLayout(container)
+    action = QtGui.QAction("Open Output Log", container)
+    button = QtWidgets.QToolButton()
+    button.setObjectName("CommandStripButton")
+    button.setText("Log")
+    button.setProperty("_gr_full_text", "Log")
+    pixmap = QtGui.QPixmap(8, 8)
+    pixmap.fill(QtGui.QColor("green"))
+    button.setIcon(QtGui.QIcon(pixmap))
+    button.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+    layout.addWidget(button)
+    try:
+        applier = LayoutApplier()
+        applier.apply_toolbar_button_mode(container, ToolbarLayout(id="main", button_mode="iconOnly", icon_size=18, height=40))
+        assert button.text() == ""
+        assert button.iconSize() == QtCore.QSize(18, 18)
+        applier.apply_toolbar_button_mode(container, ToolbarLayout(id="main", button_mode="textBesideIcon", icon_size=18, height=40))
+        assert button.text() == "Log"
+        assert button.iconSize() == QtCore.QSize(13, 13)
+        assert button.font().pointSize() <= 8
+        assert 34 <= button.minimumWidth() <= 118
+    finally:
+        action.deleteLater()
+        container.deleteLater()
+        app.processEvents()
 
 
 def test_matrix_bar_controls_live_in_theme_editor_not_settings(tmp_path: Path) -> None:

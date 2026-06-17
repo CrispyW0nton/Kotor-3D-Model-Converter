@@ -80,6 +80,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\panels\adjust_pivot_panel.py">
       <Filter>Python\src\gui\panels</Filter>
     </None>

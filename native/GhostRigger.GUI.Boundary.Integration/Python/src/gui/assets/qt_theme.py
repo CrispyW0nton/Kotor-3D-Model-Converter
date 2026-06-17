@@ -28,14 +28,22 @@ class QtOverflowScrollArea(QtWidgets.QScrollArea):
     ) -> None:
         super().__init__(parent)
         self._lock_content_width = bool(lock_content_width)
+        self._base_fixed_height: int | None = None
+        self.horizontalScrollBar().rangeChanged.connect(lambda _minimum, _maximum: self._sync_overflow_height())
+
+    def set_base_fixed_height(self, height: int) -> None:
+        self._base_fixed_height = max(1, int(height))
+        self._sync_overflow_height()
 
     def setWidget(self, widget: QtWidgets.QWidget | None) -> None:  # noqa: N802 - Qt API
         super().setWidget(widget)
         self._sync_content_width()
+        self._sync_overflow_height()
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802 - Qt API
         super().resizeEvent(event)
         self._sync_content_width()
+        self._sync_overflow_height()
 
     def _sync_content_width(self) -> None:
         if not self._lock_content_width:
@@ -46,6 +54,20 @@ class QtOverflowScrollArea(QtWidgets.QScrollArea):
         locked_width = widget.property("_gr_overflow_min_width") or 0
         widget.adjustSize()
         widget.setMinimumWidth(max(int(locked_width), widget.sizeHint().width(), self.viewport().width()))
+        self._sync_overflow_height()
+
+    def _sync_overflow_height(self) -> None:
+        if self._base_fixed_height is None:
+            return
+        show_horizontal_scrollbar = self.horizontalScrollBarPolicy() != QtCore.Qt.ScrollBarAlwaysOff
+        extra = (
+            self.horizontalScrollBar().sizeHint().height()
+            if show_horizontal_scrollbar and self.horizontalScrollBar().maximum() > 0
+            else 0
+        )
+        wanted = self._base_fixed_height + extra
+        if self.minimumHeight() != wanted or self.maximumHeight() != wanted:
+            self.setFixedHeight(wanted)
 
 
 class QtFlowLayout(QtWidgets.QLayout):
@@ -122,7 +144,7 @@ class QtFlowLayout(QtWidgets.QLayout):
             widget = item.widget()
             if widget is not None and not widget.isVisible():
                 continue
-            hint = item.sizeHint()
+            hint = item.sizeHint().expandedTo(item.minimumSize())
             next_width = hint.width() if not row else row_width + self._hspacing + hint.width()
             if row and next_width > max_width:
                 rows.append((row, row_width, line_height))
@@ -136,14 +158,20 @@ class QtFlowLayout(QtWidgets.QLayout):
         if row:
             rows.append((row, row_width, line_height))
 
+        total_height = sum(row_height for _row_items, _row_width, row_height in rows)
+        if rows:
+            total_height += self._vspacing * (len(rows) - 1)
         y = effective.y()
+        if not test_only:
+            y += max(0, (effective.height() - total_height) // 2)
         for row_items, current_width, current_height in rows:
             x = effective.x()
             if self._horizontal_alignment & QtCore.Qt.AlignHCenter:
                 x += max(0, (max_width - current_width) // 2)
             if not test_only:
                 for item, hint in row_items:
-                    item.setGeometry(QtCore.QRect(QtCore.QPoint(x, y), hint))
+                    item_y = y + max(0, (current_height - hint.height()) // 2)
+                    item.setGeometry(QtCore.QRect(QtCore.QPoint(x, item_y), hint))
                     x += hint.width() + self._hspacing
             y += current_height + self._vspacing
         if rows:
@@ -187,18 +215,19 @@ def make_horizontal_overflow_area(
     *,
     height: int | None = None,
     parent: QtWidgets.QWidget | None = None,
+    show_scrollbar: bool = True,
 ) -> QtOverflowScrollArea:
     scroll = QtOverflowScrollArea(parent, lock_content_width=True)
     scroll.setObjectName(object_name)
     scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
     scroll.setWidgetResizable(False)
-    scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+    scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded if show_scrollbar else QtCore.Qt.ScrollBarAlwaysOff)
     scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
     scroll.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
     scroll.setMinimumWidth(0)
     scroll.setStyleSheet("QScrollArea { background: transparent; border: 0; }")
     if height is not None:
-        scroll.setFixedHeight(height)
+        scroll.set_base_fixed_height(height)
     widget.setProperty("_gr_overflow_min_width", max(widget.minimumWidth(), widget.sizeHint().width()))
     widget.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
     widget.adjustSize()

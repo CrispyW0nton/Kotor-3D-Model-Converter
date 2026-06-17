@@ -63,10 +63,16 @@ class WorkspaceDockMixin:
     ) -> QtWidgets.QDockWidget:
         dock = QtDetachableDockWidget(key, title, self)
         dock.setObjectName(f"{key}Dock")
+        minimum_width = max(0, int(widget.minimumWidth()))
         if scroll:
-            dock.setWidget(make_scrollable_panel(widget, f"{key}DockScroll", dock))
+            scroll_widget = make_scrollable_panel(widget, f"{key}DockScroll", dock)
+            if minimum_width > 0:
+                scroll_widget.setMinimumWidth(minimum_width)
+            dock.setWidget(scroll_widget)
         else:
             dock.setWidget(widget)
+        if minimum_width > 0:
+            dock.setMinimumWidth(minimum_width)
         dock.setAllowedAreas(self._workspace_dock_areas())
         dock.setFeatures(
             QtWidgets.QDockWidget.DockWidgetClosable
@@ -357,7 +363,7 @@ class WorkspaceDockMixin:
     def _default_dock_area_for_key(self, key: str):
         if key in {"content_browser", "scene", "nodes", "2das", "resources"}:
             return QtCore.Qt.LeftDockWidgetArea
-        if key in {"output_log", "sequence_editor"}:
+        if key in {"output_log", "python_terminal", "sequence_editor"}:
             return QtCore.Qt.BottomDockWidgetArea
         return QtCore.Qt.RightDockWidgetArea
 
@@ -466,6 +472,8 @@ class WorkspaceDockMixin:
             "sprite_materials": "spriteMaterials",
             "mesh_tools": "meshTools",
             "adjust_pivot": "adjustPivot",
+            "output_log": "outputLog",
+            "python_terminal": "pythonTerminal",
             "2das": "2das",
             "resources": "resources",
             "diagnostics": "diagnostics",
@@ -551,6 +559,10 @@ class WorkspaceDockMixin:
             except Exception:
                 pass
         if visible:
+            widget = dock.widget()
+            apply_theme = getattr(self, "_apply_theme_to_visible_panel", None)
+            if callable(apply_theme):
+                apply_theme(widget)
             return
         self._remember_detachable_panel_state(key, dock)
         if dock.isFloating():

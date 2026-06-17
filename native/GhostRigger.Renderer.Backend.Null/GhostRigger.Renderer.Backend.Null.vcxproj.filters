@@ -62,6 +62,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\adapters\rendering\null_renderer.py">
       <Filter>Python\src\adapters\rendering</Filter>
     </None>

@@ -1046,6 +1046,43 @@ class ViewportPickingHoverMixin:
         self.meshHovered.emit(mesh_node)
         self._request_render(fast=True, reason=reason, overlay=True, selection=True)
 
+    def _refresh_viewport_hover_at(self, x: int, y: int, *, reason: str = "viewport hover refreshed") -> None:
+        if not self.mesh_hover_enabled:
+            self._clear_viewport_hover(reason="mesh hover disabled")
+            return
+        if self._mesh_hover_suppressed_for_animation():
+            self._clear_viewport_hover(reason="animation hover suppressed")
+            return
+        if self.model is None:
+            self._clear_viewport_hover(reason="mesh hover model cleared")
+            return
+        if self._measurement_mode:
+            return
+        mode = str(getattr(self, "_viewport_selection_mode", "object") or "object").lower()
+        node = None
+        face_bounds = None
+        if mode == "helpers":
+            node = self._helper_hit_test(int(x), int(y))
+        elif mode == "lights":
+            node = self._light_hit_test(int(x), int(y))
+        elif mode == "cameras":
+            node = self._camera_hit_test(int(x), int(y))
+        elif mode == "mesh":
+            hit = self._mesh_hit_test_detail(int(x), int(y), allow_gpu=False)
+            node = hit[0] if hit is not None else None
+            face_bounds = hit[1] if hit is not None else None
+        else:
+            hit = self._mesh_hit_test_detail(int(x), int(y), allow_gpu=False)
+            if hit is not None:
+                node, face_bounds = hit
+            else:
+                node = (
+                    self._camera_hit_test(int(x), int(y))
+                    or self._light_hit_test(int(x), int(y))
+                    or self._helper_hit_test(int(x), int(y))
+                )
+        self._set_viewport_hover(node, face_bounds, reason=reason)
+
     def _update_mesh_hover(self, event) -> None:
         def clear_hover(reason: str) -> None:
             clear_viewport_hover = getattr(self, "_clear_viewport_hover", None)

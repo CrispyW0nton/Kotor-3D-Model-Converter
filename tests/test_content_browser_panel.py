@@ -1574,26 +1574,32 @@ def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
     )
 
 
-def test_startup_renderer_and_hardware_scans_log_before_main_window_not_splash() -> None:
-    import inspect
-
-    from src.gui.qt_lib.windows import qt_main_window
-    from src.gui.qt_lib.windows.qt_main_window import _collect_prewindow_startup_diagnostics
-
-    run_source = inspect.getsource(qt_main_window.run)
-    diagnostics_source = inspect.getsource(_collect_prewindow_startup_diagnostics)
+def test_startup_renderer_and_hardware_scans_stream_through_splash() -> None:
+    run_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/app_runner.py"
+    ).read_text(encoding="utf-8")
+    diagnostics_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/startup_library.py"
+    ).read_text(encoding="utf-8")
 
     assert "Scanning renderers" not in run_source
     assert "Scanning hardware" not in run_source
-    assert "startup_diagnostics = _collect_prewindow_startup_diagnostics(settings_data)" in run_source
-    assert "splash = QtStartupSplash" in run_source
+    assert "splash = splash_cls(root, theme_manager=startup_theme_manager)" in run_source
+    assert "queue_prelaunch_status" in run_source
+    assert "collect_startup_diagnostics(settings_data, queue_prelaunch_status)" in run_source
+    assert "build_prelaunch_library_input(root, startup_input, queue_prelaunch_status)" in run_source
+    assert "splash.append_log_line(line)" in run_source
     assert "win.show()" in run_source
-    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("splash = QtStartupSplash")
-    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("win = QtGhostRiggerMainWindow")
+    assert run_source.index("splash = splash_cls") < run_source.index("collect_startup_diagnostics(settings_data, queue_prelaunch_status)")
+    assert run_source.index("collect_startup_diagnostics(settings_data, queue_prelaunch_status)") < run_source.index("win = window_cls")
     assert "renderer_capabilities_snapshot()" in diagnostics_source
     assert "collect_hardware_diagnostics(" in diagnostics_source
     assert "Startup renderer scan" in diagnostics_source
     assert "before Qt main-window initialization" in diagnostics_source
+    assert 'status("Checking renderer backends"' in diagnostics_source
+    assert 'status("Checking graphics hardware"' in diagnostics_source
 
 
 def test_startup_windows_use_primary_screen_not_cursor_screen() -> None:

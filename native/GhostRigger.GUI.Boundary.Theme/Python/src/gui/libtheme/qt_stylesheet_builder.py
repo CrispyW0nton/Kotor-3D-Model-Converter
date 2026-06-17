@@ -348,15 +348,14 @@ class QtStylesheetBuilder:
             color: {c('button.text')};
             border: 1px solid {c('viewportToolbar.border', c('panel.border'))};
             border-radius: {min(radius, 2)}px;
-            padding: 1px;
+            padding: 1px 5px;
+            font-size: {max(7, default_font.size - 1)}pt;
             min-height: {max(20, m('button.height', 20))}px;
             max-height: {max(20, m('button.height', 20))}px;
             min-width: {max(28, m('button.height', 20) + 8)}px;
-            max-width: {max(28, m('button.height', 20) + 8)}px;
         }}
         QFrame#CommandBar QToolButton#CommandStripMenuButton {{
             min-width: {max(32, m('button.height', 20) + 12)}px;
-            max-width: {max(32, m('button.height', 20) + 12)}px;
         }}
         QFrame#CommandBar QToolButton#CommandStripButton:hover,
         QFrame#CommandBar QToolButton#CommandStripMenuButton:hover {{

@@ -22,6 +22,30 @@ from ..geometry.model_data import (
     Animation, AnimEvent, ModelNode, KotorModel,
     _quat_mul, _quat_rotate, _quat_normalize_bind
 )
+try:
+    from ..scene.node_identity import classify_scene_model, classify_scene_node
+except Exception:  # pragma: no cover - animation must import before scene package assembly
+    def classify_scene_model(model, resource_ref=None):  # type: ignore[no-redef]
+        class _Identity:
+            asset_kind = "model"
+            animation_kind = "skeletal" if bool(getattr(model, "animations", None)) else "static"
+            skeleton_kind = "none"
+            joint_names = frozenset()
+            animated_node_names = frozenset()
+            dummy_node_names = frozenset()
+        return _Identity()
+
+    def classify_scene_node(node, identity=None) -> str:  # type: ignore[no-redef]
+        try:
+            if bool(getattr(node, "is_skin", False)):
+                return "skin_mesh"
+            if bool(getattr(node, "is_mesh", False)):
+                return "mesh"
+            if bool(getattr(node, "is_dummy", False)):
+                return "dummy"
+        except Exception:
+            pass
+        return str(getattr(node, "type_label", "") or "node")
 
 log = logging.getLogger(__name__)
 
@@ -690,9 +714,19 @@ class AnimationEngine:
         self._time    = 0.0
         # Build lookup: name → base-pose node
         self._base_nodes: Dict[str, ModelNode] = {}
+        self._scene_identity = classify_scene_model(model)
+        self._node_kinds_by_name: Dict[str, str] = {}
+        self._node_scene_keys_by_name: Dict[str, str] = {}
         if model.root_node:
             for n in model.all_nodes():
-                self._base_nodes[n.name.lower()] = n
+                name_key = n.name.lower()
+                self._base_nodes[name_key] = n
+                self._node_kinds_by_name[name_key] = str(
+                    getattr(n, "_gr_scene_node_kind", "") or classify_scene_node(n, self._scene_identity)
+                )
+                self._node_scene_keys_by_name[name_key] = str(
+                    getattr(n, "_gr_scene_node_key", "") or name_key
+                )
         # Cross-fade transition blending state
         self._blend_from_pose: Optional[AnimPose] = None
         self._blend_t:         float = 0.0   # blend fraction [0.0 → 1.0]
@@ -718,6 +752,66 @@ class AnimationEngine:
         self._current_anim_scale: float = 1.0
 
     # ── Playback control ────────────────────────────────────────────────────
+
+    def node_kind(self, node_name: str) -> str:
+        """Return the detected scene/animation role for an authored node name."""
+        return self._node_kinds_by_name.get(str(node_name or "").lower(), "node")
+
+    def is_joint_node(self, node_name: str) -> bool:
+        """Return True when *node_name* is detected as a skeleton joint."""
+        return self.node_kind(node_name) == "joint"
+
+    def is_animated_node(self, node_name: str) -> bool:
+        """Return True for authored nodes that receive animation controllers."""
+        key = str(node_name or "").lower()
+        if key in getattr(self._scene_identity, "animated_node_names", frozenset()):
+            return True
+        return self.node_kind(node_name) in {"animated_node", "animated_dummy"}
+
+    def is_dummy_node(self, node_name: str) -> bool:
+        """Return True for dummy helper nodes, including animated dummies."""
+        return self.node_kind(node_name) in {"dummy", "animated_dummy"}
+
+    def node_scene_key(self, node_name: str) -> str:
+        """Return the import-qualified node key when the model belongs to a KMAX scene."""
+        name_key = str(node_name or "").lower()
+        return self._node_scene_keys_by_name.get(name_key, name_key)
+
+    @property
+    def scene_identity(self):
+        return self._scene_identity
+
+    @property
+    def asset_kind(self) -> str:
+        return str(getattr(self._scene_identity, "asset_kind", "model"))
+
+    @property
+    def animation_kind(self) -> str:
+        return str(getattr(self._scene_identity, "animation_kind", "static"))
+
+    @property
+    def skeleton_kind(self) -> str:
+        return str(getattr(self._scene_identity, "skeleton_kind", "none"))
+
+    @property
+    def joint_names(self) -> frozenset[str]:
+        return frozenset(getattr(self._scene_identity, "joint_names", frozenset()))
+
+    @property
+    def animated_node_names(self) -> frozenset[str]:
+        return frozenset(getattr(self._scene_identity, "animated_node_names", frozenset()))
+
+    @property
+    def dummy_node_names(self) -> frozenset[str]:
+        return frozenset(getattr(self._scene_identity, "dummy_node_names", frozenset()))
+
+    @property
+    def is_skeletal_animation(self) -> bool:
+        return self.animation_kind.startswith("skeletal")
+
+    @property
+    def is_rigid_animation(self) -> bool:
+        return self.animation_kind == "rigid"
 
     @property
     def current_animation(self) -> Optional[Animation]:

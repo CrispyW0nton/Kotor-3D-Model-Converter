@@ -65,6 +65,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\ipc\__init__.py">
       <Filter>Python\src\ipc</Filter>
     </None>

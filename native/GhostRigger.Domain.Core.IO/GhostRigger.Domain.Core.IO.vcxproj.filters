@@ -68,6 +68,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\io\__init__.py">
       <Filter>Python\src\io</Filter>
     </None>

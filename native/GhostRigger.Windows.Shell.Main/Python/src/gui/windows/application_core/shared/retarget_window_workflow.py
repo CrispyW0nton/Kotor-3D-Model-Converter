@@ -6,7 +6,7 @@ import importlib
 from pathlib import Path
 
 try:
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
@@ -17,14 +17,58 @@ from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditor
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import combo_current_retarget_mode
-from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 
 
 class RetargetWindowWorkflowMixin:
     """Standalone retarget workbench, Unreal animator, sequence editor, and content-browser routing."""
 
-    def _open_animation_retarget_window(self):
+    def _ensure_animation_retarget_window(self):
         window = getattr(self, "animation_retarget_window", None)
+        if window is not None:
+            return window
+        from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
+
+        window = QtAnimationRetargetWindow(self)
+        window.set_navigation_profile(
+            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+        )
+        window.sourceCurrentRequested.connect(self._retarget_set_source_current)
+        window.targetCurrentRequested.connect(self._retarget_set_target_current)
+        window.sourceLibraryRequested.connect(lambda: self._retarget_select_library_model("source"))
+        window.targetLibraryRequested.connect(lambda: self._retarget_select_library_model("target"))
+        window.sourceGameLibraryRequested.connect(lambda row: self._send_library_row_to_retarget(row, "source"))
+        window.targetGameLibraryRequested.connect(lambda row: self._send_library_row_to_retarget(row, "target"))
+        window.sourceExternalImportRequested.connect(lambda: self._retarget_import_external_model("source"))
+        window.targetExternalImportRequested.connect(lambda: self._retarget_import_external_model("target"))
+        window.previewRequested.connect(self._retarget_workbench_preview_from_window)
+        window.sourceAnimationPlayRequested.connect(self._retarget_workbench_play_source_animation_from_window)
+        window.sourceAnimationTimeChanged.connect(self._retarget_workbench_sync_target_time_from_source)
+        window.applyRequested.connect(self._retarget_workbench_apply_from_window)
+        window.pauseRequested.connect(self._retarget_pause)
+        window.stopRequested.connect(self._retarget_stop)
+        self.animation_retarget_window = window
+        self.animation_retarget_panel = window
+        self._retarget_workbench_controls_connected = False
+        self._connect_retarget_workbench_window_controls()
+        return window
+
+    def _ensure_unreal_animator_window(self):
+        window = getattr(self, "unreal_animator_window", None)
+        if window is not None:
+            return window
+        from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
+
+        window = QtUnrealAnimatorWindow(self)
+        window.set_navigation_profile(
+            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
+        )
+        window.sourceLoadRequested.connect(self._unreal_load_supermodel)
+        window.reloadCodeRequested.connect(self._reload_unreal_animator_window)
+        self.unreal_animator_window = window
+        return window
+
+    def _open_animation_retarget_window(self):
+        window = self._ensure_animation_retarget_window()
         if window is None:
             self._not_migrated("Animation Retargeting Workbench")
             return
@@ -387,7 +431,7 @@ class RetargetWindowWorkflowMixin:
         else:
             self.statusBar().showMessage(f"Retarget preview exported: {result.mdl_path}")
     def _open_unreal_animator_window(self):
-        window = getattr(self, "unreal_animator_window", None)
+        window = self._ensure_unreal_animator_window()
         if window is None:
             self._not_migrated("Unreal Animator")
             return
@@ -414,17 +458,38 @@ class RetargetWindowWorkflowMixin:
         window.show()
         window.raise_()
         window.activateWindow()
-    def _show_sequence_editor_dock(self):
+    def _ensure_sequence_editor_dock(self):
         dock = getattr(self, "sequence_editor_dock", None)
         editor = getattr(self, "sequence_editor_docked_window", None)
+        if dock is not None and editor is not None:
+            return dock, editor
+        editor = SequenceEditorWindow(
+            self,
+            getattr(self, "viewport", None),
+            self.app_root,
+            self,
+            docked=True,
+        )
+        editor.setWindowFlags(QtCore.Qt.Widget)
+        editor.menuBar().setVisible(False)
+        dock = self._create_detachable_panel(
+            "sequence_editor",
+            "Sequence Editor",
+            editor,
+            QtCore.Qt.BottomDockWidgetArea,
+            scroll=False,
+        )
+        self.sequence_editor_docked_window = editor
+        self.sequence_editor_dock = dock
+        return dock, editor
+    def _show_sequence_editor_dock(self):
+        dock, editor = self._ensure_sequence_editor_dock()
         if dock is None or editor is None:
             self._not_migrated("Sequence Editor")
             return
         editor.set_docked_preview(True, getattr(self, "viewport", None))
         self._show_workspace_dock("sequence_editor")
     def _reload_unreal_animator_window(self) -> None:
-        global QtUnrealAnimatorWindow
-
         old_window = getattr(self, "unreal_animator_window", None)
         visible = bool(old_window is not None and old_window.isVisible())
         geometry = old_window.saveGeometry() if old_window is not None else None
@@ -559,7 +624,7 @@ class RetargetWindowWorkflowMixin:
         model, game = self._load_resource_model_for_retarget(row)
         if model is None:
             return
-        window = getattr(self, "animation_retarget_window", None)
+        window = self._ensure_animation_retarget_window()
         if window is None:
             return
         window.set_texture_dir(self._texture_dir)

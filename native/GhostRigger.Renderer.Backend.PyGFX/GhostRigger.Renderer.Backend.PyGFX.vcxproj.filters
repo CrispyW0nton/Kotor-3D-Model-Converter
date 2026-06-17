@@ -89,6 +89,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\adapters\rendering\pygfx_renderer_exports.py">
       <Filter>Python\src\adapters\rendering</Filter>
     </None>

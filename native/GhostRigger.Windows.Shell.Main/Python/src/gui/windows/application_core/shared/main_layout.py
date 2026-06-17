@@ -15,7 +15,7 @@ from src.gui.qt_lib.panels.qt_camera_panel import QtCameraPanel
 from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
 from src.gui.qt_lib.panels.qt_diagnostics_panel import QtDiagnosticsPanel
 from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
-from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel
+from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtPythonTerminalPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
@@ -29,10 +29,7 @@ from src.gui.qt_lib.viewports.qt_viewport import QtMainViewportWidget
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter, RetargetPreviewUiController
-from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import RetargetWorkbenchController
-from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
-from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
 
 
@@ -67,11 +64,6 @@ class MainWindowLayoutMixin:
         root.setContentsMargins(3, 0, 3, 3)
         root.setSpacing(0)
         self.setCentralWidget(central)
-
-        vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
-        vertical_splitter.setChildrenCollapsible(False)
-        vertical_splitter.setHandleWidth(8)
-        self.vertical_splitter = vertical_splitter
 
         self.content_browser_panel = QtContentBrowserPanel(self)
         self.library_panel = self.content_browser_panel
@@ -134,47 +126,7 @@ class MainWindowLayoutMixin:
         self.body_attachment_panel.saveBuildRequested.connect(self._handle_bas_save_build_requested)
         self.body_attachment_panel.modeChanged.connect(self._handle_bas_mode_changed)
         self.animation_library_panel = self.content_browser_panel
-        self.animation_retarget_window = QtAnimationRetargetWindow(self)
-        self.animation_retarget_window.set_navigation_profile(
-            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
-        )
-        self.animation_retarget_window.sourceCurrentRequested.connect(self._retarget_set_source_current)
-        self.animation_retarget_window.targetCurrentRequested.connect(self._retarget_set_target_current)
-        self.animation_retarget_window.sourceLibraryRequested.connect(
-            lambda: self._retarget_select_library_model("source")
-        )
-        self.animation_retarget_window.targetLibraryRequested.connect(
-            lambda: self._retarget_select_library_model("target")
-        )
-        self.animation_retarget_window.sourceGameLibraryRequested.connect(
-            lambda row: self._send_library_row_to_retarget(row, "source")
-        )
-        self.animation_retarget_window.targetGameLibraryRequested.connect(
-            lambda row: self._send_library_row_to_retarget(row, "target")
-        )
-        self.animation_retarget_window.sourceExternalImportRequested.connect(
-            lambda: self._retarget_import_external_model("source")
-        )
-        self.animation_retarget_window.targetExternalImportRequested.connect(
-            lambda: self._retarget_import_external_model("target")
-        )
-        self.animation_retarget_window.previewRequested.connect(self._retarget_workbench_preview_from_window)
-        self.animation_retarget_window.sourceAnimationPlayRequested.connect(
-            self._retarget_workbench_play_source_animation_from_window
-        )
-        self.animation_retarget_window.sourceAnimationTimeChanged.connect(
-            self._retarget_workbench_sync_target_time_from_source
-        )
-        self.animation_retarget_window.applyRequested.connect(self._retarget_workbench_apply_from_window)
-        self.animation_retarget_window.pauseRequested.connect(self._retarget_pause)
-        self.animation_retarget_window.stopRequested.connect(self._retarget_stop)
-        self.animation_retarget_panel = self.animation_retarget_window
-        self.unreal_animator_window = QtUnrealAnimatorWindow(self)
-        self.unreal_animator_window.set_navigation_profile(
-            self.settings_data.get("viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE)
-        )
-        self.unreal_animator_window.sourceLoadRequested.connect(self._unreal_load_supermodel)
-        self.unreal_animator_window.reloadCodeRequested.connect(self._reload_unreal_animator_window)
+        self._retarget_workbench_controls_connected = False
         self._unreal_source_row: Optional[dict] = None
         self._unreal_source_game = ""
         self.twoda_panel = QtTwoDaBrowserPanel(self)
@@ -202,6 +154,8 @@ class MainWindowLayoutMixin:
             "sprite_materials": (560, 680),
             "mesh_tools": (420, 760),
             "adjust_pivot": (320, 420),
+            "output_log": (760, 320),
+            "python_terminal": (760, 320),
             "2das": (980, 640),
             "resources": (980, 640),
             "sequence_editor": (1180, 720),
@@ -249,6 +203,24 @@ class MainWindowLayoutMixin:
         self._create_detachable_panel("sprite_materials", "Sprite Materials", self.sprite_materials_panel, QtCore.Qt.RightDockWidgetArea)
         self.mesh_tools_dock = self._create_detachable_panel("mesh_tools", "Mesh Tools", self.mesh_tools_panel, QtCore.Qt.RightDockWidgetArea)
         self.adjust_pivot_dock = self._create_detachable_panel("adjust_pivot", "Adjust Pivot", self.adjust_pivot_panel, QtCore.Qt.RightDockWidgetArea)
+        self.log_panel = QtLogPanel(self)
+        self.log_panel.setMinimumHeight(96)
+        self.output_log_dock = self._create_detachable_panel(
+            "output_log",
+            "Output Log",
+            self.log_panel,
+            QtCore.Qt.BottomDockWidgetArea,
+            scroll=False,
+        )
+        self.python_terminal_panel = QtPythonTerminalPanel(self)
+        self.python_terminal_panel.setMinimumHeight(96)
+        self.python_terminal_dock = self._create_detachable_panel(
+            "python_terminal",
+            "Python Terminal",
+            self.python_terminal_panel,
+            QtCore.Qt.BottomDockWidgetArea,
+            scroll=False,
+        )
         self._create_detachable_panel("2das", "2DA Browser", self.twoda_panel, QtCore.Qt.LeftDockWidgetArea)
         self._create_detachable_panel("resources", "Resource Browser", self.resource_panel, QtCore.Qt.LeftDockWidgetArea)
         self.diagnostics_dock = self._create_detachable_panel(
@@ -258,8 +230,6 @@ class MainWindowLayoutMixin:
             QtCore.Qt.RightDockWidgetArea,
             scroll=False,
         )
-        for dock in (self.content_browser_dock, self.scene_dock, self.properties_dock):
-            dock.show()
         self._stack_content_browser_under_scene()
 
         self.viewport = QtMainViewportWidget(self)
@@ -275,27 +245,10 @@ class MainWindowLayoutMixin:
         self.adjust_pivot_panel.pivotModeChanged.connect(self._set_pivot_edit_mode)
         self.adjust_pivot_panel.pivotActionRequested.connect(self._apply_pivot_action)
         self.mesh_tools_panel.set_viewport(self.viewport)
-        self.mesh_tools_dock.show()
-        if bool(self.settings_data.get("show_adjust_pivot_toolbox", True)):
+        if bool(self.settings_data.get("show_adjust_pivot_toolbox", False)):
             self.adjust_pivot_dock.show()
         self.viewport.setMinimumWidth(420)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.sequence_editor_docked_window = SequenceEditorWindow(
-            self,
-            self.viewport,
-            self.app_root,
-            self,
-            docked=True,
-        )
-        self.sequence_editor_docked_window.setWindowFlags(QtCore.Qt.Widget)
-        self.sequence_editor_docked_window.menuBar().setVisible(False)
-        self.sequence_editor_dock = self._create_detachable_panel(
-            "sequence_editor",
-            "Sequence Editor",
-            self.sequence_editor_docked_window,
-            QtCore.Qt.BottomDockWidgetArea,
-            scroll=False,
-        )
         self.viewport_label = self.viewport.canvas
         self.skeleton_panel.nodeSelected.connect(self._on_skeleton_node_selected)
         self.viewport.nodeSelected.connect(self.properties_panel.show_node)
@@ -376,17 +329,10 @@ class MainWindowLayoutMixin:
         if viewport_toolbar_band is not None:
             self.reserved_top_layout.addWidget(viewport_toolbar_band)
             QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
-        vertical_splitter.addWidget(self.viewport)
-
-        self.log_panel = QtLogPanel(self)
-        self.log_panel.setMinimumHeight(96)
+        root.addWidget(self.viewport, 1)
         self._install_gui_log_handler()
         self._configure_python_terminal_context()
-        vertical_splitter.addWidget(self.log_panel)
-        vertical_splitter.setStretchFactor(0, 1)
-        vertical_splitter.setStretchFactor(1, 0)
-        vertical_splitter.setSizes([720, 240])
-        root.addWidget(vertical_splitter, 1)
+        self.splitDockWidget(self.output_log_dock, self.python_terminal_dock, QtCore.Qt.Horizontal)
 
         # Compatibility placeholders for the already-migrated loading helpers.
         self.k1_dir_edit = QtWidgets.QLineEdit(str(self.settings_data.get("k1_dir") or ""))

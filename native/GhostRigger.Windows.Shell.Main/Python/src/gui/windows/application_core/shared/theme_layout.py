@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import os
+import time
 from pathlib import Path
 
 try:
@@ -17,6 +20,7 @@ from src.gui.libtheme.theme_watcher import ThemeLayoutWatcher
 C = dict(LEGACY_MATRIX_COLORS)
 _GUI_DIR = Path(__file__).resolve().parents[3]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+log = logging.getLogger(__name__)
 
 
 class ThemeLayoutMixin:
@@ -169,15 +173,14 @@ class ThemeLayoutMixin:
                 color: {C['text']};
                 border: 1px solid {C['border']};
                 border-radius: 2px;
-                padding: 1px;
+                padding: 1px 5px;
+                font-size: 8pt;
                 min-height: 20px;
                 max-height: 20px;
                 min-width: 28px;
-                max-width: 28px;
             }}
             QFrame#CommandBar QToolButton#CommandStripMenuButton {{
                 min-width: 32px;
-                max-width: 32px;
             }}
             QFrame#CommandBar QToolButton#CommandStripButton:hover,
             QFrame#CommandBar QToolButton#CommandStripMenuButton:hover {{
@@ -239,20 +242,21 @@ class ThemeLayoutMixin:
             toolbar_band.setStyleSheet(
                 f"QFrame#ViewportToolbarBand {{ background:{theme.color('viewportToolbar.background', theme.color('toolbar.background'))}; "
                 f"border:1px solid {theme.color('viewportToolbar.border', theme.color('toolbar.border'))}; }}"
-            )
+        )
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_ghost_theme"):
-            viewport.apply_ghost_theme(theme)
+            self._profile_theme_hook("viewport", viewport.apply_ghost_theme, theme)
         for widget in self.findChildren(QtWidgets.QWidget):
-            if widget is viewport:
+            if self._defer_startup_theme_hook(widget, primary_widget=viewport):
                 continue
             hook = getattr(widget, "apply_ghost_theme", None)
             if callable(hook):
-                hook(theme)
+                self._profile_theme_hook(widget.__class__.__name__, hook, theme)
 
     def apply_native_theme(self) -> None:
         for widget in self.findChildren(QtWidgets.QWidget):
-            widget.setStyleSheet("")
+            if not self._defer_startup_theme_hook(widget):
+                widget.setStyleSheet("")
         theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
         self.setStyleSheet(
             f"""
@@ -268,7 +272,7 @@ class ThemeLayoutMixin:
         )
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "apply_native_theme"):
-            viewport.apply_native_theme()
+            self._profile_theme_hook("viewport native", viewport.apply_native_theme)
         for panel in (getattr(self, "header_bar", None),):
             if panel is not None:
                 self._apply_matrix_bar_config(panel, theme)
@@ -278,15 +282,66 @@ class ThemeLayoutMixin:
                     panel._background = palette_color
                 panel.update()
         for widget in self.findChildren(QtWidgets.QWidget):
+            if self._defer_startup_theme_hook(widget, primary_widget=viewport):
+                continue
             hook = getattr(widget, "apply_native_theme", None)
             if callable(hook):
-                hook()
+                self._profile_theme_hook(f"{widget.__class__.__name__} native", hook)
+
+    def _defer_startup_theme_hook(self, widget, *, primary_widget=None) -> bool:
+        """Skip expensive theme hooks for widget trees already handled or hidden at launch."""
+
+        if widget is None:
+            return True
+        if primary_widget is not None and (
+            widget is primary_widget
+            or primary_widget.isAncestorOf(widget)
+        ):
+            return True
+        for dock in getattr(self, "_detachable_panels", {}).values():
+            if dock is None or dock.isVisible():
+                continue
+            if widget is dock or dock.isAncestorOf(widget):
+                return True
+        return False
+
+    def _apply_theme_to_visible_panel(self, root_widget) -> None:
+        """Apply deferred theme hooks when a hidden dock panel is first shown."""
+
+        if root_widget is None or not hasattr(self, "theme_manager"):
+            return
+        theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+        native = theme is not None and getattr(theme, "is_native", lambda: False)()
+        widgets = [root_widget, *root_widget.findChildren(QtWidgets.QWidget)]
+        for widget in widgets:
+            if widget is None:
+                continue
+            hook = getattr(widget, "apply_native_theme" if native else "apply_ghost_theme", None)
+            if callable(hook):
+                if native:
+                    self._profile_theme_hook(widget.__class__.__name__, hook)
+                else:
+                    self._profile_theme_hook(widget.__class__.__name__, hook, theme)
+
+    @staticmethod
+    def _theme_hook_profile_enabled() -> bool:
+        return str(os.environ.get("GHOSTRIGGER_THEME_PROFILE", "")).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _profile_theme_hook(self, label: str, hook, *args) -> None:
+        if not self._theme_hook_profile_enabled():
+            hook(*args)
+            return
+        started = time.perf_counter()
+        hook(*args)
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        if elapsed_ms >= 5.0:
+            log.info("Theme hook %s: %.1f ms", label, elapsed_ms)
 
     def _on_theme_changed(self, theme) -> None:
         update_legacy_palette(theme)
-        self._sync_theme_layout_settings()
-        self._refresh_theme_sensitive_icons()
-        self._apply_progress_toast_theme()
+        self._profile_theme_hook("main window sync theme/layout settings", self._sync_theme_layout_settings)
+        self._profile_theme_hook("main window refresh theme icons", self._refresh_theme_sensitive_icons)
+        self._profile_theme_hook("main window progress toast theme", self._apply_progress_toast_theme)
 
     def _on_layout_changed(self, layout) -> None:
         self._sync_theme_layout_settings()
@@ -367,6 +422,9 @@ class ThemeLayoutMixin:
             ("sequence", getattr(self, "sequence_editor_action", None)),
             ("lights", getattr(self, "lighting_panel_action", None)),
             ("cameras", getattr(self, "camera_panel_action", None)),
+            ("mesh_tools", getattr(self, "mesh_tools_panel_action", None)),
+            ("output_log", getattr(self, "output_log_panel_action", None)),
+            ("python_terminal", getattr(self, "python_terminal_panel_action", None)),
         ):
             if action is not None:
                 action.setIcon(self._icon(name))

@@ -67,9 +67,13 @@ class QtLightingPanel(QtWidgets.QWidget):
         "unreal_preview": qt_icon_manager.I.LIGHTING_RIG_UNREAL,
         "max_style_preview": qt_icon_manager.I.LIGHTING_RIG_MAX,
     }
+    _MIN_PANEL_WIDTH = 320
+    _SELECTED_LIGHT_EDITOR_WIDTH = 430
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
+        self.setMinimumWidth(self._MIN_PANEL_WIDTH)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.manager = LightManager()
         self._model = None
         self._lights: list[object] = []
@@ -92,12 +96,14 @@ class QtLightingPanel(QtWidgets.QWidget):
 
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
+        root.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(7)
 
         create_group = QtWidgets.QGroupBox("Add Light to Scene")
         create_group.setObjectName("AddLightToSceneGroup")
         create_row = QtWidgets.QGridLayout(create_group)
+        create_row.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         create_row.setContentsMargins(6, 8, 6, 6)
         create_row.setHorizontalSpacing(4)
         create_row.setVerticalSpacing(4)
@@ -112,11 +118,13 @@ class QtLightingPanel(QtWidgets.QWidget):
             button.setToolTip(f"Create {label} light")
             button.clicked.connect(lambda _checked=False, t=light_type: self.createLightRequested.emit(t))
             create_row.addWidget(button, 0, column)
+            create_row.setColumnStretch(column, 1)
         root.addWidget(create_group)
 
         lighting_group = QtWidgets.QGroupBox("Lighting System")
         lighting_group.setObjectName("LightingSystemGroup")
         lighting_grid = QtWidgets.QGridLayout(lighting_group)
+        lighting_grid.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         lighting_grid.setContentsMargins(6, 8, 6, 6)
         lighting_grid.setHorizontalSpacing(5)
         lighting_grid.setVerticalSpacing(5)
@@ -175,6 +183,7 @@ class QtLightingPanel(QtWidgets.QWidget):
 
         maps = CollapsibleGroupBox("Preview")
         maps_layout = QtWidgets.QGridLayout(maps)
+        maps_layout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         maps_layout.setContentsMargins(8, 8, 8, 8)
         maps_layout.setHorizontalSpacing(10)
         maps_layout.setVerticalSpacing(4)
@@ -218,6 +227,10 @@ class QtLightingPanel(QtWidgets.QWidget):
         root.addLayout(bake_row)
 
         self.tree = QtWidgets.QTreeWidget()
+        self.tree.setMinimumWidth(0)
+        self.tree.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.tree.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        self.tree.setHorizontalScrollMode(QtWidgets.QAbstractItemView.ScrollPerPixel)
         self.tree.setHeaderLabels(list(self._COLUMNS))
         self.tree.setRootIsDecorated(False)
         self.tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
@@ -234,10 +247,17 @@ class QtLightingPanel(QtWidgets.QWidget):
         root.addWidget(self.tree, 1)
 
         editor = CollapsibleGroupBox("Selected Light")
+        editor.setObjectName("SelectedLightEditor")
+        editor.setMinimumWidth(self._SELECTED_LIGHT_EDITOR_WIDTH)
+        editor.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         editor_layout = QtWidgets.QGridLayout(editor)
+        editor_layout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
         editor_layout.setContentsMargins(8, 8, 8, 8)
         editor_layout.setHorizontalSpacing(6)
         editor_layout.setVerticalSpacing(5)
+        editor_layout.setColumnStretch(1, 1)
+        editor_layout.setColumnStretch(3, 1)
+        editor_layout.setColumnStretch(5, 1)
         flags_row = QtWidgets.QHBoxLayout()
         flags_row.setSpacing(8)
         self.enabled_check = QtWidgets.QCheckBox("Enabled")
@@ -252,18 +272,22 @@ class QtLightingPanel(QtWidgets.QWidget):
         flags_row.addStretch(1)
         editor_layout.addLayout(flags_row, 0, 0, 1, 6)
         self.name_edit = QtWidgets.QLineEdit()
+        self.name_edit.setMinimumWidth(0)
+        self.name_edit.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.name_edit.editingFinished.connect(self._apply_editor)
         editor_layout.addWidget(QtWidgets.QLabel("Name"), 1, 0)
         editor_layout.addWidget(self.name_edit, 1, 1)
         self.type_combo = QtWidgets.QComboBox()
+        self.type_combo.setMinimumWidth(0)
+        self.type_combo.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.type_combo.addItems(self._TYPE_LABELS)
         self.type_combo.currentIndexChanged.connect(lambda _index=0: self._apply_editor())
-        self.type_combo.setMaximumWidth(150)
         editor_layout.addWidget(QtWidgets.QLabel("Type"), 1, 2)
         editor_layout.addWidget(self.type_combo, 1, 3)
         self.color_button = QtWidgets.QPushButton()
         self.color_button.setFixedHeight(20)
-        self.color_button.setMaximumWidth(86)
+        self.color_button.setMinimumWidth(0)
+        self.color_button.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.color_button.clicked.connect(self._choose_color)
         editor_layout.addWidget(QtWidgets.QLabel("Color"), 1, 4)
         editor_layout.addWidget(self.color_button, 1, 5)
@@ -272,7 +296,8 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.cone_spin = self._double_spin(1.0, 179.0, 1.0, 1)
         self.area_spin = self._double_spin(0.0, 100.0, 0.1, 2)
         for spin in (self.radius_spin, self.intensity_spin, self.cone_spin, self.area_spin):
-            spin.setMaximumWidth(90)
+            spin.setMinimumWidth(0)
+            spin.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         for column, (label, spin) in enumerate((
             ("Radius", self.radius_spin),
             ("Intensity", self.intensity_spin),
@@ -296,12 +321,38 @@ class QtLightingPanel(QtWidgets.QWidget):
         self.pos_spins: list[QtWidgets.QDoubleSpinBox] = []
         self.rot_spins: list[QtWidgets.QDoubleSpinBox] = []
         self.group_edit = QtWidgets.QLineEdit()
+        self.group_edit.setMinimumWidth(0)
+        self.group_edit.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.group_edit.editingFinished.connect(self._apply_group_name)
         editor_layout.addWidget(QtWidgets.QLabel("Group"), 4, 0)
         editor_layout.addWidget(self.group_edit, 4, 1, 1, 5)
-        root.addWidget(editor)
+        editor_scroll = QtWidgets.QScrollArea()
+        editor_scroll.setObjectName("SelectedLightEditorScroll")
+        editor_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        editor_scroll.setWidgetResizable(False)
+        editor_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        editor_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        editor_scroll.setMinimumWidth(0)
+        editor_scroll.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        editor.adjustSize()
+        editor_scroll.setMinimumHeight(
+            editor.sizeHint().height() + editor_scroll.horizontalScrollBar().sizeHint().height() + 2
+        )
+        editor_scroll.setWidget(editor)
+        self.selected_light_editor = editor
+        self.selected_light_scroll = editor_scroll
+        root.addWidget(editor_scroll)
 
+        self._make_children_shrinkable()
         self._set_editor_enabled(False)
+
+    def minimumSizeHint(self) -> QtCore.QSize:
+        hint = super().minimumSizeHint()
+        return QtCore.QSize(self._MIN_PANEL_WIDTH, hint.height())
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        self.setMinimumWidth(self._MIN_PANEL_WIDTH)
 
     def apply_ghost_theme(self, theme) -> None:
         self.setStyleSheet(
@@ -337,6 +388,25 @@ class QtLightingPanel(QtWidgets.QWidget):
         ]
         for widget in widgets:
             widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
+            widget.setMinimumWidth(0)
+            widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.setMinimumWidth(self._MIN_PANEL_WIDTH)
+        editor = getattr(self, "selected_light_editor", None)
+        if editor is not None:
+            editor.setMinimumWidth(self._SELECTED_LIGHT_EDITOR_WIDTH)
+        scroll = getattr(self, "selected_light_scroll", None)
+        if scroll is not None and editor is not None:
+            scroll.setMinimumHeight(
+                editor.sizeHint().height() + scroll.horizontalScrollBar().sizeHint().height() + 2
+            )
+
+    def _make_children_shrinkable(self) -> None:
+        for label in self.findChildren(QtWidgets.QLabel):
+            label.setMinimumWidth(0)
+            label.setWordWrap(True)
+        for widget_type in (QtWidgets.QComboBox, QtWidgets.QDoubleSpinBox, QtWidgets.QLineEdit, QtWidgets.QPushButton):
+            for widget in self.findChildren(widget_type):
+                widget.setMinimumWidth(0)
 
     def _double_spin(self, minimum: float, maximum: float, step: float, decimals: int) -> QtWidgets.QDoubleSpinBox:
         spin = QtWidgets.QDoubleSpinBox()

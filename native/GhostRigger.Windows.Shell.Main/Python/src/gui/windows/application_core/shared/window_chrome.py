@@ -230,6 +230,24 @@ class WindowChromeMixin:
             "module_meshes",
             lambda: self._show_workspace_dock("module_meshes"),
         )
+        self.mesh_tools_panel_action = QtGui.QAction(self._icon("mesh_tools"), "Open Mesh Tools", self)
+        self._configure_dock_toggle_action(
+            self.mesh_tools_panel_action,
+            "mesh_tools",
+            lambda: self._show_workspace_dock("mesh_tools"),
+        )
+        self.output_log_panel_action = QtGui.QAction(self._icon("output_log"), "Open Output Log", self)
+        self._configure_dock_toggle_action(
+            self.output_log_panel_action,
+            "output_log",
+            lambda: self._show_workspace_dock("output_log"),
+        )
+        self.python_terminal_panel_action = QtGui.QAction(self._icon("python_terminal"), "Open Python Terminal", self)
+        self._configure_dock_toggle_action(
+            self.python_terminal_panel_action,
+            "python_terminal",
+            lambda: self._show_workspace_dock("python_terminal"),
+        )
         self.sprite_materials_panel_action = QtGui.QAction(self._icon("sprite_materials"), "Open Sprite Materials", self)
         self._configure_dock_toggle_action(
             self.sprite_materials_panel_action,
@@ -372,10 +390,13 @@ class WindowChromeMixin:
         modules_menu.addAction(self.lighting_panel_action)
         modules_menu.addAction(self.camera_panel_action)
         modules_menu.addAction(self.module_meshes_panel_action)
+        modules_menu.addAction(self.mesh_tools_panel_action)
         modules_menu.addAction(self.sprite_materials_panel_action)
         modules_menu.addAction(self.adjust_pivot_panel_action)
         modules_menu.addAction(self.twoda_panel_action)
         modules_menu.addAction(self.resources_panel_action)
+        modules_menu.addAction(self.output_log_panel_action)
+        modules_menu.addAction(self.python_terminal_panel_action)
         modules_menu.addSeparator()
         modules_menu.addAction(self.port_model_action)
         modules_menu.addAction(self.generate_module_action)
@@ -589,10 +610,13 @@ class WindowChromeMixin:
         layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))
         layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action, "module_meshes", compact=True))
+        layout.addWidget(self._tool_button("Mesh Tools", self.mesh_tools_panel_action, "mesh_tools", compact=True))
         layout.addWidget(self._tool_button("Sprite Materials", self.sprite_materials_panel_action, "sprite_materials", compact=True))
         layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action, "viewport_gimbal", compact=True))
         layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action, "twoda", compact=True))
         layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, "resources", compact=True))
+        layout.addWidget(self._tool_button("Log", self.output_log_panel_action, "output_log", compact=True))
+        layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action, "python_terminal", compact=True))
         layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action, "diag", compact=True))
 
         self.visual_profile_combo = QtWidgets.QComboBox()
@@ -613,13 +637,15 @@ class WindowChromeMixin:
         combo.blockSignals(True)
         try:
             combo.clear()
+            default_layout = self.layout_manager.get_layout("default")
+            combo.addItem(default_layout.name or "Default", "default")
             for layout in self.layout_manager.available_layouts():
                 if layout.id == "default":
                     continue
                 combo.addItem(layout.name, layout.id)
             selected = self.layout_manager.settings.selected_layout
             index = combo.findData(selected)
-            combo.setCurrentIndex(max(index, 0))
+            combo.setCurrentIndex(index if index >= 0 else 0)
         finally:
             combo.blockSignals(False)
 
@@ -770,8 +796,9 @@ class WindowChromeMixin:
     ) -> QtWidgets.QToolButton:
         button = QtWidgets.QToolButton()
         button.setObjectName("CommandStripButton")
-        button.setText(text)
-        button.setProperty("_gr_full_text", text)
+        display_text = self._command_button_label(text, action)
+        button.setText("")
+        button.setProperty("_gr_full_text", display_text)
         button.setProperty("_gr_ignore_layout_button_mode", True)
         if icon_name:
             button.setIcon(self._icon(icon_name, 18))
@@ -792,6 +819,16 @@ class WindowChromeMixin:
             button.setToolTip(action.text())
         return button
 
+    @staticmethod
+    def _command_button_label(text: str, action: QtGui.QAction) -> str:
+        label = str(text or action.text()).strip()
+        if "  " in label:
+            label = label.split("  ", 1)[0].strip()
+        shortcut = action.shortcut().toString() if action.shortcut() else ""
+        if shortcut and label.endswith(shortcut):
+            label = label[: -len(shortcut)].strip()
+        return label or str(action.text()).strip()
+
     def _menu_button(
         self,
         text: str,
@@ -800,7 +837,7 @@ class WindowChromeMixin:
     ) -> QtWidgets.QToolButton:
         button = QtWidgets.QToolButton()
         button.setObjectName("CommandStripMenuButton")
-        button.setText(text)
+        button.setText("")
         button.setProperty("_gr_full_text", text)
         button.setProperty("_gr_ignore_layout_button_mode", True)
         button.setIcon(self._icon(icon_name, 18))

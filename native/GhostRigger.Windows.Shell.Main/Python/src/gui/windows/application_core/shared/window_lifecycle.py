@@ -99,6 +99,7 @@ class WindowLifecycleMixin:
     def _save_settings_data(self, values: dict):
         values = dict(values or {})
         restart_after_save = bool(values.pop("__restart_after_save", False))
+        values["viewport_navigation_profile"] = "3dsmax"
         old_dirs = (
             self.k1_dir_edit.text().strip() if hasattr(self, "k1_dir_edit") else "",
             self.k2_dir_edit.text().strip() if hasattr(self, "k2_dir_edit") else "",

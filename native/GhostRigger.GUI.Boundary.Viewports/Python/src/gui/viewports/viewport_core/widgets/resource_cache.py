@@ -21,6 +21,7 @@ class ViewportResourceCacheMixin:
             getattr(node, "_gr_scene_object_root", False)
         )
         if scene_transform_only:
+            affected_nodes = [node]
             stack = list(getattr(node, "children", []) or [])
             visited = set()
             while stack:
@@ -29,6 +30,7 @@ class ViewportResourceCacheMixin:
                 if cid in visited:
                     continue
                 visited.add(cid)
+                affected_nodes.append(child)
                 self._renderer._wt_cache.pop(cid, None)
                 stack.extend(getattr(child, "children", []) or [])
             if self._gpu_renderer is not None:
@@ -39,7 +41,8 @@ class ViewportResourceCacheMixin:
                     except TypeError:
                         invalidate("scene object transform changed")
                 else:
-                    self._gpu_renderer.invalidate_node(node)
+                    for affected in affected_nodes:
+                        self._gpu_renderer.invalidate_node(affected)
             return
         if self._gpu_renderer is not None:
             self._gpu_renderer.invalidate_node(node)

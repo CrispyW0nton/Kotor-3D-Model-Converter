@@ -141,7 +141,12 @@ class ResourceLoadingMixin:
         resref = str(row.get("resref") or "")
         game = str(row.get("game") or "")
         if resref:
-            self._start_resource_load(resref, game, import_action="clear")
+            scene_objects = []
+            try:
+                scene_objects = list(self.scene_manager.get_scene_objects())
+            except Exception:
+                scene_objects = []
+            self._start_resource_load(resref, game, import_action="add" if scene_objects else "clear")
     def _add_content_browser_model_to_current_scene(self, row: dict) -> None:
         resref = str(row.get("resref") or "")
         game = str(row.get("game") or "")

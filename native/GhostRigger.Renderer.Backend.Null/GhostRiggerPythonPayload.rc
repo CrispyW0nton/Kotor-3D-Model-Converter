@@ -1,6 +1,6 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "Python/src/adapters/rendering/null_renderer.py"
-PYTHON_PAYLOAD_0002 RCDATA "Python/src/gui/rendering/null_renderer.py"
-PYTHON_PAYLOAD_0003 RCDATA "Python/src/core/rendering/renderer_capabilities.py"
-PYTHON_PAYLOAD_0004 RCDATA "Python/src/core/rendering/renderer_interface.py"
+PYTHON_PAYLOAD_ADAPTERS_RENDERING_NULL_RENDERER RCDATA "Python/src/adapters/rendering/null_renderer.py"
+PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_CAPABILITIES RCDATA "Python/src/core/rendering/renderer_capabilities.py"
+PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_INTERFACE RCDATA "Python/src/core/rendering/renderer_interface.py"
+PYTHON_PAYLOAD_GUI_RENDERING_NULL_RENDERER RCDATA "Python/src/gui/rendering/null_renderer.py"

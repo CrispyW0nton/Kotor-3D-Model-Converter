@@ -62,6 +62,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\dialogs\__init__.py">
       <Filter>Python\src\gui\dialogs</Filter>
     </None>

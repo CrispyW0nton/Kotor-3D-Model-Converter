@@ -440,6 +440,9 @@ class ViewportToolsMixin:
             "texture": "toggle_texture",
             "textures": "toggle_texture",
             "bones": "toggle_bones",
+            "locomotion": "toggle_locomotion_discs",
+            "locomotion_disc": "toggle_locomotion_discs",
+            "locomotion_discs": "toggle_locomotion_discs",
         }
         toggle = toggles.get(key)
         if toggle:
@@ -449,6 +452,13 @@ class ViewportToolsMixin:
                 method(None if value is None else bool(value))
                 state = "toggle" if value is None else ("on" if bool(value) else "off")
                 self._log(f"IPC viewport_command {key}: {state}", "info")
+                return True
+        if key in {"locomotion_size", "locomotion_disc_size", "disc_size"}:
+            size = payload.get("size", payload.get("value", None))
+            setter = getattr(viewport, "set_locomotion_disc_size", None)
+            if callable(setter) and size is not None:
+                setter(int(size))
+                self._log(f"IPC viewport_command locomotion_disc_size: {int(size)}", "info")
                 return True
         if key in {"lighting", "lighting_mode"}:
             mode = str(payload.get("mode", payload.get("value", "scene")) or "scene")
@@ -677,12 +687,15 @@ class ViewportToolsMixin:
         panel.run_diagnostics(self._current_model)
         self._show_workspace_dock("diagnostics")
     def _configure_python_terminal_context(self) -> None:
-        terminal = getattr(getattr(self, "log_panel", None), "terminal", None)
+        terminal = getattr(self, "python_terminal_panel", None)
+        if terminal is None:
+            terminal = getattr(getattr(self, "log_panel", None), "terminal", None)
         if terminal is None:
             return
         terminal.set_context(
             window=self,
             main_window=self,
+            log_panel=getattr(self, "log_panel", None),
             viewport=lambda: getattr(self, "viewport", None),
             model=self._terminal_model,
             selected_model=self._terminal_model,

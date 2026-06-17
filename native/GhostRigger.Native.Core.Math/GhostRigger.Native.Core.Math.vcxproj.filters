@@ -98,6 +98,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\math\camera_math.py">
       <Filter>Python\src\math</Filter>
     </None>

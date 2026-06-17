@@ -278,6 +278,13 @@ void print_native_log_line(
 void log_native_dependency_audit_to_console(const fs::path& output_dir) {
     std::size_t available_count = 0;
     std::size_t payload_ready_count = 0;
+    std::string audit_payload;
+    auto record_audit_line = [&audit_payload](const std::string& line) {
+        if (!audit_payload.empty()) {
+            audit_payload.push_back('\n');
+        }
+        audit_payload += line;
+    };
     struct Row {
         std::wstring dll_name;
         bool available = false;
@@ -315,14 +322,18 @@ void log_native_dependency_audit_to_console(const fs::path& output_dir) {
 
     const std::size_t dependency_count = ghostrigger::native::core::host::kNativeDependencySpecCount;
     print_native_log_line("INFO", "ghostrigger.native", "============================================================");
+    record_audit_line("INFO  ghostrigger.native  ============================================================");
     print_native_log_line("INFO", "ghostrigger.native", "GhostRigger Native dependency audit");
+    record_audit_line("INFO  ghostrigger.native  GhostRigger Native dependency audit");
     {
         std::ostringstream summary;
         summary << "DLLs loaded: " << available_count << "/" << dependency_count
             << " | Python payload manifests: " << payload_ready_count << "/" << dependency_count;
         print_native_log_line("INFO", "ghostrigger.native", summary.str());
+        record_audit_line("INFO  ghostrigger.native  " + summary.str());
     }
     print_native_log_line("INFO", "ghostrigger.native", "============================================================");
+    record_audit_line("INFO  ghostrigger.native  ============================================================");
 
     for (std::size_t index = 0; index < rows.size(); ++index) {
         const Row& row = rows[index];
@@ -336,12 +347,16 @@ void log_native_dependency_audit_to_console(const fs::path& output_dir) {
         message << "Native DLL dependency " << (index + 1) << "/" << rows.size()
             << " " << state << " " << utf8_from_wstring(row.dll_name);
         print_native_log_line(status_level(row.available, row.payload_ready), "ghostrigger.native", message.str(), status_color(row.available, row.payload_ready));
+        std::string level = status_level(row.available, row.payload_ready);
+        record_audit_line(level + "  ghostrigger.native  " + message.str());
     }
     print_native_log_line("INFO", "ghostrigger.native", "============================================================");
+    record_audit_line("INFO  ghostrigger.native  ============================================================");
+    SetEnvironmentVariableA("GHOSTRIGGER_NATIVE_PREPYTHON_AUDIT", audit_payload.c_str());
 }
 
 void open_log_console() {
-    if (env_disabled(L"GHOSTRIGGER_NATIVE_LOG_CONSOLE")) {
+    if (!env_enabled(L"GHOSTRIGGER_NATIVE_LOG_CONSOLE")) {
         return;
     }
 

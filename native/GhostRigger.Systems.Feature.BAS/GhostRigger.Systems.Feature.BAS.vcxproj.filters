@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\systems\bas\attachment_alignment.py">
       <Filter>Python\src\systems\bas</Filter>
     </None>

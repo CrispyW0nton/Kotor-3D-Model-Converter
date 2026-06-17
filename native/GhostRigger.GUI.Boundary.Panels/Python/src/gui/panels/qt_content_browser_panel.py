@@ -558,7 +558,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.nav_tree = QtWidgets.QTreeWidget()
         self.nav_tree.setHeaderHidden(True)
         self.nav_tree.setObjectName("contentBrowserNavigation")
-        self.nav_tree.setMinimumWidth(72)
+        self.nav_tree.setMinimumWidth(88)
         self.nav_tree.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         self.nav_tree.itemSelectionChanged.connect(self._on_navigation_changed)
 
@@ -580,10 +580,10 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
 
         self.sidebar = QtWidgets.QWidget()
         self.sidebar.setObjectName("contentBrowserSidebar")
-        self.sidebar.setMinimumWidth(96)
+        self.sidebar.setMinimumWidth(112)
         self.sidebar.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         sidebar_layout = QtWidgets.QVBoxLayout(self.sidebar)
-        sidebar_layout.setContentsMargins(0, 0, 0, 0)
+        sidebar_layout.setContentsMargins(3, 3, 3, 3)
         sidebar_layout.setSpacing(5)
         self.sidebar_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.sidebar_splitter.setObjectName("contentBrowserSidebarSplitter")
@@ -591,8 +591,9 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self.sidebar_splitter.setOpaqueResize(True)
         self.sidebar_splitter.addWidget(self.nav_tree)
         self.sidebar_splitter.addWidget(self.details)
-        self.sidebar_splitter.setStretchFactor(0, 2)
-        self.sidebar_splitter.setStretchFactor(1, 3)
+        self.sidebar_splitter.setStretchFactor(0, 3)
+        self.sidebar_splitter.setStretchFactor(1, 2)
+        self.sidebar_splitter.setSizes([320, 180])
         sidebar_layout.addWidget(self.sidebar_splitter, 1)
         self.splitter.addWidget(self.sidebar)
 
@@ -1101,9 +1102,13 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         width = max(1, self.splitter.width())
         if width < 120:
             return
-        sidebar = max(112, min(240, int(width * 0.30)))
+        sidebar = max(136, min(300, int(width * 0.34)))
         center = max(96, width - sidebar)
         self.splitter.setSizes([sidebar, center])
+        height = max(1, self.sidebar_splitter.height())
+        if height >= 120:
+            details = max(96, min(180, int(height * 0.36)))
+            self.sidebar_splitter.setSizes([max(120, height - details), details])
         self._splitter_layout_applied = True
 
     def _rebuild_assets(self) -> None:
@@ -1410,7 +1415,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
     def _set_action_state(self, asset: Optional[ContentAssetDescriptor]) -> None:
         is_animation = asset is not None and asset.asset_type == "Animation"
         has_model_row = asset is not None and asset.asset_type != "Animation" and bool(asset.row.get("resref"))
-        self.primary_button.setText("Preview" if is_animation else "Open")
+        self.primary_button.setText("Preview" if is_animation else "Add")
         self.primary_button.setEnabled(asset is not None)
         self.preview_button.setEnabled(is_animation)
         self.stop_button.setEnabled(True)
@@ -1432,7 +1437,7 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
             return
         row = asset.row
         if row.get("resref"):
-            self.primarySceneLoadRequested.emit(dict(row))
+            self.addToCurrentSceneRequested.emit(dict(row))
 
     def _context_action(
         self,

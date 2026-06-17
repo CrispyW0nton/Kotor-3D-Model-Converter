@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\core\workflow\__init__.py">
       <Filter>Python\src\core\workflow</Filter>
     </None>

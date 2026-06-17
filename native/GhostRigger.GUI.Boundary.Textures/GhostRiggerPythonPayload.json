@@ -6,43 +6,43 @@
     "originals_remain_in_src": true,
     "files": [
         {
-            "resource_name": "PYTHON_PAYLOAD_0001",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_INIT",
             "source_path": "src/gui/textures/__init__.py",
             "packaged_path": "Python/src/gui/textures/__init__.py",
             "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0002",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_QT_TEX_ATLAS",
             "source_path": "src/gui/textures/qt_tex_atlas.py",
             "packaged_path": "Python/src/gui/textures/qt_tex_atlas.py",
             "sha256": "57b52dd887c3a186d92ef12742c4e3becba96086b8ec85949cc0065fb3a65c14"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0003",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_QT_TPC_RENDER_UTILS",
             "source_path": "src/gui/textures/qt_tpc_render_utils.py",
             "packaged_path": "Python/src/gui/textures/qt_tpc_render_utils.py",
             "sha256": "68b34749ee3dd2a118882d266638f2a6d453ae95a6ceb91790789c6887322976"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0004",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TEX_ATLAS",
             "source_path": "src/gui/textures/tex_atlas.py",
             "packaged_path": "Python/src/gui/textures/tex_atlas.py",
             "sha256": "7e0d8f405de44f38d3691087b5d0642ff25e916ae43630ce53ab1cafd1928592"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0005",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TPC",
             "source_path": "src/gui/textures/tpc.py",
             "packaged_path": "Python/src/gui/textures/tpc.py",
             "sha256": "c6beb7545fee4a37f32eb2e07e725e0adea8cdfe4ce3587d17f9906db66dba73"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0006",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TPC_RENDER_UTILS",
             "source_path": "src/gui/textures/tpc_render_utils.py",
             "packaged_path": "Python/src/gui/textures/tpc_render_utils.py",
             "sha256": "ed24624ef1e42954d48e6608d909c63e31fe07a20f52f7ad727c739fe08eb270"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0007",
+            "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TXI",
             "source_path": "src/gui/textures/txi.py",
             "packaged_path": "Python/src/gui/textures/txi.py",
             "sha256": "6544fc9203316f5bef313ac8782f78f4a8ff047dddbf4f7476688308fbd3ea03"

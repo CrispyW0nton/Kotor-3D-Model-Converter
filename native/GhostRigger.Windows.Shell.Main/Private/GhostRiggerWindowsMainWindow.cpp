@@ -1,6 +1,11 @@
 ﻿#include "GhostRiggerPythonPayloadResource.h"
 #include "GhostRiggerWindowsMainWindow.h"
 
+#include <atomic>
+#include <sstream>
+#include <thread>
+#include <vector>
+
 namespace {
 
 constexpr const char* kVersion = "0.1.0";
@@ -23,6 +28,16 @@ constexpr const char* kHostServiceSchema =
     R"("host_module_registered":false,"service_count":0,)"
     R"("visible_shell_mutation_allowed":false,)"
     R"("failure_points":["host_module_missing","python_shell_owner_active","native_shell_disabled","service_registry_empty"]})";
+
+void emit_prelaunch_status(
+    GRWindowsMainPrelaunchStatusCallback status_callback,
+    const char* title,
+    const char* detail
+) {
+    if (status_callback != nullptr) {
+        status_callback(title, detail);
+    }
+}
 
 } // namespace
 
@@ -48,6 +63,57 @@ GR_WINDOWS_MAIN_WINDOW_API const char* gr_windows_main_window_owner_boundary_jso
 
 GR_WINDOWS_MAIN_WINDOW_API const char* gr_windows_main_window_host_service_schema_json() {
     return kHostServiceSchema;
+}
+
+GR_WINDOWS_MAIN_WINDOW_API int gr_windows_main_window_run_prelaunch_tasks(
+    int task_count,
+    GRWindowsMainPrelaunchTaskCallback task_callback,
+    GRWindowsMainPrelaunchStatusCallback status_callback
+) {
+    if (task_callback == nullptr) {
+        emit_prelaunch_status(status_callback, "Native startup threading unavailable", "No pre-launch task callback was provided.");
+        return 1;
+    }
+    if (task_count <= 0) {
+        emit_prelaunch_status(status_callback, "Native startup threading", "No pre-launch work was scheduled.");
+        return 0;
+    }
+
+    const int clamped_task_count = task_count > 8 ? 8 : task_count;
+    std::atomic<int> completed_tasks{0};
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<std::size_t>(clamped_task_count));
+    emit_prelaunch_status(
+        status_callback,
+        "Native startup threading",
+        "Scheduling pre-launch diagnostics and library preparation on C++ worker threads."
+    );
+
+    for (int task_index = 0; task_index < clamped_task_count; ++task_index) {
+        workers.emplace_back([task_index, task_callback, status_callback, &completed_tasks, clamped_task_count]() {
+            {
+                std::ostringstream detail;
+                detail << "C++ worker " << (task_index + 1) << " started.";
+                emit_prelaunch_status(status_callback, "Pre-launch worker started", detail.str().c_str());
+            }
+
+            task_callback(task_index);
+
+            const int finished = ++completed_tasks;
+            std::ostringstream detail;
+            detail << finished << " of " << clamped_task_count << " native pre-launch workers finished.";
+            emit_prelaunch_status(status_callback, "Pre-launch worker finished", detail.str().c_str());
+        });
+    }
+
+    for (std::thread& worker : workers) {
+        if (worker.joinable()) {
+            worker.join();
+        }
+    }
+
+    emit_prelaunch_status(status_callback, "Native startup threading ready", "C++ pre-launch workers completed.");
+    return 0;
 }
 
 }

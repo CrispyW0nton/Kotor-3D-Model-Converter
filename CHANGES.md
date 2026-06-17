@@ -9,6 +9,170 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-17
+
+### [2026-06-17] Native Pre-Launch Threading And Splash Status Routing
+
+Owner: LordVaderCW
+Subsystem: Qt shell startup, native Shell Main pre-launch bridge, and startup splash status reporting
+
+- Added a Shell Main C++ pre-launch worker export that schedules startup jobs on native `std::thread` workers and emits status callbacks.
+- Added a Python native-prelaunch adapter that loads the Shell Main DLL bridge in native-host launches, with a Python worker fallback for source/test runs.
+- Routed C++ worker, renderer diagnostics, hardware diagnostics, and game-library indexing status updates through a GUI-thread queue into the splash screen status/progress text block.
+- Updated the Shell Main payload/project references and focused startup contracts for the native-first pre-launch path.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\app_runner.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\startup_library.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\native_prelaunch.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\application_core_lib.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads tests\test_core_contracts.py::test_prewindow_diagnostics_parallelizes_renderer_and_hardware_scans -q` passed (`2 passed`).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Windows_Shell_Main /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched the rebuilt Debug `GhostRigger.exe` visibly; it stayed alive/responding during startup and was closed by test cleanup.
+
+### [2026-06-17] Viewport Axis Mode Combo Alignment
+
+Owner: LordVaderCW
+Subsystem: Qt viewport toolbar axis-mode control
+
+- Centered the viewport toolbar flow row within the toolbar background so the icon buttons and World/Local/Parent dropdown share even top and bottom padding.
+- Added dedicated Default Droid viewport-toolbar colors plus scoped viewport-toolbar button/dropdown styling so the toolbar background, buttons, and axis-mode selector read as one component.
+- Synced the Default Droid theme copy in the native host runtime payload and regenerated the affected `src.gui` C++ project payload manifests.
+- Added a stable object name for the axis-mode combo and toolbar contract assertions to keep the scoped styling intentional.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\axis_mode_control.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\construction.py native\GhostRigger.GUI.Boundary.Integration\Python\src\gui\assets\qt_theme.py tests\test_core_contracts.py` passed.
+- `PYTHONPATH=native\GhostRigger.GUI.Boundary.Theme\Python python tools\validate_themes.py` parsed all six themes, including `default_droid`; it still reported the pre-existing layout compatibility warnings for `output_log` and `python_terminal` dock ids.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_GUI_Boundary_Panels /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_GUI_Boundary_Viewports /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_GUI_Boundary_Integration /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched the rebuilt Debug `GhostRigger.exe` visibly, applied `theme=default_droid` and `layout=default` through IPC, and captured `.codex_droid_viewport_toolbar_icons_down_0.png` showing the viewport toolbar row inside the Droid toolbar background with the icon glyphs shifted down toward the World selector baseline.
+- `python -m pytest tests\test_core_contracts.py::test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu -q` was attempted but stopped during import because this checkout does not expose the top-level `src` package to pytest.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_GUI_Boundary_Panels /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` was attempted but stopped at link because the running Debug `GhostRigger.exe` process was locking `GhostRigger.GUI.Boundary.Panels.dll`.
+
+### [2026-06-17] Startup Threading And Lazy Workbench Launch
+
+Owner: LordVaderCW
+Subsystem: Qt shell startup, pre-window diagnostics, lazy workbench docks, theme/layout startup timing, and native Shell Main payload
+
+- Overlapped pre-window game-library preparation with renderer/hardware diagnostics on native OS worker threads while keeping Qt widget mutation on the UI thread.
+- Split renderer capability detection and hardware diagnostics into separate startup worker tasks so they run concurrently instead of back-to-back.
+- Deferred construction of the Animation Retargeting, Unreal Animator, and docked Sequence Editor workbenches until their buttons/menu actions are used, removing hidden viewport and renderer-context creation from the default KMAX launch path.
+- Kept deferred hidden-panel theme hooks and added env-gated theme hook profiling so startup hook costs can be measured without changing normal behavior.
+- Updated the Shell Main embedded Python payload manifest for the changed startup/window files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\main_layout.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\retarget_window_workflow.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\startup_library.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\app_runner.py tests\test_core_contracts.py`
+- `python -m pytest tests\test_core_contracts.py::test_startup_theme_apply_defers_hidden_dock_panel_hooks tests\test_core_contracts.py::test_main_window_lazily_creates_heavy_animation_workbenches tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads tests\test_core_contracts.py::test_prewindow_diagnostics_parallelizes_renderer_and_hardware_scans tests\test_core_contracts.py::test_sequence_and_diagnostics_use_detachable_dock_registry -q` passed (`5 passed`).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched the actual Debug `GhostRigger.exe` visibly with `GHOSTRIGGER_THEME_PROFILE=1`; the latest log showed renderer and hardware diagnostics starting together at `10:42:10`, only one default ModernGL context, theme apply reduced to `177.8 ms` total (`hooks/icons 177.0 ms`), and layout apply at `39.3 ms`.
+
+### [2026-06-17] Viewport Locomotion Dialog, Lighting Dock Width, And Scene Transform Cache
+
+Owner: LordVaderCW
+Subsystem: Qt viewport toolbar, Lighting dock panel, KMAX scene object transforms, namespace payload packaging, and native payload manifests
+
+- Moved the locomotion disc size control out of the viewport toolbar and into a small right-click dialog on the locomotion helper button, keeping the toolbar icon-only and leaving the selection-mode control on the same row.
+- Propagated hosted panel minimum widths through detachable dock scroll wrappers so the Lighting toolbox cannot collapse into an unusable clipped strip.
+- Wrapped the selected-light editor in a horizontal/vertical overflow area and kept its controls at a stable internal width so resizing uses scrollbars instead of hiding fields under the dock edge.
+- Invalidated scene-root transform caches across child GPU nodes so moving a scene object updates the textured mesh along with the root/helper selection.
+- Added namespace extension for split `src.gui` and `src.adapters` native payload roots, and added viewport icon fallback lookup into the native runtime icon payload for unpacked/offscreen tests.
+- Updated the Viewports, Panels, Integration, Foundation, and Shell Main embedded Python payload manifests for the changed files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\toolboxes\workspace_docks.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\shared\icons.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\construction.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_lighting_panel.py native\GhostRigger.GUI.Boundary.Integration\Python\src\gui\__init__.py native\GhostRigger.Native.Core.Foundation\Python\src\adapters\__init__.py tests\test_core_contracts.py`
+- `python -m pytest tests\test_core_contracts.py::test_locomotion_disc_overlay_has_size_control_and_ipc_command tests\test_core_contracts.py::test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu tests\test_core_contracts.py::test_qt_lighting_panel_has_min_width_and_selected_light_overflow tests\test_core_contracts.py::test_scene_root_transform_evicts_child_gpu_nodes -q` passed (`4 passed`; pytest cache warning only).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched the actual Debug `GhostRigger.exe` visibly, confirmed the viewport toolbar no longer shows the inline locomotion size field, right-clicked the locomotion helper button and captured `.codex_locomotion_dialog.png` showing the size dialog, loaded `K1:PLC_bed1`, moved it through `/api/scene_object_properties`, and captured `.codex_bed_after_move.png` showing the textured mesh moved with the selected model root.
+- Relaunched the rebuilt Debug `GhostRigger.exe`, opened the Lighting dock through `/api/show_panel`, created a point light through `/api/create_scene_light`, and captured `.codex_lighting_panel_minwidth_final.png` showing the dock at a usable minimum width with selected-light content contained in the panel.
+
+### [2026-06-17] Per-Project Named Python Payload Resources
+
+Owner: LordVaderCW
+Subsystem: Native embedded Python payload manifests, resource scripts, Visual Studio project files, and payload generator tooling
+
+- Added a shared native Python payload generator that derives readable resource names from packaged Python paths, for example `PYTHON_PAYLOAD_CORE_SCENE_NODE_IDENTITY` instead of numbered `PYTHON_PAYLOAD_0001` identifiers.
+- Added a `GeneratePythonPayload.py` wrapper to every native payload project and registered it in each project's `.vcxproj` and `.vcxproj.filters` beside the manifest, RC file, and packaged Python sources.
+- Wired every native payload project to run `GeneratePythonPayload.py` through a `GenerateGhostRiggerPythonPayload` MSBuild target before `PrepareForBuild`, using `GHOSTRIGGER_PYTHON` when present and falling back to `python`.
+- Regenerated all native `GhostRiggerPythonPayload.json` and `GhostRiggerPythonPayload.rc` files from each project's own `Python/src` tree, then refreshed the aggregate native payload manifest.
+- Added payload contract coverage for readable resource names, duplicate prevention, project-local generator presence, and Visual Studio project registration.
+
+Verification:
+- `python -m py_compile scripts\native_python_payload_generator.py tests\test_native_python_payloads.py native\GhostRigger.Domain.Core.Scene\GeneratePythonPayload.py native\GhostRigger.Windows.Shell.Main\GeneratePythonPayload.py`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested tests/test_native_python_payloads.py::test_python_payload_resource_names_are_path_named tests/test_native_python_payloads.py::test_native_projects_include_project_local_payload_generator tests/test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects -q` passed (`5 passed`).
+- `rg "PYTHON_PAYLOAD_[0-9]{4}" native` returned no matches.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed and logged `Generating Python payload for ...` from the MSBuild target before native project output.
+
+### [2026-06-17] Generic Content Browser Add And Scene Object Root Selection
+
+Owner: LordVaderCW
+Subsystem: Content Browser activation, KMAX viewport scene-object selection, hover refresh, and native payload manifests
+
+- Kept Content Browser model activation on the generic add-to-current-scene path for all model rows, so repeated double-click/add operations are not tied to a specific `plc_barrel1` case and do not route through the clear-scene prompt.
+- Added viewport object-hit targeting that promotes scene-tagged mesh/helper picks to their imported scene root in object mode, while preserving direct joint selection for Bones workflows.
+- Added left-button double-click handling so double-clicking an attached dummy/helper or mesh selects the movable imported scene root, letting the root dummy, child nodes, and attached object geometry move together.
+- Cleared stale mesh/helper hover state during gizmo, gimbal, and joint drags, then refreshed hover at release so moved objects do not leave an old hover outline behind.
+- Updated the Panels and Viewports native Python payload manifests for the changed embedded files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_content_browser_panel.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\picking_hover.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\drag_interactions.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\event_navigation.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\selection_mesh.py tests\test_core_contracts.py`
+- `python -m pytest tests\test_core_contracts.py::test_content_browser_activation_adds_generic_model_rows_without_clear_prompt tests\test_core_contracts.py::test_viewport_hover_refreshes_after_transform_drags tests\test_core_contracts.py::test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_root` passed (`3 passed`; pytest cache warning only).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched the actual Debug `GhostRigger.exe`, confirmed `/api/ping`, loaded `K2:plc_barrel2` twice through `/api/library_select` (`clear` then `add`), verified `/api/state` reported `object_count: 2`, `counts.model: 2`, Default layout, and selected `PLC_barrel2_002`, then captured `knowledge_base\test_artifacts\2026-06-17_plc_barrel2_generic_duplicate_root_move_smoke.png`.
+
+### [2026-06-17] Scene Import Identity And Static Placeable Bone Filtering
+
+Owner: LordVaderCW
+Subsystem: KMAX scene identity, animation engine node metadata, viewport skeleton overlays, and content browser import workflow
+
+- Added core scene node identity classification so repeated imports keep unique scene/import IDs while preserving authored MDL node names for animation and skinning.
+- Updated KMAX scene model insertion and viewport scene composites to tag copied runtime nodes with import IDs, source node keys, asset kind, animation kind, skeleton kind, joint/mesh/dummy node kind, and detected joint/animated/dummy authored node names.
+- Changed Content Browser model activation to add a second scene object when a scene already has models, instead of routing the second double-click through a clear-style import.
+- Exposed node kind, import key, asset kind, animation kind, skeleton kind, joint names, animated node names, dummy node names, and skeletal/rigid query helpers through TAE without changing authored-name animation lookup.
+- Filtered static placeables, static meshes, and doors out of the Bones overlay when they have no skeleton evidence, fixing `plc_barrel2` roots being treated like skeleton nodes after duplicate imports.
+- Added the locomotion disc viewport toggle, copied the provided disc asset into the native runtime payload, added a compact size spinbox plus IPC size command, and rotated discs from each key joint's projected local axis.
+- Kept joint borders at 2 px yellow with orange hover borders while Bones view is active.
+- Embedded the new `node_identity.py` scene module in the native Scene payload manifest/resource list so the Debug host starts without missing-module startup errors.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Scene\Python\src\core\scene\node_identity.py native\GhostRigger.Domain.Core.Scene\Python\src\core\scene\kmax_scene_manager.py native\GhostRigger.Domain.Core.Animation\Python\src\core\animation\animation_engine.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_overlays.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\construction.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\viewport_tools.py tests\test_core_contracts.py`
+- `python -m pytest tests\test_core_contracts.py::test_kmax_scene_manager_records_import_identity_and_model_classification tests\test_core_contracts.py::test_animation_engine_exposes_scene_node_kind_and_import_key tests\test_core_contracts.py::test_animation_engine_distinguishes_rigid_animation_from_skeletons tests\test_core_contracts.py::test_content_browser_activation_adds_generic_model_rows_without_clear_prompt tests\test_core_contracts.py::test_locomotion_disc_overlay_has_size_control_and_ipc_command tests\test_core_contracts.py::test_static_placeable_scene_nodes_do_not_enter_viewport_skeleton_overlay tests\test_core_contracts.py::test_skeletal_bone_overlay_records_local_axis_angles_for_locomotion_discs -q` passed (`7 passed`; pytest cache warning only).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+- Launched the actual Debug `GhostRigger.exe` visibly, loaded `K2:plc_barrel2` twice through IPC (`clear` then `add`), verified `/api/state` reported two distinct model objects, toggled Bones on, and captured `knowledge_base\test_artifacts\2026-06-17_plc_barrel2_bones_filtered.png` showing no static-placeable bone line/label between the duplicate barrels.
+- Launched the rebuilt Debug `GhostRigger.exe` visibly, loaded `K2:plc_barrel1` twice, verified `/api/state` reported two distinct model objects, toggled Bones on, and captured `knowledge_base\test_artifacts\2026-06-17_plc_barrel1_duplicate_bones_filtered.png`.
+- Loaded `K1:n_darthmalak`, played `walk`, toggled Bones and locomotion discs on, set disc size to 144 px through IPC, and captured `knowledge_base\test_artifacts\2026-06-17_n_darthmalak_locomotion_discs.png` showing the local-axis-linked locomotion GUI around key skeleton joints.
+
+## 2026-06-16
+
+### [2026-06-16] Default Dock Layout And Tool Panel Separation
+
+Owner: LordVaderCW
+Subsystem: Qt shell layout, panels, viewport navigation, and runtime payload
+
+- Set the viewport navigation default to 3ds Max in the Python and native rendering contract paths, and normalize saved shell settings back to `3dsmax`.
+- Forced startup layout selection to the packaged Default layout and updated checked-in settings/default layout payloads accordingly.
+- Split Output Log and Python Terminal into separate detachable bottom dock panels instead of embedding the terminal inside the log or putting either widget in the viewport splitter.
+- Adjusted Content Browser startup spacing: wider left sidebar, 3 px inner sidebar padding, and a shorter lower details pane by default.
+- Added the missing Mesh Tools command-strip/menu button and `mesh_tools.svg` runtime icon.
+- Hid the redundant Properties-panel Node Transform group and loosened Properties content sizing so text and controls fit within a resized dock.
+- Changed the packaged Default layout to launch with all detachable toolboxes hidden, including Content Browser, Scene, Properties, Output Log, Python Terminal, Mesh Tools, and Adjust Pivot.
+- Added explicit command-strip/menu toggles and fallback SVG icons for Output Log and Python Terminal.
+- Routed command-strip buttons through the theme/layout button-mode override so icon-only, icon+text, and text-only modes work from the Theme Editor setting.
+- Refined command-strip text modes so visible labels omit shortcut fragments, use smaller icons/text, and receive practical text-mode widths instead of cramped icon-button sizing.
+- Set the main command-strip toolbar back to icon-only buttons with full hover text so layout button-mode experiments do not produce clipped top-toolbar labels, and fixed the layout selector so the active packaged Default layout appears as `Default` instead of falling through to `Animation`.
+- Improved Lighting panel shrink/expand behavior by removing hard width constraints, allowing editor labels/inputs to shrink, and keeping the dense light table horizontally scrollable.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\viewport_navigation.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\qt_main_window.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\main_layout.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\toolboxes\workspace_docks.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\viewport_tools.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_lifecycle.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\theme_layout.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_log_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_content_browser_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_properties_panel.py native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\layout_applier.py native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\icon_manager.py tests\test_qt_only_imports.py tests\test_core_contracts.py tests\test_theme_layout_loading.py tests\test_content_browser_panel.py`
+- `python -m pytest tests\test_qt_only_imports.py::test_log_panel_and_python_terminal_are_separate_widgets tests\test_qt_only_imports.py::test_log_panel_handler_surfaces_python_exceptions tests\test_content_browser_panel.py::test_content_browser_stacks_navigation_and_details_in_left_sidebar tests\test_content_browser_panel.py::test_content_browser_docked_layout_can_shrink_without_stealing_viewport tests\test_theme_layout_loading.py::test_layout_apply_leaves_content_browser_width_user_resizable tests\test_core_contracts.py::test_viewport_navigation_profiles_are_available tests\test_core_contracts.py::test_main_window_exposes_module_meshes_as_detachable_dock tests\test_core_contracts.py::test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport tests\test_core_contracts.py::test_sequence_and_diagnostics_use_detachable_dock_registry tests\test_core_contracts.py::test_main_window_bottom_area_uses_detachable_log_and_terminal_docks tests\test_core_contracts.py::test_main_window_exposes_animation_helpers_to_python_terminal -q` passed (`11 passed`).
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\qt_main_window.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\main_layout.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\theme_layout.py native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\icon_manager.py native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\qt_stylesheet_builder.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_lighting_panel.py tests\test_core_contracts.py tests\test_theme_layout_loading.py`
+- `python -m pytest tests\test_theme_layout_loading.py::test_packaged_layouts_load_and_affect_metrics tests\test_theme_layout_loading.py::test_visual_profile_dock_groups_stay_workflow_scoped tests\test_theme_layout_loading.py::test_visual_profile_apply_hides_detachable_docks_outside_profile tests\test_theme_layout_loading.py::test_toolbar_button_mode_override_controls_command_buttons tests\test_core_contracts.py::test_main_window_exposes_module_meshes_as_detachable_dock tests\test_core_contracts.py::test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport tests\test_core_contracts.py::test_main_window_bottom_area_uses_detachable_log_and_terminal_docks tests\test_core_contracts.py::test_qt_lighting_panel_can_shrink_inside_detachable_dock -q` passed (`8 passed`).
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\layout_applier.py native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\qt_stylesheet_builder.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\theme_layout.py tests\test_theme_layout_loading.py tests\test_core_contracts.py`
+- `python -m pytest tests\test_theme_layout_loading.py::test_toolbar_button_mode_override_controls_command_buttons tests\test_core_contracts.py::test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport -q` passed (`2 passed`).
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py tests\test_core_contracts.py`
+- `python -m pytest tests\test_core_contracts.py::test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport -q` passed.
+- Launched the actual Debug `GhostRigger.exe` visibly, confirmed `/api/health`, applied `layout=default` through `/api/appearance`, verified `/api/state` reported `layout: default`, window size `1650x920`, and opened `content_browser` and `mesh_tools` through `/api/open_tool`.
+- Launched the actual Debug `GhostRigger.exe` visibly after the follow-up payload sync, confirmed `/api/health`, verified Default layout state reported no visible docks, and opened `output_log`, `python_terminal`, and `lighting` through `/api/open_tool`.
+- Launched the actual Debug `GhostRigger.exe` visibly after the command-strip icon-only change; the shell window opened, but IPC did not initialize during the quick smoke check.
+- Targeted native rendering `.vcxproj` build was attempted but did not complete because `GhostRiggerPythonPayloadResource.h` was missing from that project setup.
+
 ## 2026-06-15
 
 ### [2026-06-15] Sequence Editor Scene Transform Keyframes

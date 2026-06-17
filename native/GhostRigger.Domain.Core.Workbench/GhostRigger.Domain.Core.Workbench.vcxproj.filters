@@ -41,6 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\workbench\__init__.py">
       <Filter>Python\src\workbench</Filter>
     </None>

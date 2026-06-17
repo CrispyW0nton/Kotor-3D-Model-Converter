@@ -6,13 +6,13 @@
     "originals_remain_in_src": true,
     "files": [
         {
-            "resource_name": "PYTHON_PAYLOAD_0001",
+            "resource_name": "PYTHON_PAYLOAD_CORE_SKELETON_INIT",
             "source_path": "src/core/skeleton/__init__.py",
             "packaged_path": "Python/src/core/skeleton/__init__.py",
             "sha256": "17da0c25a609de8c0ead85aa7858b5ed39b6f2dd2810fdcef65fcedc14254ecc"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0002",
+            "resource_name": "PYTHON_PAYLOAD_CORE_SKELETON_SKELETON_BUILDER",
             "source_path": "src/core/skeleton/skeleton_builder.py",
             "packaged_path": "Python/src/core/skeleton/skeleton_builder.py",
             "sha256": "fca1d01b1d630998c3a776309563625d012923407eaa368a914fa8a23c9bb652"

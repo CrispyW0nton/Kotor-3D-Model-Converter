@@ -421,23 +421,13 @@ class QtLogPanel(QtWidgets.QWidget):
         log_layout.addWidget(self.text, 1)
         log_layout.addWidget(self.log_footer)
 
-        self.terminal = QtPythonTerminalPanel(self)
-        self.terminal.set_context(log_panel=self, parent_widget=self.parentWidget())
-        self.content_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
-        self.content_splitter.setChildrenCollapsible(False)
-        self.content_splitter.addWidget(self.log_content)
-        self.content_splitter.addWidget(self.terminal)
-        self.content_splitter.setStretchFactor(0, 3)
-        self.content_splitter.setStretchFactor(1, 2)
-        self.content_splitter.setSizes([900, 520])
-
-        root.addWidget(self.content_splitter, 1)
+        root.addWidget(self.log_content, 1)
 
     def apply_ghost_theme(self, theme) -> None:
-        self.terminal.apply_ghost_theme(theme)
+        return None
 
     def apply_native_theme(self) -> None:
-        self.terminal.apply_native_theme()
+        return None
 
     def log(self, msg: str, level: str = "info") -> None:
         stamp = QtCore.QTime.currentTime().toString("HH:mm:ss")
@@ -474,7 +464,8 @@ class QtLogPanel(QtWidgets.QWidget):
 
     def _toggle_collapse(self) -> None:
         self._collapsed = not self._collapsed
-        self.content_splitter.setVisible(not self._collapsed)
+        self.text.setVisible(not self._collapsed)
+        self.log_footer.setVisible(not self._collapsed)
 
     def _render(self) -> None:
         self.text.setPlainText(self.get_text())
@@ -483,7 +474,7 @@ class QtLogPanel(QtWidgets.QWidget):
     def _surface_error_log(self) -> None:
         if self._collapsed:
             self._toggle_collapse()
-        self.content_splitter.show()
+        self.log_content.show()
         self.text.setFocus(QtCore.Qt.OtherFocusReason)
         self.text.raise_()
 

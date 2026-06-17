@@ -67,7 +67,6 @@ from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialo
 from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
 from src.gui.qt_lib.windows.module_editor_window import ModuleEditorWindow
-from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import (
     QtRetargetViewportAdapter,
     RetargetPreviewUiController,
@@ -80,7 +79,6 @@ from src.core.retargeting.retarget_output_naming import KotorOutputAnimationName
 from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
 from src.gui.qt_lib.panels.qt_texture_panel import QtTextureToolWindow
-from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow
 from src.gui.qt_lib.sequence_editor.sequence_editor_window import SequenceEditorWindow
 from src.ipc.server import GhostRiggerIPCServer
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE, normalize_viewport_navigation_profile
@@ -266,12 +264,13 @@ class QtGhostRiggerMainWindow(
         self.startup_input = startup_input or {}
         self.settings_path = self.app_root / "settings.json"
         self.settings_data = self._load_settings()
+        self._apply_startup_ui_defaults()
         self.settings_data.setdefault("model_double_click_behaviour", "always ask")
         self.settings_data.setdefault("default_import_placement", "auto_offset")
         self.settings_data.setdefault("recent_scenes", [])
         self.settings_data.setdefault("last_axis_mode", AxisMode.WORLD.value)
         self.settings_data.setdefault("last_pivot_edit_mode", "affect_object_only")
-        self.settings_data.setdefault("show_adjust_pivot_toolbox", True)
+        self.settings_data.setdefault("show_adjust_pivot_toolbox", False)
         self.settings_data.setdefault("autoscan", True)
         self.settings_data.setdefault("fbx_sdk", {})
         self.settings_data.setdefault("mixamo_companion_mesh_path", "")
@@ -383,6 +382,16 @@ class QtGhostRiggerMainWindow(
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
         if not self._preloaded_library.get("detection_attempted"):
             QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)
+
+    def _apply_startup_ui_defaults(self) -> None:
+        self.settings_data["viewport_navigation_profile"] = "3dsmax"
+        theme_layout = self.settings_data.setdefault("theme_layout", {})
+        if isinstance(theme_layout, dict):
+            theme_layout["selected_layout"] = "default"
+            overrides = theme_layout.get("layout_overrides")
+            if isinstance(overrides, dict):
+                overrides.pop("default", None)
+        self.settings_data["show_adjust_pivot_toolbox"] = False
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

@@ -32,6 +32,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\textures\__init__.py">
       <Filter>Python\src\gui\textures</Filter>
     </None>

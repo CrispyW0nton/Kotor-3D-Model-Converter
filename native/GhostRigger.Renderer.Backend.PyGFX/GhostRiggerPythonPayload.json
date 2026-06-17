@@ -6,124 +6,124 @@
     "originals_remain_in_src": true,
     "files": [
         {
-            "resource_name": "PYTHON_PAYLOAD_0001",
-            "source_path": "src/adapters/rendering/pygfx_renderer_exports.py",
-            "packaged_path": "Python/src/adapters/rendering/pygfx_renderer_exports.py",
-            "sha256": "fa1ed89a82f4f42046706011e664358f98493615b96a1ee4194d7daa96862d72"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0002",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_INIT",
             "source_path": "src/adapters/rendering/pygfx_core/__init__.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/__init__.py",
             "sha256": "5688fb8c471d1ae37a5566711fceef764984b68c5fac08fc142702841ebcdcd1"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0003",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_BACKEND_ENV",
             "source_path": "src/adapters/rendering/pygfx_core/backend_env.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/backend_env.py",
             "sha256": "72a6c5b049d423768fdc012638f3f2452c4693f1f260b2278de95734a884f997"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0004",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_MESH_CACHE",
             "source_path": "src/adapters/rendering/pygfx_core/mesh_cache.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/mesh_cache.py",
             "sha256": "2cb30e880dbd65f748d77e8ff5c5dfeedb64ea72128f9fba29973073505841ff"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0005",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_RENDERER",
             "source_path": "src/adapters/rendering/pygfx_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/renderer.py",
             "sha256": "ff560a871558aaad7c71ad99032c4bb0c41d053e5d50160f30993e07f1f9e949"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0006",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_SCENE_BRIDGE",
             "source_path": "src/adapters/rendering/pygfx_core/scene_bridge.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/scene_bridge.py",
             "sha256": "d628adb87e85e3a5579148018fe9b81769e448b8ad73b1bd53b991405ab7ec90"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0007",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_RENDERER_EXPORTS",
+            "source_path": "src/adapters/rendering/pygfx_renderer_exports.py",
+            "packaged_path": "Python/src/adapters/rendering/pygfx_renderer_exports.py",
+            "sha256": "fa1ed89a82f4f42046706011e664358f98493615b96a1ee4194d7daa96862d72"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_INIT",
             "source_path": "src/adapters/rendering/wgpu_core/__init__.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/__init__.py",
             "sha256": "336ecd3aedeab6a0344da518f061e3cf9e144efa079701a5e7582d55c4b58b25"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0008",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RENDERER",
             "source_path": "src/adapters/rendering/wgpu_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/renderer.py",
             "sha256": "9925d7a6b10cc2385320419ac999798dcd39d7c3411091a7f799332b6b9bc059"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0009",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RESOURCES",
             "source_path": "src/adapters/rendering/wgpu_core/resources.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/resources.py",
             "sha256": "a274b7696044fa336cb196db6a65e735d9af9f63671a4338db2c28910ee00bf3"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0010",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_SHARED",
             "source_path": "src/adapters/rendering/wgpu_core/shared.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/shared.py",
             "sha256": "3aa1de998b9902bfb56b75d5df22777530f83c91f734c9c19800c6bdfdd5fc42"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0011",
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_RENDERER_EXPORTS",
             "source_path": "src/adapters/rendering/wgpu_renderer_exports.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_renderer_exports.py",
             "sha256": "6a44cae195b6a583080d678ac19190a1ad6d8d4ef23f926c6e5676ab3a4b1f29"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0012",
-            "source_path": "src/gui/rendering/pygfx_renderer.py",
-            "packaged_path": "Python/src/gui/rendering/pygfx_renderer.py",
-            "sha256": "1ac99f09b3610500a20406f6f653c1d584617fda01af0ad484ec7f38034794c8"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0013",
-            "source_path": "src/gui/rendering/wgpu_renderer.py",
-            "packaged_path": "Python/src/gui/rendering/wgpu_renderer.py",
-            "sha256": "f6616213b83e14bf1b4115d72d70b23c2ee23361407f50ee972dca08a35814cc"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0014",
-            "source_path": "src/gui/rendering/wgpu_core/__init__.py",
-            "packaged_path": "Python/src/gui/rendering/wgpu_core/__init__.py",
-            "sha256": "78bd11dc62cefb79ea3a14e8e2a7dc789dcb5a3f4e322285a53c3c00631bf63d"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0015",
-            "source_path": "src/gui/rendering/wgpu_core/renderer.py",
-            "packaged_path": "Python/src/gui/rendering/wgpu_core/renderer.py",
-            "sha256": "80ce7486d55e72b6de5d075759e320b06b6a8e65e7bcbadf790f7a9e639b087d"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0016",
-            "source_path": "src/gui/rendering/wgpu_core/resources.py",
-            "packaged_path": "Python/src/gui/rendering/wgpu_core/resources.py",
-            "sha256": "fbc9e3f560c0b1f246b0c3ec8294bcec171a2215de75bcbce634288bde5ad24b"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0017",
-            "source_path": "src/gui/rendering/wgpu_core/shaders.py",
-            "packaged_path": "Python/src/gui/rendering/wgpu_core/shaders.py",
-            "sha256": "8cb8eba8b4776ee201e152e6c802bc7429a21d11222b84dca752b556f4e496a0"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0018",
-            "source_path": "src/gui/rendering/wgpu_core/shared.py",
-            "packaged_path": "Python/src/gui/rendering/wgpu_core/shared.py",
-            "sha256": "d37735f4c58675db8d2a52c328faca9fb6fdb1ae0d165cd30af0f202596702b3"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_0019",
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_WGPU_SHADERS",
             "source_path": "src/core/rendering/wgpu_shaders.py",
             "packaged_path": "Python/src/core/rendering/wgpu_shaders.py",
             "sha256": "d31d85ca48672e86f5786c914a2918b3fd5ecf008b514c56b0e521fe404e08e2"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_0020",
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_WGPU_SHARED",
             "source_path": "src/core/rendering/wgpu_shared.py",
             "packaged_path": "Python/src/core/rendering/wgpu_shared.py",
             "sha256": "c09f8bce7f20c523deb8c0c282200a4412d32df43b1d586db9cbeb983d785a7b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_PYGFX_RENDERER",
+            "source_path": "src/gui/rendering/pygfx_renderer.py",
+            "packaged_path": "Python/src/gui/rendering/pygfx_renderer.py",
+            "sha256": "1ac99f09b3610500a20406f6f653c1d584617fda01af0ad484ec7f38034794c8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_INIT",
+            "source_path": "src/gui/rendering/wgpu_core/__init__.py",
+            "packaged_path": "Python/src/gui/rendering/wgpu_core/__init__.py",
+            "sha256": "78bd11dc62cefb79ea3a14e8e2a7dc789dcb5a3f4e322285a53c3c00631bf63d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_RENDERER",
+            "source_path": "src/gui/rendering/wgpu_core/renderer.py",
+            "packaged_path": "Python/src/gui/rendering/wgpu_core/renderer.py",
+            "sha256": "80ce7486d55e72b6de5d075759e320b06b6a8e65e7bcbadf790f7a9e639b087d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_RESOURCES",
+            "source_path": "src/gui/rendering/wgpu_core/resources.py",
+            "packaged_path": "Python/src/gui/rendering/wgpu_core/resources.py",
+            "sha256": "fbc9e3f560c0b1f246b0c3ec8294bcec171a2215de75bcbce634288bde5ad24b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_SHADERS",
+            "source_path": "src/gui/rendering/wgpu_core/shaders.py",
+            "packaged_path": "Python/src/gui/rendering/wgpu_core/shaders.py",
+            "sha256": "8cb8eba8b4776ee201e152e6c802bc7429a21d11222b84dca752b556f4e496a0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_SHARED",
+            "source_path": "src/gui/rendering/wgpu_core/shared.py",
+            "packaged_path": "Python/src/gui/rendering/wgpu_core/shared.py",
+            "sha256": "d37735f4c58675db8d2a52c328faca9fb6fdb1ae0d165cd30af0f202596702b3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_RENDERER",
+            "source_path": "src/gui/rendering/wgpu_renderer.py",
+            "packaged_path": "Python/src/gui/rendering/wgpu_renderer.py",
+            "sha256": "f6616213b83e14bf1b4115d72d70b23c2ee23361407f50ee972dca08a35814cc"
         }
     ]
 }

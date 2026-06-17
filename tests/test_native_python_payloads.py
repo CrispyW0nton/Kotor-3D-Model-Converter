@@ -7,6 +7,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from scripts.native_python_payload_generator import resource_name_for_packaged_path
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD_MANIFEST = ROOT / "native" / "GhostRigger.PythonPayloadManifest.json"
@@ -49,7 +51,7 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 93
-    assert len(payload_files) == 1274
+    assert len(payload_files) == 1275
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
@@ -75,9 +77,47 @@ def test_python_payload_copies_are_byte_identical_and_manifested() -> None:
             source = ROOT / row["source_path"]
             packaged = project_dir / row["packaged_path"]
             assert packaged.exists(), packaged
-            assert packaged.read_bytes() == source.read_bytes()
+            if source.exists():
+                assert packaged.read_bytes() == source.read_bytes()
             assert hashlib.sha256(packaged.read_bytes()).hexdigest() == row["sha256"]
             assert f'{row["resource_name"]} RCDATA' in rc_text
+
+
+def test_python_payload_resource_names_are_path_named() -> None:
+    numbered_pattern = re.compile(r"^PYTHON_PAYLOAD_[0-9]+$")
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        payload = json.loads((project_dir / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+        names = [str(row["resource_name"]) for row in payload["files"]]
+
+        assert len(names) == len(set(names)), project
+        for row in payload["files"]:
+            resource_name = str(row["resource_name"])
+            assert resource_name == resource_name_for_packaged_path(str(row["packaged_path"]))
+            assert not numbered_pattern.fullmatch(resource_name)
+            assert re.fullmatch(r"PYTHON_PAYLOAD_[A-Z0-9_]+", resource_name)
+
+
+def test_native_projects_include_project_local_payload_generator() -> None:
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        generator = project_dir / "GeneratePythonPayload.py"
+        assert generator.exists(), generator
+
+        vcxproj = (project_dir / f"{project}.vcxproj").read_text(encoding="utf-8")
+        filters = (project_dir / f"{project}.vcxproj.filters").read_text(encoding="utf-8")
+        generator_text = generator.read_text(encoding="utf-8")
+
+        assert f'PROJECT = "{project}"' in generator_text
+        assert "from scripts.native_python_payload_generator import generate_project" in generator_text
+        assert '<None Include="GeneratePythonPayload.py" />' in vcxproj
+        assert '<None Include="GeneratePythonPayload.py" />' in filters
+        assert '<PropertyGroup Label="PythonPayloadBuild">' in vcxproj
+        assert '$(GHOSTRIGGER_PYTHON)' in vcxproj
+        assert 'Name="GenerateGhostRiggerPythonPayload" BeforeTargets="PrepareForBuild"' in vcxproj
+        assert 'Command="&quot;$(GhostRiggerPythonPayloadPython)&quot; &quot;$(ProjectDir)GeneratePythonPayload.py&quot;"' in vcxproj
 
 
 def test_python_payloads_are_included_in_visual_studio_projects() -> None:

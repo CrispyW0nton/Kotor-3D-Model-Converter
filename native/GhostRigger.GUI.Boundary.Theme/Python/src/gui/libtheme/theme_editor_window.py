@@ -729,7 +729,7 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         for label, key, minimum, maximum in (
             ("W", "splash.width", 420, 1800),
             ("H", "splash.height", 220, 900),
-            ("Logo", "splash.logoSize", 16, 220),
+            ("Logo", "splash.logoSize", 16, 360),
         ):
             size_row.addWidget(QtWidgets.QLabel(label))
             spin = QtWidgets.QSpinBox()

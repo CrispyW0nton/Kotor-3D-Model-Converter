@@ -22,6 +22,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
     "functions": (
         "app_runner",
         "geometry",
+        "native_prelaunch",
         "qt_helpers",
         "splash_theme",
         "startup_library",

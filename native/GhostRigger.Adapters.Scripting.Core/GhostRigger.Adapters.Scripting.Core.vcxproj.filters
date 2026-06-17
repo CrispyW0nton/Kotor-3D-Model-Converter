@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\adapters\scripts\__init__.py">
       <Filter>Python\src\adapters\scripts</Filter>
     </None>

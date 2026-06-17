@@ -80,8 +80,13 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self._build_character_mode_row(root)
 
         self.tabs = QtWidgets.QTabWidget()
+        self.tabs.setMinimumWidth(0)
+        self.tabs.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.text = QtWidgets.QTextEdit()
         self.text.setReadOnly(True)
+        self.text.setLineWrapMode(QtWidgets.QTextEdit.WidgetWidth)
+        self.text.setMinimumWidth(0)
+        self.text.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
         self.text.setPlainText("No model loaded.")
         self.tabs.addTab(self.text, "General")
         self.module_tab = None
@@ -106,6 +111,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         apply_button.clicked.connect(self._apply_transform)
         form.addWidget(apply_button, 1, 0, 1, 4)
         root.addWidget(self.transform_group)
+        self.transform_group.setVisible(False)
 
     def set_measurement_settings(self, values: dict | MeasurementSettings | None) -> None:
         settings = values if isinstance(values, MeasurementSettings) else MeasurementSettings.from_dict(values)
@@ -129,7 +135,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.properties_heading.setVisible(not enabled)
         if hasattr(self, "character_mode_group"):
             self.character_mode_group.setVisible(not enabled)
-        self.transform_group.setVisible(not enabled)
+        self.transform_group.setVisible(False)
         general_index = self.tabs.indexOf(self.text)
         if enabled and general_index >= 0:
             self.tabs.removeTab(general_index)
@@ -337,6 +343,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         """
         self.character_mode_group = QtWidgets.QGroupBox("Character Mode")
         self.character_mode_group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
+        self.character_mode_group.setMinimumWidth(0)
+        self.character_mode_group.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         grid = QtWidgets.QGridLayout(self.character_mode_group)
         grid.setContentsMargins(6, 6, 6, 6)
         grid.setHorizontalSpacing(6)
@@ -344,7 +352,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         # ── Read-only badge ─────────────────────────────────────────────
         self.character_mode_badge = QtWidgets.QLabel("(unknown)")
         self.character_mode_badge.setAlignment(QtCore.Qt.AlignCenter)
-        self.character_mode_badge.setMinimumWidth(140)
+        self.character_mode_badge.setMinimumWidth(0)
+        self.character_mode_badge.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         self.character_mode_badge.setStyleSheet(
             "QLabel { "
             f"background:{_CHARACTER_MODE_BADGE_COLORS['mode_ambiguous']}; "
@@ -359,6 +368,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
 
         # ── Manual-override combo ───────────────────────────────────────
         self.character_mode_combo = QtWidgets.QComboBox()
+        self.character_mode_combo.setMinimumWidth(0)
+        self.character_mode_combo.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         # Index 0 is always "(Auto)" — represents "no override / use
         # detected value".  The remaining entries enumerate CharacterMode.
         self.character_mode_combo.addItem("(Auto)", userData=None)
@@ -376,6 +387,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         )
         grid.addWidget(QtWidgets.QLabel("Override:"), 1, 0)
         grid.addWidget(self.character_mode_combo, 1, 1)
+        grid.setColumnStretch(1, 1)
 
         parent_layout.addWidget(self.character_mode_group)
 

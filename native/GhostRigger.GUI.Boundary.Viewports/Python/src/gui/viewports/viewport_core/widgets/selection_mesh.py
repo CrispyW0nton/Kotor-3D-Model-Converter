@@ -8,6 +8,30 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportSelectionMeshMixin:
+    def _scene_object_selection_target_for_node(self, node, *, force_group: bool = False):
+        """Return the movable scene root for object-style viewport picks."""
+
+        if node is None:
+            return None
+        if bool(getattr(node, "is_light", False)) or bool(getattr(node, "is_camera", False)):
+            return node
+        node_kind = str(getattr(node, "_gr_scene_node_kind", "") or "").strip().lower()
+        if node_kind == "joint":
+            return node
+        root = self._scene_root_for_node(node)
+        if root is None or root is node:
+            return node
+        if force_group:
+            return root
+        if self._is_selectable_mesh_node(node):
+            return root
+        try:
+            if self._is_general_helper_node(node):
+                return root
+        except Exception:
+            pass
+        return node
+
     def _sync_renderer_selected_meshes(self, active, mesh_nodes: list) -> None:
         selected_meshes = list(mesh_nodes or [])
         self._renderer.selected_node = active

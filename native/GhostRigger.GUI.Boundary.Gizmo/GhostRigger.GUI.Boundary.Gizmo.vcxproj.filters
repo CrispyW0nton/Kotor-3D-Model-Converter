@@ -44,6 +44,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\gizmo\__init__.py">
       <Filter>Python\src\gui\gizmo</Filter>
     </None>

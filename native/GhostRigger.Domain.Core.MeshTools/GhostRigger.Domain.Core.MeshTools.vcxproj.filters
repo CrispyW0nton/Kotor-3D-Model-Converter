@@ -65,6 +65,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\mesh_tools\__init__.py">
       <Filter>Python\src\mesh_tools</Filter>
     </None>

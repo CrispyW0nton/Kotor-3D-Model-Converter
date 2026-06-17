@@ -89,6 +89,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\panels\module_editor\__init__.py">
       <Filter>Python\src\gui\panels\module_editor</Filter>
     </None>

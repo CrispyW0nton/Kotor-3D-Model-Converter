@@ -3262,7 +3262,7 @@ def test_viewport_render_loop_is_gpu_only() -> None:
 def test_add_model_to_scene_dialog_stays_compact_under_layout_apply() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneDialog
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -3615,7 +3615,7 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
         id="scene-object-1",
         name="Bith Actor",
         visible=True,
-        metadata={"_runtime_model": model},
+        metadata={"_runtime_model": model, "scene_import_id": "import-1"},
         transform=SimpleNamespace(position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0)),
     )
 
@@ -3628,8 +3628,14 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert getattr(placed_root, "_gr_scene_source_position") == (9.0, 8.0, 7.0)
     assert getattr(placed_root, "_gr_scene_gpu_transform") is True
     assert getattr(placed_root, "_gr_scene_object_name") == "Bith Actor"
+    assert getattr(placed_root, "_gr_scene_import_id") == "import-1"
+    assert getattr(placed_root, "_gr_scene_node_key") == "import-1:n_bith"
+    assert getattr(placed_skin, "_gr_scene_node_key") == "import-1:head"
+    assert getattr(placed_root, "_gr_scene_animation_kind") in {"skeletal", "skeletal_static"}
+    assert getattr(placed_root.children[0], "_gr_scene_node_kind") == "joint"
     assert placed_skin.bone_map[0] == placed_root.name
     assert getattr(placed_skin, "_gr_scene_object_id") == "scene-object-1"
+    assert getattr(placed_skin, "_gr_scene_node_kind") == "skin_mesh"
 
     uploader = MatrixPaletteUploader(max_bones=4)
     uploader.build_inverse_bind_pose(composite)
@@ -3639,6 +3645,199 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._model_node_count == 3
     uploader.compute_skin_node_palette(placed_skin, SimpleNamespace(nodes={}))
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
+def test_kmax_scene_manager_records_import_identity_and_model_classification() -> None:
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.scene.kmax_scene_manager import KMaxSceneManager
+    from src.core.scene.scene_resource_ref import SceneResourceRef
+
+    root = ModelNode(name="PLC_barrel1", flags=int(NodeFlags.HEADER))
+    mesh = ModelNode(name="barrel_mesh", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH), parent=root)
+    root.children.append(mesh)
+    model = KotorModel(name="PLC_barrel1", root_node=root, model_type=32)
+
+    manager = KMaxSceneManager()
+    first = manager.add_model_instance(SceneResourceRef(game="K1", resref="PLC_barrel1"), runtime_model=model)
+    second = manager.add_model_instance(SceneResourceRef(game="K1", resref="PLC_barrel1"), runtime_model=model)
+
+    assert first.id != second.id
+    assert first.name != second.name
+    assert first.metadata["scene_import_id"] == first.id
+    assert second.metadata["scene_import_id"] == second.id
+    assert first.metadata["asset_kind"] == "placeable"
+    assert first.metadata["animation_kind"] == "static"
+    assert first.metadata["joint_names"] == []
+    assert first.metadata["animated_node_names"] == []
+    assert first.metadata["dummy_node_names"] == ["plc_barrel1"]
+
+
+def test_animation_engine_exposes_scene_node_kind_and_import_key() -> None:
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    root = ModelNode(name="N_Test", flags=int(NodeFlags.HEADER))
+    joint = ModelNode(name="head_g", flags=int(NodeFlags.HEADER), parent=root)
+    skin = ModelNode(name="head", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN), parent=root)
+    animated_dummy = ModelNode(name="rootdummy", flags=int(NodeFlags.HEADER), parent=root)
+    animated_dummy.controllers = [{"controller_type": 8}]
+    skin.bone_map = ["head_g"]
+    root.children.extend([joint, skin, animated_dummy])
+    setattr(joint, "_gr_scene_node_kind", "joint")
+    setattr(joint, "_gr_scene_node_key", "import-a:head_g")
+    model = KotorModel(name="N_Test", root_node=root)
+
+    engine = AnimationEngine(model)
+
+    assert engine.asset_kind == "character"
+    assert engine.animation_kind == "skeletal"
+    assert engine.skeleton_kind == "skin_bone_map"
+    assert engine.is_skeletal_animation is True
+    assert engine.is_rigid_animation is False
+    assert engine.joint_names == frozenset({"head_g"})
+    assert "rootdummy" in engine.animated_node_names
+    assert "rootdummy" in engine.dummy_node_names
+    assert engine.node_kind("head_g") == "joint"
+    assert engine.node_scene_key("head_g") == "import-a:head_g"
+    assert engine.node_kind("head") == "skin_mesh"
+    assert engine.node_kind("rootdummy") == "animated_dummy"
+    assert engine.is_joint_node("head_g") is True
+    assert engine.is_animated_node("rootdummy") is True
+    assert engine.is_dummy_node("rootdummy") is True
+
+
+def test_animation_engine_distinguishes_rigid_animation_from_skeletons() -> None:
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    root = ModelNode(name="PLC_anim", flags=int(NodeFlags.HEADER))
+    mesh = ModelNode(
+        name="animated_mesh",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.controllers = [{"controller_type": 8}]
+    root.children.append(mesh)
+    model = KotorModel(name="PLC_anim", root_node=root, model_type=32)
+
+    engine = AnimationEngine(model)
+
+    assert engine.asset_kind == "placeable"
+    assert engine.animation_kind == "rigid"
+    assert engine.is_skeletal_animation is False
+    assert engine.is_rigid_animation is True
+    assert engine.joint_names == frozenset()
+    assert engine.node_kind("animated_mesh") == "mesh"
+    assert engine.is_animated_node("animated_mesh") is True
+
+
+def test_content_browser_activation_adds_generic_model_rows_without_clear_prompt() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/resource_loading.py"
+    ).read_text(encoding="utf-8")
+    panel_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/qt_content_browser_panel.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.asset_view.itemDoubleClicked.connect(lambda _item, _column: self._activate_selected())" in panel_source
+    assert 'self.primary_button.setText("Preview" if is_animation else "Add")' in panel_source
+    assert "self.addToCurrentSceneRequested.emit(dict(row))" in panel_source
+    assert "def open_selected_as_new_scene" in panel_source
+    assert "self.primarySceneLoadRequested.emit(row)" in panel_source
+    assert 'import_action="add" if scene_objects else "clear"' in source
+    assert "def _add_content_browser_model_to_current_scene" in source
+    assert 'self._start_resource_load(resref, game, import_action="add")' in source
+
+
+def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
+    construction_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/construction.py"
+    ).read_text(encoding="utf-8")
+    overlay_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+    ).read_text(encoding="utf-8")
+    renderer_source = (
+        ROOT
+        / "native/GhostRigger.Domain.Core.Rendering/Python/src/core/rendering/frame_core/renderer_overlays.py"
+    ).read_text(encoding="utf-8")
+    viewport_tools_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/viewport_tools.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.locomotion_disc_size_spin = QtWidgets.QSpinBox(self)" in construction_source
+    assert 'self.locomotion_disc_size_spin.setObjectName("ViewportLocomotionDiscSize")' in construction_source
+    assert "self.locomotion_disc_size_spin.valueChanged.connect(self.set_locomotion_disc_size)" in construction_source
+    assert "self.locomotion_disc_button.customContextMenuRequested.connect(self._show_locomotion_disc_size_dialog)" in construction_source
+    assert "def _show_locomotion_disc_size_dialog" in construction_source
+    assert 'spin.setObjectName("ViewportLocomotionDiscSizeDialogSpin")' in construction_source
+    assert "row.addWidget(self.locomotion_disc_size_spin)" not in construction_source
+    assert "axis_angles = getattr(self._renderer, \"_bone_screen_axis_angles\", {})" in overlay_source
+    assert "disc.rotate(float(angle), resample=Image.BICUBIC, expand=False)" in overlay_source
+    assert "self._bone_screen_axis_angles = {}" in renderer_source
+    assert "self._bone_screen_axis_angles[id(node)]" in renderer_source
+    assert '"locomotion_disc": "toggle_locomotion_discs"' in viewport_tools_source
+    assert '{"locomotion_size", "locomotion_disc_size", "disc_size"}' in viewport_tools_source
+
+
+def test_viewport_hover_refreshes_after_transform_drags() -> None:
+    picking_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/picking_hover.py"
+    ).read_text(encoding="utf-8")
+    drag_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _refresh_viewport_hover_at" in picking_source
+    assert "self._set_viewport_hover(node, face_bounds, reason=reason)" in picking_source
+    assert 'self._clear_viewport_hover(request=False, reason="gizmo drag hover suppressed")' in drag_source
+    assert 'self._clear_viewport_hover(request=False, reason="gimbal drag hover suppressed")' in drag_source
+    assert 'self._clear_viewport_hover(request=False, reason="joint drag hover suppressed")' in drag_source
+    assert 'self._refresh_viewport_hover_at(x, y, reason="gizmo drag hover refreshed")' in drag_source
+    assert 'self._refresh_viewport_hover_at(x, y, reason="gimbal drag hover refreshed")' in drag_source
+    assert 'self._refresh_viewport_hover_at(x, y, reason="joint drag hover refreshed")' in drag_source
+
+
+def test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_root() -> None:
+    event_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
+    ).read_text(encoding="utf-8")
+    selection_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py"
+    ).read_text(encoding="utf-8")
+    drag_source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+    ).read_text(encoding="utf-8")
+
+    assert "QtCore.QEvent.MouseButtonDblClick" in event_source
+    assert "def _double_click_lmb" in drag_source
+    assert "def _scene_object_selection_target_for_node" in selection_source
+    assert "target = self._scene_object_selection_target_for_node(mesh_node)" in drag_source
+    assert "target = self._scene_object_selection_target_for_node(helper_node)" in drag_source
+    assert "force_group=True" in drag_source
+    assert 'node_kind == "joint"' in selection_source
+
+
+def test_scene_root_transform_evicts_child_gpu_nodes() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/resource_cache.py"
+    ).read_text(encoding="utf-8")
+
+    assert "scene_transform_only = bool(getattr(node, \"_gr_scene_gpu_transform\", False))" in source
+    assert "affected_nodes = [node]" in source
+    assert "affected_nodes.append(child)" in source
+    assert "for affected in affected_nodes:" in source
+    assert "self._gpu_renderer.invalidate_node(affected)" in source
 
 
 def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
@@ -4928,6 +5127,46 @@ def test_qt_lighting_panel_editor_refresh_preserves_selected_light() -> None:
     assert panel.pos_spins == []
 
 
+def test_qt_lighting_panel_has_min_width_and_selected_light_overflow() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    workspace_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+    ).read_text(encoding="utf-8")
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLightingPanel()
+    try:
+        panel.resize(260, 720)
+        panel.show()
+        app.processEvents()
+
+        assert panel.minimumWidth() >= 320
+        assert panel.tree.minimumWidth() == 0
+        assert panel.tree.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+        assert panel.selected_light_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+        assert panel.selected_light_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+        assert panel.selected_light_editor.minimumWidth() >= 430
+        assert panel.name_edit.minimumWidth() == 0
+        assert panel.group_edit.minimumWidth() == 0
+        assert panel.type_combo.minimumWidth() == 0
+        assert panel.color_button.minimumWidth() == 0
+        assert panel.name_edit.sizePolicy().horizontalPolicy() == QtWidgets.QSizePolicy.Expanding
+        assert panel.tree.sizePolicy().horizontalPolicy() == QtWidgets.QSizePolicy.Expanding
+        assert any(label.wordWrap() for label in panel.findChildren(QtWidgets.QLabel))
+        assert "minimum_width = max(0, int(widget.minimumWidth()))" in workspace_source
+        assert "scroll_widget.setMinimumWidth(minimum_width)" in workspace_source
+        assert "dock.setMinimumWidth(minimum_width)" in workspace_source
+    finally:
+        panel.deleteLater()
+        app.processEvents()
+
+
 def test_qt_viewport_can_pick_light_gizmos() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -5140,7 +5379,7 @@ def test_moderngl_helper_marker_overlay_draws_and_respects_toggle() -> None:
 def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
@@ -5153,6 +5392,7 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
 
         assert helper_button is viewport.dummy_helpers_button
         assert light_helper_button is viewport.light_helpers_button
+        assert viewport.viewport_toolbar_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
         assert viewport.dummy_helpers_button.isCheckable()
         assert viewport.dummy_helpers_button.isChecked() is True
         assert viewport.light_helpers_button.isCheckable()
@@ -5161,6 +5401,13 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
         assert bool(getattr(viewport._renderer, "show_light_gizmos", False)) is True
         assert bool(getattr(viewport._renderer, "show_light_radius_volumes", False)) is True
         assert mode_button is viewport.selection_mode_button
+        assert viewport.locomotion_disc_size_spin.isHidden()
+        assert viewport.viewport_toolbar.layout().indexOf(viewport.selection_mode_button) >= 0
+        assert viewport.viewport_toolbar.layout().indexOf(viewport.locomotion_disc_size_spin) < 0
+        assert viewport.axis_mode_control.combo.objectName() == "AxisModeComboBox"
+        assert viewport.axis_mode_control.TOOLBAR_VERTICAL_NUDGE == 0
+        assert viewport.axis_mode_control.height() == viewport.gimbal_button.height()
+        assert viewport.axis_mode_control.combo.height() == viewport.gimbal_button.height()
         assert [action.data() for action in mode_button.menu().actions()] == [
             "object",
             "mesh",
@@ -5506,7 +5753,7 @@ def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> N
 def test_qt_viewport_preserves_null_helper_selection_under_scene_root_tags() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from src.core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
@@ -7913,7 +8160,7 @@ def test_viewport_navigation_profiles_are_available() -> None:
     )
 
     assert set(VIEWPORT_NAVIGATION_PROFILES) == {"3dsmax", "blender", "maya"}
-    assert DEFAULT_VIEWPORT_NAVIGATION_PROFILE == "maya"
+    assert DEFAULT_VIEWPORT_NAVIGATION_PROFILE == "3dsmax"
     assert normalize_viewport_navigation_profile("3ds Max") == "3dsmax"
     assert normalize_viewport_navigation_profile("Blender") == "blender"
     assert normalize_viewport_navigation_profile("Maya") == "maya"
@@ -9263,7 +9510,16 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert '"module_meshes"' in layout_source
     assert "self.module_meshes_panel_action" in actions_source
     assert 'self._icon("module_meshes")' in actions_source
+    assert "self.mesh_tools_panel_action" in actions_source
+    assert 'self._icon("mesh_tools")' in actions_source
+    assert "self.output_log_panel_action" in actions_source
+    assert 'self._icon("output_log")' in actions_source
+    assert "self.python_terminal_panel_action" in actions_source
+    assert 'self._icon("python_terminal")' in actions_source
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
+    assert "modules_menu.addAction(self.mesh_tools_panel_action)" in menu_source
+    assert "modules_menu.addAction(self.output_log_panel_action)" in menu_source
+    assert "modules_menu.addAction(self.python_terminal_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
     assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
     assert "self.viewport.meshVisibilityChanged.connect(self._on_viewport_mesh_visibility_changed)" in layout_source
@@ -9271,7 +9527,12 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "_invalidate_renderer_resources(\"module mesh visibility changed\")" not in layout_source
     assert "_invalidate_renderer_resources(\"mesh visibility changed\")" not in layout_source
     assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
-    assert (Path("src/gui/icons/module_meshes.svg")).exists()
+    icon_root = Path("native/GhostRigger.Native.Core.Host/RuntimePayload/src/gui/icons")
+    assert (icon_root / "module_meshes.svg").exists()
+    assert (icon_root / "mesh_tools.svg").exists()
+    assert (icon_root / "output_log.svg").exists()
+    assert (icon_root / "python_terminal.svg").exists()
+    assert (icon_root / "locomotion_disc.png").exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
 
 
@@ -9434,11 +9695,30 @@ def test_qt_overflow_helpers_scroll_dense_toolbar_rows() -> None:
     strip.setMinimumWidth(900)
     strip_scroll = make_horizontal_overflow_area(strip, "TestToolbarScroll", height=40)
     strip_scroll.resize(240, 40)
+    QtWidgets.QApplication.processEvents()
 
     assert strip_scroll.widget() is strip
     assert strip_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
     assert strip_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
     assert strip.minimumWidth() >= 900
+    assert hasattr(strip_scroll, "set_base_fixed_height")
+    assert strip_scroll.height() >= 40
+
+    compact_strip = QtWidgets.QWidget()
+    compact_strip.setMinimumWidth(40)
+    compact_scroll = make_horizontal_overflow_area(compact_strip, "TestCompactToolbarScroll", height=40)
+    compact_scroll.resize(240, 40)
+    QtWidgets.QApplication.processEvents()
+    assert compact_scroll.horizontalScrollBar().maximum() == 0
+    assert compact_scroll.height() == 40
+
+    no_scroll_strip = QtWidgets.QWidget()
+    no_scroll_strip.setMinimumWidth(900)
+    no_scroll = make_horizontal_overflow_area(no_scroll_strip, "TestNoScrollToolbar", height=40, show_scrollbar=False)
+    no_scroll.resize(240, 40)
+    QtWidgets.QApplication.processEvents()
+    assert no_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
+    assert no_scroll.height() == 40
 
     panel = QtWidgets.QWidget()
     panel_scroll = make_scrollable_panel(panel, "TestDockScroll")
@@ -9491,6 +9771,11 @@ def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:
 
     assert "make_horizontal_overflow_area(" in viewport_source
     assert '"ViewportToolbarScroll"' in viewport_source
+    assert "height=34" in viewport_source
+    assert "show_scrollbar=False" in viewport_source
+    assert "toolbar_layout.height + 14" not in viewport_source
+    assert "top_margin = max(0, (toolbar_layout.height - 22) // 2 - 5)" in viewport_source
+    assert "bottom_margin = max(0, toolbar_layout.height - 22 - top_margin)" in viewport_source
     assert "make_horizontal_overflow_area(" in builder_source
     assert '"CharacterBuilderToolbarScroll"' in builder_source
     assert "make_scrollable_panel(self.bottom_strip" in bottom_source
@@ -9570,7 +9855,7 @@ def test_main_window_routes_library_and_animation_library_to_content_browser() -
     assert "self._stack_content_browser_under_scene()" in source
     stack_source = inspect.getsource(QtGhostRiggerMainWindow._stack_content_browser_under_scene)
     assert "self.splitDockWidget(self.scene_dock, self.content_browser_dock, QtCore.Qt.Vertical)" in stack_source
-    assert "vertical_splitter.addWidget(self.viewport)" in source
+    assert "root.addWidget(self.viewport, 1)" in source
     assert "left_tabs.addTab(" not in source
     assert "right_tabs.addTab(" not in source
     assert "self.animation_library_panel = self.content_browser_panel" in source
@@ -9602,6 +9887,8 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
     actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
     button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
+    label_source = inspect.getsource(QtGhostRiggerMainWindow._command_button_label)
+    profile_combo_source = inspect.getsource(QtGhostRiggerMainWindow._populate_visual_profile_combo)
     menu_source = inspect.getsource(QtGhostRiggerMainWindow._menu_button)
     visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
 
@@ -9614,11 +9901,14 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert 'layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Cameras", self.camera_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Mesh Tools", self.mesh_tools_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Log", self.output_log_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action' in command_source
-    assert actions_source.count("self._configure_dock_toggle_action(") >= 13
+    assert actions_source.count("self._configure_dock_toggle_action(") >= 15
     for action_name in (
         "content_browser_action",
         "scene_panel_action",
@@ -9629,14 +9919,22 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
         "lighting_panel_action",
         "camera_panel_action",
         "module_meshes_panel_action",
+        "mesh_tools_panel_action",
         "adjust_pivot_panel_action",
         "twoda_panel_action",
         "resources_panel_action",
+        "output_log_panel_action",
+        "python_terminal_panel_action",
         "diag_action",
     ):
         assert f"self.{action_name}" in actions_source
     assert "button.setCheckable(True)" in button_source
     assert "action.toggled.connect(button.setChecked)" in button_source
+    assert "display_text = self._command_button_label(text, action)" in button_source
+    assert 'label.split("  ", 1)[0].strip()' in label_source
+    assert "label.endswith(shortcut)" in label_source
+    assert 'combo.addItem(default_layout.name or "Default", "default")' in profile_combo_source
+    assert "combo.setCurrentIndex(index if index >= 0 else 0)" in profile_combo_source
     assert "self._sync_dock_toggle_action(key, visible)" in visibility_source
     workspace_source = inspect.getsource(QtGhostRiggerMainWindow._show_workspace_dock)
     tab_source = inspect.getsource(QtGhostRiggerMainWindow._tab_workspace_dock_with_visible_peer)
@@ -9649,9 +9947,136 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert command_source.index("layout.addStretch(1)") < command_source.index('"Animation Browser"')
     assert command_source.index('"Sequence Editor"') < command_source.index('"Animation Browser"')
     assert command_source.index('"Animation Browser"') < command_source.index('"Nodes"')
+    assert 'button.setText("")' in button_source
+    assert 'button.setProperty("_gr_ignore_layout_button_mode", True)' in button_source
+    assert "button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)" in button_source
     assert "button.setFixedSize(30, 22)" in button_source
     assert "button.setIconSize(QtCore.QSize(18, 18))" in button_source
+    assert 'button.setText("")' in menu_source
+    assert 'button.setProperty("_gr_ignore_layout_button_mode", True)' in menu_source
+    assert "button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)" in menu_source
     assert "button.setFixedSize(34, 22)" in menu_source
+
+
+def test_startup_theme_apply_defers_hidden_dock_panel_hooks() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/theme_layout.py"
+    ).read_text(encoding="utf-8")
+    dock_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _defer_startup_theme_hook" in source
+    assert "primary_widget.isAncestorOf(widget)" in source
+    assert "dock.isVisible()" in source
+    assert "dock.isAncestorOf(widget)" in source
+    assert "def _apply_theme_to_visible_panel" in source
+    assert "self._defer_startup_theme_hook(widget, primary_widget=viewport)" in source
+    assert "apply_theme(widget)" in dock_source
+
+
+def test_main_window_lazily_creates_heavy_animation_workbenches() -> None:
+    layout_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/main_layout.py"
+    ).read_text(encoding="utf-8")
+    workflow_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.animation_retarget_window = QtAnimationRetargetWindow(self)" not in layout_source
+    assert "self.unreal_animator_window = QtUnrealAnimatorWindow(self)" not in layout_source
+    assert "def _ensure_animation_retarget_window" in workflow_source
+    assert "from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow" in workflow_source
+    assert "window = QtAnimationRetargetWindow(self)" in workflow_source
+    assert "def _ensure_unreal_animator_window" in workflow_source
+    assert "from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow" in workflow_source
+    assert "window = QtUnrealAnimatorWindow(self)" in workflow_source
+    assert "window = self._ensure_animation_retarget_window()" in workflow_source
+    assert "window = self._ensure_unreal_animator_window()" in workflow_source
+
+
+def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/app_runner.py"
+    ).read_text(encoding="utf-8")
+    native_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/native_prelaunch.py"
+    ).read_text(encoding="utf-8")
+    cpp_source = (
+        ROOT / "native/GhostRigger.Windows.Shell.Main/Private/GhostRiggerWindowsMainWindow.cpp"
+    ).read_text(encoding="utf-8")
+    host_source = (ROOT / "native/GhostRigger.Native.Core.Host/Private/main.cpp").read_text(encoding="utf-8")
+    host_py_source = (ROOT / "native/GhostRigger.Native.Core.Host/main.py").read_text(encoding="utf-8")
+
+    assert "from src.gui.windows.application_core.application_core_lib.functions.native_prelaunch import start_prelaunch_tasks" in source
+    assert "def _install_splash_log_capture" in source
+    assert "GHOSTRIGGER_NATIVE_PREPYTHON_AUDIT" in source
+    assert "GHOSTRIGGER_CURRENT_LOGFILE" in source
+    assert "_SplashStream(original_stdout, emit_line, \"STDOUT\")" in source
+    assert "_SplashStream(original_stderr, emit_line, \"STDERR\")" in source
+    assert "if self._wrapped is not None" in source
+    assert "GHOSTRIGGER_SPLASH_HOLD_MS" in source
+    assert "splash.append_log_line(line)" in source
+    assert "drain_splash_log()" in source
+    assert "status_queue: SimpleQueue[tuple[str, str]] = SimpleQueue()" in source
+    assert "queue_prelaunch_status" in source
+    assert "collect_startup_diagnostics(settings_data, queue_prelaunch_status)" in source
+    assert "build_prelaunch_library_input(root, startup_input, queue_prelaunch_status)" in source
+    assert "while not prelaunch_run.done()" in source
+    assert "app.processEvents()" in source
+    assert "ctypes.CFUNCTYPE(None, ctypes.c_int)" in native_source
+    assert "gr_windows_main_window_run_prelaunch_tasks" in native_source
+    assert "ThreadPoolExecutor(max_workers=max(1, len(jobs)), thread_name_prefix=\"GRStartup\")" in native_source
+    assert "std::thread" in cpp_source
+    assert "GRWindowsMainPrelaunchStatusCallback" in cpp_source
+    assert "GHOSTRIGGER_NATIVE_PREPYTHON_AUDIT" in host_source
+    assert "record_audit_line" in host_source
+    assert 'if (!env_enabled(L"GHOSTRIGGER_NATIVE_LOG_CONSOLE"))' in host_source
+    assert "if sys.stderr is not None:" in host_py_source
+
+
+def test_startup_splash_has_launch_log_textblock() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/splash.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.launch_log = QtWidgets.QPlainTextEdit()" in source
+    assert 'self.launch_log.setObjectName("StartupSplashLog")' in source
+    assert "self.launch_log.setReadOnly(True)" in source
+    assert "self.launch_log.setMaximumBlockCount(1000)" in source
+    assert "def append_log_line" in source
+    assert "def append_log_lines" in source
+    assert "self._last_logged_status" in source
+    assert "QPlainTextEdit#StartupSplashLog" in source
+    assert "STAGE_ROWS" in source
+    assert 'self.stage_list.setObjectName("StartupSplashStages")' in source
+    assert 'self.progress_percent_label.setObjectName("StartupSplashProgressPercent")' in source
+    assert "BRANDED_SPLASH_COLORS" in source
+    assert "splash.useBrandedPalette" in source
+    assert "def _stage_index_for_status" in source
+    assert "def _set_progress_percent" in source
+
+
+def test_prewindow_diagnostics_parallelizes_renderer_and_hardware_scans() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/startup_library.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from concurrent.futures import ThreadPoolExecutor" in source
+    assert 'ThreadPoolExecutor(max_workers=2, thread_name_prefix="GRStartupDiagnostics")' in source
+    assert "renderer_future = executor.submit(scan_renderer_capabilities)" in source
+    assert "hardware_future = executor.submit(scan_hardware_diagnostics)" in source
+    assert "def _collect_prewindow_startup_diagnostics(settings_data: dict, status_callback=None)" in source
+    assert 'status("Checking renderer backends"' in source
+    assert 'status("Checking graphics hardware"' in source
 
 
 def test_viewport_toolbar_flow_layout_centers_rows() -> None:
@@ -9665,44 +10090,61 @@ def test_viewport_toolbar_flow_layout_centers_rows() -> None:
 
     assert "horizontal_alignment" in flow_source
     assert "QtCore.Qt.AlignHCenter" in viewport_source
+    assert "item.sizeHint().expandedTo(item.minimumSize())" in flow_source
     assert "(max_width - current_width) // 2" in flow_source
+    assert "(current_height - hint.height()) // 2" in flow_source
+    assert "(effective.height() - total_height) // 2" in flow_source
 
 
 def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
-    import inspect
-
-    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
-
-    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
-    sequence_source = inspect.getsource(QtGhostRiggerMainWindow._show_sequence_editor_dock)
-    diagnostics_source = inspect.getsource(QtGhostRiggerMainWindow._show_diagnostics_panel)
-    default_area_source = inspect.getsource(QtGhostRiggerMainWindow._default_dock_area_for_key)
+    layout_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/main_layout.py"
+    ).read_text(encoding="utf-8")
+    workflow_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
+    ).read_text(encoding="utf-8")
+    diagnostics_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/viewport_tools.py"
+    ).read_text(encoding="utf-8")
+    default_area_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+    ).read_text(encoding="utf-8")
 
     assert '"sequence_editor": (1180, 720)' in layout_source
     assert '"diagnostics": (760, 560)' in layout_source
-    assert "self.sequence_editor_dock = self._create_detachable_panel(" in layout_source
-    assert '"sequence_editor",' in layout_source
+    assert "self.sequence_editor_dock = self._create_detachable_panel(" not in layout_source
+    assert "def _ensure_sequence_editor_dock" in workflow_source
+    assert "self.sequence_editor_dock = dock" in workflow_source
+    assert '"sequence_editor",' in workflow_source
     assert "self.diagnostics_dock = self._create_detachable_panel(" in layout_source
     assert '"diagnostics",' in layout_source
-    assert 'self._show_workspace_dock("sequence_editor")' in sequence_source
+    assert 'self._show_workspace_dock("sequence_editor")' in workflow_source
     assert 'self._show_workspace_dock("diagnostics")' in diagnostics_source
-    assert 'key in {"output_log", "sequence_editor"}' in default_area_source
+    assert 'key in {"output_log", "python_terminal", "sequence_editor"}' in default_area_source
 
 
-def test_main_window_bottom_area_is_resizable_splitter() -> None:
+def test_main_window_bottom_area_uses_detachable_log_and_terminal_docks() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
-    assert "vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)" in source
-    assert "self.vertical_splitter = vertical_splitter" in source
-    assert "vertical_splitter.addWidget(self.viewport)" in source
-    assert "vertical_splitter.addWidget(self.log_panel)" in source
-    assert "root.addWidget(vertical_splitter, 1)" in source
+    assert "root.addWidget(self.viewport, 1)" in source
+    assert 'self.output_log_dock = self._create_detachable_panel(' in source
+    assert '"output_log",' in source
+    assert 'self.python_terminal_dock = self._create_detachable_panel(' in source
+    assert '"python_terminal",' in source
+    assert "self.output_log_dock.show()" not in source
+    assert "self.python_terminal_dock.show()" not in source
+    assert "self.splitDockWidget(self.output_log_dock, self.python_terminal_dock, QtCore.Qt.Horizontal)" in source
+    assert "vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)" not in source
+    assert "vertical_splitter.addWidget(self.log_panel)" not in source
     assert "main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)" not in source
     assert "root.addWidget(self.log_panel, 0)" not in source
-    assert "vertical_splitter.setSizes([720, 240])" in source
 
 
 def test_main_window_exposes_animation_helpers_to_python_terminal() -> None:
@@ -10231,6 +10673,76 @@ def test_unreal_viewport_hides_dummy_and_hook_helpers_from_bone_overlay() -> Non
     assert "torso_g" in names
     assert "talkdummy" not in names
     assert "headhook" not in names
+
+
+def test_static_placeable_scene_nodes_do_not_enter_viewport_skeleton_overlay() -> None:
+    import pytest
+
+    pytest.importorskip("PIL")
+
+    from PIL import Image, ImageDraw
+
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    root = ModelNode(name="PLC_barrel2", flags=int(NodeFlags.HEADER), position=(0.0, 0.0, 0.0))
+    mesh = ModelNode(
+        name="barrel_mesh",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        position=(1.0, 0.0, 0.0),
+        parent=root,
+    )
+    root.children.append(mesh)
+    for node in (root, mesh):
+        setattr(node, "_gr_scene_import_id", "import-a")
+        setattr(node, "_gr_scene_asset_kind", "placeable")
+        setattr(node, "_gr_scene_animation_kind", "static")
+        setattr(node, "_gr_scene_node_kind", "mesh" if node is mesh else "node")
+        setattr(node, "_gr_scene_node_key", f"import-a:{node.name.lower()}")
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="PLC_barrel2", root_node=root, model_type=32))
+    renderer._proj = lambda x, y, z, w, h: (int(100 + x * 10), int(100 - z * 10), y)
+
+    img = Image.new("RGB", (240, 240), "black")
+    renderer._draw_bones(ImageDraw.Draw(img), 240, 240)
+
+    assert renderer._bone_screen_positions == []
+
+
+def test_skeletal_bone_overlay_records_local_axis_angles_for_locomotion_discs() -> None:
+    import pytest
+
+    pytest.importorskip("PIL")
+
+    from PIL import Image, ImageDraw
+
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    root = ModelNode(name="N_Test", flags=int(NodeFlags.HEADER))
+    joint = ModelNode(
+        name="pelvis_g",
+        flags=int(NodeFlags.HEADER),
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.3826834324, 0.9238795325),
+        parent=root,
+    )
+    skin = ModelNode(name="body", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN), parent=root)
+    skin.bone_map = ["pelvis_g"]
+    root.children.extend([joint, skin])
+    setattr(joint, "_gr_scene_node_kind", "joint")
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="N_Test", root_node=root, model_type=4))
+    renderer._proj = lambda x, y, z, w, h: (int(100 + x * 20), int(100 - y * 20), z)
+
+    img = Image.new("RGB", (240, 240), "black")
+    renderer._draw_bones(ImageDraw.Draw(img), 240, 240)
+
+    assert id(joint) in renderer._bone_screen_axis_angles
+    assert isinstance(renderer._bone_screen_axis_angles[id(joint)], float)
 
 
 def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:

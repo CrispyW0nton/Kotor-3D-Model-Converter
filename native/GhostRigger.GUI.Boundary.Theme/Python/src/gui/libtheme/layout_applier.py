@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from .layout_model import LayoutDefinition, ToolbarLayout
 
@@ -23,6 +23,17 @@ _BUTTON_STYLES = {
 
 def button_mode_to_toolbutton_style(mode: str) -> QtCore.Qt.ToolButtonStyle:
     return _BUTTON_STYLES.get(mode, QtCore.Qt.ToolButtonTextBesideIcon)
+
+
+def _effective_toolbar_icon_size(mode: str, requested: int) -> int:
+    requested = int(requested or 16)
+    if mode == "iconOnly":
+        return requested
+    if mode == "textOnly":
+        return 0
+    if mode == "textUnderIcon":
+        return max(10, min(requested, 14))
+    return max(10, min(requested, 13))
 
 
 class LayoutApplier(QtCore.QObject):
@@ -60,7 +71,7 @@ class LayoutApplier(QtCore.QObject):
         override_icon_size: int = 0,
     ) -> None:
         mode = override_mode or toolbar.button_mode
-        icon_size = int(override_icon_size or toolbar.icon_size)
+        icon_size = _effective_toolbar_icon_size(mode, int(override_icon_size or toolbar.icon_size))
         tool_style = button_mode_to_toolbutton_style(mode)
         buttons = [
             *container.findChildren(QtWidgets.QToolButton),
@@ -71,22 +82,33 @@ class LayoutApplier(QtCore.QObject):
                 continue
             full_text = button.property("_gr_full_text") or button.text()
             button.setToolTip(button.toolTip() or str(full_text))
+            button.setMaximumWidth(16777215)
+            font = QtGui.QFont(button.font())
+            if mode != "iconOnly":
+                font.setPointSize(max(7, min(font.pointSize() or 8, 8)))
+            button.setFont(font)
             if isinstance(button, QtWidgets.QToolButton):
                 button.setToolButtonStyle(tool_style)
             if mode == "iconOnly" and not button.icon().isNull():
                 button.setProperty("_gr_saved_text", full_text)
                 button.setText("")
+                button.setIconSize(QtCore.QSize(icon_size, icon_size))
                 button.setMinimumWidth(max(icon_size + 14, 28))
             elif mode == "textOnly":
                 button.setText(str(full_text))
                 button.setIconSize(QtCore.QSize(0, 0))
+                text_width = button.fontMetrics().horizontalAdvance(str(full_text))
+                button.setMinimumWidth(max(34, min(text_width + 18, 96)))
             else:
                 button.setText(str(full_text))
                 button.setIconSize(QtCore.QSize(icon_size, icon_size))
+                text_width = button.fontMetrics().horizontalAdvance(str(full_text))
+                button.setMinimumWidth(max(icon_size + 20, min(text_width + icon_size + 24, 118)))
             if toolbar.height > 0:
                 button.setMinimumHeight(max(16, min(toolbar.height - 8, 24)))
                 button.setMaximumHeight(max(16, min(toolbar.height - 4, 28)))
-            button.setMinimumWidth(max(button.minimumWidth(), toolbar.icon_size + 14 if mode == "iconOnly" else 0))
+            if mode == "iconOnly":
+                button.setMinimumWidth(max(button.minimumWidth(), icon_size + 14))
 
     def _apply_toolbars(self, layout: LayoutDefinition, window: QtWidgets.QMainWindow) -> None:
         main_toolbar = layout.toolbar("main")
@@ -130,17 +152,18 @@ class LayoutApplier(QtCore.QObject):
             "contentBrowser": getattr(window, "content_browser_dock", None),
             "scene": getattr(window, "scene_dock", None),
             "properties": getattr(window, "properties_dock", None),
-            "outputLog": getattr(window, "log_panel", None),
+            "outputLog": getattr(window, "output_log_dock", None),
+            "pythonTerminal": getattr(window, "python_terminal_dock", None),
         }
         for panel_id, widget in pairs.items():
             if widget is None:
                 continue
             panel = layout.panel(panel_id)
             widget.setVisible(panel.visible)
-            if panel_id != "outputLog" and isinstance(widget, QtWidgets.QDockWidget):
+            if isinstance(widget, QtWidgets.QDockWidget):
                 widget.setMaximumWidth(16777215)
             user_resizable_width = panel_id == "contentBrowser"
-            if panel_id != "outputLog" and panel.min_width and not user_resizable_width:
+            if panel.min_width and not user_resizable_width:
                 widget.setMinimumWidth(panel.min_width)
             if user_resizable_width:
                 widget.setMinimumWidth(0)
@@ -164,6 +187,8 @@ class LayoutApplier(QtCore.QObject):
                 ("sprite_materials", "spriteMaterials"),
                 ("mesh_tools", "meshTools"),
                 ("adjust_pivot", "adjustPivot"),
+                ("output_log", "outputLog"),
+                ("python_terminal", "pythonTerminal"),
                 ("2das", "2das"),
                 ("resources", "resources"),
                 ("diagnostics", "diagnostics"),

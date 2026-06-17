@@ -247,6 +247,7 @@ class ViewportDragInteractionsMixin:
             self._apply_transform_gizmo_symmetry()
             if node is not None:
                 self._notify_node_moved(node, live=True)
+            self._clear_viewport_hover(request=False, reason="gizmo drag hover suppressed")
             dirty = {"transform": True, "gizmo": True}
             if node is not None and bool(getattr(node, "is_camera", False)):
                 dirty.update({"camera": True, "overlay": True})
@@ -261,10 +262,11 @@ class ViewportDragInteractionsMixin:
                 )
                 and self._snap_selected_external_bones_to_imported_at_cursor(x, y)
             ):
-                self._request_render(fast=True)
-                return
+                    self._request_render(fast=True)
+                    return
             self._apply_gimbal_drag(x, y)
             self._notify_node_moved(self._renderer.selected_node)
+            self._clear_viewport_hover(request=False, reason="gimbal drag hover suppressed")
             self._request_render(fast=True)
             return
 
@@ -283,6 +285,7 @@ class ViewportDragInteractionsMixin:
                     self._renderer.is_interactive = True
             if self._joint_dragging:
                 self._apply_joint_drag(x, y)
+                self._clear_viewport_hover(request=False, reason="joint drag hover suppressed")
                 self._request_render(fast=True)
             return
 
@@ -311,6 +314,7 @@ class ViewportDragInteractionsMixin:
         x, y = int(event.position().x()), int(event.position().y())
         if self._transform_gizmo_dragging:
             self._commit_transform_gizmo_drag()
+            self._refresh_viewport_hover_at(x, y, reason="gizmo drag hover refreshed")
             return
         if self._gimbal_dragging:
             self._gimbal_dragging = False
@@ -387,6 +391,7 @@ class ViewportDragInteractionsMixin:
                     if root_node is not None:
                         self._notify_node_moved(root_node)
             self._transform_gizmo.active_handle = None
+            self._refresh_viewport_hover_at(x, y, reason="gimbal drag hover refreshed")
             self._request_render()
             return
 
@@ -450,6 +455,7 @@ class ViewportDragInteractionsMixin:
             if self.on_bone_selected:
                 self.on_bone_selected(joint)
             self._renderer._hovered_bone = None
+            self._refresh_viewport_hover_at(x, y, reason="joint drag hover refreshed")
             self._request_render()
             return
 
@@ -596,7 +602,8 @@ class ViewportDragInteractionsMixin:
         mesh_hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
         if mesh_hit is not None:
             mesh_node, face_bounds = mesh_hit
-            self.set_selected_node(mesh_node, orbit_bounds=face_bounds)
+            target = self._scene_object_selection_target_for_node(mesh_node)
+            self.set_selected_node(target, orbit_bounds=face_bounds, source="viewport object hit")
             if self.on_bone_selected:
                 self.on_bone_selected(None)
             return
@@ -619,13 +626,35 @@ class ViewportDragInteractionsMixin:
             return
         helper_node = self._helper_hit_test(x, y)
         if helper_node is not None:
-            self.set_selected_node(helper_node)
+            target = self._scene_object_selection_target_for_node(helper_node)
+            self.set_selected_node(target, source="viewport object hit")
             if self.on_bone_selected:
                 self.on_bone_selected(None)
             return
         self.set_selected_node(None)
         if self.on_bone_selected:
             self.on_bone_selected(None)
+
+    def _double_click_lmb(self, event) -> None:
+        x, y = int(event.position().x()), int(event.position().y())
+        if self._measurement_mode:
+            return
+        helper_node = self._helper_hit_test(x, y)
+        if helper_node is not None:
+            target = self._scene_object_selection_target_for_node(helper_node, force_group=True)
+            self.set_selected_node(target, source="viewport double-click attached node")
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
+        mesh_hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
+        if mesh_hit is not None:
+            mesh_node, face_bounds = mesh_hit
+            target = self._scene_object_selection_target_for_node(mesh_node, force_group=True)
+            self.set_selected_node(target, orbit_bounds=face_bounds, source="viewport double-click attached node")
+            if self.on_bone_selected:
+                self.on_bone_selected(None)
+            return
+        self._release_lmb(event)
 
     def _press_pan(self, event) -> None:
         self._pan_dragging = True

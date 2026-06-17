@@ -32,6 +32,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
 <ItemGroup Label="PythonPayload">
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\core\scene\__init__.py" />
     <None Include="Python\src\core\scene\_native.py" />
     <None Include="Python\src\core\scene\axis_mode.py" />
@@ -41,6 +42,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\scene\kmax_validator.py" />
     <None Include="Python\src\core\scene\lyt_room_graph.py" />
     <None Include="Python\src\core\scene\module_scene_import.py" />
+    <None Include="Python\src\core\scene\node_identity.py" />
     <None Include="Python\src\core\scene\scene_manager.py" />
     <None Include="Python\src\core\scene\scene_manifest.py" />
     <None Include="Python\src\core\scene\scene_object.py" />
@@ -48,5 +50,13 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\scene\scene_resource_ref.py" />
     <None Include="Python\src\core\scene\vis_editor.py" />
   </ItemGroup>
+  <PropertyGroup Label="PythonPayloadBuild">
+    <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'=='' and '$(GHOSTRIGGER_PYTHON)'!=''">$(GHOSTRIGGER_PYTHON)</GhostRiggerPythonPayloadPython>
+    <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'==''">python</GhostRiggerPythonPayloadPython>
+  </PropertyGroup>
+  <Target Name="GenerateGhostRiggerPythonPayload" BeforeTargets="PrepareForBuild" Condition="Exists('$(ProjectDir)GeneratePythonPayload.py')">
+    <Message Importance="High" Text="Generating Python payload for $(MSBuildProjectName)" />
+    <Exec Command="&quot;$(GhostRiggerPythonPayloadPython)&quot; &quot;$(ProjectDir)GeneratePythonPayload.py&quot;" />
+  </Target>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

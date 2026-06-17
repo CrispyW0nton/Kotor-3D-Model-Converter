@@ -18,7 +18,7 @@ class ViewportConstructionMixin:
         tb.setObjectName("ViewportToolbar")
         tb.setFrameShape(QtWidgets.QFrame.StyledPanel)
         tb.setLineWidth(1)
-        tb.setMinimumHeight(30)
+        tb.setFixedHeight(34)
         self.viewport_toolbar = tb
         row = QtFlowLayout(
             tb,
@@ -27,7 +27,7 @@ class ViewportConstructionMixin:
             vspacing=2,
             horizontal_alignment=QtCore.Qt.AlignHCenter,
         )
-        row.setContentsMargins(4 if self._compact_controls else 5, 3, 4 if self._compact_controls else 5, 3)
+        row.setContentsMargins(4 if self._compact_controls else 5, 1, 4 if self._compact_controls else 5, 11)
 
         self.renderer_button = self._icon_button(
             "GPU",
@@ -123,6 +123,26 @@ class ViewportConstructionMixin:
             active=True,
             tooltip="Show or hide AccuRig joint-dot handles",
         )
+        self.locomotion_disc_button = self._icon_button(
+            "Locomotion",
+            self.toggle_locomotion_discs,
+            "locomotion_disc",
+            checkable=True,
+            tooltip="Show locomotion discs on key joints. Right-click to set disc size.",
+        )
+        self.locomotion_disc_button.setObjectName("ViewportLocomotionDiscButton")
+        self.locomotion_disc_button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.locomotion_disc_button.customContextMenuRequested.connect(self._show_locomotion_disc_size_dialog)
+        self.locomotion_disc_size_spin = QtWidgets.QSpinBox(self)
+        self.locomotion_disc_size_spin.setObjectName("ViewportLocomotionDiscSize")
+        self.locomotion_disc_size_spin.setRange(32, 256)
+        self.locomotion_disc_size_spin.setSingleStep(8)
+        self.locomotion_disc_size_spin.setValue(int(getattr(self, "_locomotion_disc_size", 96)))
+        self.locomotion_disc_size_spin.setSuffix(" px")
+        self.locomotion_disc_size_spin.setToolTip("Locomotion disc size")
+        self.locomotion_disc_size_spin.setFixedWidth(66)
+        self.locomotion_disc_size_spin.valueChanged.connect(self.set_locomotion_disc_size)
+        self.locomotion_disc_size_spin.hide()
         self.heatmap_button = self._icon_button(
             "Heat",
             self.toggle_weight_heatmap,
@@ -149,6 +169,7 @@ class ViewportConstructionMixin:
         row.addWidget(self.texture_button)
         row.addWidget(self.grid_button)
         row.addWidget(self.joint_dot_button)
+        row.addWidget(self.locomotion_disc_button)
         row.addWidget(self.heatmap_button)
         row.addWidget(self._separator())
 
@@ -296,8 +317,9 @@ class ViewportConstructionMixin:
         toolbar_scroll = make_horizontal_overflow_area(
             tb,
             "ViewportToolbarScroll",
-            height=44,
+            height=34,
             parent=self,
+            show_scrollbar=False,
         )
         toolbar_scroll.setMinimumWidth(0)
         self.viewport_toolbar_scroll = toolbar_scroll
@@ -542,6 +564,49 @@ class ViewportConstructionMixin:
         button.clicked.connect(lambda checked=False: callback(checked) if checkable else callback())
         return button
 
+    def _show_locomotion_disc_size_dialog(self, pos: QtCore.QPoint | None = None) -> None:
+        dialog = getattr(self, "_locomotion_disc_size_dialog", None)
+        if dialog is not None and dialog.isVisible():
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+
+        dialog = QtWidgets.QDialog(self)
+        dialog.setObjectName("ViewportLocomotionDiscSizeDialog")
+        dialog.setWindowTitle("Locomotion Disc")
+        dialog.setWindowFlag(QtCore.Qt.Tool, True)
+        dialog.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(QtWidgets.QLabel("Size"))
+        spin = QtWidgets.QSpinBox(dialog)
+        spin.setObjectName("ViewportLocomotionDiscSizeDialogSpin")
+        spin.setRange(32, 256)
+        spin.setSingleStep(8)
+        spin.setSuffix(" px")
+        spin.setValue(int(getattr(self, "_locomotion_disc_size", 96)))
+        spin.valueChanged.connect(self.set_locomotion_disc_size)
+        row.addWidget(spin)
+        layout.addLayout(row)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close, parent=dialog)
+        buttons.rejected.connect(dialog.close)
+        layout.addWidget(buttons)
+        dialog.finished.connect(lambda _result=0: setattr(self, "_locomotion_disc_size_dialog", None))
+        self._locomotion_disc_size_dialog = dialog
+
+        button = getattr(self, "locomotion_disc_button", None)
+        if button is not None:
+            anchor = pos if pos is not None else QtCore.QPoint(0, button.height())
+            dialog.move(button.mapToGlobal(anchor))
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
     def _icon_button(
         self,
         text: str,
@@ -588,9 +653,27 @@ class ViewportConstructionMixin:
         self._current_theme = theme
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         if toolbar is not None:
+            toolbar.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+            radius = min(3, int(getattr(theme, "metric", lambda *_args: 2)("border.radius", 2)))
+            button_height = 22
             toolbar.setStyleSheet(
                 f"#ViewportToolbar {{ background:{theme.color('viewportToolbar.background', theme.color('toolbar.background'))}; "
                 f"border:1px solid {theme.color('viewportToolbar.border', theme.color('toolbar.border'))}; }}"
+                f"#ViewportToolbar QPushButton, #ViewportToolbar QToolButton {{ "
+                f"background:{theme.color('button.background')}; "
+                f"color:{theme.color('button.text', theme.color('text.primary'))}; "
+                f"border:1px solid {theme.color('viewportToolbar.border', theme.color('panel.border'))}; "
+                f"border-radius:{radius}px; padding:3px 0px 0px 0px; margin:0px; "
+                f"min-height:{button_height}px; max-height:{button_height}px; }}"
+                f"#ViewportToolbar QPushButton:hover, #ViewportToolbar QToolButton:hover {{ "
+                f"background:{theme.color('button.hover')}; color:{theme.color('accent.primary')}; "
+                f"border-color:{theme.color('accent.primary')}; }}"
+                f"#ViewportToolbar QPushButton:pressed, #ViewportToolbar QToolButton:pressed {{ "
+                f"background:{theme.color('button.pressed')}; }}"
+                f"#ViewportToolbar QPushButton:checked, #ViewportToolbar QToolButton:checked {{ "
+                f"background:{theme.color('button.checked')}; "
+                f"color:{theme.color('button.checkedText', theme.color('button.text'))}; "
+                f"border-color:{theme.color('accent.primary')}; }}"
             )
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
@@ -676,12 +759,20 @@ class ViewportConstructionMixin:
         toolbar_layout = layout.toolbar("viewport")
         if toolbar is not None:
             toolbar.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
-            toolbar.setMinimumHeight(toolbar_layout.height)
-            toolbar.setMaximumHeight(16777215)
+            toolbar.setFixedHeight(toolbar_layout.height)
+            toolbar_row = toolbar.layout()
+            if toolbar_row is not None:
+                side_margin = 4 if self._compact_controls else 5
+                top_margin = max(0, (toolbar_layout.height - 22) // 2 - 5)
+                bottom_margin = max(0, toolbar_layout.height - 22 - top_margin)
+                toolbar_row.setContentsMargins(side_margin, top_margin, side_margin, bottom_margin)
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
             toolbar_scroll.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
-            toolbar_scroll.setFixedHeight(max(toolbar_layout.height + 14, toolbar_layout.height))
+            if hasattr(toolbar_scroll, "set_base_fixed_height"):
+                toolbar_scroll.set_base_fixed_height(toolbar_layout.height)
+            else:
+                toolbar_scroll.setFixedHeight(toolbar_layout.height)
             parent = toolbar_scroll.parentWidget()
             if parent is not None and parent.objectName() == "ViewportToolbarBand":
                 parent.setFixedHeight(toolbar_scroll.height())

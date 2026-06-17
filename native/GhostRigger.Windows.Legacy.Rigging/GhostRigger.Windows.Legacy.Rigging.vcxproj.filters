@@ -32,6 +32,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\windows\qt_character_builder_window.py">
       <Filter>Python\src\gui\windows</Filter>
     </None>

@@ -13,6 +13,7 @@ from .mixin_imports import (
     _BG,
     _clean_tex_name,
     _dot,
+    _quat_rotate,
     is_animation_supermodel,
     log,
     math,
@@ -143,10 +144,48 @@ class RendererOverlayMixin:
 
         # Clear bone screen positions for this frame (hit-test tracking)
         self._bone_screen_positions = []
+        self._bone_screen_axis_angles = {}
+
+        skeleton_name_keys: set[str] = set()
+        try:
+            nodes_for_skeleton = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes_for_skeleton = []
+        for candidate in nodes_for_skeleton:
+            for bone_name in getattr(candidate, "bone_map", None) or []:
+                key = str(bone_name or "").strip().lower()
+                if key:
+                    skeleton_name_keys.add(key)
+
+        def _scene_node_kind(node) -> str:
+            return str(getattr(node, "_gr_scene_node_kind", "") or "").strip().lower()
+
+        def _node_has_skeleton_context(node) -> bool:
+            kind = _scene_node_kind(node)
+            if kind == "joint":
+                return True
+            asset_kind = str(getattr(node, "_gr_scene_asset_kind", "") or "").strip().lower()
+            animation_kind = str(getattr(node, "_gr_scene_animation_kind", "") or "").strip().lower()
+            if asset_kind in {"placeable", "static_mesh", "door"} and animation_kind in {"", "static", "rigid"}:
+                return False
+            name_key = str(getattr(node, "name", "") or "").strip().lower()
+            if name_key in skeleton_name_keys:
+                return True
+            if kind in {"mesh", "skin_mesh", "dummy", "animated_dummy", "animated_node", "node"}:
+                return bool(skeleton_name_keys)
+            try:
+                model_type = int(getattr(self.model, "model_type", 4))
+            except Exception:
+                model_type = 4
+            if model_type in {8, 32} and not skeleton_name_keys:
+                return False
+            return True
 
         def _is_bone_node(node) -> bool:
             """Return True if this node is a skeleton joint (dummy OR deform-helper)."""
             if getattr(node, '_hide_skeleton_overlay', False):
+                return False
+            if not _node_has_skeleton_context(node):
                 return False
             nl = (getattr(node, "name", "") or "").lower()
             if self.is_hidden_bone_name(nl):
@@ -231,6 +270,24 @@ class RendererOverlayMixin:
                 return external_wp
             return node.bone_world_position()
 
+        def _record_local_axis_angle(node, wp, pp) -> None:
+            try:
+                _node_wp, node_wo, _is_id = self._node_world_transform(node)
+                axis = _quat_rotate(node_wo, (0.0, 1.0, 0.0))
+                scale = 0.35
+                ep = (wp[0] + axis[0] * scale, wp[1] + axis[1] * scale, wp[2] + axis[2] * scale)
+                pp_axis = self._proj(*ep, W, H)
+                if not pp_axis:
+                    return
+                dx = float(pp_axis[0] - pp[0])
+                dy = float(pp_axis[1] - pp[1])
+                if (dx * dx + dy * dy) < 1.0:
+                    return
+                target_angle = math.atan2(dy, dx)
+                self._bone_screen_axis_angles[id(node)] = -math.degrees(target_angle + math.pi * 0.5)
+            except Exception:
+                return
+
         def _process_bone_node(node):
             """Draw one bone joint + its connection line to the nearest bone ancestor."""
             is_bone = _is_bone_node(node)
@@ -276,6 +333,7 @@ class RendererOverlayMixin:
             if pp:
                 # Record for click hit-testing
                 self._bone_screen_positions.append((pp[0], pp[1], pp[2], node))
+                _record_local_axis_angle(node, wp, pp)
 
                 # Dot appearance
                 if is_sel:

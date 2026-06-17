@@ -1,5 +1,5 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "Python/src/adapters/__init__.py"
-PYTHON_PAYLOAD_0002 RCDATA "Python/src/adapters/native_core/__init__.py"
-PYTHON_PAYLOAD_0003 RCDATA "Python/src/adapters/native_core/package_registry.py"
+PYTHON_PAYLOAD_ADAPTERS_INIT RCDATA "Python/src/adapters/__init__.py"
+PYTHON_PAYLOAD_ADAPTERS_NATIVE_CORE_INIT RCDATA "Python/src/adapters/native_core/__init__.py"
+PYTHON_PAYLOAD_ADAPTERS_NATIVE_CORE_PACKAGE_REGISTRY RCDATA "Python/src/adapters/native_core/package_registry.py"

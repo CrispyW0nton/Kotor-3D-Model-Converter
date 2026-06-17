@@ -74,6 +74,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\gui\windows\__init__.py">
       <Filter>Python\src\gui\windows</Filter>
     </None>
@@ -90,6 +91,9 @@
       <Filter>Python\src\gui\windows\application_core\functions</Filter>
     </None>
     <None Include="Python\src\gui\windows\application_core\functions\geometry.py">
+      <Filter>Python\src\gui\windows\application_core\functions</Filter>
+    </None>
+    <None Include="Python\src\gui\windows\application_core\functions\native_prelaunch.py">
       <Filter>Python\src\gui\windows\application_core\functions</Filter>
     </None>
     <None Include="Python\src\gui\windows\application_core\functions\qt_helpers.py">

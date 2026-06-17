@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
     <None Include="Python\src\adapters\qt_autorig\__init__.py">
       <Filter>Python\src\adapters\qt_autorig</Filter>
     </None>

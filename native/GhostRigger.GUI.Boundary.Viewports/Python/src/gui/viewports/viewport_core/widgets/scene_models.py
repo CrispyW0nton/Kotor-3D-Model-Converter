@@ -6,6 +6,11 @@ from ..shared import *  # noqa: F401,F403
 from .mini_thumbnail import *  # noqa: F401,F403
 from .snap_view_bar import *  # noqa: F401,F403
 
+try:
+    from src.core.scene.node_identity import classify_scene_model, classify_scene_node
+except Exception:  # pragma: no cover - compatibility for direct package execution
+    from core.scene.node_identity import classify_scene_model, classify_scene_node  # type: ignore
+
 
 class ViewportSceneModelMixin:
     def load_model(
@@ -221,6 +226,9 @@ class ViewportSceneModelMixin:
             model_root = getattr(runtime_model, "root_node", None)
             if runtime_model is None or model_root is None:
                 continue
+            instance_metadata = getattr(instance, "metadata", {}) or {}
+            import_id = str(instance_metadata.get("scene_import_id") or instance.id)
+            scene_identity = classify_scene_model(runtime_model, getattr(instance, "source_ref", None))
             first_model = first_model or runtime_model
             try:
                 node = copy.deepcopy(model_root)
@@ -237,8 +245,12 @@ class ViewportSceneModelMixin:
             node.rotation = scene_rotation
             node._gr_scale = scene_scale
             setattr(node, "_gr_scene_object_id", instance.id)
+            setattr(node, "_gr_scene_import_id", import_id)
             setattr(node, "_gr_scene_object_root", True)
             setattr(node, "_gr_scene_object_name", instance.name)
+            setattr(node, "_gr_scene_asset_kind", scene_identity.asset_kind)
+            setattr(node, "_gr_scene_animation_kind", scene_identity.animation_kind)
+            setattr(node, "_gr_scene_skeleton_kind", scene_identity.skeleton_kind)
             setattr(node, "_gr_scene_object_locked", bool(getattr(instance, "locked", False)))
             setattr(node, "_gr_scene_gpu_transform", True)
             setattr(node, "_gr_scene_source_position", source_position)
@@ -260,7 +272,7 @@ class ViewportSceneModelMixin:
 
             # Preserve authored MDL node names for animations, skin bone maps,
             # and qBone/tBone rows while keeping scene placement as metadata.
-            self._tag_scene_object_nodes(node, instance.id, node)
+            self._tag_scene_object_nodes(node, instance.id, node, import_id=import_id, identity=scene_identity)
             self._tag_scene_source_indices(node, runtime_model)
             root.children.append(node)
         if not root.children:
@@ -378,16 +390,28 @@ class ViewportSceneModelMixin:
         setattr(node, "_gr_reference_rotation", pivot_rotation)
         setattr(node, "_gr_pivot_edit_mode", getattr(self, "_pivot_edit_mode", "affect_object_only"))
 
-    def _tag_scene_object_nodes(self, node, object_id: str, root_node) -> None:
+    def _tag_scene_object_nodes(self, node, object_id: str, root_node, *, import_id: str = "", identity=None) -> None:
         stack = [node]
         visited = set()
+        import_key = str(import_id or object_id)
+        asset_kind = str(getattr(identity, "asset_kind", "") or "")
+        animation_kind = str(getattr(identity, "animation_kind", "") or "")
+        skeleton_kind = str(getattr(identity, "skeleton_kind", "") or "")
         while stack:
             current = stack.pop()
             if current is None or id(current) in visited:
                 continue
             visited.add(id(current))
+            authored_name = str(getattr(current, "name", "") or "")
             setattr(current, "_gr_scene_object_id", object_id)
+            setattr(current, "_gr_scene_import_id", import_key)
             setattr(current, "_gr_scene_object_root_ref", root_node)
+            setattr(current, "_gr_scene_source_node_name", authored_name)
+            setattr(current, "_gr_scene_node_key", f"{import_key}:{authored_name.lower()}")
+            setattr(current, "_gr_scene_node_kind", classify_scene_node(current, identity))
+            setattr(current, "_gr_scene_asset_kind", asset_kind)
+            setattr(current, "_gr_scene_animation_kind", animation_kind)
+            setattr(current, "_gr_scene_skeleton_kind", skeleton_kind)
             stack.extend(getattr(current, "children", []) or [])
 
     @staticmethod

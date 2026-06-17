@@ -1,5 +1,5 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "Python/src/__init__.py"
-PYTHON_PAYLOAD_0002 RCDATA "Python/src/core/__init__.py"
-PYTHON_PAYLOAD_0003 RCDATA "Python/src/core/qt_core.py"
+PYTHON_PAYLOAD_INIT RCDATA "Python/src/__init__.py"
+PYTHON_PAYLOAD_CORE_INIT RCDATA "Python/src/core/__init__.py"
+PYTHON_PAYLOAD_CORE_QT_CORE RCDATA "Python/src/core/qt_core.py"
