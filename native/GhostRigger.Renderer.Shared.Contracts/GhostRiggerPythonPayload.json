@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "e35a21744cfcdfd42a2d8a5e46bf5d2ae757843678c8839a2d9dfc52662fbf7f"
+            "sha256": "51fc70788a4dccd7b6b36ded69c5ca450a08d6fd81f019a66d9b563139ffeee1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_BACKEND",

@@ -23,6 +23,7 @@ from .mixin_imports import (
     np,
 )
 from src.core.rendering.mesh_render_data import _pose_node_for_transform
+from src.math.gpu_math import _scene_authored_world_transform, _scene_gpu_root_for_node
 
 
 class RendererGeometryMixin:
@@ -132,6 +133,35 @@ class RendererGeometryMixin:
             from core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
                                          _quat_normalize, _quat_mul)
 
+        def _scene_gpu_overlay_transform(target):
+            scene_root = _scene_gpu_root_for_node(target)
+            if scene_root is None:
+                return None
+            authored = _scene_authored_world_transform(target)
+            if authored is None:
+                return None
+            authored_pos, authored_rot = authored
+            try:
+                scene_pos = tuple(float(v) for v in getattr(scene_root, "position", (0.0, 0.0, 0.0))[:3])
+                scene_rot = _quat_normalize(getattr(scene_root, "rotation", (0.0, 0.0, 0.0, 1.0)))
+                scene_scale = tuple(float(v) for v in getattr(scene_root, "_gr_scale", (1.0, 1.0, 1.0))[:3])
+                local = (
+                    float(authored_pos[0]) * scene_scale[0],
+                    float(authored_pos[1]) * scene_scale[1],
+                    float(authored_pos[2]) * scene_scale[2],
+                )
+                rotated = _qr(scene_rot, local)
+                wp = (
+                    scene_pos[0] + rotated[0],
+                    scene_pos[1] + rotated[1],
+                    scene_pos[2] + rotated[2],
+                )
+                wo = _quat_mul(scene_rot, _quat_normalize(authored_rot))
+                wo_rot = _math.sqrt(wo[0] * wo[0] + wo[1] * wo[1] + wo[2] * wo[2])
+                return (wp, wo, wo_rot < 0.001)
+            except Exception:
+                return None
+
         bas_root = self._bas_attachment_root_for_node(node)
         if bas_root is not None:
             result = self._bas_attachment_world_transform(node, bas_root, _qr, _quat_normalize_bind, _quat_normalize, _quat_mul)
@@ -166,6 +196,15 @@ class RendererGeometryMixin:
                     # NaN guard: fall back to bind-pose position if animated value is non-finite
                     if not (_math.isfinite(lx) and _math.isfinite(ly) and _math.isfinite(lz)):
                         lx, ly, lz = chain_node.position
+                    if bool(getattr(chain_node, "_gr_scene_object_root", False)):
+                        try:
+                            scene_pos = tuple(float(v) for v in getattr(chain_node, "position", (0.0, 0.0, 0.0))[:3])
+                            source_pos = tuple(float(v) for v in getattr(chain_node, "_gr_scene_source_position", scene_pos)[:3])
+                            lx = scene_pos[0] + (float(lx) - source_pos[0])
+                            ly = scene_pos[1] + (float(ly) - source_pos[1])
+                            lz = scene_pos[2] + (float(lz) - source_pos[2])
+                        except Exception:
+                            pass
                     rot = list(pn.rotation)
                     # NaN guard on rotation
                     if not all(_math.isfinite(v) for v in rot):
@@ -230,6 +269,10 @@ class RendererGeometryMixin:
             return result
 
         # Default: bind pose (no animation active)
+        scene_overlay = _scene_gpu_overlay_transform(node)
+        if scene_overlay is not None:
+            self._wt_cache[nid] = scene_overlay
+            return scene_overlay
         wp, wo = node.world_transform()
         wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
         is_id  = (wo_rot < 0.001)

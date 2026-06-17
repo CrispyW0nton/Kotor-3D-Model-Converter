@@ -166,6 +166,20 @@ class AnimationWorkflowMixin:
             self._log(f"Animation first-frame preview error: {exc}", "error")
             return False
     def _handle_animation_action(self, action: str, anim_name: str):
+        if action == "Stop":
+            self._animation_timer.stop()
+            self._animation_last_tick = None
+            self._animation_status_last_update = 0.0
+            engine = getattr(self, "_animation_engine", None)
+            if engine is not None:
+                engine.stop()
+            if hasattr(self, "viewport") and hasattr(self.viewport, "set_animation_playback_active"):
+                self.viewport.set_animation_playback_active(False)
+            if hasattr(self, "viewport") and hasattr(self.viewport, "clear_animation_pose"):
+                self.viewport.clear_animation_pose()
+            if hasattr(self, "animations_panel"):
+                self.animations_panel.info.setPlainText("Animation stopped.")
+            return
         body_model = self._require_model("Animations")
         if body_model is None:
             return
@@ -202,6 +216,9 @@ class AnimationWorkflowMixin:
                 with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
                     ok = self._animation_engine.play(anim_name, loop=self._animation_loop, blend=False)
                 if ok:
+                    self._animation_active_model = model
+                    self._animation_active_game = inheritance_game
+                    self._animation_active_supermodel = inheritance_supermodel
                     try:
                         self.viewport.set_anim_base_pose(self._tag_animation_pose_source(self._animation_engine.evaluate(0.0), model, anim_name, inheritance_game))
                     except Exception:
@@ -215,16 +232,6 @@ class AnimationWorkflowMixin:
                     f"Playing {animation_row_label(anim_name, game=model_game)}" if ok else f"Animation not found: {anim_name}"
                 )
                 self._log(f"Animation play: {anim_name}", "success" if ok else "warning")
-            elif action == "Stop":
-                self._animation_timer.stop()
-                self._animation_last_tick = None
-                self._animation_status_last_update = 0.0
-                self._animation_engine.stop()
-                if hasattr(self.viewport, "set_animation_playback_active"):
-                    self.viewport.set_animation_playback_active(False)
-                if hasattr(self.viewport, "clear_animation_pose"):
-                    self.viewport.clear_animation_pose()
-                self.animations_panel.info.setPlainText("Animation stopped.")
             elif action == "Loop":
                 self._animation_loop = not self._animation_loop
                 if self._animation_engine is not None:
@@ -240,15 +247,19 @@ class AnimationWorkflowMixin:
     def _load_animation_panel_model(self, model, select_name: str = "") -> None:
         source_model = self._animation_source_model(model)
         if source_model is None:
+            self._animation_engine = None
             self.animations_panel.load_model(None)
             source = self._animation_source_label()
-            self.animations_panel.info.setPlainText(f"No {source.lower()} animation source loaded.")
+            self.animations_panel.info.setPlainText(f"No suitable {source.lower()} model selected.")
+            if hasattr(self, "viewport") and hasattr(self.viewport, "clear_animation_pose"):
+                self.viewport.clear_animation_pose()
             return
         model = source_model
         model_game = self._animation_model_game(model)
         inheritance_game = self._animation_inheritance_game(model)
         inheritance_supermodel = self._animation_inheritance_supermodel(model)
-        self.animations_panel.load_model(model, select_name=select_name, game=model_game)
+        self.animations_panel.load_model(None)
+        self.animations_panel.set_inheritance_game(model_game, emit=False)
         if model is None:
             return
         try:
@@ -262,12 +273,11 @@ class AnimationWorkflowMixin:
                 entries = self._filter_animation_browser_entries(model, engine.list_all_animations())
         except Exception:
             log.debug("Inherited animation panel load failed", exc_info=True)
+            self.animations_panel.load_model(model, select_name=select_name, game=model_game)
             return
         existing = set()
-        for index in range(self.animations_panel.listbox.count()):
-            item = self.animations_panel.listbox.item(index)
-            existing.add(str(item.data(QtCore.Qt.UserRole) or item.text()).lower())
         inherited_count = 0
+        local_count = 0
         for entry in entries:
             name = str(entry.get("name") or "")
             if not name or name.lower() in existing:
@@ -279,11 +289,19 @@ class AnimationWorkflowMixin:
             existing.add(name.lower())
             if bool(entry.get("inherited")):
                 inherited_count += 1
+            else:
+                local_count += 1
         total = self.animations_panel.listbox.count()
         if inherited_count:
-            self.animations_panel.info.setPlainText(f"{total} animation(s), {inherited_count} inherited")
+            self.animations_panel.info.setPlainText(
+                f"{total} animation(s) for {getattr(model, 'name', 'selected model')}\n"
+                f"Mode: {self._animation_source_label()}  Local: {local_count}  Inherited: {inherited_count}"
+            )
         else:
-            self.animations_panel.info.setPlainText(f"{total} animation(s)")
+            self.animations_panel.info.setPlainText(
+                f"{total} animation(s) for {getattr(model, 'name', 'selected model')}\n"
+                f"Mode: {self._animation_source_label()}  Local: {local_count}"
+            )
         if select_name:
             self.animations_panel.select_animation(select_name)
     def _handle_animation_inheritance_game_changed(self, _game: str) -> None:
@@ -323,25 +341,65 @@ class AnimationWorkflowMixin:
     def _animation_source_model(self, fallback_model=None):
         source = self._animation_source_key()
         if source == "body":
-            return (
-                getattr(self, "_bas_body_model", None)
-                or fallback_model
-                or getattr(self, "_current_model", None)
-            )
+            body_model = getattr(self, "_bas_body_model", None)
+            if self._model_is_animation_browser_source(body_model):
+                return body_model
+
+            selected_objects = []
+            scene_manager = getattr(self, "scene_manager", None)
+            if scene_manager is not None:
+                try:
+                    selected_objects = list(scene_manager.get_selected_objects() or [])
+                except Exception:
+                    selected_objects = []
+            if selected_objects:
+                selected_object = self._selected_scene_model_object() if hasattr(self, "_selected_scene_model_object") else None
+                selected_model = None
+                if selected_object is not None and hasattr(self, "_runtime_model_for_scene_object"):
+                    selected_model = self._runtime_model_for_scene_object(selected_object)
+                return selected_model if self._model_is_animation_browser_source(selected_model) else None
+
+            for candidate in (getattr(self, "_current_model", None), fallback_model):
+                if self._model_is_animation_browser_source(candidate):
+                    return candidate
+            return None
         if source == "head":
             for attr in ("_current_head_model", "_attached_head_model", "_head_model"):
                 model = getattr(self, attr, None)
-                if model is not None:
+                if self._model_is_animation_browser_source(model):
                     return model
             for model in (fallback_model, getattr(self, "_current_model", None)):
-                if self._model_is_head_animation_source(model):
+                if self._model_is_head_animation_source(model) and self._model_is_animation_browser_source(model):
                     return model
             return None
         for attr in ("_current_attachment_model", "_current_weapon_model", "_attached_weapon_model", "_attachment_model"):
             model = getattr(self, attr, None)
-            if model is not None:
+            if self._model_is_animation_browser_source(model):
                 return model
         return None
+    def _model_is_animation_browser_source(self, model) -> bool:
+        if model is None:
+            return False
+        if getattr(model, "animations", None):
+            return True
+        supermodel = str(getattr(model, "supermodel", "") or "").strip().upper()
+        if supermodel and supermodel not in {"NULL", "NONE"}:
+            return True
+        try:
+            from src.core.geometry.model_data import CharacterMode, detect_character_mode, is_animation_supermodel
+
+            if is_animation_supermodel(model):
+                return True
+            return detect_character_mode(model) in {
+                CharacterMode.HEADLESS_BODY,
+                CharacterMode.HEAD,
+                CharacterMode.HUMANOID,
+                CharacterMode.SUPERMODEL,
+                CharacterMode.CREATURE,
+            }
+        except Exception:
+            name = str(getattr(model, "name", "") or "").lower()
+            return name.startswith(("pm", "pf", "n_", "c_", "s_"))
     def _filter_animation_browser_entries(self, model, entries: list[dict]) -> list[dict]:
         if self._animation_source_key() != "head" or not self._model_is_head_animation_source(model):
             return entries
@@ -712,7 +770,16 @@ class AnimationWorkflowMixin:
         anim = engine.current_animation
         anim_name = getattr(anim, "name", "") if anim else ""
         anim_length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
-        pose = self._tag_animation_pose_source(pose=engine.evaluate(), model=getattr(engine, "model", None), anim_name=anim_name)
+        active_model = getattr(self, "_animation_active_model", None) or getattr(engine, "model", None)
+        active_game = str(getattr(self, "_animation_active_game", "") or "")
+        active_supermodel = str(getattr(self, "_animation_active_supermodel", "") or "")
+        with self._animation_resolution_context(active_model, active_game, active_supermodel):
+            pose = self._tag_animation_pose_source(
+                pose=engine.evaluate(),
+                model=active_model,
+                anim_name=anim_name,
+                game=active_game,
+            )
         if hasattr(self, "viewport"):
             self.viewport.set_animation_pose(
                 pose,

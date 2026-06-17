@@ -286,3 +286,5 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_native_core_package_registry.py
 !/tests/test_native_project_templates.py
 /knowledge_base/books
+/docs/architecture
+/docs

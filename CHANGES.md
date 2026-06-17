@@ -11,6 +11,51 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Animation Browser Source-Scoped Clips
+
+Owner: LordVaderCW
+Subsystem: Animation Browser, inherited animation selection, and viewport playback dispatch
+
+- Changed the Animation Browser to clear when the selected scene object is not an animation-capable model instead of falling back to a stale/current model.
+- Populated the browser from the selected source model's effective local-plus-supermodel animation chain, with source mode counts and inherited-source labels.
+- Replaced the visible game selector with an auto game label, added SVG source/supermodel set toggles, expanded supermodel labels, and added per-animation SVG action badges.
+- Kept inherited playback tagged with the active source model/game/supermodel during timer ticks so viewport pose dispatch remains tied to the selected animation source.
+- Updated the GUI Panels and Shell Main native Python payload hashes for the changed Python files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_animation_panel.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\animation_workflow.py` passed.
+- `python -m py_compile tests\test_core_contracts.py` passed.
+- `python -m pytest tests/test_core_contracts.py::test_qt_animations_panel_can_select_loaded_animation tests/test_core_contracts.py::test_qt_animations_panel_displays_readable_names_with_raw_animation_slots tests/test_core_contracts.py::test_qt_animations_panel_marks_inherited_readable_names_with_raw_slots tests/test_core_contracts.py::test_qt_animations_panel_exposes_auto_inheritance_game_label tests/test_core_contracts.py::test_qt_animations_panel_exposes_animation_source_selector tests/test_core_contracts.py::test_animation_browser_clears_for_selected_static_object -q -p no:cacheprovider` passed (`6 passed`) with split native Python package roots on `PYTHONPATH`.
+
+### [2026-06-17] ModernGL Scene Root Helper Placement
+
+Owner: LordVaderCW
+Subsystem: ModernGL scene-object placement, KMAX helper/root overlays, and renderer transform data
+
+- Aligned scene-tagged root/helper transform evaluation with the ModernGL scene GPU transform path so authored root offsets, dummy helpers, and per-object placement stay together when a KMAX object is moved.
+- Kept the transform lookup scoped to the owning scene-object root so moving one model does not affect sibling scene roots or helpers.
+- Updated the Core Rendering native Python payload hash for the changed transform code.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_geometry.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_scene_root_overlay_transform_follows_own_object_offset_only -q -p no:cacheprovider` passed (`1 passed`) with native Python package roots on `PYTHONPATH`.
+- Visible ModernGL Debug-app smoke imported `c_turret01`, moved the selected scene object to `(2.5, 0.0, 0.0)` through IPC, confirmed `Renderer: ModernGL | Display: Textured`, and captured before/after viewport screenshots at `artifacts\modern_gl_root_helper_before.png` and `artifacts\modern_gl_root_helper_after.png`; the root/helpers stayed with the placed turret.
+
+### [2026-06-17] ModernGL Scene Animation Placement Isolation
+
+Owner: LordVaderCW
+Subsystem: ModernGL scene animation playback, KMAX scene selection, and render-data pose transforms
+
+- Changed the Animation Browser body source resolver to prefer the selected KMAX scene object's runtime model over the composite scene model, so per-subject animation playback targets the selected model.
+- Kept animated scene-root transforms relative to each object's authored source root and current KMAX placement, preventing root animation tracks from snapping placed meshes/skeletons back to model origin.
+- Updated native Python payload hashes for the touched ModernGL/render-data and shell packages.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Renderer.Shared.Contracts\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Runtime.Shared.Descriptors\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\animation_workflow.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests/test_core_contracts.py::test_animation_source_model_prefers_selected_scene_object_over_composite tests/test_core_contracts.py::test_scene_root_animation_pose_preserves_world_placement -q -p no:cacheprovider` passed (`2 passed`) with native Python package roots on `PYTHONPATH`.
+- Visible ModernGL Debug-app smoke via IPC loaded `Multiple Models Test Scene.kmax`, selected `N_DarthMalak`, `P_CarthBB`, `N_Bith`, `c_turret01`, and `c_turret02`, confirmed ModernGL renderer state, and captured per-subject playback screenshots under `artifacts\modern_gl_*.png`.
+- Fresh-scene ModernGL IPC smoke added mixed content-browser assets including `plc_bench`, `P_T3M4`, `pmbam`, `n_darthmalak`, and `dor_lda01`; `P_T3M4` played `pause1` while the viewport state reported `Renderer: ModernGL | Display: Textured`. Module row `001ebo1` lookup worked, but direct scene import timed out through the current library-select IPC path.
+
 ### [2026-06-17] Native Splash Folded Into Host Executable
 
 Owner: LordVaderCW

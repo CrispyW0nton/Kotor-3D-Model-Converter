@@ -5697,6 +5697,54 @@ def test_scene_bone_overlay_uses_scene_world_transform_and_skips_composite_root(
     assert "wp, _, _ = self._node_world_transform(node)" in source
 
 
+def test_scene_root_overlay_transform_follows_own_object_offset_only() -> None:
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    scene_root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+    turret_root = ModelNode(name="c_turret01", flags=int(NodeFlags.HEADER), parent=scene_root)
+    turret_root.position = (10.0, 0.0, 0.0)
+    turret_root.rotation = (0.0, 0.0, 0.0, 1.0)
+    turret_root._gr_scene_object_id = "turret-a"
+    turret_root._gr_scene_object_root = True
+    turret_root._gr_scene_gpu_transform = True
+    turret_root._gr_scene_source_position = (3.0, 0.0, 0.0)
+    turret_root._gr_scene_source_rotation = (0.0, 0.0, 0.0, 1.0)
+    turret_helper = ModelNode(name="turret_dummy", flags=int(NodeFlags.HEADER), parent=turret_root)
+    turret_helper.position = (2.0, 0.0, 0.0)
+    turret_helper._gr_scene_object_id = "turret-a"
+    turret_helper._gr_scene_object_root_ref = turret_root
+
+    other_root = ModelNode(name="c_turret02", flags=int(NodeFlags.HEADER), parent=scene_root)
+    other_root.position = (-5.0, 0.0, 0.0)
+    other_root._gr_scene_object_id = "turret-b"
+    other_root._gr_scene_object_root = True
+    other_root._gr_scene_gpu_transform = True
+    other_root._gr_scene_source_position = (1.0, 0.0, 0.0)
+    other_helper = ModelNode(name="other_dummy", flags=int(NodeFlags.HEADER), parent=other_root)
+    other_helper.position = (4.0, 0.0, 0.0)
+    other_helper._gr_scene_object_id = "turret-b"
+    other_helper._gr_scene_object_root_ref = other_root
+    scene_root.children = [turret_root, other_root]
+    turret_root.children = [turret_helper]
+    other_root.children = [other_helper]
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="scene", root_node=scene_root))
+
+    assert renderer._node_world_transform(turret_root)[0] == pytest.approx((13.0, 0.0, 0.0))
+    assert renderer._node_world_transform(turret_helper)[0] == pytest.approx((15.0, 0.0, 0.0))
+    assert renderer._node_world_transform(other_helper)[0] == pytest.approx((0.0, 0.0, 0.0))
+
+    turret_root.position = (20.0, 0.0, 0.0)
+    renderer._wt_cache.clear()
+
+    assert renderer._node_world_transform(turret_root)[0] == pytest.approx((23.0, 0.0, 0.0))
+    assert renderer._node_world_transform(turret_helper)[0] == pytest.approx((25.0, 0.0, 0.0))
+    assert renderer._node_world_transform(other_helper)[0] == pytest.approx((0.0, 0.0, 0.0))
+
+
 def test_viewport_marquee_drag_only_updates_rubber_band_before_release() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -8441,7 +8489,7 @@ def test_qt_animations_panel_displays_readable_names_with_raw_animation_slots() 
     assert panel.listbox.item(6).text() == "Blaster Set 8 (Assault Cannons: Both Hands) Attack 1 [b8a1]"
     assert panel.listbox.item(7).text() == "Combat Set 10 Block 3 [c10n3]"
     assert panel.listbox.item(8).text() == "Combat Set 2 (Single Hand Melee: Vibrosword, Short Sword) Attack 1 [c2a1]"
-    assert panel.listbox.item(9).text() == "Fists Set 2 Parry 4 Form A [f2p4a]"
+    assert panel.listbox.item(9).text() == "Fists Set 2 Power Attack 4 Form A [f2p4a]"
     assert panel.listbox.item(10).text() == "General Weapon Set 1 (Single Hand Melee: Shortsword) Attack 1 [g1a1]"
     assert panel.listbox.item(11).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Flurry 1 [g2f1]"
     assert panel.listbox.item(12).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Idle (On Guard Pose) 1 [g2r1]"
@@ -8486,7 +8534,7 @@ def test_qt_animations_panel_marks_inherited_readable_names_with_raw_slots() -> 
     assert panel.selected_animation() == "pause1"
 
 
-def test_qt_animations_panel_exposes_inheritance_game_selector() -> None:
+def test_qt_animations_panel_exposes_auto_inheritance_game_label() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from PySide6 import QtWidgets
@@ -8501,11 +8549,13 @@ def test_qt_animations_panel_exposes_inheritance_game_selector() -> None:
     panel.set_inheritance_game("K2")
 
     assert panel.selected_inheritance_game() == "K2"
+    assert panel.inheritance_game_label.text() == "K2"
     assert changes[-1] == "K2"
 
     panel.set_inheritance_game("")
 
     assert panel.selected_inheritance_game() == ""
+    assert panel.inheritance_game_label.text() == "Auto"
 
 
 def test_qt_animations_panel_exposes_animation_source_selector() -> None:
@@ -8530,6 +8580,47 @@ def test_qt_animations_panel_exposes_animation_source_selector() -> None:
     assert panel.selected_animation_source() == "attachment"
 
 
+def test_qt_animations_panel_uses_auto_game_label_and_source_icon_buttons() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+
+    assert not hasattr(panel, "inheritance_game_combo")
+    assert panel.inheritance_game_label.text() == "Auto"
+    assert panel.findChild(QtWidgets.QToolButton, "AnimationSourceBodyButton") is not None
+    assert panel.findChild(QtWidgets.QToolButton, "AnimationSourceHeadButton") is not None
+    assert panel.findChild(QtWidgets.QToolButton, "AnimationSourceAttachmentButton") is not None
+
+    panel.load_model(SimpleNamespace(_gr_source_game="K2", animations=[]))
+
+    assert panel.inheritance_game_label.text() == "K2"
+
+
+def test_qt_animations_panel_supermodel_selector_lists_extended_pc_sets() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+
+    values = {
+        str(panel.inheritance_supermodel_combo.itemData(index) or "")
+        for index in range(panel.inheritance_supermodel_combo.count())
+    }
+
+    assert {"S_Female01", "S_Female02", "S_Female03", "S_Male01", "S_Male02", "S_Male03"} <= values
+    panel.set_inheritance_supermodel("S_Custom01")
+    assert panel.selected_inheritance_supermodel() == "S_Custom01"
+
+
 def test_main_window_head_animation_source_accepts_standalone_head() -> None:
     from src.core.geometry.model_data import KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -8546,6 +8637,35 @@ def test_main_window_head_animation_source_accepts_standalone_head() -> None:
     assert window._animation_source_model() is window._current_model
 
     window._current_model = KotorModel(name="PMBAM", supermodel="S_Male02")
+
+    assert window._animation_source_model() is None
+
+
+def test_main_window_animation_browser_clears_for_unsuitable_selected_model() -> None:
+    from src.core.geometry.model_data import KotorModel
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+
+    class Panel:
+        def selected_animation_source(self) -> str:
+            return "body"
+
+    class Window(AnimationWorkflowMixin):
+        def _selected_scene_model_object(self):
+            return selected_object
+
+        def _runtime_model_for_scene_object(self, obj):
+            return (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+
+    unsupported = KotorModel(name="PLC_bench", supermodel="NULL")
+    selected_object = SimpleNamespace(object_type="model", metadata={"_runtime_model": unsupported})
+    scene_manager = SimpleNamespace(get_selected_objects=lambda: [selected_object])
+    valid_current = KotorModel(name="PMBAM", supermodel="S_Male02")
+
+    window = Window()
+    window.animations_panel = Panel()
+    window.scene_manager = scene_manager
+    window._current_model = valid_current
+    window._bas_body_model = None
 
     assert window._animation_source_model() is None
 
@@ -9376,6 +9496,76 @@ def test_animation_source_model_keeps_bas_body_as_animation_owner() -> None:
     assert QtGhostRiggerMainWindow._animation_source_model(window) is body
 
 
+def test_animation_source_model_prefers_selected_scene_object_over_composite() -> None:
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+    from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
+
+    selected_model = SimpleNamespace(name="N_Malak")
+    other_model = SimpleNamespace(name="N_Bith")
+    composite = SimpleNamespace(name="Untitled Scene [K1]", _gr_scene_composite_root=True)
+    selected_object = SimpleNamespace(object_type="model", metadata={"_runtime_model": selected_model})
+    scene_manager = SimpleNamespace(
+        get_selected_objects=lambda: [selected_object],
+        active_scene=SimpleNamespace(
+            objects=[
+                SimpleNamespace(object_type="model", metadata={"_runtime_model": other_model}),
+                selected_object,
+            ]
+        ),
+    )
+    window = SimpleNamespace(
+        _bas_body_model=None,
+        _current_model=other_model,
+        scene_manager=scene_manager,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+    )
+    window._animation_source_key = MethodType(AnimationWorkflowMixin._animation_source_key, window)
+    window._selected_scene_model_object = MethodType(SceneWorkflowMixin._selected_scene_model_object, window)
+    window._runtime_model_for_scene_object = MethodType(SceneWorkflowMixin._runtime_model_for_scene_object, window)
+
+    assert AnimationWorkflowMixin._animation_source_model(window, composite) is selected_model
+
+
+def test_animation_browser_clears_for_selected_static_object() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+    from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    static_model = SimpleNamespace(name="PLC_bench", animations=[], supermodel="NULL")
+    static_object = SimpleNamespace(object_type="model", metadata={"_runtime_model": static_model})
+    scene_manager = SimpleNamespace(
+        get_selected_objects=lambda: [static_object],
+        active_scene=SimpleNamespace(objects=[static_object]),
+    )
+    clear_calls = []
+    window = SimpleNamespace(
+        _bas_body_model=None,
+        _current_model=SimpleNamespace(name="N_DarthMalak", animations=[SimpleNamespace(name="walk")]),
+        _animation_engine=object(),
+        scene_manager=scene_manager,
+        animations_panel=QtAnimationsPanel(),
+        viewport=SimpleNamespace(clear_animation_pose=lambda: clear_calls.append("clear")),
+    )
+    window._animation_source_key = MethodType(AnimationWorkflowMixin._animation_source_key, window)
+    window._animation_source_label = MethodType(AnimationWorkflowMixin._animation_source_label, window)
+    window._animation_source_model = MethodType(AnimationWorkflowMixin._animation_source_model, window)
+    window._model_is_animation_browser_source = MethodType(AnimationWorkflowMixin._model_is_animation_browser_source, window)
+    window._selected_scene_model_object = MethodType(SceneWorkflowMixin._selected_scene_model_object, window)
+    window._runtime_model_for_scene_object = MethodType(SceneWorkflowMixin._runtime_model_for_scene_object, window)
+
+    AnimationWorkflowMixin._load_animation_panel_model(window, window._current_model)
+
+    assert window.animations_panel.listbox.count() == 0
+    assert "No suitable body model selected" in window.animations_panel.info.toPlainText()
+    assert window._animation_engine is None
+    assert clear_calls == ["clear"]
+
+
 def test_bas_animation_engine_returns_to_body_without_losing_time() -> None:
     from src.core.animation.animation_engine import AnimationEngine
     from src.core.geometry.model_data import Animation, KotorModel
@@ -9568,7 +9758,7 @@ def test_qt_animations_panel_exposes_bake_and_binary_export_actions() -> None:
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     panel = QtAnimationsPanel()
-    labels = {button.text() for button in panel.findChildren(QtWidgets.QPushButton)}
+    labels = {button.text() for button in panel.findChildren(QtWidgets.QAbstractButton)}
 
     assert "Bake Animation" in labels
     assert "Export Binary MDL" in labels
@@ -10709,6 +10899,36 @@ def test_animation_pose_source_tags_selected_scene_object() -> None:
     assert pose._gr_animation_scene_import_id == "import-1"
     assert pose._gr_animation_name == "walk"
     assert pose._gr_animation_game == "K1"
+
+
+def test_scene_root_animation_pose_preserves_world_placement() -> None:
+    from src.core.geometry.model_data import ModelNode
+    from src.core.rendering.mesh_render_data import node_world_matrix
+
+    scene_root = ModelNode(name="scene_root")
+    model_root = ModelNode(name="N_Malak", parent=scene_root, position=(10.0, 0.0, 0.0))
+    pelvis = ModelNode(name="pelvis_g", parent=model_root, position=(0.0, 2.0, 0.0))
+    scene_root.children = [model_root]
+    model_root.children = [pelvis]
+    model_root._gr_scene_object_root = True
+    model_root._gr_scene_source_position = (0.08, 0.0, 0.0)
+    model_root._gr_source_model_id = 101
+    pelvis._gr_source_model_id = 101
+
+    pose = SimpleNamespace(
+        _gr_animation_source_model_id=101,
+        nodes={
+            "n_malak": SimpleNamespace(position=(0.08, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "pelvis_g": SimpleNamespace(position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    matrix = node_world_matrix(pelvis, anim_pose=pose)
+
+    assert matrix[0, 3] == pytest.approx(10.0)
+    assert matrix[1, 3] == pytest.approx(2.0)
 
 
 def test_quinn_bone_map_loads_as_unreal_target_model() -> None:

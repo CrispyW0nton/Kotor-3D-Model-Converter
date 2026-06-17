@@ -21,7 +21,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "066843d47cf5781175204db868203f5d6adb7cba6a8bedf55beb75cdf38ab381"
+            "sha256": "7eba0e2f10f5348305eafb64e8ad3c2b74a4658ce6ed26fb4e49a331708259b1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",

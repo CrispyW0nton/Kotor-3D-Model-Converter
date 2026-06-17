@@ -105,7 +105,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL",
             "source_path": "src/gui/panels/qt_animation_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_animation_panel.py",
-            "sha256": "c421f8f4684dfe0a6404df12cdc1d2986f01e2e7eb57d61ae0d403f0eee2bd4e"
+            "sha256": "6f763e3ccac83f73bc8eed570e29d8bf614188090ab11895bff647f84cb19655"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL",

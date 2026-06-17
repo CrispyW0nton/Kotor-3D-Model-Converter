@@ -1260,6 +1260,12 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
             lx, ly, lz = getattr(pose_node, "position", getattr(chain_node, "position", (0.0, 0.0, 0.0)))
             if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):
                 lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            if bool(getattr(chain_node, "_gr_scene_object_root", False)):
+                scene_pos = tuple(float(v) for v in getattr(chain_node, "position", (0.0, 0.0, 0.0))[:3])
+                source_pos = tuple(float(v) for v in getattr(chain_node, "_gr_scene_source_position", scene_pos)[:3])
+                lx = scene_pos[0] + (float(lx) - source_pos[0])
+                ly = scene_pos[1] + (float(ly) - source_pos[1])
+                lz = scene_pos[2] + (float(lz) - source_pos[2])
             rot = list(getattr(pose_node, "rotation", getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0))))
             if not all(math.isfinite(v) for v in rot):
                 rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
