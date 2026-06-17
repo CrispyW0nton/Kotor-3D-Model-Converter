@@ -13,6 +13,15 @@
     <Filter Include="Public">
       <UniqueIdentifier>{8cc05691-e324-99e4-dabe-565b0b44d6be}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Resources">
+      <UniqueIdentifier>{13f50177-4d55-42ff-9f61-a98280eab6d0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources\icons">
+      <UniqueIdentifier>{9c9c27c9-d696-44de-857f-039d7b36079f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resources\svg">
+      <UniqueIdentifier>{ab9debc8-1ffa-489a-b2ed-d95f7a79c8e7}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Private\main.cpp">
@@ -23,8 +32,32 @@
     <ClInclude Include="Public\GhostRiggerNativeDependencies.h">
       <Filter>Public</Filter>
     </ClInclude>
+    <ClInclude Include="Public\GhostRiggerNativeSplashResource.h">
+      <Filter>Public</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\..\assets\icons\ghostrigger_1024x1024.png">
+      <Filter>Resources\icons</Filter>
+    </Image>
+    <None Include="resources\svg\check.svg">
+      <Filter>Resources\svg</Filter>
+    </None>
+    <None Include="resources\svg\document.svg">
+      <Filter>Resources\svg</Filter>
+    </None>
+    <None Include="resources\svg\gear.svg">
+      <Filter>Resources\svg</Filter>
+    </None>
+    <None Include="resources\svg\spinner.svg">
+      <Filter>Resources\svg</Filter>
+    </None>
+    <None Include="resources\svg\terminal.svg">
+      <Filter>Resources\svg</Filter>
+    </None>
+    <None Include="resources\svg\trash.svg">
+      <Filter>Resources\svg</Filter>
+    </None>
     <None Include="main.py">
       <Filter>..</Filter>
     </None>
@@ -43,5 +76,10 @@
     <None Include="..\README.md">
       <Filter>..</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerNativeSplash.rc">
+      <Filter>Resources</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

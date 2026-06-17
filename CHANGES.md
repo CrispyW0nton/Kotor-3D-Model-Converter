@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Native Splash Folded Into Host Executable
+
+Owner: LordVaderCW
+Subsystem: Native host executable packaging, startup splash resources, and Visual Studio solution targets
+
+- Removed the standalone `GhostRigger.Windows.Splash` Visual Studio application project from `GhostRigger.sln` so startup splash packaging no longer produces or advertises a separate splash `.exe`.
+- Moved the tracked splash SVG resources into `native/GhostRigger.Native.Core.Host` and added `GhostRiggerNativeSplash.rc` plus host-owned resource IDs so splash artwork is compiled into the main `GhostRigger.exe` target.
+- Updated the native project template contracts to assert that `GhostRigger.Native.Core.Host` owns the splash resources and that no `GhostRigger.Windows.Splash.vcxproj` remains.
+
+Verification:
+- XML parse checks passed for `native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj` and `native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj.filters`.
+- `python -m pytest tests\test_native_project_templates.py::test_native_host_executable_owns_splash_resources_without_a_second_exe tests\test_native_project_templates.py::test_native_solution_keeps_real_projects_without_solution_folders tests\test_native_project_templates.py::test_native_namespace_manifest_covers_solution_projects -q` passed (`3 passed`).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` reached final link after compiling the host splash resource script, then stopped because the currently running `build\vs\x64\Debug\GhostRigger.exe` process had the output executable locked.
+
 ### [2026-06-17] KMAX Viewport Scene Selection Roots
 
 Owner: LordVaderCW

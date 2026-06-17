@@ -142,6 +142,17 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerNativeDependencies.h" />
+    <ClInclude Include="Public\GhostRiggerNativeSplashResource.h" />
+  </ItemGroup>
+  <ItemGroup Label="NativeSplashResources">
+    <ResourceCompile Include="GhostRiggerNativeSplash.rc" />
+    <Image Include="..\..\assets\icons\ghostrigger_1024x1024.png" />
+    <None Include="resources\svg\check.svg" />
+    <None Include="resources\svg\document.svg" />
+    <None Include="resources\svg\gear.svg" />
+    <None Include="resources\svg\spinner.svg" />
+    <None Include="resources\svg\terminal.svg" />
+    <None Include="resources\svg\trash.svg" />
   </ItemGroup>
   <ItemGroup Label="NativePayloadDependencies">
     <ProjectReference Include="..\GhostRigger.Adapters.IO.Files\GhostRigger.Adapters.IO.Files.vcxproj">
