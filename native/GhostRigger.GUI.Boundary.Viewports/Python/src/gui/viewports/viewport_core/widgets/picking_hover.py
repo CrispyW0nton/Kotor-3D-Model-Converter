@@ -816,14 +816,15 @@ class ViewportPickingHoverMixin:
         value = str(mode or getattr(self, "_viewport_selection_mode", "object") or "object").strip().lower()
         if self.model is None:
             return []
-        if self._renderer_is_wgpu_like() and value in {"mesh", "object"}:
+        if self._renderer_is_wgpu_like() and value in {"mesh", "object", "any"}:
             gpu_nodes = self._gpu_marquee_pick_nodes(rect, value)
             if gpu_nodes is not None:
                 if value == "mesh":
                     return [node for node in gpu_nodes if self._is_selectable_mesh_node(node)]
                 if value == "object":
+                    return self._promote_nodes_to_scene_selection_roots(gpu_nodes)
+                if value == "any":
                     return gpu_nodes
-                return []
             if not allow_cpu:
                 self._last_pick_diagnostics = {
                     "method": "GPU marquee",
@@ -853,7 +854,22 @@ class ViewportPickingHoverMixin:
                     continue
                 seen.add(id(node))
                 nodes.append(node)
+        if value == "object":
+            return self._promote_nodes_to_scene_selection_roots(nodes)
         return nodes
+
+    def _promote_nodes_to_scene_selection_roots(self, nodes: list) -> list:
+        promoted = []
+        seen = set()
+        for node in nodes or []:
+            target = self._scene_object_selection_target_for_node(node, force_group=True)
+            if target is None or id(target) in seen:
+                continue
+            if bool(getattr(target, "_gr_hidden", False)) or bool(getattr(target, "_gr_scene_object_locked", False)):
+                continue
+            seen.add(id(target))
+            promoted.append(target)
+        return promoted
 
     def _projected_point_in_rect(self, point, rect: QtCore.QRect, *, width: int, height: int) -> bool:
         try:
@@ -1071,7 +1087,7 @@ class ViewportPickingHoverMixin:
             hit = self._mesh_hit_test_detail(int(x), int(y), allow_gpu=False)
             node = hit[0] if hit is not None else None
             face_bounds = hit[1] if hit is not None else None
-        else:
+        elif mode == "any":
             hit = self._mesh_hit_test_detail(int(x), int(y), allow_gpu=False)
             if hit is not None:
                 node, face_bounds = hit
@@ -1081,6 +1097,18 @@ class ViewportPickingHoverMixin:
                     or self._light_hit_test(int(x), int(y))
                     or self._helper_hit_test(int(x), int(y))
                 )
+        else:
+            hit = self._mesh_hit_test_detail(int(x), int(y), allow_gpu=False)
+            if hit is not None:
+                node, face_bounds = hit
+                node = self._scene_object_selection_target_for_node(node)
+            else:
+                raw = (
+                    self._camera_hit_test(int(x), int(y))
+                    or self._light_hit_test(int(x), int(y))
+                    or self._helper_hit_test(int(x), int(y))
+                )
+                node = self._scene_object_selection_target_for_node(raw, force_group=True) if raw is not None else None
         self._set_viewport_hover(node, face_bounds, reason=reason)
 
     def _update_mesh_hover(self, event) -> None:
@@ -1148,12 +1176,20 @@ class ViewportPickingHoverMixin:
             hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
             node = hit[0] if hit is not None else None
             face_bounds = hit[1] if hit is not None else None
-        else:
+        elif mode == "any":
             hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
             if hit is not None:
                 node, face_bounds = hit
             else:
                 node = self._camera_hit_test(x, y) or self._light_hit_test(x, y) or self._helper_hit_test(x, y)
+        else:
+            hit = self._mesh_hit_test_detail(x, y, allow_gpu=False)
+            if hit is not None:
+                node, face_bounds = hit
+                node = self._scene_object_selection_target_for_node(node)
+            else:
+                raw = self._camera_hit_test(x, y) or self._light_hit_test(x, y) or self._helper_hit_test(x, y)
+                node = self._scene_object_selection_target_for_node(raw, force_group=True) if raw is not None else None
         set_hover(node, face_bounds, reason="viewport hover changed")
 
 __all__ = ("ViewportPickingHoverMixin",)

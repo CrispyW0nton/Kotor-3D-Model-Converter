@@ -150,7 +150,10 @@ class WgpuResourceCache:
             return None
         try:
             from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
-            from src.core.rendering.mesh_render_data import bas_attachment_palette_model_for_node
+            from src.core.rendering.mesh_render_data import (
+                animation_pose_applies_to_node,
+                bas_attachment_palette_model_for_node,
+            )
             from src.core.rendering.skeleton_render_data import (
                 bas_attachment_root_local_skin_palette,
                 skin_palette_flat_bytes,
@@ -162,6 +165,10 @@ class WgpuResourceCache:
         source_model = model
         if bool(getattr(mesh_data.source, "_gr_bas_attachment_layer", False)):
             source_model = bas_attachment_palette_model_for_node(mesh_data.source) or model
+        if anim_pose is not None and not animation_pose_applies_to_node(mesh_data.source, anim_pose):
+            if not bool(getattr(mesh_data.source, "_gr_bas_attachment_layer", False)):
+                return None
+            anim_pose = None
 
         mesh_id = int(mesh_data.mesh_id)
         source_revision = tuple(getattr(mesh_data, "source_revision", ()) or ())

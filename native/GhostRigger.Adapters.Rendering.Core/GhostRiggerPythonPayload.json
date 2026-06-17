@@ -63,7 +63,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "58575e8976546da42db383ad1f9d8a248242affcf90ebb1cd05e4c1f659d272e"
+            "sha256": "e89cef61b6433af4615af9a1fa495b4c25be9b163612aed06cc3a73fcaee5f0a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -117,7 +117,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_MESH_CACHE",
             "source_path": "src/adapters/rendering/pygfx_core/mesh_cache.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/mesh_cache.py",
-            "sha256": "2cb30e880dbd65f748d77e8ff5c5dfeedb64ea72128f9fba29973073505841ff"
+            "sha256": "c3d65654b82684a3281ea8e47ceef5ec06deb47b8c6eac619255d9fd41dafb23"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_RENDERER",
@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RESOURCES",
             "source_path": "src/adapters/rendering/wgpu_core/resources.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/resources.py",
-            "sha256": "a274b7696044fa336cb196db6a65e735d9af9f63671a4338db2c28910ee00bf3"
+            "sha256": "d8180a57b6d746a98271ee42d3e1635ac79fb647c42a037e2ad8cc0f6450b259"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_SHARED",

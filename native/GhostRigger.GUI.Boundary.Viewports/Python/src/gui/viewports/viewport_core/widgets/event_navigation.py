@@ -170,7 +170,7 @@ class ViewportEventNavigationMixin:
                     self.redo()
                     return True
                 if key == QtCore.Qt.Key_A and (event.modifiers() & QtCore.Qt.ControlModifier):
-                    self.select_all_meshes()
+                    self.select_all_visible_viewport_nodes()
                     return True
                 if key == QtCore.Qt.Key_X and (event.modifiers() & QtCore.Qt.AltModifier):
                     return True

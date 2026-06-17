@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 VIEWPORT_SELECTION_MODES: tuple[tuple[str, str, str], ...] = (
+    ("any", "Any", "viewport_select_object"),
     ("object", "Object", "viewport_select_object"),
     ("mesh", "Mesh", "viewport_select_mesh"),
     ("helpers", "Helpers", "viewport_select_helpers"),

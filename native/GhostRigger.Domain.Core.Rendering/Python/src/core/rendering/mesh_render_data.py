@@ -85,6 +85,8 @@ def iter_mesh_render_data(
         if not _node_is_renderable_mesh(node):
             continue
         node_anim_pose = _bas_attachment_effective_pose_for_node(node, anim_pose)
+        if node_anim_pose is not None and not animation_pose_applies_to_node(node, node_anim_pose):
+            node_anim_pose = None
         try:
             (
                 positions,
@@ -173,7 +175,7 @@ def iter_mesh_render_data(
         material = _material_data(node, textures)
         source_revision = _node_revision(node)
         if getattr(skinning, "is_skinned", False):
-            skin_lbs_input_mode = 1 if anim_pose is not None else 0
+            skin_lbs_input_mode = 1 if node_anim_pose is not None else 0
             source_revision = (
                 *source_revision,
                 int(getattr(skinning, "skin_revision", 0) or 0),
@@ -1106,6 +1108,8 @@ def _bas_head_attachment_local_pose_node_allowed_name(name: str) -> bool:
 def _pose_node_for_transform(node, anim_pose):
     if node is None or anim_pose is None:
         return None
+    if not animation_pose_applies_to_node(node, anim_pose):
+        return None
     pose_nodes = getattr(anim_pose, "nodes", {}) or {}
     pose_nodes_by_index = getattr(anim_pose, "nodes_by_index", {}) or {}
     duplicate_node_names = set(getattr(anim_pose, "duplicate_node_names", set()) or set())
@@ -1119,6 +1123,56 @@ def _pose_node_for_transform(node, anim_pose):
     if node_name_key and node_name_key not in duplicate_node_names:
         return pose_nodes.get(node_name_key)
     return None
+
+
+def _scene_object_id_for_node(node) -> str:
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        object_id = str(getattr(current, "_gr_scene_object_id", "") or "")
+        if object_id:
+            return object_id
+        current = getattr(current, "parent", None)
+    return ""
+
+
+def _scene_import_id_for_node(node) -> str:
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        import_id = str(getattr(current, "_gr_scene_import_id", "") or "")
+        if import_id:
+            return import_id
+        current = getattr(current, "parent", None)
+    return ""
+
+
+def animation_pose_applies_to_node(node, anim_pose) -> bool:
+    """Return whether an animation pose is allowed to drive this runtime node."""
+
+    if node is None or anim_pose is None:
+        return False
+    pose_object_id = str(getattr(anim_pose, "_gr_animation_scene_object_id", "") or "")
+    if pose_object_id:
+        node_object_id = _scene_object_id_for_node(node)
+        if node_object_id and node_object_id != pose_object_id:
+            return False
+    pose_import_id = str(getattr(anim_pose, "_gr_animation_scene_import_id", "") or "")
+    if pose_import_id:
+        node_import_id = _scene_import_id_for_node(node)
+        if node_import_id and node_import_id != pose_import_id:
+            return False
+    try:
+        pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
+        node_source_id = int(getattr(node, "_gr_source_model_id", 0) or 0)
+    except Exception:
+        pose_source_id = 0
+        node_source_id = 0
+    if pose_source_id and node_source_id and pose_source_id != node_source_id:
+        return False
+    return True
 
 
 def _bas_attachment_local_transform(node, bas_root):
@@ -1198,20 +1252,10 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
 
     wx = wy = wz = 0.0
     parent_orientation = [0.0, 0.0, 0.0, 1.0]
-    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
-    pose_nodes_by_index = getattr(anim_pose, "nodes_by_index", {}) or {}
-    duplicate_node_names = set(getattr(anim_pose, "duplicate_node_names", set()) or set())
     last_i = len(chain) - 1
     for index, chain_node in enumerate(chain):
         is_leaf = index == last_i
-        node_name_key = str(getattr(chain_node, "name", "") or "").lower()
-        pose_node = None
-        try:
-            pose_node = pose_nodes_by_index.get(int(getattr(chain_node, "index", -1)))
-        except Exception:
-            pose_node = None
-        if pose_node is None and node_name_key not in duplicate_node_names:
-            pose_node = pose_nodes.get(node_name_key)
+        pose_node = _pose_node_for_transform(chain_node, anim_pose)
         if pose_node is not None:
             lx, ly, lz = getattr(pose_node, "position", getattr(chain_node, "position", (0.0, 0.0, 0.0)))
             if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):

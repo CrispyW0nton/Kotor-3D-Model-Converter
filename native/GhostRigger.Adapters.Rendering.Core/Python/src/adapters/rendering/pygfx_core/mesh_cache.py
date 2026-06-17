@@ -388,11 +388,18 @@ class PygfxMeshCache:
                 _cached_matrix_palette_uploader,
                 bas_attachment_root_local_skin_palette,
             )
-            from src.core.rendering.mesh_render_data import bas_attachment_palette_model_for_node
+            from src.core.rendering.mesh_render_data import (
+                animation_pose_applies_to_node,
+                bas_attachment_palette_model_for_node,
+            )
 
             source_model = model
             if bool(getattr(record.source, "_gr_bas_attachment_layer", False)):
                 source_model = bas_attachment_palette_model_for_node(record.source) or model
+            if anim_pose is not None and not animation_pose_applies_to_node(record.source, anim_pose):
+                if not bool(getattr(record.source, "_gr_bas_attachment_layer", False)):
+                    return
+                anim_pose = None
             uploader = _cached_matrix_palette_uploader(source_model, MAX_BONES, MatrixPaletteUploader)
             uploader.compute_skin_node_palette(record.source, anim_pose)
             palette = uploader.as_numpy_array()

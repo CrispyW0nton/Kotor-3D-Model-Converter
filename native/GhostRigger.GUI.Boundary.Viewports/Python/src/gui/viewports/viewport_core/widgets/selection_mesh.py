@@ -15,14 +15,14 @@ class ViewportSelectionMeshMixin:
             return None
         if bool(getattr(node, "is_light", False)) or bool(getattr(node, "is_camera", False)):
             return node
-        node_kind = str(getattr(node, "_gr_scene_node_kind", "") or "").strip().lower()
-        if node_kind == "joint":
-            return node
         root = self._scene_root_for_node(node)
         if root is None or root is node:
             return node
         if force_group:
             return root
+        node_kind = str(getattr(node, "_gr_scene_node_kind", "") or "").strip().lower()
+        if node_kind == "joint":
+            return node
         if self._is_selectable_mesh_node(node):
             return root
         try:
@@ -505,6 +505,10 @@ class ViewportSelectionMeshMixin:
         for node in clean_nodes:
             setattr(node, "_gr_selected", True)
         active = clean_nodes[0] if clean_nodes else None
+        active_root = self._common_scene_root_for_nodes(clean_nodes)
+        if active_root is not None and str(getattr(self, "_viewport_selection_mode", "object") or "object").lower() != "mesh":
+            active = active_root
+            self._selected_viewport_nodes = [active_root]
         self._set_selection_orbit_bounds(active, orbit_bounds if len(clean_nodes) == 1 else None)
         self._sync_renderer_selected_meshes(active, clean_nodes)
         if active is None:
@@ -740,6 +744,74 @@ class ViewportSelectionMeshMixin:
         except Exception:
             nodes = self._all_geometry_nodes()
         self.set_selected_meshes([node for node in nodes if not getattr(node, "_gr_hidden", False)])
+
+    def select_all_visible_viewport_nodes(self) -> None:
+        if self.model is None:
+            self.set_selected_viewport_nodes([])
+            return
+        nodes = self._visible_viewport_selection_nodes()
+        self.set_selected_viewport_nodes(nodes, source="ctrl-a")
+
+    def _visible_viewport_selection_nodes(self) -> list:
+        if self.model is None:
+            return []
+        root = getattr(self.model, "root_node", None)
+        if root is not None and bool(getattr(root, "_gr_scene_composite_root", False)):
+            result = []
+            seen = set()
+            for child in getattr(root, "children", []) or []:
+                if child is None or id(child) in seen:
+                    continue
+                if not bool(getattr(child, "_gr_scene_object_root", False)):
+                    continue
+                if bool(getattr(child, "_gr_hidden", False)):
+                    continue
+                if bool(getattr(child, "_gr_scene_object_locked", False)):
+                    continue
+                if bool(getattr(child, "_gr_light_hidden", False)) or bool(getattr(child, "_gr_camera_hidden", False)):
+                    continue
+                seen.add(id(child))
+                result.append(child)
+            return result
+
+        result = []
+        seen = set()
+        try:
+            nodes = list(self.model.all_nodes()) if hasattr(self.model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        for group in (
+            self._all_geometry_nodes(),
+            [node for node in nodes if self._is_general_helper_node(node)],
+            [node for node in nodes if bool(getattr(node, "is_light", False))],
+            [getattr(camera, "original_ref", None) for camera in self.camera_manager.get_all_cameras()],
+        ):
+            for node in group:
+                if node is None or id(node) in seen:
+                    continue
+                if bool(getattr(node, "_gr_hidden", False)):
+                    continue
+                if bool(getattr(node, "_gr_light_hidden", False)) or bool(getattr(node, "_gr_camera_hidden", False)):
+                    continue
+                root_node = self._scene_root_for_node(node) or node
+                if root_node is None or id(root_node) in seen:
+                    continue
+                seen.add(id(root_node))
+                result.append(root_node)
+        return result
+
+    def _common_scene_root_for_nodes(self, nodes: list):
+        roots = []
+        seen = set()
+        for node in nodes or []:
+            root = self._scene_root_for_node(node)
+            if root is None:
+                return None
+            if id(root) in seen:
+                continue
+            seen.add(id(root))
+            roots.append(root)
+        return roots[0] if len(roots) == 1 else None
 
     def _all_geometry_nodes(self) -> list:
         if self.model is None:

@@ -576,7 +576,7 @@ class ViewportDragInteractionsMixin:
                 self.on_bone_selected(None)
             return
 
-        if self._renderer.show_bones:
+        if selection_mode == "any" and self._renderer.show_bones:
             # T402: joint-dot hit-test takes priority over the underlying
             # bone hit-test so clicks on a dot always select the right node.
             node = (
@@ -591,7 +591,7 @@ class ViewportDragInteractionsMixin:
                 if self.on_bone_selected:
                     self.on_bone_selected(node)
                 return
-        if self.mesh_selection_state.mode is not MeshSelectionMode.OBJECT:
+        if selection_mode == "any" and self.mesh_selection_state.mode is not MeshSelectionMode.OBJECT:
             if self._apply_mesh_subobject_hit(
                 self._mesh_subobject_hit_test(x, y),
                 event.modifiers(),

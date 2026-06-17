@@ -4837,6 +4837,7 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     assert "meshHovered = QtCore.Signal(object)" in source
     assert "def set_selected_meshes" in source
     assert "def select_all_meshes" in source
+    assert "def select_all_visible_viewport_nodes" in source
     assert "QtCore.Qt.Key_A" in source
     assert "def _mesh_nodes_in_rect" in source
     assert "def _all_geometry_nodes" in source
@@ -5409,6 +5410,7 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
         assert viewport.axis_mode_control.height() == viewport.gimbal_button.height()
         assert viewport.axis_mode_control.combo.height() == viewport.gimbal_button.height()
         assert [action.data() for action in mode_button.menu().actions()] == [
+            "any",
             "object",
             "mesh",
             "helpers",
@@ -5420,6 +5422,10 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
         assert viewport._viewport_selection_mode == "helpers"
         assert mode_button.toolTip() == "Viewport selection mode: Helpers"
         assert not mode_button.icon().isNull()
+
+        viewport.set_viewport_selection_mode("any")
+        assert viewport._viewport_selection_mode == "any"
+        assert mode_button.toolTip() == "Viewport selection mode: Any"
 
         viewport.set_dummy_helper_visibility(False)
         assert viewport.dummy_helpers_button.isChecked() is False
@@ -5475,8 +5481,10 @@ def test_viewport_selection_mode_filters_click_targets() -> None:
         viewport._release_lmb(_Event())
         viewport.set_viewport_selection_mode("mesh")
         viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("any")
+        viewport._release_lmb(_Event())
 
-        assert selected == [helper, light, camera, mesh]
+        assert selected == [helper, light, camera, mesh, mesh]
     finally:
         viewport.deleteLater()
 
@@ -5534,6 +5542,12 @@ def test_viewport_marquee_selection_respects_active_selection_mode() -> None:
         assert helper in viewport._selected_viewport_nodes
         assert light in viewport._selected_viewport_nodes
         assert camera_node not in viewport._selected_viewport_nodes
+
+        viewport.set_viewport_selection_mode("any")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier)
+        assert mesh in viewport._selected_viewport_nodes
+        assert helper in viewport._selected_viewport_nodes
+        assert light in viewport._selected_viewport_nodes
     finally:
         viewport.deleteLater()
 
@@ -5586,8 +5600,101 @@ def test_viewport_hover_respects_active_selection_mode() -> None:
         viewport._update_mesh_hover(_Event())
         assert viewport._hovered_mesh_node is mesh
         assert viewport._hovered_camera_node is None
+
+        viewport.set_viewport_selection_mode("any")
+        viewport._update_mesh_hover(_Event())
+        assert viewport._hovered_mesh_node is mesh
     finally:
         viewport.deleteLater()
+
+
+def test_viewport_object_mode_promotes_scene_children_to_object_root() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class _Position:
+        def x(self) -> int:
+            return 100
+
+        def y(self) -> int:
+            return 100
+
+    class _Event:
+        def position(self):
+            return _Position()
+
+        def modifiers(self):
+            return QtCore.Qt.NoModifier
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    root = SimpleNamespace(
+        name="c_turret01",
+        children=[],
+        _gr_scene_object_id="obj-turret",
+        _gr_scene_object_root=True,
+    )
+    mesh = SimpleNamespace(
+        name="turret_mesh",
+        is_mesh=True,
+        vertices=[(0, 0, 0)],
+        faces=[(0, 0, 0)],
+        parent=root,
+        _gr_scene_object_id="obj-turret",
+        _gr_scene_object_root_ref=root,
+    )
+    root.children = [mesh]
+    selected: list[object | None] = []
+    viewport.set_selected_node = lambda node, *args, **kwargs: selected.append(node)
+    viewport._mesh_hit_test_detail = lambda *args, **kwargs: (mesh, None)
+    viewport._helper_hit_test = lambda *args, **kwargs: None
+    viewport._light_hit_test = lambda *args, **kwargs: None
+    viewport._camera_hit_test = lambda *args, **kwargs: None
+    viewport._renderer.show_bones = True
+    viewport._renderer.hit_test_bone = lambda *args, **kwargs: mesh
+    viewport._joint_dot_enabled = False
+    try:
+        viewport.set_viewport_selection_mode("object")
+        viewport._release_lmb(_Event())
+        assert selected == [root]
+    finally:
+        viewport.deleteLater()
+
+
+def test_ctrl_a_selects_visible_scene_object_roots_not_hidden_nodes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    visible = SimpleNamespace(name="Visible", _gr_scene_object_root=True, _gr_scene_object_id="obj-visible")
+    hidden = SimpleNamespace(name="Hidden", _gr_scene_object_root=True, _gr_scene_object_id="obj-hidden", _gr_hidden=True)
+    locked = SimpleNamespace(name="Locked", _gr_scene_object_root=True, _gr_scene_object_id="obj-locked", _gr_scene_object_locked=True)
+    composite_root = SimpleNamespace(name="scene_root", _gr_scene_composite_root=True, children=[visible, hidden, locked])
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(root_node=composite_root)
+    try:
+        viewport.select_all_visible_viewport_nodes()
+        assert viewport._selected_viewport_nodes == [visible]
+        assert viewport._renderer.selected_node is visible
+    finally:
+        viewport.deleteLater()
+
+
+def test_scene_bone_overlay_uses_scene_world_transform_and_skips_composite_root() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Domain.Core.Rendering/Python/src/core/rendering/frame_core/renderer_overlays.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'getattr(node, "_gr_scene_composite_root", False)' in source
+    assert 'getattr(node, "_gr_scene_object_id", "")' in source
+    assert "wp, _, _ = self._node_world_transform(node)" in source
 
 
 def test_viewport_marquee_drag_only_updates_rubber_band_before_release() -> None:
@@ -10491,6 +10598,117 @@ def test_scene_animation_entries_collect_all_runtime_models() -> None:
     assert {entry["animation"] for entry in entries} == {"walk", "talk"}
     assert {entry["object_name"] for entry in entries} == {"Cantina Bith", "Malak"}
     assert {entry["resref"] for entry in entries} == {"n_bith", "n_darthmalak"}
+
+
+def test_scene_animation_pose_only_drives_matching_scene_object() -> None:
+    from src.core.rendering.mesh_render_data import (
+        _pose_node_for_transform,
+        animation_pose_applies_to_node,
+        node_world_matrix,
+    )
+
+    root_a = SimpleNamespace(
+        name="root",
+        index=0,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_source_model_id=101,
+    )
+    child_a = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=root_a,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_source_model_id=101,
+    )
+    root_a.children = [child_a]
+
+    root_b = SimpleNamespace(
+        name="root",
+        index=0,
+        position=(20.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        children=[],
+        _gr_scene_object_id="obj-b",
+        _gr_scene_import_id="import-b",
+        _gr_source_model_id=202,
+    )
+    child_b = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=root_b,
+        children=[],
+        _gr_scene_object_id="obj-b",
+        _gr_scene_import_id="import-b",
+        _gr_source_model_id=202,
+    )
+    root_b.children = [child_b]
+
+    pose = SimpleNamespace(
+        _gr_animation_scene_object_id="obj-a",
+        _gr_animation_scene_import_id="import-a",
+        _gr_animation_source_model_id=101,
+        nodes={
+            "root": SimpleNamespace(position=(1.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "shared_bone": SimpleNamespace(position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    assert animation_pose_applies_to_node(child_a, pose)
+    assert not animation_pose_applies_to_node(child_b, pose)
+    assert _pose_node_for_transform(child_a, pose) is pose.nodes["shared_bone"]
+    assert _pose_node_for_transform(child_b, pose) is None
+
+    matrix_a = node_world_matrix(child_a, anim_pose=pose)
+    matrix_b = node_world_matrix(child_b, anim_pose=pose)
+
+    assert matrix_a[0, 3] == pytest.approx(1.0)
+    assert matrix_a[1, 3] == pytest.approx(2.0)
+    assert matrix_b[0, 3] == pytest.approx(20.0)
+    assert matrix_b[1, 3] == pytest.approx(1.0)
+
+
+def test_animation_pose_source_tags_selected_scene_object() -> None:
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+
+    model = SimpleNamespace(name="N_Bith")
+    selected_object = SimpleNamespace(
+        id="scene-object-1",
+        metadata={"_runtime_model": model, "scene_import_id": "import-1"},
+    )
+    window = SimpleNamespace(
+        scene_manager=SimpleNamespace(
+            get_selected_objects=lambda: [selected_object],
+            active_scene=SimpleNamespace(objects=[selected_object]),
+        )
+    )
+    window._animation_scene_object_for_model = MethodType(
+        AnimationWorkflowMixin._animation_scene_object_for_model,
+        window,
+    )
+    pose = SimpleNamespace()
+
+    tagged = AnimationWorkflowMixin._tag_animation_pose_source(window, pose, model, "walk", "K1")
+
+    assert tagged is pose
+    assert pose._gr_animation_source_model_id == id(model)
+    assert pose._gr_animation_scene_object_id == "scene-object-1"
+    assert pose._gr_animation_scene_import_id == "import-1"
+    assert pose._gr_animation_name == "walk"
+    assert pose._gr_animation_game == "K1"
 
 
 def test_quinn_bone_map_loads_as_unreal_target_model() -> None:

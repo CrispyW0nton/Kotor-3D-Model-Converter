@@ -185,6 +185,8 @@ class RendererOverlayMixin:
             """Return True if this node is a skeleton joint (dummy OR deform-helper)."""
             if getattr(node, '_hide_skeleton_overlay', False):
                 return False
+            if bool(getattr(node, "_gr_scene_composite_root", False)):
+                return False
             if not _node_has_skeleton_context(node):
                 return False
             nl = (getattr(node, "name", "") or "").lower()
@@ -262,7 +264,7 @@ class RendererOverlayMixin:
             # bone_world_position() which applies full 180°-collapse on ALL
             # nodes including the leaf — this gives the correct pivot point for
             # joint dots (independent of mesh vertex orientation).
-            if self._anim_pose is not None:
+            if self._anim_pose is not None or str(getattr(node, "_gr_scene_object_id", "") or ""):
                 wp, _, _ = self._node_world_transform(node)
                 return wp
             external_wp = getattr(node, 'external_world_position', None)

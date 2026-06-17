@@ -22,6 +22,7 @@ from .mixin_imports import (
     math,
     np,
 )
+from src.core.rendering.mesh_render_data import _pose_node_for_transform
 
 
 class RendererGeometryMixin:
@@ -159,7 +160,7 @@ class RendererGeometryMixin:
 
             for ci, chain_node in enumerate(chain):
                 is_leaf = (ci == last_i)
-                pn = self._anim_pose.nodes.get(chain_node.name.lower())
+                pn = _pose_node_for_transform(chain_node, self._anim_pose)
                 if pn:
                     lx, ly, lz = pn.position
                     # NaN guard: fall back to bind-pose position if animated value is non-finite

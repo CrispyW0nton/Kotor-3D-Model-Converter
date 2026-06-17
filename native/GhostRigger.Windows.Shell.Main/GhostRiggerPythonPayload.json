@@ -75,7 +75,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_ANIMATION_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/animation_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/animation_workflow.py",
-            "sha256": "4d14f8b4727a1ed41b6546316a9ebf54ee0476ff0a844ce7a8c8a87949323125"
+            "sha256": "46fb2bd35c0b00bad40bcf79a2cbb92aa413a501999eefda8f6ae4d2fafa3746"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_BAS_WORKFLOW",

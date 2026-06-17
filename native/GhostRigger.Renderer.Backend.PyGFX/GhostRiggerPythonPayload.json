@@ -21,7 +21,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_MESH_CACHE",
             "source_path": "src/adapters/rendering/pygfx_core/mesh_cache.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/mesh_cache.py",
-            "sha256": "2cb30e880dbd65f748d77e8ff5c5dfeedb64ea72128f9fba29973073505841ff"
+            "sha256": "c3d65654b82684a3281ea8e47ceef5ec06deb47b8c6eac619255d9fd41dafb23"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_RENDERER",
@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RESOURCES",
             "source_path": "src/adapters/rendering/wgpu_core/resources.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/resources.py",
-            "sha256": "a274b7696044fa336cb196db6a65e735d9af9f63671a4338db2c28910ee00bf3"
+            "sha256": "6391beb053e8ef812aa0648a5ec37d1d1813e5ed93abb2e05ff2943765b261e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_SHARED",

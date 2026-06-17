@@ -31,6 +31,7 @@ from .mixin_imports import (
     math,
     np,
 )
+from src.core.rendering.mesh_render_data import _pose_node_for_transform
 
 
 class RendererMeshMixin:
@@ -149,7 +150,7 @@ class RendererMeshMixin:
 
             # Apply animated alpha from pose (CTRL_MESH_ALPHA=132)
             if self._anim_pose is not None:
-                _pn_flat = self._anim_pose.nodes.get(node.name.lower())
+                _pn_flat = _pose_node_for_transform(node, self._anim_pose)
                 if _pn_flat is not None and _pn_flat.alpha is not None:
                     node_alpha = _clamp(_pn_flat.alpha, 0.0, 1.0)
 
@@ -460,7 +461,7 @@ class RendererMeshMixin:
 
             # Animation overrides
             if self._anim_pose is not None:
-                _pn = self._anim_pose.nodes.get(node.name.lower())
+                _pn = _pose_node_for_transform(node, self._anim_pose)
                 if _pn is not None and _pn.alpha is not None:
                     node_alpha = _clamp(_pn.alpha, 0.0, 1.0)
 
@@ -476,7 +477,7 @@ class RendererMeshMixin:
 
             selfillum = getattr(node, 'selfillum', (0.0, 0.0, 0.0))
             if self._anim_pose is not None:
-                _pn_si = self._anim_pose.nodes.get(node.name.lower())
+                _pn_si = _pose_node_for_transform(node, self._anim_pose)
                 if _pn_si is not None and _pn_si.selfillum is not None:
                     selfillum = _pn_si.selfillum
             si_boost = max(selfillum)
@@ -1019,7 +1020,7 @@ class RendererMeshMixin:
             # skeletal motion.  KotOR uses these heavily for droid eye blinks,
             # glass flickering, and fire/energy FX self-illumination pulses.
             if self._anim_pose is not None:
-                _pn_mat = self._anim_pose.nodes.get(node.name.lower())
+                _pn_mat = _pose_node_for_transform(node, self._anim_pose)
                 if _pn_mat is not None:
                     if _pn_mat.alpha is not None:
                         node_alpha = _clamp(_pn_mat.alpha, 0.0, 1.0)
@@ -1040,7 +1041,7 @@ class RendererMeshMixin:
 
             # Apply animated selfillum from pose (CTRL_MESH_SELFILLUMCOLOR=100)
             if self._anim_pose is not None:
-                _pn_si = self._anim_pose.nodes.get(node.name.lower())
+                _pn_si = _pose_node_for_transform(node, self._anim_pose)
                 if _pn_si is not None and _pn_si.selfillum is not None:
                     selfillum = _pn_si.selfillum
 

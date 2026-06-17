@@ -81,7 +81,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_SELECTION_MODES",
             "source_path": "src/gui/viewports/viewport_core/shared/selection_modes.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/selection_modes.py",
-            "sha256": "e3a9f5a53e989b79097c20a3d2fd3c940fe1c4b7557976ee3d2487eaab1c9de5"
+            "sha256": "34f32ba2378d9af2c2004c0d7ff557b883541bb25addcff132ff555f77df82cf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_WEIGHT_HEATMAP",
@@ -129,13 +129,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DRAG_INTERACTIONS",
             "source_path": "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py",
-            "sha256": "bd5090962ae70bfd105914c632aaf3bb2cd191d0c2d41d7530270ccc13ddbdff"
+            "sha256": "d0ddf319bf06da553b416e88317cdebac96c0a00bd0332ac479c2e224fbbd682"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_EVENT_NAVIGATION",
             "source_path": "src/gui/viewports/viewport_core/widgets/event_navigation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/event_navigation.py",
-            "sha256": "0aca32656b451e322208b3966a9b219ac17ec8962e7c81dbd162d1cc79a8d086"
+            "sha256": "25e438cc5ec82969fa5f5b377e43a338fb6a9c0f842213f8cdba0437b811af0b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_HISTORY_ANIMATION",
@@ -165,7 +165,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_PICKING_HOVER",
             "source_path": "src/gui/viewports/viewport_core/widgets/picking_hover.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/picking_hover.py",
-            "sha256": "29d4feffc327ef55be085fec1d3bd58ec67fa33ebdf96e210762f2cd2b1426b7"
+            "sha256": "c45c3333ad7e8f31cf75769e1dd6da12b9492104070410c46251e272141cc7a5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_RENDERING_PIPELINE",
@@ -189,7 +189,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SELECTION_MESH",
             "source_path": "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py",
-            "sha256": "9b857dae930d99504b0dbd57631691b6a95e37239edff908b4e006dec9cbd517"
+            "sha256": "da351633fee90491706f6e29b4cc3feb9f19cf7c04bffcbd4a03139c2ab80388"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SNAP_VIEW_BAR",

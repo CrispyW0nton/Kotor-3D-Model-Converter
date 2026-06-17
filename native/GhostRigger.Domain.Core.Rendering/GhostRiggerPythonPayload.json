@@ -81,19 +81,19 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_GEOMETRY",
             "source_path": "src/core/rendering/frame_core/renderer_geometry.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_geometry.py",
-            "sha256": "81521152a1bc12ebadfb9cb130cf511822e688e6c40c8efef64dcc1a0f072bf9"
+            "sha256": "ff2e9150f65e7e68d6754955c0773fbd266e9fc5203e4f5ca2353bd47dd40cb3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_MESHES",
             "source_path": "src/core/rendering/frame_core/renderer_meshes.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_meshes.py",
-            "sha256": "e545f1239decc2370cd0565a6e567cab94dfc707ec0385dd3d12fcde7ab3bb24"
+            "sha256": "f9c03addfafc12b70d80681730c3c4ae837a1399afa35fd93c7d51f13afaf691"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_OVERLAYS",
             "source_path": "src/core/rendering/frame_core/renderer_overlays.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_overlays.py",
-            "sha256": "16e87f799adc8d73c7b22864bc568b69c674a23fce8aa23b5ef8f2eefe7e8003"
+            "sha256": "ed6eeb325ee9a188246a2ba4086c4a4d27d22d983270d9c8e933b6469ffe7d66"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_RENDER_LOOP",
@@ -165,7 +165,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "bb5e9179f212a7d993a86abc03089a7b17b4c04770046beddf189b7e9044e785"
+            "sha256": "e35a21744cfcdfd42a2d8a5e46bf5d2ae757843678c8839a2d9dfc52662fbf7f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",

@@ -30,6 +30,11 @@ class AnimationWorkflowMixin:
         try:
             setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
             setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
+            scene_object = self._animation_scene_object_for_model(model)
+            if scene_object is not None:
+                metadata = getattr(scene_object, "metadata", {}) or {}
+                setattr(pose, "_gr_animation_scene_object_id", str(getattr(scene_object, "id", "") or ""))
+                setattr(pose, "_gr_animation_scene_import_id", str(metadata.get("scene_import_id") or getattr(scene_object, "id", "") or ""))
             if anim_name:
                 setattr(pose, "_gr_animation_name", str(anim_name))
             if game:
@@ -37,6 +42,33 @@ class AnimationWorkflowMixin:
         except Exception:
             pass
         return pose
+
+    def _animation_scene_object_for_model(self, model):
+        if model is None:
+            return None
+        scene_manager = getattr(self, "scene_manager", None)
+        if scene_manager is None:
+            return None
+        try:
+            selected = list(scene_manager.get_selected_objects() or [])
+        except Exception:
+            selected = []
+        for obj in reversed(selected):
+            metadata = getattr(obj, "metadata", {}) or {}
+            if metadata.get("_runtime_model") is model:
+                return obj
+            if metadata.get("_runtime_bas_body_model") is model:
+                return obj
+        try:
+            objects = list(getattr(scene_manager.active_scene, "objects", []) or [])
+        except Exception:
+            objects = []
+        matches = [
+            obj
+            for obj in objects
+            if (getattr(obj, "metadata", {}) or {}).get("_runtime_model") is model
+        ]
+        return matches[0] if len(matches) == 1 else None
 
     def _handle_animation_selected(self, anim_name: str):
         model = self._animation_source_model()

@@ -11,6 +11,35 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] KMAX Viewport Scene Selection Roots
+
+Owner: LordVaderCW
+Subsystem: KMAX viewport selection modes, scene-object transforms, Ctrl-A selection, and skeleton overlays
+
+- Added the missing viewport `Any` selection mode while keeping `Object`, `Mesh`, `Helpers`, `Lights`, and `Cameras` as explicit filters.
+- Changed object-mode clicks, marquee selection, and mesh selections to promote scene child meshes/helpers back to their owning KMAX scene-object root so the transform gizmo moves the object placement instead of a single child node.
+- Changed Ctrl-A in the viewport to select all visible, unlocked scene-object roots instead of only visible meshes.
+- Fixed bind-pose skeleton/joint overlay positioning for KMAX scene copies by using the renderer world-transform chain for scene-tagged nodes and skipping the synthetic composite `scene_root`.
+- Updated the affected native Python payload hashes for the Viewports and Core Rendering packages.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\shared\selection_modes.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\event_navigation.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\selection_mesh.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\picking_hover.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\drag_interactions.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_overlays.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu tests\test_core_contracts.py::test_viewport_selection_mode_filters_click_targets tests\test_core_contracts.py::test_viewport_marquee_selection_respects_active_selection_mode tests\test_core_contracts.py::test_viewport_hover_respects_active_selection_mode tests\test_core_contracts.py::test_viewport_object_mode_promotes_scene_children_to_object_root tests\test_core_contracts.py::test_ctrl_a_selects_visible_scene_object_roots_not_hidden_nodes tests\test_core_contracts.py::test_scene_bone_overlay_uses_scene_world_transform_and_skips_composite_root -q -p no:cacheprovider` passed (`7 passed`) with native Python package roots on `PYTHONPATH`.
+
+### [2026-06-17] KMAX Scene Animation Isolation
+
+Owner: LordVaderCW
+Subsystem: KMAX scene animation playback, renderer pose scoping, and animation browser source tagging
+
+- Scoped animation poses to the selected KMAX scene object/import identity so duplicate node names across multiple loaded models no longer share transforms, material controllers, or skin palettes.
+- Routed ModernGL, WGPU/PyGFX skin palette uploads, and software frame-renderer pose lookups through the shared render-data pose guard.
+- Tagged animation poses from the animation workflow with the selected scene object's runtime/import identity so the renderer can distinguish identical resrefs or repeated node names in the same scene.
+- Updated the affected native Python payload hashes so native-host packaging sees the changed renderer and animation workflow files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Runtime.Shared.Descriptors\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Renderer.Shared.Contracts\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_meshes.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_geometry.py native\GhostRigger.Adapters.Rendering.Core\Python\src\adapters\rendering\moderngl_renderer_impl.py native\GhostRigger.Renderer.Backend.ModernGL\Python\src\adapters\rendering\moderngl_renderer_impl.py native\GhostRigger.Adapters.Rendering.Core\Python\src\adapters\rendering\wgpu_core\resources.py native\GhostRigger.Renderer.Backend.PyGFX\Python\src\adapters\rendering\wgpu_core\resources.py native\GhostRigger.Adapters.Rendering.Core\Python\src\adapters\rendering\pygfx_core\mesh_cache.py native\GhostRigger.Renderer.Backend.PyGFX\Python\src\adapters\rendering\pygfx_core\mesh_cache.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\animation_workflow.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\gui\windows\application_core\shared\animation_workflow.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_scene_animation_pose_only_drives_matching_scene_object tests\test_core_contracts.py::test_animation_pose_source_tags_selected_scene_object -q -p no:cacheprovider` passed (`2 passed`) with native Python package roots on `PYTHONPATH`.
+
 ### [2026-06-17] Bounded Pre-Launch Background Handoff
 
 Owner: LordVaderCW
