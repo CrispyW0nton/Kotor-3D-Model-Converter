@@ -79,9 +79,9 @@ class QtStartupSplash(QtWidgets.QWidget):
     PRODUCT_TEXT = "GhostRigger"
     SUBTITLE_TEXT = "Odyssey Engine Pipeline"
     STAGE_ROWS = (
-        ("native", "Native runtime audit", ("native", "bootstrap", "runtime", "pre-python")),
+        ("native", "Native runtime audit", ("native", "bootstrap", "runtime", "pre-python", "pre-launch worker", "startup threading")),
         ("diagnostics", "Renderer and hardware scan", ("diagnostic", "renderer", "hardware")),
-        ("resources", "Loading tools and resources", ("resource", "library", "indexing", "game libraries")),
+        ("resources", "Loading tools and resources", ("resource", "library", "indexing", "game libraries", "game installs", "detecting game")),
         ("workspace", "Opening workspace", ("workspace", "main window")),
     )
 
@@ -428,12 +428,12 @@ class QtStartupSplash(QtWidgets.QWidget):
             self.progress_panel.set_busy(title, detail)
 
     def _stage_index_for_status(self, title: str, detail: str, finished: bool) -> int:
-        if finished:
-            return len(self.STAGE_ROWS) - 1
         haystack = f"{title} {detail}".lower()
         for index, (_stage_id, _label, keywords) in enumerate(self.STAGE_ROWS):
             if any(keyword in haystack for keyword in keywords):
                 return max(index, self._stage_index)
+        if finished:
+            return len(self.STAGE_ROWS) - 1
         return self._stage_index
 
     def _update_stage_rows(self, active_index: int) -> None:

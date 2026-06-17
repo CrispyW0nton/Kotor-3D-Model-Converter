@@ -762,6 +762,72 @@ def test_theme_editor_splash_customization_updates_preview_and_theme() -> None:
         app.processEvents()
 
 
+def test_theme_editor_layout_tab_exposes_full_layout_customization_surface() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from xml.etree import ElementTree as ET
+
+    from PySide6 import QtWidgets
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    theme_manager = ThemeManager(ROOT, {"theme_layout": {"selected_theme": "default"}})
+    layout_manager = LayoutManager(ROOT, {"theme_layout": {"selected_layout": "default"}})
+    editor = ThemeEditorWindow(theme_manager, layout_manager)
+    try:
+        labels: set[str] = set()
+        for row in range(editor.layout_metric_table.rowCount()):
+            cell = editor.layout_metric_table.cellWidget(row, 0)
+            if cell is None:
+                continue
+            label = cell.findChild(QtWidgets.QLabel)
+            if label is not None:
+                labels.add(label.text())
+
+        assert "window.maximized" in labels
+        assert "toolbar.main.visible" in labels
+        assert "toolbar.main.buttonMode" in labels
+        assert "toolbar.viewport.iconSize" in labels
+        assert "viewport.minWidth" in labels
+        assert "viewport.toolbar.buttonMode" in labels
+        assert "viewport.toolbar.compact" in labels
+        assert "panel.contentBrowser.visible" in labels
+        assert "panel.contentBrowser.region" in labels
+        assert "panel.contentBrowser.collapsed" in labels
+        assert "dockGroup.0.libraryProperties.area" in labels
+        assert "dockGroup.0.libraryProperties.docks" in labels
+        assert "spacing.panelSpacing" in labels
+        assert "spacing.viewportToolbarHeight" in labels
+
+        editor._set_layout_metric("window.maximized", "true")
+        editor._set_layout_metric("toolbar.main.visible", "false")
+        editor._set_layout_metric("toolbar.main.buttonMode", "textOnly")
+        editor._set_layout_metric("viewport.toolbar.compact", "true")
+        editor._set_layout_metric("panel.contentBrowser.region", "right")
+        editor._set_layout_metric("panel.contentBrowser.collapsed", "true")
+        editor._set_layout_metric("dockGroup.0.libraryProperties.mode", "horizontal")
+        editor._set_layout_metric("dockGroup.0.libraryProperties.docks", "library, properties")
+
+        assert editor._layout.maximized is True
+        assert editor._layout.toolbar("main").visible is False
+        assert editor._layout.toolbar("main").button_mode == "textOnly"
+        assert editor._layout.viewport.toolbar_compact is True
+        assert editor._layout.panel("contentBrowser").region == "right"
+        assert editor._layout.panel("contentBrowser").collapsed is True
+        assert editor._layout.dock_groups[0].mode == "horizontal"
+        assert editor._layout.dock_groups[0].docks == ["library", "properties"]
+
+        root = editor._layout_xml().getroot()
+        assert root.find("./mainWindow").get("maximized") == "true"
+        assert root.find("./toolbars/toolbar[@id='main']").get("visible") == "false"
+        assert root.find("./panels/panel[@id='contentBrowser']").get("collapsed") == "true"
+        assert root.find("./dockLayout/group[@id='libraryProperties']").get("mode") == "horizontal"
+        assert [dock.get("id") for dock in root.findall("./dockLayout/group[@id='libraryProperties']/dock")] == ["library", "properties"]
+        ET.tostring(root)
+    finally:
+        editor.deleteLater()
+        app.processEvents()
+
+
 def test_theme_editor_native_splash_uses_live_app_palette() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

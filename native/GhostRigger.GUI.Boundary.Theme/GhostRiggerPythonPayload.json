@@ -93,7 +93,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_EDITOR_WINDOW",
             "source_path": "src/gui/libtheme/theme_editor_window.py",
             "packaged_path": "Python/src/gui/libtheme/theme_editor_window.py",
-            "sha256": "8fe7c9a6939c2fe486c56789e0ce14580163f125e62a7ca7d55bf028f70b558b"
+            "sha256": "1a5d911d8a67b4a56b769f2cd1c6c7fefe6f40cfa1a0a08ea98766df3efdaea1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_LOADER",

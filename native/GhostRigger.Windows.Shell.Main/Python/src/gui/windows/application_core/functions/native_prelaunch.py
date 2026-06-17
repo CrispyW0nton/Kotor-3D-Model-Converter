@@ -57,8 +57,11 @@ class _PythonPrelaunchRun:
     def done(self) -> bool:
         return all(future.done() for future in self._futures)
 
-    def result(self, index: int) -> object:
-        return self._futures[index].result()
+    def task_done(self, index: int) -> bool:
+        return self._futures[index].done()
+
+    def result(self, index: int, timeout: float | None = None) -> object:
+        return self._futures[index].result(timeout=timeout)
 
     def shutdown(self) -> None:
         self._executor.shutdown(wait=True)
@@ -76,6 +79,7 @@ class _NativePrelaunchRun:
         self._status_callback = status_callback
         self._results: list[object | None] = [None] * len(self._jobs)
         self._errors: list[BaseException | None] = [None] * len(self._jobs)
+        self._task_done_events: list[threading.Event] = [threading.Event() for _ in self._jobs]
         self._native_result = 0
         self._done = threading.Event()
         self._task_callback = _TASK_CALLBACK(self._run_task)
@@ -101,6 +105,8 @@ class _NativePrelaunchRun:
             self._results[index] = self._jobs[index]()
         except BaseException as exc:
             self._errors[index] = exc
+        finally:
+            self._task_done_events[index].set()
 
     def _run_native(self) -> None:
         try:
@@ -119,12 +125,16 @@ class _NativePrelaunchRun:
     def done(self) -> bool:
         return self._done.is_set()
 
-    def result(self, index: int) -> object:
-        self._done.wait()
+    def task_done(self, index: int) -> bool:
+        return self._task_done_events[index].is_set()
+
+    def result(self, index: int, timeout: float | None = None) -> object:
+        if not self._task_done_events[index].wait(timeout):
+            raise TimeoutError(f"Pre-launch task {index} has not completed.")
         error = self._errors[index]
         if error is not None:
             raise error
-        if self._native_result != 0:
+        if self._done.is_set() and self._native_result != 0:
             raise RuntimeError(f"Native pre-launch worker bridge failed with code {self._native_result}.")
         return self._results[index]
 

@@ -355,6 +355,16 @@ class ThemeLayoutMixin:
                 combo.blockSignals(False)
         QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
 
+    def _refresh_startup_layout_after_show(self) -> None:
+        """Re-apply the selected layout once startup widgets have real screen geometry."""
+
+        if not hasattr(self, "layout_manager"):
+            return
+        self.layout_manager.apply_current_layout(self)
+        self._sync_reserved_top_rows()
+        QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)
+        QtCore.QTimer.singleShot(75, self._sync_reserved_top_rows)
+
     def _sync_theme_layout_settings(self) -> dict:
         theme_values = self.theme_manager.to_settings()
         layout_values = self.layout_manager.to_settings()

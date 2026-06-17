@@ -11,6 +11,51 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Bounded Pre-Launch Background Handoff
+
+Owner: LordVaderCW
+Subsystem: Qt shell startup, native pre-launch workers, splash status ordering, and library/renderer startup handoff
+
+- Added a bounded foreground deadline for detection, library indexing, and renderer/hardware diagnostics so the main window no longer waits indefinitely on pre-launch worker jobs.
+- Kept the library/detection/renderer work on the native C++ pre-launch bridge or Python startup worker fallback, then carried unfinished work into the main window and applied completed results after first paint.
+- Added a post-show poller that brings back delayed renderer capabilities, hardware diagnostics, and preloaded library rows without blocking the UI thread.
+- Fixed splash stage ordering so renderer/library `ready` statuses do not jump the UI to the workspace stage, and added an explicit pre-workspace status when startup work continues in the background.
+- Regenerated the Shell Main native Python payload for packaged/native-host launches.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\app_runner.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\native_prelaunch.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\startup_library.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\splash.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\qt_main_window.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads tests\test_core_contracts.py::test_main_window_defers_post_show_startup_tasks_until_after_first_paint tests\test_core_contracts.py::test_startup_splash_has_launch_log_textblock tests\test_core_contracts.py::test_prewindow_diagnostics_parallelizes_renderer_and_hardware_scans -q -p no:cacheprovider` passed (`4 passed`).
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Windows_Shell_Main /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+
+### [2026-06-17] Theme Editor Full Layout Customization Surface
+
+Owner: LordVaderCW
+Subsystem: Theme Editor layout tab and XML layout serialization
+
+- Expanded the Theme Editor Layout tab from the legacy small metric subset to the full XML-backed layout surface: window state, all toolbars, viewport sizing and toolbar options, panel visibility/regions/sizing/collapse, dock groups, and every spacing metric.
+- Added combo/text value editors for non-numeric layout fields while keeping numeric fields on spin boxes.
+- Preserved full layout data on save by writing dock groups and panel collapsed state back into the layout XML.
+- Regenerated the Theme boundary native Python payload for packaged/native-host launches.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Theme\Python\src\gui\libtheme\theme_editor_window.py tests\test_theme_layout_loading.py` passed.
+- `python -m pytest tests\test_theme_layout_loading.py::test_theme_editor_layout_tab_exposes_full_layout_customization_surface -q -p no:cacheprovider` passed (`1 passed`) with native Python roots on `PYTHONPATH`.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_GUI_Boundary_Theme /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed.
+
+### [2026-06-17] Startup Layout Refresh For Command Buttons
+
+Owner: LordVaderCW
+Subsystem: Qt shell startup layout and command/viewport toolbar geometry
+
+- Added a post-show selected-layout refresh so startup follows the same layout-application path as manually switching layouts away and back.
+- Queued follow-up reserved-top-row syncs after the window has real screen geometry, fixing command and viewport toolbar buttons that could start hidden until a layout was reselected.
+- Regenerated the Shell Main native Python payload for packaged/native-host launches.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\qt_main_window.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\theme_layout.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\app_runner.py tests\test_core_contracts.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_main_window_defers_post_show_startup_tasks_until_after_first_paint tests\test_core_contracts.py::test_main_window_reapplies_startup_layout_after_show_for_button_geometry tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads -q` passed (`3 passed`).
+- Shell Main Debug x64 MSBuild reached link but was blocked by the running application holding `build\vs\x64\Debug\GhostRigger.Windows.Shell.Main.dll`.
+
 ### [2026-06-17] Native Splash Project Packaging And Post-Show Startup Handoff
 
 Owner: LordVaderCW
@@ -26,7 +71,6 @@ Verification:
 - `python -m pytest tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads tests\test_core_contracts.py::test_main_window_defers_post_show_startup_tasks_until_after_first_paint tests\test_native_project_templates.py::test_windows_splash_project_uses_native_msbuild_resources -q` passed (`3 passed`).
 - XML parse checks passed for `native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj`, `native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj.filters`, and `native\GhostRigger.Windows.Shell.Main\GhostRigger.Windows.Shell.Main.vcxproj`.
 - `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Windows_Splash /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed after removing the Qt package gate.
-- Launched `build\vs\x64\Debug\GhostRigger.Windows.Splash.exe --auto-close-ms=1500` visibly and confirmed it returned without leaving a splash process running.
 
 ### [2026-06-17] Native Pre-Launch Threading And Splash Status Routing
 

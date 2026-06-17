@@ -213,6 +213,37 @@ class StartupLibraryMixin:
             self._populate_resource_panel()
         self._populate_animation_library_from_current_model()
 
+    def _finish_pending_prelaunch_after_first_paint(self) -> None:
+        prelaunch_run = getattr(self, "_pending_prelaunch_run", None)
+        if prelaunch_run is None:
+            return
+
+        if not getattr(self, "_pending_prelaunch_diagnostics_applied", False) and prelaunch_run.task_done(0):
+            try:
+                diagnostics = prelaunch_run.result(0, timeout=0) or {}
+                self._preloaded_renderer_capabilities = list(diagnostics.get("renderer_capabilities") or [])
+                self._preloaded_hardware_diagnostics = dict(diagnostics.get("hardware_diagnostics") or {})
+                self._log("Startup renderer and hardware diagnostics completed in the background.", "success")
+            except Exception as exc:
+                self._log(f"Startup renderer and hardware diagnostics failed after launch: {exc}", "warning")
+            self._pending_prelaunch_diagnostics_applied = True
+
+        if not getattr(self, "_pending_prelaunch_library_applied", False) and prelaunch_run.task_done(1):
+            try:
+                payload = prelaunch_run.result(1, timeout=0) or {}
+                self._preloaded_library = dict(payload.get("preloaded_library") or {})
+                self._apply_preloaded_library()
+                self._log("Startup library and detection work completed in the background.", "success")
+            except Exception as exc:
+                self._log(f"Startup library preparation failed after launch: {exc}", "warning")
+            self._pending_prelaunch_library_applied = True
+
+        if prelaunch_run.done():
+            prelaunch_run.shutdown()
+            self._pending_prelaunch_run = None
+            return
+        QtCore.QTimer.singleShot(250, self._finish_pending_prelaunch_after_first_paint)
+
     def _extract_library_row(self, row: dict):
         resref = str(row.get("resref") or "")
         game = str(row.get("game") or "K1").upper()

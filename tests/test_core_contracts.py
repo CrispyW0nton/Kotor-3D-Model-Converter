@@ -10022,19 +10022,29 @@ def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
     assert "_SplashStream(original_stderr, emit_line, \"STDERR\")" in source
     assert "if self._wrapped is not None" in source
     assert "GHOSTRIGGER_SPLASH_HOLD_MS" in source
+    assert "GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS" in source
     assert "splash.append_log_line(line)" in source
     assert "drain_splash_log()" in source
+    assert "settle_prelaunch_queues()" in source
     assert "status_queue: SimpleQueue[tuple[str, str]] = SimpleQueue()" in source
     assert "queue_prelaunch_status" in source
     assert "collect_startup_diagnostics(settings_data, queue_prelaunch_status)" in source
     assert "build_prelaunch_library_input(root, startup_input, queue_prelaunch_status)" in source
-    assert "while not prelaunch_run.done()" in source
+    assert "prelaunch_deadline = time.monotonic() + _prelaunch_foreground_seconds_from_env()" in source
+    assert "while not prelaunch_run.done() and time.monotonic() < prelaunch_deadline" in source
+    assert "prelaunch_run.task_done(0)" in source
+    assert "prelaunch_run.task_done(1)" in source
+    assert 'prepared_input["_pending_prelaunch_run"] = prelaunch_run' in source
+    assert "Startup library preparation is continuing in the background." in source
+    assert "Library, detection, and renderer pre-launch work is continuing on background workers." in source
     assert "app.processEvents()" in source
     assert "win.show()\n    app.processEvents()" in source
     assert "post_show_startup = getattr(win, \"start_post_show_startup_tasks\", None)" in source
     assert "post_show_startup()" in source
     assert "ctypes.CFUNCTYPE(None, ctypes.c_int)" in native_source
     assert "gr_windows_main_window_run_prelaunch_tasks" in native_source
+    assert "def task_done(self, index: int) -> bool:" in native_source
+    assert "def result(self, index: int, timeout: float | None = None) -> object:" in native_source
     assert "ThreadPoolExecutor(max_workers=max(1, len(jobs)), thread_name_prefix=\"GRStartup\")" in native_source
     assert "std::thread" in cpp_source
     assert "GRWindowsMainPrelaunchStatusCallback" in cpp_source
@@ -10056,13 +10066,35 @@ def test_main_window_defers_post_show_startup_tasks_until_after_first_paint() ->
 
     assert "self._post_show_startup_tasks_started = False" in source
     assert "def start_post_show_startup_tasks(self) -> None:" in source
+    assert "QtCore.QTimer.singleShot(0, self._refresh_startup_layout_after_show)" in source
     assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" in source
     assert "QtCore.QTimer.singleShot(250, self._start_ipc_server)" in source
+    assert "QtCore.QTimer.singleShot(300, self._finish_pending_prelaunch_after_first_paint)" in source
     constructor_tail = source.split("def start_post_show_startup_tasks", 1)[0]
     assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" not in constructor_tail
     assert "self._start_ipc_server()" not in constructor_tail
     assert "QtCore.QTimer.singleShot(300, self._finish_preloaded_library_after_first_paint)" in startup_source
     assert "resource_dock is not None and resource_dock.isVisible()" in startup_source
+    assert "def _finish_pending_prelaunch_after_first_paint(self) -> None:" in startup_source
+    assert "prelaunch_run.task_done(0)" in startup_source
+    assert "prelaunch_run.task_done(1)" in startup_source
+    assert "self._preloaded_renderer_capabilities = list(diagnostics.get(\"renderer_capabilities\") or [])" in startup_source
+    assert "self._preloaded_hardware_diagnostics = dict(diagnostics.get(\"hardware_diagnostics\") or {})" in startup_source
+    assert "self._preloaded_library = dict(payload.get(\"preloaded_library\") or {})" in startup_source
+    assert "QtCore.QTimer.singleShot(250, self._finish_pending_prelaunch_after_first_paint)" in startup_source
+
+
+def test_main_window_reapplies_startup_layout_after_show_for_button_geometry() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/theme_layout.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _refresh_startup_layout_after_show(self) -> None:" in source
+    assert "self.layout_manager.apply_current_layout(self)" in source
+    assert "self._sync_reserved_top_rows()" in source
+    assert "QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)" in source
+    assert "QtCore.QTimer.singleShot(75, self._sync_reserved_top_rows)" in source
 
 
 def test_startup_splash_has_launch_log_textblock() -> None:
@@ -10085,6 +10117,9 @@ def test_startup_splash_has_launch_log_textblock() -> None:
     assert "BRANDED_SPLASH_COLORS" in source
     assert "splash.useBrandedPalette" in source
     assert "def _stage_index_for_status" in source
+    assert '"pre-launch worker", "startup threading"' in source
+    assert '"game installs", "detecting game"' in source
+    assert "if finished:\n            return len(self.STAGE_ROWS) - 1\n        haystack" not in source
     assert "def _set_progress_percent" in source
 
 

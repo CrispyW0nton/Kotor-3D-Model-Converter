@@ -278,6 +278,9 @@ class QtGhostRiggerMainWindow(
         self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
         self._preloaded_hardware_diagnostics = dict(self.startup_input.get("hardware_diagnostics") or {})
         self._preloaded_renderer_capabilities = list(self.startup_input.get("renderer_capabilities") or [])
+        self._pending_prelaunch_run = self.startup_input.get("_pending_prelaunch_run")
+        self._pending_prelaunch_diagnostics_applied = False
+        self._pending_prelaunch_library_applied = False
         self._suppress_theme_progress_toast = True
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
@@ -382,10 +385,12 @@ class QtGhostRiggerMainWindow(
         if self._post_show_startup_tasks_started:
             return
         self._post_show_startup_tasks_started = True
+        QtCore.QTimer.singleShot(0, self._refresh_startup_layout_after_show)
         QtCore.QTimer.singleShot(0, self._configure_theme_watcher)
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
         QtCore.QTimer.singleShot(250, self._start_ipc_server)
         QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
+        QtCore.QTimer.singleShot(300, self._finish_pending_prelaunch_after_first_paint)
         if not self._preloaded_library.get("detection_attempted"):
             QtCore.QTimer.singleShot(350, self._auto_detect_dirs_on_startup)
 

@@ -128,6 +128,14 @@ def _splash_hold_seconds_from_env() -> float:
     return max(0.0, min(float(hold_ms) / 1000.0, 15.0))
 
 
+def _prelaunch_foreground_seconds_from_env() -> float:
+    try:
+        hold_ms = int(os.environ.get("GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS", "3500") or 3500)
+    except ValueError:
+        hold_ms = 3500
+    return max(0.5, min(float(hold_ms) / 1000.0, 12.0))
+
+
 def run_qt_application(
     app_root: Optional[str],
     startup_input: Optional[dict],
@@ -158,7 +166,7 @@ def run_qt_application(
     cleanup_splash_log_capture = _install_splash_log_capture(queue_splash_log_line)
 
     def update_prelaunch_status(title: str, detail: str) -> None:
-        finished = title.lower().endswith("ready")
+        finished = title.strip().lower() in {"workspace ready", "main window ready"}
         splash.set_status(title, detail, finished=finished)
         splash.show()
         splash.raise_()
@@ -189,6 +197,18 @@ def run_qt_application(
             update_prelaunch_status(title, detail)
             updated = True
 
+    def settle_prelaunch_queues() -> None:
+        deadline = time.monotonic() + 0.15
+        while True:
+            had_status = drain_prelaunch_status()
+            had_log = drain_splash_log()
+            app.processEvents()
+            if had_status or had_log:
+                deadline = time.monotonic() + 0.05
+            if time.monotonic() >= deadline:
+                return
+            time.sleep(0.01)
+
     for line in _read_existing_launch_log_lines():
         splash.append_log_line(line)
     update_prelaunch_status("Preparing startup", "Starting diagnostics and library indexing...")
@@ -199,33 +219,56 @@ def run_qt_application(
         ),
         status_callback=queue_prelaunch_status,
     )
-    while not prelaunch_run.done():
+    prelaunch_deadline = time.monotonic() + _prelaunch_foreground_seconds_from_env()
+    while not prelaunch_run.done() and time.monotonic() < prelaunch_deadline:
         had_status = drain_prelaunch_status()
         had_log = drain_splash_log()
         if not had_status and not had_log:
             update_prelaunch_status("Preparing startup", "Indexing game libraries and checking renderer hardware...")
         time.sleep(0.025)
         app.processEvents()
-    drain_prelaunch_status()
-    drain_splash_log()
-    try:
-        startup_diagnostics = prelaunch_run.result(0)
-    except Exception:
-        log.warning("Pre-window startup diagnostics failed.", exc_info=True)
+    settle_prelaunch_queues()
+    prelaunch_finished = prelaunch_run.done()
+    prepared_input = dict(startup_input or {})
+    pending_prelaunch = not prelaunch_finished
+    if prelaunch_run.task_done(0):
+        try:
+            startup_diagnostics = prelaunch_run.result(0, timeout=0)
+        except Exception:
+            log.warning("Pre-window startup diagnostics failed.", exc_info=True)
+            startup_diagnostics = {"renderer_capabilities": [], "hardware_diagnostics": {}}
+    else:
+        log.info("Pre-window startup diagnostics are continuing after first paint.")
         startup_diagnostics = {"renderer_capabilities": [], "hardware_diagnostics": {}}
-    try:
-        prepared_input = prelaunch_run.result(1)
-    except Exception:
-        log.warning("Pre-window library preparation failed.", exc_info=True)
-        prepared_input = dict(startup_input or {})
+        prepared_input["_pending_startup_diagnostics"] = True
+    if prelaunch_run.task_done(1):
+        try:
+            prepared_input = prelaunch_run.result(1, timeout=0)
+        except Exception:
+            log.warning("Pre-window library preparation failed.", exc_info=True)
+            prepared_input["preloaded_library"] = {
+                "rows": [],
+                "error": "Startup library preparation failed.",
+                "detection_attempted": True,
+            }
+    else:
+        log.info("Pre-window library preparation is continuing after first paint.")
         prepared_input["preloaded_library"] = {
             "rows": [],
-            "error": "Startup library preparation failed.",
+            "error": "Startup library preparation is continuing in the background.",
             "detection_attempted": True,
+            "pending": True,
         }
-    finally:
+    if pending_prelaunch:
+        prepared_input["_pending_prelaunch_run"] = prelaunch_run
+        update_prelaunch_status(
+            "Loading tools and resources",
+            "Library, detection, and renderer pre-launch work is continuing on background workers.",
+        )
+    else:
         prelaunch_run.shutdown()
     prepared_input.update(startup_diagnostics)
+    settle_prelaunch_queues()
     update_prelaunch_status("Opening workspace", "Starting the main window.")
     drain_splash_log()
     hold_seconds = _splash_hold_seconds_from_env()

@@ -62,6 +62,10 @@ _SPLASH_COLOR_KEYS = (
     "splash.progressTrack",
     "splash.progressFill",
 )
+_LAYOUT_BOOL_VALUES = ("false", "true")
+_LAYOUT_PANEL_REGIONS = ("left", "right", "farRight", "bottom")
+_LAYOUT_DOCK_AREAS = ("left", "right", "bottom")
+_LAYOUT_DOCK_MODES = ("tabbed", "vertical", "horizontal")
 
 
 def _lighten_hex(value: str, factor: float = 1.18) -> str:
@@ -927,6 +931,31 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         layout.addStretch(1)
         return wrapper
 
+    def _layout_combo_cell(self, token: str, value: str, values: tuple[str, ...]) -> QtWidgets.QWidget:
+        combo = QtWidgets.QComboBox()
+        combo.addItems(values)
+        if value and value not in values:
+            combo.addItem(value)
+        combo.setCurrentText(value)
+        combo.setProperty("metricToken", token)
+        combo.currentTextChanged.connect(lambda text, key=token: self._layout_metric_choice_changed(key, text))
+        wrapper = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(wrapper)
+        layout.setContentsMargins(8, 2, 8, 2)
+        layout.addWidget(combo, 0)
+        layout.addStretch(1)
+        return wrapper
+
+    def _layout_text_cell(self, token: str, value: str) -> QtWidgets.QWidget:
+        edit = QtWidgets.QLineEdit(value)
+        edit.setProperty("metricToken", token)
+        edit.editingFinished.connect(lambda field=edit, key=token: self._layout_metric_choice_changed(key, field.text()))
+        wrapper = QtWidgets.QWidget()
+        layout = QtWidgets.QHBoxLayout(wrapper)
+        layout.setContentsMargins(8, 2, 8, 2)
+        layout.addWidget(edit, 1)
+        return wrapper
+
     def _build_preview_area(self) -> QtWidgets.QWidget:
         panel = QtWidgets.QWidget()
         panel.setObjectName("ThemeEditorPreview")
@@ -1467,39 +1496,69 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._refresh_preview()
 
     def _populate_layout_metrics(self) -> None:
-        rows = [
-            ("window.defaultWidth", self._layout.main_width),
-            ("window.defaultHeight", self._layout.main_height),
-            ("toolbar.height", self._layout.toolbar("main").height),
-            ("toolbar.iconSize", self._layout.toolbar("main").icon_size),
-            ("leftPanel.preferredWidth", self._layout.panel("library").preferred_width),
-            ("rightPanel.preferredWidth", self._layout.panel("properties").preferred_width),
-            ("farRightPanel.preferredWidth", self._layout.panel("meshTools").preferred_width),
-            ("bottomPanel.preferredHeight", self._layout.panel("outputLog").preferred_height),
-            ("panel.margin", self._layout.spacing_value("margin", FALLBACK_METRICS["panel.margin"])),
-            ("panel.spacing", self._layout.spacing_value("panelSpacing", FALLBACK_METRICS["panel.spacing"])),
-            ("input.height", self._layout.spacing_value("inputHeight", FALLBACK_METRICS["input.height"])),
-            ("tab.height", self._layout.spacing_value("tabHeight", FALLBACK_METRICS["tab.height"])),
-            ("tab.width", self._layout.spacing_value("tabWidth", FALLBACK_METRICS["tab.width"])),
-            ("tab.padding", self._layout.spacing_value("tabPadding", FALLBACK_METRICS["tab.padding"])),
-            ("tab.paddingX", self._layout.spacing_value("tabPaddingX", FALLBACK_METRICS["tab.paddingX"])),
-            ("tab.paddingY", self._layout.spacing_value("tabPaddingY", FALLBACK_METRICS["tab.paddingY"])),
-            ("tab.margin", self._layout.spacing_value("tabMargin", FALLBACK_METRICS["tab.margin"])),
-            ("tab.marginX", self._layout.spacing_value("tabMarginX", FALLBACK_METRICS["tab.marginX"])),
-            ("tab.marginY", self._layout.spacing_value("tabMarginY", FALLBACK_METRICS["tab.marginY"])),
-            ("table.rowHeight", self._layout.spacing_value("tableRowHeight", FALLBACK_METRICS["table.rowHeight"])),
-            ("tree.rowHeight", self._layout.spacing_value("treeRowHeight", FALLBACK_METRICS["tree.rowHeight"])),
-            ("splitter.handleWidth", self._layout.spacing_value("splitterHandleWidth", FALLBACK_METRICS["splitter.handleWidth"])),
+        rows: list[tuple[str, object, str, tuple[str, ...]]] = [
+            ("window.defaultWidth", self._layout.main_width, "int", ()),
+            ("window.defaultHeight", self._layout.main_height, "int", ()),
+            ("window.maximized", self._layout.maximized, "bool", _LAYOUT_BOOL_VALUES),
         ]
+        for toolbar in sorted(self._layout.toolbars.values(), key=lambda item: item.id):
+            prefix = f"toolbar.{toolbar.id}"
+            rows.extend(
+                [
+                    (f"{prefix}.visible", toolbar.visible, "bool", _LAYOUT_BOOL_VALUES),
+                    (f"{prefix}.buttonMode", toolbar.button_mode, "choice", tuple(sorted(VALID_BUTTON_MODES))),
+                    (f"{prefix}.iconSize", toolbar.icon_size, "int", ()),
+                    (f"{prefix}.height", toolbar.height, "int", ()),
+                ]
+            )
+        rows.extend(
+            [
+                ("viewport.minWidth", self._layout.viewport.min_width, "int", ()),
+                ("viewport.preferredWidth", self._layout.viewport.preferred_width, "int", ()),
+                ("viewport.toolbar.visible", self._layout.viewport.toolbar_visible, "bool", _LAYOUT_BOOL_VALUES),
+                ("viewport.toolbar.buttonMode", self._layout.viewport.toolbar_button_mode, "choice", tuple(sorted(VALID_BUTTON_MODES))),
+                ("viewport.toolbar.compact", self._layout.viewport.toolbar_compact, "bool", _LAYOUT_BOOL_VALUES),
+            ]
+        )
+        for panel in sorted(self._layout.panels.values(), key=lambda item: item.id):
+            prefix = f"panel.{panel.id}"
+            rows.extend(
+                [
+                    (f"{prefix}.visible", panel.visible, "bool", _LAYOUT_BOOL_VALUES),
+                    (f"{prefix}.region", panel.region, "choice", _LAYOUT_PANEL_REGIONS),
+                    (f"{prefix}.minWidth", panel.min_width, "int", ()),
+                    (f"{prefix}.preferredWidth", panel.preferred_width, "int", ()),
+                    (f"{prefix}.minHeight", panel.min_height, "int", ()),
+                    (f"{prefix}.preferredHeight", panel.preferred_height, "int", ()),
+                    (f"{prefix}.collapsed", panel.collapsed, "bool", _LAYOUT_BOOL_VALUES),
+                ]
+            )
+        for index, group in enumerate(self._layout.dock_groups):
+            prefix = f"dockGroup.{index}.{group.id}"
+            rows.extend(
+                [
+                    (f"{prefix}.visible", group.visible, "bool", _LAYOUT_BOOL_VALUES),
+                    (f"{prefix}.area", group.area, "choice", _LAYOUT_DOCK_AREAS),
+                    (f"{prefix}.mode", group.mode, "choice", _LAYOUT_DOCK_MODES),
+                    (f"{prefix}.active", group.active, "text", ()),
+                    (f"{prefix}.docks", ", ".join(group.docks), "text", ()),
+                ]
+            )
+        for key, value in sorted(self._layout.spacing.items()):
+            rows.append((f"spacing.{key}", value, "int", ()))
         self.layout_metric_table.setUpdatesEnabled(False)
         self.layout_metric_table.setRowCount(len(rows))
-        for row, (key, value) in enumerate(rows):
+        for row, (key, value, value_kind, choices) in enumerate(rows):
             self.layout_metric_table.setCellWidget(row, 0, self._metric_name_cell(key))
-            self.layout_metric_table.setCellWidget(
-                row,
-                1,
-                self._metric_value_cell(key, int(value), changed=self._layout_metric_spin_changed, minimum=0),
-            )
+            if value_kind == "int":
+                cell = self._metric_value_cell(key, int(value), changed=self._layout_metric_spin_changed, minimum=0)
+            elif value_kind == "bool":
+                cell = self._layout_combo_cell(key, "true" if bool(value) else "false", choices)
+            elif value_kind == "choice":
+                cell = self._layout_combo_cell(key, str(value), choices)
+            else:
+                cell = self._layout_text_cell(key, str(value))
+            self.layout_metric_table.setCellWidget(row, 1, cell)
         self.layout_metric_table.setUpdatesEnabled(True)
 
     def _layout_metric_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
@@ -1519,23 +1578,93 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
         self._mark_dirty()
         self._refresh_preview()
 
-    def _set_layout_metric(self, key: str, value: int) -> None:
+    def _layout_metric_choice_changed(self, key: str, value: str) -> None:
+        self._set_layout_metric(key, value)
+        self._mark_dirty()
+        self._refresh_preview()
+
+    def _set_layout_metric(self, key: str, value: object) -> None:
+        def as_bool(source: object) -> bool:
+            if isinstance(source, bool):
+                return source
+            return str(source).strip().lower() in {"1", "true", "yes", "on"}
+
+        def as_int(source: object) -> int:
+            return max(0, min(5000, int(source)))
+
         if key == "window.defaultWidth":
-            self._layout.main_width = value
+            self._layout.main_width = as_int(value)
         elif key == "window.defaultHeight":
-            self._layout.main_height = value
-        elif key == "toolbar.height":
-            self._layout.toolbar("main").height = value
-        elif key == "toolbar.iconSize":
-            self._layout.toolbar("main").icon_size = value
-        elif key == "leftPanel.preferredWidth":
-            self._layout.panel("library").preferred_width = value
-        elif key == "rightPanel.preferredWidth":
-            self._layout.panel("properties").preferred_width = value
-        elif key == "farRightPanel.preferredWidth":
-            self._layout.panel("meshTools").preferred_width = value
-        elif key == "bottomPanel.preferredHeight":
-            self._layout.panel("outputLog").preferred_height = value
+            self._layout.main_height = as_int(value)
+        elif key == "window.maximized":
+            self._layout.maximized = as_bool(value)
+        elif key.startswith("toolbar."):
+            _, toolbar_id, field = key.split(".", 2)
+            toolbar = self._layout.toolbars.get(toolbar_id)
+            if toolbar is None:
+                return
+            if field == "visible":
+                toolbar.visible = as_bool(value)
+            elif field == "buttonMode" and str(value) in VALID_BUTTON_MODES:
+                toolbar.button_mode = str(value)
+                if toolbar_id == "main" and self.button_mode.currentText() != str(value):
+                    self.button_mode.blockSignals(True)
+                    self.button_mode.setCurrentText(str(value))
+                    self.button_mode.blockSignals(False)
+            elif field == "iconSize":
+                toolbar.icon_size = as_int(value)
+            elif field == "height":
+                toolbar.height = as_int(value)
+        elif key.startswith("viewport.toolbar."):
+            field = key.removeprefix("viewport.toolbar.")
+            if field == "visible":
+                self._layout.viewport.toolbar_visible = as_bool(value)
+            elif field == "buttonMode" and str(value) in VALID_BUTTON_MODES:
+                self._layout.viewport.toolbar_button_mode = str(value)
+            elif field == "compact":
+                self._layout.viewport.toolbar_compact = as_bool(value)
+        elif key == "viewport.minWidth":
+            self._layout.viewport.min_width = as_int(value)
+        elif key == "viewport.preferredWidth":
+            self._layout.viewport.preferred_width = as_int(value)
+        elif key.startswith("panel."):
+            _, panel_id, field = key.split(".", 2)
+            panel = self._layout.panels.get(panel_id)
+            if panel is None:
+                return
+            if field == "visible":
+                panel.visible = as_bool(value)
+            elif field == "region":
+                panel.region = str(value).strip() or panel.region
+            elif field == "minWidth":
+                panel.min_width = as_int(value)
+            elif field == "preferredWidth":
+                panel.preferred_width = as_int(value)
+            elif field == "minHeight":
+                panel.min_height = as_int(value)
+            elif field == "preferredHeight":
+                panel.preferred_height = as_int(value)
+            elif field == "collapsed":
+                panel.collapsed = as_bool(value)
+        elif key.startswith("dockGroup."):
+            parts = key.split(".", 3)
+            if len(parts) != 4:
+                return
+            try:
+                group = self._layout.dock_groups[int(parts[1])]
+            except (IndexError, ValueError):
+                return
+            field = parts[3]
+            if field == "visible":
+                group.visible = as_bool(value)
+            elif field == "area":
+                group.area = str(value).strip() or group.area
+            elif field == "mode":
+                group.mode = str(value).strip() or group.mode
+            elif field == "active":
+                group.active = str(value).strip()
+            elif field == "docks":
+                group.docks = [item.strip() for item in str(value).split(",") if item.strip()]
         else:
             xml_name = {
                 "panel.margin": "margin",
@@ -1553,11 +1682,14 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
                 "tree.rowHeight": "treeRowHeight",
                 "splitter.handleWidth": "splitterHandleWidth",
             }.get(key, key)
-            self._layout.spacing[xml_name] = value
+            if xml_name.startswith("spacing."):
+                xml_name = xml_name.removeprefix("spacing.")
+            self._layout.spacing[xml_name] = as_int(value)
 
     def _set_layout_button_mode(self, mode: str) -> None:
         if mode in VALID_BUTTON_MODES:
             self._layout.toolbar("main").button_mode = mode
+            self._populate_layout_metrics()
             self._mark_dirty()
             self._refresh_preview()
 
@@ -1743,7 +1875,12 @@ class ThemeEditorWindow(QtWidgets.QMainWindow):
             ET.SubElement(toolbars, "toolbar", {"id": toolbar.id, "visible": str(toolbar.visible).lower(), "buttonMode": toolbar.button_mode, "iconSize": str(toolbar.icon_size), "height": str(toolbar.height)})
         panels = ET.SubElement(root, "panels")
         for panel in self._layout.panels.values():
-            ET.SubElement(panels, "panel", {"id": panel.id, "region": panel.region, "visible": str(panel.visible).lower(), "minWidth": str(panel.min_width), "preferredWidth": str(panel.preferred_width), "minHeight": str(panel.min_height), "preferredHeight": str(panel.preferred_height)})
+            ET.SubElement(panels, "panel", {"id": panel.id, "region": panel.region, "visible": str(panel.visible).lower(), "minWidth": str(panel.min_width), "preferredWidth": str(panel.preferred_width), "minHeight": str(panel.min_height), "preferredHeight": str(panel.preferred_height), "collapsed": str(panel.collapsed).lower()})
+        dock_layout = ET.SubElement(root, "dockLayout")
+        for group in self._layout.dock_groups:
+            group_node = ET.SubElement(dock_layout, "group", {"id": group.id, "area": group.area, "mode": group.mode, "visible": str(group.visible).lower(), "active": group.active})
+            for dock_id in group.docks:
+                ET.SubElement(group_node, "dock", {"id": dock_id})
         viewport = ET.SubElement(root, "viewport")
         ET.SubElement(viewport, "region", {"id": "mainViewport", "minWidth": str(self._layout.viewport.min_width), "preferredWidth": str(self._layout.viewport.preferred_width)})
         ET.SubElement(viewport, "toolbar", {"visible": str(self._layout.viewport.toolbar_visible).lower(), "buttonMode": self._layout.viewport.toolbar_button_mode, "compact": str(self._layout.viewport.toolbar_compact).lower()})

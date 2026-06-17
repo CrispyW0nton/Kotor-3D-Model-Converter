@@ -8,7 +8,6 @@
 #include <objidl.h>
 #include <propidl.h>
 #include <gdiplus.h>
-#include <shellapi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -22,7 +21,6 @@ namespace
 {
 constexpr wchar_t kWindowClassName[] = L"GhostRiggerWindowsSplashWindow";
 constexpr UINT_PTR kFrameTimerId = 1;
-constexpr UINT_PTR kAutoCloseTimerId = 2;
 constexpr UINT kFrameTimerMs = 16;
 
 struct SplashState
@@ -30,28 +28,9 @@ struct SplashState
     ULONG_PTR gdiplusToken = 0;
     std::unique_ptr<Gdiplus::Bitmap> logo;
     ULONGLONG startTick = 0;
-    UINT autoCloseMs = 0;
     double progress = 0.0;
     std::vector<std::wstring> logLines;
 };
-
-UINT parseAutoCloseMs()
-{
-    int argc = 0;
-    PWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    UINT value = 0;
-    for (int i = 1; argv != nullptr && i < argc; ++i) {
-        const std::wstring arg(argv[i]);
-        constexpr wchar_t prefix[] = L"--auto-close-ms=";
-        if (arg.rfind(prefix, 0) == 0) {
-            value = static_cast<UINT>(std::clamp(_wtoi(arg.c_str() + (std::size(prefix) - 1)), 0, 60000));
-        }
-    }
-    if (argv != nullptr) {
-        LocalFree(argv);
-    }
-    return value;
-}
 
 Gdiplus::Color argb(const BYTE a, const BYTE r, const BYTE g, const BYTE b)
 {
@@ -224,15 +203,8 @@ LRESULT CALLBACK splashWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         state = reinterpret_cast<SplashState*>(reinterpret_cast<CREATESTRUCTW*>(lParam)->lpCreateParams);
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
         SetTimer(hwnd, kFrameTimerId, kFrameTimerMs, nullptr);
-        if (state != nullptr && state->autoCloseMs > 0) {
-            SetTimer(hwnd, kAutoCloseTimerId, state->autoCloseMs, nullptr);
-        }
         return 0;
     case WM_TIMER:
-        if (wParam == kAutoCloseTimerId) {
-            DestroyWindow(hwnd);
-            return 0;
-        }
         if (state != nullptr) {
             const double elapsed = static_cast<double>(GetTickCount64() - state->startTick) / 1000.0;
             state->progress = std::clamp(elapsed / 4.0, 0.0, 0.92);
@@ -250,7 +222,6 @@ LRESULT CALLBACK splashWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         break;
     case WM_DESTROY:
         KillTimer(hwnd, kFrameTimerId);
-        KillTimer(hwnd, kAutoCloseTimerId);
         PostQuitMessage(0);
         return 0;
     default:
@@ -269,7 +240,6 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int showCommand)
     }
     state.logo = loadPngResource(IDR_SPLASH_LOGO);
     state.startTick = GetTickCount64();
-    state.autoCloseMs = parseAutoCloseMs();
 
     WNDCLASSEXW wc{};
     wc.cbSize = sizeof(wc);
