@@ -26,6 +26,7 @@ Verification:
 - `python -m pytest tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads tests\test_core_contracts.py::test_main_window_defers_post_show_startup_tasks_until_after_first_paint tests\test_native_project_templates.py::test_windows_splash_project_uses_native_msbuild_resources -q` passed (`3 passed`).
 - XML parse checks passed for `native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj`, `native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj.filters`, and `native\GhostRigger.Windows.Shell.Main\GhostRigger.Windows.Shell.Main.vcxproj`.
 - `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Windows_Splash /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed after removing the Qt package gate.
+- Launched `build\vs\x64\Debug\GhostRigger.Windows.Splash.exe --auto-close-ms=1500` visibly and confirmed it returned without leaving a splash process running.
 
 ### [2026-06-17] Native Pre-Launch Threading And Splash Status Routing
 
