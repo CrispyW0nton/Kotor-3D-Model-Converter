@@ -341,6 +341,7 @@ class QtGhostRiggerMainWindow(
         self._retarget_engine = None
         self._retarget_mapping_report = None
         self._retarget_last_tick: Optional[float] = None
+        self._post_show_startup_tasks_started = False
         self._character_builder_window: Optional[QtCharacterBuilderWindow] = None
         self.sequence_editor_window: Optional[SequenceEditorWindow] = None
         self.sequence_editor_dock: Optional[QtWidgets.QDockWidget] = None
@@ -375,13 +376,18 @@ class QtGhostRiggerMainWindow(
         self._refresh_scene_view()
         self.scene_manager.active_scene.mark_clean()
         self._update_scene_chrome()
-        self._configure_theme_watcher()
         self._log("Qt host window ready.", "success")
-        self._start_ipc_server()
-        QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
+
+    def start_post_show_startup_tasks(self) -> None:
+        if self._post_show_startup_tasks_started:
+            return
+        self._post_show_startup_tasks_started = True
+        QtCore.QTimer.singleShot(0, self._configure_theme_watcher)
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
+        QtCore.QTimer.singleShot(250, self._start_ipc_server)
+        QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
         if not self._preloaded_library.get("detection_attempted"):
-            QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)
+            QtCore.QTimer.singleShot(350, self._auto_detect_dirs_on_startup)
 
     def _apply_startup_ui_defaults(self) -> None:
         self.settings_data["viewport_navigation_profile"] = "3dsmax"

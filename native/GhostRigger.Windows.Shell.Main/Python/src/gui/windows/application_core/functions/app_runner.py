@@ -240,6 +240,10 @@ def run_qt_application(
     drain_splash_log()
     app.processEvents()
     win.show()
+    app.processEvents()
     splash.close()
     cleanup_splash_log_capture()
+    post_show_startup = getattr(win, "start_post_show_startup_tasks", None)
+    if callable(post_show_startup):
+        post_show_startup()
     return app.exec()

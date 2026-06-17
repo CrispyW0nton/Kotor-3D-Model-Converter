@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Native Splash Project Packaging And Post-Show Startup Handoff
+
+Owner: LordVaderCW
+Subsystem: Native splash window packaging, Qt shell startup handoff, and startup library hydration
+
+- Converted `GhostRigger.Windows.Splash` from a CMake/Qt `.qrc` demo shape into a Visual Studio unmanaged C++ Win32/GDI+ project with `Public`, `Private`, `.vcxproj`, `.vcxproj.filters`, and Win32 `.rc` resource packaging.
+- Loaded the splash artwork from module `RT_RCDATA` resources instead of Qt resource paths, and removed the Qt build dependency so the project no longer requires `QTDIR`, `QtInstallDir`, Qt import libs, or Qt AUTOMOC.
+- Moved main-window post-show work behind `start_post_show_startup_tasks()` so startup-input loading, IPC startup, theme watching, auto-detect, and hidden resource-panel hydration cannot run during the pre-show `app.processEvents()` handoff.
+- Deferred non-visible resource/animation library hydration until after first paint while keeping preloaded content-browser rows available immediately.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\functions\app_runner.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\startup_library.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\qt_main_window.py tests\test_core_contracts.py tests\test_native_project_templates.py` passed.
+- `python -m pytest tests\test_core_contracts.py::test_qt_app_runner_overlaps_startup_scans_on_native_threads tests\test_core_contracts.py::test_main_window_defers_post_show_startup_tasks_until_after_first_paint tests\test_native_project_templates.py::test_windows_splash_project_uses_native_msbuild_resources -q` passed (`3 passed`).
+- XML parse checks passed for `native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj`, `native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj.filters`, and `native\GhostRigger.Windows.Shell.Main\GhostRigger.Windows.Shell.Main.vcxproj`.
+- `F:\Unreal VS\MSBuild\Current\Bin\amd64\MSBuild.exe GhostRigger.sln /t:GhostRigger_Windows_Splash /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed after removing the Qt package gate.
+
 ### [2026-06-17] Native Pre-Launch Threading And Splash Status Routing
 
 Owner: LordVaderCW

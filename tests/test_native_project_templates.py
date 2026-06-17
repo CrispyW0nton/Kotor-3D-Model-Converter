@@ -364,6 +364,32 @@ def test_windows_main_window_project_scaffold_matches_phase_one_boundary() -> No
     assert "Bridge method: C ABI DLL" in readme
 
 
+def test_windows_splash_project_uses_native_msbuild_resources() -> None:
+    solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
+    project_dir = ROOT / "native" / "GhostRigger.Windows.Splash"
+    project = (project_dir / "GhostRigger.Windows.Splash.vcxproj").read_text(encoding="utf-8")
+    filters = (project_dir / "GhostRigger.Windows.Splash.vcxproj.filters").read_text(encoding="utf-8")
+    rc = (project_dir / "GhostRigger.Windows.Splash.rc").read_text(encoding="utf-8")
+    implementation = (project_dir / "Private" / "GhostRiggerWindowsSplash.cpp").read_text(encoding="utf-8")
+    headers = "\n".join(path.read_text(encoding="utf-8") for path in (project_dir / "Public").glob("*.h"))
+
+    assert "GhostRigger.Windows.Splash" in solution
+    assert "<ConfigurationType>Application</ConfigurationType>" in project
+    assert "<ResourceCompile Include=\"GhostRigger.Windows.Splash.rc\" />" in project
+    assert "QtInstallDir" not in project
+    assert "Qt6Widgets.lib" not in project
+    assert "gdiplus.lib" in project
+    assert "Private\\GhostRiggerWindowsSplash.cpp" in project
+    assert "Resources\\icons" in filters
+    assert "IDR_SPLASH_LOGO RCDATA" in rc
+    assert "FindResourceW(GetModuleHandleW(nullptr), MAKEINTRESOURCEW(resourceId), RT_RCDATA)" in implementation
+    assert "Gdiplus::Bitmap" in implementation
+    assert "CreateWindowExW" in implementation
+    assert "Q_OBJECT" not in headers
+    assert not (project_dir / "CMakeLists.txt").exists()
+    assert not (project_dir / "resources.qrc").exists()
+
+
 def test_windows_main_window_exports_diagnostic_c_abi_boundary() -> None:
     header = (
         ROOT

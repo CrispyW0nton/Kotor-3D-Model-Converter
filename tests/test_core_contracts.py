@@ -10030,6 +10030,9 @@ def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
     assert "build_prelaunch_library_input(root, startup_input, queue_prelaunch_status)" in source
     assert "while not prelaunch_run.done()" in source
     assert "app.processEvents()" in source
+    assert "win.show()\n    app.processEvents()" in source
+    assert "post_show_startup = getattr(win, \"start_post_show_startup_tasks\", None)" in source
+    assert "post_show_startup()" in source
     assert "ctypes.CFUNCTYPE(None, ctypes.c_int)" in native_source
     assert "gr_windows_main_window_run_prelaunch_tasks" in native_source
     assert "ThreadPoolExecutor(max_workers=max(1, len(jobs)), thread_name_prefix=\"GRStartup\")" in native_source
@@ -10039,6 +10042,27 @@ def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
     assert "record_audit_line" in host_source
     assert 'if (!env_enabled(L"GHOSTRIGGER_NATIVE_LOG_CONSOLE"))' in host_source
     assert "if sys.stderr is not None:" in host_py_source
+
+
+def test_main_window_defers_post_show_startup_tasks_until_after_first_paint() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/qt_main_window.py"
+    ).read_text(encoding="utf-8")
+    startup_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/startup_library.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self._post_show_startup_tasks_started = False" in source
+    assert "def start_post_show_startup_tasks(self) -> None:" in source
+    assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" in source
+    assert "QtCore.QTimer.singleShot(250, self._start_ipc_server)" in source
+    constructor_tail = source.split("def start_post_show_startup_tasks", 1)[0]
+    assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" not in constructor_tail
+    assert "self._start_ipc_server()" not in constructor_tail
+    assert "QtCore.QTimer.singleShot(300, self._finish_preloaded_library_after_first_paint)" in startup_source
+    assert "resource_dock is not None and resource_dock.isVisible()" in startup_source
 
 
 def test_startup_splash_has_launch_log_textblock() -> None:
@@ -10094,6 +10118,20 @@ def test_viewport_toolbar_flow_layout_centers_rows() -> None:
     assert "(max_width - current_width) // 2" in flow_source
     assert "(current_height - hint.height()) // 2" in flow_source
     assert "(effective.height() - total_height) // 2" in flow_source
+
+
+def test_viewport_toolbar_keeps_minimum_visible_height() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    viewport_source = inspect.getsource(QtViewportWidget._build)
+    layout_source = inspect.getsource(QtViewportWidget.apply_ghost_layout)
+
+    assert "tb.setMinimumHeight(26)" in viewport_source
+    assert "toolbar_scroll.setMinimumHeight(26)" in viewport_source
+    assert "toolbar_height = max(26, toolbar_layout.height)" in layout_source
+    assert "toolbar_scroll.set_base_fixed_height(toolbar_height)" in layout_source
 
 
 def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:

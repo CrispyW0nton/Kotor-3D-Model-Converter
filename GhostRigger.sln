@@ -94,6 +94,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Tools.Workflow.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Windows.Shell.Main", "native\GhostRigger.Windows.Shell.Main\GhostRigger.Windows.Shell.Main.vcxproj", "{E845C5C6-F3A3-4857-8FDB-D337610EB3EA}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Windows.Splash", "native\GhostRigger.Windows.Splash\GhostRigger.Windows.Splash.vcxproj", "{0C18A725-F454-4C41-B7D7-A0DD8820792D}"
+EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Windows.Editor.Level", "native\GhostRigger.Windows.Editor.Level\GhostRigger.Windows.Editor.Level.vcxproj", "{89BC8F15-DF02-451D-806A-D058F6C2AFC7}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Windows.Workbench.AnimationRetarget", "native\GhostRigger.Windows.Workbench.AnimationRetarget\GhostRigger.Windows.Workbench.AnimationRetarget.vcxproj", "{09C1CE9C-F7C5-4C49-94B0-36E8889D0286}"
@@ -473,6 +475,14 @@ Global
 		{E845C5C6-F3A3-4857-8FDB-D337610EB3EA}.Release|Win32.Build.0 = Release|Win32
 		{E845C5C6-F3A3-4857-8FDB-D337610EB3EA}.Release|x64.ActiveCfg = Release|x64
 		{E845C5C6-F3A3-4857-8FDB-D337610EB3EA}.Release|x64.Build.0 = Release|x64
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Debug|Win32.Build.0 = Debug|Win32
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Debug|x64.ActiveCfg = Debug|x64
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Debug|x64.Build.0 = Debug|x64
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Release|Win32.ActiveCfg = Release|Win32
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Release|Win32.Build.0 = Release|Win32
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Release|x64.ActiveCfg = Release|x64
+		{0C18A725-F454-4C41-B7D7-A0DD8820792D}.Release|x64.Build.0 = Release|x64
 		{89BC8F15-DF02-451D-806A-D058F6C2AFC7}.Debug|Win32.ActiveCfg = Debug|Win32
 		{89BC8F15-DF02-451D-806A-D058F6C2AFC7}.Debug|Win32.Build.0 = Debug|Win32
 		{89BC8F15-DF02-451D-806A-D058F6C2AFC7}.Debug|x64.ActiveCfg = Debug|x64

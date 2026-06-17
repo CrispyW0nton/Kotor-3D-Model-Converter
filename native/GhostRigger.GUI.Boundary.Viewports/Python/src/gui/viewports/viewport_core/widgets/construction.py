@@ -18,6 +18,7 @@ class ViewportConstructionMixin:
         tb.setObjectName("ViewportToolbar")
         tb.setFrameShape(QtWidgets.QFrame.StyledPanel)
         tb.setLineWidth(1)
+        tb.setMinimumHeight(26)
         tb.setFixedHeight(34)
         self.viewport_toolbar = tb
         row = QtFlowLayout(
@@ -321,6 +322,7 @@ class ViewportConstructionMixin:
             parent=self,
             show_scrollbar=False,
         )
+        toolbar_scroll.setMinimumHeight(26)
         toolbar_scroll.setMinimumWidth(0)
         self.viewport_toolbar_scroll = toolbar_scroll
         if self._compact_controls:
@@ -757,9 +759,11 @@ class ViewportConstructionMixin:
     def apply_ghost_layout(self, layout) -> None:
         toolbar = self.findChild(QtWidgets.QFrame, "ViewportToolbar")
         toolbar_layout = layout.toolbar("viewport")
+        toolbar_height = max(26, toolbar_layout.height)
         if toolbar is not None:
             toolbar.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
-            toolbar.setFixedHeight(toolbar_layout.height)
+            toolbar.setMinimumHeight(26)
+            toolbar.setFixedHeight(toolbar_height)
             toolbar_row = toolbar.layout()
             if toolbar_row is not None:
                 side_margin = 4 if self._compact_controls else 5
@@ -769,10 +773,11 @@ class ViewportConstructionMixin:
         toolbar_scroll = getattr(self, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
             toolbar_scroll.setVisible(self._viewport_toolbar_visible and toolbar_layout.visible and layout.viewport.toolbar_visible)
+            toolbar_scroll.setMinimumHeight(26)
             if hasattr(toolbar_scroll, "set_base_fixed_height"):
-                toolbar_scroll.set_base_fixed_height(toolbar_layout.height)
+                toolbar_scroll.set_base_fixed_height(toolbar_height)
             else:
-                toolbar_scroll.setFixedHeight(toolbar_layout.height)
+                toolbar_scroll.setFixedHeight(toolbar_height)
             parent = toolbar_scroll.parentWidget()
             if parent is not None and parent.objectName() == "ViewportToolbarBand":
                 parent.setFixedHeight(toolbar_scroll.height())

@@ -199,11 +199,19 @@ class StartupLibraryMixin:
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:
             module_editor_window.set_library_rows(rows)
-        self._unreal_refresh_supermodel_library()
-        self._populate_resource_panel()
-        self._populate_animation_library_from_current_model()
+        QtCore.QTimer.singleShot(300, self._finish_preloaded_library_after_first_paint)
         self.statusBar().showMessage(f"{len(rows)} models")
         self._log(f"Startup library preload complete: {len(rows)} models", "success")
+
+    def _finish_preloaded_library_after_first_paint(self) -> None:
+        rows = list(getattr(self, "_library_rows", []) or [])
+        if not rows:
+            return
+        self._unreal_refresh_supermodel_library()
+        resource_dock = getattr(self, "_detachable_panels", {}).get("resources")
+        if resource_dock is not None and resource_dock.isVisible():
+            self._populate_resource_panel()
+        self._populate_animation_library_from_current_model()
 
     def _extract_library_row(self, row: dict):
         resref = str(row.get("resref") or "")

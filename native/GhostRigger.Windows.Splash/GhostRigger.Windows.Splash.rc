@@ -1,0 +1,9 @@
+#include "Public/Resource.h"
+
+IDR_SPLASH_LOGO RCDATA "resources/icons/ghostrigger_1024x1024.png"
+IDR_SPLASH_ICON_CHECK RCDATA "resources/svg/check.svg"
+IDR_SPLASH_ICON_DOCUMENT RCDATA "resources/svg/document.svg"
+IDR_SPLASH_ICON_GEAR RCDATA "resources/svg/gear.svg"
+IDR_SPLASH_ICON_SPINNER RCDATA "resources/svg/spinner.svg"
+IDR_SPLASH_ICON_TERMINAL RCDATA "resources/svg/terminal.svg"
+IDR_SPLASH_ICON_TRASH RCDATA "resources/svg/trash.svg"

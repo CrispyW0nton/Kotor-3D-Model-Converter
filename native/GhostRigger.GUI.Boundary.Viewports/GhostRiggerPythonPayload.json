@@ -117,7 +117,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_CONSTRUCTION",
             "source_path": "src/gui/viewports/viewport_core/widgets/construction.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/construction.py",
-            "sha256": "803bbda7f02d12b3617fe3941c06662d1fb0f14fcafa86331cdb91a54b3439f3"
+            "sha256": "a142b728b21bae3128814418453a4179ac000b7e55e1ff959748e5792629dba3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DISPLAY_CONTROLS",
