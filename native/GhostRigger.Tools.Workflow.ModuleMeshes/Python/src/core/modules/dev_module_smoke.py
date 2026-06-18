@@ -223,6 +223,52 @@ class DevModuleInstallPrepResult:
 
 
 @dataclass(frozen=True)
+class DevModuleSmokeVariantSuiteRequest:
+    """Options for staging every supported smoke-module variant for manual QA."""
+
+    output_dir: str = ""
+    game: str = "K1"
+    include_rectangular_composition: bool = True
+    include_floor_plan_opening: bool = True
+    game_modules_dir: str = ""
+    game_root_dir: str = ""
+    settings_path: str = ""
+    auto_detect_game_modules_dir: bool = False
+
+
+@dataclass
+class DevModuleSmokeVariantPrep:
+    """One staged smoke-module variant within the suite."""
+
+    variant_id: str
+    label: str
+    room_geometry_mode: str
+    prep_result: DevModuleInstallPrepResult
+    module_path: str = ""
+    pack_manifest_path: str = ""
+    checklist_path: str = ""
+    proof_manifest_path: str = ""
+    warnings: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DevModuleSmokeVariantSuiteResult:
+    """Result for staging the rectangular and floor-plan smoke variants."""
+
+    ok: bool = False
+    output_dir: str = ""
+    suite_checklist_path: str = ""
+    suite_manifest_path: str = ""
+    resolved_modules_dir: str = ""
+    variants: list[DevModuleSmokeVariantPrep] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    message: str = ""
+    code: str = "not_prepared"
+
+
+@dataclass(frozen=True)
 class DevModuleGameProofRequest:
     """Evidence supplied after a real ``warp grdev01`` in-game smoke test."""
 
@@ -1502,6 +1548,177 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
     )
 
 
+def _suite_variant_specs(request: DevModuleSmokeVariantSuiteRequest) -> list[tuple[str, str, str]]:
+    specs: list[tuple[str, str, str]] = []
+    if request.include_rectangular_composition:
+        specs.append(("rectangular_composition", "Rectangular composition baseline", "rectangular_composition"))
+    if request.include_floor_plan_opening:
+        specs.append(("floor_plan_opening", "Floor-plan extrusion with wall opening", "floor_plan"))
+    return specs
+
+
+def _write_variant_suite_files(
+    *,
+    output_root: Path,
+    request: DevModuleSmokeVariantSuiteRequest,
+    variants: list[DevModuleSmokeVariantPrep],
+    resolved_modules_dir: str,
+    warnings: list[str],
+    blocking: list[str],
+) -> tuple[str, str]:
+    output_root.mkdir(parents=True, exist_ok=True)
+    checklist_path = output_root / "grdev01_variant_suite_checklist.md"
+    manifest_path = output_root / "grdev01_variant_suite_manifest.json"
+    checklist_lines = [
+        "# grdev01 Smoke Variant Suite",
+        "",
+        "This suite stages every supported Map Studio smoke-module geometry variant.",
+        "Both variants intentionally produce `grdev01.mod`; test one variant at a time by copying that variant's package into the KOTOR `Modules` folder.",
+        "",
+        f"- Resolved Modules folder: `{resolved_modules_dir or '(not resolved)'}`",
+        f"- Variant count: {len(variants)}",
+        "",
+        "## Variant Test Order",
+        "",
+    ]
+    for variant in variants:
+        checklist_lines.extend(
+            [
+                f"### {variant.label}",
+                "",
+                f"- Variant id: `{variant.variant_id}`",
+                f"- Package: `{variant.module_path}`",
+                f"- Pack manifest: `{variant.pack_manifest_path}`",
+                f"- Variant proof manifest: `{variant.proof_manifest_path}`",
+                f"- Variant checklist: `{variant.checklist_path}`",
+                f"- Copy target: `{str(Path(resolved_modules_dir) / 'grdev01.mod') if resolved_modules_dir else 'Modules/grdev01.mod'}`",
+                "- [ ] Copy this variant's `grdev01.mod` to the KOTOR `Modules` folder.",
+                "- [ ] Launch the matching KOTOR game.",
+                "- [ ] Run `warp grdev01`.",
+                "- [ ] Confirm the room loads.",
+                "- [ ] Confirm the player appears on the generated floor.",
+                "- [ ] Confirm the test placeable appears.",
+                "- [ ] Walk across the generated floor.",
+                "- [ ] Capture screenshot/video evidence and record it in the variant proof manifest.",
+                "",
+            ]
+        )
+    manifest = {
+        "task": "T2615",
+        "module_root": "grdev01",
+        "game": str(request.game or "K1").upper(),
+        "manual_proof_required": True,
+        "resolved_modules_dir": resolved_modules_dir,
+        "install_policy": "stage_all_copy_one_variant_at_a_time",
+        "warnings": warnings,
+        "blocking_issues": blocking,
+        "variants": [
+            {
+                "variant_id": variant.variant_id,
+                "label": variant.label,
+                "room_geometry_mode": variant.room_geometry_mode,
+                "ok": variant.prep_result.ok,
+                "code": variant.prep_result.code,
+                "module_path": variant.module_path,
+                "pack_manifest_path": variant.pack_manifest_path,
+                "checklist_path": variant.checklist_path,
+                "proof_manifest_path": variant.proof_manifest_path,
+                "warnings": variant.warnings,
+                "blocking_issues": variant.blocking_issues,
+            }
+            for variant in variants
+        ],
+    }
+    checklist_path.write_text("\n".join(checklist_lines), encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return str(checklist_path), str(manifest_path)
+
+
+def prepare_dev_test_module_variant_suite(request: DevModuleSmokeVariantSuiteRequest | None = None) -> DevModuleSmokeVariantSuiteResult:
+    """Stage every supported ``grdev01`` smoke geometry variant for manual game QA.
+
+    The suite deliberately does not install all variants because they share the
+    same module root.  Instead it writes one package per variant and a checklist
+    that tells the tester to copy and prove one `grdev01.mod` at a time.
+    """
+
+    request = request or DevModuleSmokeVariantSuiteRequest()
+    output_root = Path(request.output_dir or "artifacts/map_studio/grdev01_variant_suite")
+    specs = _suite_variant_specs(request)
+    warnings: list[str] = []
+    blocking: list[str] = []
+    variants: list[DevModuleSmokeVariantPrep] = []
+    if not specs:
+        blocking.append("Smoke variant suite requires at least one enabled variant.")
+    resolved_modules_dir = request.game_modules_dir
+    if not resolved_modules_dir and request.auto_detect_game_modules_dir:
+        resolved_modules_dir = discover_kotor_modules_dir(
+            request.game,
+            game_root_dir=request.game_root_dir,
+            settings_path=request.settings_path,
+        )
+        if resolved_modules_dir:
+            warnings.append(f"Auto-detected KOTOR Modules folder: {resolved_modules_dir}")
+        else:
+            warnings.append("Could not auto-detect a KOTOR Modules folder; variants are staged for manual copy.")
+    for variant_id, label, mode in specs:
+        variant_output = output_root / variant_id
+        prep = prepare_dev_test_module_install(
+            DevModuleInstallPrepRequest(
+                output_dir=str(variant_output),
+                game=request.game,
+                smoke_request=DevModuleSmokeRequest(
+                    output_dir=str(variant_output),
+                    game=request.game,
+                    room_geometry_mode=mode,
+                ),
+            )
+        )
+        export_result = prep.export_result
+        pack_manifest_path = export_result.manifest_path if export_result else ""
+        module_path = export_result.module_path if export_result else ""
+        variant = DevModuleSmokeVariantPrep(
+            variant_id=variant_id,
+            label=label,
+            room_geometry_mode=mode,
+            prep_result=prep,
+            module_path=module_path,
+            pack_manifest_path=pack_manifest_path,
+            checklist_path=prep.checklist_path,
+            proof_manifest_path=prep.proof_manifest_path,
+            warnings=list(prep.warnings),
+            blocking_issues=list(prep.blocking_issues),
+        )
+        variants.append(variant)
+        warnings.extend(f"{variant_id}: {warning}" for warning in prep.warnings)
+        blocking.extend(f"{variant_id}: {issue}" for issue in prep.blocking_issues)
+    checklist_path, manifest_path = _write_variant_suite_files(
+        output_root=output_root,
+        request=request,
+        variants=variants,
+        resolved_modules_dir=resolved_modules_dir,
+        warnings=warnings,
+        blocking=blocking,
+    )
+    ok = bool(variants) and all(variant.prep_result.ok for variant in variants) and not blocking
+    return DevModuleSmokeVariantSuiteResult(
+        ok=ok,
+        output_dir=str(output_root),
+        suite_checklist_path=checklist_path,
+        suite_manifest_path=manifest_path,
+        resolved_modules_dir=resolved_modules_dir,
+        variants=variants,
+        warnings=warnings,
+        blocking_issues=blocking,
+        message=(
+            "Smoke variant suite staged for manual in-game proof."
+            if ok
+            else "Smoke variant suite staging completed with blocking issue(s)."
+        ),
+        code="staged_variant_suite" if ok else "variant_suite_preflight_failed",
+    )
+
+
 def _proof_request_checks(request: DevModuleGameProofRequest) -> dict[str, bool]:
     return {
         "module_loads_in_game": bool(request.module_loads_in_game),
@@ -1643,10 +1860,14 @@ __all__ = [
     "DevModuleResourceSummary",
     "DevModuleSmokeRequest",
     "DevModuleSmokeResult",
+    "DevModuleSmokeVariantPrep",
+    "DevModuleSmokeVariantSuiteRequest",
+    "DevModuleSmokeVariantSuiteResult",
     "build_dev_test_module",
     "discover_kotor_modules_dir",
     "export_dev_test_module",
     "prepare_dev_test_module_install",
+    "prepare_dev_test_module_variant_suite",
     "record_dev_module_game_proof",
     "verify_dev_test_module_package",
 ]

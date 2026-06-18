@@ -439,3 +439,62 @@ def test_t2601_install_prep_can_auto_detect_modules_dir_from_settings(tmp_path: 
     assert result.installed_module_path == str(installed)
     assert installed.is_file()
     assert any("Auto-detected KOTOR Modules folder" in warning for warning in result.warnings)
+
+
+def test_t2615_variant_suite_stages_rectangular_and_floor_plan_packages(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleSmokeVariantSuiteRequest, prepare_dev_test_module_variant_suite
+
+    result = prepare_dev_test_module_variant_suite(DevModuleSmokeVariantSuiteRequest(output_dir=str(tmp_path)))
+
+    assert result.ok is True
+    assert result.code == "staged_variant_suite"
+    assert Path(result.suite_checklist_path).is_file()
+    assert Path(result.suite_manifest_path).is_file()
+    assert [variant.variant_id for variant in result.variants] == ["rectangular_composition", "floor_plan_opening"]
+    for variant in result.variants:
+        assert variant.prep_result.ok is True
+        assert variant.prep_result.installed_module_path == ""
+        assert Path(variant.module_path).is_file()
+        assert Path(variant.pack_manifest_path).is_file()
+        assert Path(variant.proof_manifest_path).is_file()
+
+    checklist = Path(result.suite_checklist_path).read_text(encoding="utf-8")
+    assert "test one variant at a time" in checklist
+    assert "Rectangular composition baseline" in checklist
+    assert "Floor-plan extrusion with wall opening" in checklist
+    assert checklist.count("Run `warp grdev01`") == 2
+
+    manifest = json.loads(Path(result.suite_manifest_path).read_text(encoding="utf-8"))
+    assert manifest["task"] == "T2615"
+    assert manifest["install_policy"] == "stage_all_copy_one_variant_at_a_time"
+    assert [variant["variant_id"] for variant in manifest["variants"]] == ["rectangular_composition", "floor_plan_opening"]
+    assert all(variant["ok"] for variant in manifest["variants"])
+    rect_manifest = json.loads(Path(result.variants[0].pack_manifest_path).read_text(encoding="utf-8"))
+    floor_manifest = json.loads(Path(result.variants[1].pack_manifest_path).read_text(encoding="utf-8"))
+    assert rect_manifest["map_studio_smoke_test"]["contains"]["primitive_composition_room"] is True
+    assert floor_manifest["map_studio_smoke_test"]["contains"]["floor_plan_room"] is True
+    assert floor_manifest["map_studio_smoke_test"]["contains"]["wall_opening"] is True
+    assert rect_manifest["map_studio_smoke_test"]["game_tested"] is False
+    assert floor_manifest["map_studio_smoke_test"]["game_tested"] is False
+
+
+def test_t2615_variant_suite_blocks_when_all_variants_disabled(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleSmokeVariantSuiteRequest, prepare_dev_test_module_variant_suite
+
+    result = prepare_dev_test_module_variant_suite(
+        DevModuleSmokeVariantSuiteRequest(
+            output_dir=str(tmp_path),
+            include_rectangular_composition=False,
+            include_floor_plan_opening=False,
+        )
+    )
+
+    assert result.ok is False
+    assert result.code == "variant_suite_preflight_failed"
+    assert result.variants == []
+    assert any("at least one enabled variant" in issue for issue in result.blocking_issues)
+    assert Path(result.suite_manifest_path).is_file()

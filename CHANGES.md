@@ -11,6 +11,26 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Smoke Variant Suite Prep
+
+Owner: LordVaderCW
+Task: T2615
+Subsystem: Map Studio / in-game smoke preparation / native Python payloads
+
+- Added a suite-level `prepare_dev_test_module_variant_suite` API that stages every supported `grdev01` smoke geometry variant.
+- Added suite dataclasses for request/result and per-variant prep records so automation can inspect rectangular-composition and floor-plan-opening packages separately.
+- Wrote a suite checklist and manifest that explain both variants share `grdev01.mod` and must be copied/tested one at a time in KOTOR.
+- Kept game-tested status gated on the existing proof recorder; suite prep never marks a package as game-tested without screenshot/video-backed in-game checks.
+- Mirrored the suite prep API into the ModuleMeshes workflow payload and refreshed native payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_variant_suite`
+- `python -m pytest tests/test_dev_module_game_proof.py -q --basetemp .pytest_tmp_dev_module_game_proof_suite`
+- `python -m pytest tests/test_authored_room_floorplan.py tests/test_authored_module_project.py -q --basetemp .pytest_tmp_variant_suite_adjacent`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Floor-Plan Smoke Module Variant
 
 Owner: LordVaderCW

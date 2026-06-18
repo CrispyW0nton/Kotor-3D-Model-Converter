@@ -105,7 +105,7 @@
       "resource_name": "PYTHON_PAYLOAD_0017",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "5b772e3dabbbdc55dbaeeff6812762b1e6c4a1c854886bbc5f9fd0813a1ba6da"
+      "sha256": "ad21511c71bac0cf08210e9d0afed6cd2ad9a334572a0a38adaa25f60e54f218"
     },
     {
       "source_path": "src/core/modules/authored_walkmesh_surfaces.py",
