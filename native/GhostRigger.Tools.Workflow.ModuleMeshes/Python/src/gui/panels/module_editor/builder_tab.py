@@ -95,6 +95,9 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_layout = QtWidgets.QFormLayout(terrain_box)
         self.terrainRoomComboBox = QtWidgets.QComboBox()
         self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
+        self.terrainShapePresetComboBox = QtWidgets.QComboBox()
+        self.terrainShapePresetComboBox.setObjectName("mapStudioTerrainShapePresetComboBox")
+        self.terrainShapeHeightSpinBox = self._make_transform_spin("mapStudioTerrainShapeHeightSpinBox", -1000.0, 1000.0, " m", value=0.5, step=0.05)
         self.terrainRowSpinBox = QtWidgets.QSpinBox()
         self.terrainRowSpinBox.setObjectName("mapStudioTerrainRowSpinBox")
         self.terrainColumnSpinBox = QtWidgets.QSpinBox()
@@ -122,7 +125,11 @@ class BuilderTab(QtWidgets.QWidget):
         self.smoothTerrainButton.setObjectName("mapStudioSmoothTerrainButton")
         self.flattenTerrainButton = QtWidgets.QPushButton("Flatten Terrain")
         self.flattenTerrainButton.setObjectName("mapStudioFlattenTerrainButton")
+        self.applyTerrainShapeButton = QtWidgets.QPushButton("Apply Terrain Shape")
+        self.applyTerrainShapeButton.setObjectName("mapStudioApplyTerrainShapePresetButton")
         terrain_layout.addRow("Terrain:", self.terrainRoomComboBox)
+        terrain_layout.addRow("Shape:", self.terrainShapePresetComboBox)
+        terrain_layout.addRow("Shape height:", self.terrainShapeHeightSpinBox)
         terrain_layout.addRow("Row:", self.terrainRowSpinBox)
         terrain_layout.addRow("Column:", self.terrainColumnSpinBox)
         terrain_layout.addRow("Height:", self.terrainHeightSpinBox)
@@ -136,6 +143,7 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_layout.addRow(self.lowerTerrainButton)
         terrain_layout.addRow(self.smoothTerrainButton)
         terrain_layout.addRow(self.flattenTerrainButton)
+        terrain_layout.addRow(self.applyTerrainShapeButton)
         layout.addWidget(terrain_box)
         union_box = QtWidgets.QGroupBox("Boolean Union Rooms")
         union_layout = QtWidgets.QFormLayout(union_box)
@@ -373,11 +381,13 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
         self.terrainRoomComboBox.currentIndexChanged.connect(self._update_terrain_controls)
+        self.terrainShapePresetComboBox.currentIndexChanged.connect(self._update_terrain_shape_controls)
         self.setTerrainHeightButton.clicked.connect(lambda: self._emit_terrain_operation("set_height"))
         self.raiseTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("raise"))
         self.lowerTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("lower"))
         self.smoothTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("smooth"))
         self.flattenTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("flatten"))
+        self.applyTerrainShapeButton.clicked.connect(self._emit_terrain_shape_preset)
         self.floorPlanUnionFirstRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
         self.floorPlanUnionSecondRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
         self.mapStudioApplyRectangularUnionButton.clicked.connect(self._emit_rectangular_union)
@@ -399,6 +409,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
         self.set_terrain_room_choices(())
+        self.set_terrain_shape_presets(())
         self.set_floor_plan_room_choices(())
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
@@ -481,12 +492,48 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainRoomComboBox.blockSignals(False)
         self._update_terrain_controls()
 
+    def set_terrain_shape_presets(self, presets) -> None:
+        """Populate named terrain shape presets for non-technical terrain authoring."""
+
+        self.terrainShapePresetComboBox.blockSignals(True)
+        self.terrainShapePresetComboBox.clear()
+        for preset in tuple(presets or ()):
+            preset_id = str(getattr(preset, "preset_id", "") or "")
+            label = str(getattr(preset, "label", "") or preset_id)
+            description = str(getattr(preset, "description", "") or "")
+            default_height = float(getattr(preset, "default_height", 0.0) or 0.0)
+            self.terrainShapePresetComboBox.addItem(
+                label,
+                {
+                    "preset_id": preset_id,
+                    "description": description,
+                    "default_height": default_height,
+                },
+            )
+        if self.terrainShapePresetComboBox.count() <= 0:
+            self.terrainShapePresetComboBox.addItem("No terrain shapes", None)
+        self.terrainShapePresetComboBox.blockSignals(False)
+        self._update_terrain_shape_controls()
+
     def _current_terrain_data(self) -> dict:
         data = self.terrainRoomComboBox.currentData()
         return dict(data) if isinstance(data, dict) else {}
 
+    def _current_terrain_shape_data(self) -> dict:
+        data = self.terrainShapePresetComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
     def _current_terrain_room_resref(self) -> str:
         return str(self._current_terrain_data().get("room_resref") or "").strip()
+
+    def _update_terrain_shape_controls(self) -> None:
+        data = self._current_terrain_shape_data()
+        if not data:
+            return
+        self.terrainShapeHeightSpinBox.setValue(float(data.get("default_height", 0.0) or 0.0))
+        description = str(data.get("description") or "").strip()
+        if description and self._current_terrain_data():
+            self.terrainHintLabel.setText(description)
 
     def _update_terrain_controls(self) -> None:
         data = self._current_terrain_data()
@@ -497,6 +544,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainColumnSpinBox.setRange(0, max(0, column_count - 1))
         for widget in (
             self.terrainRoomComboBox,
+            self.terrainShapePresetComboBox,
+            self.terrainShapeHeightSpinBox,
             self.terrainRowSpinBox,
             self.terrainColumnSpinBox,
             self.terrainHeightSpinBox,
@@ -509,6 +558,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.lowerTerrainButton,
             self.smoothTerrainButton,
             self.flattenTerrainButton,
+            self.applyTerrainShapeButton,
         ):
             widget.setEnabled(enabled)
         if not enabled:
@@ -516,6 +566,24 @@ class BuilderTab(QtWidgets.QWidget):
             return
         self.terrainHintLabel.setText(
             f"Editing {data.get('room_resref')}: {row_count}x{column_count} samples, height range {data.get('min_height', 0.0):.2f}..{data.get('max_height', 0.0):.2f} m. Mesh and WOK regenerate together."
+        )
+
+    def _emit_terrain_shape_preset(self) -> None:
+        shape = self._current_terrain_shape_data()
+        preset_id = str(shape.get("preset_id") or "").strip()
+        room = self._current_terrain_room_resref()
+        if not room or not preset_id:
+            return
+        self.terrainOperationRequested.emit(
+            f"shape_preset:{preset_id}",
+            room,
+            int(self.terrainRowSpinBox.value()),
+            int(self.terrainColumnSpinBox.value()),
+            float(self.terrainShapeHeightSpinBox.value()),
+            float(self.terrainDeltaSpinBox.value()),
+            int(self.terrainRadiusSpinBox.value()),
+            int(self.terrainSmoothIterationsSpinBox.value()),
+            float(self.terrainSmoothStrengthSpinBox.value()),
         )
 
     def _emit_terrain_operation(self, operation: str) -> None:

@@ -64,6 +64,7 @@ from .authored_room_operations import (
 from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
+from .authored_terrain_builder import available_terrain_shape_presets
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
 from .dev_module_smoke import DevModuleGameProofRequest, DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install, record_dev_module_game_proof
 from .module_layout_service import ModuleLayoutService
@@ -164,6 +165,11 @@ class ModuleEditorController:
         """Return named primitive room presets for the Map Studio Builder tab."""
 
         return available_authored_room_primitive_presets()
+
+    def available_authored_terrain_shape_presets(self):
+        """Return named terrain shape presets for the Map Studio Builder tab."""
+
+        return available_terrain_shape_presets()
 
     def available_authored_walkmesh_surfaces(self):
         """Return named WOK surface choices for authored room floors."""

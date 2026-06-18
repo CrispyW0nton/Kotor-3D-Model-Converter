@@ -29,6 +29,7 @@ from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import compile_authored_room_material_preflight
 from .authored_terrain_builder import (
     TerrainHeightfieldPrimitive,
+    apply_terrain_shape_preset,
     flatten_terrain_heightfield,
     offset_terrain_heightfield_samples,
     sample_terrain_height,
@@ -1268,6 +1269,10 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
     """Dispatch a named Map Studio terrain heightfield operation."""
 
     op = str(operation or "").strip().lower()
+    shape_preset_id = str(kwargs.get("preset_id", "") or "").strip().lower()
+    if op.startswith("shape_preset:"):
+        shape_preset_id = op.split(":", 1)[1].strip().lower()
+        op = "shape_preset"
     index = _target_room_index(project, str(kwargs.get("room_resref", "")))
     room = project.rooms[index]
     primitive = _terrain_for_room(room)
@@ -1299,6 +1304,12 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
             iterations=int(kwargs.get("iterations", 1)),
             strength=float(kwargs.get("strength", 0.5)),
             preserve_boundary=bool(kwargs.get("preserve_boundary", True)),
+        )
+    elif op in {"shape_preset", "shape"}:
+        updated_primitive = apply_terrain_shape_preset(
+            primitive,
+            preset_id=shape_preset_id,
+            height=float(kwargs.get("height", 0.0)),
         )
     else:
         raise ValueError(f"Unsupported authored terrain operation: {operation}.")

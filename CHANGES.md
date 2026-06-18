@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Modder Terrain Shape Presets
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / terrain authoring / Builder terrain presets
+
+- Added named terrain shape presets for flat pads, gentle mounds, shallow bowls, center ridges, walkable ramps, and terraces so modders can create common terrain forms without hand-editing grid samples.
+- Routed terrain shape application through the headless terrain builder and authored terrain operation dispatcher so meshes, WOK faces, KMAP state, and gameplay marker Z repair remain consistent.
+- Added Builder tab terrain shape controls with stable object names and service-provided preset data, keeping terrain math outside the Qt panel.
+- Mirrored terrain shape preset support into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests\test_authored_terrain_builder.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_terrain_shapes`
+- `python -m pytest tests\test_authored_room_style.py tests\test_authored_room_presets.py tests\test_authored_terrain_builder.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_terrain_shapes_smoke`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_terrain_builder.py tests/test_authored_room_operations.py`
+
 ### [2026-06-18] Map Studio Styles Terrain Heightfield Surfaces
 
 Owner: LordVaderCW

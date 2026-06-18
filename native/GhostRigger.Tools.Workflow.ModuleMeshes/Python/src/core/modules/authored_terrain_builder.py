@@ -54,6 +54,56 @@ class TerrainSlopeReport:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class TerrainShapePreset:
+    """Named terrain form a modder can apply without editing samples one by one."""
+
+    preset_id: str
+    label: str
+    description: str
+    default_height: float = 0.5
+
+
+_TERRAIN_SHAPE_PRESETS: tuple[TerrainShapePreset, ...] = (
+    TerrainShapePreset(
+        preset_id="flat",
+        label="Flat Pad",
+        description="Level the terrain into a simple playable pad.",
+        default_height=0.0,
+    ),
+    TerrainShapePreset(
+        preset_id="gentle_mound",
+        label="Gentle Mound",
+        description="Raise a soft center hill while keeping the edges lower.",
+        default_height=0.6,
+    ),
+    TerrainShapePreset(
+        preset_id="shallow_bowl",
+        label="Shallow Bowl",
+        description="Create a shallow center depression with higher edges.",
+        default_height=0.45,
+    ),
+    TerrainShapePreset(
+        preset_id="ridge",
+        label="Center Ridge",
+        description="Raise a broad ridge through the middle of the terrain.",
+        default_height=0.5,
+    ),
+    TerrainShapePreset(
+        preset_id="ramp",
+        label="Walkable Ramp",
+        description="Slope the patch from one side to the other.",
+        default_height=0.75,
+    ),
+    TerrainShapePreset(
+        preset_id="terraces",
+        label="Terraces",
+        description="Create stepped height bands for tiered terrain blocking.",
+        default_height=0.75,
+    ),
+)
+
+
 def _height_rows(primitive: TerrainHeightfieldPrimitive) -> tuple[tuple[float, ...], ...]:
     return tuple(tuple(float(value) for value in row) for row in primitive.heights)
 
@@ -131,6 +181,21 @@ def terrain_height_range(primitive: TerrainHeightfieldPrimitive) -> tuple[float,
     return (min(values), max(values))
 
 
+def available_terrain_shape_presets() -> tuple[TerrainShapePreset, ...]:
+    """Return named terrain forms available to Map Studio."""
+
+    return _TERRAIN_SHAPE_PRESETS
+
+
+def _terrain_shape_preset(preset_id: str) -> TerrainShapePreset:
+    wanted = str(preset_id or "").strip().lower()
+    for preset in _TERRAIN_SHAPE_PRESETS:
+        if preset.preset_id == wanted:
+            return preset
+    known = ", ".join(preset.preset_id for preset in _TERRAIN_SHAPE_PRESETS)
+    raise ValueError(f"Unknown Map Studio terrain shape preset '{preset_id}'. Known presets: {known}.")
+
+
 def sample_terrain_height(primitive: TerrainHeightfieldPrimitive, *, x: float, y: float) -> float:
     """Return bilinear terrain height at local room X/Y coordinates."""
 
@@ -157,6 +222,59 @@ def sample_terrain_height(primitive: TerrainHeightfieldPrimitive, *, x: float, y
     h0 = h00 * (1.0 - column_t) + h10 * column_t
     h1 = h01 * (1.0 - column_t) + h11 * column_t
     return h0 * (1.0 - row_t) + h1 * row_t
+
+
+def apply_terrain_shape_preset(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    preset_id: str,
+    height: float | None = None,
+) -> TerrainHeightfieldPrimitive:
+    """Replace height samples with a named terrain form."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    preset = _terrain_shape_preset(preset_id)
+    amplitude = float(preset.default_height if height is None else height)
+    rows: list[tuple[float, ...]] = []
+    row_max = max(1, validation.row_count - 1)
+    column_max = max(1, validation.column_count - 1)
+    for row_index in range(validation.row_count):
+        row_t = row_index / row_max
+        y = (row_t * 2.0) - 1.0
+        values: list[float] = []
+        for column_index in range(validation.column_count):
+            column_t = column_index / column_max
+            x = (column_t * 2.0) - 1.0
+            radial = min(1.0, math.sqrt((x * x) + (y * y)))
+            if preset.preset_id == "flat":
+                value = amplitude
+            elif preset.preset_id == "gentle_mound":
+                value = amplitude * max(0.0, 1.0 - radial) ** 1.35
+            elif preset.preset_id == "shallow_bowl":
+                value = amplitude * radial * 0.65
+            elif preset.preset_id == "ridge":
+                value = amplitude * max(0.0, 1.0 - abs(x)) ** 1.15
+            elif preset.preset_id == "ramp":
+                value = amplitude * row_t
+            elif preset.preset_id == "terraces":
+                bands = 3.0
+                value = amplitude * (math.floor(row_t * bands) / bands)
+            else:
+                raise ValueError(f"Unsupported terrain shape preset '{preset.preset_id}'.")
+            values.append(float(value))
+        rows.append(tuple(values))
+    return _replace_height_rows(
+        primitive,
+        tuple(rows),
+        operation="shape_preset",
+        metadata={
+            "last_shape_preset_id": preset.preset_id,
+            "last_shape_preset_label": preset.label,
+            "last_shape_height": amplitude,
+        },
+    )
 
 
 def set_terrain_heightfield_sample(
@@ -478,8 +596,11 @@ def compile_terrain_room_geometry(primitive: TerrainHeightfieldPrimitive) -> Aut
 __all__ = [
     "TerrainHeightfieldPrimitive",
     "TerrainHeightfieldValidation",
+    "TerrainShapePreset",
     "TerrainSlopeReport",
     "analyse_terrain_slopes",
+    "apply_terrain_shape_preset",
+    "available_terrain_shape_presets",
     "build_terrain_mesh",
     "build_terrain_wok",
     "compile_terrain_room_geometry",

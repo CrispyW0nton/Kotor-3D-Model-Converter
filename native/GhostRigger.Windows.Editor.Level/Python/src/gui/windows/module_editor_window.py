@@ -259,6 +259,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.porter_tab = PorterTab()
         self.builder_tab = BuilderTab()
         self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
+        self.builder_tab.set_terrain_shape_presets(self.controller.available_authored_terrain_shape_presets())
         self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
         self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
         self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())

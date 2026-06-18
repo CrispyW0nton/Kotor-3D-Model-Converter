@@ -163,3 +163,35 @@ def test_t2908_terrain_heightfield_sample_edit_operations() -> None:
     assert smoothed.heights[1][1] < brushed.heights[1][1]
     assert flattened.heights == ((0.25, 0.25, 0.25), (0.25, 0.25, 0.25), (0.25, 0.25, 0.25))
     assert terrain_height_range(flattened) == (0.25, 0.25)
+
+
+def test_t2907_terrain_shape_presets_create_readable_heightfields() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import (
+        TerrainHeightfieldPrimitive,
+        apply_terrain_shape_preset,
+        available_terrain_shape_presets,
+        compile_terrain_room_geometry,
+    )
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grshape_room01",
+        width=8.0,
+        depth=8.0,
+        heights=tuple(tuple(0.0 for _column in range(5)) for _row in range(5)),
+        max_walkable_slope_degrees=45.0,
+    )
+
+    preset_ids = {preset.preset_id for preset in available_terrain_shape_presets()}
+    mound = apply_terrain_shape_preset(terrain, preset_id="gentle_mound", height=0.8)
+    ramp = apply_terrain_shape_preset(terrain, preset_id="ramp", height=0.6)
+    terraces = apply_terrain_shape_preset(terrain, preset_id="terraces", height=0.9)
+    geometry = compile_terrain_room_geometry(mound)
+
+    assert {"flat", "gentle_mound", "shallow_bowl", "ridge", "ramp", "terraces"} <= preset_ids
+    assert mound.heights[2][2] > mound.heights[0][0]
+    assert mound.metadata["last_shape_preset_id"] == "gentle_mound"
+    assert ramp.heights[0][0] < ramp.heights[-1][0]
+    assert len({round(value, 3) for row in terraces.heights for value in row}) >= 3
+    assert geometry.wok.walkable_face_count() > 0

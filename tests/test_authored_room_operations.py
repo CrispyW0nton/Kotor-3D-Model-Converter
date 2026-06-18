@@ -313,6 +313,36 @@ def test_t2908_controller_smooths_and_flattens_terrain_heightfield() -> None:
     assert authored.rooms[0].primitive.metadata["last_operation"] == "flatten"
 
 
+def test_t2907_controller_applies_terrain_shape_preset_and_repairs_ground_markers() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_terrain_builder import sample_terrain_height
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grterr")
+
+    result = controller.apply_authored_terrain_operation(
+        operation="shape_preset:ramp",
+        room_resref="grterr_room01",
+        height=0.6,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    terrain = authored.rooms[0].primitive
+    entry = authored.placements.entry_point.position
+    build = build_authored_module(authored)
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert terrain.metadata["last_shape_preset_id"] == "ramp"
+    assert terrain.heights[0][0] < terrain.heights[-1][0]
+    assert entry[2] == sample_terrain_height(terrain, x=entry[0], y=entry[1])
+    assert not build.blocking_issues
+
+
 def test_t2670_controller_sets_composition_primitive_transform_and_preserves_exportable_wok() -> None:
     _install_native_payload_paths()
 
@@ -690,11 +720,15 @@ def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
     for panel_source in (source, native_source):
         assert "terrainOperationRequested" in panel_source
         assert "mapStudioTerrainRoomComboBox" in panel_source
+        assert "mapStudioTerrainShapePresetComboBox" in panel_source
+        assert "mapStudioApplyTerrainShapePresetButton" in panel_source
         assert "mapStudioTerrainRowSpinBox" in panel_source
         assert "mapStudioSetTerrainHeightButton" in panel_source
         assert "mapStudioSmoothTerrainButton" in panel_source
+        assert "def set_terrain_shape_presets" in panel_source
         assert "def set_terrain_room_choices" in panel_source
-    assert "self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)" in window_source
+        assert "self.builder_tab.set_terrain_shape_presets(self.controller.available_authored_terrain_shape_presets())" in window_source
+        assert "self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)" in window_source
     assert "self.controller.apply_authored_terrain_operation" in window_source
     assert "self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)" in window_source
 
