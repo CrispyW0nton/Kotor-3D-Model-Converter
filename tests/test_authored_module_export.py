@@ -56,6 +56,9 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["capability_stage"] == "export_candidate"
     assert authored_manifest["game_tested"] is False
     assert authored_manifest["warp_command"] == "warp grdev01"
+    assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 2
+    assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 8
+    assert authored_manifest["rooms"][0]["walkmesh_boundary_wall_faces"] == 8
     contract = authored_manifest["t2601_smoke_contract"]
     assert contract["task"] == "T2601"
     assert contract["warp_command"] == "warp grdev01"

@@ -195,6 +195,31 @@ def _triangle_area_xy(points: list[tuple[float, float, float]]) -> float:
     return 0.5 * ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]))
 
 
+def _triangle_area_3d(points: list[tuple[float, float, float]]) -> float:
+    if len(points) != 3:
+        return 0.0
+    a, b, c = points
+    ab = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    ac = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    cross = (
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    )
+    return 0.5 * ((cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]) ** 0.5)
+
+
+def _is_degenerate_wok_face(face: Any, points: list[tuple[float, float, float]], *, winding_epsilon: float) -> bool:
+    area_xy = _triangle_area_xy(points)
+    if abs(area_xy) > winding_epsilon:
+        return False
+    # Authored perimeter walls are intentional vertical NON_WALK triangles:
+    # degenerate in XY, but valid in 3D and useful to the Odyssey camera/LOS.
+    if _face_surface(face) == 7 and _triangle_area_3d(points) > winding_epsilon:
+        return False
+    return True
+
+
 def _bounds(points: list[tuple[float, float, float]]) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     if not points:
         return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
@@ -280,7 +305,7 @@ def _room_summary(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKSumm
             continue
         points = [world[index] for index in indices]
         area = _triangle_area_xy(points)
-        if abs(area) <= winding_epsilon:
+        if _is_degenerate_wok_face(face, points, winding_epsilon=winding_epsilon):
             degenerate.append(face_index)
         elif area < 0:
             reversed_faces.append(face_index)
@@ -333,7 +358,7 @@ def _room_overlay(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKOver
         issue_codes: list[str] = []
         if surface_id not in known_surfaces:
             issue_codes.append("INVALID_WOK_MATERIAL")
-        if not valid_indices or abs(area) <= winding_epsilon:
+        if not valid_indices or _is_degenerate_wok_face(face, list(points), winding_epsilon=winding_epsilon):
             issue_codes.append("DEGENERATE_FACE")
         elif area < 0:
             issue_codes.append("REVERSED_FACE_WINDING")

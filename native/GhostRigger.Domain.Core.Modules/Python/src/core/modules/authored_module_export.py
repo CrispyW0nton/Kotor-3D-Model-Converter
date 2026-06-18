@@ -30,6 +30,7 @@ from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathin
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
 from .authored_room_materials import compile_authored_room_material_preflight
+from .authored_walkmesh_boundaries import apply_authored_walkmesh_boundary_policy_to_geometry
 from .custom_module_packager import CustomModulePackRequest, CustomModulePackResult, PackagedModuleResource, package_custom_module
 from .dev_module_smoke import (
     DevModulePackageVerification,
@@ -503,6 +504,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         room_resref = room.normalised_resref()
         try:
             geometry = compile_authored_room_spec(room)
+            geometry = apply_authored_walkmesh_boundary_policy_to_geometry(geometry)
         except Exception as exc:
             blocking.append(f"Room {room_resref or '(unnamed)'} geometry could not be compiled: {exc}")
             continue
@@ -654,9 +656,12 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             {
                 "resref": resref,
                 "wok_faces": len(getattr(geometry.wok, "faces", []) or []),
+                "wok_walkable_faces": int(geometry.wok.walkable_face_count()) if hasattr(geometry.wok, "walkable_face_count") else 0,
+                "wok_non_walk_faces": int(geometry.wok.non_walk_face_count()) if hasattr(geometry.wok, "non_walk_face_count") else 0,
                 "model_nodes": 1 + len(geometry.helper_meshes),
                 "texture": str(getattr(geometry.room_mesh, "texture", "") or ""),
                 "floor_surface_id": int(getattr((list(getattr(geometry.wok, "faces", []) or []) or [None])[0], "surface", -1)),
+                "walkmesh_boundary_wall_faces": int((geometry.metadata or {}).get("walkmesh_boundary_wall_faces") or 0),
             }
             for resref, geometry in sorted(build.module.room_geometry.items())
         ],

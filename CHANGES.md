@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored WOK Boundary Walls
+
+Owner: LordVaderCW
+Task: T2704
+Subsystem: Map Studio / authored WOK export / grdev01 smoke module
+
+- Added a core authored walkmesh boundary service that wraps primitive/floor-plan WOKs with vertical `NON_WALK` perimeter wall faces without mutating the source walkmesh.
+- Updated authored module export and `grdev01` smoke generation so exported manifests report walkable faces, non-walk faces, and generated boundary wall faces.
+- Adjusted area-WOK validation so intentional vertical `NON_WALK` boundary walls are accepted as valid 3D blocker geometry instead of being reported as degenerate floor triangles.
+- Regenerated and installed the `grdev01` smoke package with boundary WOK data; the package remains ready for the manual in-game `warp grdev01` proof step.
+
+Verification:
+- `python -m pytest tests\test_area_wok_integration.py tests\test_authored_walkmesh_boundaries.py tests\test_dev_module_smoke.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_wok_boundaries`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\area_wok_integration.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\area_wok_integration.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_walkmesh_boundaries.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_walkmesh_boundaries.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_area_wok_integration.py tests\test_authored_walkmesh_boundaries.py tests\test_dev_module_smoke.py tests\test_authored_module_export.py`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_installed --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-kmap --overwrite-module --json` reported `installed` with no blocking issues and only an existing-module backup warning.
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json` reported `dry_run_ready`.
+
 ### [2026-06-18] Map Studio Reports Elevated Launch Helper
 
 Owner: LordVaderCW

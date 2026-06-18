@@ -270,6 +270,44 @@ def test_t2638_wok_overlay_marks_edges_against_non_walk_faces_as_blocked(monkeyp
     assert overlay.faces[1].walkable is False
 
 
+def test_t2704_vertical_non_walk_boundary_walls_are_not_degenerate(monkeypatch):
+    _install(monkeypatch)
+    lyt = _LYT([_Room("room_a", 0.0, 0.0, 0.0)])
+    vis = _VIS({"room_a": []})
+    module = _Hydrated(
+        module=_Module(
+            lyt=lyt,
+            vis=vis,
+            room_woks={
+                "room_a": _Wok(
+                    verts=[
+                        (0.0, 0.0, 0.0),
+                        (1.0, 0.0, 0.0),
+                        (0.0, 1.0, 0.0),
+                        (1.0, 0.0, 2.0),
+                    ],
+                    faces=[
+                        _Face(0, 1, 2, 1),
+                        _Face(0, 1, 3, 7),
+                    ],
+                )
+            },
+        )
+    )
+
+    report = awi.validate_area_woks(module)
+
+    assert "DEGENERATE_FACE" not in {issue.code for issue in report.issues}
+    room = report.rooms[0]
+    assert room.face_count == 2
+    assert room.walkable_face_count == 1
+    assert room.non_walk_face_count == 1
+    assert room.degenerate_faces == ()
+    overlay = report.overlays[0]
+    assert overlay.faces[1].surface_name == "NON_WALK"
+    assert overlay.faces[1].issue_codes == ()
+
+
 def test_t1604_flags_seam_gap_between_connected_rooms(monkeypatch):
     _install(monkeypatch)
 

@@ -58,6 +58,7 @@ from .authored_room_materials import (
     compile_authored_room_material_preflight,
     normalize_authored_room_texture,
 )
+from .authored_walkmesh_boundaries import apply_authored_walkmesh_boundary_policy_to_geometry
 from .module_format import LYTLayout, VISData, WOKData
 
 
@@ -683,6 +684,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     room_spec = project.rooms[0]
     room = room_spec.normalised_resref()
     geometry = compile_authored_room_spec(room_spec)
+    geometry = apply_authored_walkmesh_boundary_policy_to_geometry(geometry, wall_height=float(request.wall_height))
     placements = project.placements
     compiled_metadata = compile_authored_module_metadata(
         project.metadata,
@@ -1011,6 +1013,7 @@ def _augment_manifest(
             "wall_opening": has_wall_opening,
             "room_mdl_mdx": True,
             "floor_walkmesh": True,
+            "walkmesh_boundary_walls": int(geometry_metadata.get("walkmesh_boundary_wall_faces") or 0) > 0,
             "player_start": True,
             "test_placeable_template": request.test_placeable_resref,
         },
@@ -1068,6 +1071,10 @@ def _augment_manifest(
             "texture": geometry.room_mesh.texture if geometry else "",
             "helper_meshes": helper_mesh_names,
             "derived_wok": True,
+            "wok_faces": len(getattr(geometry.wok, "faces", []) or []) if geometry else 0,
+            "wok_walkable_faces": int(geometry.wok.walkable_face_count()) if geometry and hasattr(geometry.wok, "walkable_face_count") else 0,
+            "wok_non_walk_faces": int(geometry.wok.non_walk_face_count()) if geometry and hasattr(geometry.wok, "non_walk_face_count") else 0,
+            "walkmesh_boundary_wall_faces": int(geometry_metadata.get("walkmesh_boundary_wall_faces") or 0),
             "metadata": geometry_metadata,
         },
         "authored_materials": {

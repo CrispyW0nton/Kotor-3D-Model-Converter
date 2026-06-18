@@ -733,6 +733,7 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
             "point_count": len(_normalise_points(primitive.points)),
             "wall_count": len(helper_meshes),
             "opening_count": len(primitive.openings),
+            "wall_height": float(primitive.wall_height),
             "polygon_area": validation.area,
             "floor_surface_id": surface_id,
             "floor_surface_name": walkmesh_surface_name(surface_id),
