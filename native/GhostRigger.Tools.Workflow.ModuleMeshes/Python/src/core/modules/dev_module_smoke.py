@@ -216,6 +216,36 @@ class DevModuleInstallPrepResult:
 
 
 @dataclass(frozen=True)
+class DevModuleGameProofRequest:
+    """Evidence supplied after a real ``warp grdev01`` in-game smoke test."""
+
+    proof_manifest_path: str
+    evidence_path: str
+    tester: str = ""
+    notes: str = ""
+    module_loads_in_game: bool = False
+    player_spawns_on_floor: bool = False
+    test_placeable_visible: bool = False
+    player_can_walk_on_floor: bool = False
+    allow_missing_evidence: bool = False
+
+
+@dataclass
+class DevModuleGameProofResult:
+    """Result of recording in-game smoke proof for the dev module."""
+
+    ok: bool = False
+    proof_manifest_path: str = ""
+    pack_manifest_path: str = ""
+    evidence_path: str = ""
+    missing_checks: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    message: str = ""
+    code: str = "not_recorded"
+
+
+@dataclass(frozen=True)
 class _ResourceRecord:
     resref: str
     restype: str
@@ -1400,8 +1430,142 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
     )
 
 
+def _proof_request_checks(request: DevModuleGameProofRequest) -> dict[str, bool]:
+    return {
+        "module_loads_in_game": bool(request.module_loads_in_game),
+        "player_spawns_on_floor": bool(request.player_spawns_on_floor),
+        "test_placeable_visible": bool(request.test_placeable_visible),
+        "player_can_walk_on_floor": bool(request.player_can_walk_on_floor),
+        "screenshot_or_video_captured": bool(request.evidence_path and (request.allow_missing_evidence or Path(request.evidence_path).is_file())),
+    }
+
+
+def _default_acceptance_checks() -> list[str]:
+    return [
+        "module_loads_in_game",
+        "player_spawns_on_floor",
+        "test_placeable_visible",
+        "player_can_walk_on_floor",
+        "screenshot_or_video_captured",
+    ]
+
+
+def _update_pack_manifest_for_game_proof(
+    *,
+    pack_manifest_path: str,
+    accepted: bool,
+    proof_payload: dict[str, Any],
+) -> list[str]:
+    warnings: list[str] = []
+    if not pack_manifest_path:
+        warnings.append("No pack manifest path was available to update with in-game proof.")
+        return warnings
+    manifest_path = Path(pack_manifest_path)
+    if not manifest_path.is_file():
+        warnings.append(f"Pack manifest was not found for in-game proof update: {manifest_path}")
+        return warnings
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        warnings.append(f"Pack manifest could not be read for in-game proof update: {exc}")
+        return warnings
+    smoke = manifest.setdefault("map_studio_smoke_test", {})
+    smoke["game_tested"] = bool(accepted)
+    if accepted:
+        smoke["capability_stage"] = "game_smoke_tested"
+        remaining = list(smoke.get("remaining_acceptance", []))
+        smoke["remaining_acceptance"] = [
+            item
+            for item in remaining
+            if not any(
+                needle in str(item).lower()
+                for needle in ("install/copy", "warp", "confirm the room loads", "confirm the player", "walk across")
+            )
+        ]
+    smoke["in_game_proof"] = proof_payload
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return warnings
+
+
+def record_dev_module_game_proof(request: DevModuleGameProofRequest) -> DevModuleGameProofResult:
+    """Record the manual in-game proof gate for ``grdev01``.
+
+    This intentionally does not infer success from generated files.  A smoke
+    module becomes game-tested only when the caller supplies the concrete KOTOR
+    acceptance checks plus a screenshot/video evidence path.
+    """
+
+    proof_manifest_path = Path(request.proof_manifest_path)
+    if not proof_manifest_path.is_file():
+        return DevModuleGameProofResult(
+            ok=False,
+            proof_manifest_path=str(proof_manifest_path),
+            evidence_path=request.evidence_path,
+            blocking_issues=[f"Proof manifest does not exist: {proof_manifest_path}"],
+            message="Could not record in-game proof because the proof manifest is missing.",
+            code="proof_manifest_missing",
+        )
+    try:
+        proof = json.loads(proof_manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return DevModuleGameProofResult(
+            ok=False,
+            proof_manifest_path=str(proof_manifest_path),
+            evidence_path=request.evidence_path,
+            blocking_issues=[f"Proof manifest could not be read: {exc}"],
+            message="Could not record in-game proof because the proof manifest is unreadable.",
+            code="proof_manifest_unreadable",
+        )
+
+    required = list(proof.get("acceptance_checks") or _default_acceptance_checks())
+    checks = _proof_request_checks(request)
+    missing = [name for name in required if not checks.get(name, False)]
+    accepted = not missing
+    tested_at = datetime.now(timezone.utc).isoformat()
+    proof_payload = {
+        "tested_at": tested_at,
+        "tester": request.tester,
+        "evidence_path": request.evidence_path,
+        "notes": request.notes,
+        "checks": checks,
+        "accepted": accepted,
+        "missing_checks": missing,
+    }
+    proof["game_test"] = proof_payload
+    proof["manual_proof_required"] = not accepted
+    proof["game_tested"] = accepted
+    if accepted:
+        proof["completed_at"] = tested_at
+    proof_manifest_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
+
+    pack_manifest_path = str((proof.get("package") or {}).get("pack_manifest_path") or "")
+    warnings = _update_pack_manifest_for_game_proof(
+        pack_manifest_path=pack_manifest_path,
+        accepted=accepted,
+        proof_payload=proof_payload,
+    )
+    blocking = [f"In-game acceptance check is incomplete: {name}" for name in missing]
+    return DevModuleGameProofResult(
+        ok=accepted,
+        proof_manifest_path=str(proof_manifest_path),
+        pack_manifest_path=pack_manifest_path,
+        evidence_path=request.evidence_path,
+        missing_checks=missing,
+        warnings=warnings,
+        blocking_issues=blocking,
+        message=(
+            "Recorded complete in-game smoke proof for grdev01."
+            if accepted
+            else "Recorded incomplete in-game smoke proof attempt; module remains unproven."
+        ),
+        code="game_proof_recorded" if accepted else "game_proof_incomplete",
+    )
+
+
 __all__ = [
     "AuthoredDevModule",
+    "DevModuleGameProofRequest",
+    "DevModuleGameProofResult",
     "DevModuleInstallPrepRequest",
     "DevModuleInstallPrepResult",
     "DevModuleResourceSummary",
@@ -1411,5 +1575,6 @@ __all__ = [
     "discover_kotor_modules_dir",
     "export_dev_test_module",
     "prepare_dev_test_module_install",
+    "record_dev_module_game_proof",
     "verify_dev_test_module_package",
 ]

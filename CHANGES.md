@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio In-Game Smoke Proof Recorder
+
+Owner: LordVaderCW
+Task: T2610
+Subsystem: Map Studio / in-game proof gate / native Python payloads
+
+- Added a headless `record_dev_module_game_proof` API for recording the manual `warp grdev01` smoke test after a real KOTOR run.
+- Added explicit proof request/result dataclasses with acceptance checks for module load, player spawn, test placeable visibility, walkability, and screenshot/video evidence.
+- Updated the generated proof manifest and pack manifest only when concrete in-game proof is supplied; missing evidence or incomplete checks keep the module marked unproven.
+- Mirrored the proof recorder into the ModuleMeshes workflow payload and refreshed native payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_dev_module_game_proof.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_dev_module_game_proof.py -q --basetemp .pytest_tmp_dev_module_game_proof`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Authored Room Material Preflight
 
 Owner: LordVaderCW
