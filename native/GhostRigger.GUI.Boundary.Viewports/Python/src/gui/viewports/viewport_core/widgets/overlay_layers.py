@@ -172,6 +172,70 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio placement marker overlay failed: %s", exc)
 
+    def _draw_map_studio_room_outlines(self, draw, w: int, h: int) -> None:
+        geometry = getattr(self, "_map_studio_room_outline_geometry", None)
+        if geometry is None:
+            return
+        polygons = tuple(getattr(geometry, "polygons", ()) or ())
+        lines = tuple(getattr(geometry, "lines", ()) or ())
+        if not polygons and not lines:
+            return
+        try:
+            for polygon in polygons:
+                points = tuple(getattr(polygon, "points", ()) or ())
+                projected = []
+                for point in points:
+                    proj = self._map_studio_project_point(point, w, h)
+                    if proj is None:
+                        projected = []
+                        break
+                    projected.append((proj[0], proj[1]))
+                if len(projected) < 3:
+                    continue
+                role = str(getattr(polygon, "role", "") or "")
+                color = self._map_studio_marker_rgba(getattr(polygon, "color", ""), 230)
+                closed = projected + [projected[0]]
+                fill_alpha = 24 if role == "floor" else 8
+                draw.polygon(projected, fill=(color[0], color[1], color[2], fill_alpha))
+                width = 3 if role == "floor" else 2
+                dash = role == "ceiling"
+                if dash:
+                    for start, end in zip(closed, closed[1:]):
+                        self._draw_map_studio_dashed_line(draw, start, end, color=color, width=width)
+                else:
+                    draw.line(closed, fill=(0, 0, 0, 150), width=width + 2)
+                    draw.line(closed, fill=color, width=width)
+            for guide in lines:
+                start = self._map_studio_project_point(getattr(guide, "start", ()), w, h)
+                end = self._map_studio_project_point(getattr(guide, "end", ()), w, h)
+                if start is None or end is None:
+                    continue
+                color = self._map_studio_marker_rgba(getattr(guide, "color", ""), 220)
+                role = str(getattr(guide, "role", "") or "")
+                width = 3 if role == "opening" else 2
+                if role == "wall_height":
+                    self._draw_map_studio_dashed_line(draw, (start[0], start[1]), (end[0], end[1]), color=color, width=width)
+                else:
+                    draw.line([(start[0], start[1]), (end[0], end[1])], fill=(0, 0, 0, 150), width=width + 2)
+                    draw.line([(start[0], start[1]), (end[0], end[1])], fill=color, width=width)
+        except Exception as exc:
+            log.debug("Map Studio room outline overlay failed: %s", exc)
+
+    @staticmethod
+    def _draw_map_studio_dashed_line(draw, start, end, *, color: tuple[int, int, int, int], width: int = 2) -> None:
+        sx, sy = float(start[0]), float(start[1])
+        ex, ey = float(end[0]), float(end[1])
+        segments = 10
+        for index in range(segments):
+            if index % 2:
+                continue
+            t0 = index / segments
+            t1 = (index + 1) / segments
+            p0 = (sx + (ex - sx) * t0, sy + (ey - sy) * t0)
+            p1 = (sx + (ex - sx) * t1, sy + (ey - sy) * t1)
+            draw.line([p0, p1], fill=(0, 0, 0, 150), width=width + 2)
+            draw.line([p0, p1], fill=color, width=width)
+
     def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
         if self.model is None:
             return

@@ -830,9 +830,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_placements = self.controller.authored_gameplay_placements()
         authored_markers = self.controller.authored_gameplay_preview_markers()
         authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
+        authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
         self.properties.set_project(self.project, authored_placements)
         self.outliner.set_project(self.project, authored_placements)
-        self.viewport_panel.set_project(self.project, authored_placements, authored_markers, authored_marker_geometry)
+        self.viewport_panel.set_project(
+            self.project,
+            authored_placements,
+            authored_markers,
+            authored_marker_geometry,
+            authored_room_outline_geometry,
+        )
         readiness_result = self.controller.authored_module_readiness()
         self.readiness_panel.set_readiness(readiness_result.readiness)
         if self.controller.model.selected_ids:

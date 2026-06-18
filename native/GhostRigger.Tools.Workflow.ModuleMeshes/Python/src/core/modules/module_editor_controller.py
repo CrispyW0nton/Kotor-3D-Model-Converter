@@ -40,6 +40,7 @@ from .authored_module_placements import (
     update_authored_gameplay_placement_transform,
 )
 from .authored_room_operations import apply_authored_floor_plan_operation
+from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
@@ -204,6 +205,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_gameplay_marker_geometry_for_project(authored)
+
+    def authored_room_outline_geometry(self):
+        """Return renderer-ready outlines for authored Map Studio rooms."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return AuthoredRoomOutlineGeometry()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_outline_geometry_for_project(authored)
 
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""

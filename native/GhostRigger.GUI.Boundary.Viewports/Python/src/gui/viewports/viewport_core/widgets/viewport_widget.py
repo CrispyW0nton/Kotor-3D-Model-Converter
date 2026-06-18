@@ -250,6 +250,7 @@ class QtViewportWidget(
         self._overlay_rebuild_rate_hz = 0.0
         self._overlay_rebuild_window_started = time_module.perf_counter()
         self._skip_overlay_pixmap_update = False
+        self._map_studio_room_outline_geometry = None
         self._map_studio_marker_geometry = None
         self._map_studio_marker_hit_zones: list[dict[str, object]] = []
         self._gpu_texture_snapshot_key = None

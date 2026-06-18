@@ -79,12 +79,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         authored_gameplay_placements=(),
         authored_gameplay_markers=(),
         authored_gameplay_marker_geometry=None,
+        authored_room_outline_geometry=None,
     ) -> None:
         self._table_updating = True
         try:
             self.scene_table.setRowCount(0)
             self._row_ids.clear()
             self._placement_marker_geometry = authored_gameplay_marker_geometry
+            self._room_outline_geometry = authored_room_outline_geometry
             self._placement_markers = {
                 str(getattr(marker, "placement_id", "") or ""): marker
                 for marker in authored_gameplay_markers or ()
@@ -116,7 +118,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 )
         finally:
             self._table_updating = False
-        self._update_marker_summary(authored_gameplay_markers, authored_gameplay_marker_geometry)
+        self._update_marker_summary(authored_gameplay_markers, authored_gameplay_marker_geometry, authored_room_outline_geometry)
+        self._sync_room_outline_overlay(authored_room_outline_geometry)
         self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)
 
     def select_id(self, item_id: str) -> None:
@@ -403,9 +406,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.scene_table.setItem(row, column, item)
         self._row_ids.append(item_id)
 
-    def _update_marker_summary(self, authored_gameplay_markers, authored_gameplay_marker_geometry=None) -> None:
+    def _update_marker_summary(self, authored_gameplay_markers, authored_gameplay_marker_geometry=None, authored_room_outline_geometry=None) -> None:
         markers = tuple(authored_gameplay_markers or ())
-        if not markers:
+        room_count = int(getattr(authored_room_outline_geometry, "room_count", 0) or 0)
+        if not markers and room_count <= 0:
             self.marker_summary_label.setText("Gameplay markers: none")
             return
         counts: dict[str, int] = {}
@@ -415,15 +419,36 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             counts[kind] = counts.get(kind, 0) + 1
             if getattr(marker, "warning", ""):
                 warnings += 1
-        parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+        parts_list = [f"{kind} {count}" for kind, count in sorted(counts.items())]
+        if room_count > 0:
+            parts_list.insert(0, f"room outline {room_count}")
+        parts = ", ".join(parts_list)
         geometry_suffix = ""
         if authored_gameplay_marker_geometry is not None:
             footprints = len(tuple(getattr(authored_gameplay_marker_geometry, "footprints", ()) or ()))
             lines = len(tuple(getattr(authored_gameplay_marker_geometry, "lines", ()) or ()))
             if footprints or lines:
                 geometry_suffix = f" | {footprints} footprint(s), {lines} guide line(s)"
+        if authored_room_outline_geometry is not None:
+            polygons = len(tuple(getattr(authored_room_outline_geometry, "polygons", ()) or ()))
+            room_lines = len(tuple(getattr(authored_room_outline_geometry, "lines", ()) or ()))
+            if polygons or room_lines:
+                geometry_suffix = f"{geometry_suffix} | {polygons} room outline polygon(s), {room_lines} wall/opening guide(s)"
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
         self.marker_summary_label.setText(f"Gameplay markers: {parts}{geometry_suffix}{suffix}")
+
+    def _sync_room_outline_overlay(self, authored_room_outline_geometry=None) -> None:
+        setter = getattr(self.viewport, "set_map_studio_room_outline_geometry", None)
+        clearer = getattr(self.viewport, "clear_map_studio_room_outline_geometry", None)
+        polygons = tuple(getattr(authored_room_outline_geometry, "polygons", ()) or ())
+        lines = tuple(getattr(authored_room_outline_geometry, "lines", ()) or ())
+        if authored_room_outline_geometry is not None and (polygons or lines) and callable(setter):
+            setter(authored_room_outline_geometry)
+            return
+        if callable(clearer):
+            clearer()
+        elif callable(setter):
+            setter(None)
 
     def _sync_marker_geometry_overlay(self, authored_gameplay_marker_geometry=None) -> None:
         setter = getattr(self.viewport, "set_map_studio_marker_geometry", None)

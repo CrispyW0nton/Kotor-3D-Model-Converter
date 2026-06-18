@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Shows Authored Room Footprint Overlays
+
+Owner: LordVaderCW
+Task: T2664
+Subsystem: Map Studio / Module Editor authored room viewport overlays / authored-room geometry / native Python payloads
+
+- Added a headless authored-room outline geometry contract for floor polygons, ceiling outlines, wall-height guides, doorway/opening spans, warning reporting, and room counts.
+- Exposed authored room outline geometry through the Module Editor controller from the stored KMAP authored-module payload.
+- Added viewport overlay state and drawing for authored room footprints, ceiling guides, wall-height guides, and openings before authored gameplay placement markers.
+- Updated the Module Editor viewport panel and the ModuleMeshes native payload panel to pass room outlines into the viewport and summarize room outline polygons plus wall/opening guide counts.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\viewport_widget.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\scene_models.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\rendering_pipeline.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_outline_geometry.py tests\test_map_studio_room_outline_overlay.py`
+- `python -m pytest tests\test_authored_room_outline_geometry.py tests\test_map_studio_room_outline_overlay.py tests\test_authored_room_presets.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_studio_room_outline`
+
 ### [2026-06-18] Map Studio Supports Direct Authored Placement Marker Dragging
 
 Owner: LordVaderCW

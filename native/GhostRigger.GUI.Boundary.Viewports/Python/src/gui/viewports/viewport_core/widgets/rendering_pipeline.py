@@ -557,6 +557,7 @@ class ViewportRenderingPipelineMixin:
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)
+            self._draw_map_studio_room_outlines(draw, w, h)
             self._draw_map_studio_placement_markers(draw, w, h)
             self._draw_wgpu_helper_markers(draw, w, h)
             if self._ensure_renderer_gimbal_state() and not self._gpu_renderer_supports_native_gizmo_drawing():
