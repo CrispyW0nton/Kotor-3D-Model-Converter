@@ -154,6 +154,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.walkmesh_tab = WalkmeshTab()
         self.porter_tab = PorterTab()
         self.builder_tab = BuilderTab()
+        self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -252,6 +253,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
+        self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -435,6 +437,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for issue in result.blocking_issues:
             self._log(f"Blocking: {issue}")
         self._refresh_all("Authored module game-test staging updated.")
+
+    def create_authored_room_preset(self, preset_id: str, module_root: str) -> None:
+        try:
+            result = self.controller.create_authored_room_preset_module(preset_id=preset_id, module_root=module_root)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Create Authored Room Primitive", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Created authored module {self.project.name} from primitive preset {preset_id}."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
 
     def export_fbx(self, dry_run: bool = False) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export KMAP Scene", f"{self.project.name}.fbx", "FBX files (*.fbx)")

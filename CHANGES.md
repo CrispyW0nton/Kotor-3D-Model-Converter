@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Primitive Room Presets
+
+Owner: LordVaderCW
+Task: T2650
+Subsystem: Map Studio / authored room primitive presets / Builder tab / native Python payloads
+
+- Added a headless authored-room preset contract for named starter shapes: rectangular dev room, doorway blockout, wide hall, and octagonal room.
+- Added controller support to seed KMAP-authored module intent from a selected primitive preset while keeping geometry, walkmesh, layout, gameplay placement, and export policy in core services.
+- Updated the Map Studio Builder tab with a module-resref field, primitive preset selector, description text, and `Create Authored Room Primitive` action.
+- Mirrored the core and Builder-tab changes into the ModuleMeshes native payload so packaged workflow behavior stays consistent.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_presets.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_presets.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_presets.py`
+- `python -m pytest tests\test_authored_room_presets.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_room_presets`
+
 ### [2026-06-18] Map Studio Adds grdev01 Launch Helper
 
 Owner: LordVaderCW

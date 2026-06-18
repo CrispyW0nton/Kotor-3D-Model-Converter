@@ -19,9 +19,11 @@ from .authored_module_export import (
 )
 from .authored_module_kmap_bridge import (
     authored_project_from_kmap_payload,
+    authored_project_to_kmap_payload,
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
 )
+from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .dev_module_smoke import DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
@@ -115,6 +117,28 @@ class ModuleEditorController:
         self.project.game = str(payload.get("game") or self.project.game or "K1").upper()
         self.project.dirty = True
         self.model.log(f"Created authored Map Studio module {self.project.name}.")
+        return self.authored_module_readiness()
+
+    def available_authored_room_presets(self):
+        """Return named primitive room presets for the Map Studio Builder tab."""
+
+        return available_authored_room_primitive_presets()
+
+    def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
+        """Store an authored module created from a named primitive room preset."""
+
+        root = str(module_root or "grdev01").strip() or "grdev01"
+        authored = create_authored_module_from_room_preset(
+            preset_id=preset_id,
+            module_root=root,
+            game=str(self.project.game or "K1").upper(),
+        )
+        payload = authored_project_to_kmap_payload(authored)
+        self.project.extra_sections["authored_module"] = payload
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        self.model.log(f"Created authored Map Studio module {self.project.name} from primitive preset {preset_id}.")
         return self.authored_module_readiness()
 
     def build_preview(self, output_dir: str | Path):
