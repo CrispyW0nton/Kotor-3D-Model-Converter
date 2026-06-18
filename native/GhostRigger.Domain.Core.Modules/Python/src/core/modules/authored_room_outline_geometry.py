@@ -6,8 +6,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, build_composition_wok
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
+from .authored_room_primitives import ArchPrimitive, WallPrimitive
 
 
 Vec3 = tuple[float, float, float]
@@ -72,8 +74,29 @@ def _floor_plan_points(primitive: FloorPlanRoomPrimitive, offset: Vec3) -> tuple
     return tuple(_offset_point((float(x), float(y)), float(primitive.z), offset) for x, y in tuple(primitive.points or ()))
 
 
+def _composition_floor_points(primitive: AuthoredRoomComposition, offset: Vec3) -> tuple[Vec3, ...]:
+    half_w = float(primitive.floor.width) * 0.5
+    half_d = float(primitive.floor.depth) * 0.5
+    z = float(primitive.floor.z) + offset[2]
+    return (
+        (-half_w + offset[0], -half_d + offset[1], z),
+        (half_w + offset[0], -half_d + offset[1], z),
+        (half_w + offset[0], half_d + offset[1], z),
+        (-half_w + offset[0], half_d + offset[1], z),
+    )
+
+
 def _wall_height(primitive: Any) -> float:
     return max(0.0, float(getattr(primitive, "wall_height", 0.0) or 0.0))
+
+
+def _composition_wall_height(primitive: AuthoredRoomComposition) -> float:
+    heights: list[float] = []
+    for item in tuple(primitive.primitives or ()):
+        base = item.primitive if isinstance(item, PlacedRoomPrimitive) else item
+        if isinstance(base, (WallPrimitive, ArchPrimitive)):
+            heights.append(float(getattr(base, "height", 0.0) or 0.0))
+    return max([0.0, *heights])
 
 
 def _top_points(points: tuple[Vec3, ...], wall_height: float) -> tuple[Vec3, ...]:
@@ -127,6 +150,51 @@ def _opening_lines(room: AuthoredRoomSpec, primitive: FloorPlanRoomPrimitive, po
     return tuple(lines)
 
 
+def _composition_walkmesh_polygons(
+    *,
+    primitive: AuthoredRoomComposition,
+    room_resref: str,
+    label: str,
+    offset: Vec3,
+) -> tuple[AuthoredRoomOutlinePolygon, ...]:
+    wok = build_composition_wok(primitive)
+    polygons: list[AuthoredRoomOutlinePolygon] = []
+    for index, face in enumerate(tuple(wok.faces or ())):
+        if index < 2:
+            continue
+        vertices = tuple(wok.verts or ())
+        try:
+            points = (
+                (
+                    float(vertices[face.v1][0]) + offset[0],
+                    float(vertices[face.v1][1]) + offset[1],
+                    float(vertices[face.v1][2]) + offset[2],
+                ),
+                (
+                    float(vertices[face.v2][0]) + offset[0],
+                    float(vertices[face.v2][1]) + offset[1],
+                    float(vertices[face.v2][2]) + offset[2],
+                ),
+                (
+                    float(vertices[face.v3][0]) + offset[0],
+                    float(vertices[face.v3][1]) + offset[1],
+                    float(vertices[face.v3][2]) + offset[2],
+                ),
+            )
+        except (IndexError, TypeError):
+            continue
+        polygons.append(
+            AuthoredRoomOutlinePolygon(
+                room_resref=room_resref,
+                label=f"{label}_walkmesh_{index - 1}",
+                points=points,
+                color="#ffcf40",
+                role="walkmesh_primitive",
+            )
+        )
+    return tuple(polygons)
+
+
 def authored_room_outline_geometry_for_project(project: AuthoredModuleProject) -> AuthoredRoomOutlineGeometry:
     """Return viewport overlay outlines for authored rooms."""
 
@@ -139,11 +207,23 @@ def authored_room_outline_geometry_for_project(project: AuthoredModuleProject) -
         primitive = room.primitive
         offset = _room_offset(room)
         color = "#42d9ff"
+        wall_height = _wall_height(primitive)
+        extra_polygons: tuple[AuthoredRoomOutlinePolygon, ...] = ()
         if isinstance(primitive, FloorPlanRoomPrimitive):
             points = _floor_plan_points(primitive, offset)
             color = "#52ff7a"
         elif isinstance(primitive, RectangularRoomPrimitive):
             points = _rectangular_points(primitive, offset)
+        elif isinstance(primitive, AuthoredRoomComposition):
+            points = _composition_floor_points(primitive, offset)
+            color = "#7cffa8"
+            wall_height = _composition_wall_height(primitive)
+            extra_polygons = _composition_walkmesh_polygons(
+                primitive=primitive,
+                room_resref=room_resref,
+                label=label,
+                offset=offset,
+            )
         else:
             warnings.append(f"Room {label} has no viewport outline for primitive type {type(primitive).__name__}.")
             continue
@@ -151,7 +231,7 @@ def authored_room_outline_geometry_for_project(project: AuthoredModuleProject) -
             warnings.append(f"Room {label} needs at least three outline points.")
             continue
         polygons.append(AuthoredRoomOutlinePolygon(room_resref=room_resref, label=label, points=points, color=color, role="floor"))
-        wall_height = _wall_height(primitive)
+        polygons.extend(extra_polygons)
         if wall_height > 0.0:
             polygons.append(
                 AuthoredRoomOutlinePolygon(

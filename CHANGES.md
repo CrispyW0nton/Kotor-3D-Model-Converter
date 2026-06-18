@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Shows Primitive Composition Room Overlays
+
+Owner: LordVaderCW
+Task: T2669
+Subsystem: Map Studio / authored room outline geometry / primitive composition overlays / native Python payloads
+
+- Added viewport outline geometry for `AuthoredRoomComposition` rooms so primitive-built rooms expose floor and ceiling outlines plus wall-height guides instead of reporting an unsupported primitive type.
+- Derived ramp and stair overlay polygons from the same authored composition WOK data used by export so elevated walkable surfaces are visible in the editor.
+- Added focused regression coverage for the `Elevation Test Room` preset proving its floor, ceiling, wall guides, and walkable ramp/stair triangles are exposed.
+- Mirrored the core outline geometry support into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_outline_geometry.py tests\test_authored_room_outline_geometry.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_outline_geometry.py tests\test_map_studio_room_outline_overlay.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_studio_composition_outline`
+
 ### [2026-06-18] Map Studio Adds Elevation Composition Room Preset
 
 Owner: LordVaderCW

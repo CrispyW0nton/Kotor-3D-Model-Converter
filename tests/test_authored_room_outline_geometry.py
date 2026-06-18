@@ -75,6 +75,35 @@ def test_t2664_controller_exposes_empty_and_authored_room_outline_geometry() -> 
     assert len([line for line in geometry.lines if line.role == "wall_height"]) == 8
 
 
+def test_t2669_elevation_composition_outline_includes_walkable_primitive_guides() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_outline_geometry import authored_room_outline_geometry_for_project
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="elevation_test_room",
+        module_root="grelevol",
+        game="K1",
+    )
+    geometry = authored_room_outline_geometry_for_project(project)
+
+    floor = next(polygon for polygon in geometry.polygons if polygon.role == "floor")
+    ceiling = next(polygon for polygon in geometry.polygons if polygon.role == "ceiling")
+    wall_guides = [line for line in geometry.lines if line.role == "wall_height"]
+    walkable_guides = [polygon for polygon in geometry.polygons if polygon.role == "walkmesh_primitive"]
+
+    assert geometry.room_count == 1
+    assert geometry.warnings == ()
+    assert floor.room_resref == "grelevol_room01"
+    assert floor.color == "#7cffa8"
+    assert len(floor.points) == 4
+    assert len(ceiling.points) == len(floor.points)
+    assert len(wall_guides) == len(floor.points)
+    assert len(walkable_guides) == 4
+    assert any(point[2] > 0.0 for polygon in walkable_guides for point in polygon.points)
+
+
 def test_t2664_rectangular_cut_outline_tracks_split_authored_rooms() -> None:
     _install_native_payload_paths()
 
