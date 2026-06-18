@@ -43,6 +43,11 @@ def test_t2617_script_installs_one_floor_plan_variant_to_modules(tmp_path: Path)
     assert payload["variant_id"] == "floor_plan_opening"
     assert payload["room_geometry_mode"] == "floor_plan"
     assert payload["installed_module_path"] == str(installed)
+    assert payload["resolved_modules_dir"] == str(modules_dir)
+    assert payload["resolved_game_root_dir"] == str(modules_dir.parent)
+    assert "launch_grdev01_smoke_test.py" in payload["launch_helper_command"]
+    assert Path(payload["elevated_launch_script_path"]).is_file()
+    assert Path(payload["proof_recording_script_path"]).is_file()
     assert installed.is_file()
     assert Path(payload["checklist_path"]).is_file()
     assert Path(payload["proof_manifest_path"]).is_file()
@@ -50,6 +55,8 @@ def test_t2617_script_installs_one_floor_plan_variant_to_modules(tmp_path: Path)
     proof = json.loads(Path(payload["proof_manifest_path"]).read_text(encoding="utf-8"))
     assert proof["install"]["installed"] is True
     assert proof["install"]["installed_module_path"] == str(installed)
+    assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
+    assert proof["launch_handoff"]["proof_recording_script_path"] == payload["proof_recording_script_path"]
     assert proof["manual_proof_required"] is True
     pack_manifest = json.loads(Path(payload["pack_manifest_path"]).read_text(encoding="utf-8"))
     smoke = pack_manifest["map_studio_smoke_test"]

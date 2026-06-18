@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Surfaces Dev Smoke Install Handoff
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / dev-module smoke test / install helper
+
+- Updated the `install_grdev01_smoke_variant.py` helper to report resolved game root, launch dry-run helper, elevated launch helper, and proof-recorder script paths in JSON and human output.
+- Added regression coverage so installed smoke variants expose the same launch/proof handoff recorded in the proof manifest.
+
+Verification:
+- `python -m pytest tests/test_install_grdev01_smoke_variant_script.py -q --basetemp .pytest_tmp_map_dev_install_helper`
+- `python -m py_compile scripts/install_grdev01_smoke_variant.py tests/test_install_grdev01_smoke_variant_script.py`
+
 ### [2026-06-18] Map Studio Writes Dev Smoke Launch Handoff
 
 Owner: LordVaderCW

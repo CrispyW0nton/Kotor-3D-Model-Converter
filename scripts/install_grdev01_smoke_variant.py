@@ -127,6 +127,10 @@ def _result_summary(result: Any, *, variant_id: str, variant_label: str, room_ge
         "installed_module_path": result.installed_module_path,
         "backup_module_path": getattr(result, "backup_module_path", ""),
         "resolved_modules_dir": result.resolved_modules_dir,
+        "resolved_game_root_dir": getattr(result, "resolved_game_root_dir", ""),
+        "launch_helper_command": getattr(result, "launch_helper_command", ""),
+        "elevated_launch_script_path": getattr(result, "elevated_launch_script_path", ""),
+        "proof_recording_script_path": getattr(result, "proof_recording_script_path", ""),
         "checklist_path": result.checklist_path,
         "proof_manifest_path": result.proof_manifest_path,
         "warnings": list(result.warnings),
@@ -143,12 +147,20 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
     print(f"Pack manifest: {summary['pack_manifest_path']}")
     if summary["resolved_modules_dir"]:
         print(f"Resolved Modules folder: {summary['resolved_modules_dir']}")
+    if summary.get("resolved_game_root_dir"):
+        print(f"Resolved game root: {summary['resolved_game_root_dir']}")
     if summary["installed_module_path"]:
         print(f"Installed module: {summary['installed_module_path']}")
         if summary.get("backup_module_path"):
             print(f"Previous module backup: {summary['backup_module_path']}")
     else:
         print("Installed module: (not copied)")
+    if summary.get("launch_helper_command"):
+        print(f"Launch dry-run helper: {summary['launch_helper_command']}")
+    if summary.get("elevated_launch_script_path"):
+        print(f"Elevated launch helper: {summary['elevated_launch_script_path']}")
+    if summary.get("proof_recording_script_path"):
+        print(f"Proof recorder: {summary['proof_recording_script_path']}")
     print(f"Checklist: {summary['checklist_path']}")
     print(f"Proof manifest: {summary['proof_manifest_path']}")
     if summary["warnings"]:
