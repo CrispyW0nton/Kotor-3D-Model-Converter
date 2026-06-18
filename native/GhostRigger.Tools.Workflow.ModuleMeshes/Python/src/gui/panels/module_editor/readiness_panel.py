@@ -75,6 +75,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.authored_summary_label.setWordWrap(True)
         root.addWidget(self.authored_summary_label)
 
+        self.template_references_label = QtWidgets.QLabel("Template references: Not checked")
+        self.template_references_label.setObjectName("mapStudioReadinessTemplateReferencesLabel")
+        self.template_references_label.setWordWrap(True)
+        root.addWidget(self.template_references_label)
+
         self.blocking_label = QtWidgets.QLabel("")
         self.blocking_label.setObjectName("mapStudioReadinessBlockingLabel")
         self.blocking_label.setWordWrap(True)
@@ -111,6 +116,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_recorder_label.setText("Proof recorder: Not ready")
             self.launch_label.setText("Launch handoff: Not ready")
             self.authored_summary_label.setText("Authored content: Not checked")
+            self.template_references_label.setText("Template references: Not checked")
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
             self.game_test_button.setEnabled(False)
@@ -199,6 +205,27 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             f"Authored content: {room_text or 'No room style summary'}; "
             f"{placement_total} gameplay placement(s); {lighting_count} room light(s)"
         )
+        template_refs = list(metadata.get("gameplay_template_references", ()) or ())
+        template_count = int(metadata.get("gameplay_template_reference_count", len(template_refs)) or 0)
+        packaged_template_count = int(metadata.get("gameplay_packaged_template_count", 0) or 0)
+        external_template_count = int(metadata.get("gameplay_external_template_count", 0) or 0)
+        if template_refs:
+            names = []
+            for ref in template_refs[:4]:
+                item = dict(ref)
+                resref = str(item.get("template_resref") or "(missing)")
+                restype = str(item.get("restype") or "")
+                status = "packaged" if bool(item.get("packaged")) else "external"
+                names.append(f"{resref}.{restype} ({status})")
+            suffix = f"; {', '.join(names)}"
+            if len(template_refs) > 4:
+                suffix += f"; +{len(template_refs) - 4} more"
+            self.template_references_label.setText(
+                f"Template references: {template_count} total, {packaged_template_count} packaged, "
+                f"{external_template_count} external/base-game{suffix}"
+            )
+        else:
+            self.template_references_label.setText("Template references: None")
 
         if blocking:
             body = "Blocking: " + "; ".join(str(item) for item in blocking[:4])

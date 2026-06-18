@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Surfaces Gameplay Template Dependencies
+
+Owner: LordVaderCW
+Task: T2700
+Subsystem: Map Studio / authored module readiness / gameplay template references
+
+- Added headless readiness metadata for authored gameplay template references so placed creatures, placeables, doors, triggers, encounters, sounds, stores, and waypoints report their expected UTC/UTP/UTD/UTT/UTE/UTS/UTM/UTW resources.
+- Distinguished packaged template resources from external/base-game/Override dependencies without blocking export candidates that intentionally reference vanilla templates.
+- Updated the Map Studio readiness panel to show template dependency counts and concrete resource names alongside the authored content summary.
+- Mirrored the readiness contract and UI display changes into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m pytest tests\test_authored_module_readiness.py -q --basetemp .pytest_tmp_map_readiness_templates`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py`
+
 ### [2026-06-18] Map Studio Clarifies Full Custom Module Builder Scope
 
 Owner: LordVaderCW

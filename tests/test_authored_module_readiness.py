@@ -28,6 +28,23 @@ def _placements(area_resref: str = "grdev01"):
     return AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=area_resref))
 
 
+def _placements_with_templates(area_resref: str = "grdev01"):
+    from src.core.modules.authored_module_objects import (
+        AuthoredCreatureInstance,
+        AuthoredGameplayPlacement,
+        AuthoredPlaceableInstance,
+        AuthoredWaypointInstance,
+        ModuleEntryPoint,
+    )
+
+    return AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref=area_resref),
+        creatures=(AuthoredCreatureInstance(template_resref="g_tresgencorp001", tag="TestCreature"),),
+        placeables=(AuthoredPlaceableInstance(template_resref="PLC_bench", tag="TestBench"),),
+        waypoints=(AuthoredWaypointInstance(template_resref="sw_startloc001", tag="StartWaypoint"),),
+    )
+
+
 def _floor_plan_project():
     from src.core.modules.authored_module_project import create_floor_plan_room_project
     from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
@@ -41,6 +58,22 @@ def _floor_plan_project():
             points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
         ),
         placements=_placements(),
+    )
+
+
+def _floor_plan_project_with_templates():
+    from src.core.modules.authored_module_project import create_floor_plan_room_project
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+
+    return create_floor_plan_room_project(
+        module_root="grdev01",
+        game="K1",
+        display_name="GhostRigger Dev Test",
+        floor_plan=FloorPlanRoomPrimitive(
+            room_resref="grdev01_room01",
+            points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        ),
+        placements=_placements_with_templates(),
     )
 
 
@@ -151,6 +184,50 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert export_steps["In-game proof"].ready is False
     assert export_steps["In-game proof"].status == "Recorder ready after warp test"
     assert export_candidate.metadata["toolchain"][0]["name"] == "Geometry authoring"
+
+
+def test_t2700_readiness_reports_external_gameplay_template_references_without_blocking_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    readiness = build_authored_module_readiness(
+        _floor_plan_project_with_templates(),
+        packaged_resources=_runtime_keys(),
+    )
+
+    refs = readiness.metadata["gameplay_template_references"]
+    names = {(item["template_resref"], item["restype"], item["kind"]) for item in refs}
+
+    assert readiness.capability_stage == "export_candidate"
+    assert readiness.can_export_candidate is True
+    assert readiness.metadata["gameplay_template_reference_count"] == 3
+    assert readiness.metadata["gameplay_packaged_template_count"] == 0
+    assert readiness.metadata["gameplay_external_template_count"] == 3
+    assert ("plc_bench", "utp", "placeable") in names
+    assert ("g_tresgencorp001", "utc", "creature") in names
+    assert ("sw_startloc001", "utw", "waypoint") in names
+    assert all(item["status"] == "external_or_base_game" for item in refs)
+    assert any("base-game" in warning for warning in readiness.warnings)
+    assert "template ref(s)" in {step.name: step for step in readiness.toolchain}["Gameplay layout"].value_label
+
+
+def test_t2700_packaged_gameplay_template_references_are_marked_as_packaged() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    readiness = build_authored_module_readiness(
+        _floor_plan_project_with_templates(),
+        packaged_resources=(*_runtime_keys(), ("PLC_bench", "utp")),
+    )
+    refs = readiness.metadata["gameplay_template_references"]
+    bench = next(item for item in refs if item["template_resref"] == "plc_bench")
+
+    assert bench["packaged"] is True
+    assert bench["status"] == "packaged"
+    assert readiness.metadata["gameplay_packaged_template_count"] == 1
+    assert readiness.metadata["gameplay_external_template_count"] == 2
 
 
 def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None:

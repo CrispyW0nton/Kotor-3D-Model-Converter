@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from .authored_module_objects import normalise_resource_resref
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_walkmesh_surfaces import walkmesh_surface_name
 
@@ -54,6 +55,20 @@ class AuthoredModuleToolchainStatus:
     status: str
     value_label: str = ""
     fix_hint: str = ""
+
+
+@dataclass(frozen=True)
+class AuthoredGameplayTemplateReference:
+    """One template resource referenced by authored GIT gameplay placement data."""
+
+    kind: str
+    template_resref: str
+    restype: str
+    tag: str = ""
+    status: str = "external_or_base_game"
+    packaged: bool = False
+    required: bool = True
+    message: str = ""
 
 
 @dataclass(frozen=True)
@@ -135,6 +150,66 @@ def _gameplay_counts(project: AuthoredModuleProject) -> dict[str, int]:
         "placeables": len(tuple(placements.placeables or ())),
         "waypoints": len(tuple(placements.waypoints or ())),
     }
+
+
+def _template_reference_entry(
+    *,
+    kind: str,
+    restype: str,
+    template_resref: Any,
+    tag: Any,
+    present: set[RuntimeResourceKey],
+) -> AuthoredGameplayTemplateReference | None:
+    resref = normalise_resource_resref(template_resref)
+    if not resref:
+        return None
+    key = (resref, restype)
+    packaged = key in present
+    status = "packaged" if packaged else "external_or_base_game"
+    message = (
+        f"{resref}.{restype} will be written into the module package."
+        if packaged
+        else f"{resref}.{restype} must resolve from the base game, Override, or another installed mod."
+    )
+    return AuthoredGameplayTemplateReference(
+        kind=kind,
+        template_resref=resref,
+        restype=restype,
+        tag=str(tag or ""),
+        status=status,
+        packaged=packaged,
+        message=message,
+    )
+
+
+def _gameplay_template_references(
+    project: AuthoredModuleProject,
+    *,
+    present: set[RuntimeResourceKey],
+) -> tuple[AuthoredGameplayTemplateReference, ...]:
+    placements = project.placements
+    refs: list[AuthoredGameplayTemplateReference] = []
+    for kind, restype, items in (
+        ("creature", "utc", tuple(placements.creatures or ())),
+        ("door", "utd", tuple(placements.doors or ())),
+        ("trigger", "utt", tuple(placements.triggers or ())),
+        ("encounter", "ute", tuple(placements.encounters or ())),
+        ("sound", "uts", tuple(placements.sounds or ())),
+        ("store", "utm", tuple(placements.stores or ())),
+        ("placeable", "utp", tuple(placements.placeables or ())),
+        ("waypoint", "utw", tuple(placements.waypoints or ())),
+    ):
+        for item in items:
+            ref = _template_reference_entry(
+                kind=kind,
+                restype=restype,
+                template_resref=getattr(item, "template_resref", ""),
+                tag=getattr(item, "tag", ""),
+                present=present,
+            )
+            if ref is not None:
+                refs.append(ref)
+    return tuple(sorted(refs, key=lambda item: (item.kind, item.template_resref, item.restype, item.tag)))
 
 
 def _lighting_count(project: AuthoredModuleProject) -> int:
@@ -244,6 +319,7 @@ def _toolchain_statuses(
     project: AuthoredModuleProject,
     *,
     rooms: tuple[AuthoredRoomReadiness, ...],
+    template_references: tuple[AuthoredGameplayTemplateReference, ...],
     missing_runtime_resources: tuple[RuntimeResourceKey, ...],
     expected_runtime_resources: tuple[RuntimeResourceKey, ...],
     blocking_messages: tuple[str, ...],
@@ -261,6 +337,13 @@ def _toolchain_statuses(
     entry_ready = normalise_resref(entry.area_resref) == project.module_root and bool(project.module_root)
     gameplay_counts = _gameplay_counts(project)
     placement_total = sum(gameplay_counts.values())
+    packaged_templates = sum(1 for ref in template_references if ref.packaged)
+    external_templates = len(template_references) - packaged_templates
+    template_label = (
+        f"; {len(template_references)} template ref(s), {packaged_templates} packaged, {external_templates} external/base-game"
+        if template_references
+        else "; no template refs"
+    )
     light_count = _lighting_count(project)
     packaged_count = len(expected_runtime_resources) - len(missing_runtime_resources)
     package_ready = bool(expected_runtime_resources) and not missing_runtime_resources and not blocking_messages
@@ -297,8 +380,8 @@ def _toolchain_statuses(
             "Gameplay layout",
             entry_ready,
             "Ready" if entry_ready else "Needs module entry point",
-            f"Entry {normalise_resref(entry.area_resref) or '(missing)'} @ {tuple(entry.position)}; {placement_total} placement(s)",
-            "Place the player start inside the module root area; add placeables, creatures, doors, and waypoints as needed.",
+            f"Entry {normalise_resref(entry.area_resref) or '(missing)'} @ {tuple(entry.position)}; {placement_total} placement(s){template_label}",
+            "Place the player start inside the module root area; add or package custom templates when placements should not rely on base-game resources.",
         ),
         AuthoredModuleToolchainStatus(
             "Runtime package",
@@ -376,10 +459,18 @@ def build_authored_module_readiness(
     present = _present_keys(packaged_resources)
     expected = _expected_keys(project.module_root, rooms)
     present_set = set(present)
+    template_references = _gameplay_template_references(project, present=present_set)
+    external_template_count = sum(1 for ref in template_references if not ref.packaged)
     missing = tuple(key for key in expected if key not in present_set)
     room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
     blocking = tuple(validation.blocking_issues) + room_blocking
-    warnings = tuple(validation.warnings)
+    template_warnings: tuple[str, ...] = ()
+    if external_template_count:
+        template_warnings = (
+            f"{external_template_count} gameplay template reference(s) rely on base-game, Override, "
+            "or another installed mod resource instead of being packaged in this .mod.",
+        )
+    warnings = tuple(validation.warnings) + template_warnings
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
@@ -449,6 +540,7 @@ def build_authored_module_readiness(
     toolchain = _toolchain_statuses(
         project,
         rooms=rooms,
+        template_references=template_references,
         missing_runtime_resources=missing,
         expected_runtime_resources=expected,
         blocking_messages=blocking,
@@ -481,6 +573,22 @@ def build_authored_module_readiness(
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
+            "gameplay_template_reference_count": len(template_references),
+            "gameplay_packaged_template_count": sum(1 for ref in template_references if ref.packaged),
+            "gameplay_external_template_count": external_template_count,
+            "gameplay_template_references": [
+                {
+                    "kind": ref.kind,
+                    "template_resref": ref.template_resref,
+                    "restype": ref.restype,
+                    "tag": ref.tag,
+                    "status": ref.status,
+                    "packaged": ref.packaged,
+                    "required": ref.required,
+                    "message": ref.message,
+                }
+                for ref in template_references
+            ],
             "lighting_count": lighting_count,
             "room_lights": [
                 {
@@ -533,6 +641,7 @@ def build_authored_module_readiness(
 
 
 __all__ = [
+    "AuthoredGameplayTemplateReference",
     "AuthoredModuleInputStatus",
     "AuthoredModuleReadiness",
     "AuthoredModuleToolchainStatus",
