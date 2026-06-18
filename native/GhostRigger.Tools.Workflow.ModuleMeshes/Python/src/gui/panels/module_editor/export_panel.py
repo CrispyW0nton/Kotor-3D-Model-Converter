@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtWidgets
 class ModuleExportPanel(QtWidgets.QWidget):
     exportRequested = QtCore.Signal(bool)
     devTestModuleRequested = QtCore.Signal(bool)
+    authoredModuleRequested = QtCore.Signal(bool)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -33,4 +34,9 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.dev_test_button.setToolTip("Build and stage the first from-scratch GhostRigger dev-test .mod package.")
         self.dev_test_button.clicked.connect(lambda: self.devTestModuleRequested.emit(self.dry_run.isChecked()))
         root.addWidget(self.dev_test_button)
+        self.authored_module_button = QtWidgets.QPushButton("Export Authored KMAP Module")
+        self.authored_module_button.setObjectName("mapStudioExportAuthoredModuleButton")
+        self.authored_module_button.setToolTip("Compile the authored module stored in this KMAP and package it as an install-safe .mod.")
+        self.authored_module_button.clicked.connect(lambda: self.authoredModuleRequested.emit(self.dry_run.isChecked()))
+        root.addWidget(self.authored_module_button)
         root.addStretch(1)

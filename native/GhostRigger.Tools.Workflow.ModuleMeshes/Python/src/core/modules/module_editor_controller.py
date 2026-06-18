@@ -11,7 +11,12 @@ from src.core.scene.module_scene_import import resolve_module_room_placement
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
-from .authored_module_kmap_bridge import build_kmap_authored_module_readiness, create_dev_test_authored_module_payload
+from .authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+from .authored_module_kmap_bridge import (
+    authored_project_from_kmap_payload,
+    build_kmap_authored_module_readiness,
+    create_dev_test_authored_module_payload,
+)
 from .dev_module_smoke import DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
@@ -127,6 +132,37 @@ class ModuleEditorController:
                 ),
             )
         )
+
+    def export_authored_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
+        """Export the authored module currently stored in the KMAP project."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        output_path = Path(output_dir)
+        result = export_authored_module_project(
+            AuthoredModuleExportRequest(
+                project=authored,
+                output_dir=str(output_path),
+                dry_run=dry_run,
+                strict=not dry_run,
+            )
+        )
+        if not dry_run and result.resources:
+            runtime_resources = [f"{item.resref}.{item.restype}" for item in result.resources]
+            payload = dict(payload)
+            payload["runtime_resources"] = runtime_resources
+            payload["game_tested"] = False
+            self.project.extra_sections["authored_module"] = payload
+            self.project.dirty = True
+        self.model.log(result.message)
+        return result
 
     def export_fbx(self, output_path: str | Path, *, dry_run: bool = False):
         return self.export_bridge.export_fbx(self.project, output_path, LevelExportOptions(dry_run=dry_run))

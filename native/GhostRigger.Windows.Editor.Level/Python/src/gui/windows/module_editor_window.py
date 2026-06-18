@@ -248,6 +248,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.propertyChanged.connect(self._set_property)
         self.export_panel.exportRequested.connect(self.export_fbx)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
+        self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
@@ -383,6 +384,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Warning: {warning}")
         for issue in result.blocking_issues:
             self._log(f"Blocking: {issue}")
+
+    def export_authored_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Export authored KMAP module", self._last_output_dir or "")
+        if not path:
+            return
+        try:
+            result = self.controller.export_authored_module(path, dry_run=dry_run)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Export Authored Module", str(exc))
+            return
+        self._last_output_dir = path
+        self._log(result.message)
+        if result.module_path:
+            self._log(f"Package: {result.module_path}")
+        if result.manifest_path:
+            self._log(f"Manifest: {result.manifest_path}")
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+        self._refresh_all("Authored module export state updated.")
 
     def export_fbx(self, dry_run: bool = False) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export KMAP Scene", f"{self.project.name}.fbx", "FBX files (*.fbx)")

@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exports Authored KMAP Modules
+
+Owner: LordVaderCW
+Task: T2643
+Subsystem: Map Studio / authored module export / Level Editor export UI / native Python payloads
+
+- Added a headless `authored_module_export` service that compiles the current KMAP-authored module intent into ARE/GIT/module IFO/PTH/LYT/VIS, room WOK, and room MDL/MDX resources.
+- Export now goes through the existing install-safe custom module packager and readback verification instead of relying only on the hardcoded `grdev01` smoke-module staging path.
+- Added `ModuleEditorController.export_authored_module()` and a Level Editor Export tab action labeled `Export Authored KMAP Module`.
+- Dry-run export now performs preflight without writing package files or marking the KMAP as having runtime resources.
+- Mirrored the core and panel changes across native Python payloads and refreshed payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py tests\test_authored_module_kmap_bridge.py tests\test_map_studio_dev_test_staging.py -q --basetemp .pytest_tmp_map_studio_authored_export`
+
 ### [2026-06-18] Map Studio Can Seed Authored Dev Room KMAP Data
 
 Owner: LordVaderCW

@@ -27,7 +27,7 @@
       "resource_name": "PYTHON_PAYLOAD_0004",
       "source_path": "src/gui/panels/module_editor/export_panel.py",
       "packaged_path": "Python/src/gui/panels/module_editor/export_panel.py",
-      "sha256": "048230d283c090450d12c4d2a08cab9d15980cfd034eda6d5a48f120414a138e"
+      "sha256": "b7ea94c24537db479bd5c0bf0403c79169b23305f1209ba168e7861a0895ee8d"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0005",
@@ -123,7 +123,7 @@
       "resource_name": "PYTHON_PAYLOAD_0020",
       "source_path": "src/core/modules/module_editor_controller.py",
       "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-      "sha256": "d9bd76dcc07cd1c60a41f241a62cae34d51fbac82999acdd51330389accfbf4e"
+      "sha256": "acf8572d7d01893fbf893c63cfd29db56da32801e428ad52e4cbea8c5eb9bfff"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0021",
@@ -349,6 +349,12 @@
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0058",
+      "source_path": "src/core/modules/authored_module_export.py",
+      "packaged_path": "Python/src/core/modules/authored_module_export.py",
+      "sha256": "28e74d035d7064afebf5f43116c60e167d934b15885956f237a9ac0f49415ef1"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0059",
       "source_path": "src/gui/panels/module_editor/readiness_panel.py",
       "packaged_path": "Python/src/gui/panels/module_editor/readiness_panel.py",
       "sha256": "6929cd2855e6cb3d7530b25cdfbdb4d11d516f5502907271ffe2e58e258bb2c9"
