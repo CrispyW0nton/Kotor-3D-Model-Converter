@@ -191,13 +191,29 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
     assert "Run the launch helper dry-run" in installed.next_action
 
 
-def test_t2639_game_tested_requires_recorded_proof_metadata() -> None:
+def test_t2639_game_tested_requires_recorded_proof_metadata(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_readiness import build_authored_module_readiness
 
+    evidence = tmp_path / "grdev01_warp_proof.png"
+    evidence.write_bytes(b"fake screenshot bytes")
     preview_only = build_authored_module_readiness(_floor_plan_project(), game_tested=True)
     bare_flag = build_authored_module_readiness(_floor_plan_project(), packaged_resources=_runtime_keys(), game_tested=True)
+    missing_evidence = build_authored_module_readiness(
+        _floor_plan_project(),
+        packaged_resources=_runtime_keys(),
+        game_tested=True,
+        proof_metadata={
+            "game_tested": True,
+            "manual_proof_required": False,
+            "game_test": {
+                "accepted": True,
+                "missing_checks": [],
+                "evidence_path": str(tmp_path / "missing_warp_proof.png"),
+            },
+        },
+    )
     proven = build_authored_module_readiness(
         _floor_plan_project(),
         packaged_resources=_runtime_keys(),
@@ -208,7 +224,7 @@ def test_t2639_game_tested_requires_recorded_proof_metadata() -> None:
             "game_test": {
                 "accepted": True,
                 "missing_checks": [],
-                "evidence_path": "C:/tmp/grdev01_warp_proof.png",
+                "evidence_path": str(evidence),
             },
         },
     )
@@ -218,6 +234,9 @@ def test_t2639_game_tested_requires_recorded_proof_metadata() -> None:
     assert bare_flag.capability_stage == "export_candidate"
     assert bare_flag.game_tested is False
     assert bare_flag.ready_for_game_test is True
+    assert missing_evidence.capability_stage == "export_candidate"
+    assert missing_evidence.game_tested is False
+    assert missing_evidence.ready_for_game_test is True
     assert proven.capability_stage == "game_tested"
     assert proven.game_tested is True
     assert proven.metadata["proof_game_tested"] is True

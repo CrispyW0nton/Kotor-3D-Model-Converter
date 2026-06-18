@@ -172,7 +172,7 @@ def _recorded_game_proof_complete(proof: dict[str, Any]) -> bool:
         and proof.get("manual_proof_required") is False
         and bool(game_test.get("accepted"))
         and not list(game_test.get("missing_checks") or ())
-        and bool(evidence_path)
+        and bool(evidence_path and Path(evidence_path).is_file())
     )
 
 

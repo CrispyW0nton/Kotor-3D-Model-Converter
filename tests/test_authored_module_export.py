@@ -380,6 +380,40 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     assert authored["t2601_smoke_contract"]["capability_stage"] == "game_smoke_tested"
 
 
+def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleGameProofRequest,
+        AuthoredModuleInstallPrepRequest,
+        prepare_authored_module_install,
+        record_authored_module_game_proof,
+    )
+
+    prep = prepare_authored_module_install(AuthoredModuleInstallPrepRequest(project=_dev_authored_project(), output_dir=str(tmp_path)))
+    missing_evidence = tmp_path / "missing_authored_warp_proof.mp4"
+
+    result = record_authored_module_game_proof(
+        AuthoredModuleGameProofRequest(
+            proof_manifest_path=prep.proof_manifest_path,
+            evidence_path=str(missing_evidence),
+            tester="pytest",
+            module_loads_in_game=True,
+            player_spawns_on_floor=True,
+            test_placeable_visible=True,
+            player_can_walk_on_floor=True,
+            allow_missing_evidence=True,
+        )
+    )
+
+    assert result.ok is False
+    assert result.code == "game_proof_incomplete"
+    assert result.missing_checks == ["screenshot_or_video_captured"]
+    proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["manual_proof_required"] is True
+    assert proof["game_tested"] is False
+
+
 def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

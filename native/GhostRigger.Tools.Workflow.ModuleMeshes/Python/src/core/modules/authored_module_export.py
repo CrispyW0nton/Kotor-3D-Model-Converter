@@ -1272,7 +1272,7 @@ def _proof_request_checks(request: AuthoredModuleGameProofRequest) -> dict[str, 
         "player_spawns_on_floor": bool(request.player_spawns_on_floor),
         "test_placeable_visible": bool(request.test_placeable_visible),
         "player_can_walk_on_floor": bool(request.player_can_walk_on_floor),
-        "screenshot_or_video_captured": bool(request.evidence_path and (request.allow_missing_evidence or Path(request.evidence_path).is_file())),
+        "screenshot_or_video_captured": bool(request.evidence_path and Path(request.evidence_path).is_file()),
     }
 
 

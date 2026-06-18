@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Requires Existing Evidence Files For Game Proof
+
+Owner: LordVaderCW
+Task: T2697
+Subsystem: Map Studio / authored module proof / grdev01 smoke proof
+
+- Tightened authored-module and dev-smoke proof recording so screenshot/video proof only passes when the evidence file exists on disk.
+- Updated authored-module readiness so `game_tested` requires recorded proof metadata and an existing evidence file.
+- Kept `allow_missing_evidence` from completing proof; it now remains useful only for recording incomplete attempts.
+- Mirrored the proof/evidence gate changes into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_module_readiness.py tests\test_authored_module_export.py tests\test_dev_module_game_proof.py`
+- `python -m pytest tests\test_authored_module_readiness.py tests\test_authored_module_export.py tests\test_dev_module_game_proof.py tests\test_authored_module_proof_scripts.py -q --basetemp .pytest_tmp_map_studio_evidence_gate`
+
 ### [2026-06-18] Map Studio Requires Recorded Proof For Game-Tested Readiness
 
 Owner: LordVaderCW
