@@ -197,6 +197,26 @@ def _proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> dict[str, Any]:
+    handoff = proof.get("launch_handoff") if isinstance(proof.get("launch_handoff"), dict) else {}
+    warp_command = str(handoff.get("warp_command") or proof.get("warp_command") or "warp grdev01")
+    proof_path = str(proof_manifest)
+    return {
+        "warp_command": warp_command,
+        "resolved_modules_dir": str(handoff.get("resolved_modules_dir") or ""),
+        "resolved_game_root_dir": str(handoff.get("resolved_game_root_dir") or ""),
+        "expected_executable_path": str(handoff.get("expected_executable_path") or ""),
+        "launch_helper_command": str(handoff.get("launch_helper_command") or ""),
+        "elevated_launch_script_path": str(handoff.get("elevated_launch_script_path") or ""),
+        "proof_recording_script_path": str(handoff.get("proof_recording_script_path") or ""),
+        "proof_recording_command_template": (
+            f'python scripts/record_authored_module_game_proof.py --proof-manifest "{proof_path}" '
+            "--evidence <screenshot-or-video> --module-loads-in-game --player-spawns-on-floor "
+            "--test-placeable-visible --player-can-walk-on-floor"
+        ),
+    }
+
+
 def _derive_status(*, verification: dict[str, Any], proof: dict[str, Any], installed: dict[str, Any]) -> tuple[str, bool]:
     if not verification.get("ok"):
         return "package_blocked", False
@@ -235,6 +255,7 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
             + ", ".join(runtime_archive["missing_required_resource_keys"])
         )
     proof_state = _proof_summary(proof)
+    launch_handoff = _launch_handoff_summary(proof=proof, proof_manifest=proof_manifest)
     installed = _installed_summary(module_path=checked_module_path, proof=proof, game_modules_dir=game_modules_dir)
     if installed.get("checked") and not installed.get("exists"):
         warnings.append(f"Installed module copy was not found: {installed['installed_module_path']}")
@@ -256,7 +277,10 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
     elif proof_state.get("game_tested") and not proof_state.get("missing_checks"):
         next_action = "No action required; this package is recorded as game-tested."
     elif ready_for_game_launch:
-        next_action = "Launch KOTOR, run `warp grdev01`, verify floor/placeable/walkability, then capture evidence."
+        next_action = (
+            f"Launch KOTOR, run `{launch_handoff['warp_command']}`, verify floor/placeable/walkability, "
+            "then capture evidence and run the proof recording command."
+        )
     elif not installed.get("checked") or not installed.get("exists"):
         next_action = "Install/copy grdev01.mod into a KOTOR Modules folder before the game test."
     elif installed.get("checked") and not installed.get("matches_package"):
@@ -271,6 +295,7 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
         "runtime_archive": runtime_archive,
         "proof": proof_state,
         "installed": installed,
+        "launch_handoff": launch_handoff,
         "ready_for_game_launch": ready_for_game_launch,
         "next_action": next_action,
         "warnings": warnings,
@@ -293,6 +318,15 @@ def _print_human_summary(status: dict[str, Any]) -> None:
         if installed["backup_module_path"]:
             print(f"Previous module backup: {installed['backup_module_path']}")
     print(f"Ready for game launch: {status['ready_for_game_launch']}")
+    handoff = status.get("launch_handoff") or {}
+    if handoff.get("launch_helper_command"):
+        print(f"Launch helper: {handoff['launch_helper_command']}")
+    if handoff.get("elevated_launch_script_path"):
+        print(f"Elevated launch script: {handoff['elevated_launch_script_path']}")
+    if handoff.get("proof_recording_script_path"):
+        print(f"Proof recorder script: {handoff['proof_recording_script_path']}")
+    if handoff.get("proof_recording_command_template"):
+        print(f"Proof recorder command: {handoff['proof_recording_command_template']}")
     print(f"Next action: {status['next_action']}")
     proof = status["proof"]
     print(f"Game-tested: {proof['game_tested']}")

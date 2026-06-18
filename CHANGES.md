@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Smoke Status Reports Launch And Proof Handoff
+
+Owner: LordVaderCW
+Task: T2702
+Subsystem: Map Studio / grdev01 smoke status / game-proof handoff
+
+- Added a `launch_handoff` block to the `grdev01` smoke status script with the warp command, game root, expected executable, launch helper, elevated launch script, proof recorder script, and a ready-to-fill proof recording command.
+- Updated the status next action for installed packages so it explicitly tells the modder to capture evidence and run the proof recording command after the in-game warp test.
+- Added script regression coverage for authored smoke status handoff fields.
+
+Verification:
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py -q --basetemp .pytest_tmp_grdev01_status_handoff`
+- `python -m py_compile scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --json` reported `installed_ready_for_game_test` with no blocking issues; it still exits nonzero by design until real in-game proof is recorded.
+
 ### [2026-06-18] Map Studio Writes Template Dependencies Into Package Manifests
 
 Owner: LordVaderCW

@@ -151,6 +151,9 @@ def test_t2698_status_accepts_authored_smoke_package_before_manual_install(tmp_p
         "player_can_walk_on_floor",
         "screenshot_or_video_captured",
     ]
+    assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
+    assert "record_authored_module_game_proof.py" in payload["launch_handoff"]["proof_recording_command_template"]
+    assert "--module-loads-in-game" in payload["launch_handoff"]["proof_recording_command_template"]
 
 
 def test_t2698_status_accepts_installed_authored_smoke_package(tmp_path: Path) -> None:
@@ -173,3 +176,7 @@ def test_t2698_status_accepts_installed_authored_smoke_package(tmp_path: Path) -
     assert payload["installed"]["matches_package"] is True
     assert payload["ready_for_game_launch"] is True
     assert payload["next_action"].startswith("Launch KOTOR")
+    assert "proof recording command" in payload["next_action"]
+    assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
+    assert "launch_grdev01_smoke_test.py" in payload["launch_handoff"]["launch_helper_command"]
+    assert payload["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
