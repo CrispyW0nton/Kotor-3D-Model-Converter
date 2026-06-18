@@ -64,10 +64,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         root.addWidget(self.splitter, 1)
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
+        self._placement_marker_geometry: object | None = None
 
-    def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_gameplay_markers=()) -> None:
+    def set_project(
+        self,
+        project: KMapProject,
+        authored_gameplay_placements=(),
+        authored_gameplay_markers=(),
+        authored_gameplay_marker_geometry=None,
+    ) -> None:
         self.scene_table.setRowCount(0)
         self._row_ids.clear()
+        self._placement_marker_geometry = authored_gameplay_marker_geometry
         self._placement_markers = {
             str(getattr(marker, "placement_id", "") or ""): marker
             for marker in authored_gameplay_markers or ()
@@ -97,7 +105,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 marker=marker_label,
                 facing=f"{bearing:.2f} rad",
             )
-        self._update_marker_summary(authored_gameplay_markers)
+        self._update_marker_summary(authored_gameplay_markers, authored_gameplay_marker_geometry)
 
     def select_id(self, item_id: str) -> None:
         for row, row_id in enumerate(self._row_ids):
@@ -203,7 +211,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.scene_table.setItem(row, column, item)
         self._row_ids.append(item_id)
 
-    def _update_marker_summary(self, authored_gameplay_markers) -> None:
+    def _update_marker_summary(self, authored_gameplay_markers, authored_gameplay_marker_geometry=None) -> None:
         markers = tuple(authored_gameplay_markers or ())
         if not markers:
             self.marker_summary_label.setText("Gameplay markers: none")
@@ -216,8 +224,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if getattr(marker, "warning", ""):
                 warnings += 1
         parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+        geometry_suffix = ""
+        if authored_gameplay_marker_geometry is not None:
+            footprints = len(tuple(getattr(authored_gameplay_marker_geometry, "footprints", ()) or ()))
+            lines = len(tuple(getattr(authored_gameplay_marker_geometry, "lines", ()) or ()))
+            if footprints or lines:
+                geometry_suffix = f" | {footprints} footprint(s), {lines} guide line(s)"
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
-        self.marker_summary_label.setText(f"Gameplay markers: {parts}{suffix}")
+        self.marker_summary_label.setText(f"Gameplay markers: {parts}{geometry_suffix}{suffix}")
 
     def _table_selection(self) -> None:
         rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []

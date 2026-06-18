@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored Placement Marker Geometry
+
+Owner: LordVaderCW
+Task: T2659
+Subsystem: Map Studio / authored gameplay placement geometry / Module Editor viewport readiness / native Python payloads
+
+- Added a headless authored gameplay marker geometry contract with footprint polygons, facing guide lines, vertical height guides, marker warnings, and marker counts.
+- Exposed marker geometry through the Module Editor controller so future renderer overlays and drag handles can use Map Studio-owned spatial data instead of recalculating placement math in the UI.
+- Routed marker geometry through the Module Editor refresh path and viewport panel, where the placement summary now reports available footprints and guide lines alongside authored placement marker counts.
+- Mirrored the core/controller/panel changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_gameplay_marker_geometry.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_gameplay_marker_geometry.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_gameplay_marker_geometry.py tests\test_authored_gameplay_preview_markers.py`
+- `python -m pytest tests\test_authored_gameplay_marker_geometry.py tests\test_authored_gameplay_preview_markers.py -q --basetemp .pytest_tmp_map_studio_marker_geometry`
+
 ### [2026-06-18] Map Studio Wires In-App Game Proof Recording
 
 Owner: LordVaderCW

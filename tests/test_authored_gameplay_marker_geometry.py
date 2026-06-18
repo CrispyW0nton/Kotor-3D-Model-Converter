@@ -24,77 +24,81 @@ def _install_native_payload_paths() -> None:
             sys.path.insert(0, path)
 
 
-def test_t2657_preview_markers_describe_spatial_gameplay_placements() -> None:
+def test_t2659_marker_geometry_adds_footprints_facing_and_height_guides() -> None:
     _install_native_payload_paths()
 
+    from src.core.modules.authored_gameplay_marker_geometry import authored_gameplay_marker_geometry
     from src.core.modules.authored_gameplay_preview import authored_gameplay_preview_markers
     from src.core.modules.authored_module_placements import add_authored_gameplay_placement
     from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
 
     project = create_authored_module_from_room_preset(
         preset_id="rectangular_dev_room",
-        module_root="grmark01",
+        module_root="grgeo01",
         game="K1",
     )
     project = add_authored_gameplay_placement(
         project,
         kind="creature",
         template_resref="c_drdmkone",
-        tag="grmark_guard",
-        position=(1.0, 2.0, 0.0),
+        tag="grgeo_guard",
+        position=(1.0, 2.0, 0.25),
         bearing=math.pi / 2.0,
     ).project
     project = add_authored_gameplay_placement(
         project,
-        kind="placeable",
-        template_resref="plc_bench",
-        tag="grmark_bench",
-        position=(-1.0, 0.5, 0.0),
-    ).project
-    project = add_authored_gameplay_placement(
-        project,
-        kind="store",
-        template_resref="stm_shop",
-        tag="grmark_store",
+        kind="trigger",
+        template_resref="trg_test",
+        tag="grgeo_trigger",
+        position=(0.0, 0.0, 0.0),
     ).project
 
     markers = authored_gameplay_preview_markers(project)
-    by_id = {marker.placement_id: marker for marker in markers}
+    geometry = authored_gameplay_marker_geometry(markers)
+    creature_marker = next(marker for marker in markers if marker.placement_id == "authored:creature:0")
+    creature_footprint = next(footprint for footprint in geometry.footprints if footprint.placement_id == "authored:creature:0")
+    creature_facing = next(line for line in geometry.lines if line.placement_id == "authored:creature:0" and line.role == "facing")
+    creature_height = next(line for line in geometry.lines if line.placement_id == "authored:creature:0" and line.role == "height")
 
-    assert {"authored:creature:0", "authored:placeable:0", "authored:placeable:1", "authored:waypoint:0"} == set(by_id)
-    assert by_id["authored:creature:0"].shape == "diamond"
-    assert by_id["authored:placeable:1"].shape == "cube"
-    assert by_id["authored:creature:0"].color == "#ff5c5c"
-    assert by_id["authored:creature:0"].forward_endpoint[1] > by_id["authored:creature:0"].position[1]
-    assert by_id["authored:creature:0"].metadata["runtime_kind"] == "creature"
+    assert geometry.marker_count == len(markers)
+    assert len(creature_footprint.points) == 4
+    assert creature_footprint.color == creature_marker.color
+    assert creature_facing.start == creature_marker.position
+    assert creature_facing.end == creature_marker.forward_endpoint
+    assert creature_height.end[2] > creature_height.start[2]
+    assert any("approximate volume" in warning for warning in geometry.warnings)
 
 
-def test_t2657_controller_exposes_authored_gameplay_preview_markers() -> None:
+def test_t2659_controller_exposes_empty_and_authored_marker_geometry() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.module_editor_controller import ModuleEditorController
 
     controller = ModuleEditorController()
     controller.new_project(name="scratch", game="K1")
-    assert controller.authored_gameplay_preview_markers() == ()
+    empty_geometry = controller.authored_gameplay_marker_geometry()
 
-    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grctlmk")
+    assert empty_geometry.marker_count == 0
+    assert empty_geometry.lines == ()
+    assert empty_geometry.footprints == ()
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grgeoctl")
     controller.add_authored_gameplay_placement(
         kind="door",
         template_resref="door_t01",
-        tag="grctlmk_door",
+        tag="grgeoctl_door",
         position=(0.0, 3.0, 0.0),
         bearing=0.5,
     )
+    geometry = controller.authored_gameplay_marker_geometry()
 
-    markers = controller.authored_gameplay_preview_markers()
+    assert geometry.marker_count == 3
+    assert len(geometry.footprints) == 3
+    assert len([line for line in geometry.lines if line.role == "facing"]) == 3
+    assert any(line.role == "height" for line in geometry.lines)
 
-    assert len(markers) == 3
-    assert {marker.kind for marker in markers} == {"placeable", "door", "waypoint"}
-    assert any(marker.shape == "doorway" and marker.label == "grctlmk_door" for marker in markers)
 
-
-def test_t2657_module_editor_uses_marker_contract_in_viewport_panel() -> None:
+def test_t2659_module_editor_passes_marker_geometry_to_viewport_panel() -> None:
     repo = Path(__file__).resolve().parents[1]
     viewport_source = (
         repo
@@ -128,12 +132,9 @@ def test_t2657_module_editor_uses_marker_contract_in_viewport_panel() -> None:
         / "module_editor_controller.py"
     ).read_text(encoding="utf-8")
 
-    assert "mapStudioPlacementMarkerSummaryLabel" in viewport_source
-    assert "authored_gameplay_markers" in viewport_source
-    assert '"Marker"' in viewport_source
-    assert '"Facing"' in viewport_source
-    assert "marker.shape" in viewport_source or 'getattr(marker, "shape"' in viewport_source
-    assert "self.controller.authored_gameplay_preview_markers()" in window_source
+    assert "authored_gameplay_marker_geometry" in controller_source
     assert "authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()" in window_source
-    assert "self.viewport_panel.set_project(self.project, authored_placements, authored_markers, authored_marker_geometry)" in window_source
-    assert "authored_gameplay_preview_markers" in controller_source
+    assert "authored_marker_geometry" in window_source
+    assert "authored_gameplay_marker_geometry" in viewport_source
+    assert "footprint(s)" in viewport_source
+    assert "guide line(s)" in viewport_source

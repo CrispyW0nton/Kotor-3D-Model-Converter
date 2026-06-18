@@ -27,6 +27,10 @@ from .authored_module_kmap_bridge import (
     create_dev_test_authored_module_payload,
 )
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
+from .authored_gameplay_marker_geometry import (
+    AuthoredGameplayMarkerGeometry,
+    authored_gameplay_marker_geometry_for_project,
+)
 from .authored_gameplay_preview import authored_gameplay_preview_markers
 from .authored_module_placements import (
     SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
@@ -186,6 +190,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_gameplay_preview_markers(authored)
+
+    def authored_gameplay_marker_geometry(self):
+        """Return renderer-ready geometry for authored gameplay placement markers."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return AuthoredGameplayMarkerGeometry()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_gameplay_marker_geometry_for_project(authored)
 
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""
