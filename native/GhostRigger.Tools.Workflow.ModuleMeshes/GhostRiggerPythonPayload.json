@@ -267,7 +267,7 @@
       "resource_name": "PYTHON_PAYLOAD_0044",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "f1e0a6e51280d4f94ef89b7a07caf5d9f3f7a8096ff92ca57214dc6a119c02c3"
+      "sha256": "5b772e3dabbbdc55dbaeeff6812762b1e6c4a1c854886bbc5f9fd0813a1ba6da"
     },
     {
       "source_path": "src/core/modules/authored_walkmesh_surfaces.py",

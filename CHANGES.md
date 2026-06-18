@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Floor-Plan Smoke Module Variant
+
+Owner: LordVaderCW
+Task: T2614
+Subsystem: Map Studio / dev smoke module / native Python payloads
+
+- Added an opt-in `room_geometry_mode="floor_plan"` path to `DevModuleSmokeRequest`.
+- Wired the `grdev01` smoke builder to create floor-plan room projects with a real wall opening while preserving the default rectangular composition smoke module.
+- Updated smoke manifests to report whether a package contains a rectangular composition room, a floor-plan room, a simple doorway marker, or an actual wall opening based on compiled geometry metadata.
+- Added staged export coverage proving the floor-plan/opening variant packages MDL/MDX/WOK/GFF resources and records opening metadata.
+- Mirrored the smoke-builder change into the ModuleMeshes workflow payload and refreshed native payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke_floorplan`
+- `python -m pytest tests/test_authored_room_floorplan.py tests/test_authored_module_project.py -q --basetemp .pytest_tmp_floorplan_project_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Floor-Plan Wall Openings
 
 Owner: LordVaderCW

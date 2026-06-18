@@ -42,9 +42,12 @@ from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_su
 from .authored_module_project import (
     AuthoredModuleProject,
     compile_authored_room_spec,
+    create_floor_plan_room_project,
     create_single_room_project,
     validate_authored_module_project,
 )
+from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
+from .authored_room_primitives import PrimitiveMaterial
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
@@ -70,6 +73,11 @@ class DevModuleSmokeRequest:
     wall_height: float = 3.0
     surface_id: int | str = 4
     room_texture: str = DEFAULT_AUTHORED_ROOM_TEXTURE
+    room_geometry_mode: str = "rectangular_composition"
+    floor_plan_opening: bool = True
+    floor_plan_opening_edge_index: int = 2
+    floor_plan_opening_width: float = 1.5
+    floor_plan_opening_height: float = 2.1
     player_start: tuple[float, float, float] = (0.0, -3.0, 0.0)
     player_facing: float = 0.0
     test_placeable_resref: str = "plc_bench"
@@ -332,6 +340,40 @@ def _room_primitive(request: DevModuleSmokeRequest) -> RectangularRoomPrimitive:
     )
 
 
+def _floor_plan_room_primitive(request: DevModuleSmokeRequest) -> FloorPlanRoomPrimitive:
+    half_w = float(request.width) * 0.5
+    half_d = float(request.depth) * 0.5
+    openings: tuple[FloorPlanWallOpening, ...] = ()
+    if request.floor_plan_opening:
+        openings = (
+            FloorPlanWallOpening(
+                name="doorway_opening",
+                edge_index=int(request.floor_plan_opening_edge_index),
+                center_fraction=0.5,
+                width=float(request.floor_plan_opening_width),
+                height=float(request.floor_plan_opening_height),
+                metadata={"source": "map_studio:t2614"},
+            ),
+        )
+    return FloorPlanRoomPrimitive(
+        room_resref=_normalise_resref(request.room_resref),
+        points=(
+            (-half_w, -half_d),
+            (half_w, -half_d),
+            (half_w, half_d),
+            (-half_w, half_d),
+        ),
+        wall_height=float(request.wall_height),
+        floor_surface_id=resolve_walkmesh_surface_id(request.surface_id),
+        material=PrimitiveMaterial(texture=normalize_authored_room_texture(request.room_texture)),
+        openings=openings,
+        metadata={
+            "geometry_mode": "floor_plan",
+            "source": "map_studio:t2614",
+        },
+    )
+
+
 def _make_gameplay_placement(request: DevModuleSmokeRequest) -> AuthoredGameplayPlacement:
     root = _normalise_resref(request.module_root)
     return AuthoredGameplayPlacement(
@@ -366,6 +408,26 @@ def _make_gameplay_placement(request: DevModuleSmokeRequest) -> AuthoredGameplay
 
 
 def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProject:
+    mode = str(request.room_geometry_mode or "rectangular_composition").strip().lower()
+    if mode in {"floor_plan", "floorplan", "floor-plan"}:
+        return create_floor_plan_room_project(
+            module_root=request.module_root,
+            game=request.game,
+            display_name="GhostRigger Dev Test",
+            floor_plan=_floor_plan_room_primitive(request),
+            placements=_make_gameplay_placement(request),
+            notes=(
+                "T2601 from-scratch smoke module.",
+                "Generated from authored floor-plan extrusion geometry and authored gameplay placements.",
+            ),
+            metadata={
+                "task": "T2601",
+                "source": "map_studio:authored_project",
+                "room_geometry_mode": "floor_plan",
+            },
+        )
+    if mode not in {"rectangular_composition", "rectangular", "composition"}:
+        raise ValueError(f"Unsupported dev module room geometry mode: {request.room_geometry_mode!r}")
     return create_single_room_project(
         module_root=request.module_root,
         game=request.game,
@@ -379,6 +441,7 @@ def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProj
         metadata={
             "task": "T2601",
             "source": "map_studio:authored_project",
+            "room_geometry_mode": "rectangular_composition",
         },
     )
 
@@ -901,6 +964,13 @@ def _augment_manifest(
     if not manifest_path.exists():
         return
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    geometry = authored.module.room_geometry
+    geometry_metadata = dict(geometry.metadata) if geometry else {}
+    geometry_primitive = str(geometry_metadata.get("primitive") or "unknown")
+    helper_meshes = list(geometry.helper_meshes) if geometry else []
+    helper_mesh_names = [mesh.name for mesh in helper_meshes]
+    has_doorway_marker = any(mesh.metadata.get("primitive") == "doorway_marker" or "door_marker" in mesh.name for mesh in helper_meshes)
+    has_wall_opening = int(geometry_metadata.get("opening_count") or 0) > 0
     data["map_studio_smoke_test"] = {
         "task": "T2601",
         "module_root": authored.module_root,
@@ -910,8 +980,10 @@ def _augment_manifest(
         "game_tested": False,
         "warp_command": f"warp {authored.module_root}",
         "contains": {
-            "primitive_composition_room": True,
-            "simple_doorway_marker": True,
+            "primitive_composition_room": geometry_primitive == "authored_room_composition",
+            "floor_plan_room": geometry_primitive == "floor_plan_extrusion",
+            "simple_doorway_marker": has_doorway_marker,
+            "wall_opening": has_wall_opening,
             "room_mdl_mdx": True,
             "floor_walkmesh": True,
             "player_start": True,
@@ -962,15 +1034,15 @@ def _augment_manifest(
             "walkmesh_bounds": list(authored.pathing_provenance.get("walkmesh_bounds", [])),
         },
         "authored_geometry": {
-            "source": authored.module.room_geometry.metadata.get("source", "src.core.modules.authored_room_geometry")
-            if authored.module.room_geometry
+            "source": geometry.metadata.get("source", "src.core.modules.authored_room_geometry")
+            if geometry
             else "unknown",
-            "primitive": authored.module.room_geometry.metadata.get("primitive") if authored.module.room_geometry else "unknown",
-            "room_mesh": authored.module.room_geometry.room_mesh.name if authored.module.room_geometry else "",
-            "texture": authored.module.room_geometry.room_mesh.texture if authored.module.room_geometry else "",
-            "helper_meshes": [mesh.name for mesh in authored.module.room_geometry.helper_meshes] if authored.module.room_geometry else [],
+            "primitive": geometry_primitive,
+            "room_mesh": geometry.room_mesh.name if geometry else "",
+            "texture": geometry.room_mesh.texture if geometry else "",
+            "helper_meshes": helper_mesh_names,
             "derived_wok": True,
-            "metadata": dict(authored.module.room_geometry.metadata) if authored.module.room_geometry else {},
+            "metadata": geometry_metadata,
         },
         "authored_materials": {
             "source": authored.material_preflight.metadata.get("source", "src.core.modules.authored_room_materials")
@@ -1166,6 +1238,11 @@ def _install_prep_smoke_request(request: DevModuleInstallPrepRequest) -> DevModu
             wall_height=request.smoke_request.wall_height,
             surface_id=request.smoke_request.surface_id,
             room_texture=request.smoke_request.room_texture,
+            room_geometry_mode=request.smoke_request.room_geometry_mode,
+            floor_plan_opening=request.smoke_request.floor_plan_opening,
+            floor_plan_opening_edge_index=request.smoke_request.floor_plan_opening_edge_index,
+            floor_plan_opening_width=request.smoke_request.floor_plan_opening_width,
+            floor_plan_opening_height=request.smoke_request.floor_plan_opening_height,
             player_start=request.smoke_request.player_start,
             player_facing=request.smoke_request.player_facing,
             test_placeable_resref=request.smoke_request.test_placeable_resref,

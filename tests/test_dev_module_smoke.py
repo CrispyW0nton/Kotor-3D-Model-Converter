@@ -110,6 +110,35 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert checks["test_placeable"].surface_id == 4
 
 
+def test_t2614_builds_floor_plan_smoke_room_with_wall_opening() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, build_dev_test_module
+
+    authored = build_dev_test_module(DevModuleSmokeRequest(room_geometry_mode="floor_plan"))
+
+    assert authored.project is not None
+    assert authored.project.metadata.metadata["room_geometry_mode"] == "floor_plan"
+    assert authored.project.rooms[0].composition is None
+    assert authored.module.room_geometry is not None
+    assert authored.module.room_geometry.metadata["primitive"] == "floor_plan_extrusion"
+    assert authored.module.room_geometry.metadata["opening_count"] == 1
+    assert authored.module.room_geometry.metadata["wall_count"] == 6
+    assert authored.module.room_geometry.room_mesh.name == "grdev01_room01_floor"
+    assert authored.module.room_geometry.room_mesh.texture == "CM_Baremetal"
+    helper_names = {mesh.name for mesh in authored.module.room_geometry.helper_meshes}
+    assert {
+        "grdev01_room01_wall_03_left",
+        "grdev01_room01_wall_03_lintel",
+        "grdev01_room01_wall_03_right",
+    } <= helper_names
+    assert authored.module.room_geometry.wok.walkable_face_count() == 2
+    assert authored.blocking_issues == []
+    checks = {check.label: check for check in authored.walkability_checks}
+    assert checks["player_start"].ok is True
+    assert checks["test_placeable"].ok is True
+
+
 def test_t2601_blocks_export_when_gameplay_anchor_is_off_walkmesh(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -126,6 +155,31 @@ def test_t2601_blocks_export_when_gameplay_anchor_is_off_walkmesh(tmp_path: Path
     assert result.code == "preflight_failed"
     assert any("player_start is outside" in issue for issue in result.blocking_issues)
     assert not (tmp_path / "install" / "Modules" / "grdev01.mod").exists()
+
+
+def test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, export_dev_test_module
+
+    result = export_dev_test_module(DevModuleSmokeRequest(output_dir=str(tmp_path), room_geometry_mode="floor_plan"))
+
+    assert result.ok is True
+    manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+    smoke = manifest["map_studio_smoke_test"]
+    assert smoke["contains"]["primitive_composition_room"] is False
+    assert smoke["contains"]["floor_plan_room"] is True
+    assert smoke["contains"]["simple_doorway_marker"] is False
+    assert smoke["contains"]["wall_opening"] is True
+    assert smoke["authored_project"]["metadata"]["room_geometry_mode"] == "floor_plan"
+    assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_floorplan"
+    assert smoke["authored_geometry"]["primitive"] == "floor_plan_extrusion"
+    assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_floor"
+    assert smoke["authored_geometry"]["metadata"]["opening_count"] == 1
+    assert smoke["authored_geometry"]["metadata"]["wall_count"] == 6
+    assert "grdev01_room01_wall_03_lintel" in smoke["authored_geometry"]["helper_meshes"]
+    assert smoke["package_verification"]["ok"] is True
+    assert "grdev01_room01.mdl/.mdx" in smoke["package_verification"]["model_pairs"]
 
 
 def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
