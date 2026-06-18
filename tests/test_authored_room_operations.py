@@ -118,6 +118,37 @@ def test_t2665_controller_moves_authored_room_outline_point() -> None:
     assert result.readiness.can_preview is True
 
 
+def test_t2668_controller_creates_elevation_composition_room_preset() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+
+    result = controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grelev01")
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+
+    primitive = payload["rooms"][0]["primitive"]
+    assert primitive["type"] == "composition"
+    assert primitive["room_resref"] == "grelev01_room01"
+    assert {item["type"] for item in primitive["primitives"]} >= {"wall", "ramp", "stairs", "arch"}
+    assert len([item for item in primitive["primitives"] if item["type"] == "wall"]) == 4
+    assert controller.project.name == "grelev01"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+    assert build.metadata["room_count"] == 1
+    assert ("grelev01_room01", "mdl") in build.resources
+    assert ("grelev01_room01", "wok") in build.resources
+    assert build.module.room_geometry["grelev01_room01"].metadata["walkmesh_primitive_count"] == 2
+    assert build.module.room_geometry["grelev01_room01"].wok.walkable_face_count() == 6
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (

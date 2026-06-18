@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Elevation Composition Room Preset
+
+Owner: LordVaderCW
+Task: T2668
+Subsystem: Map Studio / authored room presets / primitive composition rooms / native Python payloads
+
+- Added an `Elevation Test Room` Builder preset that creates a durable authored-room composition with floor, four walls, ramp, stairs, and arch geometry.
+- The preset compiles through the existing authored-module pipeline into room MDL/MDX resources plus a WOK containing the floor, ramp, and stairs walkable faces.
+- Kept geometry and export policy in the core preset service so the Map Studio UI can list and request the preset without owning primitive construction logic.
+- Mirrored the preset service into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_presets.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_presets.py tests\test_authored_room_operations.py tests\test_authored_module_project.py tests\test_authored_module_kmap_bridge.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_module_project.py tests\test_authored_module_kmap_bridge.py tests\test_authored_room_composition.py -q --basetemp .pytest_tmp_map_studio_elevation_preset`
+
 ### [2026-06-18] Map Studio Promotes Primitive Composition Rooms to Project Intent
 
 Owner: LordVaderCW

@@ -18,11 +18,12 @@ from .authored_module_objects import (
     AuthoredWaypointInstance,
     ModuleEntryPoint,
 )
-from .authored_module_project import AuthoredModuleProject, create_floor_plan_room_project, normalise_resref
+from .authored_module_project import AuthoredModuleProject, create_composition_room_project, create_floor_plan_room_project, normalise_resref
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import Vec2, Vec3
 from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, normalize_authored_room_texture
-from .authored_room_primitives import PrimitiveMaterial
+from .authored_room_primitives import ArchPrimitive, FloorPrimitive, PrimitiveMaterial, RampPrimitive, StairsPrimitive, WallPrimitive
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,20 @@ _PRESETS: tuple[AuthoredRoomPrimitivePreset, ...] = (
         placeable_position=(1.5, 1.5, 0.0),
         metadata={"shape": "octagon", "supports_non_rectangular_floorplan": True},
     ),
+    AuthoredRoomPrimitivePreset(
+        preset_id="elevation_test_room",
+        label="Elevation Test Room",
+        description="Primitive-composition room with walls, ramp, stairs, and arch geometry for testing elevated walkmesh export.",
+        points=((-6.0, -5.0), (6.0, -5.0), (6.0, 5.0), (-6.0, 5.0)),
+        entry_position=(0.0, -3.5, 0.0),
+        placeable_position=(2.5, 1.75, 0.0),
+        metadata={
+            "shape": "primitive_composition",
+            "room_geometry_mode": "authored_room_composition",
+            "supports_elevation_geometry": True,
+            "supports_walkable_ramp_and_stairs": True,
+        },
+    ),
 )
 
 
@@ -114,6 +129,144 @@ def get_authored_room_primitive_preset(preset_id: str) -> AuthoredRoomPrimitiveP
     raise ValueError(f"Unknown Map Studio room primitive preset '{preset_id}'. Known presets: {known}.")
 
 
+def _composition_project_from_preset(
+    *,
+    preset: AuthoredRoomPrimitivePreset,
+    root: str,
+    room_resref: str,
+    game: str,
+    display_name: str,
+) -> AuthoredModuleProject:
+    texture = normalize_authored_room_texture(preset.texture)
+    material = PrimitiveMaterial(
+        texture=texture,
+        metadata={
+            "source": "map_studio:room_primitive_preset",
+            "preset_id": preset.preset_id,
+        },
+    )
+    floor_surface = preset.floor_surface_id
+    composition = AuthoredRoomComposition(
+        room_resref=room_resref,
+        floor=FloorPrimitive(
+            name=f"{room_resref}_floor",
+            width=12.0,
+            depth=10.0,
+            surface_id=floor_surface,
+            material=material,
+        ),
+        primitives=(
+            WallPrimitive(
+                name=f"{room_resref}_wall_n",
+                width=12.0,
+                height=preset.wall_height,
+                center=(0.0, 5.0, preset.wall_height * 0.5),
+                material=material,
+            ),
+            WallPrimitive(
+                name=f"{room_resref}_wall_s",
+                width=12.0,
+                height=preset.wall_height,
+                center=(0.0, -5.0, preset.wall_height * 0.5),
+                material=material,
+            ),
+            WallPrimitive(
+                name=f"{room_resref}_wall_e",
+                axis="y",
+                width=10.0,
+                height=preset.wall_height,
+                center=(6.0, 0.0, preset.wall_height * 0.5),
+                material=material,
+            ),
+            WallPrimitive(
+                name=f"{room_resref}_wall_w",
+                axis="y",
+                width=10.0,
+                height=preset.wall_height,
+                center=(-6.0, 0.0, preset.wall_height * 0.5),
+                material=material,
+            ),
+            PlacedRoomPrimitive(
+                primitive=RampPrimitive(
+                    name=f"{room_resref}_ramp",
+                    width=2.0,
+                    length=3.5,
+                    height=1.0,
+                    surface_id="metal",
+                    material=material,
+                ),
+                transform=PrimitiveTransform(translation=(-2.75, 0.5, 0.0), rotation_degrees_z=0.0),
+            ),
+            PlacedRoomPrimitive(
+                primitive=StairsPrimitive(
+                    name=f"{room_resref}_stairs",
+                    width=2.0,
+                    depth=3.0,
+                    height=1.0,
+                    steps=4,
+                    surface_id=floor_surface,
+                    material=material,
+                ),
+                transform=PrimitiveTransform(translation=(2.75, 0.5, 0.0), rotation_degrees_z=0.0),
+            ),
+            ArchPrimitive(
+                name=f"{room_resref}_arch",
+                width=2.4,
+                height=3.0,
+                frame_thickness=0.3,
+                depth=0.35,
+                center=(0.0, -4.9, 1.5),
+                material=material,
+            ),
+        ),
+        metadata={
+            "source": "map_studio:room_primitive_preset",
+            "preset_id": preset.preset_id,
+            "room_geometry_mode": "authored_room_composition",
+            "supports_elevation_geometry": True,
+        },
+    )
+    placements = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref=root, position=preset.entry_position),
+        placeables=(
+            AuthoredPlaceableInstance(
+                template_resref="plc_bench",
+                tag=f"{root}_test_placeable",
+                position=preset.placeable_position,
+            ),
+        ),
+        waypoints=(
+            AuthoredWaypointInstance(
+                template_resref="sw_startloc001",
+                tag="start",
+                position=preset.entry_position,
+            ),
+        ),
+        metadata={
+            "source": "map_studio:room_primitive_preset",
+            "player_start_is_module_entry": True,
+            "preset_id": preset.preset_id,
+        },
+    )
+    return create_composition_room_project(
+        module_root=root,
+        game=game,
+        display_name=display_name,
+        composition=composition,
+        placements=placements,
+        notes=(
+            f"Map Studio primitive preset: {preset.label}.",
+            "Editable KMAP-authored primitive-composition room with generated WOK intent.",
+        ),
+        metadata={
+            "task": "T2668",
+            "source": "map_studio:room_primitive_preset",
+            "room_geometry_mode": "authored_room_composition",
+            "preset_id": preset.preset_id,
+        },
+    )
+
+
 def create_authored_module_from_room_preset(
     *,
     preset_id: str,
@@ -126,6 +279,14 @@ def create_authored_module_from_room_preset(
     preset = get_authored_room_primitive_preset(preset_id)
     root = normalise_resref(module_root or "grdev01")
     room_resref = normalise_resref(f"{root}_room01")
+    if preset.metadata.get("room_geometry_mode") == "authored_room_composition":
+        return _composition_project_from_preset(
+            preset=preset,
+            root=root,
+            room_resref=room_resref,
+            game=str(game or "K1").upper(),
+            display_name=display_name or preset.label,
+        )
     texture = normalize_authored_room_texture(preset.texture)
     primitive = FloorPlanRoomPrimitive(
         room_resref=room_resref,
