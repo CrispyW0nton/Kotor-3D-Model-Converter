@@ -49,6 +49,7 @@ def _runtime_keys():
         ("grdev01", "are"),
         ("grdev01", "git"),
         ("module", "ifo"),
+        ("grdev01", "pth"),
         ("grdev01", "lyt"),
         ("grdev01", "vis"),
         ("grdev01_room01", "wok"),
@@ -91,7 +92,9 @@ def test_t2639_floor_plan_project_is_previewable_but_not_export_candidate_withou
     assert readiness.can_export_candidate is False
     assert readiness.export_status == "Missing runtime resources"
     assert ("grdev01", "are") in readiness.missing_runtime_resources
+    assert ("grdev01", "pth") in readiness.missing_runtime_resources
     assert ("grdev01_room01", "mdl") in readiness.missing_runtime_resources
+    assert "ARE/GIT/IFO/PTH/LYT/VIS" in readiness.next_action
     assert readiness.rooms[0].can_preview_geometry is True
     assert readiness.rooms[0].walkable_face_count == 2
 

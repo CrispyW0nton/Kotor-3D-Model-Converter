@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Requires PTH In Authored Runtime Readiness
+
+Owner: LordVaderCW
+Task: T2695
+Subsystem: Map Studio / authored module readiness / runtime package gate
+
+- Added the module PTH pathing resource to the required authored-module runtime resource set.
+- Updated previewable/export-candidate guidance so Map Studio tells modders to generate ARE/GIT/IFO/PTH/LYT/VIS before export.
+- Mirrored the readiness gate fix into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py tests\test_authored_module_readiness.py`
+- `python -m pytest tests\test_authored_module_readiness.py tests\test_dev_module_smoke.py -q --basetemp .pytest_tmp_map_studio_pth_readiness`
+
 ### [2026-06-18] Map Studio Surfaces Authored Room Lights In Editor Rows
 
 Owner: LordVaderCW

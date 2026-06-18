@@ -109,6 +109,7 @@ def _expected_keys(module_root: str, rooms: Iterable[AuthoredRoomReadiness]) -> 
         (root, "are"),
         (root, "git"),
         ("module", "ifo"),
+        (root, "pth"),
         (root, "lyt"),
         (root, "vis"),
     }
@@ -424,7 +425,7 @@ def build_authored_module_readiness(
         stage = "previewable"
         preview_status = "Ready"
         export_status = "Missing runtime resources"
-        next_action = "Generate or stage ARE/GIT/IFO/LYT/VIS, room WOK, and matching room MDL/MDX resources before export."
+        next_action = "Generate or stage ARE/GIT/IFO/PTH/LYT/VIS, room WOK, and matching room MDL/MDX resources before export."
     else:
         stage = "blocked"
         preview_status = "Not ready"
