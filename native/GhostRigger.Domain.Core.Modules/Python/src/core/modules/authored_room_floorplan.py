@@ -9,6 +9,7 @@ future operations instead of hidden guesses.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -61,6 +62,16 @@ class FloorPlanBevelOperation:
 
     distance: float
     room_resref: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FloorPlanRectangularCutOperation:
+    """Boolean difference cut for an axis-aligned rectangular floor plan."""
+
+    center: Vec2
+    size: Vec2
+    room_resref_prefix: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -145,6 +156,20 @@ def _mesh_uvs(points: tuple[Vec2, ...]) -> tuple[Vec2, ...]:
     width = max(max(xs) - min_x, 1.0e-7)
     depth = max(max(ys) - min_y, 1.0e-7)
     return tuple(((x - min_x) / width, (y - min_y) / depth) for x, y in points)
+
+
+def _rect_bounds(points: tuple[Vec2, ...]) -> tuple[float, float, float, float] | None:
+    if len(points) != 4:
+        return None
+    xs = sorted({round(float(point[0]), 9) for point in points})
+    ys = sorted({round(float(point[1]), 9) for point in points})
+    if len(xs) != 2 or len(ys) != 2:
+        return None
+    expected = {(xs[0], ys[0]), (xs[1], ys[0]), (xs[1], ys[1]), (xs[0], ys[1])}
+    actual = {(round(float(x), 9), round(float(y), 9)) for x, y in points}
+    if actual != expected:
+        return None
+    return xs[0], ys[0], xs[1], ys[1]
 
 
 def _edge_length(a: Vec2, b: Vec2) -> float:
@@ -376,6 +401,95 @@ def apply_floor_plan_bevel(primitive: FloorPlanRoomPrimitive, operation: FloorPl
     )
 
 
+def _piece_resref(prefix: str, role: str, index: int) -> str:
+    suffix = f"_{role[:1]}{index}"
+    return f"{prefix[: max(1, 16 - len(suffix))]}{suffix}"[:16]
+
+
+def _rectangle_points(x0: float, y0: float, x1: float, y1: float) -> tuple[Vec2, Vec2, Vec2, Vec2]:
+    return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+
+
+def apply_floor_plan_rectangular_cut(
+    primitive: FloorPlanRoomPrimitive,
+    operation: FloorPlanRectangularCutOperation,
+) -> tuple[FloorPlanRoomPrimitive, ...]:
+    """Subtract an axis-aligned rectangle and return convex exportable pieces.
+
+    This first-pass boolean operation deliberately returns multiple rectangular
+    floor-plan primitives instead of creating a concave or holed polygon that
+    the current MDL/WOK exporter cannot safely serialize yet.
+    """
+
+    source = _normalise_points(primitive.points)
+    source_bounds = _rect_bounds(source)
+    if source_bounds is None:
+        raise ValueError("Floor-plan rectangular cut currently requires an axis-aligned rectangular source footprint.")
+    cut_width = float(operation.size[0])
+    cut_depth = float(operation.size[1])
+    if cut_width <= 0.0 or cut_depth <= 0.0:
+        raise ValueError("Floor-plan rectangular cut size must be positive.")
+    if not all(math.isfinite(float(value)) for value in (*operation.center, *operation.size)):
+        raise ValueError("Floor-plan rectangular cut center and size must contain finite values.")
+    sx0, sy0, sx1, sy1 = source_bounds
+    cx, cy = operation.center
+    cx = float(cx)
+    cy = float(cy)
+    cut_x0 = cx - cut_width * 0.5
+    cut_x1 = cx + cut_width * 0.5
+    cut_y0 = cy - cut_depth * 0.5
+    cut_y1 = cy + cut_depth * 0.5
+    ix0 = max(sx0, cut_x0)
+    ix1 = min(sx1, cut_x1)
+    iy0 = max(sy0, cut_y0)
+    iy1 = min(sy1, cut_y1)
+    if ix1 - ix0 <= 1.0e-7 or iy1 - iy0 <= 1.0e-7:
+        raise ValueError("Floor-plan rectangular cut does not overlap the source footprint.")
+    if ix0 <= sx0 + 1.0e-7 and ix1 >= sx1 - 1.0e-7 and iy0 <= sy0 + 1.0e-7 and iy1 >= sy1 - 1.0e-7:
+        raise ValueError("Floor-plan rectangular cut would remove the entire source footprint.")
+
+    prefix = _normalise_resref(operation.room_resref_prefix) or _normalise_resref(primitive.room_resref)
+    pieces: list[FloorPlanRoomPrimitive] = []
+    spans = (
+        ("left", (sx0, sy0, ix0, sy1)),
+        ("right", (ix1, sy0, sx1, sy1)),
+        ("bottom", (ix0, sy0, ix1, iy0)),
+        ("top", (ix0, iy1, ix1, sy1)),
+    )
+    piece_index = 1
+    for role, (x0, y0, x1, y1) in spans:
+        if x1 - x0 <= 1.0e-7 or y1 - y0 <= 1.0e-7:
+            continue
+        metadata = {
+            **dict(primitive.metadata),
+            "operation": "rectangular_cut_difference",
+            "cut_center": [cx, cy],
+            "cut_size": [cut_width, cut_depth],
+            "cut_intersection": [ix0, iy0, ix1, iy1],
+            "source_room_resref": primitive.room_resref,
+            "piece_role": role,
+            "piece_index": piece_index,
+            **dict(operation.metadata),
+        }
+        pieces.append(
+            FloorPlanRoomPrimitive(
+                room_resref=_piece_resref(prefix, role, piece_index),
+                points=_rectangle_points(x0, y0, x1, y1),
+                z=primitive.z,
+                wall_height=primitive.wall_height,
+                floor_surface_id=primitive.floor_surface_id,
+                material=primitive.material,
+                include_walls=primitive.include_walls,
+                openings=(),
+                metadata=metadata,
+            )
+        )
+        piece_index += 1
+    if not pieces:
+        raise ValueError("Floor-plan rectangular cut did not leave any exportable pieces.")
+    return tuple(pieces)
+
+
 def build_floor_plan_floor_mesh(primitive: FloorPlanRoomPrimitive) -> PrimitiveMesh:
     """Build a triangulated floor mesh from a convex floor-plan footprint."""
 
@@ -546,11 +660,13 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
 __all__ = [
     "FloorPlanBevelOperation",
     "FloorPlanInsetOperation",
+    "FloorPlanRectangularCutOperation",
     "FloorPlanRoomPrimitive",
     "FloorPlanRoomValidation",
     "FloorPlanWallOpening",
     "apply_floor_plan_bevel",
     "apply_floor_plan_inset",
+    "apply_floor_plan_rectangular_cut",
     "bevel_floor_plan_points",
     "build_floor_plan_floor_mesh",
     "build_floor_plan_wall_meshes",

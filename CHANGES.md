@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Rectangular Floor-Plan Cut Operation
+
+Owner: LordVaderCW
+Task: T2627
+Subsystem: Map Studio / authored floor-plan geometry / native Python payloads
+
+- Added a constrained headless rectangular cut/difference operation for axis-aligned floor plans, decomposing the remaining space into multiple convex floor-plan room pieces instead of creating unsafe concave or holed polygons.
+- Preserved export safety by rejecting non-rectangular sources, non-overlapping cuts, full-removal cuts, and invalid cut sizes before MDL/WOK compilation.
+- Mirrored the floor-plan operation into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Added regression coverage for interior cuts, edge-notch cuts, exported WOK/geometry compilation of cut pieces, and invalid boolean inputs.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_authored_room_floorplan.py`
+- `python -m pytest tests/test_authored_room_floorplan.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_floorplan_cut_smoke`
+
 ### [2026-06-18] Map Studio Authored Camera GIT Placement
 
 Owner: LordVaderCW

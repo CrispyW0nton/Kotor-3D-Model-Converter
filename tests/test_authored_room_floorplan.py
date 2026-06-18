@@ -265,3 +265,82 @@ def test_t2625_bevel_rejects_invalid_operation_inputs() -> None:
         bevel_floor_plan_points(((-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)), 1.0)
     with pytest.raises(ValueError, match="convex footprints only"):
         bevel_floor_plan_points(((0.0, 0.0), (2.0, 0.0), (1.0, 0.5), (2.0, 2.0), (0.0, 2.0)), 0.1)
+
+
+def test_t2627_rectangular_cut_decomposes_floor_plan_into_convex_pieces() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import (
+        FloorPlanRectangularCutOperation,
+        FloorPlanRoomPrimitive,
+        apply_floor_plan_rectangular_cut,
+        compile_floor_plan_room_geometry,
+        polygon_signed_area,
+    )
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="cut_room",
+        points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        metadata={"author_note": "boolean blockout"},
+    )
+
+    pieces = apply_floor_plan_rectangular_cut(
+        primitive,
+        FloorPlanRectangularCutOperation(center=(0.0, 0.0), size=(2.0, 1.0), room_resref_prefix="cutpiece"),
+    )
+    geometries = [compile_floor_plan_room_geometry(piece) for piece in pieces]
+
+    assert [piece.room_resref for piece in pieces] == ["cutpiece_l1", "cutpiece_r2", "cutpiece_b3", "cutpiece_t4"]
+    assert [piece.metadata["piece_role"] for piece in pieces] == ["left", "right", "bottom", "top"]
+    assert all(piece.openings == () for piece in pieces)
+    assert all(piece.metadata["operation"] == "rectangular_cut_difference" for piece in pieces)
+    assert all(piece.metadata["author_note"] == "boolean blockout" for piece in pieces)
+    assert sum(abs(polygon_signed_area(piece.points)) for piece in pieces) == 22.0
+    assert sum(geometry.wok.walkable_face_count() for geometry in geometries) == 8
+
+
+def test_t2627_rectangular_edge_cut_creates_exportable_notch_pieces() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRectangularCutOperation, FloorPlanRoomPrimitive, apply_floor_plan_rectangular_cut, polygon_signed_area
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="notch_room",
+        points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+    )
+
+    pieces = apply_floor_plan_rectangular_cut(
+        primitive,
+        FloorPlanRectangularCutOperation(center=(0.0, 1.25), size=(2.0, 1.5)),
+    )
+
+    assert [piece.metadata["piece_role"] for piece in pieces] == ["left", "right", "bottom"]
+    assert sum(abs(polygon_signed_area(piece.points)) for piece in pieces) == 21.0
+    assert pieces[0].points == ((-3.0, -2.0), (-1.0, -2.0), (-1.0, 2.0), (-3.0, 2.0))
+    assert pieces[2].points == ((-1.0, -2.0), (1.0, -2.0), (1.0, 0.5), (-1.0, 0.5))
+
+
+def test_t2627_rectangular_cut_rejects_unsafe_inputs() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRectangularCutOperation, FloorPlanRoomPrimitive, apply_floor_plan_rectangular_cut
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="cut_room",
+        points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+    )
+    non_rect = FloorPlanRoomPrimitive(
+        room_resref="bad",
+        points=((0.0, 0.0), (2.0, 0.0), (3.0, 1.0), (2.0, 2.0), (0.0, 2.0)),
+    )
+
+    with pytest.raises(ValueError, match="size must be positive"):
+        apply_floor_plan_rectangular_cut(primitive, FloorPlanRectangularCutOperation(center=(0.0, 0.0), size=(0.0, 1.0)))
+    with pytest.raises(ValueError, match="does not overlap"):
+        apply_floor_plan_rectangular_cut(primitive, FloorPlanRectangularCutOperation(center=(9.0, 0.0), size=(1.0, 1.0)))
+    with pytest.raises(ValueError, match="remove the entire"):
+        apply_floor_plan_rectangular_cut(primitive, FloorPlanRectangularCutOperation(center=(0.0, 0.0), size=(8.0, 6.0)))
+    with pytest.raises(ValueError, match="rectangular source"):
+        apply_floor_plan_rectangular_cut(non_rect, FloorPlanRectangularCutOperation(center=(1.0, 1.0), size=(1.0, 1.0)))
