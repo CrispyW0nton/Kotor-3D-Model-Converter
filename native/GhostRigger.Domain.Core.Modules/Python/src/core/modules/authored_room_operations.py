@@ -46,6 +46,21 @@ class AuthoredCompositionPrimitiveTransform:
     rotation_degrees_z: float
     scale: tuple[float, float, float]
     pivot: tuple[float, float, float]
+    dimensions: tuple["AuthoredCompositionPrimitiveDimension", ...] = ()
+
+
+@dataclass(frozen=True)
+class AuthoredCompositionPrimitiveDimension:
+    """UI-ready editable dimension for one authored composition primitive."""
+
+    key: str
+    label: str
+    value: float
+    minimum: float = 0.001
+    maximum: float = 1000.0
+    step: float = 0.1
+    suffix: str = " m"
+    integer: bool = False
 
 
 @dataclass(frozen=True)
@@ -169,6 +184,77 @@ def _primitive_type(primitive: Any) -> str:
     return name[:-9].lower() if name.endswith("Primitive") else name.lower()
 
 
+def _base_primitive(primitive: Any) -> Any:
+    return primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
+
+
+def _dimension(
+    key: str,
+    label: str,
+    value: Any,
+    *,
+    minimum: float = 0.001,
+    maximum: float = 1000.0,
+    step: float = 0.1,
+    suffix: str = " m",
+    integer: bool = False,
+) -> AuthoredCompositionPrimitiveDimension:
+    return AuthoredCompositionPrimitiveDimension(
+        key=key,
+        label=label,
+        value=float(value),
+        minimum=float(minimum),
+        maximum=float(maximum),
+        step=float(step),
+        suffix=suffix,
+        integer=integer,
+    )
+
+
+def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveDimension, ...]:
+    base = _base_primitive(primitive)
+    if isinstance(base, WallPrimitive):
+        return (
+            _dimension("width", "Width", base.width),
+            _dimension("height", "Height", base.height),
+            _dimension("thickness", "Thickness", base.thickness, minimum=0.01, step=0.01),
+        )
+    if isinstance(base, CubePrimitive):
+        return (
+            _dimension("size_x", "Size X", base.size[0]),
+            _dimension("size_y", "Size Y", base.size[1]),
+            _dimension("size_z", "Size Z", base.size[2]),
+        )
+    if isinstance(base, RampPrimitive):
+        return (
+            _dimension("width", "Width", base.width),
+            _dimension("length", "Length", base.length),
+            _dimension("height", "Height", base.height),
+        )
+    if isinstance(base, StairsPrimitive):
+        return (
+            _dimension("width", "Width", base.width),
+            _dimension("depth", "Depth", base.depth),
+            _dimension("height", "Height", base.height),
+            _dimension("steps", "Steps", base.steps, minimum=1.0, maximum=64.0, step=1.0, suffix="", integer=True),
+        )
+    if isinstance(base, CylinderPrimitive):
+        return (
+            _dimension("radius", "Radius", base.radius),
+            _dimension("height", "Height", base.height),
+            _dimension("segments", "Segments", base.segments, minimum=3.0, maximum=128.0, step=1.0, suffix="", integer=True),
+        )
+    if isinstance(base, ArchPrimitive):
+        return (
+            _dimension("width", "Width", base.width),
+            _dimension("height", "Height", base.height),
+            _dimension("frame_thickness", "Frame", base.frame_thickness, minimum=0.01, step=0.01),
+            _dimension("depth", "Depth", base.depth, minimum=0.01, step=0.01),
+            _dimension("segments", "Segments", base.segments, minimum=3.0, maximum=64.0, step=1.0, suffix="", integer=True),
+        )
+    return ()
+
+
 def _primitive_kind(value: Any) -> str:
     kind = str(value or "").strip().lower().replace(" ", "_")
     aliases = {
@@ -226,6 +312,102 @@ def _default_primitive_for_kind(kind: str, name: str, material: PrimitiveMateria
     raise ValueError(f"Unsupported authored room primitive kind '{kind}'.")
 
 
+def _dimension_values(values: Any) -> dict[str, Any]:
+    if values is None:
+        return {}
+    if isinstance(values, dict):
+        return {str(key): value for key, value in values.items()}
+    raise ValueError("Primitive dimension edits require a dictionary of dimension key/value pairs.")
+
+
+def _dimension_float(values: dict[str, Any], key: str, current: float, *, minimum: float = 0.001) -> float:
+    if key not in values or values[key] in (None, ""):
+        return float(current)
+    value = float(values[key])
+    if value < minimum:
+        raise ValueError(f"Primitive dimension '{key}' must be at least {minimum}.")
+    return value
+
+
+def _dimension_int(values: dict[str, Any], key: str, current: int, *, minimum: int = 1) -> int:
+    if key not in values or values[key] in (None, ""):
+        return int(current)
+    value = int(round(float(values[key])))
+    if value < minimum:
+        raise ValueError(f"Primitive dimension '{key}' must be at least {minimum}.")
+    return value
+
+
+def _reject_unknown_dimensions(values: dict[str, Any], allowed: set[str], primitive_name: str) -> None:
+    unknown = sorted(key for key in values if key not in allowed)
+    if unknown:
+        raise ValueError(f"Primitive {primitive_name} does not support dimension(s): {', '.join(unknown)}.")
+
+
+def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
+    values = _dimension_values(dimensions)
+    if isinstance(base, WallPrimitive):
+        allowed = {"width", "height", "thickness"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            width=_dimension_float(values, "width", base.width),
+            height=_dimension_float(values, "height", base.height),
+            thickness=_dimension_float(values, "thickness", base.thickness, minimum=0.01),
+        )
+    if isinstance(base, CubePrimitive):
+        allowed = {"size_x", "size_y", "size_z"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            size=(
+                _dimension_float(values, "size_x", base.size[0]),
+                _dimension_float(values, "size_y", base.size[1]),
+                _dimension_float(values, "size_z", base.size[2]),
+            ),
+        )
+    if isinstance(base, RampPrimitive):
+        allowed = {"width", "length", "height"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            width=_dimension_float(values, "width", base.width),
+            length=_dimension_float(values, "length", base.length),
+            height=_dimension_float(values, "height", base.height),
+        )
+    if isinstance(base, StairsPrimitive):
+        allowed = {"width", "depth", "height", "steps"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            width=_dimension_float(values, "width", base.width),
+            depth=_dimension_float(values, "depth", base.depth),
+            height=_dimension_float(values, "height", base.height),
+            steps=_dimension_int(values, "steps", base.steps, minimum=1),
+        )
+    if isinstance(base, CylinderPrimitive):
+        allowed = {"radius", "height", "segments"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            radius=_dimension_float(values, "radius", base.radius),
+            height=_dimension_float(values, "height", base.height),
+            segments=_dimension_int(values, "segments", base.segments, minimum=3),
+        )
+    if isinstance(base, ArchPrimitive):
+        allowed = {"width", "height", "frame_thickness", "depth", "segments"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            width=_dimension_float(values, "width", base.width),
+            height=_dimension_float(values, "height", base.height),
+            frame_thickness=_dimension_float(values, "frame_thickness", base.frame_thickness, minimum=0.01),
+            depth=_dimension_float(values, "depth", base.depth, minimum=0.01),
+            segments=_dimension_int(values, "segments", base.segments, minimum=3),
+        )
+    raise ValueError(f"Primitive {getattr(base, 'name', '(unnamed)')} does not expose editable dimensions.")
+
+
 def authored_room_composition_primitives(
     project: AuthoredModuleProject,
     *,
@@ -258,6 +440,7 @@ def authored_room_composition_primitives(
                     rotation_degrees_z=float(transform.rotation_degrees_z),
                     scale=tuple(float(value) for value in transform.scale),
                     pivot=tuple(float(value) for value in transform.pivot),
+                    dimensions=_primitive_dimensions(primitive),
                 )
             )
     return tuple(rows)
@@ -325,6 +508,58 @@ def add_authored_room_composition_primitive(
         tuple(rooms),
         operation=f"add_composition_primitive:{kind}:{name}",
     )
+
+
+def set_authored_room_composition_primitive_dimensions(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    dimensions: Any,
+) -> AuthoredModuleProject:
+    """Update editable dimensions for a named composition primitive."""
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Primitive dimension edits require a primitive name.")
+    primitives = list(composition.primitives)
+    for index, primitive in enumerate(primitives):
+        if _primitive_name(primitive) != target:
+            continue
+        base = _base_primitive(primitive)
+        updated_base = _updated_base_primitive_dimensions(base, dimensions)
+        if isinstance(primitive, PlacedRoomPrimitive):
+            primitives[index] = replace(primitive, primitive=updated_base)
+        else:
+            primitives[index] = updated_base
+        updated_composition = replace(
+            composition,
+            primitives=tuple(primitives),
+            metadata={
+                **dict(composition.metadata),
+                "last_dimension_edit": target,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "set_composition_primitive_dimensions",
+                "last_dimension_edit": target,
+            },
+        )
+        return _replace_rooms(
+            project,
+            tuple(rooms),
+            operation=f"set_composition_primitive_dimensions:{target}",
+        )
+    raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
 def _vec3_or_existing(value: Any, existing: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -630,6 +865,7 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
 
 __all__ = [
     "AuthoredCompositionPrimitiveKind",
+    "AuthoredCompositionPrimitiveDimension",
     "AuthoredCompositionPrimitiveTransform",
     "add_authored_room_composition_primitive",
     "apply_authored_floor_plan_bevel",
@@ -639,5 +875,6 @@ __all__ = [
     "available_authored_composition_primitive_kinds",
     "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
+    "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_transform",
 ]

@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Composition Primitive Dimension Editing
+
+Owner: LordVaderCW
+Task: T2673
+Subsystem: Map Studio / Builder tab / authored composition primitive dimensions / native Python payloads
+
+- Added typed editable dimensions for authored composition primitives so Builder rows can expose width, height, length, depth, radius, steps, segments, and related fields according to primitive type.
+- Added a headless dimension-edit operation that updates the actual primitive dataclass fields in KMAP-authored composition rooms while preserving transform data.
+- Wired the Builder tab and standalone Module Editor window so dimension edits route through `ModuleEditorController.set_authored_room_primitive_dimensions`.
+- Added focused regression coverage proving a resized ramp persists its dimensions, rebuilds the derived WOK vertices, and rejects dimensions that do not belong to the selected primitive type.
+- Mirrored the core/controller/panel payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_project.py -q --basetemp .pytest_tmp_map_studio_dimension_edit`
+
 ### [2026-06-18] Map Studio Adds Composition Primitive Creation Controls
 
 Owner: LordVaderCW

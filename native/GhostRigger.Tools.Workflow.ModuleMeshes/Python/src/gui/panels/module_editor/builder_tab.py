@@ -12,6 +12,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomStyleRequested = QtCore.Signal(str, str)
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
+    roomPrimitiveDimensionsRequested = QtCore.Signal(str, str, object)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
 
     ACTIONS = (
@@ -135,6 +136,30 @@ class BuilderTab(QtWidgets.QWidget):
         transform_layout.addRow("Pivot Z:", self.primitivePivotZSpinBox)
         transform_layout.addRow(self.applyPrimitiveTransformButton)
         layout.addWidget(transform_box)
+        dimensions_box = QtWidgets.QGroupBox("Primitive Dimensions")
+        dimensions_layout = QtWidgets.QFormLayout(dimensions_box)
+        self.primitiveDimensionHintLabel = QtWidgets.QLabel("Select an authored primitive to edit its dimensions.")
+        self.primitiveDimensionHintLabel.setObjectName("mapStudioPrimitiveDimensionHintLabel")
+        self.primitiveDimensionHintLabel.setWordWrap(True)
+        dimensions_layout.addRow(self.primitiveDimensionHintLabel)
+        self._primitive_dimension_controls: list[tuple[QtWidgets.QLabel, QtWidgets.QDoubleSpinBox]] = []
+        for index in range(5):
+            label = QtWidgets.QLabel(f"Dimension {index + 1}:")
+            label.setObjectName(f"mapStudioPrimitiveDimension{index + 1}Label")
+            spin = self._make_transform_spin(
+                f"mapStudioPrimitiveDimension{index + 1}SpinBox",
+                0.001,
+                1000.0,
+                " m",
+                value=0.0,
+                step=0.1,
+            )
+            self._primitive_dimension_controls.append((label, spin))
+            dimensions_layout.addRow(label, spin)
+        self.applyPrimitiveDimensionsButton = QtWidgets.QPushButton("Apply Primitive Dimensions")
+        self.applyPrimitiveDimensionsButton.setObjectName("mapStudioApplyPrimitiveDimensionsButton")
+        dimensions_layout.addRow(self.applyPrimitiveDimensionsButton)
+        layout.addWidget(dimensions_box)
         style_box = QtWidgets.QGroupBox("Room Material + Walkmesh")
         style_layout = QtWidgets.QFormLayout(style_box)
         self.roomTextureLineEdit = QtWidgets.QLineEdit("CM_Baremetal")
@@ -223,6 +248,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.addCompositionPrimitiveButton.clicked.connect(self._emit_add_composition_primitive)
         self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
         self.applyPrimitiveTransformButton.clicked.connect(self._emit_primitive_transform)
+        self.applyPrimitiveDimensionsButton.clicked.connect(self._emit_primitive_dimensions)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
@@ -233,6 +259,7 @@ class BuilderTab(QtWidgets.QWidget):
         self._update_operation_controls()
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
+        self._update_primitive_dimension_controls()
         self._update_surface_hint()
 
     @staticmethod
@@ -343,6 +370,19 @@ class BuilderTab(QtWidgets.QWidget):
                 "rotation_degrees_z": float(getattr(primitive, "rotation_degrees_z", 0.0)),
                 "scale": tuple(getattr(primitive, "scale", (1.0, 1.0, 1.0))),
                 "pivot": tuple(getattr(primitive, "pivot", (0.0, 0.0, 0.0))),
+                "dimensions": tuple(
+                    {
+                        "key": str(getattr(dimension, "key", "") or ""),
+                        "label": str(getattr(dimension, "label", "") or ""),
+                        "value": float(getattr(dimension, "value", 0.0)),
+                        "minimum": float(getattr(dimension, "minimum", 0.001)),
+                        "maximum": float(getattr(dimension, "maximum", 1000.0)),
+                        "step": float(getattr(dimension, "step", 0.1)),
+                        "suffix": str(getattr(dimension, "suffix", " m") or ""),
+                        "integer": bool(getattr(dimension, "integer", False)),
+                    }
+                    for dimension in getattr(primitive, "dimensions", ()) or ()
+                ),
             }
             self.roomPrimitiveTransformComboBox.addItem(f"{room} / {primitive_type} / {name}", data)
             if key == current_key:
@@ -411,6 +451,7 @@ class BuilderTab(QtWidgets.QWidget):
     def _update_primitive_transform_controls(self) -> None:
         data = self._current_primitive_transform_data()
         enabled = bool(data)
+        self._update_primitive_dimension_controls(data)
         for widget in (
             self.primitiveTranslateXSpinBox,
             self.primitiveTranslateYSpinBox,
@@ -450,6 +491,39 @@ class BuilderTab(QtWidgets.QWidget):
             f"Editing {data.get('primitive_type', 'primitive')} {data.get('primitive_name', '')}; mesh and WOK will be regenerated together."
         )
 
+    def _update_primitive_dimension_controls(self, data: dict | None = None) -> None:
+        current = self._current_primitive_transform_data() if data is None else data
+        dimensions = tuple(current.get("dimensions") or ()) if current else ()
+        for index, (label, spin) in enumerate(self._primitive_dimension_controls):
+            enabled = index < len(dimensions)
+            if not enabled:
+                label.setText(f"Dimension {index + 1}:")
+                spin.setProperty("dimensionKey", "")
+                spin.setProperty("dimensionInteger", False)
+                spin.setEnabled(False)
+                label.setEnabled(False)
+                continue
+            dimension = dict(dimensions[index])
+            label.setText(f"{dimension.get('label') or dimension.get('key')}:")
+            label.setEnabled(True)
+            spin.blockSignals(True)
+            spin.setProperty("dimensionKey", str(dimension.get("key") or ""))
+            spin.setProperty("dimensionInteger", bool(dimension.get("integer", False)))
+            spin.setRange(float(dimension.get("minimum", 0.001)), float(dimension.get("maximum", 1000.0)))
+            spin.setDecimals(0 if bool(dimension.get("integer", False)) else 3)
+            spin.setSingleStep(float(dimension.get("step", 0.1)))
+            spin.setSuffix(str(dimension.get("suffix", " m") or ""))
+            spin.setValue(float(dimension.get("value", 0.0)))
+            spin.setEnabled(True)
+            spin.blockSignals(False)
+        self.applyPrimitiveDimensionsButton.setEnabled(bool(current and dimensions))
+        if not current:
+            self.primitiveDimensionHintLabel.setText("Select an authored primitive to edit its dimensions.")
+        elif not dimensions:
+            self.primitiveDimensionHintLabel.setText("This primitive has no editable dimensions.")
+        else:
+            self.primitiveDimensionHintLabel.setText("Dimension edits rebuild the room mesh and any generated WOK faces for this primitive.")
+
     def _emit_primitive_transform(self) -> None:
         data = self._current_primitive_transform_data()
         if not data:
@@ -468,6 +542,26 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.primitivePivotYSpinBox.value()),
             float(self.primitivePivotZSpinBox.value()),
         )
+
+    def _emit_primitive_dimensions(self) -> None:
+        data = self._current_primitive_transform_data()
+        if not data:
+            return
+        values = {}
+        for _label, spin in self._primitive_dimension_controls:
+            key = str(spin.property("dimensionKey") or "")
+            if not key:
+                continue
+            if bool(spin.property("dimensionInteger")):
+                values[key] = int(round(float(spin.value())))
+            else:
+                values[key] = float(spin.value())
+        if values:
+            self.roomPrimitiveDimensionsRequested.emit(
+                str(data.get("room_resref") or ""),
+                str(data.get("primitive_name") or ""),
+                values,
+            )
 
     def set_gameplay_placement_kinds(self, kinds) -> None:
         """Populate the gameplay placement kind selector from the controller."""

@@ -365,6 +365,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
+        self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
@@ -665,6 +666,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Transformed room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_primitive_dimensions(self, room_resref: str, primitive_name: str, dimensions: object) -> None:
+        try:
+            result = self.controller.set_authored_room_primitive_dimensions(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                dimensions=dimensions,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Primitive Dimensions", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Edited room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
