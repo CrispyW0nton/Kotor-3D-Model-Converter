@@ -375,6 +375,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)
         self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
+        self.builder_tab.roomLightRequested.connect(self.add_authored_room_light)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
@@ -849,6 +850,39 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = "Applied room material and walkmesh surface; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def add_authored_room_light(
+        self,
+        room_resref: str,
+        name: str,
+        pos_x: float,
+        pos_y: float,
+        pos_z: float,
+        color_r: float,
+        color_g: float,
+        color_b: float,
+        radius: float,
+        intensity: float,
+        light_type: str,
+    ) -> None:
+        try:
+            result = self.controller.add_authored_room_light(
+                room_resref=room_resref,
+                name=name,
+                position=(pos_x, pos_y, pos_z),
+                color=(color_r, color_g, color_b),
+                radius=radius,
+                intensity=intensity,
+                light_type=light_type,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Room Light", str(exc))
+            return
+        readiness = result.readiness
+        message = "Added authored room light; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

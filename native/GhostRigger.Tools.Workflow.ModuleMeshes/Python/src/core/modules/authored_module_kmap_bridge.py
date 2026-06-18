@@ -23,6 +23,11 @@ from .authored_module_objects import (
     AuthoredWaypointInstance,
     ModuleEntryPoint,
 )
+from .authored_module_lighting import (
+    AuthoredRoomLight,
+    authored_room_light_payload,
+    normalise_authored_room_light,
+)
 from .authored_module_project import (
     AuthoredModuleMetadata,
     AuthoredModuleProject,
@@ -368,6 +373,10 @@ def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
     )
 
 
+def _lights(data: Any) -> tuple[AuthoredRoomLight, ...]:
+    return tuple(normalise_authored_room_light(item) for item in (data or ()))
+
+
 def _runtime_resources(data: Any) -> tuple[tuple[str, str], ...]:
     keys: set[tuple[str, str]] = set()
     for item in data or ():
@@ -668,6 +677,7 @@ def authored_project_to_kmap_payload(
             for room in project.rooms
         ],
         "placements": _placement_payload(project.placements),
+        "lights": [authored_room_light_payload(light) for light in project.lights],
         "notes": list(project.notes),
         "extra": dict(project.extra),
         "runtime_resources": list(runtime_resources),
@@ -757,6 +767,7 @@ def authored_project_from_kmap_payload(payload: Any, *, fallback_name: str = "ne
         ),
         rooms=tuple(rooms),
         placements=_placement(data.get("placements"), module_root),
+        lights=_lights(data.get("lights")),
         notes=tuple(str(item) for item in data.get("notes", ()) or ()),
         extra=_dict(data.get("extra")),
     )

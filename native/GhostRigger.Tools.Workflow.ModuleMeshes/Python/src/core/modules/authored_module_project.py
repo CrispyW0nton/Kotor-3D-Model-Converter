@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any, Union
 
 from .authored_module_objects import AuthoredGameplayPlacement, validate_authored_gameplay_placement
+from .authored_module_lighting import AuthoredRoomLight, validate_authored_room_lights
 from .authored_room_composition import (
     AuthoredRoomComposition,
     compile_authored_room_composition,
@@ -90,6 +91,7 @@ class AuthoredModuleProject:
     metadata: AuthoredModuleMetadata
     rooms: tuple[AuthoredRoomSpec, ...]
     placements: AuthoredGameplayPlacement
+    lights: tuple[AuthoredRoomLight, ...] = ()
     notes: tuple[str, ...] = ()
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -164,6 +166,9 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
     placement_validation = validate_authored_gameplay_placement(project.placements)
     warnings.extend(placement_validation.warnings)
     blocking.extend(placement_validation.blocking_issues)
+    lighting_validation = validate_authored_room_lights(project.lights, room_resrefs=seen_rooms)
+    warnings.extend(lighting_validation.warnings)
+    blocking.extend(lighting_validation.blocking_issues)
     return AuthoredModuleProjectValidation(
         ok=not blocking,
         warnings=tuple(warnings),
@@ -215,6 +220,7 @@ def create_single_room_project(
         ),
         rooms=(room,),
         placements=placements,
+        lights=(),
         notes=notes,
     )
 
@@ -252,6 +258,7 @@ def create_floor_plan_room_project(
         ),
         rooms=(room,),
         placements=placements,
+        lights=(),
         notes=notes,
     )
 
@@ -290,6 +297,7 @@ def create_composition_room_project(
         ),
         rooms=(room,),
         placements=placements,
+        lights=(),
         notes=notes,
     )
 

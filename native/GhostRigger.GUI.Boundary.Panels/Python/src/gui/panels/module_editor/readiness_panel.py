@@ -187,6 +187,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         styles = list(metadata.get("room_styles", ()) or ())
         gameplay_counts = dict(metadata.get("gameplay_counts", {}) or {})
         placement_total = int(metadata.get("gameplay_placement_count", sum(int(value) for value in gameplay_counts.values()) if gameplay_counts else 0))
+        lighting_count = int(metadata.get("lighting_count", 0) or 0)
         room_text = ""
         if styles:
             first = dict(styles[0])
@@ -195,7 +196,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
                 f"{first.get('floor_surface_name', 'surface')} {first.get('floor_surface_id', '')}"
             )
         self.authored_summary_label.setText(
-            f"Authored content: {room_text or 'No room style summary'}; {placement_total} gameplay placement(s)"
+            f"Authored content: {room_text or 'No room style summary'}; "
+            f"{placement_total} gameplay placement(s); {lighting_count} room light(s)"
         )
 
         if blocking:

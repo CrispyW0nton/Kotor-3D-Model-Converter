@@ -17,6 +17,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomPrimitiveStyleRequested = QtCore.Signal(str, str, str, str)
     roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
+    roomLightRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, str)
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -222,6 +223,41 @@ class BuilderTab(QtWidgets.QWidget):
         style_layout.addRow(self.roomSurfaceHintLabel)
         style_layout.addRow(self.applyRoomStyleButton)
         layout.addWidget(style_box)
+        light_box = QtWidgets.QGroupBox("Room Lighting")
+        light_layout = QtWidgets.QFormLayout(light_box)
+        self.roomLightRoomLineEdit = QtWidgets.QLineEdit()
+        self.roomLightRoomLineEdit.setObjectName("mapStudioRoomLightRoomLineEdit")
+        self.roomLightRoomLineEdit.setPlaceholderText("optional room resref; blank uses first room")
+        self.roomLightNameLineEdit = QtWidgets.QLineEdit("key_light")
+        self.roomLightNameLineEdit.setObjectName("mapStudioRoomLightNameLineEdit")
+        self.roomLightTypeComboBox = QtWidgets.QComboBox()
+        self.roomLightTypeComboBox.setObjectName("mapStudioRoomLightTypeComboBox")
+        self.roomLightTypeComboBox.addItem("Point", "point")
+        self.roomLightTypeComboBox.addItem("Spot", "spot")
+        self.roomLightTypeComboBox.addItem("Ambient", "ambient")
+        self.roomLightPosXSpinBox = self._make_transform_spin("mapStudioRoomLightPosXSpinBox", -1000.0, 1000.0, " m", value=0.0)
+        self.roomLightPosYSpinBox = self._make_transform_spin("mapStudioRoomLightPosYSpinBox", -1000.0, 1000.0, " m", value=0.0)
+        self.roomLightPosZSpinBox = self._make_transform_spin("mapStudioRoomLightPosZSpinBox", -1000.0, 1000.0, " m", value=2.25)
+        self.roomLightColorRSpinBox = self._make_transform_spin("mapStudioRoomLightColorRSpinBox", 0.0, 1.0, "", value=1.0, step=0.05)
+        self.roomLightColorGSpinBox = self._make_transform_spin("mapStudioRoomLightColorGSpinBox", 0.0, 1.0, "", value=0.92, step=0.05)
+        self.roomLightColorBSpinBox = self._make_transform_spin("mapStudioRoomLightColorBSpinBox", 0.0, 1.0, "", value=0.78, step=0.05)
+        self.roomLightRadiusSpinBox = self._make_transform_spin("mapStudioRoomLightRadiusSpinBox", 0.1, 1000.0, " m", value=8.0)
+        self.roomLightIntensitySpinBox = self._make_transform_spin("mapStudioRoomLightIntensitySpinBox", 0.0, 1000.0, "", value=1.0, step=0.1)
+        self.addRoomLightButton = QtWidgets.QPushButton("Add Room Light")
+        self.addRoomLightButton.setObjectName("mapStudioAddRoomLightButton")
+        light_layout.addRow("Room:", self.roomLightRoomLineEdit)
+        light_layout.addRow("Name:", self.roomLightNameLineEdit)
+        light_layout.addRow("Type:", self.roomLightTypeComboBox)
+        light_layout.addRow("Pos X:", self.roomLightPosXSpinBox)
+        light_layout.addRow("Pos Y:", self.roomLightPosYSpinBox)
+        light_layout.addRow("Pos Z:", self.roomLightPosZSpinBox)
+        light_layout.addRow("Color R:", self.roomLightColorRSpinBox)
+        light_layout.addRow("Color G:", self.roomLightColorGSpinBox)
+        light_layout.addRow("Color B:", self.roomLightColorBSpinBox)
+        light_layout.addRow("Radius:", self.roomLightRadiusSpinBox)
+        light_layout.addRow("Intensity:", self.roomLightIntensitySpinBox)
+        light_layout.addRow(self.addRoomLightButton)
+        layout.addWidget(light_box)
         placement_box = QtWidgets.QGroupBox("Gameplay Placement")
         placement_layout = QtWidgets.QFormLayout(placement_box)
         self.gameplayPlacementKindComboBox = QtWidgets.QComboBox()
@@ -302,6 +338,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.removePrimitiveButton.clicked.connect(self._emit_remove_composition_primitive)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
+        self.addRoomLightButton.clicked.connect(self._emit_room_light)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
         self.gameplayPaletteSearchLineEdit.textChanged.connect(self._apply_gameplay_palette_filter)
         self.gameplayPaletteComboBox.currentIndexChanged.connect(self._update_gameplay_palette_hint)
@@ -879,6 +916,21 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.gameplayPosYSpinBox.value()),
             float(self.gameplayPosZSpinBox.value()),
             float(self.gameplayBearingSpinBox.value()),
+        )
+
+    def _emit_room_light(self) -> None:
+        self.roomLightRequested.emit(
+            self.roomLightRoomLineEdit.text().strip(),
+            self.roomLightNameLineEdit.text().strip(),
+            float(self.roomLightPosXSpinBox.value()),
+            float(self.roomLightPosYSpinBox.value()),
+            float(self.roomLightPosZSpinBox.value()),
+            float(self.roomLightColorRSpinBox.value()),
+            float(self.roomLightColorGSpinBox.value()),
+            float(self.roomLightColorBSpinBox.value()),
+            float(self.roomLightRadiusSpinBox.value()),
+            float(self.roomLightIntensitySpinBox.value()),
+            str(self.roomLightTypeComboBox.currentData() or "point"),
         )
 
     def _update_operation_controls(self) -> None:

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from .authored_module_layout import compile_authored_module_layout
+from .authored_module_lighting import authored_room_light_payload
 from .authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
 from .authored_module_objects import AuthoredGameplayPlacement, build_git_bytes, validate_authored_gameplay_placement_against_walkmesh
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
@@ -545,6 +546,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         walkability=walkability_metadata,
         pathing=pathing_metadata,
     )
+    room_lights = [authored_room_light_payload(light) for light in tuple(getattr(project, "lights", ()) or ())]
     return AuthoredModuleBuild(
         module_root=root,
         game=project.game,
@@ -561,6 +563,8 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "room_count": len(room_geometries),
             "resource_count": len(resources),
             "gameplay_counts": _placement_counts(project.placements),
+            "lighting_count": len(room_lights),
+            "room_lights": room_lights,
             "walkability": walkability_metadata,
             "pathing": pathing_metadata,
             "smoke_expectations": smoke_expectations,
@@ -602,6 +606,8 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             for resref, geometry in sorted(build.module.room_geometry.items())
         ],
         "gameplay_counts": _placement_counts(build.project.placements),
+        "lighting_count": int(build.metadata.get("lighting_count", 0) or 0),
+        "room_lights": list(build.metadata.get("room_lights", []) or []),
         "walkability": dict(build.metadata.get("walkability", {})),
         "pathing": dict(build.metadata.get("pathing", {})),
         "smoke_expectations": dict(build.metadata.get("smoke_expectations", {})),

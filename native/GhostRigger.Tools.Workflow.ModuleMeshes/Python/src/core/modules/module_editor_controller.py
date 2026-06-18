@@ -32,6 +32,7 @@ from .authored_gameplay_marker_geometry import (
     authored_gameplay_marker_geometry_for_project,
 )
 from .authored_gameplay_preview import authored_gameplay_preview_markers
+from .authored_module_lighting import add_authored_room_light as add_authored_room_light_to_project
 from .authored_module_placements import (
     SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
     add_authored_gameplay_placement,
@@ -631,6 +632,47 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Added Map Studio {update.kind} placement {update.tag} at {update.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def add_authored_room_light(
+        self,
+        *,
+        room_resref: str = "",
+        name: str = "",
+        position: Any = (0.0, 0.0, 2.25),
+        color: Any = (1.0, 0.92, 0.78),
+        radius: float = 8.0,
+        intensity: float = 1.0,
+        light_type: str = "point",
+    ):
+        """Append room-light authoring intent to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = add_authored_room_light_to_project(
+            authored,
+            room_resref=room_resref,
+            name=name,
+            position=position,
+            color=color,
+            radius=radius,
+            intensity=intensity,
+            light_type=light_type,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Added Map Studio {update.light.light_type} room light {update.light.name} in {update.light.room_resref}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

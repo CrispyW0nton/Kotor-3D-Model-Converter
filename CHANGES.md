@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored Room Lighting Intent
+
+Owner: LordVaderCW
+Task: T2693
+Subsystem: Map Studio / authored room lighting / Builder tab / native Python payloads
+
+- Added a headless authored room-lighting model with validation, KMAP serialization, readiness metadata, and export-manifest metadata.
+- Added a Map Studio Builder panel section for room, light name/type, position, RGB color, radius, and intensity.
+- Updated authored-module readiness to report room lighting as its own toolchain stage while keeping it separate from GIT gameplay placements.
+- Mirrored the authored lighting contract, Builder controls, readiness UI, and export metadata into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_lighting.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_lighting.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py tests\test_authored_module_lighting.py tests\test_authored_module_readiness.py tests\test_authored_module_reporting.py`
+- `python -m pytest tests\test_authored_module_lighting.py tests\test_authored_module_readiness.py tests\test_authored_module_reporting.py tests\test_authored_gameplay_placements.py -q --basetemp .pytest_tmp_map_studio_room_lighting`
+
 ### [2026-06-18] Map Studio Shows Full Authoring Pipeline Readiness
 
 Owner: LordVaderCW

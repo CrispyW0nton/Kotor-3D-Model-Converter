@@ -136,6 +136,10 @@ def _gameplay_counts(project: AuthoredModuleProject) -> dict[str, int]:
     }
 
 
+def _lighting_count(project: AuthoredModuleProject) -> int:
+    return len(tuple(getattr(project, "lights", ()) or ()))
+
+
 def _game_executable_name(game: str) -> str:
     return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
 
@@ -162,6 +166,7 @@ def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInput
     entry = project.placements.entry_point
     gameplay_counts = _gameplay_counts(project)
     gameplay_total = sum(gameplay_counts.values())
+    light_count = _lighting_count(project)
     gameplay_label = ", ".join(f"{count} {kind}" for kind, count in gameplay_counts.items() if count)
     return (
         AuthoredModuleInputStatus(
@@ -187,6 +192,12 @@ def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInput
             normalise_resref(entry.area_resref) == root and bool(root),
             f"{normalise_resref(entry.area_resref) or '(missing)'} @ {tuple(entry.position)}",
             "Place the player start inside the module's entry area on walkable WOK.",
+        ),
+        AuthoredModuleInputStatus(
+            "Room lighting",
+            True,
+            f"{light_count} authored light(s)" if light_count else "No authored lights yet",
+            "Add room lights when the module needs authored lighting or future lightmap baking.",
         ),
         AuthoredModuleInputStatus(
             "Gameplay placements",
@@ -235,6 +246,7 @@ def _toolchain_statuses(
     entry_ready = normalise_resref(entry.area_resref) == project.module_root and bool(project.module_root)
     gameplay_counts = _gameplay_counts(project)
     placement_total = sum(gameplay_counts.values())
+    light_count = _lighting_count(project)
     packaged_count = len(expected_runtime_resources) - len(missing_runtime_resources)
     package_ready = bool(expected_runtime_resources) and not missing_runtime_resources and not blocking_messages
     proof_ready = bool(game_tested)
@@ -258,6 +270,13 @@ def _toolchain_statuses(
             "Ready" if walkable_faces > 0 and not room_blocking else "Needs walkable WOK faces",
             f"{walkable_faces} walkable face(s)",
             "Set a walkable floor/ramp/stair WOK surface and keep gameplay objects on walkable faces.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Lighting",
+            True,
+            f"{light_count} authored light(s)" if light_count else "Optional",
+            "Stored as room-light intent for room MDL/lightmap export",
+            "Add key/fill/ambient room lights before baking or exporting lighting-sensitive modules.",
         ),
         AuthoredModuleToolchainStatus(
             "Gameplay layout",
@@ -338,6 +357,7 @@ def build_authored_module_readiness(
     validation = validate_authored_module_project(project)
     rooms = _room_readiness(project)
     gameplay_counts = _gameplay_counts(project)
+    lighting_count = _lighting_count(project)
     present = _present_keys(packaged_resources)
     expected = _expected_keys(project.module_root, rooms)
     present_set = set(present)
@@ -445,6 +465,19 @@ def build_authored_module_readiness(
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
+            "lighting_count": lighting_count,
+            "room_lights": [
+                {
+                    "name": light.name,
+                    "room_resref": light.room_resref,
+                    "position": [float(light.position[0]), float(light.position[1]), float(light.position[2])],
+                    "color": [float(light.color[0]), float(light.color[1]), float(light.color[2])],
+                    "radius": float(light.radius),
+                    "intensity": float(light.intensity),
+                    "light_type": light.light_type,
+                }
+                for light in tuple(getattr(project, "lights", ()) or ())
+            ],
             "proof_status": proof_status,
             "proof_manifest_path": proof_manifest_path,
             "checklist_path": checklist_path,

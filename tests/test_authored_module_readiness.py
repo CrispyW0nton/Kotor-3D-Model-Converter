@@ -129,6 +129,7 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert set(preview_steps) == {
         "Geometry authoring",
         "Walkmesh",
+        "Lighting",
         "Gameplay layout",
         "Runtime package",
         "In-game proof",
@@ -138,6 +139,8 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert "bevel" in preview_steps["Geometry authoring"].value_label
     assert "rectangular union" in preview_steps["Geometry authoring"].value_label
     assert preview_steps["Walkmesh"].ready is True
+    assert preview_steps["Lighting"].ready is True
+    assert preview_steps["Lighting"].status == "Optional"
     assert preview_steps["Gameplay layout"].ready is True
     assert preview_steps["Runtime package"].ready is False
     assert "ARE/GIT/IFO/PTH/LYT/VIS" in preview_steps["Runtime package"].fix_hint
