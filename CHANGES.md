@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Rectangular Floor-Plan Union Operation
+
+Owner: LordVaderCW
+Task: T2628
+Subsystem: Map Studio / authored floor-plan geometry / native Python payloads
+
+- Added a constrained headless rectangular union operation for axis-aligned floor plans, allowing safe adjacent or overlapping room rectangles to merge into one exportable floor-plan primitive.
+- Preserved exporter safety by rejecting unions that would create disconnected, L-shaped, non-rectangular, or incompatible room footprints.
+- Mirrored the floor-plan operation into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Added regression coverage for adjacent merges, overlapping rectangular merges, geometry/WOK compilation, and unsafe union inputs.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_authored_room_floorplan.py`
+- `python -m pytest tests/test_authored_room_floorplan.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_floorplan_union_smoke`
+
 ### [2026-06-18] Map Studio Rectangular Floor-Plan Cut Operation
 
 Owner: LordVaderCW

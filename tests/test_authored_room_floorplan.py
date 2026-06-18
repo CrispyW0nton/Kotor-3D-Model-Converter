@@ -344,3 +344,112 @@ def test_t2627_rectangular_cut_rejects_unsafe_inputs() -> None:
         apply_floor_plan_rectangular_cut(primitive, FloorPlanRectangularCutOperation(center=(0.0, 0.0), size=(8.0, 6.0)))
     with pytest.raises(ValueError, match="rectangular source"):
         apply_floor_plan_rectangular_cut(non_rect, FloorPlanRectangularCutOperation(center=(1.0, 1.0), size=(1.0, 1.0)))
+
+
+def test_t2628_rectangular_union_merges_adjacent_floor_plans() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import (
+        FloorPlanRectangularUnionOperation,
+        FloorPlanRoomPrimitive,
+        FloorPlanWallOpening,
+        apply_floor_plan_rectangular_union,
+        compile_floor_plan_room_geometry,
+        polygon_signed_area,
+    )
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+
+    left = FloorPlanRoomPrimitive(
+        room_resref="left_room",
+        points=((-4.0, -2.0), (0.0, -2.0), (0.0, 2.0), (-4.0, 2.0)),
+        floor_surface_id="metal",
+        material=PrimitiveMaterial(texture="CM_Baremetal"),
+        openings=(FloorPlanWallOpening(name="old_door", edge_index=1),),
+        metadata={"author_note": "blockout"},
+    )
+    right = FloorPlanRoomPrimitive(
+        room_resref="right_room",
+        points=((0.0, -2.0), (4.0, -2.0), (4.0, 2.0), (0.0, 2.0)),
+        floor_surface_id="metal",
+        material=PrimitiveMaterial(texture="CM_Baremetal"),
+    )
+
+    merged = apply_floor_plan_rectangular_union(
+        left,
+        right,
+        FloorPlanRectangularUnionOperation(room_resref="merged_room", metadata={"operation_id": "union_a"}),
+    )
+    geometry = compile_floor_plan_room_geometry(merged)
+
+    assert merged.room_resref == "merged_room"
+    assert merged.points == ((-4.0, -2.0), (4.0, -2.0), (4.0, 2.0), (-4.0, 2.0))
+    assert merged.openings == ()
+    assert merged.metadata["operation"] == "rectangular_union"
+    assert merged.metadata["operation_id"] == "union_a"
+    assert merged.metadata["author_note"] == "blockout"
+    assert merged.metadata["source_room_resrefs"] == ["left_room", "right_room"]
+    assert polygon_signed_area(merged.points) == 32.0
+    assert geometry.room_resref == "merged_room"
+    assert geometry.wok.walkable_face_count() == 2
+    assert geometry.metadata["polygon_area"] == 32.0
+
+
+def test_t2628_rectangular_union_allows_overlapping_rectangles_that_fill_bounds() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, apply_floor_plan_rectangular_union
+
+    lower = FloorPlanRoomPrimitive(
+        room_resref="lower",
+        points=((-2.0, -2.0), (2.0, -2.0), (2.0, 1.0), (-2.0, 1.0)),
+    )
+    upper = FloorPlanRoomPrimitive(
+        room_resref="upper",
+        points=((-2.0, -1.0), (2.0, -1.0), (2.0, 2.0), (-2.0, 2.0)),
+    )
+
+    merged = apply_floor_plan_rectangular_union(lower, upper)
+
+    assert merged.room_resref == "lower"
+    assert merged.points == ((-2.0, -2.0), (2.0, -2.0), (2.0, 2.0), (-2.0, 2.0))
+    assert merged.metadata["combined_bounds"] == [-2.0, -2.0, 2.0, 2.0]
+
+
+def test_t2628_rectangular_union_rejects_non_rectangular_results() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, apply_floor_plan_rectangular_union
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+
+    base = FloorPlanRoomPrimitive(
+        room_resref="base",
+        points=((0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)),
+    )
+    l_shape = FloorPlanRoomPrimitive(
+        room_resref="branch",
+        points=((2.0, 1.0), (4.0, 1.0), (4.0, 3.0), (2.0, 3.0)),
+    )
+    disjoint = FloorPlanRoomPrimitive(
+        room_resref="far",
+        points=((5.0, 0.0), (6.0, 0.0), (6.0, 1.0), (5.0, 1.0)),
+    )
+    mismatched_material = FloorPlanRoomPrimitive(
+        room_resref="mat",
+        points=((2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0)),
+        material=PrimitiveMaterial(texture="different"),
+    )
+    non_rect = FloorPlanRoomPrimitive(
+        room_resref="poly",
+        points=((0.0, 0.0), (2.0, 0.0), (3.0, 1.0), (2.0, 2.0), (0.0, 2.0)),
+    )
+
+    with pytest.raises(ValueError, match="non-rectangular or disconnected"):
+        apply_floor_plan_rectangular_union(base, l_shape)
+    with pytest.raises(ValueError, match="non-rectangular or disconnected"):
+        apply_floor_plan_rectangular_union(base, disjoint)
+    with pytest.raises(ValueError, match="matching room materials"):
+        apply_floor_plan_rectangular_union(base, mismatched_material)
+    with pytest.raises(ValueError, match="rectangular footprints"):
+        apply_floor_plan_rectangular_union(base, non_rect)

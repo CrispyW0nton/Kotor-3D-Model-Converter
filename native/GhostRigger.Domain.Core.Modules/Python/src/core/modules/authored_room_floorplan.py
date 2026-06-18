@@ -76,6 +76,14 @@ class FloorPlanRectangularCutOperation:
 
 
 @dataclass(frozen=True)
+class FloorPlanRectangularUnionOperation:
+    """Boolean union for rectangular floor plans that remain one rectangle."""
+
+    room_resref: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FloorPlanRoomValidation:
     """Validation result for a floor-plan room primitive."""
 
@@ -410,6 +418,82 @@ def _rectangle_points(x0: float, y0: float, x1: float, y1: float) -> tuple[Vec2,
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 
+def _rect_area(bounds: tuple[float, float, float, float]) -> float:
+    x0, y0, x1, y1 = bounds
+    return max(0.0, x1 - x0) * max(0.0, y1 - y0)
+
+
+def _rect_intersection_area(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    x0 = max(first[0], second[0])
+    y0 = max(first[1], second[1])
+    x1 = min(first[2], second[2])
+    y1 = min(first[3], second[3])
+    return max(0.0, x1 - x0) * max(0.0, y1 - y0)
+
+
+def _require_union_compatible_primitives(first: FloorPlanRoomPrimitive, second: FloorPlanRoomPrimitive) -> None:
+    if abs(float(first.z) - float(second.z)) > 1.0e-7:
+        raise ValueError("Floor-plan rectangular union requires matching floor elevations.")
+    if abs(float(first.wall_height) - float(second.wall_height)) > 1.0e-7:
+        raise ValueError("Floor-plan rectangular union requires matching wall heights.")
+    if resolve_walkmesh_surface_id(first.floor_surface_id) != resolve_walkmesh_surface_id(second.floor_surface_id):
+        raise ValueError("Floor-plan rectangular union requires matching walkmesh surface types.")
+    if first.material != second.material:
+        raise ValueError("Floor-plan rectangular union requires matching room materials.")
+    if bool(first.include_walls) != bool(second.include_walls):
+        raise ValueError("Floor-plan rectangular union requires matching wall generation settings.")
+
+
+def apply_floor_plan_rectangular_union(
+    first: FloorPlanRoomPrimitive,
+    second: FloorPlanRoomPrimitive,
+    operation: FloorPlanRectangularUnionOperation | None = None,
+) -> FloorPlanRoomPrimitive:
+    """Union two rectangular floor plans when the result is one safe rectangle."""
+
+    union_operation = operation or FloorPlanRectangularUnionOperation()
+    first_bounds = _rect_bounds(_normalise_points(first.points))
+    second_bounds = _rect_bounds(_normalise_points(second.points))
+    if first_bounds is None or second_bounds is None:
+        raise ValueError("Floor-plan rectangular union currently requires axis-aligned rectangular footprints.")
+    _require_union_compatible_primitives(first, second)
+
+    min_x = min(first_bounds[0], second_bounds[0])
+    min_y = min(first_bounds[1], second_bounds[1])
+    max_x = max(first_bounds[2], second_bounds[2])
+    max_y = max(first_bounds[3], second_bounds[3])
+    combined_bounds = (min_x, min_y, max_x, max_y)
+    combined_area = _rect_area(combined_bounds)
+    source_area = _rect_area(first_bounds) + _rect_area(second_bounds) - _rect_intersection_area(first_bounds, second_bounds)
+    if combined_area <= 1.0e-7:
+        raise ValueError("Floor-plan rectangular union would create an empty footprint.")
+    if abs(combined_area - source_area) > 1.0e-7:
+        raise ValueError("Floor-plan rectangular union would produce a non-rectangular or disconnected footprint.")
+
+    metadata = {
+        **dict(first.metadata),
+        "operation": "rectangular_union",
+        "source_room_resrefs": [first.room_resref, second.room_resref],
+        "source_bounds": [list(first_bounds), list(second_bounds)],
+        "combined_bounds": list(combined_bounds),
+        **dict(union_operation.metadata),
+    }
+    return FloorPlanRoomPrimitive(
+        room_resref=_normalise_resref(union_operation.room_resref) or _normalise_resref(first.room_resref),
+        points=_rectangle_points(*combined_bounds),
+        z=first.z,
+        wall_height=first.wall_height,
+        floor_surface_id=first.floor_surface_id,
+        material=first.material,
+        include_walls=first.include_walls,
+        openings=(),
+        metadata=metadata,
+    )
+
+
 def apply_floor_plan_rectangular_cut(
     primitive: FloorPlanRoomPrimitive,
     operation: FloorPlanRectangularCutOperation,
@@ -661,12 +745,14 @@ __all__ = [
     "FloorPlanBevelOperation",
     "FloorPlanInsetOperation",
     "FloorPlanRectangularCutOperation",
+    "FloorPlanRectangularUnionOperation",
     "FloorPlanRoomPrimitive",
     "FloorPlanRoomValidation",
     "FloorPlanWallOpening",
     "apply_floor_plan_bevel",
     "apply_floor_plan_inset",
     "apply_floor_plan_rectangular_cut",
+    "apply_floor_plan_rectangular_union",
     "bevel_floor_plan_points",
     "build_floor_plan_floor_mesh",
     "build_floor_plan_wall_meshes",
