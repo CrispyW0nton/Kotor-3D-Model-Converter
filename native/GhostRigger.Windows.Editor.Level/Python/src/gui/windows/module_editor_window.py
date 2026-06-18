@@ -695,9 +695,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
         authored_placements = self.controller.authored_gameplay_placements()
+        authored_markers = self.controller.authored_gameplay_preview_markers()
         self.properties.set_project(self.project, authored_placements)
         self.outliner.set_project(self.project, authored_placements)
-        self.viewport_panel.set_project(self.project, authored_placements)
+        self.viewport_panel.set_project(self.project, authored_placements, authored_markers)
         readiness_result = self.controller.authored_module_readiness()
         self.readiness_panel.set_readiness(readiness_result.readiness)
         if self.controller.model.selected_ids:

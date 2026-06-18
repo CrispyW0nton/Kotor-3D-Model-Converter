@@ -36,6 +36,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.viewport_toolbar.addWidget(self.snap_box)
         self.viewport_toolbar.addStretch(1)
         toolbar_frame_layout.addLayout(self.viewport_toolbar)
+        self.marker_summary_label = QtWidgets.QLabel("Gameplay markers: none")
+        self.marker_summary_label.setObjectName("mapStudioPlacementMarkerSummaryLabel")
+        self.marker_summary_label.setWordWrap(True)
+        toolbar_frame_layout.addWidget(self.marker_summary_label)
         root.addWidget(self.viewport_toolbar_frame)
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.splitter.setChildrenCollapsible(False)
@@ -45,8 +49,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
             toolbar_scroll.installEventFilter(self)
-        self.scene_table = QtWidgets.QTableWidget(0, 6)
-        self.scene_table.setHorizontalHeaderLabels(["Type", "Name", "X", "Y", "Z", "Visible"])
+        self.scene_table = QtWidgets.QTableWidget(0, 8)
+        self.scene_table.setHorizontalHeaderLabels(["Type", "Name", "X", "Y", "Z", "Marker", "Facing", "Visible"])
         self.scene_table.horizontalHeader().setStretchLastSection(True)
         self.scene_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.scene_table.setMinimumHeight(58)
@@ -59,10 +63,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.splitter.setSizes([900, 90])
         root.addWidget(self.splitter, 1)
         self._row_ids: list[str] = []
+        self._placement_markers: dict[str, object] = {}
 
-    def set_project(self, project: KMapProject, authored_gameplay_placements=()) -> None:
+    def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_gameplay_markers=()) -> None:
         self.scene_table.setRowCount(0)
         self._row_ids.clear()
+        self._placement_markers = {
+            str(getattr(marker, "placement_id", "") or ""): marker
+            for marker in authored_gameplay_markers or ()
+            if str(getattr(marker, "placement_id", "") or "")
+        }
         for module in project.modules:
             pos = module.transform.position
             self._add_row("Module", module.module_name, module.module_id, pos, module.visible)
@@ -74,7 +84,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         for placement in authored_gameplay_placements or ():
             label = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or getattr(placement, "placement_id", ""))
             kind = f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
-            self._add_row(kind, label, str(getattr(placement, "placement_id", "")), getattr(placement, "position", (0.0, 0.0, 0.0)), True)
+            placement_id = str(getattr(placement, "placement_id", ""))
+            marker = self._placement_markers.get(placement_id)
+            marker_label = str(getattr(marker, "shape", "") or "")
+            bearing = float(getattr(marker, "bearing", getattr(placement, "bearing", 0.0)) or 0.0)
+            self._add_row(
+                kind,
+                label,
+                placement_id,
+                getattr(placement, "position", (0.0, 0.0, 0.0)),
+                True,
+                marker=marker_label,
+                facing=f"{bearing:.2f} rad",
+            )
+        self._update_marker_summary(authored_gameplay_markers)
 
     def select_id(self, item_id: str) -> None:
         for row, row_id in enumerate(self._row_ids):
@@ -161,15 +184,40 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         toolbar.adjustSize()
         return min(120, target_height)
 
-    def _add_row(self, kind: str, name: str, item_id: str, position, visible: bool) -> None:
+    def _add_row(self, kind: str, name: str, item_id: str, position, visible: bool, *, marker: str = "", facing: str = "") -> None:
         row = self.scene_table.rowCount()
         self.scene_table.insertRow(row)
-        values = [kind, name, f"{float(position[0]):.3f}", f"{float(position[1]):.3f}", f"{float(position[2]):.3f}", "yes" if visible else "no"]
+        values = [
+            kind,
+            name,
+            f"{float(position[0]):.3f}",
+            f"{float(position[1]):.3f}",
+            f"{float(position[2]):.3f}",
+            marker,
+            facing,
+            "yes" if visible else "no",
+        ]
         for column, value in enumerate(values):
             item = QtWidgets.QTableWidgetItem(value)
             item.setData(QtCore.Qt.UserRole, item_id)
             self.scene_table.setItem(row, column, item)
         self._row_ids.append(item_id)
+
+    def _update_marker_summary(self, authored_gameplay_markers) -> None:
+        markers = tuple(authored_gameplay_markers or ())
+        if not markers:
+            self.marker_summary_label.setText("Gameplay markers: none")
+            return
+        counts: dict[str, int] = {}
+        warnings = 0
+        for marker in markers:
+            kind = str(getattr(marker, "kind", "object") or "object")
+            counts[kind] = counts.get(kind, 0) + 1
+            if getattr(marker, "warning", ""):
+                warnings += 1
+        parts = ", ".join(f"{kind} {count}" for kind, count in sorted(counts.items()))
+        suffix = f" | {warnings} marker warning(s)" if warnings else ""
+        self.marker_summary_label.setText(f"Gameplay markers: {parts}{suffix}")
 
     def _table_selection(self) -> None:
         rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []

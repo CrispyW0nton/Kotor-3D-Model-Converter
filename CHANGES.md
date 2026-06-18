@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored Gameplay Preview Markers
+
+Owner: LordVaderCW
+Task: T2657
+Subsystem: Map Studio / authored gameplay placement preview markers / viewport table / native Python payloads
+
+- Added a headless authored gameplay preview-marker contract for spatial Map Studio placements, including kind, label, marker shape, color, radius, bearing, and forward endpoint.
+- Exposed preview markers through the Module Editor controller so marker semantics live in the Map Studio domain layer instead of being inferred inside the UI.
+- Updated the Module Editor viewport panel to show a stable gameplay-marker summary plus per-placement marker shape and facing columns next to authored placement rows.
+- Routed the Module Editor window refresh path to pass authored marker data alongside selectable authored placement rows.
+- Mirrored the core/controller/panel changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_gameplay_preview.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_gameplay_preview.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_gameplay_preview_markers.py`
+- `python -m pytest tests\test_authored_gameplay_preview_markers.py tests\test_authored_gameplay_placement_selection.py -q --basetemp .pytest_tmp_map_studio_gameplay_markers`
+
 ### [2026-06-18] Map Studio Adds Searchable Gameplay Placement Palette
 
 Owner: LordVaderCW
