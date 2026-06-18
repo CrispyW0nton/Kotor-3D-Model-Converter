@@ -13,6 +13,7 @@ from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 class ModuleEditorViewportPanel(QtWidgets.QWidget):
     itemSelected = QtCore.Signal(str)
     transformEdited = QtCore.Signal(str, object)
+    roomOutlinePointEdited = QtCore.Signal(str, int, object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -71,6 +72,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
         self._marker_drag: dict[str, object] | None = None
+        self._room_outline_point_drag: dict[str, object] | None = None
         self._table_updating = False
 
     def set_project(
@@ -168,14 +170,26 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         self.itemSelected.emit(placement_id)
                         self._begin_marker_drag(placement_id, event)
                         return True
+                    room_point = self._room_outline_point_at_event(event)
+                    if room_point is not None:
+                        self._begin_room_outline_point_drag(room_point, event)
+                        return True
             if event_type == QtCore.QEvent.MouseMove and self._marker_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if not (buttons & QtCore.Qt.LeftButton):
                     return self._finish_marker_drag(event)
                 self._update_marker_drag(event)
                 return True
+            if event_type == QtCore.QEvent.MouseMove and self._room_outline_point_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_room_outline_point_drag(event)
+                self._update_room_outline_point_drag(event)
+                return True
             if event_type == QtCore.QEvent.MouseButtonRelease and self._marker_drag is not None:
                 return self._finish_marker_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._room_outline_point_drag is not None:
+                return self._finish_room_outline_point_drag(event)
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
             QtCore.QEvent.Resize,
@@ -218,6 +232,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if pos is None:
             return ""
         return str(marker_at_screen(float(pos.x()), float(pos.y())) or "")
+
+    def _room_outline_point_at_event(self, event: QtCore.QEvent) -> tuple[str, int, tuple[float, float, float]] | None:
+        point_at_screen = getattr(self.viewport, "map_studio_room_outline_point_at_screen", None)
+        if not callable(point_at_screen):
+            return None
+        pos_fn = getattr(event, "position", None)
+        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
+        if pos is None:
+            return None
+        hit = point_at_screen(float(pos.x()), float(pos.y()))
+        if not hit or len(hit) < 3:
+            return None
+        room_resref = str(hit[0] or "")
+        point_index = int(hit[1])
+        world_point = tuple(float(value) for value in tuple(hit[2])[:3])
+        if not room_resref or point_index < 0 or len(world_point) < 3:
+            return None
+        return (room_resref, point_index, world_point)
 
     def _event_position(self, event: QtCore.QEvent) -> tuple[float, float] | None:
         pos_fn = getattr(event, "position", None)
@@ -275,6 +307,61 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.transformEdited.emit(
             str(drag.get("placement_id", "") or ""),
             LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
+        )
+        return True
+
+    def _begin_room_outline_point_drag(self, hit: tuple[str, int, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
+        start_screen = self._event_position(event)
+        if start_screen is None:
+            self._room_outline_point_drag = None
+            return False
+        room_resref, point_index, world_point = hit
+        self._room_outline_point_drag = {
+            "room_resref": room_resref,
+            "point_index": int(point_index),
+            "start_screen": start_screen,
+            "start_position": world_point,
+            "active": False,
+            "pending_position": world_point,
+        }
+        return True
+
+    def _update_room_outline_point_drag(self, event: QtCore.QEvent) -> bool:
+        if self._room_outline_point_drag is None:
+            return False
+        current = self._event_position(event)
+        if current is None:
+            return False
+        start = self._room_outline_point_drag.get("start_screen", current)
+        screen_dx = float(current[0]) - float(start[0])
+        screen_dy = float(current[1]) - float(start[1])
+        if screen_dx * screen_dx + screen_dy * screen_dy < 9.0:
+            return True
+        start_position = tuple(self._room_outline_point_drag.get("start_position", (0.0, 0.0, 0.0)))
+        if len(start_position) < 3:
+            return False
+        world_dx, world_dy = self._screen_delta_to_floor_delta(start_position, screen_dx, screen_dy)
+        pending = (float(start_position[0]) + world_dx, float(start_position[1]) + world_dy, float(start_position[2]))
+        self._room_outline_point_drag["active"] = True
+        self._room_outline_point_drag["pending_position"] = pending
+        return True
+
+    def _finish_room_outline_point_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._room_outline_point_drag is None:
+            return False
+        if event is not None:
+            self._update_room_outline_point_drag(event)
+        drag = self._room_outline_point_drag
+        self._room_outline_point_drag = None
+        if not bool(drag.get("active", False)):
+            return True
+        position = tuple(float(v) for v in tuple(drag.get("pending_position", drag.get("start_position", (0.0, 0.0, 0.0))))[:3])
+        if len(position) < 3:
+            return True
+        self.roomOutlinePointEdited.emit(
+            str(drag.get("room_resref", "") or ""),
+            int(drag.get("point_index", -1)),
+            position,
         )
         return True
 
@@ -444,11 +531,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         lines = tuple(getattr(authored_room_outline_geometry, "lines", ()) or ())
         if authored_room_outline_geometry is not None and (polygons or lines) and callable(setter):
             setter(authored_room_outline_geometry)
+            self._install_marker_pick_filters()
             return
         if callable(clearer):
             clearer()
         elif callable(setter):
             setter(None)
+        self._install_marker_pick_filters()
 
     def _sync_marker_geometry_overlay(self, authored_gameplay_marker_geometry=None) -> None:
         setter = getattr(self.viewport, "set_map_studio_marker_geometry", None)

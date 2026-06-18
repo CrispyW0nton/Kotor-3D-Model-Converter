@@ -53,6 +53,37 @@ class ViewportOverlayLayersMixin:
         zone["kind"] = kind
         zones.append(zone)
 
+    def _add_map_studio_room_outline_hit_zone(self, room_resref: object, point_index: int, **zone: object) -> None:
+        room = str(room_resref or "")
+        if not room:
+            return
+        zones = getattr(self, "_map_studio_room_outline_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_room_outline_hit_zones = zones
+        zone["room_resref"] = room
+        zone["point_index"] = int(point_index)
+        zones.append(zone)
+
+    def map_studio_room_outline_point_at_screen(self, x: float, y: float) -> tuple[str, int, tuple[float, float, float]] | tuple[()]:
+        """Return the authored room outline point under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_room_outline_hit_zones", ()) or ())):
+            cx, cy = zone.get("center", (0.0, 0.0))
+            radius = float(zone.get("radius", 0.0) or 0.0)
+            if ((px - float(cx)) ** 2 + (py - float(cy)) ** 2) <= radius * radius:
+                point = tuple(zone.get("world_point", (0.0, 0.0, 0.0)))
+                if len(point) < 3:
+                    point = (0.0, 0.0, 0.0)
+                return (
+                    str(zone.get("room_resref", "") or ""),
+                    int(zone.get("point_index", -1)),
+                    (float(point[0]), float(point[1]), float(point[2])),
+                )
+        return ()
+
     def map_studio_marker_at_screen(self, x: float, y: float) -> str:
         """Return the authored placement id under a viewport screen point."""
 
@@ -173,6 +204,7 @@ class ViewportOverlayLayersMixin:
             log.debug("Map Studio placement marker overlay failed: %s", exc)
 
     def _draw_map_studio_room_outlines(self, draw, w: int, h: int) -> None:
+        self._map_studio_room_outline_hit_zones = []
         geometry = getattr(self, "_map_studio_room_outline_geometry", None)
         if geometry is None:
             return
@@ -205,6 +237,24 @@ class ViewportOverlayLayersMixin:
                 else:
                     draw.line(closed, fill=(0, 0, 0, 150), width=width + 2)
                     draw.line(closed, fill=color, width=width)
+                if role == "floor":
+                    room_resref = getattr(polygon, "room_resref", "")
+                    for index, (point, projected_point) in enumerate(zip(points, projected)):
+                        sx, sy = float(projected_point[0]), float(projected_point[1])
+                        self._add_map_studio_room_outline_hit_zone(
+                            room_resref,
+                            index,
+                            center=(sx, sy),
+                            radius=10.0,
+                            world_point=point,
+                        )
+                        radius = 4
+                        draw.ellipse(
+                            [sx - radius, sy - radius, sx + radius, sy + radius],
+                            fill=(color[0], color[1], color[2], 235),
+                            outline=(0, 0, 0, 190),
+                            width=1,
+                        )
             for guide in lines:
                 start = self._map_studio_project_point(getattr(guide, "start", ()), w, h)
                 end = self._map_studio_project_point(getattr(guide, "end", ()), w, h)

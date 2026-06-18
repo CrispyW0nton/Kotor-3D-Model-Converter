@@ -347,6 +347,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner.actionRequested.connect(self._outliner_action)
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.viewport_panel.transformEdited.connect(self._set_transform)
+        self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.properties.transformChanged.connect(self._set_transform)
@@ -799,6 +800,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         if LevelScene(self.project).set_transform(item_id, transform):
             self._refresh_all()
+
+    def _set_authored_room_outline_point(self, room_resref: str, point_index: int, world_position: object) -> None:
+        try:
+            self.controller.move_authored_room_outline_point(
+                room_resref=room_resref,
+                point_index=int(point_index),
+                world_position=tuple(world_position),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Move Authored Room Outline Point", str(exc))
+            return
+        self._refresh_all()
 
     def _set_visibility(self, item_id: str, visible: bool) -> None:
         if item_id.startswith("authored:"):

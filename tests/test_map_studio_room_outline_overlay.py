@@ -26,10 +26,14 @@ def test_t2664_viewport_exposes_room_outline_overlay_state_and_draw_path() -> No
     )
 
     assert "_map_studio_room_outline_geometry = None" in viewport_source
+    assert "_map_studio_room_outline_hit_zones" in viewport_source
     assert "def set_map_studio_room_outline_geometry" in scene_models_source
     assert "def clear_map_studio_room_outline_geometry" in scene_models_source
     assert "def _draw_map_studio_room_outlines" in overlay_source
     assert "def _draw_map_studio_dashed_line" in overlay_source
+    assert "def map_studio_room_outline_point_at_screen" in overlay_source
+    assert "def _add_map_studio_room_outline_hit_zone" in overlay_source
+    assert "world_point=point" in overlay_source
     assert 'role == "wall_height"' in overlay_source
     assert 'role == "opening"' in overlay_source
     assert pipeline_source.index("self._draw_map_studio_room_outlines") < pipeline_source.index(
@@ -53,6 +57,10 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
 
     for source in (panel_source, native_panel_source):
         assert "authored_room_outline_geometry=None" in source
+        assert "roomOutlinePointEdited" in source
+        assert "_room_outline_point_drag" in source
+        assert "def _room_outline_point_at_event" in source
+        assert "def _finish_room_outline_point_drag" in source
         assert "self._sync_room_outline_overlay(authored_room_outline_geometry)" in source
         assert "def _sync_room_outline_overlay" in source
         assert "set_map_studio_room_outline_geometry" in source
@@ -61,6 +69,9 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
         assert "wall/opening guide(s)" in source
 
     assert "def authored_room_outline_geometry(self)" in controller_source
+    assert "def move_authored_room_outline_point(self" in controller_source
     assert "authored_room_outline_geometry_for_project(authored)" in controller_source
     assert "authored_room_outline_geometry = self.controller.authored_room_outline_geometry()" in window_source
     assert "authored_room_outline_geometry," in window_source
+    assert "roomOutlinePointEdited.connect(self._set_authored_room_outline_point)" in window_source
+    assert "self.controller.move_authored_room_outline_point" in window_source

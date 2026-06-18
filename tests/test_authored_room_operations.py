@@ -92,6 +92,32 @@ def test_t2651_room_operation_requires_authored_module_payload() -> None:
         controller.apply_authored_room_operation(operation="inset", distance=0.25)
 
 
+def test_t2665_controller_moves_authored_room_outline_point() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="doorway_blockout", module_root="grpoint")
+
+    result = controller.move_authored_room_outline_point(
+        room_resref="grpoint_room01",
+        point_index=1,
+        world_position=(6.5, -4.0, 0.0),
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    primitive = payload["rooms"][0]["primitive"]
+    assert primitive["type"] == "floor_plan"
+    assert primitive["points"][1] == [6.5, -4.0]
+    assert primitive["metadata"]["last_vertex_edit"] == 1
+    assert payload["rooms"][0]["metadata"]["last_operation"] == "move_floor_plan_point"
+    assert controller.project.dirty is True
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (

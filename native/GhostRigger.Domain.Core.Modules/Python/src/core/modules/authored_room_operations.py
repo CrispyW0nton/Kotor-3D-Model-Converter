@@ -204,6 +204,54 @@ def apply_authored_floor_plan_rectangular_cut(
     return _replace_rooms(project, rooms, operation="rectangular_cut", placements=_placements_for_cut(project, pieces[0]))
 
 
+def move_authored_floor_plan_point(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_index: int,
+    world_position: tuple[float, float, float] | tuple[float, float],
+) -> AuthoredModuleProject:
+    """Move one editable floor-plan vertex using a world-space viewport point."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    primitive = _floor_plan_for_room(room)
+    points = list(tuple(primitive.points or ()))
+    vertex_index = int(point_index)
+    if vertex_index < 0 or vertex_index >= len(points):
+        raise ValueError(f"Room {room.room_resref} has no outline point {point_index}.")
+    position = tuple(world_position)
+    if len(position) < 2:
+        raise ValueError("Map Studio room point edits require an X/Y position.")
+    room_offset = tuple(room.position or (0.0, 0.0, 0.0))
+    if len(room_offset) < 3:
+        room_offset = (0.0, 0.0, 0.0)
+    local_x = float(position[0]) - float(room_offset[0])
+    local_y = float(position[1]) - float(room_offset[1])
+    points[vertex_index] = (local_x, local_y)
+    updated_primitive = replace(
+        primitive,
+        points=tuple(points),
+        metadata={
+            **dict(primitive.metadata),
+            "last_vertex_edit": vertex_index,
+            "source": "map_studio:viewport_outline_drag",
+        },
+    )
+    updated_room = replace(
+        room,
+        primitive=updated_primitive,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "last_operation": "move_floor_plan_point",
+            "last_vertex_edit": vertex_index,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated_room,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="move_floor_plan_point")
+
+
 def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operation: str, **kwargs: Any) -> AuthoredModuleProject:
     """Dispatch a named Map Studio room operation."""
 
@@ -228,4 +276,5 @@ __all__ = [
     "apply_authored_floor_plan_inset",
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
+    "move_authored_floor_plan_point",
 ]
