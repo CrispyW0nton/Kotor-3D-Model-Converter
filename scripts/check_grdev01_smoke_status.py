@@ -1,0 +1,251 @@
+"""Audit the current grdev01 Map Studio smoke-test status.
+
+This command reads the proof manifest, checks the pack manifest, re-verifies
+the staged `grdev01.mod` package, and optionally compares an installed module
+copy in a KOTOR `Modules` folder.  It does not mark anything game-tested; it
+only reports which proof gates are satisfied and which still need evidence.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PAYLOAD_PATHS = (
+    "native/GhostRigger.Domain.Core.Modules/Python",
+    "native/GhostRigger.Domain.Core.Game/Python",
+    "native/GhostRigger.Domain.Core.Scene/Python",
+    "native/GhostRigger.Domain.Core.Walkmesh/Python",
+    "native/GhostRigger.Domain.Core.Geometry/Python",
+    "native/GhostRigger.Domain.Core.Camera/Python",
+    "native/GhostRigger.Domain.Core.Math/Python",
+    "native/GhostRigger.Domain.Core.Lighting/Python",
+    ".",
+)
+
+
+def _install_payload_paths() -> None:
+    for rel in PAYLOAD_PATHS:
+        path = str((ROOT / rel).resolve())
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--proof-manifest",
+        type=Path,
+        required=True,
+        help="Path to the grdev01 proof manifest written by install/staging.",
+    )
+    parser.add_argument(
+        "--module-path",
+        type=Path,
+        default=None,
+        help="Optional explicit grdev01.mod package path. Defaults to the proof manifest package path.",
+    )
+    parser.add_argument(
+        "--game-modules-dir",
+        type=Path,
+        default=None,
+        help="Optional KOTOR Modules folder used to check the installed grdev01.mod copy.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print a machine-readable status payload instead of a human summary.",
+    )
+    return parser
+
+
+def _load_json(path: Path) -> tuple[dict[str, Any], str]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8")), ""
+    except Exception as exc:
+        return {}, f"{path} could not be read as JSON: {exc}"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verification_summary(module_path: Path) -> dict[str, Any]:
+    if not module_path.is_file():
+        return {
+            "ok": False,
+            "code": "module_missing",
+            "module_path": str(module_path),
+            "blocking_issues": [f"Module package does not exist: {module_path}"],
+        }
+    _install_payload_paths()
+    from src.core.modules.dev_module_smoke import verify_dev_test_module_package  # noqa: WPS433
+
+    result = verify_dev_test_module_package(module_path)
+    return {
+        "ok": bool(result.ok),
+        "code": result.code,
+        "message": result.message,
+        "module_path": result.module_path,
+        "parsed_gff": list(result.parsed_gff),
+        "parsed_wok": list(result.parsed_wok),
+        "model_pairs": list(result.model_pairs),
+        "path_point_count": result.path_point_count,
+        "path_connection_count": result.path_connection_count,
+        "warnings": list(result.warnings),
+        "blocking_issues": list(result.blocking_issues),
+    }
+
+
+def _installed_summary(*, module_path: Path, proof: dict[str, Any], game_modules_dir: Path | None) -> dict[str, Any]:
+    install = proof.get("install") if isinstance(proof.get("install"), dict) else {}
+    installed_path_text = str(install.get("installed_module_path") or "")
+    if game_modules_dir is not None:
+        installed_path_text = str(game_modules_dir / "grdev01.mod")
+    if not installed_path_text:
+        return {"checked": False, "exists": False, "matches_package": False, "installed_module_path": ""}
+    installed_path = Path(installed_path_text)
+    exists = installed_path.is_file()
+    matches = False
+    if exists and module_path.is_file():
+        matches = _sha256(installed_path) == _sha256(module_path)
+    return {
+        "checked": True,
+        "exists": exists,
+        "matches_package": matches,
+        "installed_module_path": str(installed_path),
+    }
+
+
+def _proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
+    required = list(proof.get("acceptance_checks") or [])
+    game_test = proof.get("game_test") if isinstance(proof.get("game_test"), dict) else {}
+    checks = game_test.get("checks") if isinstance(game_test.get("checks"), dict) else {}
+    missing = list(game_test.get("missing_checks") or [name for name in required if not checks.get(name, False)])
+    evidence_path = str(game_test.get("evidence_path") or "")
+    evidence_exists = bool(evidence_path and Path(evidence_path).is_file())
+    return {
+        "game_tested": bool(proof.get("game_tested")),
+        "manual_proof_required": bool(proof.get("manual_proof_required", True)),
+        "required_checks": required,
+        "checks": checks,
+        "missing_checks": missing,
+        "evidence_path": evidence_path,
+        "evidence_exists": evidence_exists,
+    }
+
+
+def _derive_status(*, verification: dict[str, Any], proof: dict[str, Any], installed: dict[str, Any]) -> tuple[str, bool]:
+    if not verification.get("ok"):
+        return "package_blocked", False
+    if proof.get("game_tested") and proof.get("evidence_exists") and not proof.get("missing_checks"):
+        return "game_tested", True
+    if installed.get("checked") and installed.get("exists") and not installed.get("matches_package"):
+        return "installed_copy_mismatch", False
+    if installed.get("checked") and installed.get("exists"):
+        return "installed_ready_for_game_test", False
+    return "ready_for_manual_install", False
+
+
+def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_modules_dir: Path | None = None) -> dict[str, Any]:
+    blocking: list[str] = []
+    warnings: list[str] = []
+    proof: dict[str, Any] = {}
+    proof_error = ""
+    if proof_manifest.is_file():
+        proof, proof_error = _load_json(proof_manifest)
+    else:
+        proof_error = f"Proof manifest does not exist: {proof_manifest}"
+    if proof_error:
+        blocking.append(proof_error)
+    package = proof.get("package") if isinstance(proof.get("package"), dict) else {}
+    inferred_module = Path(str(package.get("module_path"))) if package.get("module_path") else None
+    checked_module_path = module_path or inferred_module
+    if checked_module_path is None:
+        checked_module_path = Path("grdev01.mod")
+        blocking.append("No module package path was supplied and the proof manifest did not name one.")
+    verification = _verification_summary(checked_module_path)
+    blocking.extend(verification.get("blocking_issues", []))
+    proof_state = _proof_summary(proof)
+    installed = _installed_summary(module_path=checked_module_path, proof=proof, game_modules_dir=game_modules_dir)
+    if installed.get("checked") and not installed.get("exists"):
+        warnings.append(f"Installed module copy was not found: {installed['installed_module_path']}")
+    if installed.get("checked") and installed.get("exists") and not installed.get("matches_package"):
+        blocking.append("Installed grdev01.mod does not match the staged package bytes.")
+    status, complete = _derive_status(verification=verification, proof=proof_state, installed=installed)
+    if blocking and status != "package_blocked":
+        complete = False
+    return {
+        "ok": complete,
+        "status": status if not blocking else ("game_tested" if complete else status),
+        "proof_manifest_path": str(proof_manifest),
+        "module_path": str(checked_module_path),
+        "pack_manifest_path": str(package.get("pack_manifest_path") or ""),
+        "package_verification": verification,
+        "proof": proof_state,
+        "installed": installed,
+        "warnings": warnings,
+        "blocking_issues": blocking,
+    }
+
+
+def _print_human_summary(status: dict[str, Any]) -> None:
+    print(f"grdev01 smoke status: {status['status']}")
+    print(f"Module package: {status['module_path']}")
+    print(f"Proof manifest: {status['proof_manifest_path']}")
+    if status["pack_manifest_path"]:
+        print(f"Pack manifest: {status['pack_manifest_path']}")
+    print(f"Package readback: {status['package_verification']['code']}")
+    installed = status["installed"]
+    if installed["checked"]:
+        print(f"Installed copy: {installed['installed_module_path']}")
+        print(f"Installed copy matches package: {installed['matches_package']}")
+    proof = status["proof"]
+    print(f"Game-tested: {proof['game_tested']}")
+    print(f"Manual proof required: {proof['manual_proof_required']}")
+    if proof["evidence_path"]:
+        print(f"Evidence: {proof['evidence_path']} (exists: {proof['evidence_exists']})")
+    if proof["missing_checks"]:
+        print("")
+        print("Missing proof checks:")
+        for check in proof["missing_checks"]:
+            print(f"- {check}")
+    if status["warnings"]:
+        print("")
+        print("Warnings:")
+        for warning in status["warnings"]:
+            print(f"- {warning}")
+    if status["blocking_issues"]:
+        print("")
+        print("Blocking issues:")
+        for issue in status["blocking_issues"]:
+            print(f"- {issue}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    status = build_status(
+        proof_manifest=args.proof_manifest,
+        module_path=args.module_path,
+        game_modules_dir=args.game_modules_dir,
+    )
+    if args.json:
+        print(json.dumps(status, indent=2))
+    else:
+        _print_human_summary(status)
+    return 0 if status["ok"] else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

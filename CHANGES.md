@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Smoke Proof Status Command
+
+Owner: LordVaderCW
+Task: T2619
+Subsystem: Map Studio / smoke-test proof workflow / command-line tooling
+
+- Added `scripts/check_grdev01_smoke_status.py` to audit a staged or installed `grdev01` smoke package against the T2601 proof gates.
+- Re-runs package readback verification, checks proof manifest state, verifies evidence presence, and optionally compares an installed `Modules/grdev01.mod` copy against the staged package bytes.
+- Reports explicit statuses for export candidates, installed packages awaiting game test, installed-copy mismatches, package blockers, and fully game-tested proof.
+- Documented the status audit command in `CHEETSHEET.md`.
+
+Verification:
+- `python -m py_compile scripts/check_grdev01_smoke_status.py tests/test_check_grdev01_smoke_status_script.py`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py -q --basetemp .pytest_tmp_check_grdev01_smoke_status`
+- `python -m pytest tests/test_install_grdev01_smoke_variant_script.py tests/test_record_grdev01_smoke_proof_script.py tests/test_stage_grdev01_smoke_suite_script.py -q --basetemp .pytest_tmp_grdev01_status_workflow`
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Smoke Proof Recording Command
 
 Owner: LordVaderCW
