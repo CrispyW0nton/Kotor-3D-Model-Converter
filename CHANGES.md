@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Smoke Variant Install Command
+
+Owner: LordVaderCW
+Task: T2617
+Subsystem: Map Studio / smoke-test install workflow / command-line tooling
+
+- Added `scripts/install_grdev01_smoke_variant.py` so testers can build and safely install exactly one selected `grdev01` smoke-module variant.
+- Supported rectangular and floor-plan/opening variant aliases, explicit `Modules` folder installs, dry-run preflight, overwrite protection, JSON output, and proof/checklist file generation.
+- Kept the in-game proof gate intact: installing a variant does not mark it game-tested until the proof manifest is recorded after a real `warp grdev01` run.
+- Documented the selected-variant install and dry-run commands in `CHEETSHEET.md`.
+
+Verification:
+- `python -m py_compile scripts/install_grdev01_smoke_variant.py tests/test_install_grdev01_smoke_variant_script.py`
+- `python -m pytest tests/test_install_grdev01_smoke_variant_script.py -q --basetemp .pytest_tmp_install_grdev01_smoke_variant`
+- `python -m pytest tests/test_stage_grdev01_smoke_suite_script.py tests/test_dev_module_smoke.py tests/test_dev_module_game_proof.py -q --basetemp .pytest_tmp_grdev01_cli_workflow`
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Smoke Suite Staging Script
 
 Owner: LordVaderCW

@@ -156,6 +156,19 @@ Stage only the floor-plan/opening variant:
 python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_floor_plan_only --no-rectangular
 ```
 
+Build and safely install one selected `grdev01` variant into a KOTOR `Modules`
+folder for the `warp grdev01` test:
+
+```powershell
+python scripts/install_grdev01_smoke_variant.py --variant floor-plan --game-modules-dir "C:\Path\To\KOTOR\Modules"
+```
+
+Preview the same install without copying files:
+
+```powershell
+python scripts/install_grdev01_smoke_variant.py --variant rectangular --game-modules-dir "C:\Path\To\KOTOR\Modules" --dry-run
+```
+
 Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
 into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
 video evidence before treating it as game-tested.
