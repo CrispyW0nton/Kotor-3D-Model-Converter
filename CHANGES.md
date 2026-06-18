@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Authored Door LYT Hooks
+
+Owner: LordVaderCW
+Task: T2632
+Subsystem: Map Studio / authored module layout / native Python payloads
+
+- Added LYT door-hook compilation from authored door placements so Map Studio door intent now reaches both GIT placement data and layout hook data.
+- Converts authored door bearing into a Z-axis quaternion for the LYT hook while preserving the authored tag/template-derived hook name and position.
+- Blocks duplicate or invalid door-hook names/positions before layout export.
+- Mirrored the layout compiler change into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_layout.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_layout.py tests\test_authored_module_layout.py`
+- `python -m pytest tests/test_authored_module_layout.py tests/test_authored_module_objects.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_layout_door_hooks`
+
 ### [2026-06-18] Map Studio Smoke Builder Uses Gameplay Walkmesh Gate
 
 Owner: LordVaderCW

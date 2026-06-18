@@ -147,7 +147,7 @@
       "source_path": "src/core/modules/authored_module_layout.py",
       "packaged_path": "Python/src/core/modules/authored_module_layout.py",
       "resource_name": "PYTHON_PAYLOAD_0023",
-      "sha256": "8369a7a1dba15ca8f08b957849db03504bcda1d63ba7d8d4eeccba854ff36b6c"
+      "sha256": "45a60a86a96625b37b90bb5f4bdb931014bf5d47ff83df94ae6f76508bdab4eb"
     },
     {
       "source_path": "src/core/modules/authored_module_metadata.py",

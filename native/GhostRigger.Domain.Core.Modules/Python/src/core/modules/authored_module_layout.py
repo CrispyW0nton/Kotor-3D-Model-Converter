@@ -7,10 +7,12 @@ keeps room placement and visibility policy Qt-free and testable.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
-from .module_format import LYTLayout, LYTRoom, VISData
+from .authored_module_objects import normalise_resource_resref
+from .module_format import LYTLayout, LYTDoorHook, LYTRoom, VISData
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,15 @@ class AuthoredModuleLayout:
 
 def _room_name(room: AuthoredRoomSpec) -> str:
     return normalise_resref(room.room_resref)
+
+
+def _door_hook_name(template_resref: str, tag: str) -> str:
+    return normalise_resource_resref(tag) or normalise_resource_resref(template_resref)
+
+
+def _bearing_to_quaternion_z(bearing: float) -> tuple[float, float, float, float]:
+    half = float(bearing) * 0.5
+    return (0.0, 0.0, math.sin(half), math.cos(half))
 
 
 def validate_authored_module_layout(project: AuthoredModuleProject) -> AuthoredModuleLayoutValidation:
@@ -67,6 +78,29 @@ def validate_authored_module_layout(project: AuthoredModuleProject) -> AuthoredM
                 blocking.append(f"Room {name or index + 1} references missing visible room {target_name}.")
     if len(room_set) > 1 and not any(room.visible_rooms for room in project.rooms):
         warnings.append("Multi-room layout has no explicit VIS links; each room will see only itself.")
+    seen_door_hooks: set[str] = set()
+    for index, door in enumerate(project.placements.doors):
+        hook_name = _door_hook_name(door.template_resref, door.tag)
+        if not hook_name:
+            blocking.append(f"Door hook {index + 1} requires a template resref or tag.")
+            continue
+        if hook_name in seen_door_hooks:
+            blocking.append(f"Duplicate authored door hook name: {hook_name}")
+        seen_door_hooks.add(hook_name)
+        if len(door.position) != 3:
+            blocking.append(f"Door hook {hook_name} requires an XYZ layout position.")
+        else:
+            try:
+                tuple(float(value) for value in door.position)
+            except Exception:
+                blocking.append(f"Door hook {hook_name} has a non-numeric layout position.")
+        try:
+            bearing = float(door.bearing)
+        except Exception:
+            blocking.append(f"Door hook {hook_name} has a non-numeric bearing.")
+            continue
+        if not math.isfinite(bearing):
+            blocking.append(f"Door hook {hook_name} has a non-finite bearing.")
     return AuthoredModuleLayoutValidation(
         ok=not blocking,
         warnings=tuple(warnings),
@@ -90,6 +124,20 @@ def compile_authored_module_layout(project: AuthoredModuleProject) -> AuthoredMo
         lyt.rooms.append(LYTRoom(room_name, x, y, z))
         visible = [normalise_resref(target) for target in room.visible_rooms if normalise_resref(target)]
         visibility[room_name] = visible or [room_name]
+    for door in project.placements.doors:
+        qx, qy, qz, qw = _bearing_to_quaternion_z(float(door.bearing))
+        lyt.doorhooks.append(
+            LYTDoorHook(
+                _door_hook_name(door.template_resref, door.tag),
+                float(door.position[0]),
+                float(door.position[1]),
+                float(door.position[2]),
+                qx,
+                qy,
+                qz,
+                qw,
+            )
+        )
     return AuthoredModuleLayout(
         lyt=lyt,
         vis=VISData(visibility=visibility),
@@ -98,6 +146,7 @@ def compile_authored_module_layout(project: AuthoredModuleProject) -> AuthoredMo
         metadata={
             "source": "src.core.modules.authored_module_layout",
             "room_count": len(room_names),
+            "door_hook_count": len(lyt.doorhooks),
             "vis_entry_count": len(visibility),
         },
     )
