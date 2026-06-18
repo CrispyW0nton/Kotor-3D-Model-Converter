@@ -146,3 +146,55 @@ def test_t2613_invalid_floor_plan_opening_blocks_before_export() -> None:
     assert any("does not fit within wall edge" in issue for issue in oversized.blocking_issues)
     assert not too_tall.ok
     assert any("must leave wall geometry above it" in issue for issue in too_tall.blocking_issues)
+
+
+def test_t2623_insets_convex_floor_plan_points() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import inset_floor_plan_points, polygon_signed_area
+
+    inset = inset_floor_plan_points(((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)), 0.5)
+
+    assert inset == ((-2.5, -1.5), (2.5, -1.5), (2.5, 1.5), (-2.5, 1.5))
+    assert polygon_signed_area(inset) == 15.0
+
+
+def test_t2623_apply_inset_compiles_smaller_floor_plan_room() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanInsetOperation, FloorPlanRoomPrimitive, FloorPlanWallOpening, apply_floor_plan_inset, compile_floor_plan_room_geometry
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="outer_room",
+        points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        openings=(FloorPlanWallOpening(name="door", edge_index=0),),
+        metadata={"author_note": "blockout"},
+    )
+
+    inset = apply_floor_plan_inset(
+        primitive,
+        FloorPlanInsetOperation(distance=0.25, room_resref="inner_room", metadata={"operation_id": "inset_a"}),
+    )
+    geometry = compile_floor_plan_room_geometry(inset)
+
+    assert inset.room_resref == "inner_room"
+    assert inset.points == ((-2.75, -1.75), (2.75, -1.75), (2.75, 1.75), (-2.75, 1.75))
+    assert inset.openings == ()
+    assert inset.metadata["operation"] == "inset"
+    assert inset.metadata["author_note"] == "blockout"
+    assert inset.metadata["operation_id"] == "inset_a"
+    assert geometry.room_resref == "inner_room"
+    assert geometry.metadata["polygon_area"] == 19.25
+
+
+def test_t2623_inset_rejects_invalid_operation_inputs() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_floorplan import inset_floor_plan_points
+
+    with pytest.raises(ValueError, match="distance must be positive"):
+        inset_floor_plan_points(((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)), 0.0)
+    with pytest.raises(ValueError, match="convex footprints only"):
+        inset_floor_plan_points(((0.0, 0.0), (2.0, 0.0), (1.0, 0.5), (2.0, 2.0), (0.0, 2.0)), 0.1)

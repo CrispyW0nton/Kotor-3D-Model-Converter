@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Floor-Plan Inset Operation
+
+Owner: LordVaderCW
+Task: T2623
+Subsystem: Map Studio / authored floor-plan geometry / native Python payloads
+
+- Added a headless `FloorPlanInsetOperation` and convex-footprint inset helper so future Map Studio UI tools can apply a real inward offset operation before room export.
+- Preserved existing floor-plan metadata/material settings while conservatively clearing wall openings after inset because the previous openings no longer map safely to the new footprint.
+- Mirrored the authored floor-plan change into the ModuleMeshes native Python payload and refreshed payload manifest hashes.
+- Added regression coverage for rectangle inset geometry, compile-to-room output, metadata preservation, and invalid inset inputs.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_authored_room_floorplan.py`
+- `python -m pytest tests/test_authored_room_floorplan.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_floorplan_inset_smoke`
+- Native Python payload hash check for the edited authored floor-plan module.
+
 ### [2026-06-18] Map Studio Authored Arch Primitive
 
 Owner: LordVaderCW

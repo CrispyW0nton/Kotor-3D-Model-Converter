@@ -47,6 +47,15 @@ class FloorPlanRoomPrimitive:
 
 
 @dataclass(frozen=True)
+class FloorPlanInsetOperation:
+    """Inward offset operation for a convex authored floor-plan footprint."""
+
+    distance: float
+    room_resref: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FloorPlanRoomValidation:
     """Validation result for a floor-plan room primitive."""
 
@@ -135,6 +144,16 @@ def _edge_length(a: Vec2, b: Vec2) -> float:
     return (dx * dx + dy * dy) ** 0.5
 
 
+def _line_intersection(point_a: Vec2, dir_a: Vec2, point_b: Vec2, dir_b: Vec2) -> Vec2 | None:
+    cross = dir_a[0] * dir_b[1] - dir_a[1] * dir_b[0]
+    if abs(cross) <= 1.0e-9:
+        return None
+    delta_x = point_b[0] - point_a[0]
+    delta_y = point_b[1] - point_a[1]
+    t = (delta_x * dir_b[1] - delta_y * dir_b[0]) / cross
+    return (point_a[0] + dir_a[0] * t, point_a[1] + dir_a[1] * t)
+
+
 def _lerp_point(a: Vec2, b: Vec2, fraction: float) -> Vec2:
     return (a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction)
 
@@ -220,6 +239,67 @@ def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> Flo
         area=area,
         warnings=tuple(warnings),
         blocking_issues=tuple(blocking),
+    )
+
+
+def inset_floor_plan_points(points: tuple[Vec2, ...], distance: float) -> tuple[Vec2, ...]:
+    """Inset a convex footprint by offsetting each edge inward."""
+
+    source = _normalise_points(points)
+    if len(source) < 3:
+        raise ValueError("Floor-plan inset requires at least three footprint points.")
+    if float(distance) <= 0.0:
+        raise ValueError("Floor-plan inset distance must be positive.")
+    if _has_duplicate_or_zero_edges(source):
+        raise ValueError("Floor-plan inset cannot use duplicate points or zero-length edges.")
+    if not _is_convex(source):
+        raise ValueError("Floor-plan inset currently supports convex footprints only.")
+    ccw = _ccw_points(source)
+    lines: list[tuple[Vec2, Vec2]] = []
+    for index, point in enumerate(ccw):
+        next_point = ccw[(index + 1) % len(ccw)]
+        dx = next_point[0] - point[0]
+        dy = next_point[1] - point[1]
+        length = (dx * dx + dy * dy) ** 0.5
+        if length <= 1.0e-9:
+            raise ValueError("Floor-plan inset cannot use zero-length edges.")
+        inward = (-dy / length, dx / length)
+        offset_point = (point[0] + inward[0] * float(distance), point[1] + inward[1] * float(distance))
+        lines.append((offset_point, (dx, dy)))
+    inset: list[Vec2] = []
+    for index, (line_point, line_dir) in enumerate(lines):
+        prev_point, prev_dir = lines[index - 1]
+        intersection = _line_intersection(prev_point, prev_dir, line_point, line_dir)
+        if intersection is None:
+            raise ValueError("Floor-plan inset cannot resolve parallel adjacent edges.")
+        inset.append(intersection)
+    if abs(polygon_signed_area(tuple(inset))) <= 1.0e-7:
+        raise ValueError("Floor-plan inset distance collapses the footprint.")
+    if not _is_convex(tuple(inset)):
+        raise ValueError("Floor-plan inset distance produced a non-convex footprint.")
+    return tuple(inset)
+
+
+def apply_floor_plan_inset(primitive: FloorPlanRoomPrimitive, operation: FloorPlanInsetOperation) -> FloorPlanRoomPrimitive:
+    """Return a new floor-plan primitive with its footprint inset."""
+
+    points = inset_floor_plan_points(primitive.points, operation.distance)
+    metadata = {
+        **dict(primitive.metadata),
+        "operation": "inset",
+        "inset_distance": float(operation.distance),
+        **dict(operation.metadata),
+    }
+    return FloorPlanRoomPrimitive(
+        room_resref=_normalise_resref(operation.room_resref) or primitive.room_resref,
+        points=points,
+        z=primitive.z,
+        wall_height=primitive.wall_height,
+        floor_surface_id=primitive.floor_surface_id,
+        material=primitive.material,
+        include_walls=primitive.include_walls,
+        openings=(),
+        metadata=metadata,
     )
 
 
@@ -391,13 +471,16 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
 
 
 __all__ = [
+    "FloorPlanInsetOperation",
     "FloorPlanRoomPrimitive",
     "FloorPlanRoomValidation",
     "FloorPlanWallOpening",
+    "apply_floor_plan_inset",
     "build_floor_plan_floor_mesh",
     "build_floor_plan_wall_meshes",
     "build_floor_plan_wok",
     "compile_floor_plan_room_geometry",
+    "inset_floor_plan_points",
     "polygon_signed_area",
     "validate_floor_plan_room_primitive",
 ]

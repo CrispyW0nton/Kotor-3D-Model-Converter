@@ -327,7 +327,7 @@
       "resource_name": "PYTHON_PAYLOAD_0055",
       "source_path": "src/core/modules/authored_room_floorplan.py",
       "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-      "sha256": "2f6460158b36645a4da4725fa789aa3e023a9a2cc2a97a1182ba6fa80a3ab2c0"
+      "sha256": "e2e1c3b4f5dc097fb1011892fccf4bc28d8bea81a1ccea0a80c23803be514d63"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0053",
