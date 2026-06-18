@@ -8,6 +8,18 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportOverlayLayersMixin:
+    @staticmethod
+    def _map_studio_distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+        dx = bx - ax
+        dy = by - ay
+        denom = dx * dx + dy * dy
+        if denom <= 1.0e-9:
+            return ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / denom))
+        cx = ax + dx * t
+        cy = ay + dy * t
+        return ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+
     def _map_studio_marker_rgba(self, color: object, alpha: int = 220) -> tuple[int, int, int, int]:
         text = str(color or "").strip()
         if text.startswith("#") and len(text) == 7:
@@ -29,7 +41,44 @@ class ViewportOverlayLayersMixin:
         except Exception:
             return None
 
+    def _add_map_studio_marker_hit_zone(self, placement_id: object, kind: str, **zone: object) -> None:
+        placement = str(placement_id or "")
+        if not placement:
+            return
+        zones = getattr(self, "_map_studio_marker_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_marker_hit_zones = zones
+        zone["placement_id"] = placement
+        zone["kind"] = kind
+        zones.append(zone)
+
+    def map_studio_marker_at_screen(self, x: float, y: float) -> str:
+        """Return the authored placement id under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_marker_hit_zones", ()) or ())):
+            kind = str(zone.get("kind", "") or "")
+            if kind == "rect":
+                min_x, min_y, max_x, max_y = zone.get("bounds", (0.0, 0.0, -1.0, -1.0))
+                if float(min_x) <= px <= float(max_x) and float(min_y) <= py <= float(max_y):
+                    return str(zone.get("placement_id", "") or "")
+            elif kind == "circle":
+                cx, cy = zone.get("center", (0.0, 0.0))
+                radius = float(zone.get("radius", 0.0) or 0.0)
+                if ((px - float(cx)) ** 2 + (py - float(cy)) ** 2) <= radius * radius:
+                    return str(zone.get("placement_id", "") or "")
+            elif kind == "line":
+                ax, ay = zone.get("start", (0.0, 0.0))
+                bx, by = zone.get("end", (0.0, 0.0))
+                tolerance = float(zone.get("tolerance", 0.0) or 0.0)
+                if self._map_studio_distance_to_segment(px, py, float(ax), float(ay), float(bx), float(by)) <= tolerance:
+                    return str(zone.get("placement_id", "") or "")
+        return ""
+
     def _draw_map_studio_placement_markers(self, draw, w: int, h: int) -> None:
+        self._map_studio_marker_hit_zones = []
         geometry = getattr(self, "_map_studio_marker_geometry", None)
         if geometry is None:
             return
@@ -52,6 +101,13 @@ class ViewportOverlayLayersMixin:
                     fill = (color[0], color[1], color[2], 34)
                     outline = (color[0], color[1], color[2], 205)
                     closed = projected + [projected[0]]
+                    xs = [float(p[0]) for p in projected]
+                    ys = [float(p[1]) for p in projected]
+                    self._add_map_studio_marker_hit_zone(
+                        getattr(footprint, "placement_id", ""),
+                        "rect",
+                        bounds=(min(xs) - 8.0, min(ys) - 8.0, max(xs) + 8.0, max(ys) + 8.0),
+                    )
                     draw.polygon(projected, fill=fill)
                     draw.line(closed, fill=(0, 0, 0, 125), width=4)
                     draw.line(closed, fill=outline, width=2)
@@ -65,6 +121,13 @@ class ViewportOverlayLayersMixin:
                 width = 3 if role == "facing" else 2
                 sx, sy = float(start[0]), float(start[1])
                 ex, ey = float(end[0]), float(end[1])
+                self._add_map_studio_marker_hit_zone(
+                    getattr(guide, "placement_id", ""),
+                    "line",
+                    start=(sx, sy),
+                    end=(ex, ey),
+                    tolerance=8.0 if role == "facing" else 6.0,
+                )
                 if role == "height":
                     segments = 6
                     for index in range(segments):
@@ -80,6 +143,12 @@ class ViewportOverlayLayersMixin:
                     draw.line([(sx, sy), (ex, ey)], fill=(0, 0, 0, 145), width=width + 2)
                     draw.line([(sx, sy), (ex, ey)], fill=color, width=width)
                 radius = 4
+                self._add_map_studio_marker_hit_zone(
+                    getattr(guide, "placement_id", ""),
+                    "circle",
+                    center=(sx, sy),
+                    radius=9.0,
+                )
                 draw.ellipse(
                     [sx - radius, sy - radius, sx + radius, sy + radius],
                     fill=color,
@@ -88,6 +157,12 @@ class ViewportOverlayLayersMixin:
                 )
                 if role == "facing":
                     radius = 3
+                    self._add_map_studio_marker_hit_zone(
+                        getattr(guide, "placement_id", ""),
+                        "circle",
+                        center=(ex, ey),
+                        radius=8.0,
+                    )
                     draw.ellipse(
                         [ex - radius, ey - radius, ex + radius, ey + radius],
                         fill=color,

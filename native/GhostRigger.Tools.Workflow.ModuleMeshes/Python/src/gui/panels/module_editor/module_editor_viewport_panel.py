@@ -46,6 +46,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.viewport = QtViewportWidget(self)
         self.viewport.setMinimumHeight(520)
         self._ensure_embedded_viewport_toolbar_gap()
+        self._marker_pick_filter_ids: set[int] = set()
+        self._install_marker_pick_filters()
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if toolbar_scroll is not None:
             toolbar_scroll.installEventFilter(self)
@@ -150,6 +152,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.viewport.set_renderer_settings(settings)
 
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
+        if self._is_marker_pick_event_source(watched) and event.type() == QtCore.QEvent.MouseButtonPress:
+            if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
+                placement_id = self._marker_at_event(event)
+                if placement_id:
+                    self.select_id(placement_id)
+                    self.itemSelected.emit(placement_id)
+                    return True
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
             QtCore.QEvent.Resize,
@@ -158,6 +167,40 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         }:
             QtCore.QTimer.singleShot(0, self._ensure_embedded_viewport_toolbar_gap)
         return super().eventFilter(watched, event)
+
+    def _install_marker_pick_filters(self) -> None:
+        candidates = [getattr(self, "viewport", None), getattr(getattr(self, "viewport", None), "canvas", None)]
+        canvas = getattr(getattr(self, "viewport", None), "canvas", None)
+        current_surface = getattr(canvas, "current_surface", lambda: None)() if canvas is not None else None
+        candidates.append(current_surface)
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            key = id(candidate)
+            if key in self._marker_pick_filter_ids:
+                continue
+            try:
+                candidate.installEventFilter(self)
+            except Exception:
+                continue
+            self._marker_pick_filter_ids.add(key)
+
+    def _is_marker_pick_event_source(self, watched: QtCore.QObject) -> bool:
+        canvas = getattr(self.viewport, "canvas", None)
+        if watched is self.viewport or watched is canvas:
+            return True
+        current_surface = getattr(canvas, "current_surface", lambda: None)() if canvas is not None else None
+        return watched is current_surface
+
+    def _marker_at_event(self, event: QtCore.QEvent) -> str:
+        marker_at_screen = getattr(self.viewport, "map_studio_marker_at_screen", None)
+        if not callable(marker_at_screen):
+            return ""
+        pos_fn = getattr(event, "position", None)
+        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
+        if pos is None:
+            return ""
+        return str(marker_at_screen(float(pos.x()), float(pos.y())) or "")
 
     def _ensure_embedded_viewport_toolbar_gap(self, gap_height: int = 6) -> None:
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
@@ -255,11 +298,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         lines = tuple(getattr(authored_gameplay_marker_geometry, "lines", ()) or ())
         if authored_gameplay_marker_geometry is not None and (footprints or lines) and callable(setter):
             setter(authored_gameplay_marker_geometry)
+            self._install_marker_pick_filters()
             return
         if callable(clearer):
             clearer()
         elif callable(setter):
             setter(None)
+        self._install_marker_pick_filters()
 
     def _table_selection(self) -> None:
         rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []

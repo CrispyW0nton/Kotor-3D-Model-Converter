@@ -52,3 +52,40 @@ def test_t2660_module_editor_panel_sends_marker_geometry_to_viewport() -> None:
         assert "clear_map_studio_marker_geometry" in source
         assert "footprint(s)" in source
         assert "guide line(s)" in source
+
+
+def test_t2662_marker_overlay_builds_screen_hit_zones() -> None:
+    widget_source = _read(
+        "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
+    )
+    overlay_source = _read(
+        "native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+    )
+
+    assert "self._map_studio_marker_hit_zones: list[dict[str, object]] = []" in widget_source
+    assert "def map_studio_marker_at_screen" in overlay_source
+    assert "def _add_map_studio_marker_hit_zone" in overlay_source
+    assert "kind == \"rect\"" in overlay_source
+    assert "kind == \"circle\"" in overlay_source
+    assert "kind == \"line\"" in overlay_source
+    assert "_map_studio_distance_to_segment" in overlay_source
+    assert "self._map_studio_marker_hit_zones = []" in overlay_source
+    assert "placement_id" in overlay_source
+
+
+def test_t2662_module_editor_panel_selects_authored_marker_from_viewport_click() -> None:
+    panel_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    mirrored_panel_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+
+    for source in (panel_source, mirrored_panel_source):
+        assert "self._marker_pick_filter_ids: set[int] = set()" in source
+        assert "self._install_marker_pick_filters()" in source
+        assert "def _is_marker_pick_event_source" in source
+        assert "def _marker_at_event" in source
+        assert "map_studio_marker_at_screen" in source
+        assert "self.itemSelected.emit(placement_id)" in source
+        assert "return True" in source

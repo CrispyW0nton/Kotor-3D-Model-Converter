@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Makes Authored Placement Markers Selectable
+
+Owner: LordVaderCW
+Task: T2662
+Subsystem: Map Studio / Module Editor viewport overlay hit testing / authored gameplay placement selection / native Python payloads
+
+- Added screen-space hit zones for authored placement marker footprints, facing guides, height guides, and endpoint dots during viewport overlay drawing.
+- Added a viewport `map_studio_marker_at_screen` hit-test API so the Module Editor can ask which authored placement marker is under the cursor without duplicating projection math.
+- Updated the Module Editor viewport panel to install marker-pick event filters and select authored placements when a marker is clicked.
+- Mirrored the panel marker-pick wiring into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\viewport_widget.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_map_studio_marker_overlay.py`
+- `python -m pytest tests\test_map_studio_marker_overlay.py tests\test_authored_gameplay_marker_geometry.py -q --basetemp .pytest_tmp_map_studio_marker_selection`
+
 ### [2026-06-18] Map Studio Allows Inline Authored Placement Transform Edits
 
 Owner: LordVaderCW
