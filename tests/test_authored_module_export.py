@@ -92,6 +92,72 @@ def test_t2643_controller_exports_current_kmap_authored_module(tmp_path: Path) -
     assert "grdev01_room01.mdl" in payload["runtime_resources"]
 
 
+def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grpth01",
+        game="K1",
+    )
+    for kind, template, tag, position in (
+        ("creature", "c_drdmkone", "grpth_guard", (1.0, 1.0, 0.0)),
+        ("door", "door_t01", "grpth_door", (-1.0, 1.0, 0.0)),
+        ("trigger", "trg_test", "grpth_trig", (1.0, -1.0, 0.0)),
+        ("encounter", "enc_test", "grpth_enc", (-1.0, -1.0, 0.0)),
+        ("placeable", "plc_bench", "grpth_bench", (2.0, 0.0, 0.0)),
+        ("waypoint", "wp_test", "grpth_wp", (0.0, 2.0, 0.0)),
+        ("sound", "snd_test", "grpth_sound", (0.0, -2.0, 0.0)),
+    ):
+        project = add_authored_gameplay_placement(
+            project,
+            kind=kind,
+            template_resref=template,
+            tag=tag,
+            position=position,
+        ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="camera",
+        tag="7",
+        position=(2.0, 2.0, 0.0),
+    ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="store",
+        template_resref="stm_shop",
+        tag="grpth_store",
+    ).project
+
+    build = build_authored_module(project)
+    pathing = build.metadata["pathing"]
+    labels = set(pathing["anchor_labels"])
+
+    assert not build.blocking_issues
+    assert ("grpth01", "pth") in build.resources
+    assert {
+        "entry_point",
+        "creature:grpth_guard",
+        "door:grpth_door",
+        "trigger:grpth_trig",
+        "encounter:grpth_enc",
+        "placeable:grpth_bench",
+        "waypoint:grpth_wp",
+    } <= labels
+    assert "sound:grpth_sound" not in labels
+    assert "camera:7" not in labels
+    assert "store:grpth_store" not in labels
+    assert pathing["point_count"] >= 7
+    assert build.metadata["gameplay_counts"]["creatures"] == 1
+    assert build.metadata["gameplay_counts"]["doors"] == 1
+    assert build.metadata["gameplay_counts"]["triggers"] == 1
+    assert build.metadata["gameplay_counts"]["encounters"] == 1
+
+
 def test_t2643_dry_run_does_not_mark_runtime_resources(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

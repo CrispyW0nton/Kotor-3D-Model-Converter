@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Gameplay Anchors to Authored Pathing
+
+Owner: LordVaderCW
+Task: T2680
+Subsystem: Map Studio / authored module export / gameplay placements / generated PTH pathing / native Python payloads
+
+- Extended authored-module PTH generation so walkable creatures, doors, triggers, encounters, placeables, and waypoints become gameplay anchors in the generated path graph.
+- Kept non-pathing objects such as sounds, cameras, and stores out of the path graph while preserving their GIT export counts.
+- Added pathing metadata to the authored-module build report so future Map Studio readiness/UI panels can explain which spatial gameplay anchors contributed to the generated PTH.
+- Mirrored the authored export payload update into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py::test_t2680_pathing_includes_walkable_spatial_gameplay_anchors -q --basetemp .pytest_tmp_map_studio_pathing_anchors`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_pathing_export`
+- `python -m pytest tests\test_authored_gameplay_placement_selection.py tests\test_authored_gameplay_marker_geometry.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_pathing_anchors_smoke`
+- `python -m pytest tests\test_authored_module_pathing.py -q --basetemp .pytest_tmp_map_studio_pathing_core`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Unions Authored Floor-Plan Rooms
 
 Owner: LordVaderCW

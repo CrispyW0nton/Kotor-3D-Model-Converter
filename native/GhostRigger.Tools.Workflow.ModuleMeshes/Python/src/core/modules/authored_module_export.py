@@ -285,15 +285,40 @@ def _path_anchors_from_walkability(placements: AuthoredGameplayPlacement, checks
     ok_labels = {str(getattr(check, "label", "")): bool(getattr(check, "ok", False)) for check in list(getattr(checks, "checks", ()) or ())}
     anchors: list[AuthoredPathAnchor] = []
     if ok_labels.get("entry_point", False):
-        anchors.append(AuthoredPathAnchor("entry_point", placements.entry_point.position))
+        anchors.append(AuthoredPathAnchor("entry_point", placements.entry_point.position, metadata={"kind": "entry_point"}))
+
+    def append_spatial_anchor(kind: str, index: int, item: Any) -> None:
+        if not hasattr(item, "position"):
+            return
+        template = str(getattr(item, "template_resref", "") or "")
+        tag = str(getattr(item, "tag", "") or "")
+        label = f"{kind}:{tag or template or f'{kind}_{index + 1}'}"
+        if ok_labels.get(label, False):
+            anchors.append(
+                AuthoredPathAnchor(
+                    label,
+                    tuple(getattr(item, "position")),
+                    metadata={
+                        "kind": kind,
+                        "index": index,
+                        "template_resref": template,
+                        "tag": tag,
+                    },
+                )
+            )
+
+    for index, creature in enumerate(placements.creatures):
+        append_spatial_anchor("creature", index, creature)
+    for index, door in enumerate(placements.doors):
+        append_spatial_anchor("door", index, door)
+    for index, trigger in enumerate(placements.triggers):
+        append_spatial_anchor("trigger", index, trigger)
+    for index, encounter in enumerate(placements.encounters):
+        append_spatial_anchor("encounter", index, encounter)
     for index, placeable in enumerate(placements.placeables):
-        label = f"placeable:{placeable.tag or placeable.template_resref or f'placeable_{index + 1}'}"
-        if ok_labels.get(label, False):
-            anchors.append(AuthoredPathAnchor(label, placeable.position))
+        append_spatial_anchor("placeable", index, placeable)
     for index, waypoint in enumerate(placements.waypoints):
-        label = f"waypoint:{waypoint.tag or waypoint.template_resref or f'waypoint_{index + 1}'}"
-        if ok_labels.get(label, False):
-            anchors.append(AuthoredPathAnchor(label, waypoint.position))
+        append_spatial_anchor("waypoint", index, waypoint)
     return tuple(anchors)
 
 
@@ -437,6 +462,7 @@ def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild
             "room_count": len(room_geometries),
             "resource_count": len(resources),
             "gameplay_counts": _placement_counts(project.placements),
+            "pathing": dict(pathing.metadata) if pathing is not None else {},
         },
     )
 
