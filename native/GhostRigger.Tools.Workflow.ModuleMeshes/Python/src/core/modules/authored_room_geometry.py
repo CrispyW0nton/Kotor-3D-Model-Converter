@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .module_format import WOKData, WOKFace
 
 
@@ -53,7 +54,7 @@ class RectangularRoomPrimitive:
     width: float = 10.0
     depth: float = 10.0
     wall_height: float = 3.0
-    floor_surface_id: int = 4
+    floor_surface_id: int | str = 4
     texture: str = "default"
     include_doorway_marker: bool = True
 
@@ -93,6 +94,7 @@ def _offset_faces(faces: list[Face], offset: int) -> list[Face]:
 def build_rectangular_room_wok(primitive: RectangularRoomPrimitive) -> WOKData:
     """Derive a simple walkable floor WOK from the room floor primitive."""
 
+    surface_id = resolve_walkmesh_surface_id(primitive.floor_surface_id)
     half_w = float(primitive.width) * 0.5
     half_d = float(primitive.depth) * 0.5
     return WOKData(
@@ -103,8 +105,8 @@ def build_rectangular_room_wok(primitive: RectangularRoomPrimitive) -> WOKData:
             (-half_w, half_d, 0.0),
         ],
         faces=[
-            WOKFace(0, 1, 2, surface=int(primitive.floor_surface_id), adj1=-1, adj2=-1, adj3=1),
-            WOKFace(0, 2, 3, surface=int(primitive.floor_surface_id), adj1=0, adj2=-1, adj3=-1),
+            WOKFace(0, 1, 2, surface=surface_id, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=surface_id, adj1=0, adj2=-1, adj3=-1),
         ],
     )
 
@@ -214,7 +216,8 @@ def build_rectangular_room_geometry(primitive: RectangularRoomPrimitive) -> Auth
             "width": float(primitive.width),
             "depth": float(primitive.depth),
             "wall_height": float(primitive.wall_height),
-            "floor_surface_id": int(primitive.floor_surface_id),
+            "floor_surface_id": resolve_walkmesh_surface_id(primitive.floor_surface_id),
+            "floor_surface_name": walkmesh_surface_name(resolve_walkmesh_surface_id(primitive.floor_surface_id)),
             "helper_mesh_count": len(helpers),
         },
     )

@@ -82,3 +82,20 @@ def test_t2603_composition_validation_rejects_duplicate_primitive_names() -> Non
 
     assert validation.ok is False
     assert "Duplicate authored room primitive name: duplicate" in validation.blocking_issues
+
+
+def test_t2604_composition_validation_rejects_non_walk_floor_surface() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="blocked",
+        floor=FloorPrimitive(name="blocked_floor", surface_id="non_walk"),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert "blocked floor surface 7 (NON_WALK) is not walkable." in validation.blocking_issues

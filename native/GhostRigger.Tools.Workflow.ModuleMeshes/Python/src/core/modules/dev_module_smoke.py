@@ -41,6 +41,7 @@ from .authored_room_geometry import (
     build_rectangular_room_geometry,
 )
 from .authored_room_composition import compile_authored_room_composition
+from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .authored_module_project import (
     AuthoredModuleProject,
     create_single_room_project,
@@ -60,7 +61,7 @@ class DevModuleSmokeRequest:
     width: float = 10.0
     depth: float = 10.0
     wall_height: float = 3.0
-    surface_id: int = 4
+    surface_id: int | str = 4
     room_texture: str = "default"
     player_start: tuple[float, float, float] = (0.0, -3.0, 0.0)
     player_facing: float = 0.0
@@ -356,7 +357,7 @@ def _room_primitive(request: DevModuleSmokeRequest) -> RectangularRoomPrimitive:
         width=float(request.width),
         depth=float(request.depth),
         wall_height=float(request.wall_height),
-        floor_surface_id=int(request.surface_id),
+        floor_surface_id=resolve_walkmesh_surface_id(request.surface_id),
         texture=str(request.room_texture or ""),
         include_doorway_marker=True,
     )
@@ -435,6 +436,7 @@ def _walkability_check(label: str, position: tuple[float, float, float], wok: WO
         )
     face = wok.faces[face_index]
     surface_id = int(face.surface)
+    surface_name = walkmesh_surface_name(surface_id)
     if surface_id not in _walkable_ids():
         return DevModuleWalkabilityCheck(
             label=label,
@@ -442,7 +444,7 @@ def _walkability_check(label: str, position: tuple[float, float, float], wok: WO
             ok=False,
             face_index=face_index,
             surface_id=surface_id,
-            message=f"{label} is on WOK face {face_index}, but surface {surface_id} is not walkable.",
+            message=f"{label} is on WOK face {face_index}, but surface {surface_id} ({surface_name}) is not walkable.",
         )
     floor_z = float(wok.verts[face.v1][2] + wok.verts[face.v2][2] + wok.verts[face.v3][2]) / 3.0
     if abs(float(position[2]) - floor_z) > 0.05:
@@ -460,7 +462,7 @@ def _walkability_check(label: str, position: tuple[float, float, float], wok: WO
         ok=True,
         face_index=face_index,
         surface_id=surface_id,
-        message=f"{label} is on walkable WOK face {face_index}.",
+        message=f"{label} is on walkable WOK face {face_index} ({surface_name}).",
     )
 
 

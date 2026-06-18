@@ -48,6 +48,21 @@ def test_t2602_builds_floor_mesh_and_walkmesh() -> None:
     assert [face.surface for face in wok.faces] == [4, 4]
 
 
+def test_t2604_floor_primitive_accepts_named_walkmesh_surface() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_primitives import FloorPrimitive, build_floor_mesh, build_floor_wok
+
+    primitive = FloorPrimitive(name="metal_floor", width=2.0, depth=2.0, surface_id="metal")
+
+    mesh = build_floor_mesh(primitive)
+    wok = build_floor_wok(primitive)
+
+    assert mesh.metadata["surface_id"] == 10
+    assert mesh.metadata["surface_name"] == "METAL"
+    assert [face.surface for face in wok.faces] == [10, 10]
+
+
 def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     _install_native_payload_paths()
 

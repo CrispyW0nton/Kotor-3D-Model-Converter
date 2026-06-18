@@ -2,7 +2,7 @@
   "schema": "ghostrigger_python_payload.v1",
   "phase": "P1.5 embedded python payload",
   "project": "GhostRigger.Tools.Workflow.ModuleMeshes",
-  "file_count": 49,
+  "file_count": 50,
   "originals_remain_in_src": true,
   "files": [
     {
@@ -267,37 +267,43 @@
       "resource_name": "PYTHON_PAYLOAD_0044",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "82609670d0aba1e093c8e4e4ae827c538ead0319d20cdf591fac5dfbf3025f60"
+      "sha256": "91dddd1758077691cf66eaa0914421a918ab289c808054907f73dff686beb0ee"
     },
     {
+      "source_path": "src/core/modules/authored_walkmesh_surfaces.py",
+      "packaged_path": "Python/src/core/modules/authored_walkmesh_surfaces.py",
       "resource_name": "PYTHON_PAYLOAD_0045",
+      "sha256": "0f22c9cf0b3fe30e243ef1c70a451310b0bb13f56623c89d46b6e474aff7b86d"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0046",
       "source_path": "src/core/modules/authored_room_geometry.py",
       "packaged_path": "Python/src/core/modules/authored_room_geometry.py",
-      "sha256": "28c35e07abc7e0784bc13890e67d005549af1ebcfc9c8dcd658eb9736ba72350"
+      "sha256": "19905392237e696846904e357529e31ad71591466bef21b0787d700d53fb44c5"
     },
     {
       "source_path": "src/core/modules/authored_room_composition.py",
       "packaged_path": "Python/src/core/modules/authored_room_composition.py",
-      "resource_name": "PYTHON_PAYLOAD_0046",
-      "sha256": "d0c8fec2eb216c90d385c9cddf408a641c3aa5237577b85a6b4eb76af218e77a"
+      "resource_name": "PYTHON_PAYLOAD_0047",
+      "sha256": "c50f61dec4c32ffaadc045f29956328cd5a8194ee18acde0a19b033d479ac0cc"
     },
     {
-      "resource_name": "PYTHON_PAYLOAD_0047",
+      "resource_name": "PYTHON_PAYLOAD_0048",
       "source_path": "src/core/modules/authored_module_objects.py",
       "packaged_path": "Python/src/core/modules/authored_module_objects.py",
       "sha256": "f4197363f80bcd0a57dd353e91ca7eb32041a1241b69ff5cb5b3c0a2b5990181"
     },
     {
-      "resource_name": "PYTHON_PAYLOAD_0048",
+      "resource_name": "PYTHON_PAYLOAD_0049",
       "source_path": "src/core/modules/authored_module_project.py",
       "packaged_path": "Python/src/core/modules/authored_module_project.py",
       "sha256": "99b6281c80ebd23270ae584d9e55cd1cca4fbc783ee2970bda12136b14450bc9"
     },
     {
-      "resource_name": "PYTHON_PAYLOAD_0049",
+      "resource_name": "PYTHON_PAYLOAD_0050",
       "source_path": "src/core/modules/authored_room_primitives.py",
       "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
-      "sha256": "6bff43c9827fb6795b957a63b9dbf3b3363abd664954d48be9d38f30f18bd837"
+      "sha256": "dfb9a01028bac98fdc8e14d63a6f292d6825483cee2eb1b99bdf6336a52529e0"
     }
   ]
 }

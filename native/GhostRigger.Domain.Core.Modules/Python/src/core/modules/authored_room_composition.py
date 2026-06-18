@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Union
 
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh, RectangularRoomPrimitive
+from .authored_walkmesh_surfaces import require_walkable_walkmesh_surface, resolve_walkmesh_surface_id, walkmesh_surface_name
 from .authored_room_primitives import (
     CubePrimitive,
     CylinderPrimitive,
@@ -79,6 +80,10 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
         blocking.append("Authored room composition requires a room resref.")
     if float(composition.floor.width) <= 0.0 or float(composition.floor.depth) <= 0.0:
         blocking.append("Authored room floor must have positive width and depth.")
+    try:
+        require_walkable_walkmesh_surface(composition.floor.surface_id, context=f"{composition.room_resref} floor")
+    except ValueError as exc:
+        blocking.append(str(exc))
     names: set[str] = set()
     for primitive in (composition.floor, *composition.primitives):
         name = str(getattr(primitive, "name", "") or "").strip()
@@ -104,6 +109,7 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
     floor_mesh = build_floor_mesh(composition.floor)
+    floor_surface_id = resolve_walkmesh_surface_id(composition.floor.surface_id)
     primitive_meshes = tuple(_primitive_to_mesh(primitive) for primitive in composition.primitives)
     room_resref = _normalise_name(composition.room_resref)
     return AuthoredRoomGeometry(
@@ -116,6 +122,8 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
             "primitive": "authored_room_composition",
             "source": "src.core.modules.authored_room_composition",
             "floor": floor_mesh.name,
+            "floor_surface_id": floor_surface_id,
+            "floor_surface_name": walkmesh_surface_name(floor_surface_id),
             "primitive_count": len(composition.primitives),
             "helper_mesh_count": len(composition.helper_meshes),
             "compiled_mesh_count": 1 + len(primitive_meshes) + len(composition.helper_meshes),
@@ -129,6 +137,7 @@ def create_rectangular_room_composition(primitive: RectangularRoomPrimitive) -> 
 
     room_resref = _normalise_name(primitive.room_resref)
     material = PrimitiveMaterial(texture=str(primitive.texture or "default"))
+    floor_surface_id = resolve_walkmesh_surface_id(primitive.floor_surface_id)
     half_w = float(primitive.width) * 0.5
     half_d = float(primitive.depth) * 0.5
     wall_height = float(primitive.wall_height)
@@ -138,7 +147,7 @@ def create_rectangular_room_composition(primitive: RectangularRoomPrimitive) -> 
         width=float(primitive.width),
         depth=float(primitive.depth),
         z=0.0,
-        surface_id=int(primitive.floor_surface_id),
+        surface_id=floor_surface_id,
         material=material,
     )
     walls: tuple[RoomPrimitive, ...] = (
@@ -194,7 +203,8 @@ def create_rectangular_room_composition(primitive: RectangularRoomPrimitive) -> 
             "width": float(primitive.width),
             "depth": float(primitive.depth),
             "wall_height": wall_height,
-            "floor_surface_id": int(primitive.floor_surface_id),
+            "floor_surface_id": floor_surface_id,
+            "floor_surface_name": walkmesh_surface_name(floor_surface_id),
         },
     )
 

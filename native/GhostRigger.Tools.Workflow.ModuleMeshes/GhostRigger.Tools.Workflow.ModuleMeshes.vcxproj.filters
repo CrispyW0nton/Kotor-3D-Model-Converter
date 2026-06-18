@@ -179,6 +179,9 @@
     <None Include="Python\src\core\modules\dev_module_smoke.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
+    <None Include="Python\src\core\modules\authored_walkmesh_surfaces.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
     <None Include="Python\src\core\modules\authored_room_geometry.py">
       <Filter>Python\src\core\modules</Filter>
     </None>

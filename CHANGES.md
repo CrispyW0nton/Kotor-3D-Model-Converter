@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Walkmesh Surface Authoring Policy
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / walkmesh builder / native Python payloads
+
+- Added a headless `authored_walkmesh_surfaces` policy that maps modder-facing surface names such as `stone`, `metal`, `water`, and `non_walk` to KOTOR WOK material IDs.
+- Updated floor and rectangular-room primitive generation so authored floor surfaces can be supplied as names or IDs while preserving exact WOK material output.
+- Added composition validation that rejects non-walkable floor surfaces before a room can be compiled into a playable module candidate.
+- Updated smoke walkability messages and authored geometry metadata to include surface names as well as surface IDs.
+- Mirrored the surface policy and touched Map Studio modules into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_walkmesh_surfaces.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_geometry.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_walkmesh_surfaces.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_geometry.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_walkmesh_surfaces.py tests\test_authored_room_primitives.py tests\test_authored_room_composition.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_walkmesh_surfaces.py tests/test_authored_room_primitives.py tests/test_authored_room_composition.py -q --basetemp .pytest_tmp_authored_walkmesh_surfaces`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Authored Room Composition
 
 Owner: LordVaderCW

@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .authored_room_geometry import Face, PrimitiveMesh, Vec2, Vec3
+from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .module_format import WOKData, WOKFace
 
 
@@ -32,7 +33,7 @@ class FloorPrimitive:
     width: float = 4.0
     depth: float = 4.0
     z: float = 0.0
-    surface_id: int = 4
+    surface_id: int | str = 4
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
 
 
@@ -140,6 +141,7 @@ def _box_vertices_faces(*, name: str, x: float, y: float, z: float, center: Vec3
 
 
 def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
+    surface_id = resolve_walkmesh_surface_id(primitive.surface_id)
     half_w = float(primitive.width) * 0.5
     half_d = float(primitive.depth) * 0.5
     z = float(primitive.z)
@@ -156,17 +158,18 @@ def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
         faces=faces,
         material=primitive.material,
         primitive="floor",
-        metadata={"surface_id": int(primitive.surface_id)},
+        metadata={"surface_id": surface_id, "surface_name": walkmesh_surface_name(surface_id)},
     )
 
 
 def build_floor_wok(primitive: FloorPrimitive) -> WOKData:
+    surface_id = resolve_walkmesh_surface_id(primitive.surface_id)
     mesh = build_floor_mesh(primitive)
     return WOKData(
         verts=list(mesh.vertices),
         faces=[
-            WOKFace(0, 1, 2, surface=int(primitive.surface_id), adj1=-1, adj2=-1, adj3=1),
-            WOKFace(0, 2, 3, surface=int(primitive.surface_id), adj1=0, adj2=-1, adj3=-1),
+            WOKFace(0, 1, 2, surface=surface_id, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=surface_id, adj1=0, adj2=-1, adj3=-1),
         ],
     )
 
