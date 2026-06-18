@@ -129,7 +129,9 @@ def test_t2684_kmap_bridge_reports_installed_authored_module_proof_state() -> No
     assert readiness.metadata["proof_status"] == "installed_for_game_test"
     assert readiness.metadata["installed_module_path"].endswith("grdev01.mod")
     assert readiness.metadata["resolved_modules_dir"].endswith("Modules")
-    assert "Launch KOTOR and run `warp grdev01`" in readiness.next_action
+    assert readiness.metadata["resolved_game_root_dir"].endswith("KOTOR")
+    assert "launch_grdev01_smoke_test.py" in readiness.metadata["launch_helper_command"]
+    assert "Run the launch helper dry-run" in readiness.next_action
 
 
 def test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint() -> None:

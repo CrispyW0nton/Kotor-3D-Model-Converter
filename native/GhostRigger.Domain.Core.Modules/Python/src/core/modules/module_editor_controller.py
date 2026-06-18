@@ -754,6 +754,8 @@ class ModuleEditorController:
             payload["proof_manifest_path"] = result.proof_manifest_path
             payload["checklist_path"] = result.checklist_path
             payload["resolved_modules_dir"] = result.resolved_modules_dir
+            payload["resolved_game_root_dir"] = result.resolved_game_root_dir
+            payload["launch_helper_command"] = result.launch_helper_command
             payload["installed_module_path"] = result.installed_module_path
             payload["backup_module_path"] = result.backup_module_path
             self.project.extra_sections["authored_module"] = payload

@@ -74,6 +74,8 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
 
     assert "mapStudioReadinessAuthoredSummaryLabel" in source
     assert "mapStudioReadinessGameProofLabel" in source
+    assert "mapStudioReadinessLaunchHandoffLabel" in source
     assert "gameplay_counts" in source
     assert "room_styles" in source
     assert "proof_status" in source
+    assert "launch_helper_command" in source

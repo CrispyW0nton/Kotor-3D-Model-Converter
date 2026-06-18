@@ -54,6 +54,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.proof_label.setWordWrap(True)
         root.addWidget(self.proof_label)
 
+        self.launch_label = QtWidgets.QLabel("Launch handoff: Not ready")
+        self.launch_label.setObjectName("mapStudioReadinessLaunchHandoffLabel")
+        self.launch_label.setWordWrap(True)
+        root.addWidget(self.launch_label)
+
         self.authored_summary_label = QtWidgets.QLabel("Authored content: Not checked")
         self.authored_summary_label.setObjectName("mapStudioReadinessAuthoredSummaryLabel")
         self.authored_summary_label.setWordWrap(True)
@@ -86,6 +91,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
             self.proof_label.setText("Game proof: Not staged")
+            self.launch_label.setText("Launch handoff: Not ready")
             self.authored_summary_label.setText("Authored content: Not checked")
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
@@ -113,6 +119,10 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
         evidence_path = str(metadata.get("in_game_proof_evidence_path") or "")
+        launch_status = str(metadata.get("launch_status") or "not_ready")
+        launch_helper = str(metadata.get("launch_helper_command") or "")
+        expected_executable = str(metadata.get("expected_executable_path") or "")
+        warp_command = str(metadata.get("warp_command") or f"warp {module_root}")
         if bool(getattr(readiness, "game_tested", False)):
             suffix = f" Evidence: {evidence_path}" if evidence_path else ""
             self.proof_label.setText(f"Game proof: Recorded.{suffix}")
@@ -124,6 +134,16 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_label.setText("Game proof: Not staged yet; install the .mod and run the warp test.")
         else:
             self.proof_label.setText("Game proof: Not ready")
+        if launch_helper:
+            self.launch_label.setText(f"Launch handoff: Dry-run helper ready. {launch_helper}")
+        elif launch_status == "installed_missing_game_root":
+            self.launch_label.setText(f"Launch handoff: Installed; choose the KOTOR game root, launch {expected_executable}, then run `{warp_command}`.")
+        elif installed_path:
+            self.launch_label.setText(f"Launch handoff: Launch {expected_executable}, then run `{warp_command}`.")
+        elif proof_manifest:
+            self.launch_label.setText("Launch handoff: Install the staged .mod into a KOTOR Modules folder first.")
+        else:
+            self.launch_label.setText("Launch handoff: Not ready")
         styles = list(metadata.get("room_styles", ()) or ())
         gameplay_counts = dict(metadata.get("gameplay_counts", {}) or {})
         placement_total = int(metadata.get("gameplay_placement_count", sum(int(value) for value in gameplay_counts.values()) if gameplay_counts else 0))

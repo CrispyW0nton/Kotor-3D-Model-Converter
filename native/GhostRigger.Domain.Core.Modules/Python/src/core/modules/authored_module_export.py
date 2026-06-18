@@ -121,6 +121,8 @@ class AuthoredModuleInstallPrepResult:
     installed_module_path: str = ""
     backup_module_path: str = ""
     resolved_modules_dir: str = ""
+    resolved_game_root_dir: str = ""
+    launch_helper_command: str = ""
     checklist_path: str = ""
     proof_manifest_path: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -907,6 +909,28 @@ def _authored_acceptance_checks() -> list[str]:
     ]
 
 
+def _authored_game_executable_name(game: str) -> str:
+    return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
+
+
+def _derive_game_root_dir_from_modules_dir(modules_dir_text: str) -> str:
+    if not modules_dir_text:
+        return ""
+    modules_dir = Path(modules_dir_text)
+    return str(modules_dir.parent)
+
+
+def _authored_launch_helper_command(*, proof_manifest_path: Path, game: str, game_root_dir: str) -> str:
+    if not game_root_dir or str(game or "").upper() != "K1":
+        return ""
+    return (
+        "python scripts/launch_grdev01_smoke_test.py "
+        f'--proof-manifest "{proof_manifest_path}" '
+        f'--game-root-dir "{game_root_dir}" '
+        "--dry-run"
+    )
+
+
 def _write_authored_install_proof_files(
     *,
     output_root: Path,
@@ -914,6 +938,8 @@ def _write_authored_install_proof_files(
     game: str,
     install_path: str,
     backup_path: str,
+    modules_dir: str,
+    game_root_dir: str,
     installed: bool,
     dry_run: bool,
     warnings: list[str],
@@ -924,6 +950,13 @@ def _write_authored_install_proof_files(
     checklist_path = output_root / f"{module_root}_authored_module_game_checklist.md"
     proof_manifest_path = output_root / f"{module_root}_authored_module_game_manifest.json"
     steps = _authored_game_test_steps(module_root)
+    executable_name = _authored_game_executable_name(game)
+    executable_path = str(Path(game_root_dir) / executable_name) if game_root_dir else executable_name
+    launch_helper_command = _authored_launch_helper_command(
+        proof_manifest_path=proof_manifest_path,
+        game=game,
+        game_root_dir=game_root_dir,
+    )
     checklist_lines = [
         f"# {module_root} Authored Module In-Game Test",
         "",
@@ -932,6 +965,9 @@ def _write_authored_install_proof_files(
         f"- Package: `{export_result.module_path}`",
         f"- Install target: `{install_path or '(not installed)'}`",
         f"- Previous module backup: `{backup_path or '(none)'}`",
+        f"- Game root: `{game_root_dir or '(not supplied)'}`",
+        f"- Expected executable: `{executable_path}`",
+        f"- Dry-run helper: `{launch_helper_command or '(manual launch)'}`",
         f"- Warp command: `warp {module_root}`",
         "",
         "## Steps",
@@ -969,6 +1005,14 @@ def _write_authored_install_proof_files(
         "manual_proof_required": True,
         "game_tested": False,
         "warp_command": f"warp {module_root}",
+        "launch_handoff": {
+            "resolved_modules_dir": modules_dir,
+            "resolved_game_root_dir": game_root_dir,
+            "expected_executable_path": executable_path,
+            "launch_helper_command": launch_helper_command,
+            "dry_run_first": bool(launch_helper_command),
+            "warp_command": f"warp {module_root}",
+        },
         "acceptance_checks": _authored_acceptance_checks(),
         "t2601_smoke_contract": _authored_smoke_contract_from_export_result(export_result),
         "steps": steps,
@@ -1013,6 +1057,7 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
     install_path = ""
     backup_path = ""
     modules_dir_text = request.game_modules_dir
+    resolved_game_root_dir = request.game_root_dir
     if not modules_dir_text and request.auto_detect_game_modules_dir:
         modules_dir_text = discover_kotor_modules_dir(
             request.project.game,
@@ -1023,6 +1068,8 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
             warnings.append(f"Auto-detected KOTOR Modules folder: {modules_dir_text}")
         else:
             warnings.append("Could not auto-detect a KOTOR Modules folder; package is staged for manual install.")
+    if not resolved_game_root_dir and modules_dir_text:
+        resolved_game_root_dir = _derive_game_root_dir_from_modules_dir(modules_dir_text)
     if not export_result.ok:
         blocking.append(export_result.message or "Authored module export failed.")
     else:
@@ -1054,10 +1101,17 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         game=request.project.game,
         install_path=install_path,
         backup_path=backup_path,
+        modules_dir=modules_dir_text,
+        game_root_dir=resolved_game_root_dir,
         installed=installed,
         dry_run=request.dry_run,
         warnings=warnings,
         blocking=blocking,
+    )
+    launch_helper_command = _authored_launch_helper_command(
+        proof_manifest_path=Path(proof_manifest_path),
+        game=request.project.game,
+        game_root_dir=resolved_game_root_dir,
     )
     ok = export_result.ok and not blocking and (installed or request.dry_run or not request.game_modules_dir)
     code = "installed" if installed else "staged_for_manual_install"
@@ -1071,6 +1125,8 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         installed_module_path=install_path if installed else "",
         backup_module_path=backup_path,
         resolved_modules_dir=modules_dir_text,
+        resolved_game_root_dir=resolved_game_root_dir,
+        launch_helper_command=launch_helper_command,
         checklist_path=checklist_path,
         proof_manifest_path=proof_manifest_path,
         warnings=warnings,

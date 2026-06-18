@@ -9,6 +9,7 @@ the current capability stage.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable
 
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
@@ -123,6 +124,27 @@ def _gameplay_counts(project: AuthoredModuleProject) -> dict[str, int]:
     }
 
 
+def _game_executable_name(game: str) -> str:
+    return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
+
+
+def _derive_game_root_dir(resolved_modules_dir: str) -> str:
+    if not resolved_modules_dir:
+        return ""
+    return str(Path(resolved_modules_dir).parent)
+
+
+def _launch_helper_command(*, game: str, proof_manifest_path: str, resolved_game_root_dir: str) -> str:
+    if str(game or "").upper() != "K1" or not proof_manifest_path or not resolved_game_root_dir:
+        return ""
+    return (
+        "python scripts/launch_grdev01_smoke_test.py "
+        f'--proof-manifest "{proof_manifest_path}" '
+        f'--game-root-dir "{resolved_game_root_dir}" '
+        "--dry-run"
+    )
+
+
 def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInputStatus, ...]:
     root = project.module_root
     entry = project.placements.entry_point
@@ -233,17 +255,33 @@ def build_authored_module_readiness(
     installed_module_path = str(proof.get("installed_module_path") or "")
     backup_module_path = str(proof.get("backup_module_path") or "")
     resolved_modules_dir = str(proof.get("resolved_modules_dir") or "")
+    resolved_game_root_dir = str(proof.get("resolved_game_root_dir") or "") or _derive_game_root_dir(resolved_modules_dir)
     evidence_path = str(proof.get("in_game_proof_evidence_path") or proof.get("evidence_path") or "")
+    warp_command = str(proof.get("warp_command") or f"warp {project.module_root}")
+    expected_executable_path = str(proof.get("expected_executable_path") or "")
+    if not expected_executable_path:
+        executable_name = _game_executable_name(project.game)
+        expected_executable_path = str(Path(resolved_game_root_dir) / executable_name) if resolved_game_root_dir else executable_name
+    launch_helper = str(proof.get("launch_helper_command") or "") or _launch_helper_command(
+        game=project.game,
+        proof_manifest_path=proof_manifest_path,
+        resolved_game_root_dir=resolved_game_root_dir,
+    )
     if game_tested and can_export_candidate:
         proof_status = "game_smoke_tested"
+        launch_status = "proof_recorded"
     elif installed_module_path:
         proof_status = "installed_for_game_test"
+        launch_status = "ready_for_launch_helper" if resolved_game_root_dir else "installed_missing_game_root"
     elif proof_manifest_path or checklist_path:
         proof_status = "staged_for_game_test"
+        launch_status = "install_first"
     elif can_export_candidate:
         proof_status = "not_staged"
+        launch_status = "package_first"
     else:
         proof_status = "not_ready"
+        launch_status = "not_ready"
     if game_tested and can_export_candidate:
         stage = "game_tested"
         preview_status = "Ready"
@@ -254,7 +292,10 @@ def build_authored_module_readiness(
         preview_status = "Ready"
         export_status = "Ready for package/game smoke test"
         if installed_module_path:
-            next_action = f"Launch KOTOR and run `warp {project.module_root}`, then record the proof manifest with screenshot/video evidence."
+            if launch_helper:
+                next_action = f"Run the launch helper dry-run, launch KOTOR, run `{warp_command}`, then record proof with screenshot/video evidence."
+            else:
+                next_action = f"Launch KOTOR and run `{warp_command}`, then record the proof manifest with screenshot/video evidence."
         elif proof_manifest_path or checklist_path:
             next_action = f"Install/copy the staged package into KOTOR Modules, launch KOTOR, and run `warp {project.module_root}`."
         else:
@@ -299,6 +340,11 @@ def build_authored_module_readiness(
             "installed_module_path": installed_module_path,
             "backup_module_path": backup_module_path,
             "resolved_modules_dir": resolved_modules_dir,
+            "resolved_game_root_dir": resolved_game_root_dir,
+            "expected_executable_path": expected_executable_path,
+            "launch_helper_command": launch_helper,
+            "launch_status": launch_status,
+            "warp_command": warp_command,
             "in_game_proof_evidence_path": evidence_path,
             "room_styles": [
                 {

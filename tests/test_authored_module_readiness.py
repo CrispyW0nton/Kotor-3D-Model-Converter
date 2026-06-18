@@ -139,7 +139,10 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
     assert "Install/copy the staged package" in staged.next_action
     assert installed.metadata["proof_status"] == "installed_for_game_test"
     assert installed.metadata["installed_module_path"].endswith("grdev01.mod")
-    assert "Launch KOTOR and run `warp grdev01`" in installed.next_action
+    assert installed.metadata["resolved_game_root_dir"].endswith("KOTOR")
+    assert installed.metadata["launch_status"] == "ready_for_launch_helper"
+    assert "launch_grdev01_smoke_test.py" in installed.metadata["launch_helper_command"]
+    assert "Run the launch helper dry-run" in installed.next_action
 
 
 def test_t2639_game_tested_flag_is_only_honored_for_export_candidates() -> None:

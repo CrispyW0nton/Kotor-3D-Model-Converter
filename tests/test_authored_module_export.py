@@ -379,13 +379,22 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert result.ok is True
     assert result.code == "installed"
     assert result.installed_module_path == str(installed)
+    assert result.resolved_game_root_dir == str(modules_dir.parent)
+    assert "launch_grdev01_smoke_test.py" in result.launch_helper_command
+    assert str(modules_dir.parent) in result.launch_helper_command
     assert installed.read_bytes() != b"old module"
     assert Path(result.backup_module_path).read_bytes() == b"old module"
     payload = controller.project.extra_sections["authored_module"]
     assert payload["installed_module_path"] == str(installed)
     assert payload["resolved_modules_dir"] == str(modules_dir)
+    assert payload["resolved_game_root_dir"] == str(modules_dir.parent)
+    assert payload["launch_helper_command"] == result.launch_helper_command
     assert payload["backup_module_path"] == result.backup_module_path
     assert payload["proof_manifest_path"] == result.proof_manifest_path
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
+    assert proof["launch_handoff"]["expected_executable_path"].endswith("swkotor.exe")
+    assert proof["launch_handoff"]["warp_command"] == "warp grdev01"
 
 
 def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:

@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored Launch Handoff Metadata
+
+Owner: LordVaderCW
+Task: T2685
+Subsystem: Map Studio / authored module launch handoff / game-proof readiness UI / native Python payloads
+
+- Extended authored-module install prep results and proof manifests with resolved game root, expected executable, dry-run launch helper command, and warp command metadata.
+- Stored launch handoff fields back into the authored KMAP payload and bridged them into readiness metadata so proof/install state survives project refreshes.
+- Added a dedicated launch handoff line to the Module Editor readiness panel so modders can see whether the next step is installing the package, running the dry-run helper, launching KOTOR, or recording proof.
+- Mirrored the authored export, readiness, KMAP bridge, controller, and panel updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py`
+- `python -m py_compile native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py`
+- `python -m pytest tests\test_authored_module_export.py tests\test_authored_module_readiness.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_reporting.py -q --basetemp .pytest_tmp_map_studio_launch_handoff`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Shows Authored Game-Proof Readiness
 
 Owner: LordVaderCW
