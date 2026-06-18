@@ -9,6 +9,7 @@ class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
+    roomRectangularUnionRequested = QtCore.Signal(str, str, str)
     roomStyleRequested = QtCore.Signal(str, str)
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
@@ -88,6 +89,28 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
         layout.addWidget(operation_box)
+        union_box = QtWidgets.QGroupBox("Boolean Union Rooms")
+        union_layout = QtWidgets.QFormLayout(union_box)
+        self.floorPlanUnionFirstRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanUnionFirstRoomComboBox.setObjectName("floorPlanUnionFirstRoomComboBox")
+        self.floorPlanUnionSecondRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanUnionSecondRoomComboBox.setObjectName("floorPlanUnionSecondRoomComboBox")
+        self.floorPlanUnionResultRoomLineEdit = QtWidgets.QLineEdit()
+        self.floorPlanUnionResultRoomLineEdit.setObjectName("floorPlanUnionResultRoomLineEdit")
+        self.floorPlanUnionResultRoomLineEdit.setPlaceholderText("optional result room resref")
+        self.mapStudioRectangularUnionHintLabel = QtWidgets.QLabel(
+            "Union two compatible rectangular floor-plan rooms into one exportable room."
+        )
+        self.mapStudioRectangularUnionHintLabel.setObjectName("mapStudioRectangularUnionHintLabel")
+        self.mapStudioRectangularUnionHintLabel.setWordWrap(True)
+        self.mapStudioApplyRectangularUnionButton = QtWidgets.QPushButton("Union Rectangular Rooms")
+        self.mapStudioApplyRectangularUnionButton.setObjectName("mapStudioApplyRectangularUnionButton")
+        union_layout.addRow("First room:", self.floorPlanUnionFirstRoomComboBox)
+        union_layout.addRow("Second room:", self.floorPlanUnionSecondRoomComboBox)
+        union_layout.addRow("Result:", self.floorPlanUnionResultRoomLineEdit)
+        union_layout.addRow(self.mapStudioRectangularUnionHintLabel)
+        union_layout.addRow(self.mapStudioApplyRectangularUnionButton)
+        layout.addWidget(union_box)
         add_primitive_box = QtWidgets.QGroupBox("Add Room Primitive")
         add_primitive_layout = QtWidgets.QFormLayout(add_primitive_box)
         self.compositionPrimitiveKindComboBox = QtWidgets.QComboBox()
@@ -266,6 +289,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
+        self.floorPlanUnionFirstRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
+        self.floorPlanUnionSecondRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
+        self.mapStudioApplyRectangularUnionButton.clicked.connect(self._emit_rectangular_union)
         self.compositionPrimitiveKindComboBox.currentIndexChanged.connect(self._update_composition_primitive_kind_hint)
         self.addCompositionPrimitiveButton.clicked.connect(self._emit_add_composition_primitive)
         self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
@@ -282,6 +308,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
+        self.set_floor_plan_room_choices(())
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
         self._update_primitive_dimension_controls()
@@ -334,6 +361,75 @@ class BuilderTab(QtWidgets.QWidget):
         module_root = self.moduleRootLineEdit.text().strip() or "grdev01"
         if preset_id:
             self.primitivePresetRequested.emit(preset_id, module_root)
+
+    @staticmethod
+    def _current_combo_resref(combo: QtWidgets.QComboBox) -> str:
+        data = combo.currentData()
+        if isinstance(data, dict):
+            return str(data.get("room_resref") or "").strip()
+        return ""
+
+    def set_floor_plan_room_choices(self, rooms) -> None:
+        """Populate floor-plan room choices for Builder boolean operations."""
+
+        first_current = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
+        second_current = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
+        choices = tuple(rooms or ())
+        for combo, current in (
+            (self.floorPlanUnionFirstRoomComboBox, first_current),
+            (self.floorPlanUnionSecondRoomComboBox, second_current),
+        ):
+            combo.blockSignals(True)
+            combo.clear()
+            restore_index = -1
+            for choice in choices:
+                resref = str(getattr(choice, "room_resref", "") or "")
+                label = str(getattr(choice, "label", "") or resref)
+                data = {
+                    "room_resref": resref,
+                    "point_count": int(getattr(choice, "point_count", 0) or 0),
+                    "room_index": int(getattr(choice, "room_index", 0) or 0),
+                }
+                combo.addItem(label, data)
+                if resref == current:
+                    restore_index = combo.count() - 1
+            if combo.count() <= 0:
+                combo.addItem("No compatible floor-plan rooms", None)
+            elif restore_index >= 0:
+                combo.setCurrentIndex(restore_index)
+            combo.blockSignals(False)
+        if self.floorPlanUnionSecondRoomComboBox.count() > 1 and self.floorPlanUnionSecondRoomComboBox.currentIndex() == self.floorPlanUnionFirstRoomComboBox.currentIndex():
+            self.floorPlanUnionSecondRoomComboBox.setCurrentIndex(1)
+        self._update_rectangular_union_controls()
+
+    def _update_rectangular_union_controls(self) -> None:
+        first = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
+        second = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
+        ready = bool(first and second and first != second)
+        count = max(self.floorPlanUnionFirstRoomComboBox.count(), self.floorPlanUnionSecondRoomComboBox.count())
+        self.floorPlanUnionFirstRoomComboBox.setEnabled(count >= 2)
+        self.floorPlanUnionSecondRoomComboBox.setEnabled(count >= 2)
+        self.floorPlanUnionResultRoomLineEdit.setEnabled(ready)
+        self.mapStudioApplyRectangularUnionButton.setEnabled(ready)
+        if count < 2:
+            self.mapStudioRectangularUnionHintLabel.setText(
+                "Create or split at least two compatible floor-plan rooms before using room union."
+            )
+        elif not ready:
+            self.mapStudioRectangularUnionHintLabel.setText(
+                "Choose two different compatible rooms. They must share position, material, wall height, and elevation, and form one rectangle."
+            )
+        else:
+            self.mapStudioRectangularUnionHintLabel.setText(
+                "Ready to merge these rooms into one generated MDL/WOK room. Previous export and game-proof status will become stale."
+            )
+
+    def _emit_rectangular_union(self) -> None:
+        first = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
+        second = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
+        if not first or not second or first == second:
+            return
+        self.roomRectangularUnionRequested.emit(first, second, self.floorPlanUnionResultRoomLineEdit.text().strip())
 
     def set_composition_primitive_kinds(self, kinds) -> None:
         """Populate the add-primitive palette from the controller."""

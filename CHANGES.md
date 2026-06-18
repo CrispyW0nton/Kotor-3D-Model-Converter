@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Unions Authored Floor-Plan Rooms
+
+Owner: LordVaderCW
+Task: T2679
+Subsystem: Map Studio / authored floor-plan boolean operations / Builder tab / native Python payloads
+
+- Added a project-level rectangular floor-plan union operation that merges two compatible authored rooms into one exportable MDL/MDX/WOK room while invalidating stale runtime resources and game-proof state.
+- Exposed floor-plan-compatible room choices through `ModuleEditorController` and wired the standalone Module Editor Builder tab with first-room, second-room, optional result-resref, and Union Rectangular Rooms controls.
+- Preserved Map Studio architecture boundaries by keeping union policy in `src.core.modules`, controller persistence in `ModuleEditorController`, and presentation/state wiring in the Builder tab and Module Editor window.
+- Mirrored the core/controller/Builder-tab payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_studio_room_union`
+- `python -m pytest tests\test_authored_module_export.py tests\test_authored_room_floorplan.py -q --basetemp .pytest_tmp_map_studio_union_export`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Syncs Viewport Primitive Selection to Builder Controls
 
 Owner: LordVaderCW

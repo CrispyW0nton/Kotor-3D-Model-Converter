@@ -41,8 +41,10 @@ from .authored_module_placements import (
 )
 from .authored_room_operations import (
     add_authored_room_composition_primitive,
+    apply_authored_floor_plan_rectangular_union,
     apply_authored_floor_plan_operation,
     available_authored_composition_primitive_kinds,
+    authored_floor_plan_room_choices,
     authored_room_composition_primitives,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
@@ -250,6 +252,20 @@ class ModuleEditorController:
         )
         return authored_room_composition_primitives(authored)
 
+    def authored_floor_plan_room_choices(self):
+        """Return floor-plan rooms that can participate in Builder boolean operations."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_floor_plan_room_choices(authored)
+
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""
 
@@ -285,6 +301,39 @@ class ModuleEditorController:
         self.project.game = updated.game
         self.project.dirty = True
         self.model.log(f"Applied Map Studio room operation {operation}.")
+        return self.authored_module_readiness()
+
+    def merge_authored_floor_plan_rooms(
+        self,
+        *,
+        first_room_resref: str,
+        second_room_resref: str,
+        result_room_resref: str = "",
+    ):
+        """Union two compatible floor-plan rooms in the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = apply_authored_floor_plan_rectangular_union(
+            authored,
+            first_room_resref=first_room_resref,
+            second_room_resref=second_room_resref,
+            result_room_resref=result_room_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Merged Map Studio floor-plan rooms {first_room_resref} and {second_room_resref}; previous exports/proofs are now stale."
+        )
         return self.authored_module_readiness()
 
     def move_authored_room_outline_point(self, *, room_resref: str, point_index: int, world_position: Any):

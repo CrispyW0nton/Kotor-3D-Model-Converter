@@ -365,6 +365,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
+        self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
         self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)
@@ -621,6 +622,23 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Applied room operation {operation}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def merge_authored_floor_plan_rooms(self, first_room_resref: str, second_room_resref: str, result_room_resref: str) -> None:
+        try:
+            result = self.controller.merge_authored_floor_plan_rooms(
+                first_room_resref=first_room_resref,
+                second_room_resref=second_room_resref,
+                result_room_resref=result_room_resref,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Union Rectangular Rooms", str(exc))
+            return
+        readiness = result.readiness
+        label = result_room_resref.strip() or first_room_resref
+        message = f"Merged floor-plan rooms {first_room_resref} and {second_room_resref} into {label}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
@@ -968,7 +986,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
+        authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         self.builder_tab.set_room_primitives(authored_room_primitives)
+        self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
         self.properties.set_project(self.project, authored_placements)
         self.outliner.set_project(self.project, authored_placements)
         self.viewport_panel.set_project(

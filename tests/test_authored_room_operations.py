@@ -78,6 +78,96 @@ def test_t2651_rectangular_cut_splits_current_room_and_remains_exportable() -> N
     assert all((room.normalised_resref(), "mdx") in build.resources for room in cut.rooms)
 
 
+def test_t2679_controller_unions_adjacent_floor_plan_rooms_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grunion",
+        game="K1",
+    )
+    material = PrimitiveMaterial(texture="default", metadata={"source": "test"})
+    first_primitive = FloorPlanRoomPrimitive(
+        room_resref="grunion_room01",
+        points=((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=material,
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    second_primitive = FloorPlanRoomPrimitive(
+        room_resref="grunion_room02",
+        points=((5.0, -5.0), (10.0, -5.0), (10.0, 5.0), (5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=material,
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    first_room = replace(
+        base.rooms[0],
+        room_resref="grunion_room01",
+        primitive=first_primitive,
+        composition=None,
+        metadata={"primitive": "floor_plan_extrusion"},
+    )
+    second_room = AuthoredRoomSpec(
+        room_resref="grunion_room02",
+        primitive=second_primitive,
+        visible_rooms=(),
+        metadata={"primitive": "floor_plan_extrusion"},
+    )
+    visible = ("grunion_room01", "grunion_room02")
+    project = replace(
+        base,
+        rooms=(
+            replace(first_room, visible_rooms=visible),
+            replace(second_room, visible_rooms=visible),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    choices = controller.authored_floor_plan_room_choices()
+    result = controller.merge_authored_floor_plan_rooms(
+        first_room_resref="grunion_room01",
+        second_room_resref="grunion_room02",
+        result_room_resref="grunion_merged",
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+
+    assert [choice.room_resref for choice in choices] == ["grunion_room01", "grunion_room02"]
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert len(authored.rooms) == 1
+    assert authored.rooms[0].room_resref == "grunion_merged"
+    assert authored.rooms[0].visible_rooms == ("grunion_merged",)
+    assert authored.rooms[0].metadata["last_operation"] == "rectangular_union"
+    assert authored.rooms[0].metadata["merged_room_resrefs"] == ["grunion_room01", "grunion_room02"]
+    assert tuple(authored.rooms[0].primitive.points) == ((-5.0, -5.0), (10.0, -5.0), (10.0, 5.0), (-5.0, 5.0))
+    assert payload["runtime_resources"] == []
+    assert payload["game_tested"] is False
+    assert not build.blocking_issues
+    assert build.metadata["room_count"] == 1
+    assert ("grunion_merged", "mdl") in build.resources
+    assert ("grunion_merged", "mdx") in build.resources
+    assert ("grunion_merged", "wok") in build.resources
+
+
 def test_t2651_room_operation_requires_authored_module_payload() -> None:
     _install_native_payload_paths()
 
@@ -486,6 +576,54 @@ def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     assert "roomOperationRequested" in source
     assert "self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)" in window_source
     assert "self.controller.apply_authored_room_operation" in window_source
+
+
+def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    native_source = (
+        repo
+        / "native"
+        / "GhostRigger.Tools.Workflow.ModuleMeshes"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    for panel_source in (source, native_source):
+        assert "roomRectangularUnionRequested" in panel_source
+        assert "floorPlanUnionFirstRoomComboBox" in panel_source
+        assert "floorPlanUnionSecondRoomComboBox" in panel_source
+        assert "floorPlanUnionResultRoomLineEdit" in panel_source
+        assert "mapStudioApplyRectangularUnionButton" in panel_source
+        assert "def set_floor_plan_room_choices" in panel_source
+        assert "def _emit_rectangular_union" in panel_source
+    assert "self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)" in window_source
+    assert "self.controller.merge_authored_floor_plan_rooms" in window_source
+    assert "self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)" in window_source
 
 
 def test_t2671_builder_tab_exposes_composition_primitive_transform_controls() -> None:

@@ -18,10 +18,12 @@ from .authored_room_floorplan import (
     FloorPlanBevelOperation,
     FloorPlanInsetOperation,
     FloorPlanRectangularCutOperation,
+    FloorPlanRectangularUnionOperation,
     FloorPlanRoomPrimitive,
     apply_floor_plan_bevel,
     apply_floor_plan_inset,
     apply_floor_plan_rectangular_cut,
+    apply_floor_plan_rectangular_union,
 )
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import compile_authored_room_material_preflight
@@ -79,6 +81,16 @@ class AuthoredCompositionPrimitiveKind:
     creates_walkmesh: bool = False
 
 
+@dataclass(frozen=True)
+class AuthoredFloorPlanRoomChoice:
+    """UI-ready floor-plan room choice for room-shaping operations."""
+
+    room_resref: str
+    label: str
+    point_count: int
+    room_index: int
+
+
 _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
     AuthoredCompositionPrimitiveKind("wall", "Wall", "A rectangular wall/blockout slab."),
     AuthoredCompositionPrimitiveKind("cube", "Cube", "A simple box primitive for room dressing or massing."),
@@ -126,6 +138,29 @@ def _floor_plan_for_room(room: AuthoredRoomSpec) -> FloorPlanRoomPrimitive:
     if isinstance(primitive, RectangularRoomPrimitive):
         return _rectangular_to_floor_plan(primitive, room.room_resref)
     raise ValueError(f"Room {room.room_resref} does not have a floor-plan-compatible primitive.")
+
+
+def authored_floor_plan_room_choices(project: AuthoredModuleProject) -> tuple[AuthoredFloorPlanRoomChoice, ...]:
+    """Return floor-plan-compatible authored rooms for Builder operations."""
+
+    choices: list[AuthoredFloorPlanRoomChoice] = []
+    for index, room in enumerate(tuple(project.rooms or ())):
+        try:
+            primitive = _floor_plan_for_room(room)
+        except ValueError:
+            continue
+        resref = normalise_resref(room.room_resref)
+        if not resref:
+            continue
+        choices.append(
+            AuthoredFloorPlanRoomChoice(
+                room_resref=resref,
+                label=f"{resref} ({len(tuple(primitive.points or ()))} points)",
+                point_count=len(tuple(primitive.points or ())),
+                room_index=index,
+            )
+        )
+    return tuple(choices)
 
 
 def _target_room_index(project: AuthoredModuleProject, room_resref: str = "") -> int:
@@ -986,6 +1021,74 @@ def apply_authored_floor_plan_rectangular_cut(
     return _replace_rooms(project, rooms, operation="rectangular_cut", placements=_placements_for_cut(project, pieces[0]))
 
 
+def apply_authored_floor_plan_rectangular_union(
+    project: AuthoredModuleProject,
+    *,
+    first_room_resref: str,
+    second_room_resref: str,
+    result_room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Union two compatible rectangular floor-plan rooms into one room."""
+
+    first_index = _target_room_index(project, first_room_resref)
+    second_index = _target_room_index(project, second_room_resref)
+    if first_index == second_index:
+        raise ValueError("Floor-plan rectangular union requires two different rooms.")
+    first_room = project.rooms[first_index]
+    second_room = project.rooms[second_index]
+    first_position = tuple(first_room.position or (0.0, 0.0, 0.0))
+    second_position = tuple(second_room.position or (0.0, 0.0, 0.0))
+    if len(first_position) < 3:
+        first_position = (0.0, 0.0, 0.0)
+    if len(second_position) < 3:
+        second_position = (0.0, 0.0, 0.0)
+    if any(abs(float(a) - float(b)) > 1.0e-7 for a, b in zip(first_position[:3], second_position[:3])):
+        raise ValueError("Floor-plan rectangular union requires rooms with matching room positions.")
+    target_resref = normalise_resref(result_room_resref) or normalise_resref(first_room.room_resref)
+    remaining_resrefs = {
+        normalise_resref(room.room_resref)
+        for index, room in enumerate(project.rooms)
+        if index not in {first_index, second_index}
+    }
+    if target_resref in remaining_resrefs:
+        raise ValueError(f"Floor-plan rectangular union result room resref '{target_resref}' already exists.")
+    merged = apply_floor_plan_rectangular_union(
+        _floor_plan_for_room(first_room),
+        _floor_plan_for_room(second_room),
+        FloorPlanRectangularUnionOperation(
+            room_resref=target_resref,
+            metadata={
+                "source": "map_studio:project_operation",
+                "operation": "rectangular_union",
+            },
+        ),
+    )
+    updated_room = replace(
+        first_room,
+        room_resref=merged.room_resref,
+        primitive=merged,
+        composition=None,
+        visible_rooms=(),
+        metadata={
+            **dict(first_room.metadata),
+            "last_operation": "rectangular_union",
+            "merged_room_resrefs": [normalise_resref(first_room.room_resref), normalise_resref(second_room.room_resref)],
+        },
+    )
+    rooms: list[AuthoredRoomSpec] = []
+    for index, room in enumerate(project.rooms):
+        if index == first_index:
+            rooms.append(updated_room)
+        elif index == second_index:
+            continue
+        else:
+            rooms.append(room)
+    room_tuple = tuple(rooms)
+    visible = _all_room_names(room_tuple)
+    room_tuple = tuple(replace(item, visible_rooms=visible) for item in room_tuple)
+    return _replace_rooms(project, room_tuple, operation="rectangular_union")
+
+
 def move_authored_floor_plan_point(
     project: AuthoredModuleProject,
     *,
@@ -1057,12 +1160,15 @@ __all__ = [
     "AuthoredCompositionPrimitiveKind",
     "AuthoredCompositionPrimitiveDimension",
     "AuthoredCompositionPrimitiveTransform",
+    "AuthoredFloorPlanRoomChoice",
     "add_authored_room_composition_primitive",
+    "apply_authored_floor_plan_rectangular_union",
     "apply_authored_floor_plan_bevel",
     "apply_authored_floor_plan_inset",
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
     "available_authored_composition_primitive_kinds",
+    "authored_floor_plan_room_choices",
     "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",
