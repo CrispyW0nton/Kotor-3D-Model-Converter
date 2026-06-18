@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Forwards Game Root to Authored Material Preflight
+
+Owner: LordVaderCW
+Task: T2686
+Subsystem: Map Studio / authored module export / material preflight / smoke package staging
+
+- Threaded the selected KOTOR game root from authored install prep through authored module export into room material preflight.
+- Removed the false smoke-staging warning that authored room textures could not be resolved because no game install was supplied when a game root was actually provided.
+- Mirrored the authored export update into the ModuleMeshes workflow package.
+- Re-staged and installed `grdev01.mod` into the local K1 `Modules` folder for the next manual `warp grdev01` proof pass; the previous smoke copy was backed up by the install-prep flow.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_material_root`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_installed --game K1 --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-kmap --overwrite-module --json`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json`
+
 ### [2026-06-18] Map Studio Adds Authored Launch Handoff Metadata
 
 Owner: LordVaderCW

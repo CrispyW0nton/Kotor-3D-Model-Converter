@@ -425,7 +425,7 @@ def _placement_counts(placements: AuthoredGameplayPlacement) -> dict[str, int]:
     }
 
 
-def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild:
+def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str = "") -> AuthoredModuleBuild:
     """Compile authored module intent into in-memory runtime resources."""
 
     root = project.module_root
@@ -494,6 +494,7 @@ def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild
     try:
         material_preflight = compile_authored_room_material_preflight(
             project.rooms[0].primitive.material.texture if hasattr(project.rooms[0].primitive, "material") else getattr(project.rooms[0].primitive, "texture", ""),
+            game_root_dir=game_root_dir,
             require_game_resolution=False,
         )
         warnings.extend(material_preflight.warnings)
@@ -636,7 +637,7 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
 def export_authored_module_project(request: AuthoredModuleExportRequest) -> AuthoredModuleExportResult:
     """Export the current authored Map Studio project through the MOD packager."""
 
-    build = build_authored_module(request.project)
+    build = build_authored_module(request.project, game_root_dir=request.game_root_dir)
     room_resrefs = tuple(sorted(build.module.room_geometry))
     if build.blocking_issues and request.strict:
         return AuthoredModuleExportResult(
@@ -1040,6 +1041,7 @@ def _install_prep_export_request(request: AuthoredModuleInstallPrepRequest) -> A
     return AuthoredModuleExportRequest(
         project=request.project,
         output_dir=request.output_dir,
+        game_root_dir=request.game_root_dir,
         strict=True,
         dry_run=False,
     )

@@ -179,6 +179,42 @@ def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     assert build.metadata["gameplay_counts"]["encounters"] == 1
 
 
+def test_t2686_export_forwards_game_root_to_authored_material_preflight(tmp_path: Path, monkeypatch) -> None:
+    _install_native_payload_paths()
+
+    from types import SimpleNamespace
+
+    from src.core.modules import authored_module_export as export_module
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    captured: dict[str, str] = {}
+
+    def fake_preflight(texture: str, *, game: str = "K1", game_root_dir: str = "", require_game_resolution: bool = False):
+        captured["texture"] = texture
+        captured["game_root_dir"] = game_root_dir
+        return SimpleNamespace(warnings=[], blocking_issues=[])
+
+    monkeypatch.setattr(export_module, "compile_authored_room_material_preflight", fake_preflight)
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grmat01",
+        game="K1",
+    )
+    game_root = tmp_path / "swkotor"
+
+    result = export_authored_module_project(
+        AuthoredModuleExportRequest(
+            project=project,
+            output_dir=str(tmp_path / "out"),
+            game_root_dir=str(game_root),
+        )
+    )
+
+    assert result.ok is True
+    assert captured["game_root_dir"] == str(game_root)
+
+
 def test_t2643_dry_run_does_not_mark_runtime_resources(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
