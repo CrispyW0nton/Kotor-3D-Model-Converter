@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Readiness Reaches Level Editor Export Panel
+
+Owner: LordVaderCW
+Task: T2640
+Subsystem: Map Studio / authored module readiness UI / KMAP bridge / native Python payloads
+
+- Added a headless KMAP bridge that reads an `authored_module` section from KMAP metadata or extra sections, converts it to `AuthoredModuleProject`, and produces the existing capability-honest readiness report.
+- Added a Module Editor readiness panel in the Export tab so modders can see blocked, previewable, export-candidate, and game-tested status plus runtime resource coverage before packaging.
+- Wired `ModuleEditorController.authored_module_readiness()` and the Level Editor refresh path to display the readiness card without moving parsing or export policy into Qt widgets.
+- Mirrored the bridge, panel, controller, and window changes across the native Python payloads and refreshed payload manifests.
+
+Verification:
+- `python -m json.tool native\GhostRigger.Domain.Core.Modules\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Tools.Workflow.ModuleMeshes\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.GUI.Boundary.Panels\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Windows.Editor.Level\GhostRiggerPythonPayload.json`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_readiness.py`
+- `python -m pytest tests\test_authored_module_kmap_bridge.py tests\test_authored_module_readiness.py -q --basetemp .pytest_tmp_map_studio_readiness_ui_t2640`
+
 ### [2026-06-18] Map Studio Authored Module Readiness Contract
 
 Owner: LordVaderCW

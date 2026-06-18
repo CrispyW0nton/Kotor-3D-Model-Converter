@@ -2,7 +2,7 @@
   "schema": "ghostrigger_python_payload.v1",
   "phase": "P1.5 embedded python payload",
   "project": "GhostRigger.Domain.Core.Modules",
-  "file_count": 29,
+  "file_count": 30,
   "originals_remain_in_src": true,
   "files": [
     {
@@ -45,7 +45,7 @@
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src/core/modules/module_editor_controller.py",
       "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-      "sha256": "b666431a4b03fe83d68ccf354cfe7813908bd370c8576c813acdacedbdcd8bf8"
+      "sha256": "6df255e2e3174ee74ccb8e6ed6d470c4e22284173618997ad1bb01ee4746c51d"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
@@ -178,6 +178,12 @@
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
       "sha256": "44207244cd4e9273db3f54827822b1479bc23165d3224493395cc035ebc172dd"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0030",
+      "source_path": "src/core/modules/authored_module_kmap_bridge.py",
+      "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
+      "sha256": "e24a7335607ea75437f0b59f2f9db7ad20a2ec12eea8ffcec9789ff62063b9cf"
     }
   ]
 }

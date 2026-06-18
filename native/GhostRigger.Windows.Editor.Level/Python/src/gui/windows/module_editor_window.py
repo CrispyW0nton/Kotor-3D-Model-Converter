@@ -18,6 +18,7 @@ from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPr
 from src.gui.panels.module_editor.module_editor_toolbar import ModuleEditorToolbar
 from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
 from src.gui.panels.module_editor.porter_tab import PorterTab
+from src.gui.panels.module_editor.readiness_panel import ModuleReadinessPanel
 from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
 from src.gui.panels.module_editor.walkmesh_tab import WalkmeshTab
@@ -185,10 +186,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.properties = ModuleEditorPropertiesPanel(right)
+        self.readiness_panel = ModuleReadinessPanel(right)
         self.export_panel = ModuleExportPanel(right)
         right_tabs = QtWidgets.QTabWidget()
         right_tabs.addTab(self.properties, "Properties")
-        right_tabs.addTab(self.export_panel, "Export")
+        export_page = QtWidgets.QWidget(right_tabs)
+        export_layout = QtWidgets.QVBoxLayout(export_page)
+        export_layout.setContentsMargins(0, 0, 0, 0)
+        export_layout.addWidget(self.readiness_panel)
+        export_layout.addWidget(self.export_panel)
+        right_tabs.addTab(export_page, "Export")
         right_layout.addWidget(right_tabs, 1)
         self.main_splitter.addWidget(right)
 
@@ -234,6 +241,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner.actionRequested.connect(self._outliner_action)
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.validation_panel.issueActivated.connect(self.select_item)
+        self.readiness_panel.gameTestRequested.connect(lambda: self._log("Run the installed module in KOTOR and record proof before marking game-tested."))
         self.properties.transformChanged.connect(self._set_transform)
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
@@ -502,6 +510,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.set_project(self.project)
         self.outliner.set_project(self.project)
         self.viewport_panel.set_project(self.project)
+        readiness_result = self.controller.authored_module_readiness()
+        self.readiness_panel.set_readiness(readiness_result.readiness)
         if self.controller.model.selected_ids:
             self.select_item(self.controller.model.selected_ids[0])
         if message:

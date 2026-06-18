@@ -11,6 +11,7 @@ from src.core.scene.module_scene_import import resolve_module_room_placement
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
+from .authored_module_kmap_bridge import build_kmap_authored_module_readiness
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
 from .module_walkmesh_service import ModuleWalkmeshService
@@ -87,6 +88,11 @@ class ModuleEditorController:
 
     def validate(self):
         return self.validator.validate(self.project)
+
+    def authored_module_readiness(self):
+        """Return Map Studio authored-module readiness for the current KMAP."""
+
+        return build_kmap_authored_module_readiness(self.project)
 
     def build_preview(self, output_dir: str | Path):
         return self.builder_service.build_preview(self.project, output_dir)
