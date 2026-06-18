@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -97,3 +98,35 @@ def test_t2649_launch_grdev01_smoke_blocks_stale_installed_module(tmp_path: Path
     assert payload["status"] == "installed_copy_mismatch"
     assert payload["installed_matches_package"] is False
     assert any("does not match" in issue for issue in payload["blocking_issues"])
+
+
+def test_t2687_launch_reports_elevation_without_traceback(tmp_path: Path, monkeypatch, capsys) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+    spec = importlib.util.spec_from_file_location("launch_grdev01_smoke_test_under_test", LAUNCH_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    def raise_elevation(*args, **kwargs):
+        exc = OSError(740, "The requested operation requires elevation")
+        exc.winerror = 740
+        raise exc
+
+    monkeypatch.setattr(module.subprocess, "Popen", raise_elevation)
+
+    code = module.main(
+        [
+            "--proof-manifest",
+            str(prep["proof_manifest_path"]),
+            "--game-root-dir",
+            str(game_root),
+            "--json",
+        ]
+    )
+
+    assert code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["code"] == "launch_requires_elevation"
+    assert "requires elevation" in payload["message"]
+    assert any("administrator" in issue for issue in payload["blocking_issues"])

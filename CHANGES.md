@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Reports Elevated KOTOR Launch Requirement
+
+Owner: LordVaderCW
+Task: T2687
+Subsystem: Map Studio / grdev01 smoke launch helper / game-proof workflow
+
+- Changed the `grdev01` launch helper to catch Windows elevation launch failures and return a structured blocked result instead of crashing with a traceback.
+- Added a regression test that simulates `WinError 740` so the helper continues to report a modder-actionable administrator/elevation message.
+- Re-ran the real local K1 launch helper after installing `grdev01.mod`; the package remains installed and launch-ready, but the local Steam `swkotor.exe` requires elevation before the manual `warp grdev01` proof can continue.
+
+Verification:
+- `python -m py_compile scripts\launch_grdev01_smoke_test.py tests\test_launch_grdev01_smoke_script.py`
+- `python -m pytest tests\test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_launch_grdev01_elevation`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+
 ### [2026-06-18] Map Studio Forwards Game Root to Authored Material Preflight
 
 Owner: LordVaderCW

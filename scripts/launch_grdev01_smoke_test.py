@@ -156,7 +156,37 @@ def main(argv: list[str] | None = None) -> int:
             _print_human_summary(payload)
         return 1
     if not args.dry_run:
-        subprocess.Popen(launch_command, cwd=str(args.game_root_dir))  # noqa: S603
+        try:
+            subprocess.Popen(launch_command, cwd=str(args.game_root_dir))  # noqa: S603
+        except OSError as exc:
+            status = dict(status)
+            blocking = list(status.get("blocking_issues", []))
+            winerror = getattr(exc, "winerror", None) or getattr(exc, "errno", None)
+            if winerror == 740:
+                code = "launch_requires_elevation"
+                message = "KOTOR was not launched because Windows requires elevation for this executable."
+                blocking.append(
+                    f"Windows requires elevation to launch {executable}. Start KOTOR as administrator, then run `warp grdev01`."
+                )
+            else:
+                code = "launch_failed"
+                message = f"KOTOR launch failed: {exc}"
+                blocking.append(message)
+            status["blocking_issues"] = blocking
+            payload = _summary(
+                ok=False,
+                code=code,
+                message=message,
+                status=status,
+                executable=executable,
+                launch_command=launch_command,
+                dry_run=False,
+            )
+            if args.json:
+                print(json.dumps(payload, indent=2))
+            else:
+                _print_human_summary(payload)
+            return 1
     payload = _summary(
         ok=True,
         code="dry_run_ready" if args.dry_run else "launched",
