@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Includes Evidence Capture in Smoke Handoff
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / smoke-test handoff / in-game proof workflow
+
+- Added the `capture_grdev01_smoke_evidence.py` command to generated `grdev01` authored-module and dev-smoke checklists and proof manifests.
+- Surfaced the evidence capture command through prepare/install/status JSON summaries so the proof workflow points testers to the capture-plus-record helper after `warp grdev01`.
+- Mirrored the authored/dev smoke handoff changes into the ModuleMeshes workflow payload and refreshed the local installed `grdev01` proof bundle with the new capture command.
+
+Verification:
+- `python -m pytest tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests/test_dev_module_smoke.py::test_t2601_install_prep_writes_manual_game_test_checklist tests/test_dev_module_smoke.py::test_t2601_install_prep_copies_to_modules_without_overwrite -q --basetemp .pytest_tmp_map_capture_handoff_core`
+- `python -m pytest tests/test_prepare_grdev01_authored_smoke_script.py tests/test_install_grdev01_smoke_variant_script.py::test_t2617_script_installs_one_floor_plan_variant_to_modules tests/test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_installed_authored_smoke_package -q --basetemp .pytest_tmp_map_capture_handoff_scripts`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py scripts\prepare_grdev01_authored_smoke.py scripts\install_grdev01_smoke_variant.py scripts\check_grdev01_smoke_status.py`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_installed --overwrite-kmap --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-module --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --kotormcp --json`
+
 ### [2026-06-18] Map Studio Adds grdev01 Evidence Capture Helper
 
 Owner: LordVaderCW

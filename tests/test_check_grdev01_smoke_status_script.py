@@ -225,9 +225,10 @@ def test_t2698_status_accepts_installed_authored_smoke_package(tmp_path: Path) -
     assert payload["installed"]["matches_package"] is True
     assert payload["ready_for_game_launch"] is True
     assert payload["next_action"].startswith("Launch KOTOR")
-    assert "proof recording command" in payload["next_action"]
+    assert "evidence capture command" in payload["next_action"]
     assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
     assert "launch_grdev01_smoke_test.py" in payload["launch_handoff"]["launch_helper_command"]
+    assert "capture_grdev01_smoke_evidence.py" in payload["launch_handoff"]["evidence_capture_command"]
     assert payload["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
 
 

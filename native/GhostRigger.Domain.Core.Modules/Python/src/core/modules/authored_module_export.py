@@ -1059,6 +1059,26 @@ def _record_proof_script_path() -> str:
     return "scripts\\record_authored_module_game_proof.py"
 
 
+def _capture_grdev01_evidence_script_path() -> str:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        script_path = parent / "scripts" / "capture_grdev01_smoke_evidence.py"
+        if script_path.is_file():
+            return str(script_path)
+    return "scripts\\capture_grdev01_smoke_evidence.py"
+
+
+def _capture_evidence_command(*, proof_manifest_path: Path, module_root: str) -> str:
+    if module_root.lower() != "grdev01":
+        return ""
+    capture_path = _capture_grdev01_evidence_script_path()
+    return (
+        f'python "{capture_path}" --proof-manifest "{proof_manifest_path}" '
+        "--record-proof --module-loads-in-game --player-spawns-on-floor "
+        "--test-placeable-visible --player-can-walk-on-floor"
+    )
+
+
 def _write_authored_proof_recording_script(
     *,
     output_root: Path,
@@ -1141,6 +1161,10 @@ def _write_authored_install_proof_files(
         module_root=module_root,
         proof_manifest_path=proof_manifest_path,
     )
+    capture_evidence_command = _capture_evidence_command(
+        proof_manifest_path=proof_manifest_path,
+        module_root=module_root,
+    )
     checklist_lines = [
         f"# {module_root} Authored Module In-Game Test",
         "",
@@ -1153,6 +1177,7 @@ def _write_authored_install_proof_files(
         f"- Expected executable: `{executable_path}`",
         f"- Dry-run helper: `{launch_helper_command or '(manual launch)'}`",
         f"- Elevated launch helper: `{elevated_launch_script_path or '(not written)'}`",
+        f"- Evidence capture helper: `{capture_evidence_command or '(manual screenshot/video capture)'}`",
         f"- Proof recorder: `{proof_recording_script_path}`",
         f"- Warp command: `warp {module_root}`",
         "",
@@ -1198,6 +1223,7 @@ def _write_authored_install_proof_files(
             "expected_executable_path": executable_path,
             "launch_helper_command": launch_helper_command,
             "elevated_launch_script_path": elevated_launch_script_path,
+            "evidence_capture_command": capture_evidence_command,
             "proof_recording_script_path": proof_recording_script_path,
             "dry_run_first": bool(launch_helper_command),
             "warp_command": f"warp {module_root}",

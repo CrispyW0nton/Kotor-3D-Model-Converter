@@ -356,6 +356,7 @@ def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> d
         "expected_executable_path": str(handoff.get("expected_executable_path") or ""),
         "launch_helper_command": str(handoff.get("launch_helper_command") or ""),
         "elevated_launch_script_path": str(handoff.get("elevated_launch_script_path") or ""),
+        "evidence_capture_command": str(handoff.get("evidence_capture_command") or ""),
         "proof_recording_script_path": recorder_script,
         "proof_recording_command_template": (
             f'python "{recorder_command_script}" --proof-manifest "{proof_path}" '
@@ -445,6 +446,11 @@ def build_status(
             f"Launch {game_label}, run `{launch_handoff['warp_command']}`, verify floor/placeable/walkability, "
             "then capture evidence and run the proof recording command."
         )
+        if launch_handoff.get("evidence_capture_command"):
+            next_action = (
+                f"Launch {game_label}, run `{launch_handoff['warp_command']}`, verify floor/placeable/walkability, "
+                "then run the evidence capture command."
+            )
     elif not installed.get("checked") or not installed.get("exists"):
         next_action = "Install/copy grdev01.mod into a KOTOR Modules folder before the game test."
     elif installed.get("checked") and not installed.get("matches_package"):
@@ -495,6 +501,8 @@ def _print_human_summary(status: dict[str, Any]) -> None:
         print(f"Launch helper: {handoff['launch_helper_command']}")
     if handoff.get("elevated_launch_script_path"):
         print(f"Elevated launch script: {handoff['elevated_launch_script_path']}")
+    if handoff.get("evidence_capture_command"):
+        print(f"Evidence capture command: {handoff['evidence_capture_command']}")
     if handoff.get("proof_recording_script_path"):
         print(f"Proof recorder script: {handoff['proof_recording_script_path']}")
     if handoff.get("proof_recording_command_template"):

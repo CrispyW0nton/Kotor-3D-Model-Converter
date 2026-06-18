@@ -378,6 +378,8 @@ def test_t2601_install_prep_writes_manual_game_test_checklist(tmp_path: Path) ->
     assert "No KOTOR Modules folder was supplied" in "\n".join(result.warnings)
     checklist = Path(result.checklist_path).read_text(encoding="utf-8")
     assert "warp grdev01" in checklist
+    assert "Evidence capture helper:" in checklist
+    assert "capture_grdev01_smoke_evidence.py" in checklist
     assert "Proof recorder:" in checklist
     proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
     assert "record_grdev01_smoke_proof.py" in proof_recorder
@@ -389,6 +391,8 @@ def test_t2601_install_prep_writes_manual_game_test_checklist(tmp_path: Path) ->
     assert proof["install"]["installed"] is False
     assert proof["package"]["verification"]["ok"] is True
     assert proof["launch_handoff"]["warp_command"] == "warp grdev01"
+    assert "capture_grdev01_smoke_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--record-proof" in proof["launch_handoff"]["evidence_capture_command"]
     assert proof["launch_handoff"]["proof_recording_script_path"] == result.proof_recording_script_path
     assert proof["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
     assert proof["acceptance_checks"] == [
@@ -425,6 +429,7 @@ def test_t2601_install_prep_copies_to_modules_without_overwrite(tmp_path: Path) 
     assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
     assert proof["launch_handoff"]["expected_executable_path"] == str(modules_dir.parent / "swkotor.exe")
     assert proof["launch_handoff"]["elevated_launch_script_path"] == result.elevated_launch_script_path
+    assert "capture_grdev01_smoke_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
     assert proof["launch_handoff"]["proof_recording_script_path"] == result.proof_recording_script_path
 
     installed.write_bytes(b"existing")

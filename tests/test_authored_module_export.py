@@ -301,6 +301,8 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert "No KOTOR Modules folder was supplied" in "\n".join(result.warnings)
     checklist = Path(result.checklist_path).read_text(encoding="utf-8")
     assert "warp grdev01" in checklist
+    assert "Evidence capture helper:" in checklist
+    assert "capture_grdev01_smoke_evidence.py" in checklist
     assert "Proof recorder:" in checklist
     proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
     assert "record_authored_module_game_proof.py" in proof_recorder
@@ -312,6 +314,8 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert proof["game_tested"] is False
     assert proof["install"]["installed"] is False
     assert proof["package"]["verification"]["ok"] is True
+    assert "capture_grdev01_smoke_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--record-proof" in proof["launch_handoff"]["evidence_capture_command"]
     contract = proof["t2601_smoke_contract"]
     assert contract["task"] == "T2601"
     assert contract["all_required_resources_present"] is True

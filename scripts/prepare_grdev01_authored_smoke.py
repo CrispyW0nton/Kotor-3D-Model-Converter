@@ -144,6 +144,17 @@ def _resource_summary(export_result: Any) -> list[dict[str, Any]]:
     ]
 
 
+def _proof_launch_handoff_value(proof_manifest_path: str, key: str) -> str:
+    if not proof_manifest_path:
+        return ""
+    try:
+        proof = json.loads(Path(proof_manifest_path).read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    handoff = proof.get("launch_handoff") if isinstance(proof.get("launch_handoff"), dict) else {}
+    return str(handoff.get(key) or "")
+
+
 def _summary(
     *,
     result: Any,
@@ -185,6 +196,7 @@ def _summary(
         "resolved_game_root_dir": getattr(result, "resolved_game_root_dir", ""),
         "launch_helper_command": getattr(result, "launch_helper_command", ""),
         "elevated_launch_script_path": getattr(result, "elevated_launch_script_path", ""),
+        "evidence_capture_command": _proof_launch_handoff_value(result.proof_manifest_path, "evidence_capture_command"),
         "proof_recording_script_path": getattr(result, "proof_recording_script_path", ""),
         "checklist_path": result.checklist_path,
         "proof_manifest_path": result.proof_manifest_path,
@@ -210,6 +222,8 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
         print(f"Launch dry-run helper: {summary['launch_helper_command']}")
     if summary["elevated_launch_script_path"]:
         print(f"Elevated launcher: {summary['elevated_launch_script_path']}")
+    if summary.get("evidence_capture_command"):
+        print(f"Evidence capture command: {summary['evidence_capture_command']}")
     if summary.get("proof_recording_script_path"):
         print(f"Proof recorder: {summary['proof_recording_script_path']}")
     if summary["installed_module_path"]:

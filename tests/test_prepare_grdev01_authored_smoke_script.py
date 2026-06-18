@@ -90,6 +90,8 @@ def test_t2647_prepare_grdev01_authored_smoke_installs_with_backup(tmp_path: Pat
     assert payload["resolved_game_root_dir"] == str(modules_dir.parent)
     assert "launch_grdev01_smoke_test.py" in payload["launch_helper_command"]
     assert str(modules_dir.parent) in payload["launch_helper_command"]
+    assert "capture_grdev01_smoke_evidence.py" in payload["evidence_capture_command"]
+    assert "--record-proof" in payload["evidence_capture_command"]
     assert Path(payload["elevated_launch_script_path"]).is_file()
     assert Path(payload["proof_recording_script_path"]).is_file()
     assert "RunAs" in Path(payload["elevated_launch_script_path"]).read_text(encoding="utf-8")
@@ -101,5 +103,6 @@ def test_t2647_prepare_grdev01_authored_smoke_installs_with_backup(tmp_path: Pat
     assert proof["install"]["installed_module_path"] == str(installed)
     assert proof["launch_handoff"]["resolved_game_root_dir"] == payload["resolved_game_root_dir"]
     assert proof["launch_handoff"]["launch_helper_command"] == payload["launch_helper_command"]
+    assert proof["launch_handoff"]["evidence_capture_command"] == payload["evidence_capture_command"]
     assert proof["launch_handoff"]["elevated_launch_script_path"] == payload["elevated_launch_script_path"]
     assert proof["launch_handoff"]["proof_recording_script_path"] == payload["proof_recording_script_path"]
