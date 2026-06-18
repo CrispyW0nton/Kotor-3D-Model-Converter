@@ -22,10 +22,15 @@ from .authored_room_composition import (
 )
 from .authored_room_floorplan import FloorPlanRoomPrimitive, compile_floor_plan_room_geometry, validate_floor_plan_room_primitive
 from .authored_room_geometry import AuthoredRoomGeometry, RectangularRoomPrimitive, build_rectangular_room_geometry
+from .authored_terrain_builder import (
+    TerrainHeightfieldPrimitive,
+    compile_terrain_room_geometry,
+    validate_terrain_heightfield_primitive,
+)
 
 
 Vec3 = tuple[float, float, float]
-RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive, AuthoredRoomComposition]
+RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive, AuthoredRoomComposition, TerrainHeightfieldPrimitive]
 _RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
 
@@ -146,6 +151,10 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
             floorplan_validation = validate_floor_plan_room_primitive(room.primitive)
             warnings.extend(floorplan_validation.warnings)
             blocking.extend(floorplan_validation.blocking_issues)
+        elif isinstance(room.primitive, TerrainHeightfieldPrimitive):
+            terrain_validation = validate_terrain_heightfield_primitive(room.primitive)
+            warnings.extend(terrain_validation.warnings)
+            blocking.extend(terrain_validation.blocking_issues)
         elif isinstance(room.primitive, RectangularRoomPrimitive):
             if float(room.primitive.width) <= 0.0 or float(room.primitive.depth) <= 0.0:
                 blocking.append(f"Room {resref} rectangular primitive requires positive width and depth.")
@@ -185,6 +194,8 @@ def compile_authored_room_spec(room: AuthoredRoomSpec) -> AuthoredRoomGeometry:
         return compile_authored_room_composition(room.primitive)
     if isinstance(room.primitive, FloorPlanRoomPrimitive):
         return compile_floor_plan_room_geometry(room.primitive)
+    if isinstance(room.primitive, TerrainHeightfieldPrimitive):
+        return compile_terrain_room_geometry(room.primitive)
     if isinstance(room.primitive, RectangularRoomPrimitive):
         return build_rectangular_room_geometry(room.primitive)
     raise TypeError(f"Unsupported authored room primitive: {type(room.primitive)!r}")
@@ -302,6 +313,44 @@ def create_composition_room_project(
     )
 
 
+def create_terrain_room_project(
+    *,
+    module_root: str,
+    game: str,
+    display_name: str,
+    terrain: TerrainHeightfieldPrimitive,
+    placements: AuthoredGameplayPlacement,
+    notes: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
+) -> AuthoredModuleProject:
+    """Create a single-room project from an authored terrain heightfield."""
+
+    root = normalise_resref(module_root)
+    room_resref = normalise_resref(terrain.room_resref)
+    room = AuthoredRoomSpec(
+        room_resref=room_resref,
+        primitive=terrain,
+        visible_rooms=(room_resref,),
+        metadata={
+            "primitive": "terrain_heightfield",
+            "source": "src.core.modules.authored_module_project",
+        },
+    )
+    return AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(
+            module_root=root,
+            game=str(game or "K1").upper(),
+            display_name=display_name,
+            tag=root,
+            metadata=dict(metadata or {}),
+        ),
+        rooms=(room,),
+        placements=placements,
+        lights=(),
+        notes=notes,
+    )
+
+
 __all__ = [
     "AuthoredModuleMetadata",
     "AuthoredModuleProject",
@@ -313,6 +362,7 @@ __all__ = [
     "create_composition_room_project",
     "create_floor_plan_room_project",
     "create_single_room_project",
+    "create_terrain_room_project",
     "normalise_resref",
     "validate_authored_module_project",
 ]

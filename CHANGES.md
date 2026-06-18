@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Terrain Heightfield Foundations
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / terrain authoring / authored room compiler
+
+- Added a headless terrain heightfield primitive that compiles a modder-authored height grid into visible room mesh geometry and matching WOK faces.
+- Added terrain slope analysis so triangles steeper than the configured max walkable angle export as `NON_WALK` surfaces with actionable warnings.
+- Wired terrain primitives into the authored module project compiler and added a single-room terrain project factory for future Map Studio UI calls.
+- Mirrored the terrain builder and project compiler changes into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests\test_authored_terrain_builder.py tests\test_authored_module_project.py tests\test_dev_module_smoke.py -q --basetemp .pytest_tmp_map_terrain_builder`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_terrain_builder.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_terrain_builder.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py tests\test_authored_terrain_builder.py tests\test_authored_module_project.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_terrain_export_smoke`
+
 ### [2026-06-18] Map Studio Adds Terrain Builder Roadmap Scope
 
 Owner: LordVaderCW
