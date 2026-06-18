@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Smoke Builder Uses Gameplay Walkmesh Gate
+
+Owner: LordVaderCW
+Task: T2631
+Subsystem: Map Studio / dev module smoke proof / native Python payloads
+
+- Rewired the `grdev01` smoke module builder to use the reusable authored gameplay placement walkmesh validator for player-start and test-placeable checks.
+- Preserved existing proof-manifest labels while removing duplicated smoke-local walkmesh surface/Z logic.
+- Mirrored the smoke builder change into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_dev_module_smoke.py tests/test_authored_module_objects.py -q --basetemp .pytest_tmp_smoke_walkmesh_gate`
+
 ### [2026-06-18] Map Studio Gameplay Placement Walkmesh Validation
 
 Owner: LordVaderCW

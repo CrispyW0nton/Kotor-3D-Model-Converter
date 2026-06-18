@@ -32,13 +32,14 @@ from .authored_module_objects import (
     AuthoredWaypointInstance,
     ModuleEntryPoint,
     build_git_bytes,
+    validate_authored_gameplay_placement_against_walkmesh,
 )
 from .authored_room_geometry import (
     AuthoredRoomGeometry,
     PrimitiveMesh,
     RectangularRoomPrimitive,
 )
-from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
+from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id
 from .authored_module_project import (
     AuthoredModuleProject,
     compile_authored_room_spec,
@@ -492,63 +493,32 @@ def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProj
     )
 
 
-def _walkable_ids() -> set[int]:
-    try:
-        from .module_format import WALKABLE_IDS
+def _smoke_walkability_label(label: str) -> str | None:
+    if label == "entry_point":
+        return "player_start"
+    if label.startswith("placeable:"):
+        return "test_placeable"
+    return None
 
-        return set(WALKABLE_IDS)
-    except Exception:
-        return {1, 3, 4, 5, 9, 10, 11, 12, 13, 14, 19, 20, 21}
 
-
-def _walkability_check(label: str, position: tuple[float, float, float], wok: WOKData) -> DevModuleWalkabilityCheck:
-    face_index = wok.face_at_point(float(position[0]), float(position[1]))
-    if face_index < 0:
-        return DevModuleWalkabilityCheck(
-            label=label,
-            position=position,
-            ok=False,
-            face_index=-1,
-            surface_id=-1,
-            message=f"{label} is outside the generated room walkmesh.",
+def _validate_gameplay_anchors(placements: AuthoredGameplayPlacement, wok: WOKData) -> list[DevModuleWalkabilityCheck]:
+    validation = validate_authored_gameplay_placement_against_walkmesh(placements, wok)
+    checks: list[DevModuleWalkabilityCheck] = []
+    for check in validation.checks:
+        smoke_label = _smoke_walkability_label(check.label)
+        if smoke_label is None:
+            continue
+        checks.append(
+            DevModuleWalkabilityCheck(
+                label=smoke_label,
+                position=check.position,
+                ok=check.ok,
+                face_index=check.face_index,
+                surface_id=check.surface_id,
+                message=check.message.replace(check.label, smoke_label, 1),
+            )
         )
-    face = wok.faces[face_index]
-    surface_id = int(face.surface)
-    surface_name = walkmesh_surface_name(surface_id)
-    if surface_id not in _walkable_ids():
-        return DevModuleWalkabilityCheck(
-            label=label,
-            position=position,
-            ok=False,
-            face_index=face_index,
-            surface_id=surface_id,
-            message=f"{label} is on WOK face {face_index}, but surface {surface_id} ({surface_name}) is not walkable.",
-        )
-    floor_z = float(wok.verts[face.v1][2] + wok.verts[face.v2][2] + wok.verts[face.v3][2]) / 3.0
-    if abs(float(position[2]) - floor_z) > 0.05:
-        return DevModuleWalkabilityCheck(
-            label=label,
-            position=position,
-            ok=False,
-            face_index=face_index,
-            surface_id=surface_id,
-            message=f"{label} Z={position[2]:.3f} is not on generated floor Z={floor_z:.3f}.",
-        )
-    return DevModuleWalkabilityCheck(
-        label=label,
-        position=position,
-        ok=True,
-        face_index=face_index,
-        surface_id=surface_id,
-        message=f"{label} is on walkable WOK face {face_index} ({surface_name}).",
-    )
-
-
-def _validate_gameplay_anchors(request: DevModuleSmokeRequest, wok: WOKData) -> list[DevModuleWalkabilityCheck]:
-    return [
-        _walkability_check("player_start", request.player_start, wok),
-        _walkability_check("test_placeable", request.test_placeable_position, wok),
-    ]
+    return checks
 
 
 def _game_root_for_template_check(request: DevModuleSmokeRequest) -> str:
@@ -723,7 +693,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     lyt = layout.lyt
     vis = layout.vis
     wok = geometry.wok
-    walkability_checks = _validate_gameplay_anchors(request, wok)
+    walkability_checks = _validate_gameplay_anchors(placements, wok)
     walkability_by_label = {check.label: check for check in walkability_checks}
     path_anchors = []
     if walkability_by_label.get("player_start") and walkability_by_label["player_start"].ok:
