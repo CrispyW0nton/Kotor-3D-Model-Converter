@@ -842,6 +842,48 @@ def _authored_smoke_contract_from_export_result(export_result: AuthoredModuleExp
     return contract
 
 
+def authored_module_smoke_summary_lines(export_result: AuthoredModuleExportResult) -> list[str]:
+    """Return concise modder-facing smoke-test expectations for a staged module."""
+
+    contract = _authored_smoke_contract_from_export_result(export_result)
+    lines = [f"Smoke test: run `{contract['warp_command']}` in the matching KOTOR game."]
+    entry = contract.get("expected_entry_point")
+    if isinstance(entry, dict):
+        position = entry.get("position", [])
+        area = str(entry.get("area_resref") or contract.get("module_root") or "")
+        if len(position) >= 3:
+            lines.append(
+                "Expected player start: "
+                f"{area} at ({float(position[0]):.2f}, {float(position[1]):.2f}, {float(position[2]):.2f})."
+            )
+    placeables = [row for row in contract.get("expected_placeables", []) if isinstance(row, dict)]
+    if placeables:
+        labels = []
+        for row in placeables:
+            position = _vec3_to_manifest(row.get("position", (0.0, 0.0, 0.0)))
+            labels.append(
+                f"{row.get('tag') or row.get('template_resref')} @ "
+                f"({position[0]:.2f}, {position[1]:.2f}, {position[2]:.2f})"
+            )
+        lines.append(f"Expected placeable(s): {', '.join(labels)}.")
+    walkability = contract.get("walkability")
+    if isinstance(walkability, dict):
+        checks = [row for row in walkability.get("checks", []) if isinstance(row, dict)]
+        passed = sum(1 for row in checks if row.get("ok"))
+        if checks:
+            lines.append(f"Walkability preflight: {passed}/{len(checks)} gameplay anchor(s) on generated WOK.")
+    anchors = list(contract.get("pathing_anchor_labels") or [])
+    if anchors:
+        shown = ", ".join(str(label) for label in anchors[:8])
+        suffix = "" if len(anchors) <= 8 else f", +{len(anchors) - 8} more"
+        lines.append(f"Pathing anchors: {shown}{suffix}.")
+    if contract.get("game_tested"):
+        lines.append("Capability: game-smoke-tested.")
+    else:
+        lines.append("Capability: export candidate; in-game screenshot/video proof is still required.")
+    return lines
+
+
 def _authored_game_test_steps(module_root: str) -> list[str]:
     return [
         f"Install/copy `{module_root}.mod` into the selected KOTOR `Modules` folder.",
@@ -1180,6 +1222,7 @@ __all__ = [
     "AuthoredModuleInstallPrepRequest",
     "AuthoredModuleInstallPrepResult",
     "AuthoredModuleResourceSummary",
+    "authored_module_smoke_summary_lines",
     "build_authored_module",
     "export_authored_module_project",
     "prepare_authored_module_install",

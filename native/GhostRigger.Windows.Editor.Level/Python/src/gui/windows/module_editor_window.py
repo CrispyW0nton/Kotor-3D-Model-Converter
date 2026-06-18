@@ -8,6 +8,7 @@ from typing import Any
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject, LevelScene, LevelTransform
+from src.core.modules.authored_module_export import authored_module_smoke_summary_lines
 from src.core.modules.module_editor_controller import ModuleEditorController
 from src.gui.panels.module_editor.blueprints_tab import BlueprintsTab
 from src.gui.panels.module_editor.builder_tab import BuilderTab
@@ -523,6 +524,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Package: {result.module_path}")
         if result.manifest_path:
             self._log(f"Manifest: {result.manifest_path}")
+        for line in authored_module_smoke_summary_lines(result):
+            self._log(line)
         for warning in result.warnings:
             self._log(f"Warning: {warning}")
         for issue in result.blocking_issues:
@@ -552,6 +555,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Game-test checklist: {result.checklist_path}")
         if result.proof_manifest_path:
             self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if export_result is not None:
+            for line in authored_module_smoke_summary_lines(export_result):
+                self._log(line)
         for warning in result.warnings:
             self._log(f"Warning: {warning}")
         for issue in result.blocking_issues:

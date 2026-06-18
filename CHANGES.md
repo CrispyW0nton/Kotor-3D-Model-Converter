@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Logs Authored Smoke Test Expectations
+
+Owner: LordVaderCW
+Task: T2682
+Subsystem: Map Studio / authored module proof UX / Module Editor window / native Python payloads
+
+- Added a reusable authored-module smoke summary formatter that turns the T2601 contract into concise modder-facing lines for warp command, player start, expected placeables, walkability preflight, path anchors, and capability stage.
+- Logged those lines after authored module export and game-test staging so a modder can see what `grdev01` should do in KOTOR without opening the JSON manifest by hand.
+- Mirrored the authored export payload update into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_smoke_summary`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Enriches Authored Smoke Proof Contracts
 
 Owner: LordVaderCW

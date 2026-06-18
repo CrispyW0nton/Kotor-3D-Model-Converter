@@ -213,6 +213,7 @@ def test_t2643_export_panel_exposes_authored_module_action() -> None:
     assert panel_source == boundary_panel_source
     assert "self.export_panel.authoredModuleRequested.connect(self.export_authored_module)" in window_source
     assert "self.controller.export_authored_module(path, dry_run=dry_run)" in window_source
+    assert "authored_module_smoke_summary_lines" in window_source
 
 
 def _dev_authored_project():
@@ -225,7 +226,11 @@ def _dev_authored_project():
 def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
-    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleInstallPrepRequest,
+        authored_module_smoke_summary_lines,
+        prepare_authored_module_install,
+    )
 
     result = prepare_authored_module_install(AuthoredModuleInstallPrepRequest(project=_dev_authored_project(), output_dir=str(tmp_path)))
 
@@ -251,6 +256,12 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert contract["expected_placeables"][0]["tag"] == "grdev01_test_placeable"
     assert contract["all_walkability_checks_passed"] is True
     assert "placeable:grdev01_test_placeable" in contract["pathing_anchor_labels"]
+    summary = authored_module_smoke_summary_lines(result.export_result)
+    assert any("warp grdev01" in line for line in summary)
+    assert "Expected player start: grdev01 at (0.00, -3.00, 0.00)." in summary
+    assert any("grdev01_test_placeable" in line for line in summary)
+    assert "Walkability preflight: 3/3 gameplay anchor(s) on generated WOK." in summary
+    assert summary[-1] == "Capability: export candidate; in-game screenshot/video proof is still required."
 
 
 def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp_path: Path) -> None:
