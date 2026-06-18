@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -50,6 +51,15 @@ def _prepare_authored(tmp_path: Path, *args: str) -> dict[str, object]:
 
 def _status(proof_manifest: str, *args: str) -> subprocess.CompletedProcess[str]:
     return _run_script(STATUS_SCRIPT, "--proof-manifest", proof_manifest, "--json", *args)
+
+
+def _load_status_module():
+    spec = importlib.util.spec_from_file_location("check_grdev01_smoke_status", STATUS_SCRIPT)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_t2619_status_reports_export_candidate_ready_for_manual_install(tmp_path: Path) -> None:
@@ -219,3 +229,68 @@ def test_t2698_status_accepts_installed_authored_smoke_package(tmp_path: Path) -
     assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
     assert "launch_grdev01_smoke_test.py" in payload["launch_handoff"]["launch_helper_command"]
     assert payload["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
+
+
+def test_t2601_status_can_include_kotormcp_module_visibility_check(tmp_path: Path, monkeypatch) -> None:
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    authored = _prepare_authored(
+        tmp_path / "authored",
+        "--game-modules-dir",
+        str(modules_dir),
+    )
+    status_module = _load_status_module()
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_run_kotormcp_tool(name: str, arguments: dict[str, object], *, game_root_dir: str = "") -> dict[str, object]:
+        calls.append((name, arguments))
+        if name == "kotor_module_resources":
+            return {
+                "module_root": "grdev01",
+                "count": 9,
+                "total": 9,
+                "items": [
+                    {"resref": "grdev01", "type": "ARE", "extension": "are", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01", "type": "GIT", "extension": "git", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01", "type": "LYT", "extension": "lyt", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01", "type": "PTH", "extension": "pth", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01", "type": "VIS", "extension": "vis", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01_room01", "type": "MDL", "extension": "mdl", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01_room01", "type": "THG", "extension": "thg", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "grdev01_room01", "type": "WOK", "extension": "wok", "size": 10, "source": "module:grdev01.mod"},
+                    {"resref": "module", "type": "IFO", "extension": "ifo", "size": 10, "source": "module:grdev01.mod"},
+                ],
+            }
+        return {
+            "module_root": "grdev01",
+            "resource_count": 9,
+            "type_breakdown": {
+                "ARE": 1,
+                "GIT": 1,
+                "IFO": 1,
+                "LYT": 1,
+                "PTH": 1,
+                "VIS": 1,
+                "MDL": 1,
+                "THG": 1,
+                "WOK": 1,
+            },
+            "area_info": {"error": "I/O operation on closed file."},
+        }
+
+    monkeypatch.setattr(status_module, "_run_kotormcp_module_tool", fake_run_kotormcp_tool)
+
+    payload = status_module.build_status(
+        proof_manifest=Path(str(authored["proof_manifest_path"])),
+        game_modules_dir=modules_dir,
+        use_kotormcp=True,
+    )
+
+    assert payload["status"] == "installed_ready_for_game_test"
+    assert payload["kotormcp"]["checked"] is True
+    assert payload["kotormcp"]["ok"] is True
+    assert payload["kotormcp"]["resource_count"] == 9
+    assert payload["kotormcp"]["missing_required_types"] == []
+    assert payload["kotormcp"]["model_buffer_entry_type"] == "THG"
+    assert payload["kotormcp"]["warnings"] == ["KotorMCP area summary warning: I/O operation on closed file."]
+    assert [name for name, _args in calls] == ["kotor_module_resources", "kotor_describe_module"]

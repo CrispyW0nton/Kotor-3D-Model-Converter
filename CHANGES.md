@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds KotorMCP Smoke Visibility Check
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KotorMCP smoke validation / module proof
+
+- Added an optional `--kotormcp` status check for the `grdev01` smoke package so KotorMCP confirms the installed module is visible to the KOTOR resource pipeline.
+- The status report now records KotorMCP resource visibility, missing required module resource types, and the PyKotor model-buffer alias reported for the MDX payload.
+- Kept KotorMCP as an installed-module cross-check, while the existing package verifier remains the strict archive/GFF/WOK/MDL-MDX readback gate.
+
+Verification:
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py::test_t2601_status_can_include_kotormcp_module_visibility_check -q --basetemp .pytest_tmp_kotormcp_status_check`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py -q --basetemp .pytest_tmp_kotormcp_status_full`
+- `python -m py_compile scripts/check_grdev01_smoke_status.py tests/test_check_grdev01_smoke_status_script.py`
+- `python scripts/check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --kotormcp --json`
+
 ### [2026-06-18] Map Studio Tightens Game-Proof Evidence Gate
 
 Owner: LordVaderCW

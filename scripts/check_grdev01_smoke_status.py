@@ -51,8 +51,10 @@ PAYLOAD_PATHS = (
     "native/GhostRigger.Domain.Core.Camera/Python",
     "native/GhostRigger.Domain.Core.Math/Python",
     "native/GhostRigger.Domain.Core.Lighting/Python",
+    "native/GhostRigger.Domain.Core.KotorMCP/Python/src",
     ".",
 )
+KOTORMCP_REQUIRED_RESOURCE_TYPES = ("ARE", "GIT", "IFO", "LYT", "PTH", "VIS", "MDL", "WOK")
 
 
 def _install_payload_paths() -> None:
@@ -86,6 +88,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help="Print a machine-readable status payload instead of a human summary.",
+    )
+    parser.add_argument(
+        "--kotormcp",
+        action="store_true",
+        help="Also query KotorMCP against the installed game to confirm grdev01 is visible as a module.",
     )
     return parser
 
@@ -156,6 +163,122 @@ def _runtime_archive_summary(verification: dict[str, Any]) -> dict[str, Any]:
         "walkmesh_key_ok": "grdev01_room01.wok" in resource_keys,
         "layout_keys_ok": "grdev01.lyt" in resource_keys and "grdev01.vis" in resource_keys,
         "path_key_ok": "grdev01.pth" in resource_keys,
+    }
+
+
+def _parse_kotormcp_payload(result: dict[str, Any]) -> dict[str, Any]:
+    text = result.get("text") if isinstance(result, dict) else ""
+    if not isinstance(text, str) or not text:
+        return {"error": f"Unexpected KotorMCP response: {result!r}"}
+    try:
+        payload = json.loads(text)
+    except Exception as exc:
+        return {"error": f"KotorMCP response was not JSON: {exc}"}
+    return payload if isinstance(payload, dict) else {"error": f"Unexpected KotorMCP payload: {payload!r}"}
+
+
+def _run_kotormcp_module_tool(name: str, arguments: dict[str, Any], *, game_root_dir: str = "") -> dict[str, Any]:
+    _install_payload_paths()
+    import asyncio  # noqa: WPS433
+    import os  # noqa: WPS433
+
+    from kotormcp.tools import handle_tool  # noqa: WPS433
+
+    game = str(arguments.get("game") or "").lower()
+    env_name = "K2_PATH" if game == "k2" else "K1_PATH"
+    previous_env = os.environ.get(env_name)
+    if game_root_dir:
+        os.environ[env_name] = game_root_dir
+    try:
+        result = asyncio.run(handle_tool(name, arguments))
+    finally:
+        if game_root_dir:
+            if previous_env is None:
+                os.environ.pop(env_name, None)
+            else:
+                os.environ[env_name] = previous_env
+    return _parse_kotormcp_payload(result)
+
+
+def _kotormcp_summary(*, enabled: bool, module_root: str, game: str, game_root_dir: str = "") -> dict[str, Any]:
+    if not enabled:
+        return {
+            "checked": False,
+            "ok": False,
+            "available": False,
+            "module_root": module_root,
+            "game": game,
+            "resource_count": 0,
+            "resources": [],
+            "missing_required_types": [],
+            "warnings": [],
+            "blocking_issues": [],
+        }
+
+    game_arg = "k2" if str(game).upper() == "K2" else "k1"
+    warnings: list[str] = []
+    blocking: list[str] = []
+    try:
+        resources = _run_kotormcp_module_tool(
+            "kotor_module_resources",
+            {"game": game_arg, "module_root": module_root, "limit": 500, "offset": 0},
+            game_root_dir=game_root_dir,
+        )
+        describe = _run_kotormcp_module_tool(
+            "kotor_describe_module",
+            {"game": game_arg, "module_root": module_root},
+            game_root_dir=game_root_dir,
+        )
+    except Exception as exc:
+        return {
+            "checked": True,
+            "ok": False,
+            "available": False,
+            "module_root": module_root,
+            "game": game_arg.upper(),
+            "resource_count": 0,
+            "resources": [],
+            "missing_required_types": list(KOTORMCP_REQUIRED_RESOURCE_TYPES),
+            "warnings": [],
+            "blocking_issues": [f"KotorMCP could not run: {exc}"],
+        }
+
+    if resources.get("error"):
+        blocking.append(str(resources["error"]))
+    if describe.get("error"):
+        blocking.append(str(describe["error"]))
+
+    items = resources.get("items") if isinstance(resources.get("items"), list) else []
+    seen_types = {str(item.get("type") or "").upper() for item in items if isinstance(item, dict)}
+    missing_types = [restype for restype in KOTORMCP_REQUIRED_RESOURCE_TYPES if restype not in seen_types]
+    if missing_types:
+        blocking.append("KotorMCP did not see required resource types: " + ", ".join(missing_types))
+
+    area_info = describe.get("area_info") if isinstance(describe.get("area_info"), dict) else {}
+    if area_info.get("error"):
+        warnings.append(f"KotorMCP area summary warning: {area_info['error']}")
+
+    model_buffer_alias = ""
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("resref") or "").lower() == "grdev01_room01" and str(item.get("type") or "").upper() in {"MDX", "THG"}:
+            model_buffer_alias = str(item.get("type") or "").upper()
+            break
+
+    return {
+        "checked": True,
+        "ok": not blocking,
+        "available": True,
+        "module_root": str(resources.get("module_root") or module_root),
+        "game": game_arg.upper(),
+        "resource_count": int(resources.get("total") or resources.get("count") or len(items)),
+        "resources": items,
+        "type_breakdown": describe.get("type_breakdown") if isinstance(describe.get("type_breakdown"), dict) else {},
+        "missing_required_types": missing_types,
+        "model_buffer_entry_type": model_buffer_alias,
+        "warnings": warnings,
+        "blocking_issues": blocking,
     }
 
 
@@ -254,7 +377,13 @@ def _derive_status(*, verification: dict[str, Any], proof: dict[str, Any], insta
     return "ready_for_manual_install", False
 
 
-def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_modules_dir: Path | None = None) -> dict[str, Any]:
+def build_status(
+    *,
+    proof_manifest: Path,
+    module_path: Path | None = None,
+    game_modules_dir: Path | None = None,
+    use_kotormcp: bool = False,
+) -> dict[str, Any]:
     blocking: list[str] = []
     warnings: list[str] = []
     proof: dict[str, Any] = {}
@@ -282,6 +411,15 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
     proof_state = _proof_summary(proof)
     launch_handoff = _launch_handoff_summary(proof=proof, proof_manifest=proof_manifest)
     installed = _installed_summary(module_path=checked_module_path, proof=proof, game_modules_dir=game_modules_dir)
+    module_root = str(proof.get("module_root") or package.get("module_root") or "grdev01")
+    kotormcp = _kotormcp_summary(
+        enabled=use_kotormcp,
+        module_root=module_root,
+        game=launch_handoff.get("game") or proof.get("game") or "K1",
+        game_root_dir=launch_handoff.get("resolved_game_root_dir") or "",
+    )
+    if use_kotormcp and not kotormcp.get("ok"):
+        blocking.extend(kotormcp.get("blocking_issues", []))
     if installed.get("checked") and not installed.get("exists"):
         warnings.append(f"Installed module copy was not found: {installed['installed_module_path']}")
     if installed.get("checked") and installed.get("exists") and not installed.get("matches_package"):
@@ -321,6 +459,7 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
         "runtime_archive": runtime_archive,
         "proof": proof_state,
         "installed": installed,
+        "kotormcp": kotormcp,
         "launch_handoff": launch_handoff,
         "ready_for_game_launch": ready_for_game_launch,
         "next_action": next_action,
@@ -343,6 +482,11 @@ def _print_human_summary(status: dict[str, Any]) -> None:
         print(f"Installed copy matches package: {installed['matches_package']}")
         if installed["backup_module_path"]:
             print(f"Previous module backup: {installed['backup_module_path']}")
+    kotormcp = status.get("kotormcp") or {}
+    if kotormcp.get("checked"):
+        print(f"KotorMCP module check: {kotormcp['ok']} ({kotormcp['resource_count']} resource(s))")
+        if kotormcp.get("model_buffer_entry_type"):
+            print(f"KotorMCP model buffer entry type: {kotormcp['model_buffer_entry_type']}")
     print(f"Ready for game launch: {status['ready_for_game_launch']}")
     handoff = status.get("launch_handoff") or {}
     if handoff.get("game"):
@@ -371,6 +515,11 @@ def _print_human_summary(status: dict[str, Any]) -> None:
         print("Warnings:")
         for warning in status["warnings"]:
             print(f"- {warning}")
+    if kotormcp.get("warnings"):
+        print("")
+        print("KotorMCP warnings:")
+        for warning in kotormcp["warnings"]:
+            print(f"- {warning}")
     if status["blocking_issues"]:
         print("")
         print("Blocking issues:")
@@ -385,6 +534,7 @@ def main(argv: list[str] | None = None) -> int:
         proof_manifest=args.proof_manifest,
         module_path=args.module_path,
         game_modules_dir=args.game_modules_dir,
+        use_kotormcp=args.kotormcp,
     )
     if args.json:
         print(json.dumps(status, indent=2))
