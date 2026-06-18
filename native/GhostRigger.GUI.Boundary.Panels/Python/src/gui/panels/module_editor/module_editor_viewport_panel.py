@@ -106,6 +106,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 facing=f"{bearing:.2f} rad",
             )
         self._update_marker_summary(authored_gameplay_markers, authored_gameplay_marker_geometry)
+        self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)
 
     def select_id(self, item_id: str) -> None:
         for row, row_id in enumerate(self._row_ids):
@@ -232,6 +233,19 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 geometry_suffix = f" | {footprints} footprint(s), {lines} guide line(s)"
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
         self.marker_summary_label.setText(f"Gameplay markers: {parts}{geometry_suffix}{suffix}")
+
+    def _sync_marker_geometry_overlay(self, authored_gameplay_marker_geometry=None) -> None:
+        setter = getattr(self.viewport, "set_map_studio_marker_geometry", None)
+        clearer = getattr(self.viewport, "clear_map_studio_marker_geometry", None)
+        footprints = tuple(getattr(authored_gameplay_marker_geometry, "footprints", ()) or ())
+        lines = tuple(getattr(authored_gameplay_marker_geometry, "lines", ()) or ())
+        if authored_gameplay_marker_geometry is not None and (footprints or lines) and callable(setter):
+            setter(authored_gameplay_marker_geometry)
+            return
+        if callable(clearer):
+            clearer()
+        elif callable(setter):
+            setter(None)
 
     def _table_selection(self) -> None:
         rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []

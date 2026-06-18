@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Draws Authored Placement Marker Overlays
+
+Owner: LordVaderCW
+Task: T2660
+Subsystem: Map Studio / Module Editor viewport overlay / authored gameplay placement preview / native Python payloads
+
+- Added a viewport-level Map Studio marker overlay hook that draws authored placement footprints, facing guide lines, and vertical height guides from the core marker geometry contract.
+- Added `set_map_studio_marker_geometry` and `clear_map_studio_marker_geometry` to the viewport widget path so Module Editor can drive marker overlays without owning renderer math.
+- Updated the Module Editor viewport panel to synchronize authored marker geometry into the viewport overlay and clear it when no authored placement geometry is available.
+- Mirrored the panel wiring into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\viewport_widget.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\scene_models.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\rendering_pipeline.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_map_studio_marker_overlay.py tests\test_authored_gameplay_marker_geometry.py`
+- `python -m pytest tests\test_map_studio_marker_overlay.py tests\test_authored_gameplay_marker_geometry.py tests\test_authored_gameplay_preview_markers.py -q --basetemp .pytest_tmp_map_studio_marker_overlay`
+
 ### [2026-06-18] Map Studio Adds Authored Placement Marker Geometry
 
 Owner: LordVaderCW

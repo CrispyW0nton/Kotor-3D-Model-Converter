@@ -136,5 +136,6 @@ def test_t2659_module_editor_passes_marker_geometry_to_viewport_panel() -> None:
     assert "authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()" in window_source
     assert "authored_marker_geometry" in window_source
     assert "authored_gameplay_marker_geometry" in viewport_source
+    assert "self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)" in viewport_source
     assert "footprint(s)" in viewport_source
     assert "guide line(s)" in viewport_source

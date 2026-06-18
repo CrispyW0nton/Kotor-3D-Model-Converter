@@ -8,6 +8,95 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportOverlayLayersMixin:
+    def _map_studio_marker_rgba(self, color: object, alpha: int = 220) -> tuple[int, int, int, int]:
+        text = str(color or "").strip()
+        if text.startswith("#") and len(text) == 7:
+            try:
+                return (
+                    int(text[1:3], 16),
+                    int(text[3:5], 16),
+                    int(text[5:7], 16),
+                    max(0, min(255, int(alpha))),
+                )
+            except ValueError:
+                pass
+        return (82, 255, 122, max(0, min(255, int(alpha))))
+
+    def _map_studio_project_point(self, point: object, w: int, h: int):
+        try:
+            x, y, z = point
+            return self._renderer._proj(float(x), float(y), float(z), w, h)
+        except Exception:
+            return None
+
+    def _draw_map_studio_placement_markers(self, draw, w: int, h: int) -> None:
+        geometry = getattr(self, "_map_studio_marker_geometry", None)
+        if geometry is None:
+            return
+        footprints = tuple(getattr(geometry, "footprints", ()) or ())
+        lines = tuple(getattr(geometry, "lines", ()) or ())
+        if not footprints and not lines:
+            return
+        try:
+            for footprint in footprints:
+                points = tuple(getattr(footprint, "points", ()) or ())
+                projected = []
+                for point in points:
+                    proj = self._map_studio_project_point(point, w, h)
+                    if proj is None:
+                        projected = []
+                        break
+                    projected.append((proj[0], proj[1]))
+                if len(projected) >= 3:
+                    color = self._map_studio_marker_rgba(getattr(footprint, "color", ""), 220)
+                    fill = (color[0], color[1], color[2], 34)
+                    outline = (color[0], color[1], color[2], 205)
+                    closed = projected + [projected[0]]
+                    draw.polygon(projected, fill=fill)
+                    draw.line(closed, fill=(0, 0, 0, 125), width=4)
+                    draw.line(closed, fill=outline, width=2)
+            for guide in lines:
+                start = self._map_studio_project_point(getattr(guide, "start", ()), w, h)
+                end = self._map_studio_project_point(getattr(guide, "end", ()), w, h)
+                if start is None or end is None:
+                    continue
+                color = self._map_studio_marker_rgba(getattr(guide, "color", ""), 235)
+                role = str(getattr(guide, "role", "") or "")
+                width = 3 if role == "facing" else 2
+                sx, sy = float(start[0]), float(start[1])
+                ex, ey = float(end[0]), float(end[1])
+                if role == "height":
+                    segments = 6
+                    for index in range(segments):
+                        if index % 2:
+                            continue
+                        t0 = index / segments
+                        t1 = (index + 1) / segments
+                        p0 = (sx + (ex - sx) * t0, sy + (ey - sy) * t0)
+                        p1 = (sx + (ex - sx) * t1, sy + (ey - sy) * t1)
+                        draw.line([p0, p1], fill=(0, 0, 0, 145), width=width + 2)
+                        draw.line([p0, p1], fill=color, width=width)
+                else:
+                    draw.line([(sx, sy), (ex, ey)], fill=(0, 0, 0, 145), width=width + 2)
+                    draw.line([(sx, sy), (ex, ey)], fill=color, width=width)
+                radius = 4
+                draw.ellipse(
+                    [sx - radius, sy - radius, sx + radius, sy + radius],
+                    fill=color,
+                    outline=(0, 0, 0, 180),
+                    width=1,
+                )
+                if role == "facing":
+                    radius = 3
+                    draw.ellipse(
+                        [ex - radius, ey - radius, ex + radius, ey + radius],
+                        fill=color,
+                        outline=(0, 0, 0, 180),
+                        width=1,
+                    )
+        except Exception as exc:
+            log.debug("Map Studio placement marker overlay failed: %s", exc)
+
     def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
         if self.model is None:
             return
