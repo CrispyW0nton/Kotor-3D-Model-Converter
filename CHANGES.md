@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds grdev01 Launch Helper
+
+Owner: LordVaderCW
+Task: T2649
+Subsystem: Map Studio / authored smoke launch helper / proof command workflow
+
+- Added `scripts/launch_grdev01_smoke_test.py` to verify the authored `grdev01` smoke package, installed Modules copy, and KOTOR executable before launching the manual in-game proof loop.
+- The helper supports dry-run JSON output for repeatable checks, refuses missing `swkotor.exe`, and refuses a stale installed `grdev01.mod` whose bytes do not match the staged package.
+- Kept capability honesty intact: launching readiness is separate from game-tested proof, which still requires `warp grdev01` evidence recorded through the proof command.
+
+Verification:
+- `python -m py_compile scripts\launch_grdev01_smoke_test.py tests\test_launch_grdev01_smoke_script.py`
+- `python -m pytest tests\test_launch_grdev01_smoke_script.py tests\test_prepare_grdev01_authored_smoke_script.py -q --basetemp .pytest_tmp_launch_grdev01_smoke`
+- `python scripts\launch_grdev01_smoke_test.py --dry-run --json`
+
 ### [2026-06-18] Map Studio Documents grdev01 Launch-Ready Install
 
 Owner: LordVaderCW

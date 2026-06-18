@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PREPARE_SCRIPT = ROOT / "scripts" / "prepare_grdev01_authored_smoke.py"
+LAUNCH_SCRIPT = ROOT / "scripts" / "launch_grdev01_smoke_test.py"
+
+
+def _run_script(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(script), *args],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _prepare_installed_smoke(tmp_path: Path, *, create_exe: bool = True) -> tuple[dict[str, object], Path]:
+    output_dir = tmp_path / "smoke"
+    game_root = tmp_path / "KOTOR"
+    modules_dir = game_root / "Modules"
+    modules_dir.mkdir(parents=True)
+    if create_exe:
+        (game_root / "swkotor.exe").write_bytes(b"fake exe")
+    result = _run_script(
+        PREPARE_SCRIPT,
+        "--output-dir",
+        str(output_dir),
+        "--game-modules-dir",
+        str(modules_dir),
+        "--json",
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    return json.loads(result.stdout), game_root
+
+
+def _launch(proof_manifest: str, game_root: Path) -> subprocess.CompletedProcess[str]:
+    return _run_script(
+        LAUNCH_SCRIPT,
+        "--proof-manifest",
+        proof_manifest,
+        "--game-root-dir",
+        str(game_root),
+        "--dry-run",
+        "--json",
+    )
+
+
+def test_t2649_launch_grdev01_smoke_dry_run_accepts_ready_install(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+
+    result = _launch(str(prep["proof_manifest_path"]), game_root)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["code"] == "dry_run_ready"
+    assert payload["status"] == "installed_ready_for_game_test"
+    assert payload["ready_for_game_launch"] is True
+    assert payload["installed_matches_package"] is True
+    assert payload["dry_run"] is True
+    assert payload["launch_command"] == [str(game_root / "swkotor.exe")]
+    assert "warp grdev01" in payload["next_action"]
+
+
+def test_t2649_launch_grdev01_smoke_blocks_missing_executable(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path, create_exe=False)
+
+    result = _launch(str(prep["proof_manifest_path"]), game_root)
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["code"] == "not_ready"
+    assert payload["status"] == "installed_ready_for_game_test"
+    assert payload["ready_for_game_launch"] is True
+    assert any("swkotor.exe" in issue for issue in payload["blocking_issues"])
+
+
+def test_t2649_launch_grdev01_smoke_blocks_stale_installed_module(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+    installed = game_root / "Modules" / "grdev01.mod"
+    installed.write_bytes(b"stale module")
+
+    result = _launch(str(prep["proof_manifest_path"]), game_root)
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["code"] == "not_ready"
+    assert payload["status"] == "installed_copy_mismatch"
+    assert payload["installed_matches_package"] is False
+    assert any("does not match" in issue for issue in payload["blocking_issues"])
