@@ -362,6 +362,70 @@ def test_t2674_removing_missing_composition_primitive_fails_clearly() -> None:
         )
 
 
+def test_t2676_controller_styles_composition_primitive_material_and_surface() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grstylep")
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["stale.mod"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    result = controller.set_authored_room_primitive_style(
+        room_resref="grstylep_room01",
+        primitive_name="grstylep_room01_ramp",
+        texture="LME_Floor01.tga",
+        surface_id="metal",
+    )
+    updated = controller.project.extra_sections["authored_module"]
+    primitive_payload = updated["rooms"][0]["primitive"]
+    ramp_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grstylep_room01_ramp")
+    authored = authored_project_from_kmap_payload(updated)
+    build = build_authored_module(authored)
+    geometry = build.module.room_geometry["grstylep_room01"]
+    ramp_mesh = next(mesh for mesh in geometry.helper_meshes if mesh.name == "grstylep_room01_ramp")
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert updated["runtime_resources"] == []
+    assert updated["game_tested"] is False
+    assert ramp_payload["material"]["texture"] == "LME_Floor01"
+    assert ramp_payload["surface_id"] == 10
+    assert ramp_mesh.texture == "LME_Floor01"
+    assert 10 in {face.surface for face in geometry.wok.faces}
+    assert not build.blocking_issues
+
+
+def test_t2676_visual_composition_primitive_rejects_walkmesh_surface() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_operations import set_authored_room_composition_primitive_style
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="elevation_test_room",
+        module_root="grstylep",
+        game="K1",
+    )
+
+    with pytest.raises(ValueError, match="does not contribute walkmesh faces"):
+        set_authored_room_composition_primitive_style(
+            project,
+            room_resref="grstylep_room01",
+            primitive_name="grstylep_room01_arch",
+            texture="CM_Baremetal",
+            surface_id="metal",
+        )
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (
@@ -521,3 +585,36 @@ def test_t2674_builder_tab_exposes_remove_composition_primitive_controls() -> No
     assert "def _emit_remove_composition_primitive" in source
     assert "self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)" in window_source
     assert "self.controller.remove_authored_room_primitive" in window_source
+
+
+def test_t2676_builder_tab_exposes_primitive_style_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "roomPrimitiveStyleRequested" in source
+    assert "mapStudioPrimitiveTextureLineEdit" in source
+    assert "mapStudioPrimitiveSurfaceComboBox" in source
+    assert "mapStudioApplyPrimitiveStyleButton" in source
+    assert "def _emit_primitive_style" in source
+    assert "self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)" in window_source
+    assert "self.controller.set_authored_room_primitive_style" in window_source

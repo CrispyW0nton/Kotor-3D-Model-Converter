@@ -366,6 +366,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
         self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)
+        self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)
         self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
@@ -683,6 +684,23 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Edited room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_primitive_style(self, room_resref: str, primitive_name: str, texture: str, surface_id: str) -> None:
+        try:
+            result = self.controller.set_authored_room_primitive_style(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                texture=texture,
+                surface_id=surface_id,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Primitive Material + Surface", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Styled room primitive {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

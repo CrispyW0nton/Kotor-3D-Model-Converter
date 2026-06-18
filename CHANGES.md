@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Composition Primitive Material and WOK Surface Editing
+
+Owner: LordVaderCW
+Task: T2676
+Subsystem: Map Studio / Builder tab / authored composition primitive material and walkmesh surfaces / native Python payloads
+
+- Added a headless operation for setting the texture resref and optional WOK surface on a named authored composition primitive.
+- Exposed primitive-level material controls in the Builder tab so visual primitives can receive textures and ramp/stair primitives can also receive KOTOR WOK surface IDs such as stone, metal, sand, or non-walk.
+- Routed the Builder tab signal through the standalone Module Editor window into `ModuleEditorController.set_authored_room_primitive_style`, preserving stale-export/proof invalidation through the existing KMAP serialization path.
+- Added focused regression coverage proving primitive style edits persist, compile into helper mesh texture data, affect generated WOK faces, and reject WOK surface assignment on visual-only primitives.
+- Mirrored the core/controller/panel payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_operations.py`
+- `python -m py_compile native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py`
+- `python -m pytest tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_studio_primitive_style`
+- `python -m pytest tests\test_authored_room_style.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_primitive_style_smoke`
+
 ### [2026-06-18] Map Studio Adds Authored Module Smoke Contract Metadata
 
 Owner: LordVaderCW

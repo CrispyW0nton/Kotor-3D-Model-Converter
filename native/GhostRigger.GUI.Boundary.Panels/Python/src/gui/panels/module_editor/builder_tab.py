@@ -13,6 +13,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
     roomPrimitiveDimensionsRequested = QtCore.Signal(str, str, object)
+    roomPrimitiveStyleRequested = QtCore.Signal(str, str, str, str)
     roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
 
@@ -164,6 +165,23 @@ class BuilderTab(QtWidgets.QWidget):
         self.applyPrimitiveDimensionsButton.setObjectName("mapStudioApplyPrimitiveDimensionsButton")
         dimensions_layout.addRow(self.applyPrimitiveDimensionsButton)
         layout.addWidget(dimensions_box)
+        primitive_style_box = QtWidgets.QGroupBox("Primitive Material + Walkmesh")
+        primitive_style_layout = QtWidgets.QFormLayout(primitive_style_box)
+        self.primitiveTextureLineEdit = QtWidgets.QLineEdit()
+        self.primitiveTextureLineEdit.setObjectName("mapStudioPrimitiveTextureLineEdit")
+        self.primitiveTextureLineEdit.setPlaceholderText("KOTOR texture resref for selected primitive")
+        self.primitiveSurfaceComboBox = QtWidgets.QComboBox()
+        self.primitiveSurfaceComboBox.setObjectName("mapStudioPrimitiveSurfaceComboBox")
+        self.primitiveSurfaceHintLabel = QtWidgets.QLabel("Select a primitive that contributes WOK faces to edit its walkmesh surface.")
+        self.primitiveSurfaceHintLabel.setObjectName("mapStudioPrimitiveSurfaceHintLabel")
+        self.primitiveSurfaceHintLabel.setWordWrap(True)
+        self.applyPrimitiveStyleButton = QtWidgets.QPushButton("Apply Primitive Material + Surface")
+        self.applyPrimitiveStyleButton.setObjectName("mapStudioApplyPrimitiveStyleButton")
+        primitive_style_layout.addRow("Texture:", self.primitiveTextureLineEdit)
+        primitive_style_layout.addRow("WOK surface:", self.primitiveSurfaceComboBox)
+        primitive_style_layout.addRow(self.primitiveSurfaceHintLabel)
+        primitive_style_layout.addRow(self.applyPrimitiveStyleButton)
+        layout.addWidget(primitive_style_box)
         style_box = QtWidgets.QGroupBox("Room Material + Walkmesh")
         style_layout = QtWidgets.QFormLayout(style_box)
         self.roomTextureLineEdit = QtWidgets.QLineEdit("CM_Baremetal")
@@ -253,6 +271,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
         self.applyPrimitiveTransformButton.clicked.connect(self._emit_primitive_transform)
         self.applyPrimitiveDimensionsButton.clicked.connect(self._emit_primitive_dimensions)
+        self.primitiveSurfaceComboBox.currentIndexChanged.connect(self._update_primitive_surface_hint)
+        self.applyPrimitiveStyleButton.clicked.connect(self._emit_primitive_style)
         self.removePrimitiveButton.clicked.connect(self._emit_remove_composition_primitive)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
@@ -265,6 +285,7 @@ class BuilderTab(QtWidgets.QWidget):
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
         self._update_primitive_dimension_controls()
+        self._update_primitive_style_controls()
         self._update_surface_hint()
 
     @staticmethod
@@ -375,6 +396,10 @@ class BuilderTab(QtWidgets.QWidget):
                 "rotation_degrees_z": float(getattr(primitive, "rotation_degrees_z", 0.0)),
                 "scale": tuple(getattr(primitive, "scale", (1.0, 1.0, 1.0))),
                 "pivot": tuple(getattr(primitive, "pivot", (0.0, 0.0, 0.0))),
+                "texture": str(getattr(primitive, "texture", "") or ""),
+                "surface_id": "" if getattr(primitive, "surface_id", None) is None else str(getattr(primitive, "surface_id")),
+                "surface_name": str(getattr(primitive, "surface_name", "") or ""),
+                "supports_walkmesh_surface": bool(getattr(primitive, "supports_walkmesh_surface", False)),
                 "dimensions": tuple(
                     {
                         "key": str(getattr(dimension, "key", "") or ""),
@@ -402,7 +427,14 @@ class BuilderTab(QtWidgets.QWidget):
     def set_walkmesh_surfaces(self, surfaces) -> None:
         """Populate the authored room WOK surface selector from the controller."""
 
-        self.roomSurfaceComboBox.clear()
+        self._authored_walkmesh_surfaces = tuple(surfaces or ())
+        self._fill_surface_combo(self.roomSurfaceComboBox, self._authored_walkmesh_surfaces)
+        self._fill_surface_combo(self.primitiveSurfaceComboBox, self._authored_walkmesh_surfaces)
+        self._update_surface_hint()
+        self._update_primitive_style_controls()
+
+    def _fill_surface_combo(self, combo: QtWidgets.QComboBox, surfaces) -> None:
+        combo.clear()
         for surface in surfaces or ():
             surface_id = str(getattr(surface, "surface_id", "") or "")
             name = str(getattr(surface, "name", "") or surface_id)
@@ -410,7 +442,7 @@ class BuilderTab(QtWidgets.QWidget):
             walkable = bool(getattr(surface, "walkable", False))
             description = str(getattr(surface, "description", "") or "")
             state = "walkable" if walkable else "not walkable"
-            self.roomSurfaceComboBox.addItem(
+            combo.addItem(
                 f"{surface_id} - {authoring_name.title()} ({state})",
                 {
                     "surface_id": surface_id,
@@ -419,9 +451,8 @@ class BuilderTab(QtWidgets.QWidget):
                     "description": description,
                 },
             )
-        if self.roomSurfaceComboBox.count() <= 0:
-            self.roomSurfaceComboBox.addItem("4 - Stone (walkable)", {"surface_id": "4", "walkable": True, "description": "Walkable stone floor."})
-        self._update_surface_hint()
+        if combo.count() <= 0:
+            combo.addItem("4 - Stone (walkable)", {"surface_id": "4", "walkable": True, "description": "Walkable stone floor."})
 
     def _current_surface_data(self) -> dict:
         data = self.roomSurfaceComboBox.currentData()
@@ -438,6 +469,64 @@ class BuilderTab(QtWidgets.QWidget):
         texture = self.roomTextureLineEdit.text().strip()
         surface_id = str(self._current_surface_data().get("surface_id") or self.roomSurfaceComboBox.currentData() or "4")
         self.roomStyleRequested.emit(texture, surface_id)
+
+    def _current_primitive_surface_data(self) -> dict:
+        data = self.primitiveSurfaceComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _select_surface_combo_value(self, combo: QtWidgets.QComboBox, surface_id: str) -> None:
+        wanted = str(surface_id or "").strip()
+        if not wanted:
+            return
+        for index in range(combo.count()):
+            data = combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("surface_id") or "") == wanted:
+                combo.blockSignals(True)
+                combo.setCurrentIndex(index)
+                combo.blockSignals(False)
+                return
+
+    def _update_primitive_surface_hint(self) -> None:
+        data = self._current_primitive_transform_data()
+        if not data:
+            self.primitiveSurfaceHintLabel.setText("Select a primitive to edit its material.")
+            return
+        if not bool(data.get("supports_walkmesh_surface", False)):
+            self.primitiveSurfaceHintLabel.setText("This primitive is visual-only; texture changes are allowed, but it does not create WOK faces.")
+            return
+        surface = self._current_primitive_surface_data()
+        description = surface.get("description") or "Choose how this primitive's generated WOK faces should behave in-game."
+        if surface and not bool(surface.get("walkable", False)):
+            description = f"{description} This is not normally walkable."
+        self.primitiveSurfaceHintLabel.setText(str(description))
+
+    def _update_primitive_style_controls(self, data: dict | None = None) -> None:
+        current = self._current_primitive_transform_data() if data is None else data
+        enabled = bool(current)
+        supports_surface = bool(current and current.get("supports_walkmesh_surface", False))
+        for widget in (self.primitiveTextureLineEdit, self.applyPrimitiveStyleButton):
+            widget.setEnabled(enabled)
+        self.primitiveSurfaceComboBox.setEnabled(enabled and supports_surface)
+        self.primitiveTextureLineEdit.blockSignals(True)
+        self.primitiveTextureLineEdit.setText(str(current.get("texture") or "") if current else "")
+        self.primitiveTextureLineEdit.blockSignals(False)
+        if current:
+            self._select_surface_combo_value(self.primitiveSurfaceComboBox, str(current.get("surface_id") or ""))
+        self._update_primitive_surface_hint()
+
+    def _emit_primitive_style(self) -> None:
+        data = self._current_primitive_transform_data()
+        if not data:
+            return
+        surface_id = ""
+        if bool(data.get("supports_walkmesh_surface", False)):
+            surface_id = str(self._current_primitive_surface_data().get("surface_id") or "")
+        self.roomPrimitiveStyleRequested.emit(
+            str(data.get("room_resref") or ""),
+            str(data.get("primitive_name") or ""),
+            self.primitiveTextureLineEdit.text().strip(),
+            surface_id,
+        )
 
     def _current_primitive_transform_data(self) -> dict:
         data = self.roomPrimitiveTransformComboBox.currentData()
@@ -457,6 +546,7 @@ class BuilderTab(QtWidgets.QWidget):
         data = self._current_primitive_transform_data()
         enabled = bool(data)
         self._update_primitive_dimension_controls(data)
+        self._update_primitive_style_controls(data)
         for widget in (
             self.primitiveTranslateXSpinBox,
             self.primitiveTranslateYSpinBox,

@@ -24,6 +24,7 @@ from .authored_room_floorplan import (
     apply_floor_plan_rectangular_cut,
 )
 from .authored_room_geometry import RectangularRoomPrimitive
+from .authored_room_materials import compile_authored_room_material_preflight
 from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
@@ -33,6 +34,7 @@ from .authored_room_primitives import (
     WallPrimitive,
     PrimitiveMaterial,
 )
+from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,10 @@ class AuthoredCompositionPrimitiveTransform:
     rotation_degrees_z: float
     scale: tuple[float, float, float]
     pivot: tuple[float, float, float]
+    texture: str = ""
+    surface_id: int | None = None
+    surface_name: str = ""
+    supports_walkmesh_surface: bool = False
     dimensions: tuple["AuthoredCompositionPrimitiveDimension", ...] = ()
 
 
@@ -255,6 +261,21 @@ def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveD
     return ()
 
 
+def _primitive_material_value(primitive: Any) -> PrimitiveMaterial:
+    return getattr(_base_primitive(primitive), "material", PrimitiveMaterial())
+
+
+def _primitive_surface_id(primitive: Any) -> int | None:
+    base = _base_primitive(primitive)
+    if isinstance(base, (RampPrimitive, StairsPrimitive)):
+        return resolve_walkmesh_surface_id(base.surface_id)
+    return None
+
+
+def _primitive_supports_walkmesh_surface(primitive: Any) -> bool:
+    return _primitive_surface_id(primitive) is not None
+
+
 def _primitive_kind(value: Any) -> str:
     kind = str(value or "").strip().lower().replace(" ", "_")
     aliases = {
@@ -408,6 +429,40 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
     raise ValueError(f"Primitive {getattr(base, 'name', '(unnamed)')} does not expose editable dimensions.")
 
 
+def _style_metadata(texture: str, surface_id: int | None = None) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "source": "map_studio:composition_primitive_style_update",
+        "texture": texture,
+    }
+    if surface_id is not None:
+        metadata["surface_id"] = int(surface_id)
+        metadata["surface_name"] = walkmesh_surface_name(surface_id)
+    return metadata
+
+
+def _updated_base_primitive_style(base: Any, *, texture: Any = "", surface_id: Any = None) -> Any:
+    material_preflight = compile_authored_room_material_preflight(texture or getattr(getattr(base, "material", None), "texture", "default"))
+    if material_preflight.blocking_issues:
+        raise ValueError(material_preflight.blocking_issues[0])
+    current_material = getattr(base, "material", PrimitiveMaterial())
+    next_surface_id = None
+    if isinstance(base, (RampPrimitive, StairsPrimitive)):
+        next_surface_id = resolve_walkmesh_surface_id(base.surface_id if surface_id in (None, "") else surface_id)
+    elif surface_id not in (None, ""):
+        raise ValueError(f"Primitive {getattr(base, 'name', '(unnamed)')} does not contribute walkmesh faces, so it cannot have a WOK surface.")
+    material = replace(
+        current_material,
+        texture=material_preflight.texture,
+        metadata={
+            **dict(current_material.metadata),
+            **_style_metadata(material_preflight.texture, next_surface_id),
+        },
+    )
+    if isinstance(base, (RampPrimitive, StairsPrimitive)):
+        return replace(base, material=material, surface_id=next_surface_id)
+    return replace(base, material=material)
+
+
 def authored_room_composition_primitives(
     project: AuthoredModuleProject,
     *,
@@ -431,6 +486,8 @@ def authored_room_composition_primitives(
             if not name:
                 continue
             transform = _primitive_transform(primitive)
+            material = _primitive_material_value(primitive)
+            surface_id = _primitive_surface_id(primitive)
             rows.append(
                 AuthoredCompositionPrimitiveTransform(
                     room_resref=room_name,
@@ -440,6 +497,10 @@ def authored_room_composition_primitives(
                     rotation_degrees_z=float(transform.rotation_degrees_z),
                     scale=tuple(float(value) for value in transform.scale),
                     pivot=tuple(float(value) for value in transform.pivot),
+                    texture=str(material.texture or ""),
+                    surface_id=surface_id,
+                    surface_name=walkmesh_surface_name(surface_id) if surface_id is not None else "",
+                    supports_walkmesh_surface=_primitive_supports_walkmesh_surface(primitive),
                     dimensions=_primitive_dimensions(primitive),
                 )
             )
@@ -558,6 +619,59 @@ def set_authored_room_composition_primitive_dimensions(
             project,
             tuple(rooms),
             operation=f"set_composition_primitive_dimensions:{target}",
+        )
+    raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
+
+
+def set_authored_room_composition_primitive_style(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    texture: Any = "",
+    surface_id: Any = None,
+) -> AuthoredModuleProject:
+    """Update material and optional WOK surface for a named composition primitive."""
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Primitive style edits require a primitive name.")
+    primitives = list(composition.primitives)
+    for index, primitive in enumerate(primitives):
+        if _primitive_name(primitive) != target:
+            continue
+        base = _base_primitive(primitive)
+        updated_base = _updated_base_primitive_style(base, texture=texture, surface_id=surface_id)
+        if isinstance(primitive, PlacedRoomPrimitive):
+            primitives[index] = replace(primitive, primitive=updated_base)
+        else:
+            primitives[index] = updated_base
+        updated_composition = replace(
+            composition,
+            primitives=tuple(primitives),
+            metadata={
+                **dict(composition.metadata),
+                "last_style_edit": target,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "set_composition_primitive_style",
+                "last_style_edit": target,
+            },
+        )
+        return _replace_rooms(
+            project,
+            tuple(rooms),
+            operation=f"set_composition_primitive_style:{target}",
         )
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
@@ -920,5 +1034,6 @@ __all__ = [
     "move_authored_floor_plan_point",
     "remove_authored_room_composition_primitive",
     "set_authored_room_composition_primitive_dimensions",
+    "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
 ]
