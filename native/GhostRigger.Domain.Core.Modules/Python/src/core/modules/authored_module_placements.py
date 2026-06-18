@@ -36,6 +36,19 @@ class AuthoredGameplayPlacementUpdate:
     count: int
 
 
+@dataclass(frozen=True)
+class AuthoredGameplayPlacementRow:
+    """Selectable authored gameplay object projected into Map Studio UI."""
+
+    placement_id: str
+    kind: str
+    index: int
+    template_resref: str
+    tag: str
+    position: Vec3
+    bearing: float = 0.0
+
+
 SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS: tuple[str, ...] = (
     "placeable",
     "creature",
@@ -47,6 +60,19 @@ SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS: tuple[str, ...] = (
     "camera",
     "store",
 )
+
+
+_KIND_FIELDS: dict[str, str] = {
+    "placeable": "placeables",
+    "creature": "creatures",
+    "door": "doors",
+    "waypoint": "waypoints",
+    "trigger": "triggers",
+    "encounter": "encounters",
+    "sound": "sounds",
+    "camera": "cameras",
+    "store": "stores",
+}
 
 
 def _kind(value: Any) -> str:
@@ -64,6 +90,33 @@ def _kind(value: Any) -> str:
         "waypoint_start": "waypoint",
     }
     return aliases.get(text, text)
+
+
+def authored_gameplay_placement_id(kind: Any, index: int) -> str:
+    """Return the stable virtual UI id for one authored gameplay placement."""
+
+    normalized = _kind(kind)
+    if normalized not in SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS:
+        raise ValueError(f"Unsupported authored gameplay placement kind '{kind}'.")
+    return f"authored:{normalized}:{int(index)}"
+
+
+def parse_authored_gameplay_placement_id(value: Any) -> tuple[str, int]:
+    """Parse a virtual id like ``authored:placeable:0``."""
+
+    parts = str(value or "").strip().split(":")
+    if len(parts) != 3 or parts[0] != "authored":
+        raise ValueError(f"'{value}' is not an authored gameplay placement id.")
+    kind = _kind(parts[1])
+    if kind not in SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS:
+        raise ValueError(f"Unsupported authored gameplay placement kind '{parts[1]}'.")
+    try:
+        index = int(parts[2])
+    except ValueError as exc:
+        raise ValueError(f"Authored gameplay placement id '{value}' has an invalid index.") from exc
+    if index < 0:
+        raise ValueError(f"Authored gameplay placement id '{value}' has a negative index.")
+    return kind, index
 
 
 def _vec3(value: Any) -> Vec3:
@@ -102,6 +155,41 @@ def _tag_or_default(tag: Any, template_resref: str, kind: str, count: int) -> st
     if template_resref:
         return template_resref
     return f"{kind}_{count + 1}"
+
+
+def _placement_template(item: Any) -> str:
+    return str(getattr(item, "template_resref", getattr(item, "camera_id", "")) or "")
+
+
+def _placement_tag(item: Any, kind: str, index: int) -> str:
+    return str(getattr(item, "tag", "") or _placement_template(item) or authored_gameplay_placement_id(kind, index))
+
+
+def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[AuthoredGameplayPlacementRow, ...]:
+    """Return selectable UI rows for authored GIT/IFO gameplay placements."""
+
+    rows: list[AuthoredGameplayPlacementRow] = []
+    placement = project.placements
+    for kind, field_name in _KIND_FIELDS.items():
+        for index, item in enumerate(tuple(getattr(placement, field_name, ()) or ())):
+            if not hasattr(item, "position"):
+                continue
+            try:
+                position = _vec3(getattr(item, "position", (0.0, 0.0, 0.0)))
+            except ValueError:
+                position = (0.0, 0.0, 0.0)
+            rows.append(
+                AuthoredGameplayPlacementRow(
+                    placement_id=authored_gameplay_placement_id(kind, index),
+                    kind=kind,
+                    index=index,
+                    template_resref=_placement_template(item),
+                    tag=_placement_tag(item, kind, index),
+                    position=position,
+                    bearing=float(getattr(item, "bearing", 0.0) or 0.0),
+                )
+            )
+    return tuple(rows)
 
 
 def _append_placement(
@@ -228,8 +316,71 @@ def add_authored_gameplay_placement(
     )
 
 
+def update_authored_gameplay_placement_transform(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+    *,
+    position: Any | None = None,
+    bearing: float | None = None,
+) -> AuthoredGameplayPlacementUpdate:
+    """Move/rotate one authored gameplay placement selected in Map Studio."""
+
+    kind, index = parse_authored_gameplay_placement_id(placement_id)
+    field_name = _KIND_FIELDS[kind]
+    items = list(tuple(getattr(project.placements, field_name, ()) or ()))
+    if index >= len(items):
+        raise ValueError(f"Authored gameplay placement '{placement_id}' does not exist.")
+    current = items[index]
+    if not hasattr(current, "position"):
+        raise ValueError(f"Authored gameplay placement '{placement_id}' is not a spatial map object.")
+    pos = _vec3(position) if position is not None else _vec3(getattr(current, "position", (0.0, 0.0, 0.0)))
+    updated_item = replace(current, position=pos)
+    if bearing is not None and hasattr(updated_item, "bearing"):
+        updated_item = replace(updated_item, bearing=float(bearing))
+    items[index] = updated_item
+    transform_metadata = {
+        "placement_id": str(placement_id),
+        "kind": kind,
+        "index": index,
+        "position": [float(pos[0]), float(pos[1]), float(pos[2])],
+        "bearing": float(getattr(updated_item, "bearing", 0.0) or 0.0),
+    }
+    updated_placements = replace(
+        project.placements,
+        **{
+            field_name: tuple(items),
+            "metadata": {
+                **dict(project.placements.metadata),
+                "last_gameplay_placement_transform": transform_metadata,
+            },
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Moved Map Studio gameplay placement: {placement_id}.",),
+        extra={
+            **dict(project.extra),
+            "last_gameplay_placement_transform": transform_metadata,
+        },
+    )
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=_placement_template(updated_item),
+        tag=_placement_tag(updated_item, kind, index),
+        position=pos,
+        count=len(items),
+    )
+
+
 __all__ = [
+    "AuthoredGameplayPlacementRow",
     "AuthoredGameplayPlacementUpdate",
     "SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS",
     "add_authored_gameplay_placement",
+    "authored_gameplay_placement_id",
+    "authored_gameplay_placement_rows",
+    "parse_authored_gameplay_placement_id",
+    "update_authored_gameplay_placement_transform",
 ]

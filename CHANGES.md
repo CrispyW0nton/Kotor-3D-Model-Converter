@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Projects Authored Placements Into Editor Selection
+
+Owner: LordVaderCW
+Task: T2655
+Subsystem: Map Studio / authored gameplay placement selection / viewport table / outliner / properties panel / native Python payloads
+
+- Added stable virtual IDs for authored gameplay placements so Map Studio can select and edit generated GIT objects before package export.
+- Added a headless authored-placement transform update path for spatial placements, with stores kept exportable but excluded from draggable map-object rows.
+- Projected authored creatures, placeables, doors, triggers, encounters, sounds, cameras, and waypoints into the Module Editor viewport table, outliner, and properties panel.
+- Routed authored placement position/bearing edits through the Module Editor controller so stale runtime resources and game-test proof state are cleared after map edits.
+- Mirrored the core/controller/panel changes into the ModuleMeshes and Properties native payloads.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_placements.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_placements.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_outliner.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_properties.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_outliner.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_properties.py native\GhostRigger.Tools.Workflow.Properties\Python\src\gui\panels\module_editor\module_editor_properties.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_gameplay_placement_selection.py`
+- `python -m pytest tests\test_authored_gameplay_placement_selection.py tests\test_authored_gameplay_placements.py tests\test_authored_module_reporting.py -q --basetemp .pytest_tmp_map_studio_placement_selection`
+
 ### [2026-06-18] Map Studio Reports Authored Room And Placement Summaries
 
 Owner: LordVaderCW

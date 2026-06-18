@@ -651,18 +651,36 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._handle_tab_action(mapping.get(action, action))
 
     def _set_transform(self, item_id: str, transform: LevelTransform) -> None:
+        if item_id.startswith("authored:"):
+            try:
+                self.controller.set_authored_gameplay_placement_transform(
+                    item_id,
+                    position=transform.position,
+                    bearing=float(transform.rotation[2]) if len(transform.rotation) >= 3 else None,
+                )
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Move Authored Gameplay Placement", str(exc))
+                return
+            self._refresh_all()
+            return
         if LevelScene(self.project).set_transform(item_id, transform):
             self._refresh_all()
 
     def _set_visibility(self, item_id: str, visible: bool) -> None:
+        if item_id.startswith("authored:"):
+            return
         if LevelScene(self.project).set_visibility(item_id, visible):
             self._refresh_all()
 
     def _set_locked(self, item_id: str, locked: bool) -> None:
+        if item_id.startswith("authored:"):
+            return
         if LevelScene(self.project).set_locked(item_id, locked):
             self._refresh_all()
 
     def _set_property(self, item_id: str, key: str, value: Any) -> None:
+        if item_id.startswith("authored:"):
+            return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:
             return
@@ -675,9 +693,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
-        self.properties.set_project(self.project)
-        self.outliner.set_project(self.project)
-        self.viewport_panel.set_project(self.project)
+        authored_placements = self.controller.authored_gameplay_placements()
+        self.properties.set_project(self.project, authored_placements)
+        self.outliner.set_project(self.project, authored_placements)
+        self.viewport_panel.set_project(self.project, authored_placements)
         readiness_result = self.controller.authored_module_readiness()
         self.readiness_panel.set_readiness(readiness_result.readiness)
         if self.controller.model.selected_ids:

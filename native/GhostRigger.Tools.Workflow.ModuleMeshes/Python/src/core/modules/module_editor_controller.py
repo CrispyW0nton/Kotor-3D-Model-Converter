@@ -23,7 +23,13 @@ from .authored_module_kmap_bridge import (
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
 )
-from .authored_module_placements import SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS, add_authored_gameplay_placement
+from .authored_module_placements import (
+    SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
+    add_authored_gameplay_placement,
+    authored_gameplay_placement_rows,
+    parse_authored_gameplay_placement_id,
+    update_authored_gameplay_placement_transform,
+)
 from .authored_room_operations import apply_authored_floor_plan_operation
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
@@ -138,6 +144,20 @@ class ModuleEditorController:
 
         return SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS
 
+    def authored_gameplay_placements(self):
+        """Return selectable authored gameplay placements for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_gameplay_placement_rows(authored)
+
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""
 
@@ -238,6 +258,34 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Added Map Studio {update.kind} placement {update.tag} at {update.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_gameplay_placement_transform(self, placement_id: str, *, position: Any, bearing: float | None = None):
+        """Move one authored gameplay placement by virtual id."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_gameplay_placement_transform(
+            authored,
+            placement_id,
+            position=position,
+            bearing=bearing,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Moved Map Studio {update.kind} placement {update.tag} to {update.position}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

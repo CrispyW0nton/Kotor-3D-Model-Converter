@@ -60,7 +60,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         root.addWidget(self.splitter, 1)
         self._row_ids: list[str] = []
 
-    def set_project(self, project: KMapProject) -> None:
+    def set_project(self, project: KMapProject, authored_gameplay_placements=()) -> None:
         self.scene_table.setRowCount(0)
         self._row_ids.clear()
         for module in project.modules:
@@ -71,6 +71,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._add_row("Room", room.name, room.room_id, pos, room.visible)
         for blueprint in project.blueprints:
             self._add_row("Blueprint", blueprint.name, blueprint.blueprint_id, blueprint.position, True)
+        for placement in authored_gameplay_placements or ():
+            label = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or getattr(placement, "placement_id", ""))
+            kind = f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
+            self._add_row(kind, label, str(getattr(placement, "placement_id", "")), getattr(placement, "position", (0.0, 0.0, 0.0)), True)
 
     def select_id(self, item_id: str) -> None:
         for row, row_id in enumerate(self._row_ids):
