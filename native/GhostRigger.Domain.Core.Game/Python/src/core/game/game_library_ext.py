@@ -249,7 +249,7 @@ class GFFReader:
         4: 'DWORD', 5: 'INT', 6: 'DWORD64', 7: 'INT64',
         8: 'FLOAT', 9: 'DOUBLE', 10: 'CExoString',
         11: 'ResRef', 12: 'CExoLocString', 13: 'VOID',
-        14: 'Struct', 15: 'List',
+        14: 'Struct', 15: 'List', 16: 'Vector4', 17: 'Vector3',
     }
 
     @classmethod
@@ -399,6 +399,18 @@ class GFFReader:
                     field_off, field_count,
                     labels, fdata_off, findx_off, listindx_off))
             return items
+        elif ftype == 16:  # Vector4
+            raw = data[fdata_off+fval:fdata_off+fval+16]
+            if len(raw) < 16:
+                return {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 0.0}
+            x, y, z, w = struct.unpack('<ffff', raw)
+            return {'x': x, 'y': y, 'z': z, 'w': w}
+        elif ftype == 17:  # Vector3
+            raw = data[fdata_off+fval:fdata_off+fval+12]
+            if len(raw) < 12:
+                return {'x': 0.0, 'y': 0.0, 'z': 0.0}
+            x, y, z = struct.unpack('<fff', raw)
+            return {'x': x, 'y': y, 'z': z}
         return None
 
 

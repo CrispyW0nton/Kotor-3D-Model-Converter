@@ -21,7 +21,7 @@
             "resource_name": "PYTHON_PAYLOAD_0003",
             "source_path": "src/core/templates/twoda.py",
             "packaged_path": "Python/src/core/templates/twoda.py",
-            "sha256": "36c1faf87de1e4f7360f9bc6438c1aa5d328094149938b41c512bae8520b9435"
+            "sha256": "f5b370dd5099fe6f693f16251f95da1883afe715d3720442ec1bd59ffce7b8aa"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0004",
@@ -63,7 +63,7 @@
             "resource_name": "PYTHON_PAYLOAD_0010",
             "source_path": "src/core/game/game_library_ext.py",
             "packaged_path": "Python/src/core/game/game_library_ext.py",
-            "sha256": "82f2a553b60f85630f8136b3a772e375fd3254c55dbc1193b1da8bf6827a47fc"
+            "sha256": "325ffe867f0b8cbeefb4d44cefa0b8b3fd2f678dbf3e994f4c0b5ed3cc51555e"
         }
     ]
 }

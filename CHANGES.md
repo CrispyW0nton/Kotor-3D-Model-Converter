@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Authored Camera GIT Placement
+
+Owner: LordVaderCW
+Task: T2626
+Subsystem: Map Studio / authored gameplay placement / native Python payloads
+
+- Promoted authored module camera intent into real GIT `CameraList` serialization using the engine-facing camera fields confirmed from the PyKotor GIT model.
+- Added camera readback support to `GITData`, including position, orientation, field of view, height, microphone range, and pitch.
+- Extended the lightweight GFF reader to parse Vector3/Vector4 fields so camera position/orientation survive round-trip validation.
+- Mirrored the module changes into the ModuleMeshes payload and refreshed affected native Python payload manifests, including a stale TwoDABrowser payload hash caught during verification.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_format.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_format.py native\GhostRigger.Domain.Core.Game\Python\src\core\game\game_library_ext.py native\GhostRigger.Tools.Workflow.TwoDABrowser\Python\src\core\game\game_library_ext.py tests\test_authored_module_objects.py`
+- `python -m pytest tests/test_authored_module_objects.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_authored_camera_git`
+- Native Python payload hash check across the updated module/game/tool manifests.
+
 ### [2026-06-18] Map Studio Floor-Plan Bevel Operation
 
 Owner: LordVaderCW

@@ -362,7 +362,20 @@ class GITStore:
     tag:    str = ""
 
 @dataclass
+class GITCamera:
+    camera_id: int = 0
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    orientation: Tuple[float,float,float,float] = (0.0, 0.0, 0.0, 1.0)
+    field_of_view: float = 45.0
+    height: float = 0.0
+    mic_range: float = 0.0
+    pitch: float = 0.0
+
+@dataclass
 class GITData:
+    cameras:    List[GITCamera]    = field(default_factory=list)
     creatures:  List[GITCreature]  = field(default_factory=list)
     doors:      List[GITDoor]      = field(default_factory=list)
     placeables: List[GITPlaceable] = field(default_factory=list)
@@ -393,6 +406,43 @@ class GITData:
             v = d.get(key)
             try: return int(v) if v is not None else default
             except: return default
+
+        def _v3(d, key, default=(0.0, 0.0, 0.0)):
+            v = d.get(key)
+            if isinstance(v, dict):
+                return (_f(v, 'x', default[0]), _f(v, 'y', default[1]), _f(v, 'z', default[2]))
+            if isinstance(v, (list, tuple)) and len(v) >= 3:
+                return (_f({'v': v[0]}, 'v', default[0]), _f({'v': v[1]}, 'v', default[1]), _f({'v': v[2]}, 'v', default[2]))
+            return default
+
+        def _v4(d, key, default=(0.0, 0.0, 0.0, 1.0)):
+            v = d.get(key)
+            if isinstance(v, dict):
+                return (_f(v, 'x', default[0]), _f(v, 'y', default[1]), _f(v, 'z', default[2]), _f(v, 'w', default[3]))
+            if isinstance(v, (list, tuple)) and len(v) >= 4:
+                return (
+                    _f({'v': v[0]}, 'v', default[0]),
+                    _f({'v': v[1]}, 'v', default[1]),
+                    _f({'v': v[2]}, 'v', default[2]),
+                    _f({'v': v[3]}, 'v', default[3]),
+                )
+            return default
+
+        # Cameras
+        for camera in (raw.get('CameraList') or []):
+            if not isinstance(camera, dict): continue
+            position = _v3(camera, 'Position')
+            g.cameras.append(GITCamera(
+                camera_id     = _i(camera, 'CameraID'),
+                x             = position[0],
+                y             = position[1],
+                z             = position[2],
+                orientation   = _v4(camera, 'Orientation'),
+                field_of_view = _f(camera, 'FieldOfView'),
+                height        = _f(camera, 'Height'),
+                mic_range     = _f(camera, 'MicRange'),
+                pitch         = _f(camera, 'Pitch'),
+            ))
 
         # Creatures
         for c in (raw.get('Creature List') or []):
@@ -494,7 +544,7 @@ class GITData:
         return g
 
     def summary(self) -> str:
-        return (f"GIT: {len(self.creatures)} creatures, {len(self.doors)} doors, "
+        return (f"GIT: {len(self.cameras)} cameras, {len(self.creatures)} creatures, {len(self.doors)} doors, "
                 f"{len(self.placeables)} placeables, {len(self.waypoints)} waypoints, "
                 f"{len(self.triggers)} triggers, {len(self.encounters)} encounters, "
                 f"{len(self.sounds)} sounds, {len(self.stores)} stores")

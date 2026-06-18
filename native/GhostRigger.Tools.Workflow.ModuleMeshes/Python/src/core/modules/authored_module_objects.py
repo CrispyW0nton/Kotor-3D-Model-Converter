@@ -13,6 +13,7 @@ from typing import Any
 
 
 Vec3 = tuple[float, float, float]
+Vec4 = tuple[float, float, float, float]
 
 
 @dataclass(frozen=True)
@@ -101,11 +102,15 @@ class AuthoredSoundInstance:
 
 @dataclass(frozen=True)
 class AuthoredCameraInstance:
-    """Authored module camera intent for future camera-list export."""
+    """Authored area camera placement for a GIT CameraList entry."""
 
-    camera_id: str
+    camera_id: int | str
     position: Vec3 = (0.0, 0.0, 0.0)
-    bearing: float = 0.0
+    orientation: Vec4 = (0.0, 0.0, 0.0, 1.0)
+    field_of_view: float = 45.0
+    height: float = 0.0
+    mic_range: float = 0.0
+    pitch: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -153,6 +158,22 @@ def normalise_resource_resref(value: Any) -> str:
 
 def _position_ok(position: Vec3) -> bool:
     return len(position) == 3 and all(math.isfinite(float(value)) for value in position)
+
+
+def _orientation_ok(orientation: Vec4) -> bool:
+    if len(orientation) != 4:
+        return False
+    if not all(math.isfinite(float(value)) for value in orientation):
+        return False
+    return sum(float(value) * float(value) for value in orientation) > 1.0e-12
+
+
+def _camera_id_value(camera_id: int | str) -> int | None:
+    try:
+        value = int(str(camera_id).strip(), 10)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 def _validate_template(kind: str, template_resref: str, blocking: list[str]) -> None:
@@ -204,10 +225,20 @@ def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -
         if not _position_ok(sound.position):
             blocking.append(f"Sound {sound.template_resref or '(missing)'} has an invalid position.")
     for camera in placement.cameras:
-        if not normalise_resource_resref(camera.camera_id):
-            blocking.append("Camera placement requires a camera id.")
+        if _camera_id_value(camera.camera_id) is None:
+            blocking.append("Camera placement requires a non-negative numeric camera id.")
         if not _position_ok(camera.position):
             blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid position.")
+        if not _orientation_ok(camera.orientation):
+            blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid orientation quaternion.")
+        if not math.isfinite(float(camera.field_of_view)) or float(camera.field_of_view) < 0.0:
+            blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid field of view.")
+        if not math.isfinite(float(camera.height)):
+            blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid height.")
+        if not math.isfinite(float(camera.mic_range)):
+            blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid mic range.")
+        if not math.isfinite(float(camera.pitch)):
+            blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid pitch.")
     for store in placement.stores:
         _validate_template("Store", store.template_resref, blocking)
     return AuthoredGameplayPlacementValidation(
@@ -341,6 +372,19 @@ def _add_sound(list_value: Any, index: int, sound: AuthoredSoundInstance) -> Non
     item.set_single("ZPosition", float(sound.position[2]))
 
 
+def _add_camera(list_value: Any, index: int, camera: AuthoredCameraInstance) -> None:
+    from utility.common.geometry import Vector3, Vector4
+
+    item = list_value.add(index)
+    item.set_int32("CameraID", _camera_id_value(camera.camera_id) or 0)
+    item.set_single("FieldOfView", float(camera.field_of_view))
+    item.set_single("Height", float(camera.height))
+    item.set_single("MicRange", float(camera.mic_range))
+    item.set_vector4("Orientation", Vector4(*camera.orientation))
+    item.set_vector3("Position", Vector3(*camera.position))
+    item.set_single("Pitch", float(camera.pitch))
+
+
 def _add_store(list_value: Any, index: int, store: AuthoredStoreInstance) -> None:
     item = list_value.add(index)
     resref = normalise_resource_resref(store.template_resref)
@@ -357,6 +401,11 @@ def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
     gff = _new_gff("GIT")
     root = gff.root
     root.set_uint8("UseTemplates", 1)
+
+    cameras = _empty_gff_list()
+    for index, camera in enumerate(placement.cameras):
+        _add_camera(cameras, index, camera)
+    root.set_list("CameraList", cameras)
 
     creatures = _empty_gff_list()
     for index, creature in enumerate(placement.creatures):

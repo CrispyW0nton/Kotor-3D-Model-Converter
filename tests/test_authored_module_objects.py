@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
@@ -26,6 +28,7 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_objects import (
+        AuthoredCameraInstance,
         AuthoredCreatureInstance,
         AuthoredDoorInstance,
         AuthoredEncounterInstance,
@@ -66,6 +69,17 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
         ),
         encounters=(AuthoredEncounterInstance(template_resref="enc_dev", tag="ambush", position=(-1.0, 2.5, 0.0)),),
         sounds=(AuthoredSoundInstance(template_resref="snd_wind", tag="ambient_wind", position=(0.0, 1.0, 0.0)),),
+        cameras=(
+            AuthoredCameraInstance(
+                camera_id=7,
+                position=(4.0, 5.0, 1.5),
+                orientation=(0.0, 0.0, 0.70710678, 0.70710678),
+                field_of_view=55.0,
+                height=1.25,
+                mic_range=12.0,
+                pitch=0.35,
+            ),
+        ),
         stores=(AuthoredStoreInstance(template_resref="st_dev", tag="dev_store"),),
         placeables=(AuthoredPlaceableInstance(template_resref="plc_bench", position=(1.75, 1.5, 0.0)),),
         waypoints=(AuthoredWaypointInstance(template_resref="sw_startloc001", tag="start", position=(0.0, -3.0, 0.0)),),
@@ -97,6 +111,15 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
     assert git.sounds[0].resref == "snd_wind"
     assert git.sounds[0].tag == "ambient_wind"
     assert git.sounds[0].y == 1.0
+    assert len(git.cameras) == 1
+    assert git.cameras[0].camera_id == 7
+    assert git.cameras[0].x == 4.0
+    assert git.cameras[0].z == 1.5
+    assert git.cameras[0].orientation == pytest.approx((0.0, 0.0, 0.70710678, 0.70710678))
+    assert git.cameras[0].field_of_view == 55.0
+    assert git.cameras[0].height == 1.25
+    assert git.cameras[0].mic_range == 12.0
+    assert git.cameras[0].pitch == pytest.approx(0.35)
     assert len(git.stores) == 1
     assert git.stores[0].resref == "st_dev"
     assert git.stores[0].tag == "dev_store"
