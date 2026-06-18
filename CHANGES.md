@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Gameplay Placement Walkmesh Validation
+
+Owner: LordVaderCW
+Task: T2630
+Subsystem: Map Studio / authored gameplay placement / native Python payloads
+
+- Added reusable headless validation that checks authored gameplay placements against a generated WOK before module export.
+- Validates entry points, creatures, doors, triggers, encounters, placeables, and waypoints against walkable WOK faces and floor Z so player starts and test objects cannot silently export into void or blocking surfaces.
+- Mirrored the gameplay placement validation into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Added regression coverage for valid generated-room placements, outside-walkmesh placements, Z-offset failures, and non-walk surface failures.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_objects.py tests\test_authored_module_objects.py`
+- `python -m pytest tests/test_authored_module_objects.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_gameplay_walkmesh_smoke`
+
 ### [2026-06-18] Map Studio Path Connection Walkmesh Validation
 
 Owner: LordVaderCW

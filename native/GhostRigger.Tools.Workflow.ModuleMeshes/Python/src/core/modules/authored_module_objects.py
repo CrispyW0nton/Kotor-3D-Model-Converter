@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from .authored_walkmesh_surfaces import walkable_walkmesh_surface_ids, walkmesh_surface_name
+
 
 Vec3 = tuple[float, float, float]
 Vec4 = tuple[float, float, float, float]
@@ -147,6 +149,28 @@ class AuthoredGameplayPlacementValidation:
     blocking_issues: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class AuthoredGameplayWalkmeshCheck:
+    """One gameplay placement walkability check against a generated WOK."""
+
+    label: str
+    position: Vec3
+    ok: bool
+    face_index: int = -1
+    surface_id: int = -1
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class AuthoredGameplayWalkmeshValidation:
+    """Validation summary for authored gameplay placements against a WOK."""
+
+    ok: bool
+    checks: tuple[AuthoredGameplayWalkmeshCheck, ...] = ()
+    warnings: tuple[str, ...] = ()
+    blocking_issues: tuple[str, ...] = ()
+
+
 def normalise_resource_resref(value: Any) -> str:
     """Return a KOTOR-style lowercase resref fragment for placed resources."""
 
@@ -243,6 +267,137 @@ def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -
         _validate_template("Store", store.template_resref, blocking)
     return AuthoredGameplayPlacementValidation(
         ok=not blocking,
+        warnings=tuple(warnings),
+        blocking_issues=tuple(blocking),
+    )
+
+
+def _walkmesh_face_at_position(wok: Any, position: Vec3) -> int:
+    face_at_point = getattr(wok, "face_at_point", None)
+    if not callable(face_at_point):
+        return -2
+    return int(face_at_point(float(position[0]), float(position[1])))
+
+
+def _walkmesh_check(label: str, position: Vec3, wok: Any, *, z_tolerance: float) -> AuthoredGameplayWalkmeshCheck:
+    if not _position_ok(position):
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            message=f"{label} position must contain finite XYZ values.",
+        )
+    face_index = _walkmesh_face_at_position(wok, position)
+    if face_index == -2:
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            message=f"{label} cannot be checked because the WOK does not support point lookup.",
+        )
+    if face_index < 0:
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            face_index=face_index,
+            message=f"{label} is outside the generated room walkmesh.",
+        )
+    faces = list(getattr(wok, "faces", ()) or ())
+    verts = list(getattr(wok, "verts", ()) or ())
+    if face_index >= len(faces):
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            face_index=face_index,
+            message=f"{label} resolved to missing WOK face {face_index}.",
+        )
+    face = faces[face_index]
+    surface_id = int(getattr(face, "surface", -1))
+    surface_name = walkmesh_surface_name(surface_id)
+    if surface_id not in walkable_walkmesh_surface_ids():
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            face_index=face_index,
+            surface_id=surface_id,
+            message=f"{label} is on WOK face {face_index}, but surface {surface_id} ({surface_name}) is not walkable.",
+        )
+    vertex_indices = (int(getattr(face, "v1", -1)), int(getattr(face, "v2", -1)), int(getattr(face, "v3", -1)))
+    if any(vertex_index < 0 or vertex_index >= len(verts) for vertex_index in vertex_indices):
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            face_index=face_index,
+            surface_id=surface_id,
+            message=f"{label} resolved to WOK face {face_index} with invalid vertex indices.",
+        )
+    floor_z = sum(float(verts[vertex_index][2]) for vertex_index in vertex_indices) / 3.0
+    if abs(float(position[2]) - floor_z) > float(z_tolerance):
+        return AuthoredGameplayWalkmeshCheck(
+            label=label,
+            position=position,
+            ok=False,
+            face_index=face_index,
+            surface_id=surface_id,
+            message=f"{label} Z={float(position[2]):.3f} is not on generated floor Z={floor_z:.3f}.",
+        )
+    return AuthoredGameplayWalkmeshCheck(
+        label=label,
+        position=position,
+        ok=True,
+        face_index=face_index,
+        surface_id=surface_id,
+        message=f"{label} is on walkable WOK face {face_index} ({surface_name}).",
+    )
+
+
+def validate_authored_gameplay_placement_against_walkmesh(
+    placement: AuthoredGameplayPlacement,
+    wok: Any,
+    *,
+    z_tolerance: float = 0.05,
+) -> AuthoredGameplayWalkmeshValidation:
+    """Validate that gameplay placements that need pathing sit on walkable WOK space."""
+
+    warnings: list[str] = []
+    blocking: list[str] = []
+    checks: list[AuthoredGameplayWalkmeshCheck] = []
+    if not math.isfinite(float(z_tolerance)) or float(z_tolerance) < 0.0:
+        blocking.append("Gameplay placement walkmesh Z tolerance must be finite and non-negative.")
+        z_tolerance = 0.0
+
+    checks.append(_walkmesh_check("entry_point", placement.entry_point.position, wok, z_tolerance=float(z_tolerance)))
+    for index, creature in enumerate(placement.creatures):
+        label = creature.tag or normalise_resource_resref(creature.template_resref) or f"creature_{index + 1}"
+        checks.append(_walkmesh_check(f"creature:{label}", creature.position, wok, z_tolerance=float(z_tolerance)))
+    for index, door in enumerate(placement.doors):
+        label = door.tag or normalise_resource_resref(door.template_resref) or f"door_{index + 1}"
+        checks.append(_walkmesh_check(f"door:{label}", door.position, wok, z_tolerance=float(z_tolerance)))
+    for index, trigger in enumerate(placement.triggers):
+        label = trigger.tag or normalise_resource_resref(trigger.template_resref) or f"trigger_{index + 1}"
+        checks.append(_walkmesh_check(f"trigger:{label}", trigger.position, wok, z_tolerance=float(z_tolerance)))
+        for point_index, point in enumerate(trigger.geometry):
+            checks.append(_walkmesh_check(f"trigger:{label}:point_{point_index + 1}", point, wok, z_tolerance=float(z_tolerance)))
+    for index, encounter in enumerate(placement.encounters):
+        label = encounter.tag or normalise_resource_resref(encounter.template_resref) or f"encounter_{index + 1}"
+        checks.append(_walkmesh_check(f"encounter:{label}", encounter.position, wok, z_tolerance=float(z_tolerance)))
+    for index, placeable in enumerate(placement.placeables):
+        label = placeable.tag or normalise_resource_resref(placeable.template_resref) or f"placeable_{index + 1}"
+        checks.append(_walkmesh_check(f"placeable:{label}", placeable.position, wok, z_tolerance=float(z_tolerance)))
+    for index, waypoint in enumerate(placement.waypoints):
+        label = waypoint.tag or normalise_resource_resref(waypoint.template_resref) or f"waypoint_{index + 1}"
+        checks.append(_walkmesh_check(f"waypoint:{label}", waypoint.position, wok, z_tolerance=float(z_tolerance)))
+
+    blocking.extend(check.message for check in checks if not check.ok)
+    if not checks:
+        warnings.append("No gameplay placements required walkmesh validation.")
+    return AuthoredGameplayWalkmeshValidation(
+        ok=not blocking,
+        checks=tuple(checks),
         warnings=tuple(warnings),
         blocking_issues=tuple(blocking),
     )
@@ -462,6 +617,8 @@ __all__ = [
     "AuthoredEncounterInstance",
     "AuthoredGameplayPlacement",
     "AuthoredGameplayPlacementValidation",
+    "AuthoredGameplayWalkmeshCheck",
+    "AuthoredGameplayWalkmeshValidation",
     "AuthoredPlaceableInstance",
     "AuthoredSoundInstance",
     "AuthoredStoreInstance",
@@ -473,4 +630,5 @@ __all__ = [
     "build_git_gff",
     "normalise_resource_resref",
     "validate_authored_gameplay_placement",
+    "validate_authored_gameplay_placement_against_walkmesh",
 ]

@@ -168,3 +168,91 @@ def test_t2605_project_validation_includes_gameplay_placement_issues() -> None:
 
     assert validation.ok is False
     assert "Creature placement requires a template resref." in validation.blocking_issues
+
+
+def test_t2630_gameplay_placements_validate_against_generated_walkmesh() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_objects import (
+        AuthoredGameplayPlacement,
+        AuthoredPlaceableInstance,
+        AuthoredWaypointInstance,
+        ModuleEntryPoint,
+        validate_authored_gameplay_placement_against_walkmesh,
+    )
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive, build_rectangular_room_wok
+
+    wok = build_rectangular_room_wok(RectangularRoomPrimitive(room_resref="grdev01_room01"))
+    placement = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref="grdev01", position=(0.0, -3.0, 0.0)),
+        placeables=(AuthoredPlaceableInstance(template_resref="plc_bench", tag="bench", position=(1.75, 1.5, 0.0)),),
+        waypoints=(AuthoredWaypointInstance(template_resref="sw_startloc001", tag="start", position=(0.0, -3.0, 0.0)),),
+    )
+
+    validation = validate_authored_gameplay_placement_against_walkmesh(placement, wok)
+
+    assert validation.ok is True
+    assert [check.label for check in validation.checks] == ["entry_point", "placeable:bench", "waypoint:start"]
+    assert all(check.face_index >= 0 for check in validation.checks)
+    assert all(check.surface_id == 4 for check in validation.checks)
+
+
+def test_t2630_gameplay_placement_walkmesh_validation_blocks_unsafe_positions() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_objects import (
+        AuthoredGameplayPlacement,
+        AuthoredPlaceableInstance,
+        AuthoredWaypointInstance,
+        ModuleEntryPoint,
+        validate_authored_gameplay_placement_against_walkmesh,
+    )
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive, build_rectangular_room_wok
+
+    wok = build_rectangular_room_wok(RectangularRoomPrimitive(room_resref="grdev01_room01"))
+    placement = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref="grdev01", position=(99.0, 99.0, 0.0)),
+        placeables=(AuthoredPlaceableInstance(template_resref="plc_bench", tag="bench", position=(1.75, 1.5, 1.0)),),
+        waypoints=(AuthoredWaypointInstance(template_resref="sw_startloc001", tag="start", position=(0.0, -3.0, 0.0)),),
+    )
+
+    validation = validate_authored_gameplay_placement_against_walkmesh(placement, wok)
+
+    assert validation.ok is False
+    assert any("entry_point is outside the generated room walkmesh" in issue for issue in validation.blocking_issues)
+    assert any("placeable:bench Z=1.000 is not on generated floor Z=0.000" in issue for issue in validation.blocking_issues)
+    assert any(check.label == "waypoint:start" and check.ok for check in validation.checks)
+
+
+def test_t2630_gameplay_placement_walkmesh_validation_blocks_non_walk_surfaces() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_objects import (
+        AuthoredGameplayPlacement,
+        AuthoredPlaceableInstance,
+        ModuleEntryPoint,
+        validate_authored_gameplay_placement_against_walkmesh,
+    )
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    wok = WOKData(
+        verts=[
+            (-1.0, -1.0, 0.0),
+            (1.0, -1.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (-1.0, 1.0, 0.0),
+        ],
+        faces=[
+            WOKFace(0, 1, 2, 7),
+            WOKFace(0, 2, 3, 7),
+        ],
+    )
+    placement = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref="grdev01", position=(0.0, 0.0, 0.0)),
+        placeables=(AuthoredPlaceableInstance(template_resref="plc_bench", tag="bench", position=(0.25, 0.25, 0.0)),),
+    )
+
+    validation = validate_authored_gameplay_placement_against_walkmesh(placement, wok)
+
+    assert validation.ok is False
+    assert any("surface 7 (NON_WALK) is not walkable" in issue for issue in validation.blocking_issues)
