@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Authored Module Layout Compiler
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / module layout builder / native Python payloads
+
+- Added a headless `authored_module_layout` compiler that turns authored room specs into LYT room placements and VIS visibility data.
+- Added validation for duplicate room resrefs, invalid room positions, and missing VIS targets so layout errors are caught before package export.
+- Routed the `grdev01` smoke module through the layout compiler instead of constructing LYT/VIS directly in the smoke builder.
+- Added smoke manifest layout provenance so exported packages report authored room positions and visibility links.
+- Mirrored the layout compiler into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_layout.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_layout.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_module_layout.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_module_layout.py -q --basetemp .pytest_tmp_authored_module_layout`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Gameplay Placement Contract Expansion
 
 Owner: LordVaderCW

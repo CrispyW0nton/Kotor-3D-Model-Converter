@@ -47,7 +47,8 @@ from .authored_module_project import (
     create_single_room_project,
     validate_authored_module_project,
 )
-from .module_format import LYTLayout, LYTRoom, VISData, WOKData
+from .authored_module_layout import compile_authored_module_layout
+from .module_format import LYTLayout, VISData, WOKData
 
 
 @dataclass(frozen=True)
@@ -636,9 +637,9 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         else build_rectangular_room_geometry(room_spec.primitive)
     )
     placements = project.placements
-    lyt = LYTLayout(rooms=[LYTRoom(room, *room_spec.position)])
-    visible = [target for target in room_spec.visible_rooms if target]
-    vis = VISData(visibility={room: visible or [room]})
+    layout = compile_authored_module_layout(project)
+    lyt = layout.lyt
+    vis = layout.vis
     wok = geometry.wok
     walkability_checks = _validate_gameplay_anchors(request, wok)
     template_checks, template_warnings = _validate_gameplay_templates(request, placements)
@@ -911,6 +912,18 @@ def _augment_manifest(
             "room_count": len(authored.project.rooms) if authored.project else 0,
             "notes": list(authored.project.notes) if authored.project else [],
             "metadata": dict(authored.project.metadata.metadata) if authored.project else {},
+        },
+        "authored_layout": {
+            "source": "src.core.modules.authored_module_layout",
+            "room_count": len(authored.module.lyt.rooms),
+            "rooms": [
+                {
+                    "resref": room.model,
+                    "position": [room.x, room.y, room.z],
+                    "visible": list(authored.module.vis.visibility.get(room.model, [])),
+                }
+                for room in authored.module.lyt.rooms
+            ],
         },
         "authored_geometry": {
             "source": authored.module.room_geometry.metadata.get("source", "src.core.modules.authored_room_geometry")

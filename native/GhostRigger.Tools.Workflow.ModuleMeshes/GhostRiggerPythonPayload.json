@@ -2,7 +2,7 @@
   "schema": "ghostrigger_python_payload.v1",
   "phase": "P1.5 embedded python payload",
   "project": "GhostRigger.Tools.Workflow.ModuleMeshes",
-  "file_count": 50,
+  "file_count": 51,
   "originals_remain_in_src": true,
   "files": [
     {
@@ -267,7 +267,7 @@
       "resource_name": "PYTHON_PAYLOAD_0044",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "810960c97683a5236fc03518d59086f5fa96089108671c7e901bc9915746c1e0"
+      "sha256": "5190396c5fe0c97a1f7829af7b454988ac92ba9eca818f2bb53609663946a073"
     },
     {
       "source_path": "src/core/modules/authored_walkmesh_surfaces.py",
@@ -300,7 +300,13 @@
       "sha256": "e17898fe22a22d1341e858ec515349af59a8d59e208e141cadd45c8a2e1cc66e"
     },
     {
+      "source_path": "src/core/modules/authored_module_layout.py",
+      "packaged_path": "Python/src/core/modules/authored_module_layout.py",
       "resource_name": "PYTHON_PAYLOAD_0050",
+      "sha256": "8369a7a1dba15ca8f08b957849db03504bcda1d63ba7d8d4eeccba854ff36b6c"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0051",
       "source_path": "src/core/modules/authored_room_primitives.py",
       "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
       "sha256": "dfb9a01028bac98fdc8e14d63a6f292d6825483cee2eb1b99bdf6336a52529e0"

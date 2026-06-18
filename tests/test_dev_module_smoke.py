@@ -150,6 +150,15 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_project"]["module_root"] == "grdev01"
     assert smoke["authored_project"]["room_count"] == 1
     assert smoke["authored_project"]["metadata"]["task"] == "T2601"
+    assert smoke["authored_layout"]["source"] == "src.core.modules.authored_module_layout"
+    assert smoke["authored_layout"]["room_count"] == 1
+    assert smoke["authored_layout"]["rooms"] == [
+        {
+            "resref": "grdev01_room01",
+            "position": [0.0, 0.0, 0.0],
+            "visible": ["grdev01_room01"],
+        }
+    ]
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_composition"
     assert smoke["authored_geometry"]["primitive"] == "authored_room_composition"
     assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_mesh"
