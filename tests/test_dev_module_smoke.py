@@ -408,6 +408,40 @@ def test_t2601_install_prep_copies_to_modules_without_overwrite(tmp_path: Path) 
     assert installed.read_bytes() == b"existing"
 
 
+def test_t2635_install_prep_overwrite_backs_up_existing_module(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleInstallPrepRequest, prepare_dev_test_module_install
+
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    installed = modules_dir / "grdev01.mod"
+    installed.write_bytes(b"existing")
+
+    result = prepare_dev_test_module_install(
+        DevModuleInstallPrepRequest(
+            output_dir=str(tmp_path / "out"),
+            game_modules_dir=str(modules_dir),
+            overwrite=True,
+        )
+    )
+
+    backup = modules_dir / "grdev01.mod.bak"
+    assert result.ok is True
+    assert result.code == "installed"
+    assert result.installed_module_path == str(installed)
+    assert result.backup_module_path == str(backup)
+    assert backup.read_bytes() == b"existing"
+    assert installed.read_bytes() != b"existing"
+    assert any("Backed up existing grdev01.mod" in warning for warning in result.warnings)
+
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["install"]["installed_module_path"] == str(installed)
+    assert proof["install"]["backup_module_path"] == str(backup)
+    checklist = Path(result.checklist_path).read_text(encoding="utf-8")
+    assert str(backup) in checklist
+
+
 def test_t2601_install_prep_can_auto_detect_modules_dir_from_settings(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

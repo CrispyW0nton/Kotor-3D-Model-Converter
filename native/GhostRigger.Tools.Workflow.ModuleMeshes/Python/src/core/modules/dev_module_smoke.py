@@ -217,6 +217,7 @@ class DevModuleInstallPrepResult:
     ok: bool = False
     export_result: DevModuleSmokeResult | None = None
     installed_module_path: str = ""
+    backup_module_path: str = ""
     resolved_modules_dir: str = ""
     checklist_path: str = ""
     proof_manifest_path: str = ""
@@ -1366,6 +1367,17 @@ def discover_kotor_modules_dir(
     return ""
 
 
+def _next_install_backup_path(path: Path) -> Path:
+    candidate = path.with_suffix(path.suffix + ".bak")
+    if not candidate.exists():
+        return candidate
+    for index in range(1, 1000):
+        candidate = path.with_suffix(path.suffix + f".bak{index}")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"Could not find an available backup path for {path}.")
+
+
 def _game_test_steps(module_root: str) -> list[str]:
     return [
         f"Install/copy `{module_root}.mod` into the selected KOTOR `Modules` folder.",
@@ -1385,6 +1397,7 @@ def _write_install_proof_files(
     export_result: DevModuleSmokeResult,
     game: str,
     install_path: str,
+    backup_path: str,
     installed: bool,
     dry_run: bool,
     warnings: list[str],
@@ -1402,6 +1415,7 @@ def _write_install_proof_files(
         "",
         f"- Package: `{export_result.module_path}`",
         f"- Install target: `{install_path or '(not installed)'}`",
+        f"- Previous module backup: `{backup_path or '(none)'}`",
         f"- Warp command: `warp {module_root}`",
         "",
         "## Steps",
@@ -1434,6 +1448,7 @@ def _write_install_proof_files(
             "installed": installed,
             "dry_run": dry_run,
             "installed_module_path": install_path,
+            "backup_module_path": backup_path,
         },
         "manual_proof_required": True,
         "warp_command": f"warp {module_root}",
@@ -1463,6 +1478,7 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
     blocking = list(export_result.blocking_issues)
     installed = False
     install_path = ""
+    backup_path = ""
     modules_dir_text = request.game_modules_dir
     if not modules_dir_text and request.auto_detect_game_modules_dir:
         modules_dir_text = discover_kotor_modules_dir(
@@ -1491,6 +1507,11 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
                 elif request.dry_run:
                     warnings.append(f"Dry run: would copy {export_result.module_path} to {destination}.")
                 else:
+                    if destination.exists():
+                        backup = _next_install_backup_path(destination)
+                        shutil.copy2(destination, backup)
+                        backup_path = str(backup)
+                        warnings.append(f"Backed up existing {destination.name} to {backup}.")
                     shutil.copy2(export_result.module_path, destination)
                     installed = True
     checklist_path, proof_manifest_path = _write_install_proof_files(
@@ -1498,6 +1519,7 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
         export_result=export_result,
         game=smoke_request.game,
         install_path=install_path,
+        backup_path=backup_path,
         installed=installed,
         dry_run=request.dry_run,
         warnings=warnings,
@@ -1513,6 +1535,7 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
         ok=ok,
         export_result=export_result,
         installed_module_path=install_path if installed else "",
+        backup_module_path=backup_path,
         resolved_modules_dir=modules_dir_text,
         checklist_path=checklist_path,
         proof_manifest_path=proof_manifest_path,

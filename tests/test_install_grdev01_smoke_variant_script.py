@@ -81,6 +81,35 @@ def test_t2617_script_blocks_existing_module_without_overwrite(tmp_path: Path) -
     assert (modules_dir / "grdev01.mod").read_bytes() == b"existing"
 
 
+def test_t2635_script_overwrite_backs_up_existing_module(tmp_path: Path) -> None:
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    installed = modules_dir / "grdev01.mod"
+    installed.write_bytes(b"existing")
+
+    result = _run_script(
+        "--variant",
+        "rectangular",
+        "--output-dir",
+        str(tmp_path / "out"),
+        "--game-modules-dir",
+        str(modules_dir),
+        "--overwrite",
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    backup = modules_dir / "grdev01.mod.bak"
+    assert payload["ok"] is True
+    assert payload["code"] == "installed"
+    assert payload["installed_module_path"] == str(installed)
+    assert payload["backup_module_path"] == str(backup)
+    assert backup.read_bytes() == b"existing"
+    assert installed.read_bytes() != b"existing"
+    assert any("Backed up existing grdev01.mod" in warning for warning in payload["warnings"])
+
+
 def test_t2617_script_dry_run_does_not_copy_to_modules(tmp_path: Path) -> None:
     modules_dir = tmp_path / "KOTOR" / "Modules"
     modules_dir.mkdir(parents=True)

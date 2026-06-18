@@ -125,6 +125,7 @@ def _result_summary(result: Any, *, variant_id: str, variant_label: str, room_ge
         "module_path": export.module_path if export else "",
         "pack_manifest_path": export.manifest_path if export else "",
         "installed_module_path": result.installed_module_path,
+        "backup_module_path": getattr(result, "backup_module_path", ""),
         "resolved_modules_dir": result.resolved_modules_dir,
         "checklist_path": result.checklist_path,
         "proof_manifest_path": result.proof_manifest_path,
@@ -144,6 +145,8 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
         print(f"Resolved Modules folder: {summary['resolved_modules_dir']}")
     if summary["installed_module_path"]:
         print(f"Installed module: {summary['installed_module_path']}")
+        if summary.get("backup_module_path"):
+            print(f"Previous module backup: {summary['backup_module_path']}")
     else:
         print("Installed module: (not copied)")
     print(f"Checklist: {summary['checklist_path']}")

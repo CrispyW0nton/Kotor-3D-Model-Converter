@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Smoke Install Overwrite Backups
+
+Owner: LordVaderCW
+Task: T2635
+Subsystem: Map Studio / dev module install prep / native Python payloads / smoke install CLI
+
+- Added rollback-safe overwrite handling for `grdev01.mod` smoke installs: when `overwrite=True` is explicitly requested and an existing module file is present, GhostRigger now copies it to a numbered `.bak` path before replacing it.
+- Records the backup path in `DevModuleInstallPrepResult`, the in-game proof manifest, the smoke checklist, and the `install_grdev01_smoke_variant.py --json` summary.
+- Mirrored the install prep behavior into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Added regression coverage for direct install prep and CLI overwrite behavior.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py scripts\install_grdev01_smoke_variant.py tests\test_dev_module_smoke.py tests\test_install_grdev01_smoke_variant_script.py`
+- `python -m pytest tests/test_dev_module_smoke.py tests/test_install_grdev01_smoke_variant_script.py -q --basetemp .pytest_tmp_grdev01_install_backup`
+
 ### [2026-06-18] Map Studio Smoke Module Uses Engine IFO Resref
 
 Owner: LordVaderCW
