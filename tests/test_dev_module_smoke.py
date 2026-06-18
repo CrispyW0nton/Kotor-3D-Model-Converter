@@ -60,7 +60,11 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert authored.module.room_woks["grdev01_room01"].walkable_face_count() == 2
     assert authored.module.room_geometry is not None
     assert authored.module.room_geometry.room_mesh.name == "grdev01_room01_mesh"
+    assert authored.module.room_geometry.room_mesh.texture == "CM_Baremetal"
     assert authored.module.room_geometry.room_mesh.faces == primitive_geometry.room_mesh.faces
+    assert authored.material_preflight is not None
+    assert authored.material_preflight.texture == "CM_Baremetal"
+    assert authored.material_preflight.blocking_issues == ()
     assert {mesh.name for mesh in authored.module.room_geometry.helper_meshes} >= {
         "grdev01_room01_wall_n",
         "grdev01_room01_wall_s",
@@ -183,6 +187,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_composition"
     assert smoke["authored_geometry"]["primitive"] == "authored_room_composition"
     assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_mesh"
+    assert smoke["authored_geometry"]["texture"] == "CM_Baremetal"
     assert set(smoke["authored_geometry"]["helper_meshes"]) >= {
         "grdev01_room01_wall_n",
         "grdev01_room01_wall_s",
@@ -192,6 +197,9 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     }
     assert smoke["authored_geometry"]["metadata"]["compiled_mesh_count"] == 6
     assert smoke["authored_geometry"]["derived_wok"] is True
+    assert smoke["authored_materials"]["source"] == "src.core.modules.authored_room_materials"
+    assert smoke["authored_materials"]["texture"] == "CM_Baremetal"
+    assert "CM_Baremetal" in smoke["authored_materials"]["message"]
     assert smoke["authored_placements"]["source"] == "src.core.modules.authored_module_objects"
     assert smoke["authored_placements"]["entry_area"] == "grdev01"
     assert smoke["authored_placements"]["counts"] == {

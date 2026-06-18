@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Authored Room Material Preflight
+
+Owner: LordVaderCW
+Task: T2609
+Subsystem: Map Studio / authored room materials / native Python payloads
+
+- Added a headless `authored_room_materials` preflight that normalizes authored room texture names, rejects unsafe path-like texture strings, and can resolve the texture against a local KOTOR install.
+- Replaced the smoke room's placeholder `default` texture with the vanilla-resolvable `CM_Baremetal` baseline so generated dev modules have explicit material provenance.
+- Routed the `grdev01` smoke module through material preflight and added `authored_materials` plus geometry texture reporting to the smoke package manifest.
+- Mirrored the material preflight module into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_materials.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_materials.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_room_materials.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_room_materials.py -q --basetemp .pytest_tmp_authored_room_materials`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+- Generated `artifacts\map_studio\grdev01_smoke\install\Modules\grdev01.mod`; manifest resolved `CM_Baremetal` from the local K1 texture pack.
+
 ### [2026-06-17] Map Studio Authored Pathing Compiler
 
 Owner: LordVaderCW

@@ -49,6 +49,12 @@ from .authored_module_project import (
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
+from .authored_room_materials import (
+    AuthoredRoomMaterialPreflight,
+    DEFAULT_AUTHORED_ROOM_TEXTURE,
+    compile_authored_room_material_preflight,
+    normalize_authored_room_texture,
+)
 from .module_format import LYTLayout, VISData, WOKData
 
 
@@ -64,7 +70,7 @@ class DevModuleSmokeRequest:
     depth: float = 10.0
     wall_height: float = 3.0
     surface_id: int | str = 4
-    room_texture: str = "default"
+    room_texture: str = DEFAULT_AUTHORED_ROOM_TEXTURE
     player_start: tuple[float, float, float] = (0.0, -3.0, 0.0)
     player_facing: float = 0.0
     test_placeable_resref: str = "plc_bench"
@@ -150,6 +156,7 @@ class AuthoredDevModule:
     project: AuthoredModuleProject | None = None
     metadata_provenance: dict[str, Any] = field(default_factory=dict)
     pathing_provenance: dict[str, Any] = field(default_factory=dict)
+    material_preflight: AuthoredRoomMaterialPreflight | None = None
     resources: dict[tuple[str, str], Any] = field(default_factory=dict)
     packaged_resources: list[PackagedModuleResource] = field(default_factory=list)
     resource_summaries: list[DevModuleResourceSummary] = field(default_factory=list)
@@ -291,7 +298,7 @@ def _room_primitive(request: DevModuleSmokeRequest) -> RectangularRoomPrimitive:
         depth=float(request.depth),
         wall_height=float(request.wall_height),
         floor_surface_id=resolve_walkmesh_surface_id(request.surface_id),
-        texture=str(request.room_texture or ""),
+        texture=normalize_authored_room_texture(request.room_texture),
         include_doorway_marker=True,
     )
 
@@ -594,6 +601,12 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         anchors=tuple(path_anchors),
     )
     template_checks, template_warnings = _validate_gameplay_templates(request, placements)
+    material_game_root = _game_root_for_template_check(request) if request.include_game_template_check else ""
+    material_preflight = compile_authored_room_material_preflight(
+        geometry.room_mesh.texture,
+        game_root_dir=material_game_root,
+        require_game_resolution=False,
+    )
     module_state = _ModuleState(name=root, lyt=lyt, vis=vis, room_woks={room: wok}, room_geometry=geometry, placements=placements)
 
     packaged = [
@@ -621,10 +634,12 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         for (resref, restype), _resource in sorted(resources.items())
     ]
     warnings = list(template_warnings)
+    warnings.extend(material_preflight.warnings)
     if not request.include_reference_check:
         warnings.append("Game-library template reference validation is disabled for this smoke package.")
     blocking = [check.message for check in walkability_checks if not check.ok]
     blocking.extend(check.message for check in template_checks if not check.ok)
+    blocking.extend(material_preflight.blocking_issues)
     project_validation = validate_authored_module_project(project)
     warnings.extend(project_validation.warnings)
     blocking.extend(project_validation.blocking_issues)
@@ -635,6 +650,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         project=project,
         metadata_provenance=dict(compiled_metadata.metadata),
         pathing_provenance=dict(compiled_pathing.metadata),
+        material_preflight=material_preflight,
         resources=resources,
         packaged_resources=packaged,
         resource_summaries=summaries,
@@ -926,9 +942,21 @@ def _augment_manifest(
             else "unknown",
             "primitive": authored.module.room_geometry.metadata.get("primitive") if authored.module.room_geometry else "unknown",
             "room_mesh": authored.module.room_geometry.room_mesh.name if authored.module.room_geometry else "",
+            "texture": authored.module.room_geometry.room_mesh.texture if authored.module.room_geometry else "",
             "helper_meshes": [mesh.name for mesh in authored.module.room_geometry.helper_meshes] if authored.module.room_geometry else [],
             "derived_wok": True,
             "metadata": dict(authored.module.room_geometry.metadata) if authored.module.room_geometry else {},
+        },
+        "authored_materials": {
+            "source": authored.material_preflight.metadata.get("source", "src.core.modules.authored_room_materials")
+            if authored.material_preflight
+            else "unknown",
+            "texture": authored.material_preflight.texture if authored.material_preflight else "",
+            "resolved": authored.material_preflight.resolved if authored.material_preflight else False,
+            "source_path": authored.material_preflight.source_path if authored.material_preflight else "",
+            "source_kind": authored.material_preflight.source_kind if authored.material_preflight else "",
+            "message": authored.material_preflight.message if authored.material_preflight else "",
+            "metadata": dict(authored.material_preflight.metadata) if authored.material_preflight else {},
         },
         "authored_placements": {
             "source": "src.core.modules.authored_module_objects",
