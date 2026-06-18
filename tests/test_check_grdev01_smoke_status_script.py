@@ -70,6 +70,9 @@ def test_t2619_status_reports_export_candidate_ready_for_manual_install(tmp_path
     assert payload["proof"]["manual_proof_required"] is True
     assert payload["installed"]["checked"] is False
     assert payload["installed"]["package_sha256"] == payload["package_verification"]["module_sha256"]
+    assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
+    assert payload["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
+    assert "record_grdev01_smoke_proof.py" in payload["launch_handoff"]["proof_recording_command_template"]
 
 
 def test_t2619_status_reports_installed_variant_ready_for_game_test(tmp_path: Path) -> None:
@@ -95,6 +98,8 @@ def test_t2619_status_reports_installed_variant_ready_for_game_test(tmp_path: Pa
     assert payload["ready_for_game_launch"] is True
     assert payload["next_action"].startswith("Launch KOTOR")
     assert payload["proof"]["game_tested"] is False
+    assert payload["launch_handoff"]["elevated_launch_script_path"].endswith("grdev01_launch_kotor_as_admin.cmd")
+    assert payload["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
 
 
 def test_t2619_status_reports_game_tested_after_complete_proof(tmp_path: Path) -> None:

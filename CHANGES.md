@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Writes Dev Smoke Launch Handoff
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / dev-module smoke test / game-proof handoff
+
+- Added launch-handoff metadata to the `grdev01` dev smoke proof manifest, including resolved Modules folder, game root, expected executable, dry-run launch helper, elevated launcher, proof-recorder script, and warp command.
+- Generated a `grdev01_record_game_proof.cmd` convenience recorder for the T2601 dev smoke path so testers can record real screenshot/video-backed proof after running `warp grdev01`.
+- Logged the new launch/proof handoff paths from the Map Studio dev-test staging action and corrected the status script so T2601 manifests point at `record_grdev01_smoke_proof.py` while authored manifests still point at the authored proof recorder.
+- Mirrored the dev smoke handoff changes into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests/test_dev_module_smoke.py::test_t2601_install_prep_writes_manual_game_test_checklist tests/test_dev_module_smoke.py::test_t2601_install_prep_copies_to_modules_without_overwrite tests/test_dev_module_smoke.py::test_t2601_install_prep_can_auto_detect_modules_dir_from_settings -q --basetemp .pytest_tmp_map_dev_handoff_core`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py::test_t2619_status_reports_export_candidate_ready_for_manual_install tests/test_check_grdev01_smoke_status_script.py::test_t2619_status_reports_installed_variant_ready_for_game_test tests/test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_authored_smoke_package_before_manual_install -q --basetemp .pytest_tmp_map_dev_handoff_status`
+- `python -m pytest tests/test_map_studio_dev_test_staging.py -q --basetemp .pytest_tmp_map_dev_handoff_ui`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py tests/test_launch_grdev01_smoke_script.py tests/test_record_grdev01_smoke_proof_script.py -q --basetemp .pytest_tmp_map_dev_handoff_scripts`
+- `python -m pytest tests/test_dev_module_smoke.py tests/test_map_studio_dev_test_staging.py -q --basetemp .pytest_tmp_map_dev_handoff_smoke`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/dev_module_smoke.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/dev_module_smoke.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py scripts/check_grdev01_smoke_status.py`
+
 ### [2026-06-18] Map Studio Draws Terrain Walkability Overlay
 
 Owner: LordVaderCW

@@ -374,13 +374,23 @@ def test_t2601_install_prep_writes_manual_game_test_checklist(tmp_path: Path) ->
     assert result.installed_module_path == ""
     assert Path(result.checklist_path).is_file()
     assert Path(result.proof_manifest_path).is_file()
+    assert Path(result.proof_recording_script_path).is_file()
     assert "No KOTOR Modules folder was supplied" in "\n".join(result.warnings)
     checklist = Path(result.checklist_path).read_text(encoding="utf-8")
     assert "warp grdev01" in checklist
+    assert "Proof recorder:" in checklist
+    proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
+    assert "record_grdev01_smoke_proof.py" in proof_recorder
+    assert "--module-loads-in-game" in proof_recorder
+    assert "Drag or paste screenshot/video evidence path" in proof_recorder
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["manual_proof_required"] is True
+    assert proof["game_tested"] is False
     assert proof["install"]["installed"] is False
     assert proof["package"]["verification"]["ok"] is True
+    assert proof["launch_handoff"]["warp_command"] == "warp grdev01"
+    assert proof["launch_handoff"]["proof_recording_script_path"] == result.proof_recording_script_path
+    assert proof["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
     assert proof["acceptance_checks"] == [
         "module_loads_in_game",
         "player_spawns_on_floor",
@@ -411,6 +421,11 @@ def test_t2601_install_prep_copies_to_modules_without_overwrite(tmp_path: Path) 
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["install"]["installed"] is True
     assert proof["install"]["installed_module_path"] == str(installed)
+    assert proof["launch_handoff"]["resolved_modules_dir"] == str(modules_dir)
+    assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
+    assert proof["launch_handoff"]["expected_executable_path"] == str(modules_dir.parent / "swkotor.exe")
+    assert proof["launch_handoff"]["elevated_launch_script_path"] == result.elevated_launch_script_path
+    assert proof["launch_handoff"]["proof_recording_script_path"] == result.proof_recording_script_path
 
     installed.write_bytes(b"existing")
     blocked = prepare_dev_test_module_install(
@@ -485,6 +500,10 @@ def test_t2601_install_prep_can_auto_detect_modules_dir_from_settings(tmp_path: 
     assert result.ok is True
     assert result.code == "installed"
     assert result.resolved_modules_dir == str(modules_dir)
+    assert result.resolved_game_root_dir == str(game_root)
+    assert "launch_grdev01_smoke_test.py" in result.launch_helper_command
+    assert Path(result.elevated_launch_script_path).is_file()
+    assert Path(result.proof_recording_script_path).is_file()
     assert result.installed_module_path == str(installed)
     assert installed.is_file()
     assert any("Auto-detected KOTOR Modules folder" in warning for warning in result.warnings)

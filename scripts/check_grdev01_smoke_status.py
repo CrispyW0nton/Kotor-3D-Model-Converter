@@ -201,6 +201,12 @@ def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> d
     handoff = proof.get("launch_handoff") if isinstance(proof.get("launch_handoff"), dict) else {}
     warp_command = str(handoff.get("warp_command") or proof.get("warp_command") or "warp grdev01")
     proof_path = str(proof_manifest)
+    task = str(proof.get("task") or "").strip().upper()
+    recorder_script = str(handoff.get("proof_recording_script_path") or "")
+    if task == "T2601":
+        recorder_command_script = "scripts/record_grdev01_smoke_proof.py"
+    else:
+        recorder_command_script = "scripts/record_authored_module_game_proof.py"
     return {
         "warp_command": warp_command,
         "resolved_modules_dir": str(handoff.get("resolved_modules_dir") or ""),
@@ -208,9 +214,9 @@ def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> d
         "expected_executable_path": str(handoff.get("expected_executable_path") or ""),
         "launch_helper_command": str(handoff.get("launch_helper_command") or ""),
         "elevated_launch_script_path": str(handoff.get("elevated_launch_script_path") or ""),
-        "proof_recording_script_path": str(handoff.get("proof_recording_script_path") or ""),
+        "proof_recording_script_path": recorder_script,
         "proof_recording_command_template": (
-            f'python scripts/record_authored_module_game_proof.py --proof-manifest "{proof_path}" '
+            f'python "{recorder_command_script}" --proof-manifest "{proof_path}" '
             "--evidence <screenshot-or-video> --module-loads-in-game --player-spawns-on-floor "
             "--test-placeable-visible --player-can-walk-on-floor"
         ),

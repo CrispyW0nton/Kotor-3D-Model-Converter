@@ -509,6 +509,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Game-test checklist: {result.checklist_path}")
         if result.proof_manifest_path:
             self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if getattr(result, "launch_helper_command", ""):
+            self._log(f"Launch dry-run helper: {result.launch_helper_command}")
+        if getattr(result, "elevated_launch_script_path", ""):
+            self._log(f"Elevated launch helper: {result.elevated_launch_script_path}")
+        if getattr(result, "proof_recording_script_path", ""):
+            self._log(f"Proof recorder: {result.proof_recording_script_path}")
         for warning in result.warnings:
             self._log(f"Warning: {warning}")
         for issue in result.blocking_issues:

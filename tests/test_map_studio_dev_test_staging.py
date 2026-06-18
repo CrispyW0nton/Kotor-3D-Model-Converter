@@ -40,6 +40,9 @@ def test_t2641_controller_stages_grdev01_smoke_module(tmp_path: Path) -> None:
     assert Path(result.export_result.module_path).is_file()
     assert Path(result.checklist_path).is_file()
     assert Path(result.proof_manifest_path).is_file()
+    assert Path(result.proof_recording_script_path).is_file()
+    assert result.launch_helper_command == ""
+    assert result.elevated_launch_script_path == ""
 
 
 def test_t2641_export_panel_exposes_dev_test_stage_action() -> None:
@@ -54,6 +57,7 @@ def test_t2641_export_panel_exposes_dev_test_stage_action() -> None:
     assert "mapStudioStageDevTestModuleButton" in panel_source
     assert "Stage grdev01 Dev Test Module" in panel_source
     assert "self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)" in window_source
+    assert "Proof recorder:" in window_source
 
 
 def test_t2642_builder_tab_exposes_authored_dev_room_action() -> None:

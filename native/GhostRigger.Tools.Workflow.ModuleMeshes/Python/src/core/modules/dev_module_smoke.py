@@ -220,6 +220,10 @@ class DevModuleInstallPrepResult:
     installed_module_path: str = ""
     backup_module_path: str = ""
     resolved_modules_dir: str = ""
+    resolved_game_root_dir: str = ""
+    launch_helper_command: str = ""
+    elevated_launch_script_path: str = ""
+    proof_recording_script_path: str = ""
     checklist_path: str = ""
     proof_manifest_path: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -1313,6 +1317,16 @@ def _game_modules_dir_from_root(root: str | Path) -> Path:
     return Path(root) / "Modules"
 
 
+def _derive_game_root_dir_from_modules_dir(modules_dir_text: str) -> str:
+    if not modules_dir_text:
+        return ""
+    return str(Path(modules_dir_text).parent)
+
+
+def _game_executable_name(game: str) -> str:
+    return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
+
+
 def _candidate_game_roots(game: str, *, explicit_root: str = "", settings_path: str = "") -> list[Path]:
     game_tag = str(game or "K1").upper()
     roots: list[str] = []
@@ -1385,6 +1399,115 @@ def _next_install_backup_path(path: Path) -> Path:
     raise RuntimeError(f"Could not find an available backup path for {path}.")
 
 
+def _dev_launch_helper_command(*, proof_manifest_path: Path, game: str, game_root_dir: str) -> str:
+    if not game_root_dir or str(game or "").upper() != "K1":
+        return ""
+    return (
+        "python scripts/launch_grdev01_smoke_test.py "
+        f'--proof-manifest "{proof_manifest_path}" '
+        f'--game-root-dir "{game_root_dir}" '
+        "--dry-run"
+    )
+
+
+def _powershell_single_quoted(value: str | Path) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _write_dev_elevated_launch_script(
+    *,
+    output_root: Path,
+    module_root: str,
+    game: str,
+    game_root_dir: str,
+    proof_manifest_path: Path,
+) -> str:
+    if not game_root_dir:
+        return ""
+    executable = Path(game_root_dir) / _game_executable_name(game)
+    script_path = output_root / f"{module_root}_launch_kotor_as_admin.cmd"
+    ps_command = (
+        "Start-Process "
+        f"-FilePath {_powershell_single_quoted(executable)} "
+        f"-WorkingDirectory {_powershell_single_quoted(game_root_dir)} "
+        "-Verb RunAs"
+    )
+    lines = [
+        "@echo off",
+        "setlocal",
+        f"echo GhostRigger Map Studio dev smoke test: {module_root}",
+        f"echo Expected module package is installed in: {Path(game_root_dir) / 'Modules'}",
+        f"echo This helper starts KOTOR with Windows elevation, then you must run: warp {module_root}",
+        f"echo Proof manifest: {proof_manifest_path}",
+        "echo.",
+        f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{ps_command}"',
+        "if errorlevel 1 (",
+        "  echo KOTOR did not launch. Start it manually as administrator and keep using this checklist.",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        "echo.",
+        f"echo After KOTOR opens, load a save, open the console, and run: warp {module_root}",
+        "echo Capture screenshot/video evidence, then record proof with GhostRigger's proof recorder.",
+        "pause",
+    ]
+    script_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(script_path)
+
+
+def _record_dev_proof_script_path() -> str:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        script_path = parent / "scripts" / "record_grdev01_smoke_proof.py"
+        if script_path.is_file():
+            return str(script_path)
+    return "scripts\\record_grdev01_smoke_proof.py"
+
+
+def _write_dev_proof_recording_script(
+    *,
+    output_root: Path,
+    module_root: str,
+    proof_manifest_path: Path,
+) -> str:
+    script_path = output_root / f"{module_root}_record_game_proof.cmd"
+    recorder_path = _record_dev_proof_script_path()
+    proof_path = proof_manifest_path.resolve()
+    lines = [
+        "@echo off",
+        "setlocal",
+        f"echo GhostRigger Map Studio dev proof recorder: {module_root}",
+        f"echo Proof manifest: {proof_path}",
+        "echo.",
+        f"echo Run this only after KOTOR has loaded the module with: warp {module_root}",
+        "echo Confirm the player spawns on the generated floor, the test placeable is visible, and walking works.",
+        "echo.",
+        "set /p EVIDENCE=Drag or paste screenshot/video evidence path here, then press Enter: ",
+        "set \"EVIDENCE=%EVIDENCE:\"=%\"",
+        "if \"%EVIDENCE%\"==\"\" (",
+        "  echo No evidence path supplied. Proof was not recorded.",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        (
+            f'python "{recorder_path}" --proof-manifest "{proof_path}" '
+            '--evidence "%EVIDENCE%" --tester "%USERNAME%" '
+            "--module-loads-in-game --player-spawns-on-floor "
+            "--test-placeable-visible --player-can-walk-on-floor"
+        ),
+        "if errorlevel 1 (",
+        "  echo Proof recording did not complete. Check the message above.",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        "echo.",
+        "echo Proof recorded. Keep the evidence file with the packaged module.",
+        "pause",
+    ]
+    script_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(script_path)
+
+
 def _game_test_steps(module_root: str) -> list[str]:
     return [
         f"Install/copy `{module_root}.mod` into the selected KOTOR `Modules` folder.",
@@ -1405,16 +1528,37 @@ def _write_install_proof_files(
     game: str,
     install_path: str,
     backup_path: str,
+    modules_dir: str,
+    game_root_dir: str,
     installed: bool,
     dry_run: bool,
     warnings: list[str],
     blocking: list[str],
-) -> tuple[str, str]:
+) -> tuple[str, str, str, str]:
     output_root.mkdir(parents=True, exist_ok=True)
     module_root = export_result.module_root or "grdev01"
     checklist_path = output_root / f"{module_root}_in_game_smoke_checklist.md"
     proof_manifest_path = output_root / f"{module_root}_in_game_smoke_manifest.json"
     steps = _game_test_steps(module_root)
+    executable_name = _game_executable_name(game)
+    executable_path = str(Path(game_root_dir) / executable_name) if game_root_dir else executable_name
+    launch_helper_command = _dev_launch_helper_command(
+        proof_manifest_path=proof_manifest_path,
+        game=game,
+        game_root_dir=game_root_dir,
+    )
+    elevated_launch_script_path = _write_dev_elevated_launch_script(
+        output_root=output_root,
+        module_root=module_root,
+        game=game,
+        game_root_dir=game_root_dir,
+        proof_manifest_path=proof_manifest_path,
+    )
+    proof_recording_script_path = _write_dev_proof_recording_script(
+        output_root=output_root,
+        module_root=module_root,
+        proof_manifest_path=proof_manifest_path,
+    )
     checklist_lines = [
         f"# {module_root} In-Game Smoke Test",
         "",
@@ -1423,6 +1567,12 @@ def _write_install_proof_files(
         f"- Package: `{export_result.module_path}`",
         f"- Install target: `{install_path or '(not installed)'}`",
         f"- Previous module backup: `{backup_path or '(none)'}`",
+        f"- Modules folder: `{modules_dir or '(not supplied)'}`",
+        f"- Game root: `{game_root_dir or '(not supplied)'}`",
+        f"- Expected executable: `{executable_path}`",
+        f"- Dry-run helper: `{launch_helper_command or '(manual launch)'}`",
+        f"- Elevated launch helper: `{elevated_launch_script_path or '(not written)'}`",
+        f"- Proof recorder: `{proof_recording_script_path}`",
         f"- Warp command: `warp {module_root}`",
         "",
         "## Steps",
@@ -1458,7 +1608,18 @@ def _write_install_proof_files(
             "backup_module_path": backup_path,
         },
         "manual_proof_required": True,
+        "game_tested": False,
         "warp_command": f"warp {module_root}",
+        "launch_handoff": {
+            "resolved_modules_dir": modules_dir,
+            "resolved_game_root_dir": game_root_dir,
+            "expected_executable_path": executable_path,
+            "launch_helper_command": launch_helper_command,
+            "elevated_launch_script_path": elevated_launch_script_path,
+            "proof_recording_script_path": proof_recording_script_path,
+            "dry_run_first": bool(launch_helper_command),
+            "warp_command": f"warp {module_root}",
+        },
         "acceptance_checks": [
             "module_loads_in_game",
             "player_spawns_on_floor",
@@ -1471,7 +1632,7 @@ def _write_install_proof_files(
         "blocking_issues": blocking,
     }
     proof_manifest_path.write_text(json.dumps(proof_manifest, indent=2), encoding="utf-8")
-    return str(checklist_path), str(proof_manifest_path)
+    return str(checklist_path), str(proof_manifest_path), elevated_launch_script_path, proof_recording_script_path
 
 
 def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None = None) -> DevModuleInstallPrepResult:
@@ -1487,6 +1648,7 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
     install_path = ""
     backup_path = ""
     modules_dir_text = request.game_modules_dir
+    resolved_game_root_dir = request.game_root_dir
     if not modules_dir_text and request.auto_detect_game_modules_dir:
         modules_dir_text = discover_kotor_modules_dir(
             smoke_request.game,
@@ -1497,6 +1659,8 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
             warnings.append(f"Auto-detected KOTOR Modules folder: {modules_dir_text}")
         else:
             warnings.append("Could not auto-detect a KOTOR Modules folder; package is staged for manual install.")
+    if not resolved_game_root_dir and modules_dir_text:
+        resolved_game_root_dir = _derive_game_root_dir_from_modules_dir(modules_dir_text)
     if not export_result.ok:
         blocking.append(export_result.message or "Smoke module export failed.")
     else:
@@ -1521,12 +1685,14 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
                         warnings.append(f"Backed up existing {destination.name} to {backup}.")
                     shutil.copy2(export_result.module_path, destination)
                     installed = True
-    checklist_path, proof_manifest_path = _write_install_proof_files(
+    checklist_path, proof_manifest_path, elevated_launch_script_path, proof_recording_script_path = _write_install_proof_files(
         output_root=output_root,
         export_result=export_result,
         game=smoke_request.game,
         install_path=install_path,
         backup_path=backup_path,
+        modules_dir=modules_dir_text,
+        game_root_dir=resolved_game_root_dir,
         installed=installed,
         dry_run=request.dry_run,
         warnings=warnings,
@@ -1544,6 +1710,14 @@ def prepare_dev_test_module_install(request: DevModuleInstallPrepRequest | None 
         installed_module_path=install_path if installed else "",
         backup_module_path=backup_path,
         resolved_modules_dir=modules_dir_text,
+        resolved_game_root_dir=resolved_game_root_dir,
+        launch_helper_command=_dev_launch_helper_command(
+            proof_manifest_path=Path(proof_manifest_path),
+            game=smoke_request.game,
+            game_root_dir=resolved_game_root_dir,
+        ),
+        elevated_launch_script_path=elevated_launch_script_path,
+        proof_recording_script_path=proof_recording_script_path,
         checklist_path=checklist_path,
         proof_manifest_path=proof_manifest_path,
         warnings=warnings,
