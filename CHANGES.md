@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Enriches Authored Smoke Proof Contracts
+
+Owner: LordVaderCW
+Task: T2681
+Subsystem: Map Studio / authored module export / T2601 smoke proof manifest / native Python payloads
+
+- Added authored-module smoke expectations for player entry position, authored placeables, waypoints, walkability checks, and generated pathing anchors to the export manifest and install-proof manifest.
+- Preserved the current staged export flow while carrying build metadata through `AuthoredModuleExportResult` so proof artifacts can tell a modder exactly what to verify during `warp grdev01`.
+- Mirrored the authored export payload update into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_smoke_contract`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Adds Gameplay Anchors to Authored Pathing
 
 Owner: LordVaderCW

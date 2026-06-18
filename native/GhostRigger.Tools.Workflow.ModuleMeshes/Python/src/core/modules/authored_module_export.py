@@ -92,6 +92,7 @@ class AuthoredModuleExportResult:
     resources: list[AuthoredModuleResourceSummary] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     blocking_issues: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
     message: str = ""
     code: str = "not_run"
 
@@ -322,6 +323,92 @@ def _path_anchors_from_walkability(placements: AuthoredGameplayPlacement, checks
     return tuple(anchors)
 
 
+def _vec3_to_manifest(value: Any) -> list[float]:
+    values = list(value or (0.0, 0.0, 0.0))
+    while len(values) < 3:
+        values.append(0.0)
+    return [float(values[0]), float(values[1]), float(values[2])]
+
+
+def _walkability_to_manifest(walkability: Any) -> dict[str, Any]:
+    if walkability is None:
+        return {
+            "ok": False,
+            "checks": [],
+            "warnings": [],
+            "blocking_issues": ["No walkability validation was run."],
+        }
+    return {
+        "ok": bool(getattr(walkability, "ok", False)),
+        "checks": [
+            {
+                "label": str(getattr(check, "label", "")),
+                "position": _vec3_to_manifest(getattr(check, "position", (0.0, 0.0, 0.0))),
+                "ok": bool(getattr(check, "ok", False)),
+                "face_index": int(getattr(check, "face_index", -1)),
+                "surface_id": int(getattr(check, "surface_id", -1)),
+                "message": str(getattr(check, "message", "")),
+            }
+            for check in list(getattr(walkability, "checks", ()) or ())
+        ],
+        "warnings": list(getattr(walkability, "warnings", ()) or ()),
+        "blocking_issues": list(getattr(walkability, "blocking_issues", ()) or ()),
+    }
+
+
+def _positioned_expectations(kind: str, items: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, item in enumerate(tuple(items or ())):
+        if not hasattr(item, "position"):
+            continue
+        template = str(getattr(item, "template_resref", "") or "")
+        tag = str(getattr(item, "tag", "") or "")
+        rows.append(
+            {
+                "kind": kind,
+                "index": index,
+                "template_resref": template,
+                "tag": tag,
+                "label": f"{kind}:{tag or template or f'{kind}_{index + 1}'}",
+                "position": _vec3_to_manifest(getattr(item, "position")),
+                "bearing": float(getattr(item, "bearing", 0.0) or 0.0),
+            }
+        )
+    return rows
+
+
+def _smoke_expectations_from_build_parts(
+    project: AuthoredModuleProject,
+    *,
+    walkability: dict[str, Any],
+    pathing: dict[str, Any],
+) -> dict[str, Any]:
+    placements = project.placements
+    expected_entry = {
+        "label": "entry_point",
+        "area_resref": placements.entry_point.area_resref,
+        "position": _vec3_to_manifest(placements.entry_point.position),
+        "facing": float(placements.entry_point.facing),
+    }
+    expected_placeables = _positioned_expectations("placeable", placements.placeables)
+    expected_waypoints = _positioned_expectations("waypoint", placements.waypoints)
+    return {
+        "expected_entry_point": expected_entry,
+        "expected_placeables": expected_placeables,
+        "expected_waypoints": expected_waypoints,
+        "expected_runtime_observations": {
+            "player_start_area": expected_entry["area_resref"],
+            "player_start_position": expected_entry["position"],
+            "test_placeable_tags": [row["tag"] for row in expected_placeables if row["tag"]],
+            "waypoint_tags": [row["tag"] for row in expected_waypoints if row["tag"]],
+        },
+        "walkability": walkability,
+        "all_walkability_checks_passed": bool(walkability.get("ok", False)),
+        "pathing": pathing,
+        "pathing_anchor_labels": list(pathing.get("anchor_labels", []) or []),
+    }
+
+
 def _placement_counts(placements: AuthoredGameplayPlacement) -> dict[str, int]:
     return {
         "creatures": len(tuple(placements.creatures or ())),
@@ -446,6 +533,13 @@ def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild
         room_geometry=room_geometries,
         placements=project.placements,
     )
+    walkability_metadata = _walkability_to_manifest(walkability)
+    pathing_metadata = dict(pathing.metadata) if pathing is not None else {}
+    smoke_expectations = _smoke_expectations_from_build_parts(
+        project,
+        walkability=walkability_metadata,
+        pathing=pathing_metadata,
+    )
     return AuthoredModuleBuild(
         module_root=root,
         game=project.game,
@@ -462,7 +556,9 @@ def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild
             "room_count": len(room_geometries),
             "resource_count": len(resources),
             "gameplay_counts": _placement_counts(project.placements),
-            "pathing": dict(pathing.metadata) if pathing is not None else {},
+            "walkability": walkability_metadata,
+            "pathing": pathing_metadata,
+            "smoke_expectations": smoke_expectations,
         },
     )
 
@@ -501,6 +597,9 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             for resref, geometry in sorted(build.module.room_geometry.items())
         ],
         "gameplay_counts": _placement_counts(build.project.placements),
+        "walkability": dict(build.metadata.get("walkability", {})),
+        "pathing": dict(build.metadata.get("pathing", {})),
+        "smoke_expectations": dict(build.metadata.get("smoke_expectations", {})),
         "resources": [summary.__dict__ for summary in build.resource_summaries],
         "package_ok": bool(package_result.ok),
         "package_verification": _verification_to_manifest(verification),
@@ -545,6 +644,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             resources=build.resource_summaries,
             warnings=build.warnings,
             blocking_issues=build.blocking_issues,
+            metadata=dict(build.metadata),
             message=f"Authored Map Studio module preflight found {len(build.blocking_issues)} blocking issue(s).",
             code="preflight_failed",
         )
@@ -556,6 +656,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             resources=build.resource_summaries,
             warnings=build.warnings + ["Dry run only; no MOD package was written."],
             blocking_issues=build.blocking_issues,
+            metadata=dict(build.metadata),
             message=(
                 f"Authored Map Studio module dry run passed for {build.module_root}."
                 if not build.blocking_issues
@@ -603,6 +704,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
         resources=build.resource_summaries,
         warnings=build.warnings + package_result.warnings + verification_warnings,
         blocking_issues=build.blocking_issues + package_result.blocking_issues + verification_blocking,
+        metadata=dict(build.metadata),
         message=(
             f"Authored Map Studio module exported: {package_result.module_path}"
             if ok
@@ -713,23 +815,31 @@ def _authored_smoke_contract_from_parts(
 
 
 def _authored_smoke_contract(build: AuthoredModuleBuild, verification: DevModulePackageVerification | None) -> dict[str, Any]:
-    return _authored_smoke_contract_from_parts(
+    contract = _authored_smoke_contract_from_parts(
         module_root=build.module_root,
         room_resrefs=tuple(sorted(build.module.room_geometry)),
         built_resources={(summary.resref, summary.restype) for summary in build.resource_summaries},
         verification=verification,
     )
+    expectations = build.metadata.get("smoke_expectations")
+    if isinstance(expectations, dict):
+        contract.update(expectations)
+    return contract
 
 
 def _authored_smoke_contract_from_export_result(export_result: AuthoredModuleExportResult) -> dict[str, Any]:
     module_root = export_result.module_root or "authored"
-    return _authored_smoke_contract_from_parts(
+    contract = _authored_smoke_contract_from_parts(
         module_root=module_root,
         room_resrefs=tuple(export_result.room_resrefs),
         built_resources={(summary.resref, summary.restype) for summary in export_result.resources},
         verification=export_result.package_verification,
         capability_stage="export_candidate" if export_result.ok else "export_blocked",
     )
+    expectations = export_result.metadata.get("smoke_expectations")
+    if isinstance(expectations, dict):
+        contract.update(expectations)
+    return contract
 
 
 def _authored_game_test_steps(module_root: str) -> list[str]:

@@ -72,6 +72,27 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
         "grdev01_room01.mdl",
         "grdev01_room01.mdx",
     }
+    assert contract["expected_entry_point"]["area_resref"] == "grdev01"
+    assert contract["expected_entry_point"]["position"] == [0.0, -3.0, 0.0]
+    assert contract["expected_placeables"] == [
+        {
+            "kind": "placeable",
+            "index": 0,
+            "template_resref": "plc_bench",
+            "tag": "grdev01_test_placeable",
+            "label": "placeable:grdev01_test_placeable",
+            "position": [1.75, 1.5, 0.0],
+            "bearing": 0.0,
+        }
+    ]
+    assert contract["expected_waypoints"][0]["tag"] == "start"
+    assert contract["all_walkability_checks_passed"] is True
+    walkability_by_label = {row["label"]: row for row in contract["walkability"]["checks"]}
+    assert walkability_by_label["entry_point"]["ok"] is True
+    assert walkability_by_label["placeable:grdev01_test_placeable"]["ok"] is True
+    assert walkability_by_label["waypoint:start"]["ok"] is True
+    assert {"entry_point", "placeable:grdev01_test_placeable", "waypoint:start"} <= set(contract["pathing_anchor_labels"])
+    assert authored_manifest["smoke_expectations"]["expected_runtime_observations"]["test_placeable_tags"] == ["grdev01_test_placeable"]
 
 
 def test_t2643_controller_exports_current_kmap_authored_module(tmp_path: Path) -> None:
@@ -226,6 +247,10 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert contract["task"] == "T2601"
     assert contract["all_required_resources_present"] is True
     assert contract["in_game_acceptance_checks"] == proof["acceptance_checks"]
+    assert contract["expected_entry_point"]["position"] == [0.0, -3.0, 0.0]
+    assert contract["expected_placeables"][0]["tag"] == "grdev01_test_placeable"
+    assert contract["all_walkability_checks_passed"] is True
+    assert "placeable:grdev01_test_placeable" in contract["pathing_anchor_labels"]
 
 
 def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp_path: Path) -> None:
