@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Shows Terrain Walkability Feedback
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / terrain authoring / WOK walkability feedback
+
+- Added walkable triangle count, blocked/non-walk triangle count, max slope, and slope warnings to the UI-ready terrain room choice model.
+- Updated the Builder terrain hint to tell modders when sculpted terrain will export blocked `NON_WALK` triangles and suggest smoothing or flattening before game proof.
+- Added focused regressions for both clean terrain and deliberately too-steep terrain so blocked WOK status stays visible in the Builder workflow.
+- Mirrored terrain walkability feedback into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_terrain_builder.py -q --basetemp .pytest_tmp_map_terrain_walkability`
+- `python -m pytest tests\test_authored_room_style.py tests\test_authored_room_presets.py tests\test_authored_terrain_builder.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_terrain_walkability_smoke`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py tests/test_authored_room_operations.py`
+
 ### [2026-06-18] Map Studio Adds Modder Terrain Shape Presets
 
 Owner: LordVaderCW

@@ -266,6 +266,9 @@ def test_t2908_controller_edits_terrain_heightfield_and_remains_exportable() -> 
     assert [choice.room_resref for choice in choices] == ["grterr_room01"]
     assert choices[0].row_count == 5
     assert choices[0].column_count == 5
+    assert choices[0].walkable_triangle_count > 0
+    assert choices[0].non_walk_triangle_count == 0
+    assert "walk / 0 blocked" in choices[0].label
     assert result.readiness is not None
     assert result.readiness.can_preview is True
     assert payload["rooms"][0]["primitive"]["type"] == "terrain_heightfield"
@@ -341,6 +344,31 @@ def test_t2907_controller_applies_terrain_shape_preset_and_repairs_ground_marker
     assert terrain.heights[0][0] < terrain.heights[-1][0]
     assert entry[2] == sample_terrain_height(terrain, x=entry[0], y=entry[1])
     assert not build.blocking_issues
+
+
+def test_t2907_terrain_room_choices_report_blocked_slope_status() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grterr")
+    controller.apply_authored_terrain_operation(
+        operation="set_height",
+        room_resref="grterr_room01",
+        row_index=2,
+        column_index=2,
+        height=4.0,
+    )
+
+    choices = controller.authored_terrain_room_choices()
+
+    assert len(choices) == 1
+    assert choices[0].walkable_triangle_count + choices[0].non_walk_triangle_count == 32
+    assert choices[0].non_walk_triangle_count > 0
+    assert choices[0].max_slope_degrees > 35.0
+    assert "blocked" in choices[0].label
 
 
 def test_t2670_controller_sets_composition_primitive_transform_and_preserves_exportable_wok() -> None:
@@ -722,6 +750,9 @@ def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
         assert "mapStudioTerrainRoomComboBox" in panel_source
         assert "mapStudioTerrainShapePresetComboBox" in panel_source
         assert "mapStudioApplyTerrainShapePresetButton" in panel_source
+        assert "walkable_triangle_count" in panel_source
+        assert "non_walk_triangle_count" in panel_source
+        assert "Blocked triangles export as NON_WALK" in panel_source
         assert "mapStudioTerrainRowSpinBox" in panel_source
         assert "mapStudioSetTerrainHeightButton" in panel_source
         assert "mapStudioSmoothTerrainButton" in panel_source

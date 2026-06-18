@@ -29,6 +29,7 @@ from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import compile_authored_room_material_preflight
 from .authored_terrain_builder import (
     TerrainHeightfieldPrimitive,
+    analyse_terrain_slopes,
     apply_terrain_shape_preset,
     flatten_terrain_heightfield,
     offset_terrain_heightfield_samples,
@@ -111,7 +112,11 @@ class AuthoredTerrainRoomChoice:
     column_count: int
     min_height: float
     max_height: float
+    max_slope_degrees: float
+    walkable_triangle_count: int
+    non_walk_triangle_count: int
     room_index: int
+    warnings: tuple[str, ...] = ()
 
 
 _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
@@ -209,14 +214,22 @@ def authored_terrain_room_choices(project: AuthoredModuleProject) -> tuple[Autho
         row_count = len(rows)
         column_count = len(rows[0]) if rows else 0
         min_height, max_height = terrain_height_range(primitive)
+        report = analyse_terrain_slopes(primitive)
         choices.append(
             AuthoredTerrainRoomChoice(
                 room_resref=resref,
-                label=f"{resref} ({row_count}x{column_count}, {min_height:.2f}..{max_height:.2f} m)",
+                label=(
+                    f"{resref} ({row_count}x{column_count}, {min_height:.2f}..{max_height:.2f} m, "
+                    f"{report.walkable_triangle_count} walk / {report.non_walk_triangle_count} blocked)"
+                ),
                 row_count=row_count,
                 column_count=column_count,
                 min_height=float(min_height),
                 max_height=float(max_height),
+                max_slope_degrees=float(report.max_slope_degrees),
+                walkable_triangle_count=int(report.walkable_triangle_count),
+                non_walk_triangle_count=int(report.non_walk_triangle_count),
+                warnings=tuple(report.warnings),
                 room_index=index,
             )
         )

@@ -480,6 +480,10 @@ class BuilderTab(QtWidgets.QWidget):
                 "column_count": int(getattr(choice, "column_count", 0) or 0),
                 "min_height": float(getattr(choice, "min_height", 0.0) or 0.0),
                 "max_height": float(getattr(choice, "max_height", 0.0) or 0.0),
+                "max_slope_degrees": float(getattr(choice, "max_slope_degrees", 0.0) or 0.0),
+                "walkable_triangle_count": int(getattr(choice, "walkable_triangle_count", 0) or 0),
+                "non_walk_triangle_count": int(getattr(choice, "non_walk_triangle_count", 0) or 0),
+                "warnings": tuple(getattr(choice, "warnings", ()) or ()),
                 "room_index": int(getattr(choice, "room_index", 0) or 0),
             }
             self.terrainRoomComboBox.addItem(label, data)
@@ -564,9 +568,19 @@ class BuilderTab(QtWidgets.QWidget):
         if not enabled:
             self.terrainHintLabel.setText("Create a terrain heightfield preset to sculpt terrain samples.")
             return
-        self.terrainHintLabel.setText(
-            f"Editing {data.get('room_resref')}: {row_count}x{column_count} samples, height range {data.get('min_height', 0.0):.2f}..{data.get('max_height', 0.0):.2f} m. Mesh and WOK regenerate together."
+        blocked = int(data.get("non_walk_triangle_count", 0) or 0)
+        warnings = tuple(data.get("warnings", ()) or ())
+        hint = (
+            f"Editing {data.get('room_resref')}: {row_count}x{column_count} samples, "
+            f"height {data.get('min_height', 0.0):.2f}..{data.get('max_height', 0.0):.2f} m. "
+            f"WOK: {int(data.get('walkable_triangle_count', 0) or 0)} walkable / {blocked} blocked, "
+            f"max slope {float(data.get('max_slope_degrees', 0.0) or 0.0):.1f} deg."
         )
+        if blocked:
+            hint += " Blocked triangles export as NON_WALK; smooth or flatten slopes before game proof."
+        if warnings:
+            hint += f" Warning: {warnings[0]}"
+        self.terrainHintLabel.setText(hint)
 
     def _emit_terrain_shape_preset(self) -> None:
         shape = self._current_terrain_shape_data()
