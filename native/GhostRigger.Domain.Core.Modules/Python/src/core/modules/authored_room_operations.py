@@ -562,6 +562,49 @@ def set_authored_room_composition_primitive_dimensions(
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
+def remove_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredModuleProject:
+    """Remove a named editable primitive from a composition room."""
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Removing a composition primitive requires a primitive name.")
+    primitives = [primitive for primitive in composition.primitives if _primitive_name(primitive) != target]
+    if len(primitives) == len(tuple(composition.primitives)):
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
+    updated_composition = replace(
+        composition,
+        primitives=tuple(primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_removed_primitive": target,
+        },
+    )
+    rooms[room_index] = replace(
+        room,
+        primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+        composition=updated_composition if room.composition is not None else room.composition,
+        metadata={
+            **dict(room.metadata),
+            "last_operation": "remove_composition_primitive",
+            "last_removed_primitive": target,
+        },
+    )
+    return _replace_rooms(
+        project,
+        tuple(rooms),
+        operation=f"remove_composition_primitive:{target}",
+    )
+
+
 def _vec3_or_existing(value: Any, existing: tuple[float, float, float]) -> tuple[float, float, float]:
     if value is None:
         return existing
@@ -875,6 +918,7 @@ __all__ = [
     "available_authored_composition_primitive_kinds",
     "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
+    "remove_authored_room_composition_primitive",
     "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_transform",
 ]

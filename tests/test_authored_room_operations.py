@@ -312,6 +312,56 @@ def test_t2673_rejects_unknown_primitive_dimension_key() -> None:
         )
 
 
+def test_t2674_controller_removes_composition_primitive_for_builder_tab() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grrem")
+
+    result = controller.remove_authored_room_primitive(
+        room_resref="grrem_room01",
+        primitive_name="grrem_room01_ramp",
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    primitive_payload = payload["rooms"][0]["primitive"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    wok = build.module.room_geometry["grrem_room01"].wok
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert all(item["name"] != "grrem_room01_ramp" for item in primitive_payload["primitives"])
+    assert wok.walkable_face_count() == 4
+    assert not build.blocking_issues
+
+
+def test_t2674_removing_missing_composition_primitive_fails_clearly() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_operations import remove_authored_room_composition_primitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="elevation_test_room",
+        module_root="grrem",
+        game="K1",
+    )
+
+    with pytest.raises(ValueError, match="no primitive named 'missing_cube'"):
+        remove_authored_room_composition_primitive(
+            project,
+            room_resref="grrem_room01",
+            primitive_name="missing_cube",
+        )
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (
@@ -440,3 +490,34 @@ def test_t2673_builder_tab_exposes_primitive_dimension_controls() -> None:
     assert "def _emit_primitive_dimensions" in source
     assert "self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)" in window_source
     assert "self.controller.set_authored_room_primitive_dimensions" in window_source
+
+
+def test_t2674_builder_tab_exposes_remove_composition_primitive_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "roomPrimitiveRemoveRequested" in source
+    assert "mapStudioRemoveCompositionPrimitiveButton" in source
+    assert "def _emit_remove_composition_primitive" in source
+    assert "self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)" in window_source
+    assert "self.controller.remove_authored_room_primitive" in window_source

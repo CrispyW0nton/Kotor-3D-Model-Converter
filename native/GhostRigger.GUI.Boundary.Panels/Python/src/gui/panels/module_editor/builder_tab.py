@@ -13,6 +13,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
     roomPrimitiveDimensionsRequested = QtCore.Signal(str, str, object)
+    roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
 
     ACTIONS = (
@@ -122,6 +123,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.primitivePivotZSpinBox = self._make_transform_spin("mapStudioPrimitivePivotZSpinBox", -1000.0, 1000.0, " m")
         self.applyPrimitiveTransformButton = QtWidgets.QPushButton("Apply Primitive Transform")
         self.applyPrimitiveTransformButton.setObjectName("mapStudioApplyPrimitiveTransformButton")
+        self.removePrimitiveButton = QtWidgets.QPushButton("Remove Selected Primitive")
+        self.removePrimitiveButton.setObjectName("mapStudioRemoveCompositionPrimitiveButton")
         transform_layout.addRow("Primitive:", self.roomPrimitiveTransformComboBox)
         transform_layout.addRow(self.primitiveTransformHintLabel)
         transform_layout.addRow("Move X:", self.primitiveTranslateXSpinBox)
@@ -135,6 +138,7 @@ class BuilderTab(QtWidgets.QWidget):
         transform_layout.addRow("Pivot Y:", self.primitivePivotYSpinBox)
         transform_layout.addRow("Pivot Z:", self.primitivePivotZSpinBox)
         transform_layout.addRow(self.applyPrimitiveTransformButton)
+        transform_layout.addRow(self.removePrimitiveButton)
         layout.addWidget(transform_box)
         dimensions_box = QtWidgets.QGroupBox("Primitive Dimensions")
         dimensions_layout = QtWidgets.QFormLayout(dimensions_box)
@@ -249,6 +253,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
         self.applyPrimitiveTransformButton.clicked.connect(self._emit_primitive_transform)
         self.applyPrimitiveDimensionsButton.clicked.connect(self._emit_primitive_dimensions)
+        self.removePrimitiveButton.clicked.connect(self._emit_remove_composition_primitive)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
@@ -464,6 +469,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.primitivePivotYSpinBox,
             self.primitivePivotZSpinBox,
             self.applyPrimitiveTransformButton,
+            self.removePrimitiveButton,
         ):
             widget.setEnabled(enabled)
         if not enabled:
@@ -562,6 +568,15 @@ class BuilderTab(QtWidgets.QWidget):
                 str(data.get("primitive_name") or ""),
                 values,
             )
+
+    def _emit_remove_composition_primitive(self) -> None:
+        data = self._current_primitive_transform_data()
+        if not data:
+            return
+        self.roomPrimitiveRemoveRequested.emit(
+            str(data.get("room_resref") or ""),
+            str(data.get("primitive_name") or ""),
+        )
 
     def set_gameplay_placement_kinds(self, kinds) -> None:
         """Populate the gameplay placement kind selector from the controller."""

@@ -45,6 +45,7 @@ from .authored_room_operations import (
     available_authored_composition_primitive_kinds,
     authored_room_composition_primitives,
     move_authored_floor_plan_point,
+    remove_authored_room_composition_primitive,
     set_authored_room_composition_primitive_dimensions,
     set_authored_room_composition_primitive_transform,
 )
@@ -425,6 +426,32 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Edited Map Studio room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def remove_authored_room_primitive(self, *, room_resref: str, primitive_name: str):
+        """Remove one authored composition primitive from the current KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = remove_authored_room_composition_primitive(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Removed Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

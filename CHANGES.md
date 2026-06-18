@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Composition Primitive Removal
+
+Owner: LordVaderCW
+Task: T2674
+Subsystem: Map Studio / Builder tab / authored composition primitive removal / native Python payloads
+
+- Added a headless operation for removing a named primitive from an authored composition room.
+- Exposed removal through the Module Editor controller, Builder tab, and standalone Module Editor window using the selected primitive from the transform/dimension editor.
+- Kept room mesh and generated WOK in sync by rebuilding from the updated composition intent.
+- Added focused regression coverage proving removal persists in KMAP payload data, updates the derived walkmesh face count, and fails clearly for missing primitive names.
+- Mirrored the core/controller/panel payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_project.py -q --basetemp .pytest_tmp_map_studio_remove_primitive`
+
 ### [2026-06-18] Map Studio Adds Composition Primitive Dimension Editing
 
 Owner: LordVaderCW
