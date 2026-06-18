@@ -38,7 +38,7 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     primitive_geometry = compile_authored_room_composition(create_rectangular_room_composition(primitive))
     are = AREData.from_bytes(authored.resources[("grdev01", "are")].data)
     git = GITData.from_bytes(authored.resources[("grdev01", "git")].data)
-    ifo = IFOData.from_bytes(authored.resources[("grdev01", "ifo")].data)
+    ifo = IFOData.from_bytes(authored.resources[("module", "ifo")].data)
 
     assert authored.module_root == "grdev01"
     assert authored.project is not None
@@ -49,7 +49,7 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert authored.project.metadata.metadata["task"] == "T2601"
     assert ("grdev01", "are") in keys
     assert ("grdev01", "git") in keys
-    assert ("grdev01", "ifo") in keys
+    assert ("module", "ifo") in keys
     assert ("grdev01", "lyt") in keys
     assert ("grdev01", "vis") in keys
     assert ("grdev01", "pth") in keys
@@ -197,7 +197,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert Path(result.manifest_path).is_file()
     assert result.package_verification is not None
     assert result.package_verification.ok is True
-    assert set(result.package_verification.parsed_gff) == {"grdev01.are", "grdev01.git", "grdev01.ifo", "grdev01.pth"}
+    assert set(result.package_verification.parsed_gff) == {"grdev01.are", "grdev01.git", "module.ifo", "grdev01.pth"}
     assert result.package_verification.parsed_wok == ("grdev01_room01.wok",)
     assert result.package_verification.model_pairs == ("grdev01_room01.mdl/.mdx",)
 
@@ -228,6 +228,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     ]
     assert smoke["authored_metadata"]["source"] == "src.core.modules.authored_module_metadata"
     assert smoke["authored_metadata"]["module_root"] == "grdev01"
+    assert smoke["authored_metadata"]["engine_ifo_resref"] == "module"
     assert smoke["authored_metadata"]["display_name"] == "GhostRigger Dev Test"
     assert smoke["authored_metadata"]["tag"] == "grdev01"
     assert smoke["authored_metadata"]["fog_near"] == 100.0
@@ -297,7 +298,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert checks["test_placeable"]["surface_id"] == 4
     assert ("grdev01", "are") in resources
     assert ("grdev01", "git") in resources
-    assert ("grdev01", "ifo") in resources
+    assert ("module", "ifo") in resources
     assert ("grdev01", "pth") in resources
     assert ("grdev01", "lyt") in resources
     assert ("grdev01", "vis") in resources
@@ -324,7 +325,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
         archive_keys.add((resref, restype_by_id[restype_id]))
     assert ("grdev01", "are") in archive_keys
     assert ("grdev01", "git") in archive_keys
-    assert ("grdev01", "ifo") in archive_keys
+    assert ("module", "ifo") in archive_keys
     assert ("grdev01", "pth") in archive_keys
     assert ("grdev01", "lyt") in archive_keys
     assert ("grdev01", "vis") in archive_keys
@@ -337,7 +338,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert {f"{resource.resref}.{resource.restype}" for resource in verification.resources} >= {
         "grdev01.are",
         "grdev01.git",
-        "grdev01.ifo",
+        "module.ifo",
         "grdev01.pth",
         "grdev01.lyt",
         "grdev01.vis",

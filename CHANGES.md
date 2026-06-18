@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Smoke Module Uses Engine IFO Resref
+
+Owner: LordVaderCW
+Task: T2634
+Subsystem: Map Studio / dev module smoke package contract / native Python payloads
+
+- Changed the generated `grdev01` smoke module package to write the module entry resource as `module.ifo`, matching KOTOR module archive convention while keeping ARE/GIT/PTH/LYT/VIS rooted at `grdev01`.
+- Updated package readback verification and smoke manifests to explicitly report `engine_ifo_resref = module`.
+- Mirrored the smoke builder change into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Updated smoke coverage so future changes cannot regress back to `grdev01.ifo`.
+- Pointed the package/save pipeline tests at the native Modules payload after the package split so they keep exercising the active implementation.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_dev_module_smoke.py tests/test_custom_module_packager.py tests/test_module_save_pipeline.py -q --basetemp .pytest_tmp_engine_ifo_resref`
+
 ### [2026-06-18] Map Studio Authored Resref Safety Validation
 
 Owner: LordVaderCW

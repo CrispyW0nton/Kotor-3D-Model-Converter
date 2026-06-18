@@ -61,6 +61,9 @@ from .authored_room_materials import (
 from .module_format import LYTLayout, VISData, WOKData
 
 
+ENGINE_MODULE_IFO_RESREF = "module"
+
+
 @dataclass(frozen=True)
 class DevModuleSmokeRequest:
     """Options for the first from-scratch module proof package."""
@@ -716,7 +719,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     packaged = [
         _make_packaged(root, "are", compiled_metadata.are_bytes, "map_studio:t2601:are"),
         _make_packaged(root, "git", _make_git_bytes(request), "map_studio:t2601:git"),
-        _make_packaged(root, "ifo", compiled_metadata.ifo_bytes, "map_studio:t2601:ifo"),
+        _make_packaged(ENGINE_MODULE_IFO_RESREF, "ifo", compiled_metadata.ifo_bytes, "map_studio:t2601:ifo"),
         _make_packaged(root, "pth", compiled_pathing.pth_bytes, "map_studio:t2601:pth"),
     ]
     mdl_bytes, mdx_bytes = _make_room_model_bytes(request, geometry)
@@ -859,7 +862,7 @@ def verify_dev_test_module_package(
     expected = {
         (module_root, "are"),
         (module_root, "git"),
-        (module_root, "ifo"),
+        (ENGINE_MODULE_IFO_RESREF, "ifo"),
         (module_root, "pth"),
         (module_root, "lyt"),
         (module_root, "vis"),
@@ -872,22 +875,27 @@ def verify_dev_test_module_package(
     parsed_gff: list[str] = []
     path_point_count = 0
     path_connection_count = 0
-    for restype in ("are", "git", "ifo", "pth"):
-        key = (module_root, restype)
+    for resref, restype in (
+        (module_root, "are"),
+        (module_root, "git"),
+        (ENGINE_MODULE_IFO_RESREF, "ifo"),
+        (module_root, "pth"),
+    ):
+        key = (resref, restype)
         if key not in payloads:
             continue
         try:
             content = _gff_content_name(payloads[key][1])
             if content != restype:
-                blocking.append(f"{module_root}.{restype} parsed as {content.upper()}, expected {restype.upper()}.")
+                blocking.append(f"{resref}.{restype} parsed as {content.upper()}, expected {restype.upper()}.")
             else:
-                parsed_gff.append(f"{module_root}.{restype}")
+                parsed_gff.append(f"{resref}.{restype}")
                 if restype == "pth":
                     path_point_count, path_connection_count = _pth_counts(payloads[key][1])
                     if path_point_count < 1:
-                        blocking.append(f"{module_root}.pth parsed but contains no path points.")
+                        blocking.append(f"{resref}.pth parsed but contains no path points.")
         except Exception as exc:
-            blocking.append(f"{module_root}.{restype} did not parse as GFF: {exc}")
+            blocking.append(f"{resref}.{restype} did not parse as GFF: {exc}")
 
     parsed_wok: list[str] = []
     wok_key = (room, "wok")
@@ -1029,6 +1037,7 @@ def _augment_manifest(
         "authored_metadata": {
             "source": authored.metadata_provenance.get("source", "src.core.modules.authored_module_metadata"),
             "module_root": authored.metadata_provenance.get("module_root", authored.module_root),
+            "engine_ifo_resref": ENGINE_MODULE_IFO_RESREF,
             "display_name": authored.metadata_provenance.get(
                 "display_name",
                 authored.project.metadata.display_name if authored.project else "",
