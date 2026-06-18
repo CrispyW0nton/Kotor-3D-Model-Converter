@@ -9,12 +9,13 @@ a reusable Qt-free service.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from math import isfinite
+from math import ceil, hypot, isfinite
 from typing import Any
 
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
+WALKABLE_SURFACE_IDS = frozenset({1, 3, 4, 5, 9, 10, 11, 12, 13, 14, 19, 20, 21})
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,35 @@ def _point_on_walkmesh(wok: Any, x: float, y: float) -> tuple[bool, int]:
     if not callable(face_at_point):
         return True, -1
     face_index = int(face_at_point(float(x), float(y)))
-    return face_index >= 0, face_index
+    if face_index < 0:
+        return False, face_index
+    faces = list(getattr(wok, "faces", ()) or ())
+    if face_index < len(faces):
+        surface = getattr(faces[face_index], "surface", None)
+        if surface is not None and int(surface) not in WALKABLE_SURFACE_IDS:
+            return False, face_index
+    return True, face_index
+
+
+def _connection_on_walkmesh(
+    wok: Any,
+    source: AuthoredPathPoint,
+    target: AuthoredPathPoint,
+    *,
+    sample_interval: float,
+) -> tuple[bool, tuple[float, float, int] | None]:
+    distance = hypot(float(target.x) - float(source.x), float(target.y) - float(source.y))
+    if distance <= 1.0e-7:
+        return True, None
+    steps = max(1, int(ceil(distance / sample_interval)))
+    for step in range(1, steps):
+        fraction = step / steps
+        x = float(source.x) + (float(target.x) - float(source.x)) * fraction
+        y = float(source.y) + (float(target.y) - float(source.y)) * fraction
+        ok, _face_index = _point_on_walkmesh(wok, x, y)
+        if not ok:
+            return False, (x, y, step)
+    return True, None
 
 
 def build_authored_path_graph_from_walkmesh(
@@ -151,11 +180,18 @@ def build_authored_path_graph_from_walkmesh(
     )
 
 
-def validate_authored_path_graph(graph: AuthoredPathGraph, *, wok: Any | None = None) -> AuthoredPathingValidation:
+def validate_authored_path_graph(
+    graph: AuthoredPathGraph,
+    *,
+    wok: Any | None = None,
+    connection_sample_interval: float = 0.5,
+) -> AuthoredPathingValidation:
     """Validate authored path graph indices and walkmesh placement."""
 
     warnings: list[str] = []
     blocking: list[str] = []
+    if not isfinite(float(connection_sample_interval)) or float(connection_sample_interval) <= 0.0:
+        blocking.append("Path connection sample interval must be positive.")
     if not graph.points:
         blocking.append("Authored path graph requires at least one path point.")
     for index, point in enumerate(graph.points):
@@ -169,16 +205,33 @@ def validate_authored_path_graph(graph: AuthoredPathGraph, *, wok: Any | None = 
                 blocking.append(f"Path point {index} ({point.label}) is outside the generated walkmesh.")
     seen_edges: set[tuple[int, int]] = set()
     for edge in graph.connections:
+        edge_indices_ok = True
         if edge.source < 0 or edge.source >= len(graph.points):
             blocking.append(f"Path connection has invalid source index {edge.source}.")
+            edge_indices_ok = False
         if edge.target < 0 or edge.target >= len(graph.points):
             blocking.append(f"Path connection has invalid target index {edge.target}.")
+            edge_indices_ok = False
         if edge.source == edge.target:
             blocking.append(f"Path connection {edge.source}->{edge.target} loops to itself.")
+            edge_indices_ok = False
         key = (edge.source, edge.target)
         if key in seen_edges:
             blocking.append(f"Duplicate path connection {edge.source}->{edge.target}.")
         seen_edges.add(key)
+        if wok is not None and edge_indices_ok and isfinite(float(connection_sample_interval)) and float(connection_sample_interval) > 0.0:
+            ok, failed_sample = _connection_on_walkmesh(
+                wok,
+                graph.points[edge.source],
+                graph.points[edge.target],
+                sample_interval=float(connection_sample_interval),
+            )
+            if not ok and failed_sample is not None:
+                x, y, step = failed_sample
+                blocking.append(
+                    f"Path connection {edge.source}->{edge.target} leaves the generated walkmesh near sample {step} "
+                    f"({x:.3f}, {y:.3f})."
+                )
     if len(graph.points) > 1 and not graph.connections:
         blocking.append("Authored path graph with multiple points requires path connections.")
     return AuthoredPathingValidation(

@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Path Connection Walkmesh Validation
+
+Owner: LordVaderCW
+Task: T2629
+Subsystem: Map Studio / authored module pathing / native Python payloads
+
+- Added headless path-connection validation that samples authored PTH edges across the generated WOK so disconnected walkmesh islands cannot be connected by an invalid path segment.
+- Tightened path point checks so points landing on non-walk surfaces are blocked instead of being accepted merely because they hit a WOK triangle.
+- Mirrored the pathing validation change into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Added regression coverage for a two-island WOK where both path points are valid but the edge between them crosses empty space.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_pathing.py tests\test_authored_module_pathing.py`
+- `python -m pytest tests/test_authored_module_pathing.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_path_connection_smoke`
+
 ### [2026-06-18] Map Studio Rectangular Floor-Plan Union Operation
 
 Owner: LordVaderCW

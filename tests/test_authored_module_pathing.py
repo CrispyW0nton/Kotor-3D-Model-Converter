@@ -77,3 +77,46 @@ def test_t2608_blocks_path_points_outside_walkmesh() -> None:
         assert "outside the generated walkmesh" in str(exc)
     else:
         raise AssertionError("outside path anchors should block before PTH serialization")
+
+
+def test_t2629_blocks_path_connections_that_leave_walkmesh() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_pathing import (
+        AuthoredPathConnection,
+        AuthoredPathGraph,
+        AuthoredPathPoint,
+        validate_authored_path_graph,
+    )
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    wok = WOKData(
+        verts=[
+            (-2.0, -1.0, 0.0),
+            (-1.0, -1.0, 0.0),
+            (-1.0, 1.0, 0.0),
+            (-2.0, 1.0, 0.0),
+            (1.0, -1.0, 0.0),
+            (2.0, -1.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (1.0, 1.0, 0.0),
+        ],
+        faces=[
+            WOKFace(0, 1, 2, 4),
+            WOKFace(0, 2, 3, 4),
+            WOKFace(4, 5, 6, 4),
+            WOKFace(4, 6, 7, 4),
+        ],
+    )
+    graph = AuthoredPathGraph(
+        points=(
+            AuthoredPathPoint(label="left_island", x=-1.5, y=0.0),
+            AuthoredPathPoint(label="right_island", x=1.5, y=0.0),
+        ),
+        connections=(AuthoredPathConnection(source=0, target=1),),
+    )
+
+    validation = validate_authored_path_graph(graph, wok=wok, connection_sample_interval=0.25)
+
+    assert validation.ok is False
+    assert any("leaves the generated walkmesh" in issue for issue in validation.blocking_issues)
