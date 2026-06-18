@@ -7,6 +7,7 @@ compile it into ``AuthoredRoomGeometry`` for MDL/MDX/WOK packaging.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from typing import Any, Union
 
@@ -35,7 +36,33 @@ from .authored_room_primitives import (
 from .module_format import WOKData, WOKFace
 
 
-RoomPrimitive = Union[WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive, ArchPrimitive]
+BaseRoomPrimitive = Union[WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive, ArchPrimitive]
+
+
+@dataclass(frozen=True)
+class PrimitiveTransform:
+    """Durable transform intent for one authored primitive instance.
+
+    Map Studio gizmos should persist transforms here before compilation so the
+    visible MDL mesh and derived WOK stay in lockstep for export.
+    """
+
+    translation: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rotation_degrees_z: float = 0.0
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    pivot: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class PlacedRoomPrimitive:
+    """A primitive plus editor-authored transform data."""
+
+    primitive: BaseRoomPrimitive
+    transform: PrimitiveTransform = field(default_factory=PrimitiveTransform)
+    name: str = ""
+
+
+RoomPrimitive = Union[BaseRoomPrimitive, PlacedRoomPrimitive]
 
 
 @dataclass(frozen=True)
@@ -62,7 +89,92 @@ def _normalise_name(value: Any) -> str:
     return str(value or "").strip().lower()[:16]
 
 
+def _transform_manifest(transform: PrimitiveTransform) -> dict[str, Any]:
+    return {
+        "translation": [float(value) for value in transform.translation],
+        "rotation_degrees_z": float(transform.rotation_degrees_z),
+        "scale": [float(value) for value in transform.scale],
+        "pivot": [float(value) for value in transform.pivot],
+    }
+
+
+def _transform_point(point: tuple[float, float, float], transform: PrimitiveTransform) -> tuple[float, float, float]:
+    px, py, pz = (float(value) for value in transform.pivot)
+    sx, sy, sz = (float(value) for value in transform.scale)
+    tx, ty, tz = (float(value) for value in transform.translation)
+    x = (float(point[0]) - px) * sx
+    y = (float(point[1]) - py) * sy
+    z = (float(point[2]) - pz) * sz
+    angle = math.radians(float(transform.rotation_degrees_z))
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    return (
+        x * cos_a - y * sin_a + px + tx,
+        x * sin_a + y * cos_a + py + ty,
+        z + pz + tz,
+    )
+
+
+def _transform_normal(normal: tuple[float, float, float], transform: PrimitiveTransform) -> tuple[float, float, float]:
+    angle = math.radians(float(transform.rotation_degrees_z))
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    x = float(normal[0]) * cos_a - float(normal[1]) * sin_a
+    y = float(normal[0]) * sin_a + float(normal[1]) * cos_a
+    z = float(normal[2])
+    length = math.sqrt(x * x + y * y + z * z)
+    if length <= 0.0:
+        return (0.0, 0.0, 1.0)
+    return (x / length, y / length, z / length)
+
+
+def transform_primitive_mesh(mesh: PrimitiveMesh, transform: PrimitiveTransform, *, name: str = "") -> PrimitiveMesh:
+    """Apply an editor transform to a primitive mesh without mutating it."""
+
+    return PrimitiveMesh(
+        name=name or mesh.name,
+        vertices=tuple(_transform_point(vertex, transform) for vertex in mesh.vertices),
+        faces=tuple(mesh.faces),
+        normals=tuple(_transform_normal(normal, transform) for normal in mesh.normals),
+        uvs=tuple(mesh.uvs),
+        texture=mesh.texture,
+        diffuse=mesh.diffuse,
+        ambient=mesh.ambient,
+        metadata={
+            **dict(mesh.metadata),
+            "transform": _transform_manifest(transform),
+            "transform_source": "src.core.modules.authored_room_composition",
+        },
+    )
+
+
+def transform_wok_data(wok: WOKData, transform: PrimitiveTransform) -> WOKData:
+    """Apply the same editor transform to WOK vertices as the visible mesh."""
+
+    return WOKData(
+        name=wok.name,
+        verts=[_transform_point(vertex, transform) for vertex in wok.verts],
+        faces=[
+            WOKFace(face.v1, face.v2, face.v3, face.surface, face.adj1, face.adj2, face.adj3)
+            for face in wok.faces
+        ],
+    )
+
+
+def _base_primitive(primitive: RoomPrimitive) -> BaseRoomPrimitive:
+    return primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
+
+
+def _primitive_name(primitive: FloorPrimitive | RoomPrimitive) -> str:
+    if isinstance(primitive, PlacedRoomPrimitive):
+        return str(primitive.name or getattr(primitive.primitive, "name", "") or "").strip()
+    return str(getattr(primitive, "name", "") or "").strip()
+
+
 def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
+    if isinstance(primitive, PlacedRoomPrimitive):
+        mesh = _primitive_to_mesh(primitive.primitive)
+        return transform_primitive_mesh(mesh, primitive.transform, name=_primitive_name(primitive))
     if isinstance(primitive, WallPrimitive):
         return build_wall_mesh(primitive)
     if isinstance(primitive, CubePrimitive):
@@ -104,10 +216,16 @@ def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
 
     wok = build_floor_wok(composition.floor)
     for primitive in composition.primitives:
-        if isinstance(primitive, RampPrimitive):
-            _append_wok(wok, build_ramp_wok(primitive))
-        if isinstance(primitive, StairsPrimitive):
-            _append_wok(wok, build_stairs_wok(primitive))
+        base = _base_primitive(primitive)
+        primitive_wok: WOKData | None = None
+        if isinstance(base, RampPrimitive):
+            primitive_wok = build_ramp_wok(base)
+        if isinstance(base, StairsPrimitive):
+            primitive_wok = build_stairs_wok(base)
+        if primitive_wok is not None:
+            if isinstance(primitive, PlacedRoomPrimitive):
+                primitive_wok = transform_wok_data(primitive_wok, primitive.transform)
+            _append_wok(wok, primitive_wok)
     return wok
 
 
@@ -126,7 +244,7 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
         blocking.append(str(exc))
     names: set[str] = set()
     for primitive in (composition.floor, *composition.primitives):
-        name = str(getattr(primitive, "name", "") or "").strip()
+        name = _primitive_name(primitive)
         if not name:
             blocking.append("Every authored room primitive requires a stable name.")
             continue
@@ -134,33 +252,37 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
             blocking.append(f"Duplicate authored room primitive name: {name}")
         names.add(name)
     for primitive in composition.primitives:
-        if isinstance(primitive, RampPrimitive):
-            if float(primitive.width) <= 0.0 or float(primitive.length) <= 0.0 or float(primitive.height) <= 0.0:
-                blocking.append(f"Ramp primitive {primitive.name or '(unnamed)'} must have positive width, length, and height.")
+        if isinstance(primitive, PlacedRoomPrimitive) and any(float(value) <= 0.0 for value in primitive.transform.scale):
+            blocking.append(f"Placed primitive {_primitive_name(primitive) or '(unnamed)'} must have positive transform scale.")
+        base = _base_primitive(primitive)
+        base_name = _primitive_name(primitive) or str(getattr(base, "name", "") or "(unnamed)")
+        if isinstance(base, RampPrimitive):
+            if float(base.width) <= 0.0 or float(base.length) <= 0.0 or float(base.height) <= 0.0:
+                blocking.append(f"Ramp primitive {base_name} must have positive width, length, and height.")
             try:
-                require_walkable_walkmesh_surface(primitive.surface_id, context=f"{primitive.name} ramp")
+                require_walkable_walkmesh_surface(base.surface_id, context=f"{base_name} ramp")
             except ValueError as exc:
                 blocking.append(str(exc))
-        if isinstance(primitive, StairsPrimitive):
+        if isinstance(base, StairsPrimitive):
             if (
-                float(primitive.width) <= 0.0
-                or float(primitive.depth) <= 0.0
-                or float(primitive.height) <= 0.0
-                or int(primitive.steps) <= 0
+                float(base.width) <= 0.0
+                or float(base.depth) <= 0.0
+                or float(base.height) <= 0.0
+                or int(base.steps) <= 0
             ):
-                blocking.append(f"Stairs primitive {primitive.name or '(unnamed)'} must have positive width, depth, height, and step count.")
+                blocking.append(f"Stairs primitive {base_name} must have positive width, depth, height, and step count.")
             try:
-                require_walkable_walkmesh_surface(primitive.surface_id, context=f"{primitive.name} stairs")
+                require_walkable_walkmesh_surface(base.surface_id, context=f"{base_name} stairs")
             except ValueError as exc:
                 blocking.append(str(exc))
-        if isinstance(primitive, ArchPrimitive):
+        if isinstance(base, ArchPrimitive):
             if (
-                float(primitive.width) <= 0.0
-                or float(primitive.height) <= 0.0
-                or float(primitive.depth) <= 0.0
-                or float(primitive.frame_thickness) <= 0.0
+                float(base.width) <= 0.0
+                or float(base.height) <= 0.0
+                or float(base.depth) <= 0.0
+                or float(base.frame_thickness) <= 0.0
             ):
-                blocking.append(f"Arch primitive {primitive.name or '(unnamed)'} must have positive width, height, depth, and frame thickness.")
+                blocking.append(f"Arch primitive {base_name} must have positive width, height, depth, and frame thickness.")
     if not composition.primitives and not composition.helper_meshes:
         warnings.append("Authored room composition has only a floor; add walls or helpers before game-facing export.")
     return AuthoredRoomCompositionValidation(
@@ -195,7 +317,12 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
             "primitive_count": len(composition.primitives),
             "helper_mesh_count": len(composition.helper_meshes),
             "compiled_mesh_count": 1 + len(primitive_meshes) + len(composition.helper_meshes),
-            "walkmesh_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, (RampPrimitive, StairsPrimitive))),
+            "walkmesh_primitive_count": sum(
+                1
+                for primitive in composition.primitives
+                if isinstance(_base_primitive(primitive), (RampPrimitive, StairsPrimitive))
+            ),
+            "transformed_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, PlacedRoomPrimitive)),
             "warnings": list(validation.warnings),
         },
     )
@@ -281,9 +408,13 @@ def create_rectangular_room_composition(primitive: RectangularRoomPrimitive) -> 
 __all__ = [
     "AuthoredRoomComposition",
     "AuthoredRoomCompositionValidation",
+    "PlacedRoomPrimitive",
+    "PrimitiveTransform",
     "RoomPrimitive",
     "build_composition_wok",
     "compile_authored_room_composition",
     "create_rectangular_room_composition",
+    "transform_primitive_mesh",
+    "transform_wok_data",
     "validate_authored_room_composition",
 ]

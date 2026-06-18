@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Primitive Transforms Keep Mesh and WOK Aligned
+
+Owner: LordVaderCW
+Task: T2637
+Subsystem: Map Studio / authored room composition / native Python payloads
+
+- Added `PrimitiveTransform` and `PlacedRoomPrimitive` to the authored room composition contract so future Map Studio gizmos can persist translation, Z rotation, scale, and pivot data as headless authoring intent.
+- Applies placed-primitive transforms to both generated helper meshes and derived ramp/stair WOK vertices, keeping visible geometry and walkable collision/pathing data together for export.
+- Blocks non-positive placed-primitive scale before compilation and records transform metadata in compiled primitive meshes.
+- Mirrored the composition transform contract into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_composition.py tests\test_authored_room_composition.py`
+- `python -m pytest tests/test_authored_room_composition.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_room_transform_t2637`
+
 ### [2026-06-18] Map Studio Smoke Status Shows Runtime Launch Readiness
 
 Owner: LordVaderCW

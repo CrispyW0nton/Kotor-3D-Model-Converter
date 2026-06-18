@@ -203,6 +203,91 @@ def test_t2624_composition_rejects_invalid_stairs_walkmesh_surface() -> None:
     assert "bad_stairs_path stairs surface 7 (NON_WALK) is not walkable." in validation.blocking_issues
 
 
+def test_t2637_composition_transforms_placed_ramp_mesh_and_wok_together() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import (
+        AuthoredRoomComposition,
+        PlacedRoomPrimitive,
+        PrimitiveTransform,
+        compile_authored_room_composition,
+        validate_authored_room_composition,
+    )
+    from src.core.modules.authored_room_primitives import FloorPrimitive, RampPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="move_ramp",
+        floor=FloorPrimitive(name="move_ramp_floor", width=8.0, depth=8.0),
+        primitives=(
+            PlacedRoomPrimitive(
+                primitive=RampPrimitive(
+                    name="move_ramp_slope",
+                    width=2.0,
+                    length=2.0,
+                    height=1.0,
+                    surface_id="metal",
+                ),
+                transform=PrimitiveTransform(
+                    translation=(1.0, 2.0, 0.5),
+                    rotation_degrees_z=90.0,
+                ),
+            ),
+        ),
+    )
+
+    validation = validate_authored_room_composition(composition)
+    geometry = compile_authored_room_composition(composition)
+
+    assert validation.ok is True
+    assert geometry.metadata["transformed_primitive_count"] == 1
+    assert geometry.metadata["walkmesh_primitive_count"] == 1
+    ramp_mesh = geometry.helper_meshes[0]
+    assert ramp_mesh.name == "move_ramp_slope"
+    assert ramp_mesh.metadata["transform"]["translation"] == [1.0, 2.0, 0.5]
+    assert ramp_mesh.metadata["transform"]["rotation_degrees_z"] == 90.0
+    assert _rounded_points(ramp_mesh.vertices[:4]) == [
+        (2.0, 1.0, 0.5),
+        (2.0, 3.0, 0.5),
+        (0.0, 3.0, 1.5),
+        (0.0, 1.0, 1.5),
+    ]
+    assert _rounded_points(geometry.wok.verts[4:]) == [
+        (2.0, 1.0, 0.5),
+        (2.0, 3.0, 0.5),
+        (0.0, 3.0, 1.5),
+        (0.0, 1.0, 1.5),
+    ]
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10]
+
+
+def test_t2637_composition_rejects_invalid_placed_primitive_scale() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import (
+        AuthoredRoomComposition,
+        PlacedRoomPrimitive,
+        PrimitiveTransform,
+        validate_authored_room_composition,
+    )
+    from src.core.modules.authored_room_primitives import FloorPrimitive, RampPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="bad_scale",
+        floor=FloorPrimitive(name="bad_scale_floor"),
+        primitives=(
+            PlacedRoomPrimitive(
+                primitive=RampPrimitive(name="bad_scale_ramp"),
+                transform=PrimitiveTransform(scale=(0.0, 1.0, 1.0)),
+            ),
+        ),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert "Placed primitive bad_scale_ramp must have positive transform scale." in validation.blocking_issues
+
+
 def test_t2622_composition_compiles_arch_primitive_as_helper_mesh() -> None:
     _install_native_payload_paths()
 
@@ -243,3 +328,10 @@ def test_t2622_composition_rejects_invalid_arch_dimensions() -> None:
 
     assert validation.ok is False
     assert "Arch primitive bad_arch_entry must have positive width, height, depth, and frame thickness." in validation.blocking_issues
+
+
+def _rounded_points(points: object) -> list[tuple[float, float, float]]:
+    return [
+        (round(float(point[0]), 6), round(float(point[1]), 6), round(float(point[2]), 6))
+        for point in points
+    ]
