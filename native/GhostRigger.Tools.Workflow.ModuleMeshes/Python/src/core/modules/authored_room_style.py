@@ -10,6 +10,7 @@ from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import AuthoredRoomMaterialPreflight, compile_authored_room_material_preflight
 from .authored_room_primitives import PrimitiveMaterial
+from .authored_terrain_builder import TerrainHeightfieldPrimitive
 from .authored_walkmesh_surfaces import (
     is_walkable_walkmesh_surface,
     resolve_walkmesh_surface_id,
@@ -90,6 +91,32 @@ def _styled_rectangular(
     )
 
 
+def _styled_terrain(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    texture: str,
+    surface_id: int,
+    surface_name: str,
+) -> TerrainHeightfieldPrimitive:
+    material = replace(
+        primitive.material,
+        texture=texture,
+        metadata={
+            **dict(primitive.material.metadata),
+            **_style_metadata(texture, surface_id, surface_name),
+        },
+    )
+    return replace(
+        primitive,
+        material=material,
+        floor_surface_id=surface_id,
+        metadata={
+            **dict(primitive.metadata),
+            "last_room_style_update": _style_metadata(texture, surface_id, surface_name),
+        },
+    )
+
+
 def _styled_room(
     room: AuthoredRoomSpec,
     *,
@@ -110,6 +137,13 @@ def _styled_room(
             primitive,
             texture=texture,
             surface_id=surface_id,
+        )
+    elif isinstance(primitive, TerrainHeightfieldPrimitive):
+        updated_primitive = _styled_terrain(
+            primitive,
+            texture=texture,
+            surface_id=surface_id,
+            surface_name=surface_name,
         )
     else:
         raise ValueError(f"Room {room.room_resref} has unsupported primitive type: {type(primitive)!r}")

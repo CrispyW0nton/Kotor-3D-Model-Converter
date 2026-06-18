@@ -25,7 +25,7 @@ from .authored_module_project import (
     create_terrain_room_project,
     normalise_resref,
 )
-from .authored_terrain_builder import TerrainHeightfieldPrimitive
+from .authored_terrain_builder import TerrainHeightfieldPrimitive, sample_terrain_height
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import Vec2, Vec3
@@ -324,20 +324,22 @@ def _terrain_project_from_preset(
             **dict(preset.metadata),
         },
     )
+    entry_position = _position_on_terrain(terrain, preset.entry_position)
+    placeable_position = _position_on_terrain(terrain, preset.placeable_position)
     placements = AuthoredGameplayPlacement(
-        entry_point=ModuleEntryPoint(area_resref=root, position=preset.entry_position),
+        entry_point=ModuleEntryPoint(area_resref=root, position=entry_position),
         placeables=(
             AuthoredPlaceableInstance(
                 template_resref="plc_bench",
                 tag=f"{root}_test_placeable",
-                position=preset.placeable_position,
+                position=placeable_position,
             ),
         ),
         waypoints=(
             AuthoredWaypointInstance(
                 template_resref="sw_startloc001",
                 tag="start",
-                position=preset.entry_position,
+                position=entry_position,
             ),
         ),
         metadata={
@@ -363,6 +365,12 @@ def _terrain_project_from_preset(
             "preset_id": preset.preset_id,
         },
     )
+
+
+def _position_on_terrain(terrain: TerrainHeightfieldPrimitive, position: Vec3) -> Vec3:
+    x = float(position[0])
+    y = float(position[1])
+    return (x, y, sample_terrain_height(terrain, x=x, y=y))
 
 
 def create_authored_module_from_room_preset(

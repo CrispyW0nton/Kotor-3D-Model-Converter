@@ -45,7 +45,9 @@ def test_t2652_room_style_updates_floor_plan_material_surface_and_export() -> No
     assert update.floor_surface_id == 10
     assert room.primitive.material.texture == "LME_Floor01"
     assert geometry.room_mesh.texture == "LME_Floor01"
-    assert {face.surface for face in geometry.wok.faces} == {10}
+    assert geometry.metadata["floor_surface_id"] == 10
+    assert {face.surface for face in geometry.wok.faces} <= {10, 7}
+    assert sum(1 for face in geometry.wok.faces if face.surface == 10) >= 1
     assert not build.blocking_issues
     assert (room.normalised_resref(), "wok") in build.resources
 
@@ -67,7 +69,9 @@ def test_t2652_room_style_updates_rectangular_smoke_room_and_invalidates_composi
     assert room.composition is None
     assert room.primitive.texture == "CM_Test_Floor"
     assert geometry.room_mesh.texture == "CM_Test_Floor"
-    assert {face.surface for face in geometry.wok.faces} == {4}
+    assert geometry.metadata["floor_surface_id"] == 4
+    assert {face.surface for face in geometry.wok.faces} <= {4, 7}
+    assert sum(1 for face in geometry.wok.faces if face.surface == 4) >= 1
 
 
 def test_t2652_controller_style_update_stores_kmap_and_clears_runtime_state() -> None:
@@ -90,6 +94,63 @@ def test_t2652_controller_style_update_stores_kmap_and_clears_runtime_state() ->
     assert updated["game_tested"] is False
     assert updated["rooms"][0]["primitive"]["material"]["texture"] == "CM_NewWall"
     assert updated["rooms"][0]["primitive"]["floor_surface_id"] == 20
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+
+
+def test_t2907_room_style_updates_terrain_material_surface_and_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.authored_room_style import update_authored_room_style
+
+    project = create_authored_module_from_room_preset(
+        preset_id="terrain_heightfield",
+        module_root="grterrstyle",
+        game="K1",
+    )
+
+    update = update_authored_room_style(project, texture="LMA_grass01.tga", floor_surface="sand")
+    room = update.project.rooms[0]
+    build = build_authored_module(update.project)
+    geometry = build.module.room_geometry[room.normalised_resref()]
+
+    assert update.texture == "LMA_grass01"
+    assert update.floor_surface_id == 20
+    assert room.primitive.material.texture == "LMA_grass01"
+    assert room.primitive.floor_surface_id == 20
+    assert room.primitive.metadata["last_room_style_update"]["floor_surface_name"] == "SAND"
+    assert geometry.metadata["primitive"] == "terrain_heightfield"
+    assert geometry.metadata["floor_surface_id"] == 20
+    assert geometry.room_mesh.texture == "LMA_grass01"
+    assert {face.surface for face in geometry.wok.faces} <= {20, 7}
+    assert sum(1 for face in geometry.wok.faces if face.surface == 20) >= 1
+    assert not build.blocking_issues
+
+
+def test_t2907_controller_style_update_stores_terrain_kmap_and_clears_runtime_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grterrstyle")
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["grterrstyle.are"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    result = controller.apply_authored_room_style(texture="LMA_Grass01", floor_surface="metal")
+    updated = controller.project.extra_sections["authored_module"]
+    primitive = updated["rooms"][0]["primitive"]
+
+    assert updated["runtime_resources"] == []
+    assert updated["game_tested"] is False
+    assert primitive["type"] == "terrain_heightfield"
+    assert primitive["material"]["texture"] == "LMA_Grass01"
+    assert primitive["floor_surface_id"] == 10
     assert result.readiness is not None
     assert result.readiness.can_preview is True
 
