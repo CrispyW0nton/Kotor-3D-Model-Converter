@@ -239,6 +239,80 @@ def test_t2668_controller_creates_elevation_composition_room_preset() -> None:
     assert build.module.room_geometry["grelev01_room01"].wok.walkable_face_count() == 6
 
 
+def test_t2908_controller_edits_terrain_heightfield_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grterr")
+
+    choices = controller.authored_terrain_room_choices()
+    result = controller.apply_authored_terrain_operation(
+        operation="set_height",
+        room_resref="grterr_room01",
+        row_index=2,
+        column_index=2,
+        height=0.8,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    geometry = build.module.room_geometry["grterr_room01"]
+
+    assert [choice.room_resref for choice in choices] == ["grterr_room01"]
+    assert choices[0].row_count == 5
+    assert choices[0].column_count == 5
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert payload["rooms"][0]["primitive"]["type"] == "terrain_heightfield"
+    assert payload["rooms"][0]["primitive"]["heights"][2][2] == 0.8
+    assert payload["rooms"][0]["metadata"]["last_operation"] == "terrain_set_height"
+    assert not build.blocking_issues
+    assert geometry.room_mesh.metadata["height_max"] == 0.8
+    assert geometry.wok.walkable_face_count() > 0
+
+
+def test_t2908_controller_smooths_and_flattens_terrain_heightfield() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grterr")
+    controller.apply_authored_terrain_operation(
+        operation="raise",
+        room_resref="grterr_room01",
+        row_index=2,
+        column_index=2,
+        delta=0.4,
+        radius=1,
+    )
+    controller.apply_authored_terrain_operation(
+        operation="smooth",
+        room_resref="grterr_room01",
+        iterations=1,
+        strength=0.5,
+    )
+    result = controller.apply_authored_terrain_operation(
+        operation="flatten",
+        room_resref="grterr_room01",
+        height=0.1,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    heights = authored.rooms[0].primitive.heights
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert all(value == 0.1 for row in heights for value in row)
+    assert authored.rooms[0].primitive.metadata["last_operation"] == "flatten"
+
+
 def test_t2670_controller_sets_composition_primitive_transform_and_preserves_exportable_wok() -> None:
     _install_native_payload_paths()
 
@@ -576,6 +650,53 @@ def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     assert "roomOperationRequested" in source
     assert "self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)" in window_source
     assert "self.controller.apply_authored_room_operation" in window_source
+
+
+def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    native_source = (
+        repo
+        / "native"
+        / "GhostRigger.Tools.Workflow.ModuleMeshes"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    for panel_source in (source, native_source):
+        assert "terrainOperationRequested" in panel_source
+        assert "mapStudioTerrainRoomComboBox" in panel_source
+        assert "mapStudioTerrainRowSpinBox" in panel_source
+        assert "mapStudioSetTerrainHeightButton" in panel_source
+        assert "mapStudioSmoothTerrainButton" in panel_source
+        assert "def set_terrain_room_choices" in panel_source
+    assert "self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)" in window_source
+    assert "self.controller.apply_authored_terrain_operation" in window_source
+    assert "self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)" in window_source
 
 
 def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:

@@ -368,6 +368,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
+        self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
         self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
@@ -724,6 +725,39 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Applied room operation {operation}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_terrain_operation(
+        self,
+        operation: str,
+        room_resref: str,
+        row_index: int,
+        column_index: int,
+        height: float,
+        delta: float,
+        radius: int,
+        iterations: int,
+        strength: float,
+    ) -> None:
+        try:
+            result = self.controller.apply_authored_terrain_operation(
+                operation=operation,
+                room_resref=room_resref,
+                row_index=row_index,
+                column_index=column_index,
+                height=height,
+                delta=delta,
+                radius=radius,
+                iterations=iterations,
+                strength=strength,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Terrain Operation", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Applied terrain operation {operation} to {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
@@ -1134,8 +1168,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
+        authored_terrain_rooms = self.controller.authored_terrain_room_choices()
         self.builder_tab.set_room_primitives(authored_room_primitives)
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
+        self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
         self.properties.set_project(self.project, authored_placements, authored_room_lights)
         self.outliner.set_project(self.project, authored_placements, authored_room_lights)
         self.viewport_panel.set_project(

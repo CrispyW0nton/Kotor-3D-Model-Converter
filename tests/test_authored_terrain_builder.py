@@ -132,3 +132,34 @@ def test_t2907_terrain_project_compiles_through_authored_room_spec() -> None:
     assert geometry.wok.walkable_face_count() == 8
     assert with_boundaries.wok.non_walk_face_count() == 16
     assert with_boundaries.metadata["walkmesh_boundary_wall_faces"] == 16
+
+
+def test_t2908_terrain_heightfield_sample_edit_operations() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import (
+        TerrainHeightfieldPrimitive,
+        flatten_terrain_heightfield,
+        offset_terrain_heightfield_samples,
+        set_terrain_heightfield_sample,
+        smooth_terrain_heightfield,
+        terrain_height_range,
+    )
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grterr_room01",
+        heights=((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+    )
+
+    raised = set_terrain_heightfield_sample(terrain, row_index=1, column_index=1, height=1.0)
+    brushed = offset_terrain_heightfield_samples(raised, row_index=1, column_index=1, delta=0.5, radius=1)
+    smoothed = smooth_terrain_heightfield(brushed, iterations=1, strength=0.5)
+    flattened = flatten_terrain_heightfield(smoothed, height=0.25)
+
+    assert raised.heights[1][1] == 1.0
+    assert brushed.heights[1][1] == 1.5
+    assert brushed.metadata["last_changed_sample_count"] == 5
+    assert smoothed.heights[0] == brushed.heights[0]
+    assert smoothed.heights[1][1] < brushed.heights[1][1]
+    assert flattened.heights == ((0.25, 0.25, 0.25), (0.25, 0.25, 0.25), (0.25, 0.25, 0.25))
+    assert terrain_height_range(flattened) == (0.25, 0.25)

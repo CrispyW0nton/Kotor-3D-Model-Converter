@@ -27,6 +27,15 @@ from .authored_room_floorplan import (
 )
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import compile_authored_room_material_preflight
+from .authored_terrain_builder import (
+    TerrainHeightfieldPrimitive,
+    flatten_terrain_heightfield,
+    offset_terrain_heightfield_samples,
+    sample_terrain_height,
+    set_terrain_heightfield_sample,
+    smooth_terrain_heightfield,
+    terrain_height_range,
+)
 from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
@@ -91,6 +100,19 @@ class AuthoredFloorPlanRoomChoice:
     room_index: int
 
 
+@dataclass(frozen=True)
+class AuthoredTerrainRoomChoice:
+    """UI-ready terrain room choice for heightfield sculpt operations."""
+
+    room_resref: str
+    label: str
+    row_count: int
+    column_count: int
+    min_height: float
+    max_height: float
+    room_index: int
+
+
 _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
     AuthoredCompositionPrimitiveKind("wall", "Wall", "A rectangular wall/blockout slab."),
     AuthoredCompositionPrimitiveKind("cube", "Cube", "A simple box primitive for room dressing or massing."),
@@ -140,6 +162,13 @@ def _floor_plan_for_room(room: AuthoredRoomSpec) -> FloorPlanRoomPrimitive:
     raise ValueError(f"Room {room.room_resref} does not have a floor-plan-compatible primitive.")
 
 
+def _terrain_for_room(room: AuthoredRoomSpec) -> TerrainHeightfieldPrimitive:
+    primitive = room.primitive
+    if isinstance(primitive, TerrainHeightfieldPrimitive):
+        return primitive
+    raise ValueError(f"Room {room.room_resref} does not have an editable terrain heightfield.")
+
+
 def authored_floor_plan_room_choices(project: AuthoredModuleProject) -> tuple[AuthoredFloorPlanRoomChoice, ...]:
     """Return floor-plan-compatible authored rooms for Builder operations."""
 
@@ -157,6 +186,36 @@ def authored_floor_plan_room_choices(project: AuthoredModuleProject) -> tuple[Au
                 room_resref=resref,
                 label=f"{resref} ({len(tuple(primitive.points or ()))} points)",
                 point_count=len(tuple(primitive.points or ())),
+                room_index=index,
+            )
+        )
+    return tuple(choices)
+
+
+def authored_terrain_room_choices(project: AuthoredModuleProject) -> tuple[AuthoredTerrainRoomChoice, ...]:
+    """Return authored terrain rooms for Builder heightfield operations."""
+
+    choices: list[AuthoredTerrainRoomChoice] = []
+    for index, room in enumerate(tuple(project.rooms or ())):
+        try:
+            primitive = _terrain_for_room(room)
+        except ValueError:
+            continue
+        resref = normalise_resref(room.room_resref)
+        if not resref:
+            continue
+        rows = tuple(tuple(item) for item in primitive.heights or ())
+        row_count = len(rows)
+        column_count = len(rows[0]) if rows else 0
+        min_height, max_height = terrain_height_range(primitive)
+        choices.append(
+            AuthoredTerrainRoomChoice(
+                room_resref=resref,
+                label=f"{resref} ({row_count}x{column_count}, {min_height:.2f}..{max_height:.2f} m)",
+                row_count=row_count,
+                column_count=column_count,
+                min_height=float(min_height),
+                max_height=float(max_height),
                 room_index=index,
             )
         )
@@ -977,6 +1036,55 @@ def _placements_for_cut(project: AuthoredModuleProject, first_piece: FloorPlanRo
     )
 
 
+def _terrain_room_position(room: AuthoredRoomSpec) -> tuple[float, float, float]:
+    position = tuple(room.position or (0.0, 0.0, 0.0))
+    if len(position) < 3:
+        return (0.0, 0.0, 0.0)
+    return (float(position[0]), float(position[1]), float(position[2]))
+
+
+def _snap_position_to_terrain(
+    terrain: TerrainHeightfieldPrimitive,
+    room_position: tuple[float, float, float],
+    position: Any,
+) -> tuple[float, float, float]:
+    source = tuple(position or (0.0, 0.0, 0.0))
+    if len(source) < 3:
+        source = (0.0, 0.0, 0.0)
+    x = float(source[0])
+    y = float(source[1])
+    local_x = x - room_position[0]
+    local_y = y - room_position[1]
+    z = room_position[2] + sample_terrain_height(terrain, x=local_x, y=local_y)
+    return (x, y, z)
+
+
+def _repair_placements_for_terrain(
+    placements: AuthoredGameplayPlacement,
+    *,
+    terrain: TerrainHeightfieldPrimitive,
+    room: AuthoredRoomSpec,
+    operation: str,
+) -> AuthoredGameplayPlacement:
+    room_position = _terrain_room_position(room)
+    snap = lambda position: _snap_position_to_terrain(terrain, room_position, position)
+    return replace(
+        placements,
+        entry_point=replace(placements.entry_point, position=snap(placements.entry_point.position)),
+        creatures=tuple(replace(item, position=snap(item.position)) for item in placements.creatures),
+        doors=tuple(replace(item, position=snap(item.position)) for item in placements.doors),
+        triggers=tuple(replace(item, position=snap(item.position)) for item in placements.triggers),
+        encounters=tuple(replace(item, position=snap(item.position)) for item in placements.encounters),
+        sounds=tuple(replace(item, position=snap(item.position)) for item in placements.sounds),
+        placeables=tuple(replace(item, position=snap(item.position)) for item in placements.placeables),
+        waypoints=tuple(replace(item, position=snap(item.position)) for item in placements.waypoints),
+        metadata={
+            **dict(placements.metadata),
+            "terrain_height_repaired_after_operation": operation,
+        },
+    )
+
+
 def apply_authored_floor_plan_rectangular_cut(
     project: AuthoredModuleProject,
     *,
@@ -1156,12 +1264,72 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
     raise ValueError(f"Unsupported authored floor-plan operation: {operation}.")
 
 
+def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: str, **kwargs: Any) -> AuthoredModuleProject:
+    """Dispatch a named Map Studio terrain heightfield operation."""
+
+    op = str(operation or "").strip().lower()
+    index = _target_room_index(project, str(kwargs.get("room_resref", "")))
+    room = project.rooms[index]
+    primitive = _terrain_for_room(room)
+    if op in {"set_height", "set_sample", "sample"}:
+        updated_primitive = set_terrain_heightfield_sample(
+            primitive,
+            row_index=int(kwargs.get("row_index", 0)),
+            column_index=int(kwargs.get("column_index", 0)),
+            height=float(kwargs.get("height", 0.0)),
+        )
+    elif op in {"raise", "lower", "offset"}:
+        delta = float(kwargs.get("delta", 0.0))
+        if op == "lower":
+            delta = -abs(delta)
+        elif op == "raise":
+            delta = abs(delta)
+        updated_primitive = offset_terrain_heightfield_samples(
+            primitive,
+            row_index=int(kwargs.get("row_index", 0)),
+            column_index=int(kwargs.get("column_index", 0)),
+            delta=delta,
+            radius=int(kwargs.get("radius", 0)),
+        )
+    elif op == "flatten":
+        updated_primitive = flatten_terrain_heightfield(primitive, height=float(kwargs.get("height", 0.0)))
+    elif op == "smooth":
+        updated_primitive = smooth_terrain_heightfield(
+            primitive,
+            iterations=int(kwargs.get("iterations", 1)),
+            strength=float(kwargs.get("strength", 0.5)),
+            preserve_boundary=bool(kwargs.get("preserve_boundary", True)),
+        )
+    else:
+        raise ValueError(f"Unsupported authored terrain operation: {operation}.")
+    updated = replace(
+        room,
+        primitive=updated_primitive,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "terrain_heightfield",
+            "last_operation": f"terrain_{op}",
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    placements = _repair_placements_for_terrain(
+        project.placements,
+        terrain=updated_primitive,
+        room=updated,
+        operation=f"terrain_{op}",
+    )
+    return _replace_rooms(project, rooms, operation=f"terrain_{op}", placements=placements)
+
+
 __all__ = [
     "AuthoredCompositionPrimitiveKind",
     "AuthoredCompositionPrimitiveDimension",
     "AuthoredCompositionPrimitiveTransform",
     "AuthoredFloorPlanRoomChoice",
+    "AuthoredTerrainRoomChoice",
     "add_authored_room_composition_primitive",
+    "apply_authored_terrain_operation",
     "apply_authored_floor_plan_rectangular_union",
     "apply_authored_floor_plan_bevel",
     "apply_authored_floor_plan_inset",
@@ -1169,6 +1337,7 @@ __all__ = [
     "apply_authored_floor_plan_rectangular_cut",
     "available_authored_composition_primitive_kinds",
     "authored_floor_plan_room_choices",
+    "authored_terrain_room_choices",
     "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",

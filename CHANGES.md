@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Terrain Heightfield Editing Controls
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / terrain authoring / Builder terrain tools
+
+- Added headless terrain heightfield edit operations for setting individual samples, raising/lowering brush samples, smoothing, flattening, and bilinear terrain-height sampling.
+- Added project/controller terrain operation dispatch that updates KMAP-authored terrain payloads and repairs gameplay placement Z values against the edited terrain so player starts, waypoints, placeables, and other ground markers remain export-valid after sculpting.
+- Added a terrain heightfield control group to the Map Studio Builder tab with terrain room selection, row/column sample targeting, set/raise/lower/smooth/flatten controls, and thin window/controller wiring.
+- Mirrored the terrain edit operations, controller hooks, and Builder tab UI into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests\test_authored_terrain_builder.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_terrain_edit`
+- `python -m pytest tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_terrain_edit_ops`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_terrain_builder.py tests/test_authored_room_operations.py`
+
 ### [2026-06-18] Map Studio Exposes Terrain Heightfield Preset
 
 Owner: LordVaderCW

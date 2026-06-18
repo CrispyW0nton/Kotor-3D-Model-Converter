@@ -8,7 +8,7 @@ UI can later expose sculpt/heightfield controls without owning geometry policy.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .authored_room_geometry import AuthoredRoomGeometry, Face, PrimitiveMesh, Vec2, Vec3
@@ -58,6 +58,37 @@ def _height_rows(primitive: TerrainHeightfieldPrimitive) -> tuple[tuple[float, .
     return tuple(tuple(float(value) for value in row) for row in primitive.heights)
 
 
+def _replace_height_rows(
+    primitive: TerrainHeightfieldPrimitive,
+    rows: tuple[tuple[float, ...], ...],
+    *,
+    operation: str,
+    metadata: dict[str, Any] | None = None,
+) -> TerrainHeightfieldPrimitive:
+    return replace(
+        primitive,
+        heights=rows,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": operation,
+            **dict(metadata or {}),
+        },
+    )
+
+
+def _sample_indices(primitive: TerrainHeightfieldPrimitive, row_index: int, column_index: int) -> tuple[int, int]:
+    rows = _height_rows(primitive)
+    row_count = len(rows)
+    column_count = len(rows[0]) if rows else 0
+    row = int(row_index)
+    column = int(column_index)
+    if row < 0 or row >= row_count:
+        raise ValueError(f"Terrain row index {row} is outside the heightfield range 0..{max(0, row_count - 1)}.")
+    if column < 0 or column >= column_count:
+        raise ValueError(f"Terrain column index {column} is outside the heightfield range 0..{max(0, column_count - 1)}.")
+    return row, column
+
+
 def validate_terrain_heightfield_primitive(primitive: TerrainHeightfieldPrimitive) -> TerrainHeightfieldValidation:
     """Validate terrain dimensions before mesh/WOK generation."""
 
@@ -87,6 +118,165 @@ def validate_terrain_heightfield_primitive(primitive: TerrainHeightfieldPrimitiv
         column_count=column_count,
         warnings=tuple(warnings),
         blocking_issues=tuple(blocking),
+    )
+
+
+def terrain_height_range(primitive: TerrainHeightfieldPrimitive) -> tuple[float, float]:
+    """Return min/max terrain height samples for UI summaries."""
+
+    rows = _height_rows(primitive)
+    values = [height for row in rows for height in row]
+    if not values:
+        return (0.0, 0.0)
+    return (min(values), max(values))
+
+
+def sample_terrain_height(primitive: TerrainHeightfieldPrimitive, *, x: float, y: float) -> float:
+    """Return bilinear terrain height at local room X/Y coordinates."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    rows = _height_rows(primitive)
+    width = float(primitive.width)
+    depth = float(primitive.depth)
+    column_pos = ((float(x) + (width * 0.5)) / width) * float(validation.column_count - 1)
+    row_pos = ((float(y) + (depth * 0.5)) / depth) * float(validation.row_count - 1)
+    column_pos = max(0.0, min(float(validation.column_count - 1), column_pos))
+    row_pos = max(0.0, min(float(validation.row_count - 1), row_pos))
+    column0 = int(math.floor(column_pos))
+    row0 = int(math.floor(row_pos))
+    column1 = min(validation.column_count - 1, column0 + 1)
+    row1 = min(validation.row_count - 1, row0 + 1)
+    column_t = column_pos - float(column0)
+    row_t = row_pos - float(row0)
+    h00 = float(rows[row0][column0])
+    h10 = float(rows[row0][column1])
+    h01 = float(rows[row1][column0])
+    h11 = float(rows[row1][column1])
+    h0 = h00 * (1.0 - column_t) + h10 * column_t
+    h1 = h01 * (1.0 - column_t) + h11 * column_t
+    return h0 * (1.0 - row_t) + h1 * row_t
+
+
+def set_terrain_heightfield_sample(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    row_index: int,
+    column_index: int,
+    height: float,
+) -> TerrainHeightfieldPrimitive:
+    """Return terrain with one grid sample set to a specific height."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    row, column = _sample_indices(primitive, row_index, column_index)
+    rows = [list(item) for item in _height_rows(primitive)]
+    rows[row][column] = float(height)
+    return _replace_height_rows(
+        primitive,
+        tuple(tuple(item) for item in rows),
+        operation="set_height_sample",
+        metadata={"last_row_index": row, "last_column_index": column, "last_height": float(height)},
+    )
+
+
+def offset_terrain_heightfield_samples(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    row_index: int,
+    column_index: int,
+    delta: float,
+    radius: int = 0,
+) -> TerrainHeightfieldPrimitive:
+    """Return terrain with one sample or a small grid brush raised/lowered."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    row, column = _sample_indices(primitive, row_index, column_index)
+    brush_radius = max(0, int(radius))
+    rows = [list(item) for item in _height_rows(primitive)]
+    changed = 0
+    for row_cursor in range(max(0, row - brush_radius), min(validation.row_count, row + brush_radius + 1)):
+        for column_cursor in range(max(0, column - brush_radius), min(validation.column_count, column + brush_radius + 1)):
+            distance = math.sqrt(float(row_cursor - row) ** 2 + float(column_cursor - column) ** 2)
+            if distance > brush_radius:
+                continue
+            weight = 1.0 if brush_radius <= 0 else max(0.0, 1.0 - (distance / float(brush_radius + 1)))
+            rows[row_cursor][column_cursor] = float(rows[row_cursor][column_cursor]) + (float(delta) * weight)
+            changed += 1
+    return _replace_height_rows(
+        primitive,
+        tuple(tuple(item) for item in rows),
+        operation="offset_height_samples",
+        metadata={
+            "last_row_index": row,
+            "last_column_index": column,
+            "last_delta": float(delta),
+            "last_radius": brush_radius,
+            "last_changed_sample_count": changed,
+        },
+    )
+
+
+def flatten_terrain_heightfield(primitive: TerrainHeightfieldPrimitive, *, height: float = 0.0) -> TerrainHeightfieldPrimitive:
+    """Return terrain with every height sample set to one level."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    rows = tuple(tuple(float(height) for _column in range(validation.column_count)) for _row in range(validation.row_count))
+    return _replace_height_rows(
+        primitive,
+        rows,
+        operation="flatten",
+        metadata={"last_height": float(height)},
+    )
+
+
+def smooth_terrain_heightfield(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    iterations: int = 1,
+    strength: float = 0.5,
+    preserve_boundary: bool = True,
+) -> TerrainHeightfieldPrimitive:
+    """Return terrain with height samples averaged toward their neighbors."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    count = max(1, int(iterations))
+    blend = max(0.0, min(1.0, float(strength)))
+    rows = [list(item) for item in _height_rows(primitive)]
+    for _iteration in range(count):
+        source = [list(item) for item in rows]
+        for row_index in range(validation.row_count):
+            for column_index in range(validation.column_count):
+                boundary = row_index in {0, validation.row_count - 1} or column_index in {0, validation.column_count - 1}
+                if preserve_boundary and boundary:
+                    continue
+                neighbours: list[float] = []
+                for row_delta, column_delta in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                    row_cursor = row_index + row_delta
+                    column_cursor = column_index + column_delta
+                    if 0 <= row_cursor < validation.row_count and 0 <= column_cursor < validation.column_count:
+                        neighbours.append(float(source[row_cursor][column_cursor]))
+                if not neighbours:
+                    continue
+                average = sum(neighbours) / len(neighbours)
+                rows[row_index][column_index] = float(source[row_index][column_index]) * (1.0 - blend) + average * blend
+    return _replace_height_rows(
+        primitive,
+        tuple(tuple(item) for item in rows),
+        operation="smooth",
+        metadata={
+            "last_iterations": count,
+            "last_strength": blend,
+            "preserve_boundary": bool(preserve_boundary),
+        },
     )
 
 
@@ -293,5 +483,11 @@ __all__ = [
     "build_terrain_mesh",
     "build_terrain_wok",
     "compile_terrain_room_geometry",
+    "flatten_terrain_heightfield",
+    "offset_terrain_heightfield_samples",
+    "sample_terrain_height",
+    "set_terrain_heightfield_sample",
+    "smooth_terrain_heightfield",
+    "terrain_height_range",
     "validate_terrain_heightfield_primitive",
 ]

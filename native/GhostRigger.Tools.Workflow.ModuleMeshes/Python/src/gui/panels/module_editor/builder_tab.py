@@ -9,6 +9,7 @@ class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
+    terrainOperationRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
     roomRectangularUnionRequested = QtCore.Signal(str, str, str)
     roomStyleRequested = QtCore.Signal(str, str)
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
@@ -90,6 +91,52 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
         layout.addWidget(operation_box)
+        terrain_box = QtWidgets.QGroupBox("Terrain Heightfield")
+        terrain_layout = QtWidgets.QFormLayout(terrain_box)
+        self.terrainRoomComboBox = QtWidgets.QComboBox()
+        self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
+        self.terrainRowSpinBox = QtWidgets.QSpinBox()
+        self.terrainRowSpinBox.setObjectName("mapStudioTerrainRowSpinBox")
+        self.terrainColumnSpinBox = QtWidgets.QSpinBox()
+        self.terrainColumnSpinBox.setObjectName("mapStudioTerrainColumnSpinBox")
+        self.terrainHeightSpinBox = self._make_transform_spin("mapStudioTerrainHeightSpinBox", -1000.0, 1000.0, " m", step=0.05)
+        self.terrainDeltaSpinBox = self._make_transform_spin("mapStudioTerrainDeltaSpinBox", 0.01, 100.0, " m", value=0.1, step=0.05)
+        self.terrainRadiusSpinBox = QtWidgets.QSpinBox()
+        self.terrainRadiusSpinBox.setObjectName("mapStudioTerrainRadiusSpinBox")
+        self.terrainRadiusSpinBox.setRange(0, 64)
+        self.terrainSmoothIterationsSpinBox = QtWidgets.QSpinBox()
+        self.terrainSmoothIterationsSpinBox.setObjectName("mapStudioTerrainSmoothIterationsSpinBox")
+        self.terrainSmoothIterationsSpinBox.setRange(1, 32)
+        self.terrainSmoothIterationsSpinBox.setValue(1)
+        self.terrainSmoothStrengthSpinBox = self._make_transform_spin("mapStudioTerrainSmoothStrengthSpinBox", 0.0, 1.0, "", value=0.5, step=0.1)
+        self.terrainHintLabel = QtWidgets.QLabel("Create a terrain heightfield preset to sculpt terrain samples.")
+        self.terrainHintLabel.setObjectName("mapStudioTerrainHintLabel")
+        self.terrainHintLabel.setWordWrap(True)
+        self.setTerrainHeightButton = QtWidgets.QPushButton("Set Sample Height")
+        self.setTerrainHeightButton.setObjectName("mapStudioSetTerrainHeightButton")
+        self.raiseTerrainButton = QtWidgets.QPushButton("Raise Sample")
+        self.raiseTerrainButton.setObjectName("mapStudioRaiseTerrainButton")
+        self.lowerTerrainButton = QtWidgets.QPushButton("Lower Sample")
+        self.lowerTerrainButton.setObjectName("mapStudioLowerTerrainButton")
+        self.smoothTerrainButton = QtWidgets.QPushButton("Smooth Terrain")
+        self.smoothTerrainButton.setObjectName("mapStudioSmoothTerrainButton")
+        self.flattenTerrainButton = QtWidgets.QPushButton("Flatten Terrain")
+        self.flattenTerrainButton.setObjectName("mapStudioFlattenTerrainButton")
+        terrain_layout.addRow("Terrain:", self.terrainRoomComboBox)
+        terrain_layout.addRow("Row:", self.terrainRowSpinBox)
+        terrain_layout.addRow("Column:", self.terrainColumnSpinBox)
+        terrain_layout.addRow("Height:", self.terrainHeightSpinBox)
+        terrain_layout.addRow("Delta:", self.terrainDeltaSpinBox)
+        terrain_layout.addRow("Radius:", self.terrainRadiusSpinBox)
+        terrain_layout.addRow("Smooth passes:", self.terrainSmoothIterationsSpinBox)
+        terrain_layout.addRow("Smooth strength:", self.terrainSmoothStrengthSpinBox)
+        terrain_layout.addRow(self.terrainHintLabel)
+        terrain_layout.addRow(self.setTerrainHeightButton)
+        terrain_layout.addRow(self.raiseTerrainButton)
+        terrain_layout.addRow(self.lowerTerrainButton)
+        terrain_layout.addRow(self.smoothTerrainButton)
+        terrain_layout.addRow(self.flattenTerrainButton)
+        layout.addWidget(terrain_box)
         union_box = QtWidgets.QGroupBox("Boolean Union Rooms")
         union_layout = QtWidgets.QFormLayout(union_box)
         self.floorPlanUnionFirstRoomComboBox = QtWidgets.QComboBox()
@@ -325,6 +372,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
+        self.terrainRoomComboBox.currentIndexChanged.connect(self._update_terrain_controls)
+        self.setTerrainHeightButton.clicked.connect(lambda: self._emit_terrain_operation("set_height"))
+        self.raiseTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("raise"))
+        self.lowerTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("lower"))
+        self.smoothTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("smooth"))
+        self.flattenTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("flatten"))
         self.floorPlanUnionFirstRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
         self.floorPlanUnionSecondRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
         self.mapStudioApplyRectangularUnionButton.clicked.connect(self._emit_rectangular_union)
@@ -345,6 +398,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
+        self.set_terrain_room_choices(())
         self.set_floor_plan_room_choices(())
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
@@ -398,6 +452,87 @@ class BuilderTab(QtWidgets.QWidget):
         module_root = self.moduleRootLineEdit.text().strip() or "grdev01"
         if preset_id:
             self.primitivePresetRequested.emit(preset_id, module_root)
+
+    def set_terrain_room_choices(self, rooms) -> None:
+        """Populate terrain heightfield choices for Builder sculpt operations."""
+
+        current = self._current_terrain_room_resref()
+        self.terrainRoomComboBox.blockSignals(True)
+        self.terrainRoomComboBox.clear()
+        restore_index = -1
+        for choice in tuple(rooms or ()):
+            resref = str(getattr(choice, "room_resref", "") or "")
+            label = str(getattr(choice, "label", "") or resref)
+            data = {
+                "room_resref": resref,
+                "row_count": int(getattr(choice, "row_count", 0) or 0),
+                "column_count": int(getattr(choice, "column_count", 0) or 0),
+                "min_height": float(getattr(choice, "min_height", 0.0) or 0.0),
+                "max_height": float(getattr(choice, "max_height", 0.0) or 0.0),
+                "room_index": int(getattr(choice, "room_index", 0) or 0),
+            }
+            self.terrainRoomComboBox.addItem(label, data)
+            if resref == current:
+                restore_index = self.terrainRoomComboBox.count() - 1
+        if self.terrainRoomComboBox.count() <= 0:
+            self.terrainRoomComboBox.addItem("No terrain heightfield rooms", None)
+        elif restore_index >= 0:
+            self.terrainRoomComboBox.setCurrentIndex(restore_index)
+        self.terrainRoomComboBox.blockSignals(False)
+        self._update_terrain_controls()
+
+    def _current_terrain_data(self) -> dict:
+        data = self.terrainRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _current_terrain_room_resref(self) -> str:
+        return str(self._current_terrain_data().get("room_resref") or "").strip()
+
+    def _update_terrain_controls(self) -> None:
+        data = self._current_terrain_data()
+        enabled = bool(data)
+        row_count = max(0, int(data.get("row_count", 0) or 0))
+        column_count = max(0, int(data.get("column_count", 0) or 0))
+        self.terrainRowSpinBox.setRange(0, max(0, row_count - 1))
+        self.terrainColumnSpinBox.setRange(0, max(0, column_count - 1))
+        for widget in (
+            self.terrainRoomComboBox,
+            self.terrainRowSpinBox,
+            self.terrainColumnSpinBox,
+            self.terrainHeightSpinBox,
+            self.terrainDeltaSpinBox,
+            self.terrainRadiusSpinBox,
+            self.terrainSmoothIterationsSpinBox,
+            self.terrainSmoothStrengthSpinBox,
+            self.setTerrainHeightButton,
+            self.raiseTerrainButton,
+            self.lowerTerrainButton,
+            self.smoothTerrainButton,
+            self.flattenTerrainButton,
+        ):
+            widget.setEnabled(enabled)
+        if not enabled:
+            self.terrainHintLabel.setText("Create a terrain heightfield preset to sculpt terrain samples.")
+            return
+        self.terrainHintLabel.setText(
+            f"Editing {data.get('room_resref')}: {row_count}x{column_count} samples, height range {data.get('min_height', 0.0):.2f}..{data.get('max_height', 0.0):.2f} m. Mesh and WOK regenerate together."
+        )
+
+    def _emit_terrain_operation(self, operation: str) -> None:
+        room = self._current_terrain_room_resref()
+        if not room:
+            return
+        self.terrainOperationRequested.emit(
+            operation,
+            room,
+            int(self.terrainRowSpinBox.value()),
+            int(self.terrainColumnSpinBox.value()),
+            float(self.terrainHeightSpinBox.value()),
+            float(self.terrainDeltaSpinBox.value()),
+            int(self.terrainRadiusSpinBox.value()),
+            int(self.terrainSmoothIterationsSpinBox.value()),
+            float(self.terrainSmoothStrengthSpinBox.value()),
+        )
 
     @staticmethod
     def _current_combo_resref(combo: QtWidgets.QComboBox) -> str:
