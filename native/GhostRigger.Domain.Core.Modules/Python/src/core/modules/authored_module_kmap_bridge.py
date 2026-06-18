@@ -797,6 +797,7 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
             "resolved_game_root_dir",
             "launch_helper_command",
             "elevated_launch_script_path",
+            "proof_recording_script_path",
             "in_game_proof_evidence_path",
         )
         if payload_dict.get(key)

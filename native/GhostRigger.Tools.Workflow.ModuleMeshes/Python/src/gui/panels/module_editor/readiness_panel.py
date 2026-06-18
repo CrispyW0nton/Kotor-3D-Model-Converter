@@ -55,6 +55,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.proof_label.setWordWrap(True)
         root.addWidget(self.proof_label)
 
+        self.proof_recorder_label = QtWidgets.QLabel("Proof recorder: Not ready")
+        self.proof_recorder_label.setObjectName("mapStudioReadinessProofRecorderLabel")
+        self.proof_recorder_label.setWordWrap(True)
+        root.addWidget(self.proof_recorder_label)
+
         self.launch_label = QtWidgets.QLabel("Launch handoff: Not ready")
         self.launch_label.setObjectName("mapStudioReadinessLaunchHandoffLabel")
         self.launch_label.setWordWrap(True)
@@ -97,6 +102,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
             self.proof_label.setText("Game proof: Not staged")
+            self.proof_recorder_label.setText("Proof recorder: Not ready")
             self.launch_label.setText("Launch handoff: Not ready")
             self.authored_summary_label.setText("Authored content: Not checked")
             self.blocking_label.setText("Create or open a Map Studio module project first.")
@@ -129,6 +135,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         launch_status = str(metadata.get("launch_status") or "not_ready")
         launch_helper = str(metadata.get("launch_helper_command") or "")
         elevated_launch_script = str(metadata.get("elevated_launch_script_path") or "")
+        proof_recorder_script = str(metadata.get("proof_recording_script_path") or "")
         expected_executable = str(metadata.get("expected_executable_path") or "")
         warp_command = str(metadata.get("warp_command") or f"warp {module_root}")
         if bool(getattr(readiness, "game_tested", False)):
@@ -142,6 +149,12 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_label.setText("Game proof: Not staged yet; install the .mod and run the warp test.")
         else:
             self.proof_label.setText("Game proof: Not ready")
+        if proof_recorder_script:
+            self.proof_recorder_label.setText(f"Proof recorder: Ready after the KOTOR warp test. {proof_recorder_script}")
+        elif proof_manifest:
+            self.proof_recorder_label.setText("Proof recorder: Use Record Game Smoke Proof after capturing screenshot/video evidence.")
+        else:
+            self.proof_recorder_label.setText("Proof recorder: Not ready")
         if elevated_launch_script:
             self.launch_label.setText(f"Launch handoff: Elevated launcher ready. {elevated_launch_script}")
         elif launch_helper:

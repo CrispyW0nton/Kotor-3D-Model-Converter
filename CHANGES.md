@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored Smoke Proof Recorder
+
+Owner: LordVaderCW
+Task: T2690
+Subsystem: Map Studio / authored module game-proof handoff / readiness UI / native Python payloads
+
+- Added a generated `*_record_game_proof.cmd` artifact beside the authored module smoke checklist and elevated launcher.
+- The recorder prompts for screenshot/video evidence after the real KOTOR `warp <module>` test, then calls the authored proof recorder with the required acceptance checks.
+- Stored the recorder path in the install-prep result, proof manifest launch handoff, KMAP payload, readiness metadata, and Map Studio readiness panel.
+- Updated the one-command `prepare_grdev01_authored_smoke.py` summary and next actions to show the recorder script.
+- Re-staged and installed `grdev01.mod` into the local K1 `Modules` folder; the previous live smoke copy was backed up by the install-prep flow.
+
+Verification:
+- `python -m py_compile scripts\prepare_grdev01_authored_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py`
+- `python -m pytest tests\test_authored_module_export.py tests\test_authored_module_readiness.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_reporting.py tests\test_prepare_grdev01_authored_smoke_script.py -q --basetemp .pytest_tmp_map_studio_proof_recorder`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_installed --game K1 --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-kmap --overwrite-module --json`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json`
+
 ### [2026-06-18] Map Studio Adds Launch Handoff Button
 
 Owner: LordVaderCW

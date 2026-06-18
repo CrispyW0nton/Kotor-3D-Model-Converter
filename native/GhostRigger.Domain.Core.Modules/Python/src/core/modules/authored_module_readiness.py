@@ -268,6 +268,7 @@ def build_authored_module_readiness(
         resolved_game_root_dir=resolved_game_root_dir,
     )
     elevated_launch_script_path = str(proof.get("elevated_launch_script_path") or "")
+    proof_recording_script_path = str(proof.get("proof_recording_script_path") or "")
     if game_tested and can_export_candidate:
         proof_status = "game_smoke_tested"
         launch_status = "proof_recorded"
@@ -345,6 +346,7 @@ def build_authored_module_readiness(
             "expected_executable_path": expected_executable_path,
             "launch_helper_command": launch_helper,
             "elevated_launch_script_path": elevated_launch_script_path,
+            "proof_recording_script_path": proof_recording_script_path,
             "launch_status": launch_status,
             "warp_command": warp_command,
             "in_game_proof_evidence_path": evidence_path,

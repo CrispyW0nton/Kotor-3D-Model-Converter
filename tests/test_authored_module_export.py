@@ -275,9 +275,15 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert result.installed_module_path == ""
     assert Path(result.checklist_path).is_file()
     assert Path(result.proof_manifest_path).is_file()
+    assert Path(result.proof_recording_script_path).is_file()
     assert "No KOTOR Modules folder was supplied" in "\n".join(result.warnings)
     checklist = Path(result.checklist_path).read_text(encoding="utf-8")
     assert "warp grdev01" in checklist
+    assert "Proof recorder:" in checklist
+    proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
+    assert "record_authored_module_game_proof.py" in proof_recorder
+    assert "--module-loads-in-game" in proof_recorder
+    assert "Drag or paste screenshot/video evidence path" in proof_recorder
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["task"] == "T2644"
     assert proof["manual_proof_required"] is True
@@ -431,12 +437,14 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert payload["resolved_game_root_dir"] == str(modules_dir.parent)
     assert payload["launch_helper_command"] == result.launch_helper_command
     assert payload["elevated_launch_script_path"] == result.elevated_launch_script_path
+    assert payload["proof_recording_script_path"] == result.proof_recording_script_path
     assert payload["backup_module_path"] == result.backup_module_path
     assert payload["proof_manifest_path"] == result.proof_manifest_path
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
     assert proof["launch_handoff"]["expected_executable_path"].endswith("swkotor.exe")
     assert proof["launch_handoff"]["elevated_launch_script_path"] == result.elevated_launch_script_path
+    assert proof["launch_handoff"]["proof_recording_script_path"] == result.proof_recording_script_path
     assert proof["launch_handoff"]["warp_command"] == "warp grdev01"
 
 

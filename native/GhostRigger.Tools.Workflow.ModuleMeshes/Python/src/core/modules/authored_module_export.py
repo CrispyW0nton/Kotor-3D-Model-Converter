@@ -124,6 +124,7 @@ class AuthoredModuleInstallPrepResult:
     resolved_game_root_dir: str = ""
     launch_helper_command: str = ""
     elevated_launch_script_path: str = ""
+    proof_recording_script_path: str = ""
     checklist_path: str = ""
     proof_manifest_path: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -978,6 +979,59 @@ def _write_authored_elevated_launch_script(
     return str(script_path)
 
 
+def _record_proof_script_path() -> str:
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        script_path = parent / "scripts" / "record_authored_module_game_proof.py"
+        if script_path.is_file():
+            return str(script_path)
+    return "scripts\\record_authored_module_game_proof.py"
+
+
+def _write_authored_proof_recording_script(
+    *,
+    output_root: Path,
+    module_root: str,
+    proof_manifest_path: Path,
+) -> str:
+    script_path = output_root / f"{module_root}_record_game_proof.cmd"
+    recorder_path = _record_proof_script_path()
+    proof_path = proof_manifest_path.resolve()
+    lines = [
+        "@echo off",
+        "setlocal",
+        f"echo GhostRigger authored module proof recorder: {module_root}",
+        f"echo Proof manifest: {proof_path}",
+        "echo.",
+        f"echo Run this only after KOTOR has loaded the module with: warp {module_root}",
+        "echo Confirm the player spawns on the generated floor, the authored placeable is visible, and walking works.",
+        "echo.",
+        "set /p EVIDENCE=Drag or paste screenshot/video evidence path here, then press Enter: ",
+        "set \"EVIDENCE=%EVIDENCE:\"=%\"",
+        "if \"%EVIDENCE%\"==\"\" (",
+        "  echo No evidence path supplied. Proof was not recorded.",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        (
+            f'python "{recorder_path}" --proof-manifest "{proof_path}" '
+            '--evidence "%EVIDENCE%" --tester "%USERNAME%" '
+            "--module-loads-in-game --player-spawns-on-floor "
+            "--test-placeable-visible --player-can-walk-on-floor"
+        ),
+        "if errorlevel 1 (",
+        "  echo Proof recording did not complete. Check the message above.",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        "echo.",
+        "echo Proof recorded. Keep the evidence file with the packaged module.",
+        "pause",
+    ]
+    script_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(script_path)
+
+
 def _write_authored_install_proof_files(
     *,
     output_root: Path,
@@ -991,7 +1045,7 @@ def _write_authored_install_proof_files(
     dry_run: bool,
     warnings: list[str],
     blocking: list[str],
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str]:
     output_root.mkdir(parents=True, exist_ok=True)
     module_root = export_result.module_root or "authored"
     checklist_path = output_root / f"{module_root}_authored_module_game_checklist.md"
@@ -1011,6 +1065,11 @@ def _write_authored_install_proof_files(
         game_root_dir=game_root_dir,
         proof_manifest_path=proof_manifest_path,
     )
+    proof_recording_script_path = _write_authored_proof_recording_script(
+        output_root=output_root,
+        module_root=module_root,
+        proof_manifest_path=proof_manifest_path,
+    )
     checklist_lines = [
         f"# {module_root} Authored Module In-Game Test",
         "",
@@ -1023,6 +1082,7 @@ def _write_authored_install_proof_files(
         f"- Expected executable: `{executable_path}`",
         f"- Dry-run helper: `{launch_helper_command or '(manual launch)'}`",
         f"- Elevated launch helper: `{elevated_launch_script_path or '(not written)'}`",
+        f"- Proof recorder: `{proof_recording_script_path}`",
         f"- Warp command: `warp {module_root}`",
         "",
         "## Steps",
@@ -1066,6 +1126,7 @@ def _write_authored_install_proof_files(
             "expected_executable_path": executable_path,
             "launch_helper_command": launch_helper_command,
             "elevated_launch_script_path": elevated_launch_script_path,
+            "proof_recording_script_path": proof_recording_script_path,
             "dry_run_first": bool(launch_helper_command),
             "warp_command": f"warp {module_root}",
         },
@@ -1076,7 +1137,7 @@ def _write_authored_install_proof_files(
         "blocking_issues": blocking,
     }
     proof_manifest_path.write_text(json.dumps(proof_manifest, indent=2), encoding="utf-8")
-    return str(checklist_path), str(proof_manifest_path), elevated_launch_script_path
+    return str(checklist_path), str(proof_manifest_path), elevated_launch_script_path, proof_recording_script_path
 
 
 def _install_prep_export_request(request: AuthoredModuleInstallPrepRequest) -> AuthoredModuleExportRequest:
@@ -1152,7 +1213,7 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
                     shutil.copy2(export_result.module_path, destination)
                     installed = True
 
-    checklist_path, proof_manifest_path, elevated_launch_script_path = _write_authored_install_proof_files(
+    checklist_path, proof_manifest_path, elevated_launch_script_path, proof_recording_script_path = _write_authored_install_proof_files(
         output_root=output_root,
         export_result=export_result,
         game=request.project.game,
@@ -1185,6 +1246,7 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         resolved_game_root_dir=resolved_game_root_dir,
         launch_helper_command=launch_helper_command,
         elevated_launch_script_path=elevated_launch_script_path,
+        proof_recording_script_path=proof_recording_script_path,
         checklist_path=checklist_path,
         proof_manifest_path=proof_manifest_path,
         warnings=warnings,

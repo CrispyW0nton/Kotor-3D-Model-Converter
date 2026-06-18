@@ -74,6 +74,7 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
 
     assert "mapStudioReadinessAuthoredSummaryLabel" in source
     assert "mapStudioReadinessGameProofLabel" in source
+    assert "mapStudioReadinessProofRecorderLabel" in source
     assert "mapStudioReadinessLaunchHandoffLabel" in source
     assert "mapStudioOpenLaunchHandoffButton" in source
     assert "launchHandoffRequested" in source
@@ -82,7 +83,9 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     assert "proof_status" in source
     assert "launch_helper_command" in source
     assert "elevated_launch_script_path" in source
+    assert "proof_recording_script_path" in source
     assert "Elevated launcher ready" in source
+    assert "Proof recorder: Ready" in source
 
 
 def test_t2689_module_editor_wires_launch_handoff_button() -> None:
@@ -101,4 +104,5 @@ def test_t2689_module_editor_wires_launch_handoff_button() -> None:
     assert "self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)" in source
     assert "def open_map_studio_launch_handoff" in source
     assert "elevated_launch_script_path" in source
+    assert "proof_recording_script_path" in source
     assert "QDesktopServices.openUrl" in source

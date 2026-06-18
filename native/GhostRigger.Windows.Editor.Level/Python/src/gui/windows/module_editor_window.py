@@ -659,11 +659,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
         launcher_path = Path(str(payload.get("elevated_launch_script_path") or ""))
         proof_path = Path(str(payload.get("proof_manifest_path") or ""))
+        proof_recorder_path = Path(str(payload.get("proof_recording_script_path") or ""))
         if launcher_path.is_file():
+            recorder_line = (
+                f"\n\nAfter capturing screenshot/video evidence, run:\n{proof_recorder_path}"
+                if proof_recorder_path.is_file()
+                else ""
+            )
             response = QtWidgets.QMessageBox.question(
                 self,
                 "Open Launch Handoff",
-                "Open the elevated KOTOR launcher for this authored module smoke test? Windows may ask for administrator approval. This only starts the game; you still need to run the warp command and record proof.",
+                "Open the elevated KOTOR launcher for this authored module smoke test? Windows may ask for administrator approval. This only starts the game; you still need to run the warp command and record proof."
+                + recorder_line,
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             )
             if response != QtWidgets.QMessageBox.Yes:

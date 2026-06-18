@@ -117,6 +117,7 @@ def _error_summary(*, code: str, message: str, output_dir: Path, kmap_path: Path
         "pack_manifest_path": "",
         "installed_module_path": "",
         "backup_module_path": "",
+        "proof_recording_script_path": "",
         "checklist_path": "",
         "proof_manifest_path": "",
         "warnings": [],
@@ -156,6 +157,9 @@ def _summary(
         next_actions.append(f"Copy `{export_result.module_path if export_result else module_root + '.mod'}` into a KOTOR `Modules` folder.")
         next_actions.append(f"Launch {game} and run `warp {module_root}`.")
     next_actions.append("Confirm the module loads, the player is on the floor, the test placeable appears, and walking works.")
+    proof_recorder = str(getattr(result, "proof_recording_script_path", "") or "")
+    if proof_recorder:
+        next_actions.append(f"After capturing evidence, run `{proof_recorder}` and paste the screenshot/video path.")
     next_actions.append(
         "Record proof with "
         f"`python scripts/record_authored_module_game_proof.py --proof-manifest \"{proof_manifest}\" --evidence <screenshot-or-video> "
@@ -175,6 +179,7 @@ def _summary(
         "backup_module_path": result.backup_module_path,
         "resolved_modules_dir": result.resolved_modules_dir,
         "elevated_launch_script_path": getattr(result, "elevated_launch_script_path", ""),
+        "proof_recording_script_path": getattr(result, "proof_recording_script_path", ""),
         "checklist_path": result.checklist_path,
         "proof_manifest_path": result.proof_manifest_path,
         "resources": _resource_summary(export_result),
@@ -195,6 +200,8 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
     print(f"Proof manifest: {summary['proof_manifest_path'] or '(not written)'}")
     if summary["elevated_launch_script_path"]:
         print(f"Elevated launcher: {summary['elevated_launch_script_path']}")
+    if summary.get("proof_recording_script_path"):
+        print(f"Proof recorder: {summary['proof_recording_script_path']}")
     if summary["installed_module_path"]:
         print(f"Installed module: {summary['installed_module_path']}")
     if summary["backup_module_path"]:
