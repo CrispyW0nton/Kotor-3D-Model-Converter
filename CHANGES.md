@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Authored Module Readiness Contract
+
+Owner: LordVaderCW
+Task: T2639
+Subsystem: Map Studio / authored module readiness / native Python payloads
+
+- Added a headless readiness model for scratch-built Map Studio modules that separates blocked, previewable, export-candidate, and game-tested states.
+- Reports required runtime resources for a playable `.mod` package, including ARE/GIT/module IFO/LYT/VIS plus room WOK/MDL/MDX keys, so the UI can explain what is missing before export.
+- Keeps capability honesty explicit: previewable authored geometry is not called game-ready until package resources exist and a separate in-game proof flag is recorded.
+- Mirrored the readiness contract into the ModuleMeshes native Python payload and added focused readiness coverage.
+
+Verification:
+- `python -m json.tool native\GhostRigger.Domain.Core.Modules\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Tools.Workflow.ModuleMeshes\GhostRiggerPythonPayload.json`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py tests\test_authored_module_readiness.py`
+- `python -m pytest tests\test_authored_module_readiness.py -q --basetemp .pytest_tmp_authored_module_readiness_t2639`
+
 ### [2026-06-18] Map Studio Walkmesh Overlay Diagnostics
 
 Owner: LordVaderCW
