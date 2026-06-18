@@ -106,3 +106,29 @@ def test_t2612_rectangular_room_spec_still_compiles_for_smoke_path() -> None:
     assert geometry.room_resref == "grdev01_room01"
     assert geometry.metadata["primitive"] == "rectangular_room"
     assert geometry.wok.walkable_face_count() == 2
+
+
+def test_t2633_project_validation_blocks_unsafe_resrefs_before_truncation() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec, validate_authored_module_project
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
+
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="this_module_name_is_far_too_long"),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref="bad room",
+                primitive=RectangularRoomPrimitive(room_resref="bad room"),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="entry/area")),
+    )
+
+    validation = validate_authored_module_project(project)
+
+    assert validation.ok is False
+    assert any("this_module_name_is_far_too_long" in issue and "16 characters or fewer" in issue for issue in validation.blocking_issues)
+    assert any("bad room" in issue and "letters, numbers, and underscores" in issue for issue in validation.blocking_issues)
+    assert any("entry/area" in issue and "letters, numbers, and underscores" in issue for issue in validation.blocking_issues)

@@ -102,3 +102,27 @@ def test_t2607_blocks_invalid_authored_metadata_before_serialization() -> None:
         raise AssertionError("invalid metadata should block before GFF serialization")
     assert "other_area" in message
     assert "Fog far distance" in message
+
+
+def test_t2633_metadata_validation_blocks_silent_resref_truncation() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_metadata import compile_authored_module_metadata, validate_authored_module_metadata
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+
+    module = AuthoredModuleMetadata(module_root="grdev01_custom_module_name")
+    entry = ModuleEntryPoint(area_resref="grdev01_custom_module_name")
+
+    validation = validate_authored_module_metadata(module, entry)
+
+    assert validation.ok is False
+    assert any("grdev01_custom_module_name" in issue and "16 characters or fewer" in issue for issue in validation.blocking_issues)
+    try:
+        compile_authored_module_metadata(module, entry)
+    except ValueError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("unsafe metadata resrefs should block before GFF serialization")
+    assert "grdev01_custom_module_name" in message
+    assert "16 characters or fewer" in message

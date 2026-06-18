@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .authored_module_objects import ModuleEntryPoint, apply_entry_point_to_ifo
-from .authored_module_project import AuthoredModuleMetadata, normalise_resref
+from .authored_module_project import AuthoredModuleMetadata, authored_resref_blocking_issue, normalise_resref
 
 
 RGB = tuple[int, int, int]
@@ -115,11 +115,13 @@ def validate_authored_module_metadata(
     warnings: list[str] = []
     blocking: list[str] = []
     module_root = module.normalised_root()
-    if not module_root:
-        blocking.append("Authored module metadata requires a module resref.")
-    if len(module_root) > 16:
-        blocking.append("Authored module resref must be 16 characters or fewer.")
+    module_issue = authored_resref_blocking_issue("Authored module metadata", module.module_root)
+    if module_issue:
+        blocking.append(module_issue)
     entry_area = normalise_resref(entry_point.area_resref)
+    entry_issue = authored_resref_blocking_issue("Module entry area", entry_point.area_resref)
+    if entry_issue:
+        blocking.append(entry_issue)
     if entry_area and module_root and entry_area != module_root:
         blocking.append(f"Module entry area {entry_area} does not match module resref {module_root}.")
     if not str(module.display_name or area.name or "").strip():

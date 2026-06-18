@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Authored Resref Safety Validation
+
+Owner: LordVaderCW
+Task: T2633
+Subsystem: Map Studio / authored module metadata and project validation / native Python payloads
+
+- Added shared authored-resref validation for module roots, room resrefs, and entry-area resrefs so Map Studio blocks unsafe names before package/ARE/IFO export.
+- Prevents silent truncation of overlong module names and rejects spaces or path-like punctuation that would make the generated module confusing or unwarpable.
+- Mirrored the project and metadata validation changes into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+- Added regression coverage for overlong module roots, unsafe room/entry names, and metadata compilation blocking before GFF serialization.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_metadata.py tests\test_authored_module_project.py tests\test_authored_module_metadata.py`
+- `python -m pytest tests/test_authored_module_project.py tests/test_authored_module_metadata.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_resref_safety`
+
 ### [2026-06-18] Map Studio Authored Door LYT Hooks
 
 Owner: LordVaderCW

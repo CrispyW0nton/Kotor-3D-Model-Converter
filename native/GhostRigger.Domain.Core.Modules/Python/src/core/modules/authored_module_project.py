@@ -8,6 +8,7 @@ MDL/MDX/WOK/GFF bytes.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Union
 
@@ -19,6 +20,7 @@ from .authored_room_geometry import AuthoredRoomGeometry, RectangularRoomPrimiti
 
 Vec3 = tuple[float, float, float]
 RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive]
+_RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def normalise_resref(value: Any) -> str:
@@ -28,6 +30,21 @@ def normalise_resref(value: Any) -> str:
     if "." in text:
         text = text.rsplit(".", 1)[0]
     return text[:16]
+
+
+def authored_resref_blocking_issue(label: str, value: Any) -> str | None:
+    """Return a validation issue for unsafe authored resrefs, if any."""
+
+    raw = str(value or "").strip()
+    if "." in raw:
+        raw = raw.rsplit(".", 1)[0]
+    if not raw:
+        return f"{label} requires a resref."
+    if len(raw) > 16:
+        return f"{label} resref '{raw}' is {len(raw)} characters; KOTOR resrefs must be 16 characters or fewer."
+    if not _RESREF_PATTERN.match(raw):
+        return f"{label} resref '{raw}' may only contain letters, numbers, and underscores."
+    return None
 
 
 @dataclass(frozen=True)
@@ -94,12 +111,16 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
 
     warnings: list[str] = []
     blocking: list[str] = []
-    if not project.module_root:
-        blocking.append("Authored module project requires a module resref.")
+    module_issue = authored_resref_blocking_issue("Authored module", project.metadata.module_root)
+    if module_issue:
+        blocking.append(module_issue)
     if not project.rooms:
         blocking.append("Authored module project requires at least one room.")
     seen_rooms: set[str] = set()
     for room in project.rooms:
+        room_issue = authored_resref_blocking_issue("Authored room", room.room_resref)
+        if room_issue:
+            blocking.append(room_issue)
         resref = room.normalised_resref()
         if not resref:
             blocking.append("Authored room requires a room resref.")
@@ -122,6 +143,9 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
             if missing:
                 warnings.append(f"Room {resref} references visibility targets that may be defined later: {', '.join(missing)}")
     entry_area = normalise_resref(project.placements.entry_point.area_resref)
+    entry_issue = authored_resref_blocking_issue("Module entry area", project.placements.entry_point.area_resref)
+    if entry_issue:
+        blocking.append(entry_issue)
     if entry_area != project.module_root:
         blocking.append(f"Module entry area {entry_area or '(missing)'} does not match module root {project.module_root}.")
     placement_validation = validate_authored_gameplay_placement(project.placements)
@@ -223,6 +247,7 @@ __all__ = [
     "AuthoredModuleProjectValidation",
     "AuthoredRoomSpec",
     "RoomPrimitiveIntent",
+    "authored_resref_blocking_issue",
     "compile_authored_room_spec",
     "create_floor_plan_room_project",
     "create_single_room_project",
