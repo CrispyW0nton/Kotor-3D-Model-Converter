@@ -29,6 +29,7 @@ from .authored_room_primitives import (
     build_ramp_mesh,
     build_ramp_wok,
     build_stairs_mesh,
+    build_stairs_wok,
     build_wall_mesh,
 )
 from .module_format import WOKData, WOKFace
@@ -105,6 +106,8 @@ def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
     for primitive in composition.primitives:
         if isinstance(primitive, RampPrimitive):
             _append_wok(wok, build_ramp_wok(primitive))
+        if isinstance(primitive, StairsPrimitive):
+            _append_wok(wok, build_stairs_wok(primitive))
     return wok
 
 
@@ -136,6 +139,18 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
                 blocking.append(f"Ramp primitive {primitive.name or '(unnamed)'} must have positive width, length, and height.")
             try:
                 require_walkable_walkmesh_surface(primitive.surface_id, context=f"{primitive.name} ramp")
+            except ValueError as exc:
+                blocking.append(str(exc))
+        if isinstance(primitive, StairsPrimitive):
+            if (
+                float(primitive.width) <= 0.0
+                or float(primitive.depth) <= 0.0
+                or float(primitive.height) <= 0.0
+                or int(primitive.steps) <= 0
+            ):
+                blocking.append(f"Stairs primitive {primitive.name or '(unnamed)'} must have positive width, depth, height, and step count.")
+            try:
+                require_walkable_walkmesh_surface(primitive.surface_id, context=f"{primitive.name} stairs")
             except ValueError as exc:
                 blocking.append(str(exc))
         if isinstance(primitive, ArchPrimitive):
@@ -180,7 +195,7 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
             "primitive_count": len(composition.primitives),
             "helper_mesh_count": len(composition.helper_meshes),
             "compiled_mesh_count": 1 + len(primitive_meshes) + len(composition.helper_meshes),
-            "walkmesh_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, RampPrimitive)),
+            "walkmesh_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, (RampPrimitive, StairsPrimitive))),
             "warnings": list(validation.warnings),
         },
     )

@@ -151,6 +151,58 @@ def test_t2620_composition_rejects_non_walkable_ramp_surface() -> None:
     assert "bad_ramp_path ramp surface 7 (NON_WALK) is not walkable." in validation.blocking_issues
 
 
+def test_t2624_composition_adds_walkable_stair_faces_to_wok() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive, StairsPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="stair_room",
+        floor=FloorPrimitive(name="stair_room_floor", width=8.0, depth=8.0, surface_id="stone"),
+        primitives=(
+            StairsPrimitive(
+                name="stair_room_steps",
+                width=2.0,
+                depth=3.0,
+                height=1.25,
+                steps=5,
+                surface_id="metal",
+            ),
+        ),
+    )
+
+    validation = validate_authored_room_composition(composition)
+    geometry = compile_authored_room_composition(composition)
+
+    assert validation.ok is True
+    assert geometry.metadata["walkmesh_primitive_count"] == 1
+    assert geometry.wok.walkable_face_count() == 4
+    assert len(geometry.wok.verts) == 8
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10]
+    assert geometry.wok.verts[4:] == [(-1.0, -1.5, 0.0), (1.0, -1.5, 0.0), (1.0, 1.5, 1.25), (-1.0, 1.5, 1.25)]
+    assert geometry.helper_meshes[0].metadata["primitive"] == "stairs"
+    assert geometry.helper_meshes[0].metadata["steps"] == 5
+
+
+def test_t2624_composition_rejects_invalid_stairs_walkmesh_surface() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive, StairsPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="bad_stairs",
+        floor=FloorPrimitive(name="bad_stairs_floor"),
+        primitives=(StairsPrimitive(name="bad_stairs_path", surface_id="non_walk"),),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert "bad_stairs_path stairs surface 7 (NON_WALK) is not walkable." in validation.blocking_issues
+
+
 def test_t2622_composition_compiles_arch_primitive_as_helper_mesh() -> None:
     _install_native_payload_paths()
 

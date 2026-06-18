@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Walkable Stair WOKs
+
+Owner: LordVaderCW
+Task: T2624
+Subsystem: Map Studio / authored room geometry / native Python payloads
+
+- Added `surface_id` support and walkable WOK generation for authored stair primitives so visual stair treads can export with a continuous pathable stair-run proxy.
+- Updated authored room composition to merge stair WOK faces into room walkmeshes and block non-walkable stair surfaces before package export.
+- Mirrored the authored primitive/composition changes into the ModuleMeshes native Python payload and refreshed payload manifest hashes.
+- Added regression coverage for stair WOK vertices/faces, room composition WOK merging, and rejection of non-walkable stair surfaces.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_composition.py tests\test_authored_room_primitives.py tests\test_authored_room_composition.py`
+- `python -m pytest tests/test_authored_room_primitives.py tests/test_authored_room_composition.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_stairs_wok_smoke`
+- Native Python payload hash check for the edited authored room modules.
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Floor-Plan Inset Operation
 
 Owner: LordVaderCW

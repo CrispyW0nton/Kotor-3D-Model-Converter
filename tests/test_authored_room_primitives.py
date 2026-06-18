@@ -77,6 +77,7 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
         build_ramp_mesh,
         build_ramp_wok,
         build_stairs_mesh,
+        build_stairs_wok,
         build_wall_mesh,
     )
 
@@ -86,7 +87,9 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     ramp_primitive = RampPrimitive(name="ramp", width=2.0, length=4.0, height=1.25, center=(1.0, 2.0, 0.25), surface_id="metal")
     ramp = build_ramp_mesh(ramp_primitive)
     ramp_wok = build_ramp_wok(ramp_primitive)
-    stairs = build_stairs_mesh(StairsPrimitive(name="stairs", width=2.0, depth=4.0, height=1.0, steps=4))
+    stairs_primitive = StairsPrimitive(name="stairs", width=2.0, depth=4.0, height=1.0, steps=4, surface_id="stone")
+    stairs = build_stairs_mesh(stairs_primitive)
+    stairs_wok = build_stairs_wok(stairs_primitive)
 
     assert arch.metadata["primitive"] == "arch"
     assert arch.metadata["segments"] == 8
@@ -111,7 +114,11 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     assert ramp_wok.verts == list(ramp.vertices[:4])
     assert stairs.metadata["primitive"] == "stairs"
     assert stairs.metadata["steps"] == 4
+    assert stairs.metadata["surface_id"] == 4
     assert len(stairs.faces) == 48
+    assert stairs_wok.walkable_face_count() == 2
+    assert stairs_wok.verts == [(-1.0, -2.0, 0.0), (1.0, -2.0, 0.0), (1.0, 2.0, 1.0), (-1.0, 2.0, 1.0)]
+    assert [face.surface for face in stairs_wok.faces] == [4, 4]
 
 
 def test_t2602_builds_segmented_cylinder_mesh() -> None:

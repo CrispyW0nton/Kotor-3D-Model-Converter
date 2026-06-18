@@ -74,6 +74,7 @@ class StairsPrimitive:
     depth: float = 4.0
     height: float = 1.0
     steps: int = 4
+    surface_id: int | str = 4
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
 
 
@@ -303,7 +304,33 @@ def build_stairs_mesh(primitive: StairsPrimitive) -> PrimitiveMesh:
         faces=tuple(faces),
         material=primitive.material,
         primitive="stairs",
-        metadata={"steps": steps},
+        metadata={
+            "steps": steps,
+            "surface_id": resolve_walkmesh_surface_id(primitive.surface_id),
+            "surface_name": walkmesh_surface_name(resolve_walkmesh_surface_id(primitive.surface_id)),
+        },
+    )
+
+
+def build_stairs_wok(primitive: StairsPrimitive) -> WOKData:
+    """Build a continuous walkable WOK proxy over visual stair treads."""
+
+    surface_id = resolve_walkmesh_surface_id(primitive.surface_id)
+    half_w = float(primitive.width) * 0.5
+    half_d = float(primitive.depth) * 0.5
+    h = float(primitive.height)
+    verts: list[Vec3] = [
+        (-half_w, -half_d, 0.0),
+        (half_w, -half_d, 0.0),
+        (half_w, half_d, h),
+        (-half_w, half_d, h),
+    ]
+    return WOKData(
+        verts=verts,
+        faces=[
+            WOKFace(0, 1, 2, surface=surface_id, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=surface_id, adj1=0, adj2=-1, adj3=-1),
+        ],
     )
 
 
@@ -446,5 +473,6 @@ __all__ = [
     "build_ramp_mesh",
     "build_ramp_wok",
     "build_stairs_mesh",
+    "build_stairs_wok",
     "build_wall_mesh",
 ]

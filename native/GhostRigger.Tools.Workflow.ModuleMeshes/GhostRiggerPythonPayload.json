@@ -291,7 +291,7 @@
       "source_path": "src/core/modules/authored_room_composition.py",
       "packaged_path": "Python/src/core/modules/authored_room_composition.py",
       "resource_name": "PYTHON_PAYLOAD_0047",
-      "sha256": "a59dc93d87b399c31973425c52be334b95b14beacdfc054a81fe221ac6e90fde"
+      "sha256": "c25843fc99d41c865e5da11eea35a4ba149f538d8e397474bbcc00a26ff0fadc"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0048",
@@ -333,7 +333,7 @@
       "resource_name": "PYTHON_PAYLOAD_0053",
       "source_path": "src/core/modules/authored_room_primitives.py",
       "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
-      "sha256": "e970c02cdd9bd4f605dbef3e644b1dc73c69f8672e78630e8239378b1827de11"
+      "sha256": "537556cfe7a711cc41a5d7c89367c12bc3a6414569f31f3489a919774bf383d1"
     }
   ]
 }
