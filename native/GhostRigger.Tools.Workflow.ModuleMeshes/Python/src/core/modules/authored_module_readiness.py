@@ -210,9 +210,11 @@ def build_authored_module_readiness(
     *,
     packaged_resources: Iterable[Any] = (),
     game_tested: bool = False,
+    proof_metadata: dict[str, Any] | None = None,
 ) -> AuthoredModuleReadiness:
     """Build a capability-honest readiness summary for Map Studio UI/export."""
 
+    proof = dict(proof_metadata or {})
     validation = validate_authored_module_project(project)
     rooms = _room_readiness(project)
     gameplay_counts = _gameplay_counts(project)
@@ -226,6 +228,22 @@ def build_authored_module_readiness(
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
     ready_for_game_test = can_export_candidate and not bool(game_tested)
+    proof_manifest_path = str(proof.get("proof_manifest_path") or "")
+    checklist_path = str(proof.get("checklist_path") or "")
+    installed_module_path = str(proof.get("installed_module_path") or "")
+    backup_module_path = str(proof.get("backup_module_path") or "")
+    resolved_modules_dir = str(proof.get("resolved_modules_dir") or "")
+    evidence_path = str(proof.get("in_game_proof_evidence_path") or proof.get("evidence_path") or "")
+    if game_tested and can_export_candidate:
+        proof_status = "game_smoke_tested"
+    elif installed_module_path:
+        proof_status = "installed_for_game_test"
+    elif proof_manifest_path or checklist_path:
+        proof_status = "staged_for_game_test"
+    elif can_export_candidate:
+        proof_status = "not_staged"
+    else:
+        proof_status = "not_ready"
     if game_tested and can_export_candidate:
         stage = "game_tested"
         preview_status = "Ready"
@@ -235,7 +253,12 @@ def build_authored_module_readiness(
         stage = "export_candidate"
         preview_status = "Ready"
         export_status = "Ready for package/game smoke test"
-        next_action = f"Package the module, install it, launch KOTOR, and run `warp {project.module_root}` for game proof."
+        if installed_module_path:
+            next_action = f"Launch KOTOR and run `warp {project.module_root}`, then record the proof manifest with screenshot/video evidence."
+        elif proof_manifest_path or checklist_path:
+            next_action = f"Install/copy the staged package into KOTOR Modules, launch KOTOR, and run `warp {project.module_root}`."
+        else:
+            next_action = f"Package the module, install it, launch KOTOR, and run `warp {project.module_root}` for game proof."
     elif can_preview:
         stage = "previewable"
         preview_status = "Ready"
@@ -270,6 +293,13 @@ def build_authored_module_readiness(
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
+            "proof_status": proof_status,
+            "proof_manifest_path": proof_manifest_path,
+            "checklist_path": checklist_path,
+            "installed_module_path": installed_module_path,
+            "backup_module_path": backup_module_path,
+            "resolved_modules_dir": resolved_modules_dir,
+            "in_game_proof_evidence_path": evidence_path,
             "room_styles": [
                 {
                     "room_resref": room.room_resref,

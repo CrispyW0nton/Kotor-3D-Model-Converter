@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Shows Authored Game-Proof Readiness
+
+Owner: LordVaderCW
+Task: T2684
+Subsystem: Map Studio / authored module readiness / proof-state UI / native Python payloads
+
+- Extended authored-module readiness metadata with proof status, staged proof manifest, checklist path, installed module path, backup path, resolved Modules folder, and recorded evidence path.
+- Taught the KMAP bridge to pass staged/install/proof paths from the authored module payload into the readiness contract.
+- Added a dedicated game-proof line to the Module Editor readiness panel so modders can tell whether a module is not staged, staged for test, installed for a warp test, or already proof-recorded.
+- Mirrored the readiness, KMAP bridge, and panel updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py tests\test_authored_module_readiness.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_reporting.py`
+- `python -m pytest tests\test_authored_module_readiness.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_reporting.py -q --basetemp .pytest_tmp_map_studio_proof_readiness`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Adds Explicit Authored Module Game Install Action
 
 Owner: LordVaderCW

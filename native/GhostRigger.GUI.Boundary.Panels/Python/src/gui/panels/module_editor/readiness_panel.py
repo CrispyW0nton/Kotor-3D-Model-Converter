@@ -49,6 +49,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.runtime_label.setWordWrap(True)
         root.addWidget(self.runtime_label)
 
+        self.proof_label = QtWidgets.QLabel("Game proof: Not staged")
+        self.proof_label.setObjectName("mapStudioReadinessGameProofLabel")
+        self.proof_label.setWordWrap(True)
+        root.addWidget(self.proof_label)
+
         self.authored_summary_label = QtWidgets.QLabel("Authored content: Not checked")
         self.authored_summary_label.setObjectName("mapStudioReadinessAuthoredSummaryLabel")
         self.authored_summary_label.setWordWrap(True)
@@ -80,6 +85,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.preview_label.setText("Preview: Not ready")
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
+            self.proof_label.setText("Game proof: Not staged")
             self.authored_summary_label.setText("Authored content: Not checked")
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
@@ -103,6 +109,21 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
         metadata = dict(getattr(readiness, "metadata", {}) or {})
+        proof_status = str(metadata.get("proof_status") or "not_ready")
+        installed_path = str(metadata.get("installed_module_path") or "")
+        proof_manifest = str(metadata.get("proof_manifest_path") or "")
+        evidence_path = str(metadata.get("in_game_proof_evidence_path") or "")
+        if bool(getattr(readiness, "game_tested", False)):
+            suffix = f" Evidence: {evidence_path}" if evidence_path else ""
+            self.proof_label.setText(f"Game proof: Recorded.{suffix}")
+        elif installed_path:
+            self.proof_label.setText(f"Game proof: Installed for warp test. {installed_path}")
+        elif proof_manifest:
+            self.proof_label.setText(f"Game proof: Staged; proof manifest ready. {proof_manifest}")
+        elif proof_status == "not_staged":
+            self.proof_label.setText("Game proof: Not staged yet; install the .mod and run the warp test.")
+        else:
+            self.proof_label.setText("Game proof: Not ready")
         styles = list(metadata.get("room_styles", ()) or ())
         gameplay_counts = dict(metadata.get("gameplay_counts", {}) or {})
         placement_total = int(metadata.get("gameplay_placement_count", sum(int(value) for value in gameplay_counts.values()) if gameplay_counts else 0))

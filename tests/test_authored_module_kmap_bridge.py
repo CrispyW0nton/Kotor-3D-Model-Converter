@@ -110,6 +110,28 @@ def test_t2640_kmap_bridge_promotes_complete_runtime_resources_to_export_candida
     assert "warp grdev01" in readiness.next_action
 
 
+def test_t2684_kmap_bridge_reports_installed_authored_module_proof_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.level import new_kmap_project
+    from src.core.modules.authored_module_kmap_bridge import build_kmap_authored_module_readiness
+
+    project = new_kmap_project(name="grdev01", game="K1")
+    payload = _authored_payload(_runtime_resources())
+    payload["proof_manifest_path"] = "C:/tmp/grdev01_authored_module_game_manifest.json"
+    payload["installed_module_path"] = "C:/Games/KOTOR/Modules/grdev01.mod"
+    payload["resolved_modules_dir"] = "C:/Games/KOTOR/Modules"
+    project.extra_sections["authored_module"] = payload
+
+    readiness = build_kmap_authored_module_readiness(project).readiness
+
+    assert readiness is not None
+    assert readiness.metadata["proof_status"] == "installed_for_game_test"
+    assert readiness.metadata["installed_module_path"].endswith("grdev01.mod")
+    assert readiness.metadata["resolved_modules_dir"].endswith("Modules")
+    assert "Launch KOTOR and run `warp grdev01`" in readiness.next_action
+
+
 def test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint() -> None:
     _install_native_payload_paths()
 

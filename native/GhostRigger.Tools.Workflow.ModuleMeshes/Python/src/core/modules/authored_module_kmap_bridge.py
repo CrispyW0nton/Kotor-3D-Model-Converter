@@ -784,11 +784,25 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
             blocking_messages=(f"Authored module section could not be parsed: {exc}",),
             metadata={"source": "src.core.modules.authored_module_kmap_bridge", "has_payload": True},
         )
-    resources = _runtime_resources(_dict(payload).get("runtime_resources"))
+    payload_dict = _dict(payload)
+    resources = _runtime_resources(payload_dict.get("runtime_resources"))
+    proof_metadata = {
+        key: payload_dict.get(key)
+        for key in (
+            "proof_manifest_path",
+            "checklist_path",
+            "installed_module_path",
+            "backup_module_path",
+            "resolved_modules_dir",
+            "in_game_proof_evidence_path",
+        )
+        if payload_dict.get(key)
+    }
     readiness = build_authored_module_readiness(
         project,
         packaged_resources=resources,
-        game_tested=bool(_dict(payload).get("game_tested", False)),
+        game_tested=bool(payload_dict.get("game_tested", False)),
+        proof_metadata=proof_metadata,
     )
     return AuthoredModuleKMapBridgeResult(
         project=project,

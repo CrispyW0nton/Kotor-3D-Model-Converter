@@ -111,6 +111,37 @@ def test_t2639_runtime_resources_promote_project_to_export_candidate() -> None:
     assert "warp grdev01" in readiness.next_action
 
 
+def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    staged = build_authored_module_readiness(
+        _floor_plan_project(),
+        packaged_resources=_runtime_keys(),
+        proof_metadata={
+            "proof_manifest_path": "C:/tmp/grdev01_authored_module_game_manifest.json",
+            "checklist_path": "C:/tmp/grdev01_authored_module_game_checklist.md",
+        },
+    )
+    installed = build_authored_module_readiness(
+        _floor_plan_project(),
+        packaged_resources=_runtime_keys(),
+        proof_metadata={
+            "proof_manifest_path": "C:/tmp/grdev01_authored_module_game_manifest.json",
+            "installed_module_path": "C:/Games/KOTOR/Modules/grdev01.mod",
+            "resolved_modules_dir": "C:/Games/KOTOR/Modules",
+        },
+    )
+
+    assert staged.metadata["proof_status"] == "staged_for_game_test"
+    assert staged.metadata["proof_manifest_path"].endswith("grdev01_authored_module_game_manifest.json")
+    assert "Install/copy the staged package" in staged.next_action
+    assert installed.metadata["proof_status"] == "installed_for_game_test"
+    assert installed.metadata["installed_module_path"].endswith("grdev01.mod")
+    assert "Launch KOTOR and run `warp grdev01`" in installed.next_action
+
+
 def test_t2639_game_tested_flag_is_only_honored_for_export_candidates() -> None:
     _install_native_payload_paths()
 

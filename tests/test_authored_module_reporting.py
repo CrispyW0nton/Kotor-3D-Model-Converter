@@ -73,5 +73,7 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     ).read_text(encoding="utf-8")
 
     assert "mapStudioReadinessAuthoredSummaryLabel" in source
+    assert "mapStudioReadinessGameProofLabel" in source
     assert "gameplay_counts" in source
     assert "room_styles" in source
+    assert "proof_status" in source
