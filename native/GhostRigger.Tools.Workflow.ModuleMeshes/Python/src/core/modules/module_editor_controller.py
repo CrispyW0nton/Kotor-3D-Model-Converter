@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +14,11 @@ from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
 from .authored_module_export import (
     AuthoredModuleExportRequest,
+    AuthoredModuleGameProofRequest,
     AuthoredModuleInstallPrepRequest,
     export_authored_module_project,
     prepare_authored_module_install,
+    record_authored_module_game_proof,
 )
 from .authored_module_kmap_bridge import (
     authored_project_from_kmap_payload,
@@ -36,7 +39,7 @@ from .authored_room_operations import apply_authored_floor_plan_operation
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
-from .dev_module_smoke import DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install
+from .dev_module_smoke import DevModuleGameProofRequest, DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install, record_dev_module_game_proof
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
 from .module_walkmesh_service import ModuleWalkmeshService
@@ -399,6 +402,55 @@ class ModuleEditorController:
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
         self.model.log(result.message)
+        return result
+
+    def record_map_studio_game_proof(
+        self,
+        *,
+        proof_manifest_path: str | Path,
+        evidence_path: str | Path,
+        tester: str = "",
+        notes: str = "",
+        module_loads_in_game: bool = False,
+        player_spawns_on_floor: bool = False,
+        test_placeable_visible: bool = False,
+        player_can_walk_on_floor: bool = False,
+        allow_missing_evidence: bool = False,
+    ):
+        """Record in-game proof for a staged Map Studio module proof manifest."""
+
+        proof_path = Path(proof_manifest_path)
+        try:
+            proof = json.loads(proof_path.read_text(encoding="utf-8"))
+        except Exception:
+            proof = {}
+        task = str(proof.get("task") or "").strip().upper()
+        proof_filename = proof_path.name.lower()
+        common = {
+            "proof_manifest_path": str(proof_path),
+            "evidence_path": str(evidence_path),
+            "tester": tester,
+            "notes": notes,
+            "module_loads_in_game": bool(module_loads_in_game),
+            "player_spawns_on_floor": bool(player_spawns_on_floor),
+            "test_placeable_visible": bool(test_placeable_visible),
+            "player_can_walk_on_floor": bool(player_can_walk_on_floor),
+            "allow_missing_evidence": bool(allow_missing_evidence),
+        }
+        if task == "T2601" or proof_filename.endswith("_in_game_smoke_manifest.json"):
+            result = record_dev_module_game_proof(DevModuleGameProofRequest(**common))
+        else:
+            result = record_authored_module_game_proof(AuthoredModuleGameProofRequest(**common))
+            if getattr(result, "ok", False):
+                payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+                if payload:
+                    payload["game_tested"] = True
+                    payload["proof_manifest_path"] = str(getattr(result, "proof_manifest_path", "") or proof_path)
+                    payload["pack_manifest_path"] = str(getattr(result, "pack_manifest_path", "") or "")
+                    payload["in_game_proof_evidence_path"] = str(getattr(result, "evidence_path", "") or evidence_path)
+                    self.project.extra_sections["authored_module"] = payload
+                    self.project.dirty = True
+        self.model.log(getattr(result, "message", "Recorded Map Studio game proof."))
         return result
 
     def export_fbx(self, output_path: str | Path, *, dry_run: bool = False):

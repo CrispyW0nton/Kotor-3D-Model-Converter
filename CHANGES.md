@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Wires In-App Game Proof Recording
+
+Owner: LordVaderCW
+Task: T2658
+Subsystem: Map Studio / game proof recording / readiness panel / Module Editor controller / native Python payloads
+
+- Added a Module Editor controller proof-recording path that accepts either a `T2601` grdev01 smoke proof manifest or an authored-module proof manifest and dispatches to the existing headless proof validators.
+- Successful authored-module proof now updates the KMAP authored-module payload with `game_tested`, proof manifest, pack manifest, and evidence path so readiness can honestly move to `game_tested`.
+- Replaced the readiness panel's proof-button reminder with an in-app dialog that collects the proof manifest, screenshot/video evidence, tester, notes, and explicit KOTOR acceptance checks.
+- Kept the proof gate strict: the UI calls the existing backend proof recorder and does not mark a module tested without evidence and the required in-game checks.
+- Mirrored the controller changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_game_proof_ui.py`
+- `python -m pytest tests\test_map_studio_game_proof_ui.py tests\test_authored_module_proof_scripts.py tests\test_dev_module_game_proof.py -q --basetemp .pytest_tmp_map_studio_game_proof_ui`
+
 ### [2026-06-18] Map Studio Adds Authored Gameplay Preview Markers
 
 Owner: LordVaderCW

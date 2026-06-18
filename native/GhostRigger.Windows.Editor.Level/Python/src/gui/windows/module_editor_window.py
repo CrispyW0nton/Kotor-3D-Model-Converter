@@ -26,6 +26,109 @@ from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
 
+class _MapStudioGameProofDialog(QtWidgets.QDialog):
+    """Collect manual KOTOR smoke-test proof before marking a module tested."""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None, *, proof_manifest_path: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Record Map Studio Game Proof")
+        self.setModal(True)
+        layout = QtWidgets.QVBoxLayout(self)
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
+
+        self.proof_manifest_edit = QtWidgets.QLineEdit(proof_manifest_path)
+        self.proof_manifest_edit.setObjectName("mapStudioProofManifestLineEdit")
+        proof_browse = QtWidgets.QPushButton("Browse...")
+        proof_browse.setObjectName("mapStudioProofManifestBrowseButton")
+        proof_row = QtWidgets.QHBoxLayout()
+        proof_row.addWidget(self.proof_manifest_edit, 1)
+        proof_row.addWidget(proof_browse)
+        form.addRow("Proof manifest", proof_row)
+
+        self.evidence_edit = QtWidgets.QLineEdit()
+        self.evidence_edit.setObjectName("mapStudioProofEvidenceLineEdit")
+        evidence_browse = QtWidgets.QPushButton("Browse...")
+        evidence_browse.setObjectName("mapStudioProofEvidenceBrowseButton")
+        evidence_row = QtWidgets.QHBoxLayout()
+        evidence_row.addWidget(self.evidence_edit, 1)
+        evidence_row.addWidget(evidence_browse)
+        form.addRow("Screenshot/video", evidence_row)
+
+        self.tester_edit = QtWidgets.QLineEdit()
+        self.tester_edit.setObjectName("mapStudioProofTesterLineEdit")
+        form.addRow("Tester", self.tester_edit)
+
+        self.notes_edit = QtWidgets.QPlainTextEdit()
+        self.notes_edit.setObjectName("mapStudioProofNotesEdit")
+        self.notes_edit.setMaximumHeight(90)
+        form.addRow("Notes", self.notes_edit)
+
+        checks_box = QtWidgets.QGroupBox("KOTOR in-game acceptance checks")
+        checks_box.setObjectName("mapStudioProofChecksGroupBox")
+        checks_layout = QtWidgets.QVBoxLayout(checks_box)
+        self.module_loads_box = QtWidgets.QCheckBox("`warp` loads the generated module in KOTOR")
+        self.module_loads_box.setObjectName("mapStudioProofModuleLoadsCheckBox")
+        self.player_floor_box = QtWidgets.QCheckBox("Player appears on the generated floor, not in void")
+        self.player_floor_box.setObjectName("mapStudioProofPlayerFloorCheckBox")
+        self.placeable_visible_box = QtWidgets.QCheckBox("Authored/test placeable appears where expected")
+        self.placeable_visible_box.setObjectName("mapStudioProofPlaceableVisibleCheckBox")
+        self.walkable_floor_box = QtWidgets.QCheckBox("Player can walk across the generated floor")
+        self.walkable_floor_box.setObjectName("mapStudioProofWalkableFloorCheckBox")
+        self.allow_missing_evidence_box = QtWidgets.QCheckBox("Record incomplete attempt if evidence file is missing")
+        self.allow_missing_evidence_box.setObjectName("mapStudioProofAllowMissingEvidenceCheckBox")
+        for widget in (
+            self.module_loads_box,
+            self.player_floor_box,
+            self.placeable_visible_box,
+            self.walkable_floor_box,
+            self.allow_missing_evidence_box,
+        ):
+            checks_layout.addWidget(widget)
+        layout.addWidget(checks_box)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        proof_browse.clicked.connect(self._browse_proof_manifest)
+        evidence_browse.clicked.connect(self._browse_evidence)
+
+    def values(self) -> dict[str, Any]:
+        return {
+            "proof_manifest_path": self.proof_manifest_edit.text().strip(),
+            "evidence_path": self.evidence_edit.text().strip(),
+            "tester": self.tester_edit.text().strip(),
+            "notes": self.notes_edit.toPlainText().strip(),
+            "module_loads_in_game": self.module_loads_box.isChecked(),
+            "player_spawns_on_floor": self.player_floor_box.isChecked(),
+            "test_placeable_visible": self.placeable_visible_box.isChecked(),
+            "player_can_walk_on_floor": self.walkable_floor_box.isChecked(),
+            "allow_missing_evidence": self.allow_missing_evidence_box.isChecked(),
+        }
+
+    def _browse_proof_manifest(self) -> None:
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Map Studio proof manifest",
+            self.proof_manifest_edit.text().strip(),
+            "Proof manifest (*.json);;All files (*.*)",
+        )
+        if path:
+            self.proof_manifest_edit.setText(path)
+
+    def _browse_evidence(self) -> None:
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select KOTOR screenshot or video evidence",
+            self.evidence_edit.text().strip(),
+            "Evidence (*.png *.jpg *.jpeg *.bmp *.mp4 *.mov *.mkv);;All files (*.*)",
+        )
+        if path:
+            self.evidence_edit.setText(path)
+
+
 class ModuleEditorWindow(QtWidgets.QMainWindow):
     """Top-level KMAP/Module Editor window with its own menus and viewport."""
 
@@ -244,7 +347,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner.actionRequested.connect(self._outliner_action)
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.validation_panel.issueActivated.connect(self.select_item)
-        self.readiness_panel.gameTestRequested.connect(lambda: self._log("Run the installed module in KOTOR and record proof before marking game-tested."))
+        self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.properties.transformChanged.connect(self._set_transform)
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
@@ -443,6 +546,35 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for issue in result.blocking_issues:
             self._log(f"Blocking: {issue}")
         self._refresh_all("Authored module game-test staging updated.")
+
+    def record_game_smoke_proof(self) -> None:
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        default_manifest = str(payload.get("proof_manifest_path") or "")
+        dialog = _MapStudioGameProofDialog(self, proof_manifest_path=default_manifest)
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return
+        values = dialog.values()
+        if not values["proof_manifest_path"]:
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", "Choose the proof manifest written by the Map Studio stage action.")
+            return
+        if not values["evidence_path"] and not values["allow_missing_evidence"]:
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", "Choose screenshot or video evidence from the actual KOTOR test.")
+            return
+        result = self.controller.record_map_studio_game_proof(**values)
+        self._log(result.message)
+        if getattr(result, "proof_manifest_path", ""):
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if getattr(result, "pack_manifest_path", ""):
+            self._log(f"Pack manifest: {result.pack_manifest_path}")
+        if getattr(result, "evidence_path", ""):
+            self._log(f"Evidence: {result.evidence_path}")
+        for warning in getattr(result, "warnings", ()):
+            self._log(f"Warning: {warning}")
+        for issue in getattr(result, "blocking_issues", ()):
+            self._log(f"Blocking: {issue}")
+        if not getattr(result, "ok", False):
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", result.message)
+        self._refresh_all("Map Studio game proof updated.")
 
     def create_authored_room_preset(self, preset_id: str, module_root: str) -> None:
         try:
