@@ -68,6 +68,8 @@ def test_t2649_launch_grdev01_smoke_dry_run_accepts_ready_install(tmp_path: Path
     assert payload["dry_run"] is True
     assert payload["launch_command"] == [str(game_root / "swkotor.exe")]
     assert "warp grdev01" in payload["next_action"]
+    assert payload["proof_recording_script_path"] == prep["proof_recording_script_path"]
+    assert "record_game_proof.cmd" in payload["next_action"]
 
 
 def test_t2649_launch_grdev01_smoke_blocks_missing_executable(tmp_path: Path) -> None:

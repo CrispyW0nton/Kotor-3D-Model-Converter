@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Launch Helper Reports Proof Recorder
+
+Owner: LordVaderCW
+Task: T2691
+Subsystem: Map Studio / grdev01 launch helper / game-proof handoff
+
+- Updated `launch_grdev01_smoke_test.py` to read the generated proof recorder path from the proof manifest and include it in JSON/human launch-check output.
+- The dry-run next action now points to the `*_record_game_proof.cmd` script after the real `warp grdev01` screenshot/video capture.
+
+Verification:
+- `python -m py_compile scripts\launch_grdev01_smoke_test.py tests\test_launch_grdev01_smoke_script.py`
+- `python -m pytest tests\test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_map_studio_launch_recorder`
+
 ### [2026-06-18] Map Studio Adds Authored Smoke Proof Recorder
 
 Owner: LordVaderCW

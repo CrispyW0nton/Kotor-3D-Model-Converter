@@ -66,6 +66,17 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _proof_recording_script_path(proof_manifest: Path) -> str:
+    try:
+        proof = json.loads(proof_manifest.read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+    handoff = proof.get("launch_handoff") if isinstance(proof, dict) else {}
+    if not isinstance(handoff, dict):
+        return ""
+    return str(handoff.get("proof_recording_script_path") or "")
+
+
 def _summary(
     *,
     ok: bool,
@@ -74,8 +85,14 @@ def _summary(
     status: dict[str, Any],
     executable: Path,
     launch_command: list[str],
+    proof_recording_script_path: str,
     dry_run: bool,
 ) -> dict[str, Any]:
+    next_action = str(status.get("next_action", "") or "")
+    if ok:
+        next_action = "In KOTOR, open the console and run `warp grdev01`. Then capture evidence and record proof."
+        if proof_recording_script_path:
+            next_action += f" Run `{proof_recording_script_path}` after capturing screenshot/video evidence."
     return {
         "ok": ok,
         "code": code,
@@ -88,12 +105,9 @@ def _summary(
         "installed_matches_package": bool((status.get("installed") or {}).get("matches_package", False)),
         "executable_path": str(executable),
         "launch_command": launch_command,
+        "proof_recording_script_path": proof_recording_script_path,
         "dry_run": dry_run,
-        "next_action": (
-            "In KOTOR, open the console and run `warp grdev01`. Then capture evidence and record proof."
-            if ok
-            else status.get("next_action", "")
-        ),
+        "next_action": next_action,
         "warnings": list(status.get("warnings", [])),
         "blocking_issues": list(status.get("blocking_issues", [])),
     }
@@ -110,6 +124,8 @@ def _print_human_summary(payload: dict[str, Any]) -> None:
     print(f"Installed copy matches package: {payload['installed_matches_package']}")
     print(f"Executable: {payload['executable_path']}")
     print(f"Command: {' '.join(payload['launch_command'])}")
+    if payload.get("proof_recording_script_path"):
+        print(f"Proof recorder: {payload['proof_recording_script_path']}")
     if payload["dry_run"]:
         print("Dry run: KOTOR was not launched.")
     if payload["next_action"]:
@@ -134,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     status_module = _load_status_module()
     status = status_module.build_status(proof_manifest=args.proof_manifest, game_modules_dir=modules_dir)
     launch_command = [str(executable)]
+    proof_recorder = _proof_recording_script_path(args.proof_manifest)
     blocking = list(status.get("blocking_issues", []))
     if not executable.is_file():
         blocking.append(f"KOTOR executable does not exist: {executable}")
@@ -148,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
             status=status,
             executable=executable,
             launch_command=launch_command,
+            proof_recording_script_path=proof_recorder,
             dry_run=bool(args.dry_run),
         )
         if args.json:
@@ -180,6 +198,7 @@ def main(argv: list[str] | None = None) -> int:
                 status=status,
                 executable=executable,
                 launch_command=launch_command,
+                proof_recording_script_path=proof_recorder,
                 dry_run=False,
             )
             if args.json:
@@ -198,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         status=status,
         executable=executable,
         launch_command=launch_command,
+        proof_recording_script_path=proof_recorder,
         dry_run=bool(args.dry_run),
     )
     if args.json:
