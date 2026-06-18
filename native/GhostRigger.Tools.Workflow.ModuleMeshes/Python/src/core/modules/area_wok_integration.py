@@ -75,17 +75,31 @@ class AreaWOKIntegrationReport:
 
 
 def _import_lyt_room_graph():
-    try:
-        return import_module("core.lyt_room_graph")
-    except ImportError:
-        return import_module("src.core.lyt_room_graph")
+    for name in (
+        "src.core.scene.lyt_room_graph",
+        "core.scene.lyt_room_graph",
+        "core.lyt_room_graph",
+        "src.core.lyt_room_graph",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module("src.core.scene.lyt_room_graph")
 
 
 def _import_walkmesh_editor():
-    try:
-        return import_module("core.walkmesh_editor")
-    except ImportError:
-        return import_module("src.core.walkmesh_editor")
+    for name in (
+        "src.core.walkmesh.walkmesh_editor",
+        "core.walkmesh.walkmesh_editor",
+        "core.walkmesh_editor",
+        "src.core.walkmesh_editor",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module("src.core.walkmesh.walkmesh_editor")
 
 
 def _normalise_resref(value: Any) -> str:

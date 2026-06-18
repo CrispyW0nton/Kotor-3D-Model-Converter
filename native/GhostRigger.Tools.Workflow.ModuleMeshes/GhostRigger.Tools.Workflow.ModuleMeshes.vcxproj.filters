@@ -176,6 +176,15 @@
     <None Include="Python\src\core\modules\module_walkmesh_service.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
+    <None Include="Python\src\core\modules\dev_module_smoke.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_room_geometry.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_objects.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
     <None Include="Python\src\core\level\__init__.py">
       <Filter>Python\src\core\level</Filter>
     </None>

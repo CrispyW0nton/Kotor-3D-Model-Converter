@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Domain.Core.Modules",
-    "file_count": 16,
+    "file_count": 19,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -15,13 +15,13 @@
             "resource_name": "PYTHON_PAYLOAD_0002",
             "source_path": "src/core/modules/area_wok_integration.py",
             "packaged_path": "Python/src/core/modules/area_wok_integration.py",
-            "sha256": "3ed68f0139e617ef0ad295d3046e289350e2c7fc0f9cc4de54f55aa385f7beb0"
+            "sha256": "4eb44ba57e5ad50448dc14b23fbe831fadbc55ddce95647f934f558d7b58831a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0003",
             "source_path": "src/core/modules/custom_module_packager.py",
             "packaged_path": "Python/src/core/modules/custom_module_packager.py",
-            "sha256": "672642986a2d0d3900a90f16da3a8f5daa035a1836685807d010a1d00de57bbe"
+            "sha256": "7845e4eab9366dab7c196d32c3cc40e10693ad04023dc337f45c5fb5a516453d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0004",
@@ -100,6 +100,24 @@
             "source_path": "src/core/modules/module_walkmesh_service.py",
             "packaged_path": "Python/src/core/modules/module_walkmesh_service.py",
             "sha256": "140fe20bc2f0bc3f02ec06da573704878ba8d7f73540cbf94ee2195cdedc2aa4"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0017",
+            "source_path": "src/core/modules/dev_module_smoke.py",
+            "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
+            "sha256": "5f8ee0a94ee05493bba8e72af8f1d24850008c24b1a02b765690d24b3f101d9c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0018",
+            "source_path": "src/core/modules/authored_room_geometry.py",
+            "packaged_path": "Python/src/core/modules/authored_room_geometry.py",
+            "sha256": "28c35e07abc7e0784bc13890e67d005549af1ebcfc9c8dcd658eb9736ba72350"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0019",
+            "source_path": "src/core/modules/authored_module_objects.py",
+            "packaged_path": "Python/src/core/modules/authored_module_objects.py",
+            "sha256": "f4197363f80bcd0a57dd353e91ca7eb32041a1241b69ff5cb5b3c0a2b5990181"
         }
     ]
 }

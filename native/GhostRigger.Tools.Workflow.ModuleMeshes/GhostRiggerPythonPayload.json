@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Tools.Workflow.ModuleMeshes",
-    "file_count": 43,
+    "file_count": 46,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -93,13 +93,13 @@
             "resource_name": "PYTHON_PAYLOAD_0015",
             "source_path": "src/core/modules/area_wok_integration.py",
             "packaged_path": "Python/src/core/modules/area_wok_integration.py",
-            "sha256": "3ed68f0139e617ef0ad295d3046e289350e2c7fc0f9cc4de54f55aa385f7beb0"
+            "sha256": "4eb44ba57e5ad50448dc14b23fbe831fadbc55ddce95647f934f558d7b58831a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0016",
             "source_path": "src/core/modules/custom_module_packager.py",
             "packaged_path": "Python/src/core/modules/custom_module_packager.py",
-            "sha256": "672642986a2d0d3900a90f16da3a8f5daa035a1836685807d010a1d00de57bbe"
+            "sha256": "7845e4eab9366dab7c196d32c3cc40e10693ad04023dc337f45c5fb5a516453d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0017",
@@ -255,13 +255,31 @@
             "resource_name": "PYTHON_PAYLOAD_0042",
             "source_path": "src/core/walkmesh/walkmesh_editor.py",
             "packaged_path": "Python/src/core/walkmesh/walkmesh_editor.py",
-            "sha256": "5b292b15766827a617b3f30ecadc9e9e83549356a783d07318018a5037d9a082"
+            "sha256": "4c82e080747008673095f555ef2c91671de894072b8c58d2f1be2ec951384125"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0043",
             "source_path": "src/core/walkmesh/walkmesh_renderer.py",
             "packaged_path": "Python/src/core/walkmesh/walkmesh_renderer.py",
             "sha256": "332451d16bf3b17812d33044acada906b38fc9e737581d591dedd871dea491fa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0044",
+            "source_path": "src/core/modules/dev_module_smoke.py",
+            "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
+            "sha256": "5f8ee0a94ee05493bba8e72af8f1d24850008c24b1a02b765690d24b3f101d9c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0045",
+            "source_path": "src/core/modules/authored_room_geometry.py",
+            "packaged_path": "Python/src/core/modules/authored_room_geometry.py",
+            "sha256": "28c35e07abc7e0784bc13890e67d005549af1ebcfc9c8dcd658eb9736ba72350"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0046",
+            "source_path": "src/core/modules/authored_module_objects.py",
+            "packaged_path": "Python/src/core/modules/authored_module_objects.py",
+            "sha256": "f4197363f80bcd0a57dd353e91ca7eb32041a1241b69ff5cb5b3c0a2b5990181"
         }
     ]
 }

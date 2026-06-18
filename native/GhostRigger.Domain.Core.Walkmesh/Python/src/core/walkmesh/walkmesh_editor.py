@@ -128,10 +128,17 @@ class WalkmeshRoundTripResult:
 def _import_module_format():
     """Import module_format in both package and direct-test contexts."""
 
-    try:
-        return import_module("core.module_format")
-    except ImportError:
-        return import_module("src.core.module_format")
+    for name in (
+        "src.core.modules.module_format",
+        "core.modules.module_format",
+        "core.module_format",
+        "src.core.module_format",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module("src.core.modules.module_format")
 
 
 def _import_walkmesh_renderer():

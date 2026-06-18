@@ -83,24 +83,45 @@ class CustomModulePackResult:
 
 
 def _import_module_save_pipeline():
-    try:
-        return import_module("core.module_save_pipeline")
-    except ImportError:
-        return import_module("src.core.module_save_pipeline")
+    for name in (
+        "src.core.modules.module_save_pipeline",
+        "core.modules.module_save_pipeline",
+        "core.module_save_pipeline",
+        "src.core.module_save_pipeline",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module(".module_save_pipeline", __package__)
 
 
 def _import_reference_safety():
-    try:
-        return import_module("core.module_reference_safety")
-    except ImportError:
-        return import_module("src.core.module_reference_safety")
+    for name in (
+        "src.core.modules.module_reference_safety",
+        "core.modules.module_reference_safety",
+        "core.module_reference_safety",
+        "src.core.module_reference_safety",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module(".module_reference_safety", __package__)
 
 
 def _import_area_wok_integration():
-    try:
-        return import_module("core.area_wok_integration")
-    except ImportError:
-        return import_module("src.core.area_wok_integration")
+    for name in (
+        "src.core.modules.area_wok_integration",
+        "core.modules.area_wok_integration",
+        "core.area_wok_integration",
+        "src.core.area_wok_integration",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module(".area_wok_integration", __package__)
 
 
 def _normalise_resref(value: Any) -> str:

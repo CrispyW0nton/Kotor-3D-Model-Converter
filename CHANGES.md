@@ -9,6 +9,34 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-17
+
+### [2026-06-17] Map Studio Dev Module Smoke Builder
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module packaging / native Python payloads
+
+- Added a headless from-scratch dev-module builder for `grdev01` that authors a single primitive room, floor WOK, LYT/VIS, ARE/GIT/IFO/PTH GFF resources, room MDL/MDX, player start, and a test placeable candidate.
+- Added visible primitive doorway-marker geometry to the generated room MDL so the smoke room contains more than a plain box.
+- Added pre-game walkability checks for the player start and test placeable positions so strict smoke export blocks if either gameplay anchor drifts off the generated WOK floor.
+- Added a safe install-prep helper that can stage `grdev01.mod`, optionally copy it to a supplied KOTOR `Modules` folder without overwriting by default, and write a manual `warp grdev01` checklist/proof manifest.
+- Routed the generated resources through the existing custom module packager so output is staged as `install/Modules/grdev01.mod` plus loose source resources and an inspectable manifest.
+- Added package readback verification for the generated `.mod`, including direct MOD key-table reads, ARE/GIT/IFO/PTH GFF parsing, WOK parsing, LYT/VIS room-reference checks, and MDL/MDX size-pair checks before the smoke result is considered export-ready.
+- Added opt-in KOTOR `Modules` folder discovery for smoke install-prep using explicit roots, environment overrides, `src/settings.json`, and common Steam/GOG install paths while preserving no-overwrite defaults.
+- Added a reusable headless `authored_room_geometry` primitive contract so the smoke room is compiled from an authored rectangular-room primitive with a derived WOK and helper doorway marker mesh instead of one-off local geometry code.
+- Added a reusable headless `authored_module_objects` placement contract for module entry points, placeables, and waypoints, then compiled the smoke GIT/IFO from that model instead of direct one-off GFF writes.
+- Fixed smoke waypoint field emission to use canonical `XPosition`/`YPosition`/`ZPosition`/`XOrientation` fields and added GIT/IFO readback assertions for the player start, `plc_bench`, and `start` waypoint.
+- Replaced the synthetic smoke waypoint template with installed KOTOR template `sw_startloc001.utw` and added opt-in PyKotor-backed gameplay template resolution so the smoke preflight/manifest can prove `plc_bench.utp` and `sw_startloc001.utw` resolve from the selected KOTOR install.
+- Marked the manifest as an `export_candidate` with `warp grdev01` acceptance instructions, not game-tested or launch-ready.
+- Fixed stale module/WOK import routes in the native payloads so the Map Studio package and WOK validation paths resolve the split `src.core.modules`, `src.core.scene`, and `src.core.walkmesh` packages.
+- Mirrored the module-smoke service and import fixes into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_geometry.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\custom_module_packager.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\area_wok_integration.py native\GhostRigger.Domain.Core.Walkmesh\Python\src\core\walkmesh\walkmesh_editor.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_geometry.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\custom_module_packager.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\area_wok_integration.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\walkmesh\walkmesh_editor.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Direct smoke exported `grdev01.mod` with no blocking issues, WOK validation passing, player/placeable anchors verified on walkable surface ID 4, installed K1 template checks passing for `plc_bench.utp` and `sw_startloc001.utw`, authored primitive-room provenance recorded, and package readback verification passing for ARE/GIT/IFO/PTH GFFs, room WOK, LYT/VIS room links, and MDL/MDX header sizes; install-prep tests cover staged-only proof files, safe copy to a Modules folder, auto-detected fake install from settings, and no-overwrite blocking; an ignored manual-test artifact was generated under `artifacts/t2601_dev_module_smoke/`, and K1 install-prep copied `grdev01.mod` to the detected Steam K1 `Modules` folder for manual `warp grdev01` testing.
+
 ## 2026-06-15
 
 ### [2026-06-15] Native Viewport Toolbar Icon Recovery
