@@ -121,6 +121,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         evidence_path = str(metadata.get("in_game_proof_evidence_path") or "")
         launch_status = str(metadata.get("launch_status") or "not_ready")
         launch_helper = str(metadata.get("launch_helper_command") or "")
+        elevated_launch_script = str(metadata.get("elevated_launch_script_path") or "")
         expected_executable = str(metadata.get("expected_executable_path") or "")
         warp_command = str(metadata.get("warp_command") or f"warp {module_root}")
         if bool(getattr(readiness, "game_tested", False)):
@@ -134,7 +135,9 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_label.setText("Game proof: Not staged yet; install the .mod and run the warp test.")
         else:
             self.proof_label.setText("Game proof: Not ready")
-        if launch_helper:
+        if elevated_launch_script:
+            self.launch_label.setText(f"Launch handoff: Elevated launcher ready. {elevated_launch_script}")
+        elif launch_helper:
             self.launch_label.setText(f"Launch handoff: Dry-run helper ready. {launch_helper}")
         elif launch_status == "installed_missing_game_root":
             self.launch_label.setText(f"Launch handoff: Installed; choose the KOTOR game root, launch {expected_executable}, then run `{warp_command}`.")

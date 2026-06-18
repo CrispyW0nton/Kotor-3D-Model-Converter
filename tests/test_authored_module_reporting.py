@@ -79,3 +79,5 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     assert "room_styles" in source
     assert "proof_status" in source
     assert "launch_helper_command" in source
+    assert "elevated_launch_script_path" in source
+    assert "Elevated launcher ready" in source

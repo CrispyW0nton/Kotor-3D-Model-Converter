@@ -131,6 +131,7 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
             "proof_manifest_path": "C:/tmp/grdev01_authored_module_game_manifest.json",
             "installed_module_path": "C:/Games/KOTOR/Modules/grdev01.mod",
             "resolved_modules_dir": "C:/Games/KOTOR/Modules",
+            "elevated_launch_script_path": "C:/tmp/grdev01_launch_kotor_as_admin.cmd",
         },
     )
 
@@ -142,6 +143,7 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
     assert installed.metadata["resolved_game_root_dir"].endswith("KOTOR")
     assert installed.metadata["launch_status"] == "ready_for_launch_helper"
     assert "launch_grdev01_smoke_test.py" in installed.metadata["launch_helper_command"]
+    assert installed.metadata["elevated_launch_script_path"].endswith("grdev01_launch_kotor_as_admin.cmd")
     assert "Run the launch helper dry-run" in installed.next_action
 
 

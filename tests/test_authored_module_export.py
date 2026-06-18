@@ -418,6 +418,11 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert result.resolved_game_root_dir == str(modules_dir.parent)
     assert "launch_grdev01_smoke_test.py" in result.launch_helper_command
     assert str(modules_dir.parent) in result.launch_helper_command
+    assert Path(result.elevated_launch_script_path).is_file()
+    launch_script = Path(result.elevated_launch_script_path).read_text(encoding="utf-8")
+    assert "Start-Process" in launch_script
+    assert "-Verb RunAs" in launch_script
+    assert "warp grdev01" in launch_script
     assert installed.read_bytes() != b"old module"
     assert Path(result.backup_module_path).read_bytes() == b"old module"
     payload = controller.project.extra_sections["authored_module"]
@@ -425,11 +430,13 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert payload["resolved_modules_dir"] == str(modules_dir)
     assert payload["resolved_game_root_dir"] == str(modules_dir.parent)
     assert payload["launch_helper_command"] == result.launch_helper_command
+    assert payload["elevated_launch_script_path"] == result.elevated_launch_script_path
     assert payload["backup_module_path"] == result.backup_module_path
     assert payload["proof_manifest_path"] == result.proof_manifest_path
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
     assert proof["launch_handoff"]["expected_executable_path"].endswith("swkotor.exe")
+    assert proof["launch_handoff"]["elevated_launch_script_path"] == result.elevated_launch_script_path
     assert proof["launch_handoff"]["warp_command"] == "warp grdev01"
 
 

@@ -35,6 +35,7 @@ def test_t2647_prepare_grdev01_authored_smoke_creates_kmap_and_package(tmp_path:
     assert Path(payload["pack_manifest_path"]).is_file()
     assert Path(payload["checklist_path"]).is_file()
     assert Path(payload["proof_manifest_path"]).is_file()
+    assert payload["elevated_launch_script_path"] == ""
     assert {"are", "git", "ifo", "lyt", "vis", "wok", "mdl", "mdx"} <= {item["restype"] for item in payload["resources"]}
     assert any("record_authored_module_game_proof.py" in action for action in payload["next_actions"])
 
@@ -83,8 +84,11 @@ def test_t2647_prepare_grdev01_authored_smoke_installs_with_backup(tmp_path: Pat
     assert payload["code"] == "installed"
     assert payload["installed_module_path"] == str(installed)
     assert payload["backup_module_path"] == str(backup)
+    assert Path(payload["elevated_launch_script_path"]).is_file()
+    assert "RunAs" in Path(payload["elevated_launch_script_path"]).read_text(encoding="utf-8")
     assert backup.read_bytes() == b"existing"
     assert installed.read_bytes() != b"existing"
     proof = json.loads(Path(payload["proof_manifest_path"]).read_text(encoding="utf-8"))
     assert proof["install"]["installed"] is True
     assert proof["install"]["installed_module_path"] == str(installed)
+    assert proof["launch_handoff"]["elevated_launch_script_path"] == payload["elevated_launch_script_path"]

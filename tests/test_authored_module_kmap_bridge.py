@@ -121,6 +121,7 @@ def test_t2684_kmap_bridge_reports_installed_authored_module_proof_state() -> No
     payload["proof_manifest_path"] = "C:/tmp/grdev01_authored_module_game_manifest.json"
     payload["installed_module_path"] = "C:/Games/KOTOR/Modules/grdev01.mod"
     payload["resolved_modules_dir"] = "C:/Games/KOTOR/Modules"
+    payload["elevated_launch_script_path"] = "C:/tmp/grdev01_launch_kotor_as_admin.cmd"
     project.extra_sections["authored_module"] = payload
 
     readiness = build_kmap_authored_module_readiness(project).readiness
@@ -131,6 +132,7 @@ def test_t2684_kmap_bridge_reports_installed_authored_module_proof_state() -> No
     assert readiness.metadata["resolved_modules_dir"].endswith("Modules")
     assert readiness.metadata["resolved_game_root_dir"].endswith("KOTOR")
     assert "launch_grdev01_smoke_test.py" in readiness.metadata["launch_helper_command"]
+    assert readiness.metadata["elevated_launch_script_path"].endswith("grdev01_launch_kotor_as_admin.cmd")
     assert "Run the launch helper dry-run" in readiness.next_action
 
 

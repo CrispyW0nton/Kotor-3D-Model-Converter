@@ -174,6 +174,7 @@ def _summary(
         "installed_module_path": result.installed_module_path,
         "backup_module_path": result.backup_module_path,
         "resolved_modules_dir": result.resolved_modules_dir,
+        "elevated_launch_script_path": getattr(result, "elevated_launch_script_path", ""),
         "checklist_path": result.checklist_path,
         "proof_manifest_path": result.proof_manifest_path,
         "resources": _resource_summary(export_result),
@@ -192,6 +193,8 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
     print(f"Pack manifest: {summary['pack_manifest_path'] or '(not written)'}")
     print(f"Checklist: {summary['checklist_path'] or '(not written)'}")
     print(f"Proof manifest: {summary['proof_manifest_path'] or '(not written)'}")
+    if summary["elevated_launch_script_path"]:
+        print(f"Elevated launcher: {summary['elevated_launch_script_path']}")
     if summary["installed_module_path"]:
         print(f"Installed module: {summary['installed_module_path']}")
     if summary["backup_module_path"]:

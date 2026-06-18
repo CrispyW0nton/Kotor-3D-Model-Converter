@@ -123,6 +123,7 @@ class AuthoredModuleInstallPrepResult:
     resolved_modules_dir: str = ""
     resolved_game_root_dir: str = ""
     launch_helper_command: str = ""
+    elevated_launch_script_path: str = ""
     checklist_path: str = ""
     proof_manifest_path: str = ""
     warnings: list[str] = field(default_factory=list)
@@ -932,6 +933,51 @@ def _authored_launch_helper_command(*, proof_manifest_path: Path, game: str, gam
     )
 
 
+def _powershell_single_quoted(value: str | Path) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _write_authored_elevated_launch_script(
+    *,
+    output_root: Path,
+    module_root: str,
+    game: str,
+    game_root_dir: str,
+    proof_manifest_path: Path,
+) -> str:
+    if not game_root_dir:
+        return ""
+    executable = Path(game_root_dir) / _authored_game_executable_name(game)
+    script_path = output_root / f"{module_root}_launch_kotor_as_admin.cmd"
+    ps_command = (
+        "Start-Process "
+        f"-FilePath {_powershell_single_quoted(executable)} "
+        f"-WorkingDirectory {_powershell_single_quoted(game_root_dir)} "
+        "-Verb RunAs"
+    )
+    lines = [
+        "@echo off",
+        "setlocal",
+        f"echo GhostRigger authored module smoke test: {module_root}",
+        f"echo Expected module package is installed in: {Path(game_root_dir) / 'Modules'}",
+        f"echo This helper starts KOTOR with Windows elevation, then you must run: warp {module_root}",
+        f"echo Proof manifest: {proof_manifest_path}",
+        "echo.",
+        f'powershell -NoProfile -ExecutionPolicy Bypass -Command "{ps_command}"',
+        "if errorlevel 1 (",
+        "  echo KOTOR did not launch. Start it manually as administrator and keep using this checklist.",
+        "  pause",
+        "  exit /b 1",
+        ")",
+        "echo.",
+        f"echo After KOTOR opens, load a save, open the console, and run: warp {module_root}",
+        "echo Capture screenshot/video evidence, then record proof with GhostRigger's proof recorder.",
+        "pause",
+    ]
+    script_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(script_path)
+
+
 def _write_authored_install_proof_files(
     *,
     output_root: Path,
@@ -945,7 +991,7 @@ def _write_authored_install_proof_files(
     dry_run: bool,
     warnings: list[str],
     blocking: list[str],
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     output_root.mkdir(parents=True, exist_ok=True)
     module_root = export_result.module_root or "authored"
     checklist_path = output_root / f"{module_root}_authored_module_game_checklist.md"
@@ -958,6 +1004,13 @@ def _write_authored_install_proof_files(
         game=game,
         game_root_dir=game_root_dir,
     )
+    elevated_launch_script_path = _write_authored_elevated_launch_script(
+        output_root=output_root,
+        module_root=module_root,
+        game=game,
+        game_root_dir=game_root_dir,
+        proof_manifest_path=proof_manifest_path,
+    )
     checklist_lines = [
         f"# {module_root} Authored Module In-Game Test",
         "",
@@ -969,6 +1022,7 @@ def _write_authored_install_proof_files(
         f"- Game root: `{game_root_dir or '(not supplied)'}`",
         f"- Expected executable: `{executable_path}`",
         f"- Dry-run helper: `{launch_helper_command or '(manual launch)'}`",
+        f"- Elevated launch helper: `{elevated_launch_script_path or '(not written)'}`",
         f"- Warp command: `warp {module_root}`",
         "",
         "## Steps",
@@ -1011,6 +1065,7 @@ def _write_authored_install_proof_files(
             "resolved_game_root_dir": game_root_dir,
             "expected_executable_path": executable_path,
             "launch_helper_command": launch_helper_command,
+            "elevated_launch_script_path": elevated_launch_script_path,
             "dry_run_first": bool(launch_helper_command),
             "warp_command": f"warp {module_root}",
         },
@@ -1021,7 +1076,7 @@ def _write_authored_install_proof_files(
         "blocking_issues": blocking,
     }
     proof_manifest_path.write_text(json.dumps(proof_manifest, indent=2), encoding="utf-8")
-    return str(checklist_path), str(proof_manifest_path)
+    return str(checklist_path), str(proof_manifest_path), elevated_launch_script_path
 
 
 def _install_prep_export_request(request: AuthoredModuleInstallPrepRequest) -> AuthoredModuleExportRequest:
@@ -1097,7 +1152,7 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
                     shutil.copy2(export_result.module_path, destination)
                     installed = True
 
-    checklist_path, proof_manifest_path = _write_authored_install_proof_files(
+    checklist_path, proof_manifest_path, elevated_launch_script_path = _write_authored_install_proof_files(
         output_root=output_root,
         export_result=export_result,
         game=request.project.game,
@@ -1129,6 +1184,7 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         resolved_modules_dir=modules_dir_text,
         resolved_game_root_dir=resolved_game_root_dir,
         launch_helper_command=launch_helper_command,
+        elevated_launch_script_path=elevated_launch_script_path,
         checklist_path=checklist_path,
         proof_manifest_path=proof_manifest_path,
         warnings=warnings,

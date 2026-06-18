@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Writes Elevated Authored Smoke Launcher
+
+Owner: LordVaderCW
+Task: T2688
+Subsystem: Map Studio / authored module game-proof handoff / smoke launcher artifact / native Python payloads
+
+- Added a generated `*_launch_kotor_as_admin.cmd` artifact to authored module install prep so Program Files KOTOR installs can prompt for elevation with `Start-Process -Verb RunAs`.
+- Stored the elevated launcher path in the proof manifest launch handoff, the install-prep result, KMAP payload, readiness metadata, and Module Editor readiness panel.
+- Exposed the elevated launcher path in the `prepare_grdev01_authored_smoke.py` JSON/human summaries.
+- Re-staged and installed `grdev01.mod` into the local K1 `Modules` folder with the new elevated launcher; the previous live smoke copy was backed up by the install-prep flow.
+
+Verification:
+- `python -m py_compile scripts\prepare_grdev01_authored_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py tests\test_prepare_grdev01_authored_smoke_script.py`
+- `python -m pytest tests\test_authored_module_export.py tests\test_authored_module_readiness.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_reporting.py tests\test_prepare_grdev01_authored_smoke_script.py -q --basetemp .pytest_tmp_map_studio_elevated_launcher_full`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_installed --game K1 --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-kmap --overwrite-module --json`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json`
+
 ### [2026-06-18] Map Studio Reports Elevated KOTOR Launch Requirement
 
 Owner: LordVaderCW
