@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Optional GIT Placement Lists
+
+Owner: LordVaderCW
+Task: T2621
+Subsystem: Map Studio / authored gameplay placement / native Python payloads
+
+- Promoted authored encounter, sound, and store placements from stored intent to serialized GIT list entries.
+- Added typed GIT readback records for encounters, sounds, and stores so generated packages can report those authored objects instead of silently dropping them.
+- Added validation for encounter/sound positions and camera placement identifiers while keeping camera export as a future list-specific slice.
+- Mirrored the authored placement and module-format changes into the ModuleMeshes native Python payload and refreshed payload manifest hashes.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_format.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_format.py tests\test_authored_module_objects.py`
+- `python -m pytest tests/test_authored_module_objects.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_authored_optional_git_lists`
+- Native Python payload hash check for the edited authored placement/module-format files.
+
 ### [2026-06-18] Map Studio Walkable Ramp WOKs
 
 Owner: LordVaderCW

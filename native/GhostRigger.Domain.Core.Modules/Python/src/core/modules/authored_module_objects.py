@@ -83,12 +83,7 @@ class AuthoredTriggerInstance:
 
 @dataclass(frozen=True)
 class AuthoredEncounterInstance:
-    """Authored UTE-backed encounter intent.
-
-    Export of detailed encounter fields is intentionally conservative in this
-    slice; Map Studio can store/validate the intent before the full GIT writer
-    grows richer encounter semantics.
-    """
+    """Authored UTE-backed encounter instance for a GIT Encounter List entry."""
 
     template_resref: str
     tag: str = ""
@@ -97,7 +92,7 @@ class AuthoredEncounterInstance:
 
 @dataclass(frozen=True)
 class AuthoredSoundInstance:
-    """Authored UTS-backed sound intent for future GIT SoundList export."""
+    """Authored UTS-backed sound instance for a GIT SoundList entry."""
 
     template_resref: str
     tag: str = ""
@@ -115,7 +110,7 @@ class AuthoredCameraInstance:
 
 @dataclass(frozen=True)
 class AuthoredStoreInstance:
-    """Authored UTM-backed store intent for future GIT StoreList export."""
+    """Authored UTM-backed store instance for a GIT StoreList entry."""
 
     template_resref: str
     tag: str = ""
@@ -202,8 +197,17 @@ def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -
             blocking.append(f"Waypoint {waypoint.template_resref or '(missing)'} has an invalid position.")
     for encounter in placement.encounters:
         _validate_template("Encounter", encounter.template_resref, blocking)
+        if not _position_ok(encounter.position):
+            blocking.append(f"Encounter {encounter.template_resref or '(missing)'} has an invalid position.")
     for sound in placement.sounds:
         _validate_template("Sound", sound.template_resref, blocking)
+        if not _position_ok(sound.position):
+            blocking.append(f"Sound {sound.template_resref or '(missing)'} has an invalid position.")
+    for camera in placement.cameras:
+        if not normalise_resource_resref(camera.camera_id):
+            blocking.append("Camera placement requires a camera id.")
+        if not _position_ok(camera.position):
+            blocking.append(f"Camera {camera.camera_id or '(missing)'} has an invalid position.")
     for store in placement.stores:
         _validate_template("Store", store.template_resref, blocking)
     return AuthoredGameplayPlacementValidation(
@@ -317,6 +321,33 @@ def _add_waypoint(list_value: Any, index: int, waypoint: AuthoredWaypointInstanc
     item.set_single("Bearing", float(waypoint.bearing))
 
 
+def _add_encounter(list_value: Any, index: int, encounter: AuthoredEncounterInstance) -> None:
+    item = list_value.add(index)
+    resref = normalise_resource_resref(encounter.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", encounter.tag or resref)
+    item.set_single("XPosition", float(encounter.position[0]))
+    item.set_single("YPosition", float(encounter.position[1]))
+    item.set_single("ZPosition", float(encounter.position[2]))
+
+
+def _add_sound(list_value: Any, index: int, sound: AuthoredSoundInstance) -> None:
+    item = list_value.add(index)
+    resref = normalise_resource_resref(sound.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", sound.tag or resref)
+    item.set_single("XPosition", float(sound.position[0]))
+    item.set_single("YPosition", float(sound.position[1]))
+    item.set_single("ZPosition", float(sound.position[2]))
+
+
+def _add_store(list_value: Any, index: int, store: AuthoredStoreInstance) -> None:
+    item = list_value.add(index)
+    resref = normalise_resource_resref(store.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", store.tag or resref)
+
+
 def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
     """Compile authored gameplay placements into a GIT GFF."""
 
@@ -342,8 +373,20 @@ def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
         _add_trigger(triggers, index, trigger)
     root.set_list("TriggerList", triggers)
 
-    for label in ("Encounter List", "SoundList", "StoreList"):
-        root.set_list(label, _empty_gff_list())
+    encounters = _empty_gff_list()
+    for index, encounter in enumerate(placement.encounters):
+        _add_encounter(encounters, index, encounter)
+    root.set_list("Encounter List", encounters)
+
+    sounds = _empty_gff_list()
+    for index, sound in enumerate(placement.sounds):
+        _add_sound(sounds, index, sound)
+    root.set_list("SoundList", sounds)
+
+    stores = _empty_gff_list()
+    for index, store in enumerate(placement.stores):
+        _add_store(stores, index, store)
+    root.set_list("StoreList", stores)
 
     placeables = _empty_gff_list()
     for index, placeable in enumerate(placement.placeables):

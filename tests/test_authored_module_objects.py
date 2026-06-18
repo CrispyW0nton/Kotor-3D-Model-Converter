@@ -28,8 +28,11 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
     from src.core.modules.authored_module_objects import (
         AuthoredCreatureInstance,
         AuthoredDoorInstance,
+        AuthoredEncounterInstance,
         AuthoredGameplayPlacement,
         AuthoredPlaceableInstance,
+        AuthoredSoundInstance,
+        AuthoredStoreInstance,
         AuthoredTriggerInstance,
         AuthoredWaypointInstance,
         ModuleEntryPoint,
@@ -61,6 +64,9 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
                 transition_destination=1,
             ),
         ),
+        encounters=(AuthoredEncounterInstance(template_resref="enc_dev", tag="ambush", position=(-1.0, 2.5, 0.0)),),
+        sounds=(AuthoredSoundInstance(template_resref="snd_wind", tag="ambient_wind", position=(0.0, 1.0, 0.0)),),
+        stores=(AuthoredStoreInstance(template_resref="st_dev", tag="dev_store"),),
         placeables=(AuthoredPlaceableInstance(template_resref="plc_bench", position=(1.75, 1.5, 0.0)),),
         waypoints=(AuthoredWaypointInstance(template_resref="sw_startloc001", tag="start", position=(0.0, -3.0, 0.0)),),
     )
@@ -83,6 +89,17 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
     assert git.triggers[0].linked_to == "wp_next"
     assert git.triggers[0].transition == 1
     assert len(git.triggers[0].geometry) == 3
+    assert len(git.encounters) == 1
+    assert git.encounters[0].resref == "enc_dev"
+    assert git.encounters[0].tag == "ambush"
+    assert git.encounters[0].x == -1.0
+    assert len(git.sounds) == 1
+    assert git.sounds[0].resref == "snd_wind"
+    assert git.sounds[0].tag == "ambient_wind"
+    assert git.sounds[0].y == 1.0
+    assert len(git.stores) == 1
+    assert git.stores[0].resref == "st_dev"
+    assert git.stores[0].tag == "dev_store"
     assert len(git.placeables) == 1
     assert len(git.waypoints) == 1
 

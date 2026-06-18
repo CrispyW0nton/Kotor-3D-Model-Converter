@@ -135,7 +135,7 @@
       "resource_name": "PYTHON_PAYLOAD_0022",
       "source_path": "src/core/modules/module_format.py",
       "packaged_path": "Python/src/core/modules/module_format.py",
-      "sha256": "8b660b1cea7c646b57d17a7551762f761b74852ca176ca043a2985d38f7d8686"
+      "sha256": "9ed93fec17131bcd1bb137ad483dae49f790fd96422225b0c779cdcf2b6e0cd5"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0023",
@@ -297,7 +297,7 @@
       "resource_name": "PYTHON_PAYLOAD_0048",
       "source_path": "src/core/modules/authored_module_objects.py",
       "packaged_path": "Python/src/core/modules/authored_module_objects.py",
-      "sha256": "1ff4a5fe9c3f5f2157b7b91c17ceefe415db3535a48686b6a30b37bc4b070dc0"
+      "sha256": "cb2f6468105aac27ac6ea9e58efd84edb5b5a4b1c038910077c4a282d9144c90"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0049",

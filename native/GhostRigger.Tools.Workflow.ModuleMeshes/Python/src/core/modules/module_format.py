@@ -341,12 +341,36 @@ class GITTrigger:
     transition: int = 0
 
 @dataclass
+class GITEncounter:
+    resref: str
+    tag:    str = ""
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+
+@dataclass
+class GITSound:
+    resref: str
+    tag:    str = ""
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+
+@dataclass
+class GITStore:
+    resref: str
+    tag:    str = ""
+
+@dataclass
 class GITData:
     creatures:  List[GITCreature]  = field(default_factory=list)
     doors:      List[GITDoor]      = field(default_factory=list)
     placeables: List[GITPlaceable] = field(default_factory=list)
     waypoints:  List[GITWaypoint]  = field(default_factory=list)
     triggers:   List[GITTrigger]   = field(default_factory=list)
+    encounters: List[GITEncounter] = field(default_factory=list)
+    sounds:     List[GITSound]     = field(default_factory=list)
+    stores:     List[GITStore]     = field(default_factory=list)
     _raw:       Optional[Dict]     = field(default=None, repr=False)
 
     @classmethod
@@ -437,12 +461,43 @@ class GITData:
                 transition = _i(t, 'TransitionDestin'),
             ))
 
+        # Encounters
+        for e in (raw.get('Encounter List') or []):
+            if not isinstance(e, dict): continue
+            g.encounters.append(GITEncounter(
+                resref = _s(e, 'TemplateResRef'),
+                tag    = _s(e, 'Tag'),
+                x      = _f(e, 'XPosition'),
+                y      = _f(e, 'YPosition'),
+                z      = _f(e, 'ZPosition'),
+            ))
+
+        # Sounds
+        for s in (raw.get('SoundList') or []):
+            if not isinstance(s, dict): continue
+            g.sounds.append(GITSound(
+                resref = _s(s, 'TemplateResRef'),
+                tag    = _s(s, 'Tag'),
+                x      = _f(s, 'XPosition'),
+                y      = _f(s, 'YPosition'),
+                z      = _f(s, 'ZPosition'),
+            ))
+
+        # Stores
+        for store in (raw.get('StoreList') or []):
+            if not isinstance(store, dict): continue
+            g.stores.append(GITStore(
+                resref = _s(store, 'TemplateResRef'),
+                tag    = _s(store, 'Tag'),
+            ))
+
         return g
 
     def summary(self) -> str:
         return (f"GIT: {len(self.creatures)} creatures, {len(self.doors)} doors, "
                 f"{len(self.placeables)} placeables, {len(self.waypoints)} waypoints, "
-                f"{len(self.triggers)} triggers")
+                f"{len(self.triggers)} triggers, {len(self.encounters)} encounters, "
+                f"{len(self.sounds)} sounds, {len(self.stores)} stores")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
