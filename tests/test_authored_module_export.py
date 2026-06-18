@@ -56,6 +56,22 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["capability_stage"] == "export_candidate"
     assert authored_manifest["game_tested"] is False
     assert authored_manifest["warp_command"] == "warp grdev01"
+    contract = authored_manifest["t2601_smoke_contract"]
+    assert contract["task"] == "T2601"
+    assert contract["warp_command"] == "warp grdev01"
+    assert contract["all_required_resources_present"] is True
+    assert contract["pre_game_package_readback_ok"] is True
+    assert {row["filename"] for row in contract["required_resources"]} >= {
+        "grdev01.are",
+        "grdev01.git",
+        "module.ifo",
+        "grdev01.pth",
+        "grdev01.lyt",
+        "grdev01.vis",
+        "grdev01_room01.wok",
+        "grdev01_room01.mdl",
+        "grdev01_room01.mdx",
+    }
 
 
 def test_t2643_controller_exports_current_kmap_authored_module(tmp_path: Path) -> None:
@@ -140,6 +156,10 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert proof["game_tested"] is False
     assert proof["install"]["installed"] is False
     assert proof["package"]["verification"]["ok"] is True
+    contract = proof["t2601_smoke_contract"]
+    assert contract["task"] == "T2601"
+    assert contract["all_required_resources_present"] is True
+    assert contract["in_game_acceptance_checks"] == proof["acceptance_checks"]
 
 
 def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp_path: Path) -> None:
@@ -205,12 +225,15 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     assert proof["manual_proof_required"] is False
     assert proof["game_tested"] is True
     assert proof["game_test"]["accepted"] is True
+    assert proof["t2601_smoke_contract"]["game_tested"] is True
+    assert proof["t2601_smoke_contract"]["proof_required"] is False
 
     pack_manifest = json.loads(Path(result.pack_manifest_path).read_text(encoding="utf-8"))
     authored = pack_manifest["map_studio_authored_module"]
     assert authored["game_tested"] is True
     assert authored["capability_stage"] == "game_smoke_tested"
     assert authored["in_game_proof"]["checks"]["player_can_walk_on_floor"] is True
+    assert authored["t2601_smoke_contract"]["capability_stage"] == "game_smoke_tested"
 
 
 def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None:

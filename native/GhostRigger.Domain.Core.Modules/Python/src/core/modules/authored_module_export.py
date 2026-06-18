@@ -455,6 +455,7 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         "Walk across the generated floor and confirm WOK/pathing behavior.",
         "Capture screenshot or video evidence and record it in the proof manifest.",
     ]
+    smoke_contract = _authored_smoke_contract(build, verification)
     data["map_studio_authored_module"] = {
         "task": "T2643",
         "module_root": build.module_root,
@@ -492,6 +493,8 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             ],
             "blocking_issues": list(verification.blocking_issues) if verification is not None else [],
         },
+        "t2601_smoke_contract": smoke_contract,
+        "required_runtime_resources": smoke_contract["required_resources"],
         "manual_game_test_required": [
             f"Copy/install {build.module_root}.mod into the KOTOR Modules folder.",
             f"Start KOTOR and run 'warp {build.module_root}'.",
@@ -620,6 +623,89 @@ def _verification_to_manifest(verification: DevModulePackageVerification | None)
     }
 
 
+def _authored_required_resource_rows(module_root: str, room_resrefs: tuple[str, ...]) -> list[dict[str, str]]:
+    rows = [
+        (module_root, "are", "Area metadata"),
+        (module_root, "git", "Gameplay instances"),
+        (ENGINE_MODULE_IFO_RESREF, "ifo", "Module entry metadata"),
+        (module_root, "pth", "Path graph"),
+        (module_root, "lyt", "Room layout"),
+        (module_root, "vis", "Room visibility"),
+    ]
+    for room in room_resrefs:
+        rows.extend(
+            [
+                (room, "wok", "Walkmesh"),
+                (room, "mdl", "Room model"),
+                (room, "mdx", "Room vertex data"),
+            ]
+        )
+    return [
+        {
+            "resref": resref,
+            "restype": restype,
+            "filename": f"{resref}.{restype}",
+            "purpose": purpose,
+        }
+        for resref, restype, purpose in rows
+    ]
+
+
+def _authored_smoke_contract_from_parts(
+    *,
+    module_root: str,
+    room_resrefs: tuple[str, ...],
+    built_resources: set[tuple[str, str]],
+    verification: DevModulePackageVerification | None,
+    capability_stage: str = "export_candidate",
+    game_tested: bool = False,
+) -> dict[str, Any]:
+    verified = {
+        (resource.resref, resource.restype)
+        for resource in (verification.resources if verification is not None else ())
+    }
+    available = verified or built_resources
+    required = _authored_required_resource_rows(module_root, room_resrefs)
+    required_with_status = [
+        dict(row, present=(row["resref"], row["restype"]) in available)
+        for row in required
+    ]
+    missing = [row["filename"] for row in required_with_status if not row["present"]]
+    return {
+        "task": "T2601",
+        "module_root": module_root,
+        "warp_command": f"warp {module_root}",
+        "capability_stage": capability_stage,
+        "required_resources": required_with_status,
+        "all_required_resources_present": not missing,
+        "missing_required_resources": missing,
+        "pre_game_package_readback_ok": bool(verification.ok) if verification is not None else False,
+        "in_game_acceptance_checks": _authored_acceptance_checks(),
+        "proof_required": not game_tested,
+        "game_tested": game_tested,
+    }
+
+
+def _authored_smoke_contract(build: AuthoredModuleBuild, verification: DevModulePackageVerification | None) -> dict[str, Any]:
+    return _authored_smoke_contract_from_parts(
+        module_root=build.module_root,
+        room_resrefs=tuple(sorted(build.module.room_geometry)),
+        built_resources={(summary.resref, summary.restype) for summary in build.resource_summaries},
+        verification=verification,
+    )
+
+
+def _authored_smoke_contract_from_export_result(export_result: AuthoredModuleExportResult) -> dict[str, Any]:
+    module_root = export_result.module_root or "authored"
+    return _authored_smoke_contract_from_parts(
+        module_root=module_root,
+        room_resrefs=tuple(export_result.room_resrefs),
+        built_resources={(summary.resref, summary.restype) for summary in export_result.resources},
+        verification=export_result.package_verification,
+        capability_stage="export_candidate" if export_result.ok else "export_blocked",
+    )
+
+
 def _authored_game_test_steps(module_root: str) -> list[str]:
     return [
         f"Install/copy `{module_root}.mod` into the selected KOTOR `Modules` folder.",
@@ -706,6 +792,7 @@ def _write_authored_install_proof_files(
         "game_tested": False,
         "warp_command": f"warp {module_root}",
         "acceptance_checks": _authored_acceptance_checks(),
+        "t2601_smoke_contract": _authored_smoke_contract_from_export_result(export_result),
         "steps": steps,
         "warnings": warnings,
         "blocking_issues": blocking,
@@ -850,6 +937,12 @@ def _update_authored_pack_manifest_for_game_proof(
         return warnings
     authored = manifest.setdefault("map_studio_authored_module", {})
     authored["game_tested"] = bool(accepted)
+    contract = authored.get("t2601_smoke_contract")
+    if isinstance(contract, dict):
+        contract["game_tested"] = bool(accepted)
+        contract["proof_required"] = not accepted
+        if accepted:
+            contract["capability_stage"] = "game_smoke_tested"
     if accepted:
         authored["capability_stage"] = "game_smoke_tested"
         remaining = list(authored.get("remaining_acceptance", []))
@@ -908,6 +1001,12 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
     proof["game_test"] = proof_payload
     proof["manual_proof_required"] = not accepted
     proof["game_tested"] = accepted
+    contract = proof.get("t2601_smoke_contract")
+    if isinstance(contract, dict):
+        contract["game_tested"] = accepted
+        contract["proof_required"] = not accepted
+        if accepted:
+            contract["capability_stage"] = "game_smoke_tested"
     if accepted:
         proof["completed_at"] = tested_at
     proof_manifest_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")

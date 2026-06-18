@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored Module Smoke Contract Metadata
+
+Owner: LordVaderCW
+Task: T2675
+Subsystem: Map Studio / authored module export / T2601 smoke proof metadata / native Python payloads
+
+- Added a headless T2601 smoke-contract manifest section for authored KMAP module exports so the package records its required ARE/GIT/IFO/PTH/LYT/VIS/WOK/MDL/MDX resources, resource presence, readback status, warp command, and in-game acceptance checks.
+- Wrote the same contract into authored-module manual proof manifests so scripts and UI panels can distinguish export-candidate status from actual game-tested status.
+- Updated game-proof recording to promote the embedded smoke contract to `game_smoke_tested` only after the manual in-game acceptance checks are supplied.
+- Mirrored the authored export service update into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_authored_module_smoke_contract`
+- `python -m pytest tests\test_map_studio_game_proof_ui.py tests\test_dev_module_game_proof.py tests\test_dev_module_smoke.py::test_t2601_install_prep_writes_manual_game_test_checklist -q --basetemp .pytest_tmp_map_studio_smoke_contract`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Adds Composition Primitive Removal
 
 Owner: LordVaderCW
