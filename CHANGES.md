@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Smoke Proof Recording Command
+
+Owner: LordVaderCW
+Task: T2618
+Subsystem: Map Studio / in-game proof workflow / command-line tooling
+
+- Added `scripts/record_grdev01_smoke_proof.py` so testers can record screenshot/video-backed `warp grdev01` acceptance evidence.
+- Required explicit proof flags for module load, player floor spawn, placeable visibility, and floor walkability before the package is marked game-tested.
+- Added subprocess coverage proving complete proof updates both the proof manifest and pack manifest, while incomplete proof leaves the module unproven.
+- Documented the proof-recording command in `CHEETSHEET.md`.
+
+Verification:
+- `python -m py_compile scripts/record_grdev01_smoke_proof.py tests/test_record_grdev01_smoke_proof_script.py`
+- `python -m pytest tests/test_record_grdev01_smoke_proof_script.py -q --basetemp .pytest_tmp_record_grdev01_smoke_proof`
+- `python -m pytest tests/test_install_grdev01_smoke_variant_script.py tests/test_stage_grdev01_smoke_suite_script.py tests/test_dev_module_game_proof.py -q --basetemp .pytest_tmp_grdev01_proof_workflow`
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Smoke Variant Install Command
 
 Owner: LordVaderCW

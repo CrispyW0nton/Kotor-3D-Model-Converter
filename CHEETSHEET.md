@@ -169,6 +169,13 @@ Preview the same install without copying files:
 python scripts/install_grdev01_smoke_variant.py --variant rectangular --game-modules-dir "C:\Path\To\KOTOR\Modules" --dry-run
 ```
 
+After a real in-game `warp grdev01` test, record proof with the evidence file
+and every verified acceptance check:
+
+```powershell
+python scripts/record_grdev01_smoke_proof.py --proof-manifest artifacts/map_studio/grdev01_install/floor_plan_opening/grdev01_in_game_smoke_manifest.json --evidence "C:\Path\To\grdev01-proof.png" --tester LordVaderCW --module-loads-in-game --player-spawns-on-floor --test-placeable-visible --player-can-walk-on-floor
+```
+
 Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
 into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
 video evidence before treating it as game-tested.
