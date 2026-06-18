@@ -19,6 +19,19 @@ from .module_format import WOKData, WOKFace
 
 
 @dataclass(frozen=True)
+class FloorPlanWallOpening:
+    """Door/window-like opening cut into one generated floor-plan wall edge."""
+
+    name: str
+    edge_index: int
+    center_fraction: float = 0.5
+    width: float = 1.5
+    height: float = 2.1
+    bottom: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FloorPlanRoomPrimitive:
     """Editable intent for one extruded room footprint."""
 
@@ -29,6 +42,7 @@ class FloorPlanRoomPrimitive:
     floor_surface_id: int | str = 4
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
     include_walls: bool = True
+    openings: tuple[FloorPlanWallOpening, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -115,6 +129,42 @@ def _mesh_uvs(points: tuple[Vec2, ...]) -> tuple[Vec2, ...]:
     return tuple(((x - min_x) / width, (y - min_y) / depth) for x, y in points)
 
 
+def _edge_length(a: Vec2, b: Vec2) -> float:
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def _lerp_point(a: Vec2, b: Vec2, fraction: float) -> Vec2:
+    return (a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction)
+
+
+def _quad_mesh(
+    *,
+    name: str,
+    vertices: tuple[Vec3, Vec3, Vec3, Vec3],
+    material: PrimitiveMaterial,
+    metadata: dict[str, Any],
+) -> PrimitiveMesh:
+    return PrimitiveMesh(
+        name=name,
+        vertices=vertices,
+        faces=((0, 1, 2), (0, 2, 3)),
+        normals=((0.0, 0.0, 1.0),) * 4,
+        uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+        texture=material.texture,
+        diffuse=material.diffuse,
+        ambient=material.ambient,
+        metadata=metadata,
+    )
+
+
+def _opening_span(opening: FloorPlanWallOpening, edge_length: float) -> tuple[float, float]:
+    half_fraction = (float(opening.width) * 0.5) / max(edge_length, 1.0e-7)
+    center = float(opening.center_fraction)
+    return center - half_fraction, center + half_fraction
+
+
 def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> FloorPlanRoomValidation:
     """Validate an authored floor plan before compiling meshes or WOK data."""
 
@@ -134,12 +184,37 @@ def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> Flo
         blocking.append("Floor-plan room currently supports convex footprints only; split concave rooms into multiple primitives.")
     if float(primitive.wall_height) <= 0.0:
         blocking.append("Floor-plan room wall height must be positive.")
+    openings_by_edge: set[int] = set()
+    for opening in primitive.openings:
+        opening_name = str(opening.name or "").strip() or f"edge {opening.edge_index}"
+        edge_index = int(opening.edge_index)
+        if edge_index < 0 or edge_index >= max(len(points), 1):
+            blocking.append(f"Opening {opening_name} references missing wall edge {edge_index}.")
+            continue
+        if edge_index in openings_by_edge:
+            blocking.append(f"Only one floor-plan opening per wall edge is supported for now: edge {edge_index}.")
+        openings_by_edge.add(edge_index)
+        if float(opening.width) <= 0.0:
+            blocking.append(f"Opening {opening_name} width must be positive.")
+        if float(opening.height) <= 0.0:
+            blocking.append(f"Opening {opening_name} height must be positive.")
+        if float(opening.bottom) < 0.0:
+            blocking.append(f"Opening {opening_name} bottom must not be below the room floor.")
+        if float(opening.bottom) + float(opening.height) >= float(primitive.wall_height):
+            blocking.append(f"Opening {opening_name} must leave wall geometry above it.")
+        if len(points) >= 3 and edge_index < len(points):
+            edge_len = _edge_length(points[edge_index], points[(edge_index + 1) % len(points)])
+            start_fraction, end_fraction = _opening_span(opening, edge_len)
+            if start_fraction <= 0.0 or end_fraction >= 1.0:
+                blocking.append(f"Opening {opening_name} does not fit within wall edge {edge_index}.")
     try:
         require_walkable_walkmesh_surface(primitive.floor_surface_id, context=f"{primitive.room_resref} floor plan")
     except ValueError as exc:
         blocking.append(str(exc))
     if not primitive.include_walls:
         warnings.append("Floor-plan room has no generated walls; it will export as a walkable floor only.")
+        if primitive.openings:
+            warnings.append("Floor-plan wall openings are ignored because wall generation is disabled.")
     return FloorPlanRoomValidation(
         ok=not blocking,
         area=area,
@@ -210,34 +285,78 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
     room_resref = _normalise_resref(primitive.room_resref)
     z = float(primitive.z)
     top_z = z + float(primitive.wall_height)
+    openings_by_edge = {int(opening.edge_index): opening for opening in primitive.openings}
     meshes: list[PrimitiveMesh] = []
     for index, (x0, y0) in enumerate(points):
         x1, y1 = points[(index + 1) % len(points)]
-        vertices: tuple[Vec3, ...] = (
-            (x0, y0, z),
-            (x1, y1, z),
-            (x1, y1, top_z),
-            (x0, y0, top_z),
-        )
+        opening = openings_by_edge.get(index)
+        base_metadata = {
+            "primitive": "floor_plan_wall",
+            "source": "map_studio:t2611",
+            "edge_index": index,
+            "wall_height": float(primitive.wall_height),
+            **dict(primitive.material.metadata),
+        }
+        if opening is None:
+            meshes.append(
+                _quad_mesh(
+                    name=f"{room_resref}_wall_{index + 1:02d}",
+                    vertices=((x0, y0, z), (x1, y1, z), (x1, y1, top_z), (x0, y0, top_z)),
+                    material=primitive.material,
+                    metadata=base_metadata,
+                )
+            )
+            continue
+        edge_len = _edge_length((x0, y0), (x1, y1))
+        start_fraction, end_fraction = _opening_span(opening, edge_len)
+        start = _lerp_point((x0, y0), (x1, y1), start_fraction)
+        end = _lerp_point((x0, y0), (x1, y1), end_fraction)
+        opening_bottom = z + float(opening.bottom)
+        opening_top = opening_bottom + float(opening.height)
+        opening_metadata = {
+            **base_metadata,
+            "opening_name": str(opening.name or "").strip(),
+            "opening_center_fraction": float(opening.center_fraction),
+            "opening_width": float(opening.width),
+            "opening_height": float(opening.height),
+            "opening_bottom": float(opening.bottom),
+            **dict(opening.metadata),
+        }
+        if start_fraction > 1.0e-7:
+            meshes.append(
+                _quad_mesh(
+                    name=f"{room_resref}_wall_{index + 1:02d}_left",
+                    vertices=((x0, y0, z), (start[0], start[1], z), (start[0], start[1], top_z), (x0, y0, top_z)),
+                    material=primitive.material,
+                    metadata={**opening_metadata, "wall_panel": "opening_left"},
+                )
+            )
+        if float(opening.bottom) > 1.0e-7:
+            meshes.append(
+                _quad_mesh(
+                    name=f"{room_resref}_wall_{index + 1:02d}_sill",
+                    vertices=((start[0], start[1], z), (end[0], end[1], z), (end[0], end[1], opening_bottom), (start[0], start[1], opening_bottom)),
+                    material=primitive.material,
+                    metadata={**opening_metadata, "wall_panel": "opening_sill"},
+                )
+            )
         meshes.append(
-            PrimitiveMesh(
-                name=f"{room_resref}_wall_{index + 1:02d}",
-                vertices=vertices,
-                faces=((0, 1, 2), (0, 2, 3)),
-                normals=((0.0, 0.0, 1.0),) * len(vertices),
-                uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
-                texture=primitive.material.texture,
-                diffuse=primitive.material.diffuse,
-                ambient=primitive.material.ambient,
-                metadata={
-                    "primitive": "floor_plan_wall",
-                    "source": "map_studio:t2611",
-                    "edge_index": index,
-                    "wall_height": float(primitive.wall_height),
-                    **dict(primitive.material.metadata),
-                },
+            _quad_mesh(
+                name=f"{room_resref}_wall_{index + 1:02d}_lintel",
+                vertices=((start[0], start[1], opening_top), (end[0], end[1], opening_top), (end[0], end[1], top_z), (start[0], start[1], top_z)),
+                material=primitive.material,
+                metadata={**opening_metadata, "wall_panel": "opening_lintel"},
             )
         )
+        if end_fraction < 1.0 - 1.0e-7:
+            meshes.append(
+                _quad_mesh(
+                    name=f"{room_resref}_wall_{index + 1:02d}_right",
+                    vertices=((end[0], end[1], z), (x1, y1, z), (x1, y1, top_z), (end[0], end[1], top_z)),
+                    material=primitive.material,
+                    metadata={**opening_metadata, "wall_panel": "opening_right"},
+                )
+            )
     return tuple(meshes)
 
 
@@ -262,6 +381,7 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
             "source": "src.core.modules.authored_room_floorplan",
             "point_count": len(_normalise_points(primitive.points)),
             "wall_count": len(helper_meshes),
+            "opening_count": len(primitive.openings),
             "polygon_area": validation.area,
             "floor_surface_id": surface_id,
             "floor_surface_name": walkmesh_surface_name(surface_id),
@@ -273,6 +393,7 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
 __all__ = [
     "FloorPlanRoomPrimitive",
     "FloorPlanRoomValidation",
+    "FloorPlanWallOpening",
     "build_floor_plan_floor_mesh",
     "build_floor_plan_wall_meshes",
     "build_floor_plan_wok",

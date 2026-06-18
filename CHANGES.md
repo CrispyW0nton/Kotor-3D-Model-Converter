@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Floor-Plan Wall Openings
+
+Owner: LordVaderCW
+Task: T2613
+Subsystem: Map Studio / authored room geometry / native Python payloads
+
+- Added `FloorPlanWallOpening` room intent so authored floor-plan walls can contain a first-pass doorway/window opening.
+- Split opened wall edges into deterministic left, lintel, right, and optional sill panel meshes while preserving the generated floor WOK.
+- Added validation that blocks openings with missing wall edges, non-positive dimensions, negative bottoms, no wall geometry above, oversized edge spans, or multiple openings on one edge.
+- Mirrored the opening-aware floor-plan compiler into the ModuleMeshes workflow payload and refreshed native payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_authored_room_floorplan.py`
+- `python -m pytest tests/test_authored_room_floorplan.py -q --basetemp .pytest_tmp_authored_room_openings`
+- `python -m pytest tests/test_authored_module_project.py -q --basetemp .pytest_tmp_authored_module_project_openings`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke_openings`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Floor-Plan Room Project Contract
 
 Owner: LordVaderCW

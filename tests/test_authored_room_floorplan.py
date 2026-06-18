@@ -93,3 +93,56 @@ def test_t2611_invalid_floor_plan_blocks_before_geometry_export() -> None:
     assert any("duplicate" in issue for issue in duplicate.blocking_issues)
     assert not concave.ok
     assert any("convex" in issue for issue in concave.blocking_issues)
+
+
+def test_t2613_floor_plan_doorway_opening_splits_wall_panels() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening, compile_floor_plan_room_geometry
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="door_room",
+        points=((-2.0, -1.0), (2.0, -1.0), (2.0, 1.0), (-2.0, 1.0)),
+        wall_height=3.0,
+        openings=(FloorPlanWallOpening(name="door_a", edge_index=0, center_fraction=0.5, width=1.0, height=2.0),),
+    )
+
+    geometry = compile_floor_plan_room_geometry(primitive)
+    wall_names = [mesh.name for mesh in geometry.helper_meshes]
+    opening_panels = [mesh for mesh in geometry.helper_meshes if mesh.metadata.get("opening_name") == "door_a"]
+
+    assert geometry.metadata["opening_count"] == 1
+    assert geometry.metadata["wall_count"] == 6
+    assert wall_names[:3] == ["door_room_wall_01_left", "door_room_wall_01_lintel", "door_room_wall_01_right"]
+    assert len(opening_panels) == 3
+    assert {mesh.metadata["wall_panel"] for mesh in opening_panels} == {"opening_left", "opening_lintel", "opening_right"}
+    lintel = next(mesh for mesh in opening_panels if mesh.metadata["wall_panel"] == "opening_lintel")
+    assert min(vertex[2] for vertex in lintel.vertices) == 2.0
+    assert max(vertex[2] for vertex in lintel.vertices) == 3.0
+    assert geometry.wok.walkable_face_count() == 2
+
+
+def test_t2613_invalid_floor_plan_opening_blocks_before_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening, validate_floor_plan_room_primitive
+
+    oversized = validate_floor_plan_room_primitive(
+        FloorPlanRoomPrimitive(
+            room_resref="bad_opening",
+            points=((-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)),
+            openings=(FloorPlanWallOpening(name="too_wide", edge_index=0, width=4.0, height=1.0),),
+        )
+    )
+    too_tall = validate_floor_plan_room_primitive(
+        FloorPlanRoomPrimitive(
+            room_resref="bad_opening",
+            points=((-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)),
+            openings=(FloorPlanWallOpening(name="too_tall", edge_index=0, width=1.0, height=3.0),),
+        )
+    )
+
+    assert not oversized.ok
+    assert any("does not fit within wall edge" in issue for issue in oversized.blocking_issues)
+    assert not too_tall.ok
+    assert any("must leave wall geometry above it" in issue for issue in too_tall.blocking_issues)
