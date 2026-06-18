@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Clarifies Full Custom Module Builder Scope
+
+Owner: LordVaderCW
+Task: T2699
+Subsystem: Map Studio / roadmap / module-boundary documentation
+
+- Updated the full-suite roadmap so Map Studio is explicitly defined as a from-scratch KOTOR module authoring suite, not only a layout or packaging helper.
+- Captured the intended modder workflow: primitive geometry authoring, WOK/PTH/LYT/VIS generation, gameplay object placement, staged `.mod` packaging, and recorded in-game proof.
+- Updated README Module/Map workflow boundaries so Module Studio owns existing module/resource editing while Map Studio owns authored custom module creation.
+
+Verification:
+- Documentation-only scope update.
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Covers Authored Smoke Status Handoff
 
 Owner: LordVaderCW

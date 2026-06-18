@@ -242,11 +242,22 @@ The color picker should appear only for lightsaber models.
 
 Module and map work belongs in Module Studio/Map Studio/KMAP surfaces.
 
+- **Module Studio** is for existing KOTOR module/resource editing: hydrate RIM/MOD
+  data, inspect ARE/GIT/IFO/templates/WOK resources, edit fields safely, and save
+  with backups/manifests.
+- **Map Studio** is for authored/custom module creation: build room geometry from
+  primitives and floor-plan operations, generate WOK/PTH/LYT/VIS, place gameplay
+  objects, and package a staged `.mod` that can be copied into the game.
 - `.kmap` stores module/room/resource references and lightweight overrides.
 - `.kmax` stores scene objects, transforms, cameras, lights, pivots, and editor
   scene state.
 - Source KOTOR data should not be modified unless the user explicitly chooses
   an export/write operation.
+
+The current first Map Studio proof target is `grdev01`: a generated KOTOR 1
+dev-test module with authored room MDL/MDX/WOK, ARE/GIT/IFO/PTH/LYT/VIS,
+player start, one test placeable, staged `.mod`, and a required in-game
+`warp grdev01` screenshot/video proof before it can be called game-tested.
 
 ## Validation And Export Safety
 
