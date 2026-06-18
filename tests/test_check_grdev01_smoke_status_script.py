@@ -47,9 +47,15 @@ def test_t2619_status_reports_export_candidate_ready_for_manual_install(tmp_path
     payload = json.loads(result.stdout)
     assert payload["status"] == "ready_for_manual_install"
     assert payload["package_verification"]["ok"] is True
+    assert payload["runtime_archive"]["engine_ifo_key_ok"] is True
+    assert payload["runtime_archive"]["missing_required_resource_keys"] == []
+    assert "module.ifo" in payload["runtime_archive"]["required_resource_keys"]
+    assert payload["ready_for_game_launch"] is False
+    assert payload["next_action"].startswith("Install/copy grdev01.mod")
     assert payload["proof"]["game_tested"] is False
     assert payload["proof"]["manual_proof_required"] is True
     assert payload["installed"]["checked"] is False
+    assert payload["installed"]["package_sha256"] == payload["package_verification"]["module_sha256"]
 
 
 def test_t2619_status_reports_installed_variant_ready_for_game_test(tmp_path: Path) -> None:
@@ -71,6 +77,9 @@ def test_t2619_status_reports_installed_variant_ready_for_game_test(tmp_path: Pa
     assert payload["package_verification"]["ok"] is True
     assert payload["installed"]["exists"] is True
     assert payload["installed"]["matches_package"] is True
+    assert payload["installed"]["installed_sha256"] == payload["installed"]["package_sha256"]
+    assert payload["ready_for_game_launch"] is True
+    assert payload["next_action"].startswith("Launch KOTOR")
     assert payload["proof"]["game_tested"] is False
 
 
@@ -105,3 +114,5 @@ def test_t2619_status_reports_game_tested_after_complete_proof(tmp_path: Path) -
     assert payload["proof"]["manual_proof_required"] is False
     assert payload["proof"]["evidence_exists"] is True
     assert payload["proof"]["missing_checks"] == []
+    assert payload["ready_for_game_launch"] is False
+    assert payload["next_action"].startswith("No action required")

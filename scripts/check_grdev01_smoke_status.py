@@ -17,6 +17,17 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REQUIRED_RUNTIME_RESOURCE_KEYS = (
+    "grdev01.are",
+    "grdev01.git",
+    "module.ifo",
+    "grdev01.pth",
+    "grdev01.lyt",
+    "grdev01.vis",
+    "grdev01_room01.mdl",
+    "grdev01_room01.mdx",
+    "grdev01_room01.wok",
+)
 PAYLOAD_PATHS = (
     "native/GhostRigger.Domain.Core.Modules/Python",
     "native/GhostRigger.Domain.Core.Game/Python",
@@ -92,11 +103,24 @@ def _verification_summary(module_path: Path) -> dict[str, Any]:
     from src.core.modules.dev_module_smoke import verify_dev_test_module_package  # noqa: WPS433
 
     result = verify_dev_test_module_package(module_path)
+    resources = [
+        {
+            "resref": resource.resref,
+            "restype": resource.restype,
+            "key": f"{resource.resref}.{resource.restype}",
+            "size": resource.size,
+            "offset": resource.offset,
+        }
+        for resource in result.resources
+    ]
     return {
         "ok": bool(result.ok),
         "code": result.code,
         "message": result.message,
         "module_path": result.module_path,
+        "module_sha256": _sha256(module_path),
+        "resources": resources,
+        "resource_keys": sorted(resource["key"] for resource in resources),
         "parsed_gff": list(result.parsed_gff),
         "parsed_wok": list(result.parsed_wok),
         "model_pairs": list(result.model_pairs),
@@ -107,23 +131,51 @@ def _verification_summary(module_path: Path) -> dict[str, Any]:
     }
 
 
+def _runtime_archive_summary(verification: dict[str, Any]) -> dict[str, Any]:
+    resource_keys = set(verification.get("resource_keys") or [])
+    missing = [key for key in REQUIRED_RUNTIME_RESOURCE_KEYS if key not in resource_keys]
+    return {
+        "required_resource_keys": list(REQUIRED_RUNTIME_RESOURCE_KEYS),
+        "missing_required_resource_keys": missing,
+        "engine_ifo_key_ok": "module.ifo" in resource_keys,
+        "room_model_pair_ok": "grdev01_room01.mdl" in resource_keys and "grdev01_room01.mdx" in resource_keys,
+        "walkmesh_key_ok": "grdev01_room01.wok" in resource_keys,
+        "layout_keys_ok": "grdev01.lyt" in resource_keys and "grdev01.vis" in resource_keys,
+        "path_key_ok": "grdev01.pth" in resource_keys,
+    }
+
+
 def _installed_summary(*, module_path: Path, proof: dict[str, Any], game_modules_dir: Path | None) -> dict[str, Any]:
     install = proof.get("install") if isinstance(proof.get("install"), dict) else {}
     installed_path_text = str(install.get("installed_module_path") or "")
+    backup_path_text = str(install.get("backup_module_path") or "")
     if game_modules_dir is not None:
         installed_path_text = str(game_modules_dir / "grdev01.mod")
     if not installed_path_text:
-        return {"checked": False, "exists": False, "matches_package": False, "installed_module_path": ""}
+        return {
+            "checked": False,
+            "exists": False,
+            "matches_package": False,
+            "installed_module_path": "",
+            "backup_module_path": backup_path_text,
+            "package_sha256": _sha256(module_path) if module_path.is_file() else "",
+            "installed_sha256": "",
+        }
     installed_path = Path(installed_path_text)
     exists = installed_path.is_file()
     matches = False
+    package_sha = _sha256(module_path) if module_path.is_file() else ""
+    installed_sha = _sha256(installed_path) if exists else ""
     if exists and module_path.is_file():
-        matches = _sha256(installed_path) == _sha256(module_path)
+        matches = installed_sha == package_sha
     return {
         "checked": True,
         "exists": exists,
         "matches_package": matches,
         "installed_module_path": str(installed_path),
+        "backup_module_path": backup_path_text,
+        "package_sha256": package_sha,
+        "installed_sha256": installed_sha,
     }
 
 
@@ -176,6 +228,12 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
         blocking.append("No module package path was supplied and the proof manifest did not name one.")
     verification = _verification_summary(checked_module_path)
     blocking.extend(verification.get("blocking_issues", []))
+    runtime_archive = _runtime_archive_summary(verification)
+    if runtime_archive["missing_required_resource_keys"]:
+        blocking.append(
+            "Module package is missing KOTOR runtime resources: "
+            + ", ".join(runtime_archive["missing_required_resource_keys"])
+        )
     proof_state = _proof_summary(proof)
     installed = _installed_summary(module_path=checked_module_path, proof=proof, game_modules_dir=game_modules_dir)
     if installed.get("checked") and not installed.get("exists"):
@@ -185,6 +243,24 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
     status, complete = _derive_status(verification=verification, proof=proof_state, installed=installed)
     if blocking and status != "package_blocked":
         complete = False
+    ready_for_game_launch = (
+        status == "installed_ready_for_game_test"
+        and not blocking
+        and verification.get("ok")
+        and installed.get("matches_package")
+        and not proof_state.get("game_tested")
+    )
+    next_action = "No action required; this package is recorded as game-tested."
+    if not verification.get("ok") or blocking:
+        next_action = "Fix blocking package/install issues before launching KOTOR."
+    elif proof_state.get("game_tested") and not proof_state.get("missing_checks"):
+        next_action = "No action required; this package is recorded as game-tested."
+    elif ready_for_game_launch:
+        next_action = "Launch KOTOR, run `warp grdev01`, verify floor/placeable/walkability, then capture evidence."
+    elif not installed.get("checked") or not installed.get("exists"):
+        next_action = "Install/copy grdev01.mod into a KOTOR Modules folder before the game test."
+    elif installed.get("checked") and not installed.get("matches_package"):
+        next_action = "Reinstall the staged grdev01.mod so the live Modules copy matches the verified package."
     return {
         "ok": complete,
         "status": status if not blocking else ("game_tested" if complete else status),
@@ -192,8 +268,11 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
         "module_path": str(checked_module_path),
         "pack_manifest_path": str(package.get("pack_manifest_path") or ""),
         "package_verification": verification,
+        "runtime_archive": runtime_archive,
         "proof": proof_state,
         "installed": installed,
+        "ready_for_game_launch": ready_for_game_launch,
+        "next_action": next_action,
         "warnings": warnings,
         "blocking_issues": blocking,
     }
@@ -206,10 +285,15 @@ def _print_human_summary(status: dict[str, Any]) -> None:
     if status["pack_manifest_path"]:
         print(f"Pack manifest: {status['pack_manifest_path']}")
     print(f"Package readback: {status['package_verification']['code']}")
+    print(f"Engine module IFO key: {status['runtime_archive']['engine_ifo_key_ok']}")
     installed = status["installed"]
     if installed["checked"]:
         print(f"Installed copy: {installed['installed_module_path']}")
         print(f"Installed copy matches package: {installed['matches_package']}")
+        if installed["backup_module_path"]:
+            print(f"Previous module backup: {installed['backup_module_path']}")
+    print(f"Ready for game launch: {status['ready_for_game_launch']}")
+    print(f"Next action: {status['next_action']}")
     proof = status["proof"]
     print(f"Game-tested: {proof['game_tested']}")
     print(f"Manual proof required: {proof['manual_proof_required']}")

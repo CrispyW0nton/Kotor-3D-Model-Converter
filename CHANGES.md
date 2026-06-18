@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Smoke Status Shows Runtime Launch Readiness
+
+Owner: LordVaderCW
+Task: T2636
+Subsystem: Map Studio / grdev01 smoke proof status CLI
+
+- Expanded `check_grdev01_smoke_status.py` so the smoke status report now lists required KOTOR runtime archive keys, confirms the `module.ifo` engine key, reports staged/installed SHA-256 values, and records whether the exact installed copy is ready for a real `warp grdev01` launch test.
+- Added a concrete `next_action` field so modders and future agents can distinguish package-fix, install/copy, game-launch, and already-proven states without guessing.
+- Tightened status-script coverage for export-candidate, installed-ready, and game-tested states.
+
+Verification:
+- `python -m py_compile scripts\check_grdev01_smoke_status.py`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py -q --basetemp .pytest_tmp_grdev01_status_t2636`
+
 ### [2026-06-18] Map Studio Smoke Install Overwrite Backups
 
 Owner: LordVaderCW
