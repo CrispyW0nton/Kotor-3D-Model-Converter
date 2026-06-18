@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Authored Arch Primitive
+
+Owner: LordVaderCW
+Task: T2622
+Subsystem: Map Studio / authored room geometry / native Python payloads
+
+- Added an authored `ArchPrimitive` that builds a deterministic segmented doorway arch mesh from two side pillars plus a semi-circular arch band.
+- Wired arch primitives into authored room composition compilation and validation so Map Studio projects can include doorway/blockout arches alongside walls, cubes, ramps, stairs, and cylinders.
+- Mirrored the authored room primitive/composition changes into the ModuleMeshes native Python payload and refreshed payload manifest hashes.
+- Added regression coverage for arch mesh metadata, dimensions, segment counts, room composition helper output, and invalid arch dimension blocking.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_composition.py tests\test_authored_room_primitives.py tests\test_authored_room_composition.py`
+- `python -m pytest tests/test_authored_room_primitives.py tests/test_authored_room_composition.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_arch_primitive_smoke`
+- Native Python payload hash check for the edited authored room modules.
+
 ### [2026-06-18] Map Studio Optional GIT Placement Lists
 
 Owner: LordVaderCW

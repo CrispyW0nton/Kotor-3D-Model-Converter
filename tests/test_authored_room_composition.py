@@ -149,3 +149,45 @@ def test_t2620_composition_rejects_non_walkable_ramp_surface() -> None:
 
     assert validation.ok is False
     assert "bad_ramp_path ramp surface 7 (NON_WALK) is not walkable." in validation.blocking_issues
+
+
+def test_t2622_composition_compiles_arch_primitive_as_helper_mesh() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import ArchPrimitive, FloorPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="arch_room",
+        floor=FloorPrimitive(name="arch_room_floor"),
+        primitives=(ArchPrimitive(name="arch_room_entry", width=2.5, height=3.0, frame_thickness=0.3, depth=0.35),),
+    )
+
+    validation = validate_authored_room_composition(composition)
+    geometry = compile_authored_room_composition(composition)
+
+    assert validation.ok is True
+    assert geometry.metadata["primitive_count"] == 1
+    assert geometry.metadata["walkmesh_primitive_count"] == 0
+    assert geometry.wok.walkable_face_count() == 2
+    assert len(geometry.helper_meshes) == 1
+    assert geometry.helper_meshes[0].name == "arch_room_entry"
+    assert geometry.helper_meshes[0].metadata["primitive"] == "arch"
+
+
+def test_t2622_composition_rejects_invalid_arch_dimensions() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import ArchPrimitive, FloorPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="bad_arch",
+        floor=FloorPrimitive(name="bad_arch_floor"),
+        primitives=(ArchPrimitive(name="bad_arch_entry", width=0.0),),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert "Arch primitive bad_arch_entry must have positive width, height, depth, and frame thickness." in validation.blocking_issues

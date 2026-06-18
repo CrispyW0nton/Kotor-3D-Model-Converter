@@ -13,6 +13,7 @@ from typing import Any, Union
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh, RectangularRoomPrimitive
 from .authored_walkmesh_surfaces import require_walkable_walkmesh_surface, resolve_walkmesh_surface_id, walkmesh_surface_name
 from .authored_room_primitives import (
+    ArchPrimitive,
     CubePrimitive,
     CylinderPrimitive,
     FloorPrimitive,
@@ -20,6 +21,7 @@ from .authored_room_primitives import (
     RampPrimitive,
     StairsPrimitive,
     WallPrimitive,
+    build_arch_mesh,
     build_cube_mesh,
     build_cylinder_mesh,
     build_floor_mesh,
@@ -32,7 +34,7 @@ from .authored_room_primitives import (
 from .module_format import WOKData, WOKFace
 
 
-RoomPrimitive = Union[WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive]
+RoomPrimitive = Union[WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive, ArchPrimitive]
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,8 @@ def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
         return build_stairs_mesh(primitive)
     if isinstance(primitive, CylinderPrimitive):
         return build_cylinder_mesh(primitive)
+    if isinstance(primitive, ArchPrimitive):
+        return build_arch_mesh(primitive)
     raise TypeError(f"Unsupported authored room primitive: {type(primitive)!r}")
 
 
@@ -134,6 +138,14 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
                 require_walkable_walkmesh_surface(primitive.surface_id, context=f"{primitive.name} ramp")
             except ValueError as exc:
                 blocking.append(str(exc))
+        if isinstance(primitive, ArchPrimitive):
+            if (
+                float(primitive.width) <= 0.0
+                or float(primitive.height) <= 0.0
+                or float(primitive.depth) <= 0.0
+                or float(primitive.frame_thickness) <= 0.0
+            ):
+                blocking.append(f"Arch primitive {primitive.name or '(unnamed)'} must have positive width, height, depth, and frame thickness.")
     if not composition.primitives and not composition.helper_meshes:
         warnings.append("Authored room composition has only a floor; add walls or helpers before game-facing export.")
     return AuthoredRoomCompositionValidation(

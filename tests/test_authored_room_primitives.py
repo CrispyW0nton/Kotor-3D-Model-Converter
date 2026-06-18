@@ -67,10 +67,12 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_room_primitives import (
+        ArchPrimitive,
         CubePrimitive,
         RampPrimitive,
         StairsPrimitive,
         WallPrimitive,
+        build_arch_mesh,
         build_cube_mesh,
         build_ramp_mesh,
         build_ramp_wok,
@@ -78,6 +80,7 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
         build_wall_mesh,
     )
 
+    arch = build_arch_mesh(ArchPrimitive(name="door_arch", width=2.0, height=3.0, frame_thickness=0.25, depth=0.4, segments=8))
     wall = build_wall_mesh(WallPrimitive(name="wall_y", axis="y", width=5.0, height=2.5, thickness=0.25))
     cube = build_cube_mesh(CubePrimitive(name="crate", size=(1.0, 2.0, 3.0), center=(0.0, 0.0, 1.5)))
     ramp_primitive = RampPrimitive(name="ramp", width=2.0, length=4.0, height=1.25, center=(1.0, 2.0, 0.25), surface_id="metal")
@@ -85,6 +88,14 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     ramp_wok = build_ramp_wok(ramp_primitive)
     stairs = build_stairs_mesh(StairsPrimitive(name="stairs", width=2.0, depth=4.0, height=1.0, steps=4))
 
+    assert arch.metadata["primitive"] == "arch"
+    assert arch.metadata["segments"] == 8
+    assert arch.metadata["opening_width"] == 1.5
+    assert arch.metadata["opening_height"] == 2.0
+    assert len(arch.vertices) == 52
+    assert len(arch.faces) == 92
+    assert min(vertex[2] for vertex in arch.vertices) == 0.0
+    assert max(vertex[2] for vertex in arch.vertices) == 3.0
     assert wall.metadata["primitive"] == "wall"
     assert len(wall.vertices) == 8
     assert len(wall.faces) == 12

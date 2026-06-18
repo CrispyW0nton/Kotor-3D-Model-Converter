@@ -87,6 +87,20 @@ class CylinderPrimitive:
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
 
 
+@dataclass(frozen=True)
+class ArchPrimitive:
+    """Segmented doorway arch frame for authored room blockouts."""
+
+    name: str
+    width: float = 2.0
+    height: float = 3.0
+    frame_thickness: float = 0.25
+    depth: float = 0.25
+    segments: int = 12
+    center: Vec3 = (0.0, 0.0, 1.5)
+    material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+
+
 def _mesh(
     *,
     name: str,
@@ -140,6 +154,12 @@ def _box_vertices_faces(*, name: str, x: float, y: float, z: float, center: Vec3
         (3, 4, 0),
     )
     return _mesh(name=name, vertices=vertices, faces=faces, material=material, primitive=primitive)
+
+
+def _append_mesh_parts(vertices: list[Vec3], faces: list[Face], mesh: PrimitiveMesh) -> None:
+    offset = len(vertices)
+    vertices.extend(mesh.vertices)
+    faces.extend((a + offset, b + offset, c + offset) for a, b, c in mesh.faces)
 
 
 def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
@@ -319,7 +339,98 @@ def build_cylinder_mesh(primitive: CylinderPrimitive) -> PrimitiveMesh:
     )
 
 
+def build_arch_mesh(primitive: ArchPrimitive) -> PrimitiveMesh:
+    """Build a segmented semi-circular doorway arch frame."""
+
+    width = max(0.001, float(primitive.width))
+    height = max(0.001, float(primitive.height))
+    depth = max(0.001, float(primitive.depth))
+    outer_radius = width * 0.5
+    frame = max(0.001, min(float(primitive.frame_thickness), outer_radius * 0.95))
+    inner_radius = max(0.001, outer_radius - frame)
+    segments = max(4, int(primitive.segments))
+    cx, cy, cz = primitive.center
+    bottom = cz - height * 0.5
+    top = cz + height * 0.5
+    spring_z = max(bottom, top - outer_radius)
+    pillar_height = max(0.001, spring_z - bottom)
+    half_depth = depth * 0.5
+
+    vertices: list[Vec3] = []
+    faces: list[Face] = []
+    for pillar_name, pillar_x in (
+        ("left", cx - outer_radius + frame * 0.5),
+        ("right", cx + outer_radius - frame * 0.5),
+    ):
+        pillar = _box_vertices_faces(
+            name=f"{primitive.name}_{pillar_name}_pillar",
+            x=frame,
+            y=depth,
+            z=pillar_height,
+            center=(pillar_x, cy, bottom + pillar_height * 0.5),
+            material=primitive.material,
+            primitive="arch_pillar",
+        )
+        _append_mesh_parts(vertices, faces, pillar)
+
+    band_start = len(vertices)
+    for index in range(segments + 1):
+        angle = math.pi - (math.pi * index / segments)
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        vertices.extend(
+            (
+                (cx + cos_a * outer_radius, cy - half_depth, spring_z + sin_a * outer_radius),
+                (cx + cos_a * inner_radius, cy - half_depth, spring_z + sin_a * inner_radius),
+                (cx + cos_a * outer_radius, cy + half_depth, spring_z + sin_a * outer_radius),
+                (cx + cos_a * inner_radius, cy + half_depth, spring_z + sin_a * inner_radius),
+            )
+        )
+    for index in range(segments):
+        a = band_start + index * 4
+        b = band_start + (index + 1) * 4
+        outer_front_a, inner_front_a, outer_back_a, inner_back_a = a, a + 1, a + 2, a + 3
+        outer_front_b, inner_front_b, outer_back_b, inner_back_b = b, b + 1, b + 2, b + 3
+        faces.extend(
+            (
+                (outer_front_a, outer_front_b, inner_front_b),
+                (outer_front_a, inner_front_b, inner_front_a),
+                (outer_back_a, inner_back_b, outer_back_b),
+                (outer_back_a, inner_back_a, inner_back_b),
+                (outer_front_a, outer_back_b, outer_front_b),
+                (outer_front_a, outer_back_a, outer_back_b),
+                (inner_front_a, inner_front_b, inner_back_b),
+                (inner_front_a, inner_back_b, inner_back_a),
+            )
+        )
+    start = band_start
+    end = band_start + segments * 4
+    faces.extend(
+        (
+            (start, start + 1, start + 3),
+            (start, start + 3, start + 2),
+            (end, end + 3, end + 1),
+            (end, end + 2, end + 3),
+        )
+    )
+    return _mesh(
+        name=primitive.name,
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+        material=primitive.material,
+        primitive="arch",
+        metadata={
+            "segments": segments,
+            "frame_thickness": frame,
+            "opening_width": inner_radius * 2.0,
+            "opening_height": spring_z - bottom,
+            "depth": depth,
+        },
+    )
+
+
 __all__ = [
+    "ArchPrimitive",
     "CubePrimitive",
     "CylinderPrimitive",
     "FloorPrimitive",
@@ -327,6 +438,7 @@ __all__ = [
     "RampPrimitive",
     "StairsPrimitive",
     "WallPrimitive",
+    "build_arch_mesh",
     "build_cube_mesh",
     "build_cylinder_mesh",
     "build_floor_mesh",
