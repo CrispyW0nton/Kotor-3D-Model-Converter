@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Snaps Authored Drags to the Viewport Grid
+
+Owner: LordVaderCW
+Task: T2666
+Subsystem: Map Studio / Module Editor viewport snapping / authored room and gameplay marker gestures / native Python payloads
+
+- Made the Module Editor viewport Snap checkbox constrain authored gameplay marker drags and authored room outline point drags to the active viewport minor grid spacing.
+- Read snap spacing from the viewport measurement settings with a bounded 10 cm fallback so Map Studio authored gestures follow the same grid model shown in the viewport.
+- Added stable object names and tooltip text for the Map Studio Grid/Snap controls.
+- Mirrored the snap behavior into the ModuleMeshes native payload panel.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_map_studio_marker_drag.py tests\test_map_studio_room_outline_overlay.py`
+- `python -m pytest tests\test_map_studio_marker_drag.py tests\test_map_studio_room_outline_overlay.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_studio_snap_drag`
+
 ### [2026-06-18] Map Studio Allows Authored Room Outline Point Dragging
 
 Owner: LordVaderCW

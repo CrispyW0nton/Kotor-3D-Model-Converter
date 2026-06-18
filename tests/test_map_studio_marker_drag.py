@@ -48,3 +48,22 @@ def test_t2663_marker_drag_uses_camera_projected_floor_delta() -> None:
         assert "determinant = ax * by - ay * bx" in source
         assert "def _fallback_screen_delta_to_floor_delta" in source
         assert "def _clamp_floor_delta" in source
+
+
+def test_t2666_marker_and_room_point_drags_honor_map_studio_snap_grid() -> None:
+    panel_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    mirrored_panel_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+
+    for source in (panel_source, mirrored_panel_source):
+        assert 'self.snap_box.setObjectName("mapStudioViewportSnapCheckBox")' in source
+        assert "def _snap_map_studio_position" in source
+        assert "def _map_studio_grid_spacing" in source
+        assert 'getattr(settings, "minor_grid_spacing", 10.0)' in source
+        assert "return self._snap_map_studio_position(" in source
+        assert "pending = self._snap_map_studio_position(" in source
+        assert "round(float(position[0]) / spacing) * spacing" in source
+        assert "round(float(position[1]) / spacing) * spacing" in source

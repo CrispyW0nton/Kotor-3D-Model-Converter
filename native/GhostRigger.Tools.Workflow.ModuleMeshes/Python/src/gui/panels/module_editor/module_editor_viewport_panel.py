@@ -32,8 +32,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.viewport_toolbar.setSpacing(6)
         self.focus_button = QtWidgets.QPushButton("Focus")
         self.grid_box = QtWidgets.QCheckBox("Grid")
+        self.grid_box.setObjectName("mapStudioViewportGridCheckBox")
         self.grid_box.setChecked(True)
         self.snap_box = QtWidgets.QCheckBox("Snap")
+        self.snap_box.setObjectName("mapStudioViewportSnapCheckBox")
+        self.snap_box.setToolTip("Snap authored room and gameplay marker drags to the viewport grid.")
         self.viewport_toolbar.addWidget(self.focus_button)
         self.viewport_toolbar.addWidget(self.grid_box)
         self.viewport_toolbar.addWidget(self.snap_box)
@@ -341,7 +344,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if len(start_position) < 3:
             return False
         world_dx, world_dy = self._screen_delta_to_floor_delta(start_position, screen_dx, screen_dy)
-        pending = (float(start_position[0]) + world_dx, float(start_position[1]) + world_dy, float(start_position[2]))
+        pending = self._snap_map_studio_position(
+            (float(start_position[0]) + world_dx, float(start_position[1]) + world_dy, float(start_position[2]))
+        )
         self._room_outline_point_drag["active"] = True
         self._room_outline_point_drag["pending_position"] = pending
         return True
@@ -378,10 +383,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if len(start_position) < 3:
             return None
         world_dx, world_dy = self._screen_delta_to_floor_delta(start_position, screen_dx, screen_dy)
-        return (
-            float(start_position[0]) + world_dx,
-            float(start_position[1]) + world_dy,
-            float(start_position[2]),
+        return self._snap_map_studio_position(
+            (
+                float(start_position[0]) + world_dx,
+                float(start_position[1]) + world_dy,
+                float(start_position[2]),
+            )
         )
 
     def _screen_delta_to_floor_delta(self, position, screen_dx: float, screen_dy: float) -> tuple[float, float]:
@@ -425,6 +432,27 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             max(-limit, min(limit, float(world_dx))),
             max(-limit, min(limit, float(world_dy))),
         )
+
+    def _snap_map_studio_position(self, position: tuple[float, float, float]) -> tuple[float, float, float]:
+        if not bool(self.snap_box.isChecked()):
+            return (float(position[0]), float(position[1]), float(position[2]))
+        spacing = self._map_studio_grid_spacing()
+        return (
+            round(float(position[0]) / spacing) * spacing,
+            round(float(position[1]) / spacing) * spacing,
+            float(position[2]),
+        )
+
+    def _map_studio_grid_spacing(self) -> float:
+        settings = getattr(self.viewport, "measurement_settings", None)
+        spacing = getattr(settings, "minor_grid_spacing", 10.0)
+        try:
+            value = float(spacing)
+        except (TypeError, ValueError):
+            value = 10.0
+        if not math.isfinite(value) or value <= 0.0:
+            return 10.0
+        return value
 
     def _ensure_embedded_viewport_toolbar_gap(self, gap_height: int = 6) -> None:
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
