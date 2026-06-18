@@ -73,13 +73,16 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
         WallPrimitive,
         build_cube_mesh,
         build_ramp_mesh,
+        build_ramp_wok,
         build_stairs_mesh,
         build_wall_mesh,
     )
 
     wall = build_wall_mesh(WallPrimitive(name="wall_y", axis="y", width=5.0, height=2.5, thickness=0.25))
     cube = build_cube_mesh(CubePrimitive(name="crate", size=(1.0, 2.0, 3.0), center=(0.0, 0.0, 1.5)))
-    ramp = build_ramp_mesh(RampPrimitive(name="ramp", width=2.0, length=4.0, height=1.25))
+    ramp_primitive = RampPrimitive(name="ramp", width=2.0, length=4.0, height=1.25, center=(1.0, 2.0, 0.25), surface_id="metal")
+    ramp = build_ramp_mesh(ramp_primitive)
+    ramp_wok = build_ramp_wok(ramp_primitive)
     stairs = build_stairs_mesh(StairsPrimitive(name="stairs", width=2.0, depth=4.0, height=1.0, steps=4))
 
     assert wall.metadata["primitive"] == "wall"
@@ -89,7 +92,12 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     assert min(vertex[2] for vertex in cube.vertices) == 0.0
     assert max(vertex[2] for vertex in cube.vertices) == 3.0
     assert ramp.metadata["primitive"] == "ramp"
-    assert max(vertex[2] for vertex in ramp.vertices) == 1.25
+    assert ramp.metadata["surface_id"] == 10
+    assert min(vertex[0] for vertex in ramp.vertices) == 0.0
+    assert max(vertex[2] for vertex in ramp.vertices) == 1.5
+    assert ramp_wok.walkable_face_count() == 2
+    assert [face.surface for face in ramp_wok.faces] == [10, 10]
+    assert ramp_wok.verts == list(ramp.vertices[:4])
     assert stairs.metadata["primitive"] == "stairs"
     assert stairs.metadata["steps"] == 4
     assert len(stairs.faces) == 48

@@ -25,9 +25,11 @@ from .authored_room_primitives import (
     build_floor_mesh,
     build_floor_wok,
     build_ramp_mesh,
+    build_ramp_wok,
     build_stairs_mesh,
     build_wall_mesh,
 )
+from .module_format import WOKData, WOKFace
 
 
 RoomPrimitive = Union[WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive]
@@ -71,6 +73,37 @@ def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
     raise TypeError(f"Unsupported authored room primitive: {type(primitive)!r}")
 
 
+def _append_wok(base: WOKData, extra: WOKData) -> WOKData:
+    """Append one primitive WOK to another while preserving local adjacency."""
+
+    vertex_offset = len(base.verts)
+    face_offset = len(base.faces)
+    base.verts.extend(tuple(vertex) for vertex in extra.verts)
+    for face in extra.faces:
+        base.faces.append(
+            WOKFace(
+                face.v1 + vertex_offset,
+                face.v2 + vertex_offset,
+                face.v3 + vertex_offset,
+                face.surface,
+                face.adj1 + face_offset if face.adj1 >= 0 else -1,
+                face.adj2 + face_offset if face.adj2 >= 0 else -1,
+                face.adj3 + face_offset if face.adj3 >= 0 else -1,
+            )
+        )
+    return base
+
+
+def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
+    """Build the room WOK from the floor plus walkable authored primitives."""
+
+    wok = build_floor_wok(composition.floor)
+    for primitive in composition.primitives:
+        if isinstance(primitive, RampPrimitive):
+            _append_wok(wok, build_ramp_wok(primitive))
+    return wok
+
+
 def validate_authored_room_composition(composition: AuthoredRoomComposition) -> AuthoredRoomCompositionValidation:
     """Validate a primitive room composition before it is compiled."""
 
@@ -93,6 +126,14 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
         if name in names:
             blocking.append(f"Duplicate authored room primitive name: {name}")
         names.add(name)
+    for primitive in composition.primitives:
+        if isinstance(primitive, RampPrimitive):
+            if float(primitive.width) <= 0.0 or float(primitive.length) <= 0.0 or float(primitive.height) <= 0.0:
+                blocking.append(f"Ramp primitive {primitive.name or '(unnamed)'} must have positive width, length, and height.")
+            try:
+                require_walkable_walkmesh_surface(primitive.surface_id, context=f"{primitive.name} ramp")
+            except ValueError as exc:
+                blocking.append(str(exc))
     if not composition.primitives and not composition.helper_meshes:
         warnings.append("Authored room composition has only a floor; add walls or helpers before game-facing export.")
     return AuthoredRoomCompositionValidation(
@@ -116,7 +157,7 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
         room_resref=room_resref,
         room_mesh=floor_mesh,
         helper_meshes=primitive_meshes + tuple(composition.helper_meshes),
-        wok=build_floor_wok(composition.floor),
+        wok=build_composition_wok(composition),
         metadata={
             **dict(composition.metadata),
             "primitive": "authored_room_composition",
@@ -127,6 +168,7 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
             "primitive_count": len(composition.primitives),
             "helper_mesh_count": len(composition.helper_meshes),
             "compiled_mesh_count": 1 + len(primitive_meshes) + len(composition.helper_meshes),
+            "walkmesh_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, RampPrimitive)),
             "warnings": list(validation.warnings),
         },
     )
@@ -213,6 +255,7 @@ __all__ = [
     "AuthoredRoomComposition",
     "AuthoredRoomCompositionValidation",
     "RoomPrimitive",
+    "build_composition_wok",
     "compile_authored_room_composition",
     "create_rectangular_room_composition",
     "validate_authored_room_composition",

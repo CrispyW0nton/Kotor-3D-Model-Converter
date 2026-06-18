@@ -9,6 +9,26 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-18
+
+### [2026-06-18] Map Studio Walkable Ramp WOKs
+
+Owner: LordVaderCW
+Task: T2620
+Subsystem: Map Studio / authored room geometry / native Python payloads
+
+- Added walkable WOK generation for authored ramp primitives so sloped helper geometry can contribute pathable faces instead of remaining visual-only.
+- Updated authored room composition to merge ramp WOK faces with the base floor WOK and validate ramp surface IDs through the existing walkmesh surface rules.
+- Mirrored the authored room primitive/composition changes into the ModuleMeshes native Python payload and refreshed payload manifest hashes.
+- Added regression coverage proving ramp WOK vertices/faces, composition WOK merging, and rejection of non-walkable ramp surfaces.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_composition.py tests\test_authored_room_primitives.py tests\test_authored_room_composition.py`
+- `python -m pytest tests/test_authored_room_primitives.py tests/test_authored_room_composition.py -q --basetemp .pytest_tmp_ramp_wok_primitives`
+- `python -m pytest tests/test_authored_room_primitives.py tests/test_authored_room_composition.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_ramp_wok_smoke`
+- Native Python payload hash check for the edited authored room modules.
+- `git diff --check`
+
 ## 2026-06-17
 
 ### [2026-06-17] Map Studio Smoke Proof Status Command

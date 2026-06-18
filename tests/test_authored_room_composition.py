@@ -99,3 +99,53 @@ def test_t2604_composition_validation_rejects_non_walk_floor_surface() -> None:
 
     assert validation.ok is False
     assert "blocked floor surface 7 (NON_WALK) is not walkable." in validation.blocking_issues
+
+
+def test_t2620_composition_adds_walkable_ramp_faces_to_wok() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive, RampPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="ramp_room",
+        floor=FloorPrimitive(name="ramp_room_floor", width=8.0, depth=8.0, surface_id="stone"),
+        primitives=(
+            RampPrimitive(
+                name="ramp_room_ramp",
+                width=2.0,
+                length=3.0,
+                height=1.0,
+                center=(2.5, 0.0, 0.0),
+                surface_id="metal",
+            ),
+        ),
+    )
+
+    validation = validate_authored_room_composition(composition)
+    geometry = compile_authored_room_composition(composition)
+
+    assert validation.ok is True
+    assert geometry.metadata["walkmesh_primitive_count"] == 1
+    assert geometry.wok.walkable_face_count() == 4
+    assert len(geometry.wok.verts) == 8
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10]
+    assert geometry.wok.verts[4:] == [(1.5, -1.5, 0.0), (3.5, -1.5, 0.0), (3.5, 1.5, 1.0), (1.5, 1.5, 1.0)]
+
+
+def test_t2620_composition_rejects_non_walkable_ramp_surface() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive, RampPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="bad_ramp",
+        floor=FloorPrimitive(name="bad_ramp_floor"),
+        primitives=(RampPrimitive(name="bad_ramp_path", surface_id="non_walk"),),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert "bad_ramp_path ramp surface 7 (NON_WALK) is not walkable." in validation.blocking_issues

@@ -62,6 +62,8 @@ class RampPrimitive:
     width: float = 2.0
     length: float = 4.0
     height: float = 1.0
+    center: Vec3 = (0.0, 0.0, 0.0)
+    surface_id: int | str = 4
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
 
 
@@ -207,13 +209,15 @@ def build_ramp_mesh(primitive: RampPrimitive) -> PrimitiveMesh:
     half_w = float(primitive.width) * 0.5
     half_l = float(primitive.length) * 0.5
     h = float(primitive.height)
+    cx, cy, cz = primitive.center
+    surface_id = resolve_walkmesh_surface_id(primitive.surface_id)
     vertices: tuple[Vec3, ...] = (
-        (-half_w, -half_l, 0.0),
-        (half_w, -half_l, 0.0),
-        (half_w, half_l, h),
-        (-half_w, half_l, h),
-        (-half_w, half_l, 0.0),
-        (half_w, half_l, 0.0),
+        (cx - half_w, cy - half_l, cz),
+        (cx + half_w, cy - half_l, cz),
+        (cx + half_w, cy + half_l, cz + h),
+        (cx - half_w, cy + half_l, cz + h),
+        (cx - half_w, cy + half_l, cz),
+        (cx + half_w, cy + half_l, cz),
     )
     faces: tuple[Face, ...] = (
         (0, 1, 2),
@@ -226,7 +230,28 @@ def build_ramp_mesh(primitive: RampPrimitive) -> PrimitiveMesh:
         (0, 2, 3),
         (1, 5, 2),
     )
-    return _mesh(name=primitive.name, vertices=vertices, faces=faces, material=primitive.material, primitive="ramp")
+    return _mesh(
+        name=primitive.name,
+        vertices=vertices,
+        faces=faces,
+        material=primitive.material,
+        primitive="ramp",
+        metadata={"surface_id": surface_id, "surface_name": walkmesh_surface_name(surface_id)},
+    )
+
+
+def build_ramp_wok(primitive: RampPrimitive) -> WOKData:
+    """Build a walkable sloped WOK from the ramp's top surface."""
+
+    surface_id = resolve_walkmesh_surface_id(primitive.surface_id)
+    mesh = build_ramp_mesh(primitive)
+    return WOKData(
+        verts=list(mesh.vertices[:4]),
+        faces=[
+            WOKFace(0, 1, 2, surface=surface_id, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=surface_id, adj1=0, adj2=-1, adj3=-1),
+        ],
+    )
 
 
 def build_stairs_mesh(primitive: StairsPrimitive) -> PrimitiveMesh:
@@ -307,6 +332,7 @@ __all__ = [
     "build_floor_mesh",
     "build_floor_wok",
     "build_ramp_mesh",
+    "build_ramp_wok",
     "build_stairs_mesh",
     "build_wall_mesh",
 ]
