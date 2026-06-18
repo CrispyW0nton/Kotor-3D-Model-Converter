@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Supports Direct Authored Placement Marker Dragging
+
+Owner: LordVaderCW
+Task: T2663
+Subsystem: Map Studio / Module Editor viewport placement editing / authored gameplay marker gestures / native Python payloads
+
+- Added a Module Editor viewport drag lifecycle for authored gameplay placement markers: click selects, drag computes a floor-plane movement, and release emits the existing `LevelTransform` edit signal.
+- Kept the authoritative placement update on the existing Module Editor controller path so authored-module readiness, stale export status, and game-proof invalidation remain centralized.
+- Used the viewport renderer projection to convert screen-space marker drags into map-floor X/Y movement, with a bounded fallback when projection is unavailable.
+- Mirrored the drag behavior into the ModuleMeshes native payload panel.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_map_studio_marker_drag.py tests\test_map_studio_marker_overlay.py tests\test_map_studio_placement_table_editing.py`
+- `python -m pytest tests\test_map_studio_marker_drag.py tests\test_map_studio_marker_overlay.py tests\test_map_studio_placement_table_editing.py -q --basetemp .pytest_tmp_map_studio_marker_drag`
+
 ### [2026-06-18] Map Studio Makes Authored Placement Markers Selectable
 
 Owner: LordVaderCW

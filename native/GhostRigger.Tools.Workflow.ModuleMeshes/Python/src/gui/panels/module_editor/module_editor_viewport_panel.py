@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject, LevelTransform
@@ -68,6 +70,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
+        self._marker_drag: dict[str, object] | None = None
         self._table_updating = False
 
     def set_project(
@@ -152,13 +155,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.viewport.set_renderer_settings(settings)
 
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
-        if self._is_marker_pick_event_source(watched) and event.type() == QtCore.QEvent.MouseButtonPress:
-            if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
-                placement_id = self._marker_at_event(event)
-                if placement_id:
-                    self.select_id(placement_id)
-                    self.itemSelected.emit(placement_id)
-                    return True
+        if self._is_marker_pick_event_source(watched):
+            event_type = event.type()
+            if event_type == QtCore.QEvent.MouseButtonPress:
+                if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
+                    placement_id = self._marker_at_event(event)
+                    if placement_id:
+                        self.select_id(placement_id)
+                        self.itemSelected.emit(placement_id)
+                        self._begin_marker_drag(placement_id, event)
+                        return True
+            if event_type == QtCore.QEvent.MouseMove and self._marker_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_marker_drag(event)
+                self._update_marker_drag(event)
+                return True
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._marker_drag is not None:
+                return self._finish_marker_drag(event)
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
             QtCore.QEvent.Resize,
@@ -201,6 +215,126 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if pos is None:
             return ""
         return str(marker_at_screen(float(pos.x()), float(pos.y())) or "")
+
+    def _event_position(self, event: QtCore.QEvent) -> tuple[float, float] | None:
+        pos_fn = getattr(event, "position", None)
+        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
+        if pos is None:
+            return None
+        return (float(pos.x()), float(pos.y()))
+
+    def _begin_marker_drag(self, placement_id: str, event: QtCore.QEvent) -> bool:
+        marker = self._placement_markers.get(str(placement_id))
+        start_screen = self._event_position(event)
+        if marker is None or start_screen is None:
+            self._marker_drag = None
+            return False
+        self._marker_drag = {
+            "placement_id": str(placement_id),
+            "start_screen": start_screen,
+            "start_position": self._marker_position(marker),
+            "bearing": float(getattr(marker, "bearing", 0.0) or 0.0),
+            "active": False,
+            "pending_position": self._marker_position(marker),
+        }
+        return True
+
+    def _update_marker_drag(self, event: QtCore.QEvent) -> bool:
+        if self._marker_drag is None:
+            return False
+        current = self._event_position(event)
+        if current is None:
+            return False
+        start = self._marker_drag.get("start_screen", current)
+        screen_dx = float(current[0]) - float(start[0])
+        screen_dy = float(current[1]) - float(start[1])
+        if screen_dx * screen_dx + screen_dy * screen_dy < 9.0:
+            return True
+        pending = self._drag_marker_position(screen_dx, screen_dy)
+        if pending is not None:
+            self._marker_drag["active"] = True
+            self._marker_drag["pending_position"] = pending
+        return True
+
+    def _finish_marker_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._marker_drag is None:
+            return False
+        if event is not None:
+            self._update_marker_drag(event)
+        drag = self._marker_drag
+        self._marker_drag = None
+        if not bool(drag.get("active", False)):
+            return True
+        position = tuple(float(v) for v in tuple(drag.get("pending_position", drag.get("start_position", (0.0, 0.0, 0.0))))[:3])
+        if len(position) < 3:
+            return True
+        bearing = float(drag.get("bearing", 0.0) or 0.0)
+        self.transformEdited.emit(
+            str(drag.get("placement_id", "") or ""),
+            LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
+        )
+        return True
+
+    def _marker_position(self, marker: object) -> tuple[float, float, float]:
+        value = tuple(getattr(marker, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+        if len(value) < 3:
+            return (0.0, 0.0, 0.0)
+        return (float(value[0]), float(value[1]), float(value[2]))
+
+    def _drag_marker_position(self, screen_dx: float, screen_dy: float) -> tuple[float, float, float] | None:
+        if self._marker_drag is None:
+            return None
+        start_position = tuple(self._marker_drag.get("start_position", (0.0, 0.0, 0.0)))
+        if len(start_position) < 3:
+            return None
+        world_dx, world_dy = self._screen_delta_to_floor_delta(start_position, screen_dx, screen_dy)
+        return (
+            float(start_position[0]) + world_dx,
+            float(start_position[1]) + world_dy,
+            float(start_position[2]),
+        )
+
+    def _screen_delta_to_floor_delta(self, position, screen_dx: float, screen_dy: float) -> tuple[float, float]:
+        renderer = getattr(self.viewport, "_renderer", None)
+        project = getattr(renderer, "_proj", None)
+        if not callable(project):
+            return self._fallback_screen_delta_to_floor_delta(screen_dx, screen_dy)
+        w, h = self._viewport_canvas_size()
+        try:
+            x, y, z = (float(position[0]), float(position[1]), float(position[2]))
+            base = project(x, y, z, w, h)
+            x_axis = project(x + 1.0, y, z, w, h)
+            y_axis = project(x, y + 1.0, z, w, h)
+            ax = float(x_axis[0]) - float(base[0])
+            ay = float(x_axis[1]) - float(base[1])
+            bx = float(y_axis[0]) - float(base[0])
+            by = float(y_axis[1]) - float(base[1])
+            determinant = ax * by - ay * bx
+            if abs(determinant) <= 1.0e-6:
+                return self._fallback_screen_delta_to_floor_delta(screen_dx, screen_dy)
+            world_dx = (float(screen_dx) * by - float(screen_dy) * bx) / determinant
+            world_dy = (ax * float(screen_dy) - ay * float(screen_dx)) / determinant
+            if not math.isfinite(world_dx) or not math.isfinite(world_dy):
+                return self._fallback_screen_delta_to_floor_delta(screen_dx, screen_dy)
+            return self._clamp_floor_delta(world_dx, world_dy)
+        except Exception:
+            return self._fallback_screen_delta_to_floor_delta(screen_dx, screen_dy)
+
+    def _viewport_canvas_size(self) -> tuple[int, int]:
+        canvas = getattr(self.viewport, "canvas", None)
+        if canvas is not None:
+            return (max(8, int(canvas.width())), max(8, int(canvas.height())))
+        return (max(8, int(self.viewport.width())), max(8, int(self.viewport.height())))
+
+    def _fallback_screen_delta_to_floor_delta(self, screen_dx: float, screen_dy: float) -> tuple[float, float]:
+        return self._clamp_floor_delta(float(screen_dx) * 0.05, -float(screen_dy) * 0.05)
+
+    def _clamp_floor_delta(self, world_dx: float, world_dy: float) -> tuple[float, float]:
+        limit = 250.0
+        return (
+            max(-limit, min(limit, float(world_dx))),
+            max(-limit, min(limit, float(world_dy))),
+        )
 
     def _ensure_embedded_viewport_toolbar_gap(self, gap_height: int = 6) -> None:
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
