@@ -155,6 +155,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.porter_tab = PorterTab()
         self.builder_tab = BuilderTab()
         self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
+        self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -255,6 +256,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
+        self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -474,6 +476,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Applied room operation {operation}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_style(self, texture: str, floor_surface: str) -> None:
+        try:
+            result = self.controller.apply_authored_room_style(texture=texture, floor_surface=floor_surface)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Room Material + Surface", str(exc))
+            return
+        readiness = result.readiness
+        message = "Applied room material and walkmesh surface; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

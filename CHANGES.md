@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exposes Room Material And Surface Controls
+
+Owner: LordVaderCW
+Task: T2652
+Subsystem: Map Studio / authored room style / walkmesh surface assignment / Builder tab / native Python payloads
+
+- Added a headless authored-room style service that applies a KOTOR texture resref and WOK surface material to rectangular and floor-plan authored rooms.
+- The style update invalidates stale compiled room composition so preview/export uses the new texture and walkmesh surface, and previous runtime/game-test proof state is cleared when saved back into KMAP.
+- Added controller APIs for the WOK surface palette and current-room material/surface assignment.
+- Updated the Map Studio Builder tab with `Room Material + Walkmesh` controls for texture resref selection and named KOTOR surface behavior.
+- Mirrored the core/controller/UI changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_style.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_style.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_style.py`
+- `python -m pytest tests\test_authored_room_style.py tests\test_authored_room_presets.py tests\test_authored_room_operations.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_room_style`
+
 ### [2026-06-18] Map Studio Exposes Room Shaping Operations
 
 Owner: LordVaderCW

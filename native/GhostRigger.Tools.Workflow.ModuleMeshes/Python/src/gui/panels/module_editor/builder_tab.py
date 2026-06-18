@@ -9,6 +9,7 @@ class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
+    roomStyleRequested = QtCore.Signal(str, str)
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -80,6 +81,23 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
         layout.addWidget(operation_box)
+        style_box = QtWidgets.QGroupBox("Room Material + Walkmesh")
+        style_layout = QtWidgets.QFormLayout(style_box)
+        self.roomTextureLineEdit = QtWidgets.QLineEdit("CM_Baremetal")
+        self.roomTextureLineEdit.setObjectName("mapStudioRoomTextureLineEdit")
+        self.roomTextureLineEdit.setPlaceholderText("KOTOR texture resref, e.g. CM_Baremetal")
+        self.roomSurfaceComboBox = QtWidgets.QComboBox()
+        self.roomSurfaceComboBox.setObjectName("mapStudioRoomSurfaceComboBox")
+        self.roomSurfaceHintLabel = QtWidgets.QLabel("Choose how the generated floor should behave in the KOTOR walkmesh.")
+        self.roomSurfaceHintLabel.setObjectName("mapStudioRoomSurfaceHintLabel")
+        self.roomSurfaceHintLabel.setWordWrap(True)
+        self.applyRoomStyleButton = QtWidgets.QPushButton("Apply Room Material + Surface")
+        self.applyRoomStyleButton.setObjectName("mapStudioApplyRoomStyleButton")
+        style_layout.addRow("Texture:", self.roomTextureLineEdit)
+        style_layout.addRow("WOK surface:", self.roomSurfaceComboBox)
+        style_layout.addRow(self.roomSurfaceHintLabel)
+        style_layout.addRow(self.applyRoomStyleButton)
+        layout.addWidget(style_box)
         for label in self.ACTIONS:
             button = QtWidgets.QPushButton(label)
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
@@ -92,7 +110,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
+        self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
+        self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
         self._update_operation_controls()
+        self._update_surface_hint()
 
     def set_primitive_presets(self, presets) -> None:
         """Populate the primitive preset selector from the controller."""
@@ -120,6 +141,46 @@ class BuilderTab(QtWidgets.QWidget):
         module_root = self.moduleRootLineEdit.text().strip() or "grdev01"
         if preset_id:
             self.primitivePresetRequested.emit(preset_id, module_root)
+
+    def set_walkmesh_surfaces(self, surfaces) -> None:
+        """Populate the authored room WOK surface selector from the controller."""
+
+        self.roomSurfaceComboBox.clear()
+        for surface in surfaces or ():
+            surface_id = str(getattr(surface, "surface_id", "") or "")
+            name = str(getattr(surface, "name", "") or surface_id)
+            authoring_name = str(getattr(surface, "authoring_name", "") or name).replace("_", " ")
+            walkable = bool(getattr(surface, "walkable", False))
+            description = str(getattr(surface, "description", "") or "")
+            state = "walkable" if walkable else "not walkable"
+            self.roomSurfaceComboBox.addItem(
+                f"{surface_id} - {authoring_name.title()} ({state})",
+                {
+                    "surface_id": surface_id,
+                    "name": name,
+                    "walkable": walkable,
+                    "description": description,
+                },
+            )
+        if self.roomSurfaceComboBox.count() <= 0:
+            self.roomSurfaceComboBox.addItem("4 - Stone (walkable)", {"surface_id": "4", "walkable": True, "description": "Walkable stone floor."})
+        self._update_surface_hint()
+
+    def _current_surface_data(self) -> dict:
+        data = self.roomSurfaceComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_surface_hint(self) -> None:
+        data = self._current_surface_data()
+        description = data.get("description") or "Choose how the generated floor should behave in the KOTOR walkmesh."
+        if data and not bool(data.get("walkable", False)):
+            description = f"{description} This is not normally walkable."
+        self.roomSurfaceHintLabel.setText(str(description))
+
+    def _emit_room_style(self) -> None:
+        texture = self.roomTextureLineEdit.text().strip()
+        surface_id = str(self._current_surface_data().get("surface_id") or self.roomSurfaceComboBox.currentData() or "4")
+        self.roomStyleRequested.emit(texture, surface_id)
 
     def _update_operation_controls(self) -> None:
         operation = str(self.roomOperationComboBox.currentData() or "")
