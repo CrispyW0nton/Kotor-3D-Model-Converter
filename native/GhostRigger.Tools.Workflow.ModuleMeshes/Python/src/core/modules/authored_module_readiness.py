@@ -220,6 +220,29 @@ def _game_executable_name(game: str) -> str:
     return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
 
 
+_PROOF_EVIDENCE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".webp",
+    ".gif",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".avi",
+    ".mkv",
+    ".webm",
+}
+
+
+def _valid_proof_evidence_path(evidence_path: str) -> bool:
+    if not evidence_path:
+        return False
+    path = Path(evidence_path)
+    return path.is_file() and path.stat().st_size > 0 and path.suffix.lower() in _PROOF_EVIDENCE_EXTENSIONS
+
+
 def _derive_game_root_dir(resolved_modules_dir: str) -> str:
     if not resolved_modules_dir:
         return ""
@@ -248,7 +271,7 @@ def _recorded_game_proof_complete(proof: dict[str, Any]) -> bool:
         and proof.get("manual_proof_required") is False
         and bool(game_test.get("accepted"))
         and not list(game_test.get("missing_checks") or ())
-        and bool(evidence_path and Path(evidence_path).is_file())
+        and _valid_proof_evidence_path(evidence_path)
     )
 
 

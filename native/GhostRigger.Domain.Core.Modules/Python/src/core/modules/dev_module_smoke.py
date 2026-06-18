@@ -1910,8 +1910,31 @@ def _proof_request_checks(request: DevModuleGameProofRequest) -> dict[str, bool]
         "player_spawns_on_floor": bool(request.player_spawns_on_floor),
         "test_placeable_visible": bool(request.test_placeable_visible),
         "player_can_walk_on_floor": bool(request.player_can_walk_on_floor),
-        "screenshot_or_video_captured": bool(request.evidence_path and Path(request.evidence_path).is_file()),
+        "screenshot_or_video_captured": _valid_proof_evidence_path(request.evidence_path),
     }
+
+
+_PROOF_EVIDENCE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".webp",
+    ".gif",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".avi",
+    ".mkv",
+    ".webm",
+}
+
+
+def _valid_proof_evidence_path(evidence_path: str) -> bool:
+    if not evidence_path:
+        return False
+    path = Path(evidence_path)
+    return path.is_file() and path.stat().st_size > 0 and path.suffix.lower() in _PROOF_EVIDENCE_EXTENSIONS
 
 
 def _default_acceptance_checks() -> list[str]:

@@ -106,6 +106,69 @@ def test_t2610_missing_evidence_keeps_smoke_module_unproven(tmp_path: Path) -> N
     assert smoke["in_game_proof"]["missing_checks"] == ["screenshot_or_video_captured"]
 
 
+def test_t2601_unsupported_evidence_file_keeps_smoke_module_unproven(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import (
+        DevModuleGameProofRequest,
+        DevModuleInstallPrepRequest,
+        prepare_dev_test_module_install,
+        record_dev_module_game_proof,
+    )
+
+    prep = prepare_dev_test_module_install(DevModuleInstallPrepRequest(output_dir=str(tmp_path)))
+    evidence = tmp_path / "not_a_screenshot.txt"
+    evidence.write_text("I saw it work", encoding="utf-8")
+
+    result = record_dev_module_game_proof(
+        DevModuleGameProofRequest(
+            proof_manifest_path=prep.proof_manifest_path,
+            evidence_path=str(evidence),
+            tester="pytest",
+            module_loads_in_game=True,
+            player_spawns_on_floor=True,
+            test_placeable_visible=True,
+            player_can_walk_on_floor=True,
+        )
+    )
+
+    assert result.ok is False
+    assert result.missing_checks == ["screenshot_or_video_captured"]
+    proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["game_tested"] is False
+    assert proof["game_test"]["checks"]["screenshot_or_video_captured"] is False
+
+
+def test_t2601_empty_image_evidence_keeps_smoke_module_unproven(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import (
+        DevModuleGameProofRequest,
+        DevModuleInstallPrepRequest,
+        prepare_dev_test_module_install,
+        record_dev_module_game_proof,
+    )
+
+    prep = prepare_dev_test_module_install(DevModuleInstallPrepRequest(output_dir=str(tmp_path)))
+    evidence = tmp_path / "empty_proof.png"
+    evidence.write_bytes(b"")
+
+    result = record_dev_module_game_proof(
+        DevModuleGameProofRequest(
+            proof_manifest_path=prep.proof_manifest_path,
+            evidence_path=str(evidence),
+            tester="pytest",
+            module_loads_in_game=True,
+            player_spawns_on_floor=True,
+            test_placeable_visible=True,
+            player_can_walk_on_floor=True,
+        )
+    )
+
+    assert result.ok is False
+    assert result.missing_checks == ["screenshot_or_video_captured"]
+
+
 def test_t2610_allow_missing_evidence_keeps_smoke_module_unproven(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

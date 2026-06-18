@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Tightens Game-Proof Evidence Gate
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / in-game proof / capability honesty
+
+- Tightened authored-module and dev-module smoke proof recording so `game_tested` requires a non-empty screenshot/video evidence file with a supported image or video extension.
+- Updated readiness/status proof checks so hand-edited manifests with unsupported evidence files are not treated as completed game proof.
+- Mirrored the proof evidence validation into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests/test_dev_module_game_proof.py tests/test_record_grdev01_smoke_proof_script.py -q --basetemp .pytest_tmp_map_dev_proof_evidence`
+- `python -m pytest tests/test_authored_module_export.py::test_t2644_records_authored_module_game_proof tests/test_authored_module_export.py::test_t2644_allow_missing_evidence_keeps_authored_module_unproven tests/test_authored_module_export.py::test_t2601_authored_module_rejects_unsupported_game_proof_evidence -q --basetemp .pytest_tmp_map_authored_proof_evidence`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py::test_t2619_status_reports_game_tested_after_complete_proof tests/test_check_grdev01_smoke_status_script.py::test_t2601_status_does_not_accept_unsupported_proof_evidence -q --basetemp .pytest_tmp_map_status_proof_evidence`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_export.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_export.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/dev_module_smoke.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/dev_module_smoke.py scripts/check_grdev01_smoke_status.py`
+
 ### [2026-06-18] Map Studio Exposes Authored Smoke Launch Helper
 
 Owner: LordVaderCW

@@ -28,6 +28,20 @@ REQUIRED_RUNTIME_RESOURCE_KEYS = (
     "grdev01_room01.mdx",
     "grdev01_room01.wok",
 )
+PROOF_EVIDENCE_EXTENSIONS = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".bmp",
+    ".webp",
+    ".gif",
+    ".mp4",
+    ".mov",
+    ".m4v",
+    ".avi",
+    ".mkv",
+    ".webm",
+}
 PAYLOAD_PATHS = (
     "native/GhostRigger.Domain.Core.Modules/Python",
     "native/GhostRigger.Domain.Core.Game/Python",
@@ -185,7 +199,9 @@ def _proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
     checks = game_test.get("checks") if isinstance(game_test.get("checks"), dict) else {}
     missing = list(game_test.get("missing_checks") or [name for name in required if not checks.get(name, False)])
     evidence_path = str(game_test.get("evidence_path") or "")
-    evidence_exists = bool(evidence_path and Path(evidence_path).is_file())
+    evidence = Path(evidence_path) if evidence_path else None
+    evidence_exists = bool(evidence is not None and evidence.is_file())
+    evidence_accepted = bool(evidence_exists and evidence.stat().st_size > 0 and evidence.suffix.lower() in PROOF_EVIDENCE_EXTENSIONS)
     return {
         "game_tested": bool(proof.get("game_tested")),
         "manual_proof_required": bool(proof.get("manual_proof_required", True)),
@@ -194,6 +210,7 @@ def _proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
         "missing_checks": missing,
         "evidence_path": evidence_path,
         "evidence_exists": evidence_exists,
+        "evidence_accepted": evidence_accepted,
     }
 
 
@@ -228,7 +245,7 @@ def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> d
 def _derive_status(*, verification: dict[str, Any], proof: dict[str, Any], installed: dict[str, Any]) -> tuple[str, bool]:
     if not verification.get("ok"):
         return "package_blocked", False
-    if proof.get("game_tested") and proof.get("evidence_exists") and not proof.get("missing_checks"):
+    if proof.get("game_tested") and proof.get("evidence_accepted") and not proof.get("missing_checks"):
         return "game_tested", True
     if installed.get("checked") and installed.get("exists") and not installed.get("matches_package"):
         return "installed_copy_mismatch", False

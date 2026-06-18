@@ -132,9 +132,43 @@ def test_t2619_status_reports_game_tested_after_complete_proof(tmp_path: Path) -
     assert payload["proof"]["game_tested"] is True
     assert payload["proof"]["manual_proof_required"] is False
     assert payload["proof"]["evidence_exists"] is True
+    assert payload["proof"]["evidence_accepted"] is True
     assert payload["proof"]["missing_checks"] == []
     assert payload["ready_for_game_launch"] is False
     assert payload["next_action"].startswith("No action required")
+
+
+def test_t2601_status_does_not_accept_unsupported_proof_evidence(tmp_path: Path) -> None:
+    install = _install_variant(tmp_path / "prep", "--variant", "rectangular")
+    proof_path = Path(str(install["proof_manifest_path"]))
+    evidence = tmp_path / "grdev01-proof.txt"
+    evidence.write_text("not screenshot/video evidence", encoding="utf-8")
+    proof = json.loads(proof_path.read_text(encoding="utf-8"))
+    proof["manual_proof_required"] = False
+    proof["game_tested"] = True
+    proof["game_test"] = {
+        "accepted": True,
+        "missing_checks": [],
+        "evidence_path": str(evidence),
+        "checks": {
+            "module_loads_in_game": True,
+            "player_spawns_on_floor": True,
+            "test_placeable_visible": True,
+            "player_can_walk_on_floor": True,
+            "screenshot_or_video_captured": True,
+        },
+    }
+    proof_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
+
+    result = _status(str(proof_path))
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] != "game_tested"
+    assert payload["proof"]["game_tested"] is True
+    assert payload["proof"]["evidence_exists"] is True
+    assert payload["proof"]["evidence_accepted"] is False
+    assert payload["ok"] is False
 
 
 def test_t2698_status_accepts_authored_smoke_package_before_manual_install(tmp_path: Path) -> None:

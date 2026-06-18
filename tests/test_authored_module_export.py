@@ -436,6 +436,39 @@ def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: P
     assert proof["game_tested"] is False
 
 
+def test_t2601_authored_module_rejects_unsupported_game_proof_evidence(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleGameProofRequest,
+        AuthoredModuleInstallPrepRequest,
+        prepare_authored_module_install,
+        record_authored_module_game_proof,
+    )
+
+    prep = prepare_authored_module_install(AuthoredModuleInstallPrepRequest(project=_dev_authored_project(), output_dir=str(tmp_path)))
+    evidence = tmp_path / "notes.txt"
+    evidence.write_text("warp worked", encoding="utf-8")
+
+    result = record_authored_module_game_proof(
+        AuthoredModuleGameProofRequest(
+            proof_manifest_path=prep.proof_manifest_path,
+            evidence_path=str(evidence),
+            tester="pytest",
+            module_loads_in_game=True,
+            player_spawns_on_floor=True,
+            test_placeable_visible=True,
+            player_can_walk_on_floor=True,
+        )
+    )
+
+    assert result.ok is False
+    assert result.missing_checks == ["screenshot_or_video_captured"]
+    proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["game_tested"] is False
+    assert proof["game_test"]["checks"]["screenshot_or_video_captured"] is False
+
+
 def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
