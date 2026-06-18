@@ -357,6 +357,37 @@ def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None
     assert "grdev01_room01.mdl" in payload["runtime_resources"]
 
 
+def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    installed = modules_dir / "grdev01.mod"
+    installed.write_bytes(b"old module")
+
+    result = controller.stage_authored_module(
+        tmp_path / "stage",
+        game_modules_dir=modules_dir,
+        overwrite=True,
+    )
+
+    assert result.ok is True
+    assert result.code == "installed"
+    assert result.installed_module_path == str(installed)
+    assert installed.read_bytes() != b"old module"
+    assert Path(result.backup_module_path).read_bytes() == b"old module"
+    payload = controller.project.extra_sections["authored_module"]
+    assert payload["installed_module_path"] == str(installed)
+    assert payload["resolved_modules_dir"] == str(modules_dir)
+    assert payload["backup_module_path"] == result.backup_module_path
+    assert payload["proof_manifest_path"] == result.proof_manifest_path
+
+
 def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
     panel_source = Path(
         "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
@@ -370,7 +401,12 @@ def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
 
     assert "authoredModuleStageRequested" in panel_source
     assert "mapStudioStageAuthoredModuleButton" in panel_source
+    assert "authoredModuleInstallRequested" in panel_source
+    assert "mapStudioInstallAuthoredModuleButton" in panel_source
     assert "Stage Authored Module for Game Test" in panel_source
+    assert "Install Authored Module for Game Test" in panel_source
     assert panel_source == boundary_panel_source
     assert "self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)" in window_source
+    assert "self.export_panel.authoredModuleInstallRequested.connect(self.install_authored_module)" in window_source
     assert "self.controller.stage_authored_module(path, dry_run=dry_run)" in window_source
+    assert "game_modules_dir=modules_path" in window_source

@@ -362,6 +362,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
         self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
         self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)
+        self.export_panel.authoredModuleInstallRequested.connect(self.install_authored_module)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
@@ -563,6 +564,66 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for issue in result.blocking_issues:
             self._log(f"Blocking: {issue}")
         self._refresh_all("Authored module game-test staging updated.")
+
+    def install_authored_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module package and proof files", self._last_output_dir or "")
+        if not path:
+            return
+        modules_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select KOTOR Modules folder", "")
+        if not modules_path:
+            return
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "authored").strip().lower()
+        destination = Path(modules_path) / f"{module_root}.mod"
+        overwrite = False
+        if destination.exists():
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Install Authored Module",
+                f"{destination.name} already exists in the selected Modules folder.\n\n"
+                "GhostRigger will create a .bak backup before replacing it. Continue?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer != QtWidgets.QMessageBox.Yes:
+                return
+            overwrite = True
+        try:
+            result = self.controller.stage_authored_module(
+                path,
+                dry_run=dry_run,
+                game_modules_dir=modules_path,
+                overwrite=overwrite,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Install Authored Module", str(exc))
+            return
+        self._last_output_dir = path
+        self._log(result.message)
+        export_result = result.export_result
+        if export_result is not None:
+            if export_result.module_path:
+                self._log(f"Package: {export_result.module_path}")
+            if export_result.manifest_path:
+                self._log(f"Manifest: {export_result.manifest_path}")
+        if result.installed_module_path:
+            self._log(f"Installed module: {result.installed_module_path}")
+        if result.backup_module_path:
+            self._log(f"Backup module: {result.backup_module_path}")
+        if result.checklist_path:
+            self._log(f"Game-test checklist: {result.checklist_path}")
+        if result.proof_manifest_path:
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if export_result is not None:
+            for line in authored_module_smoke_summary_lines(export_result):
+                self._log(line)
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+        if not result.ok:
+            QtWidgets.QMessageBox.warning(self, "Install Authored Module", result.message)
+        self._refresh_all("Authored module game-test install updated.")
 
     def record_game_smoke_proof(self) -> None:
         payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})

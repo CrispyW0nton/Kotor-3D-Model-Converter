@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Explicit Authored Module Game Install Action
+
+Owner: LordVaderCW
+Task: T2683
+Subsystem: Map Studio / authored module game-test install path / Module Editor export panel / native Python payloads
+
+- Exposed an explicit `Install Authored Module for Game Test...` action in the Module Editor export panel so copying a generated `.mod` into a selected KOTOR `Modules` folder is a deliberate workflow step.
+- Extended `ModuleEditorController.stage_authored_module` to pass an optional Modules folder through the existing safe install-prep service, preserving backup/overwrite handling, staged manifests, and proof checklist output.
+- Stored resolved Modules folder, installed module path, backup path, proof manifest, checklist, and runtime resources back into the authored KMAP payload after install staging.
+- Mirrored the controller and export-panel payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_authored_install`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Logs Authored Smoke Test Expectations
 
 Owner: LordVaderCW

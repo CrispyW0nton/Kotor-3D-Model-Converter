@@ -10,6 +10,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
     devTestModuleRequested = QtCore.Signal(bool)
     authoredModuleRequested = QtCore.Signal(bool)
     authoredModuleStageRequested = QtCore.Signal(bool)
+    authoredModuleInstallRequested = QtCore.Signal(bool)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -45,4 +46,9 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.authored_stage_button.setToolTip("Package the authored module and write a checklist/proof manifest for an in-game warp test.")
         self.authored_stage_button.clicked.connect(lambda: self.authoredModuleStageRequested.emit(self.dry_run.isChecked()))
         root.addWidget(self.authored_stage_button)
+        self.authored_install_button = QtWidgets.QPushButton("Install Authored Module for Game Test...")
+        self.authored_install_button.setObjectName("mapStudioInstallAuthoredModuleButton")
+        self.authored_install_button.setToolTip("Package the authored module, copy it to a chosen KOTOR Modules folder, and write a checklist/proof manifest.")
+        self.authored_install_button.clicked.connect(lambda: self.authoredModuleInstallRequested.emit(self.dry_run.isChecked()))
+        root.addWidget(self.authored_install_button)
         root.addStretch(1)

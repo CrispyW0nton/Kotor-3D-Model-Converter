@@ -714,7 +714,15 @@ class ModuleEditorController:
         self.model.log(result.message)
         return result
 
-    def stage_authored_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
+    def stage_authored_module(
+        self,
+        output_dir: str | Path,
+        *,
+        dry_run: bool = False,
+        overwrite: bool = False,
+        game_modules_dir: str | Path = "",
+        auto_detect_game_modules_dir: bool = False,
+    ):
         """Stage the current authored KMAP module with a manual game-test checklist."""
 
         extra = getattr(self.project, "extra_sections", {}) or {}
@@ -731,8 +739,10 @@ class ModuleEditorController:
             AuthoredModuleInstallPrepRequest(
                 project=authored,
                 output_dir=str(output_path),
+                game_modules_dir=str(game_modules_dir or ""),
                 dry_run=dry_run,
                 overwrite=overwrite,
+                auto_detect_game_modules_dir=bool(auto_detect_game_modules_dir),
             )
         )
         export_result = result.export_result
@@ -743,6 +753,9 @@ class ModuleEditorController:
             payload["game_tested"] = False
             payload["proof_manifest_path"] = result.proof_manifest_path
             payload["checklist_path"] = result.checklist_path
+            payload["resolved_modules_dir"] = result.resolved_modules_dir
+            payload["installed_module_path"] = result.installed_module_path
+            payload["backup_module_path"] = result.backup_module_path
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
         self.model.log(result.message)
