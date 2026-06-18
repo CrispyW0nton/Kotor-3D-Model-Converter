@@ -30,12 +30,13 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, build_dev_test_module
     from src.core.modules.authored_room_composition import compile_authored_room_composition, create_rectangular_room_composition
     from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
-    from src.core.modules.module_format import GITData, IFOData
+    from src.core.modules.module_format import AREData, GITData, IFOData
 
     authored = build_dev_test_module(DevModuleSmokeRequest())
     keys = {(summary.resref, summary.restype) for summary in authored.resource_summaries}
     primitive = RectangularRoomPrimitive(room_resref="grdev01_room01")
     primitive_geometry = compile_authored_room_composition(create_rectangular_room_composition(primitive))
+    are = AREData.from_bytes(authored.resources[("grdev01", "are")].data)
     git = GITData.from_bytes(authored.resources[("grdev01", "git")].data)
     ifo = IFOData.from_bytes(authored.resources[("grdev01", "ifo")].data)
 
@@ -87,8 +88,16 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert git.waypoints[0].tag == "start"
     assert git.waypoints[0].x == 0.0
     assert git.waypoints[0].y == -3.0
+    assert are.name == "GhostRigger Dev Test"
+    assert are.tag == "grdev01"
+    assert are.fog_near == 100.0
+    assert are.fog_far == 200.0
     assert ifo.entry_area == "grdev01"
     assert ifo.entry_y == -3.0
+    assert ifo.mod_name == "GhostRigger Dev Test"
+    assert ifo.tag == "grdev01"
+    assert ifo.dawn_hour == 6
+    assert ifo.dusk_hour == 18
     assert authored.blocking_issues == []
     checks = {check.label: check for check in authored.walkability_checks}
     assert checks["player_start"].ok is True
@@ -159,6 +168,14 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
             "visible": ["grdev01_room01"],
         }
     ]
+    assert smoke["authored_metadata"]["source"] == "src.core.modules.authored_module_metadata"
+    assert smoke["authored_metadata"]["module_root"] == "grdev01"
+    assert smoke["authored_metadata"]["display_name"] == "GhostRigger Dev Test"
+    assert smoke["authored_metadata"]["tag"] == "grdev01"
+    assert smoke["authored_metadata"]["fog_near"] == 100.0
+    assert smoke["authored_metadata"]["fog_far"] == 200.0
+    assert smoke["authored_metadata"]["dawn_hour"] == 6
+    assert smoke["authored_metadata"]["dusk_hour"] == 18
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_composition"
     assert smoke["authored_geometry"]["primitive"] == "authored_room_composition"
     assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_mesh"

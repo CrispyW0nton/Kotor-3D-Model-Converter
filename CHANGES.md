@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Authored Module Metadata Compiler
+
+Owner: LordVaderCW
+Task: T2607
+Subsystem: Map Studio / module metadata / native Python payloads
+
+- Added a headless `authored_module_metadata` compiler that turns editable Map Studio area/module settings into ARE and IFO bytes.
+- Routed the `grdev01` smoke module through the metadata compiler instead of keeping ARE/IFO construction hidden in the smoke builder.
+- Wrote ARE fields with GhostRigger readback-compatible labels such as `FogNearDist`, `FogFarDist`, and `SunFog`.
+- Added smoke manifest metadata provenance so generated modules report their authored name, tag, fog, and time settings.
+- Mirrored the compiler into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_module_metadata.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_module_metadata.py -q --basetemp .pytest_tmp_authored_module_metadata`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+
 ### [2026-06-17] Map Studio Authored Module Layout Compiler
 
 Owner: LordVaderCW
