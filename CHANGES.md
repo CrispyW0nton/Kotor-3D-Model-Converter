@@ -11,6 +11,26 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Floor-Plan Room Project Contract
+
+Owner: LordVaderCW
+Task: T2612
+Subsystem: Map Studio / authored module project / native Python payloads
+
+- Extended `AuthoredRoomSpec` so Map Studio projects can carry either legacy rectangular room primitives or new floor-plan extrusion primitives.
+- Added `compile_authored_room_spec` as the shared room-intent compiler used by the smoke builder and future UI/export callers.
+- Added `create_floor_plan_room_project` for single-room projects authored from a drawn footprint.
+- Routed `build_dev_test_module` through the shared room-spec compiler while keeping the existing rectangular `grdev01` smoke path compatible.
+- Mirrored the project/smoke changes into the ModuleMeshes workflow payload and refreshed native payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_module_project.py`
+- `python -m pytest tests/test_authored_module_project.py tests/test_authored_room_floorplan.py -q --basetemp .pytest_tmp_authored_module_project_floorplan`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke_project_floorplan`
+- `python -m pytest tests/test_authored_module_layout.py tests/test_authored_module_objects.py -q --basetemp .pytest_tmp_authored_module_project_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Authored Floor-Plan Extrusion
 
 Owner: LordVaderCW

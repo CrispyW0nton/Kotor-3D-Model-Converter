@@ -9,14 +9,16 @@ MDL/MDX/WOK/GFF bytes.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Union
 
 from .authored_module_objects import AuthoredGameplayPlacement, validate_authored_gameplay_placement
-from .authored_room_composition import AuthoredRoomComposition, create_rectangular_room_composition
-from .authored_room_geometry import RectangularRoomPrimitive
+from .authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, create_rectangular_room_composition
+from .authored_room_floorplan import FloorPlanRoomPrimitive, compile_floor_plan_room_geometry, validate_floor_plan_room_primitive
+from .authored_room_geometry import AuthoredRoomGeometry, RectangularRoomPrimitive, build_rectangular_room_geometry
 
 
 Vec3 = tuple[float, float, float]
+RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive]
 
 
 def normalise_resref(value: Any) -> str:
@@ -49,7 +51,7 @@ class AuthoredRoomSpec:
     """One authored room source in a Map Studio project."""
 
     room_resref: str
-    primitive: RectangularRoomPrimitive
+    primitive: RoomPrimitiveIntent
     composition: AuthoredRoomComposition | None = None
     position: Vec3 = (0.0, 0.0, 0.0)
     visible_rooms: tuple[str, ...] = ()
@@ -104,6 +106,17 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
         if resref in seen_rooms:
             blocking.append(f"Duplicate authored room resref: {resref}")
         seen_rooms.add(resref)
+        if isinstance(room.primitive, FloorPlanRoomPrimitive):
+            floorplan_validation = validate_floor_plan_room_primitive(room.primitive)
+            warnings.extend(floorplan_validation.warnings)
+            blocking.extend(floorplan_validation.blocking_issues)
+        elif isinstance(room.primitive, RectangularRoomPrimitive):
+            if float(room.primitive.width) <= 0.0 or float(room.primitive.depth) <= 0.0:
+                blocking.append(f"Room {resref} rectangular primitive requires positive width and depth.")
+            if float(room.primitive.wall_height) <= 0.0:
+                blocking.append(f"Room {resref} rectangular primitive requires positive wall height.")
+        else:
+            blocking.append(f"Room {resref} has unsupported authored primitive type: {type(room.primitive)!r}")
         if room.visible_rooms:
             missing = [normalise_resref(item) for item in room.visible_rooms if normalise_resref(item) not in seen_rooms]
             if missing:
@@ -119,6 +132,18 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
         warnings=tuple(warnings),
         blocking_issues=tuple(blocking),
     )
+
+
+def compile_authored_room_spec(room: AuthoredRoomSpec) -> AuthoredRoomGeometry:
+    """Compile one authored room spec into room geometry and WOK data."""
+
+    if room.composition is not None:
+        return compile_authored_room_composition(room.composition)
+    if isinstance(room.primitive, FloorPlanRoomPrimitive):
+        return compile_floor_plan_room_geometry(room.primitive)
+    if isinstance(room.primitive, RectangularRoomPrimitive):
+        return build_rectangular_room_geometry(room.primitive)
+    raise TypeError(f"Unsupported authored room primitive: {type(room.primitive)!r}")
 
 
 def create_single_room_project(
@@ -155,11 +180,51 @@ def create_single_room_project(
     )
 
 
+def create_floor_plan_room_project(
+    *,
+    module_root: str,
+    game: str,
+    display_name: str,
+    floor_plan: FloorPlanRoomPrimitive,
+    placements: AuthoredGameplayPlacement,
+    notes: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
+) -> AuthoredModuleProject:
+    """Create a single-room project from an editable floor-plan extrusion."""
+
+    root = normalise_resref(module_root)
+    room_resref = normalise_resref(floor_plan.room_resref)
+    room = AuthoredRoomSpec(
+        room_resref=room_resref,
+        primitive=floor_plan,
+        visible_rooms=(room_resref,),
+        metadata={
+            "primitive": "floor_plan_extrusion",
+            "source": "src.core.modules.authored_module_project",
+        },
+    )
+    return AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(
+            module_root=root,
+            game=str(game or "K1").upper(),
+            display_name=display_name,
+            tag=root,
+            metadata=dict(metadata or {}),
+        ),
+        rooms=(room,),
+        placements=placements,
+        notes=notes,
+    )
+
+
 __all__ = [
     "AuthoredModuleMetadata",
     "AuthoredModuleProject",
     "AuthoredModuleProjectValidation",
     "AuthoredRoomSpec",
+    "RoomPrimitiveIntent",
+    "compile_authored_room_spec",
+    "create_floor_plan_room_project",
     "create_single_room_project",
     "normalise_resref",
     "validate_authored_module_project",

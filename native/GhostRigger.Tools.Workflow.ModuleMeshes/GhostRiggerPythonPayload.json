@@ -267,7 +267,7 @@
       "resource_name": "PYTHON_PAYLOAD_0044",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "d7156c05019abe5377853aaf1a66898536bc7b9e36b4b31838c3c355cf9df8f6"
+      "sha256": "f1e0a6e51280d4f94ef89b7a07caf5d9f3f7a8096ff92ca57214dc6a119c02c3"
     },
     {
       "source_path": "src/core/modules/authored_walkmesh_surfaces.py",
@@ -303,7 +303,7 @@
       "resource_name": "PYTHON_PAYLOAD_0049",
       "source_path": "src/core/modules/authored_module_project.py",
       "packaged_path": "Python/src/core/modules/authored_module_project.py",
-      "sha256": "e17898fe22a22d1341e858ec515349af59a8d59e208e141cadd45c8a2e1cc66e"
+      "sha256": "f1255bb839e7f0b3aff3d75e6831aac309e7812ba9fce048a407bf0db47bfeb4"
     },
     {
       "source_path": "src/core/modules/authored_module_layout.py",

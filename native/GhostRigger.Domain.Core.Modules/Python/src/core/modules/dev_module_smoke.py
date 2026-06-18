@@ -37,12 +37,11 @@ from .authored_room_geometry import (
     AuthoredRoomGeometry,
     PrimitiveMesh,
     RectangularRoomPrimitive,
-    build_rectangular_room_geometry,
 )
-from .authored_room_composition import compile_authored_room_composition
 from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .authored_module_project import (
     AuthoredModuleProject,
+    compile_authored_room_spec,
     create_single_room_project,
     validate_authored_module_project,
 )
@@ -600,11 +599,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     root = project.module_root
     room_spec = project.rooms[0]
     room = room_spec.normalised_resref()
-    geometry = (
-        compile_authored_room_composition(room_spec.composition)
-        if room_spec.composition is not None
-        else build_rectangular_room_geometry(room_spec.primitive)
-    )
+    geometry = compile_authored_room_spec(room_spec)
     placements = project.placements
     compiled_metadata = compile_authored_module_metadata(
         project.metadata,

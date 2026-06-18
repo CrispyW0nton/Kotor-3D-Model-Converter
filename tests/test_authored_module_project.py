@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+def _install_native_payload_paths() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    for rel in (
+        "native/GhostRigger.Domain.Core.Modules/Python",
+        "native/GhostRigger.Domain.Core.Game/Python",
+        "native/GhostRigger.Domain.Core.Scene/Python",
+        "native/GhostRigger.Domain.Core.Walkmesh/Python",
+        "native/GhostRigger.Domain.Core.Geometry/Python",
+        "native/GhostRigger.Domain.Core.Camera/Python",
+        "native/GhostRigger.Domain.Core.Math/Python",
+        "native/GhostRigger.Domain.Core.Lighting/Python",
+        ".",
+    ):
+        path = str((repo / rel).resolve())
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+def _placements():
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+
+    return AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grdev01"))
+
+
+def test_t2612_floor_plan_room_project_compiles_through_room_spec() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_project import (
+        compile_authored_room_spec,
+        create_floor_plan_room_project,
+        validate_authored_module_project,
+    )
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+
+    floor_plan = FloorPlanRoomPrimitive(
+        room_resref="grdev01_room01",
+        points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        material=PrimitiveMaterial(texture="CM_Baremetal"),
+    )
+    project = create_floor_plan_room_project(
+        module_root="grdev01",
+        game="K1",
+        display_name="GhostRigger Dev Test",
+        floor_plan=floor_plan,
+        placements=_placements(),
+    )
+
+    validation = validate_authored_module_project(project)
+    geometry = compile_authored_room_spec(project.rooms[0])
+
+    assert validation.ok
+    assert project.rooms[0].metadata["primitive"] == "floor_plan_extrusion"
+    assert geometry.metadata["primitive"] == "floor_plan_extrusion"
+    assert geometry.room_mesh.name == "grdev01_room01_floor"
+    assert geometry.room_mesh.texture == "CM_Baremetal"
+    assert len(geometry.helper_meshes) == 4
+    assert geometry.wok.walkable_face_count() == 2
+
+
+def test_t2612_project_validation_blocks_invalid_floor_plan_room() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec, validate_authored_module_project
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="grdev01"),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref="grdev01_room01",
+                primitive=FloorPlanRoomPrimitive(
+                    room_resref="grdev01_room01",
+                    points=((0.0, 0.0), (2.0, 0.0), (1.0, 0.5), (2.0, 2.0), (0.0, 2.0)),
+                ),
+            ),
+        ),
+        placements=_placements(),
+    )
+
+    validation = validate_authored_module_project(project)
+
+    assert not validation.ok
+    assert any("convex footprints only" in issue for issue in validation.blocking_issues)
+
+
+def test_t2612_rectangular_room_spec_still_compiles_for_smoke_path() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_project import AuthoredRoomSpec, compile_authored_room_spec
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
+
+    room = AuthoredRoomSpec(
+        room_resref="grdev01_room01",
+        primitive=RectangularRoomPrimitive(room_resref="grdev01_room01", width=10.0, depth=8.0),
+    )
+
+    geometry = compile_authored_room_spec(room)
+
+    assert geometry.room_resref == "grdev01_room01"
+    assert geometry.metadata["primitive"] == "rectangular_room"
+    assert geometry.wok.walkable_face_count() == 2
