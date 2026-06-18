@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds One-Shot grdev01 Smoke Prep
+
+Owner: LordVaderCW
+Task: T2647
+Subsystem: Map Studio / authored smoke preparation CLI / proof command workflow
+
+- Added `scripts/prepare_grdev01_authored_smoke.py` as the one-command setup path for the first from-scratch Map Studio proof loop.
+- The command creates a saved `grdev01.kmap`, packages the authored module into `grdev01.mod`, writes the manual checklist/proof manifest, and can optionally install into a KOTOR `Modules` folder with backup-on-overwrite behavior.
+- Added targeted tests for package creation, accidental KMAP overwrite protection, and fake Modules-folder installation with backup.
+
+Verification:
+- `python -m py_compile scripts\prepare_grdev01_authored_smoke.py tests\test_prepare_grdev01_authored_smoke_script.py`
+- `python -m pytest tests\test_prepare_grdev01_authored_smoke_script.py -q --basetemp .pytest_tmp_prepare_grdev01_authored_smoke`
+
 ### [2026-06-18] Map Studio Can Seed the grdev01 Authored KMAP
 
 Owner: LordVaderCW
