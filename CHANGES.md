@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Reports Elevated Launch Helper
+
+Owner: LordVaderCW
+Task: T2703
+Subsystem: Map Studio / grdev01 launch helper / game-proof handoff
+
+- Updated the `grdev01` launch helper so JSON and human output include the elevated KOTOR launcher path, proof recorder path, and manifest-provided warp command.
+- Made the Windows elevation failure actionable by pointing directly at the generated elevated launch script before asking the modder to run `warp grdev01`.
+- Added launch-helper regression coverage for the handoff fields and elevation message.
+
+Verification:
+- `python -m pytest tests\test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_grdev01_launch_elevation_handoff`
+- `python -m py_compile scripts\launch_grdev01_smoke_test.py tests\test_launch_grdev01_smoke_script.py`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json` reported `dry_run_ready` with the elevated launcher and proof recorder paths.
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json` reported `launch_requires_elevation` and pointed at `artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_launch_kotor_as_admin.cmd`.
+
 ### [2026-06-18] Map Studio Smoke Status Reports Launch And Proof Handoff
 
 Owner: LordVaderCW

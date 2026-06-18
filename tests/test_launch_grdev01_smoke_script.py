@@ -67,6 +67,8 @@ def test_t2649_launch_grdev01_smoke_dry_run_accepts_ready_install(tmp_path: Path
     assert payload["installed_matches_package"] is True
     assert payload["dry_run"] is True
     assert payload["launch_command"] == [str(game_root / "swkotor.exe")]
+    assert payload["warp_command"] == "warp grdev01"
+    assert payload["elevated_launch_script_path"] == prep["elevated_launch_script_path"]
     assert "warp grdev01" in payload["next_action"]
     assert payload["proof_recording_script_path"] == prep["proof_recording_script_path"]
     assert "record_game_proof.cmd" in payload["next_action"]
@@ -132,3 +134,5 @@ def test_t2687_launch_reports_elevation_without_traceback(tmp_path: Path, monkey
     assert payload["code"] == "launch_requires_elevation"
     assert "requires elevation" in payload["message"]
     assert any("administrator" in issue for issue in payload["blocking_issues"])
+    assert payload["elevated_launch_script_path"] == prep["elevated_launch_script_path"]
+    assert any(str(prep["elevated_launch_script_path"]) in issue for issue in payload["blocking_issues"])
