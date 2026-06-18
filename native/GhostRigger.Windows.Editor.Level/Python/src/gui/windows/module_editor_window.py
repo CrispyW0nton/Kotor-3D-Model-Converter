@@ -432,6 +432,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             callback()
 
     def _handle_tab_action(self, action: str) -> None:
+        if action == "Create grdev01 Dev Room":
+            result = self.controller.create_dev_test_authored_module()
+            readiness = result.readiness
+            message = "Created grdev01 authored module with one primitive room, generated walkmesh intent, player start, and test placeable."
+            if readiness is not None:
+                message = f"{message} Readiness: {readiness.capability_stage}."
+            self._refresh_all(message)
+            return
         if action == "Load LYT":
             path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load LYT", "", "LYT files (*.lyt);;All files (*.*)")
             if path:

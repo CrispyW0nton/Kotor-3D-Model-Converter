@@ -10,9 +10,21 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
-from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
+from .authored_module_objects import (
+    AuthoredGameplayPlacement,
+    AuthoredPlaceableInstance,
+    AuthoredWaypointInstance,
+    ModuleEntryPoint,
+)
+from .authored_module_project import (
+    AuthoredModuleMetadata,
+    AuthoredModuleProject,
+    AuthoredRoomSpec,
+    create_single_room_project,
+    normalise_resref,
+)
 from .authored_module_readiness import AuthoredModuleReadiness, build_authored_module_readiness
+from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, normalize_authored_room_texture
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_primitives import PrimitiveMaterial
@@ -110,12 +122,33 @@ def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPr
 def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
     source = _dict(data)
     entry = _dict(source.get("entry_point"))
+    placeables = tuple(
+        AuthoredPlaceableInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+            bearing=_float(item.get("bearing"), 0.0),
+        )
+        for item in (_dict(raw) for raw in source.get("placeables", ()) or ())
+    )
+    waypoints = tuple(
+        AuthoredWaypointInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+            bearing=_float(item.get("bearing"), 0.0),
+            linked_to=str(item.get("linked_to") or ""),
+        )
+        for item in (_dict(raw) for raw in source.get("waypoints", ()) or ())
+    )
     return AuthoredGameplayPlacement(
         entry_point=ModuleEntryPoint(
             area_resref=normalise_resref(entry.get("area_resref") or module_root),
             position=_vec3(entry.get("position")),
             facing=_float(entry.get("facing"), 0.0),
         ),
+        placeables=placeables,
+        waypoints=waypoints,
         metadata=_dict(source.get("metadata")),
     )
 
@@ -134,6 +167,168 @@ def _runtime_resources(data: Any) -> tuple[tuple[str, str], ...]:
         if resref and restype:
             keys.add((resref, restype))
     return tuple(sorted(keys))
+
+
+def _vec3_payload(value: tuple[float, float, float]) -> list[float]:
+    return [float(value[0]), float(value[1]), float(value[2])]
+
+
+def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimitive) -> dict[str, Any]:
+    if isinstance(primitive, FloorPlanRoomPrimitive):
+        return {
+            "type": "floor_plan",
+            "room_resref": primitive.room_resref,
+            "points": [[float(x), float(y)] for x, y in primitive.points],
+            "z": float(primitive.z),
+            "wall_height": float(primitive.wall_height),
+            "floor_surface_id": primitive.floor_surface_id,
+            "material": {
+                "texture": primitive.material.texture,
+                "diffuse": _vec3_payload(primitive.material.diffuse),
+                "ambient": _vec3_payload(primitive.material.ambient),
+                "metadata": dict(primitive.material.metadata),
+            },
+            "include_walls": bool(primitive.include_walls),
+            "openings": [
+                {
+                    "name": opening.name,
+                    "edge_index": int(opening.edge_index),
+                    "center_fraction": float(opening.center_fraction),
+                    "width": float(opening.width),
+                    "height": float(opening.height),
+                    "bottom": float(opening.bottom),
+                    "metadata": dict(opening.metadata),
+                }
+                for opening in primitive.openings
+            ],
+            "metadata": dict(primitive.metadata),
+        }
+    return {
+        "type": "rectangular",
+        "room_resref": primitive.room_resref,
+        "width": float(primitive.width),
+        "depth": float(primitive.depth),
+        "wall_height": float(primitive.wall_height),
+        "floor_surface_id": primitive.floor_surface_id,
+        "texture": primitive.texture,
+        "include_doorway_marker": bool(primitive.include_doorway_marker),
+    }
+
+
+def _placement_payload(placement: AuthoredGameplayPlacement) -> dict[str, Any]:
+    return {
+        "entry_point": {
+            "area_resref": placement.entry_point.area_resref,
+            "position": _vec3_payload(placement.entry_point.position),
+            "facing": float(placement.entry_point.facing),
+        },
+        "placeables": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+                "bearing": float(item.bearing),
+            }
+            for item in placement.placeables
+        ],
+        "waypoints": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+                "bearing": float(item.bearing),
+                "linked_to": item.linked_to,
+            }
+            for item in placement.waypoints
+        ],
+        "metadata": dict(placement.metadata),
+    }
+
+
+def authored_project_to_kmap_payload(
+    project: AuthoredModuleProject,
+    *,
+    runtime_resources: tuple[str, ...] = (),
+    game_tested: bool = False,
+) -> dict[str, Any]:
+    """Convert an authored module project to the serializable KMAP section."""
+
+    return {
+        "module_root": project.metadata.module_root,
+        "game": project.game,
+        "display_name": project.metadata.display_name,
+        "tag": project.metadata.tag,
+        "description": project.metadata.description,
+        "capability_stage": project.metadata.capability_stage,
+        "metadata": dict(project.metadata.metadata),
+        "rooms": [
+            {
+                "room_resref": room.room_resref,
+                "primitive": _primitive_payload(room.primitive),
+                "position": _vec3_payload(room.position),
+                "visible_rooms": list(room.visible_rooms),
+                "metadata": dict(room.metadata),
+            }
+            for room in project.rooms
+        ],
+        "placements": _placement_payload(project.placements),
+        "notes": list(project.notes),
+        "extra": dict(project.extra),
+        "runtime_resources": list(runtime_resources),
+        "game_tested": bool(game_tested),
+    }
+
+
+def create_dev_test_authored_module_payload(*, module_root: str = "grdev01", game: str = "K1") -> dict[str, Any]:
+    """Create the first editable from-scratch Map Studio KMAP payload."""
+
+    root = normalise_resref(module_root)
+    room_resref = normalise_resref(f"{root}_room01")
+    project = create_single_room_project(
+        module_root=root,
+        game=game,
+        display_name="GhostRigger Dev Test",
+        room_primitive=RectangularRoomPrimitive(
+            room_resref=room_resref,
+            width=10.0,
+            depth=10.0,
+            wall_height=3.0,
+            floor_surface_id=4,
+            texture=normalize_authored_room_texture(DEFAULT_AUTHORED_ROOM_TEXTURE),
+            include_doorway_marker=True,
+        ),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref=root, position=(0.0, -3.0, 0.0)),
+            placeables=(
+                AuthoredPlaceableInstance(
+                    template_resref="plc_bench",
+                    tag="grdev01_test_placeable",
+                    position=(1.75, 1.5, 0.0),
+                ),
+            ),
+            waypoints=(
+                AuthoredWaypointInstance(
+                    template_resref="sw_startloc001",
+                    tag="start",
+                    position=(0.0, -3.0, 0.0),
+                ),
+            ),
+            metadata={
+                "source": "map_studio:kmap_authored_module",
+                "player_start_is_module_entry": True,
+            },
+        ),
+        notes=(
+            "T2601 from-scratch smoke module.",
+            "Editable KMAP-authored primitive room with player start and test placeable.",
+        ),
+        metadata={
+            "task": "T2601",
+            "source": "map_studio:kmap_authored_module",
+            "room_geometry_mode": "rectangular_composition",
+        },
+    )
+    return authored_project_to_kmap_payload(project)
 
 
 def authored_project_from_kmap_payload(payload: Any, *, fallback_name: str = "new_level", fallback_game: str = "K1") -> AuthoredModuleProject:
@@ -210,5 +405,7 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
 __all__ = [
     "AuthoredModuleKMapBridgeResult",
     "authored_project_from_kmap_payload",
+    "authored_project_to_kmap_payload",
     "build_kmap_authored_module_readiness",
+    "create_dev_test_authored_module_payload",
 ]

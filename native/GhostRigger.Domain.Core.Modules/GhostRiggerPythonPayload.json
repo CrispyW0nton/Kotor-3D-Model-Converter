@@ -45,7 +45,7 @@
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src/core/modules/module_editor_controller.py",
       "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-      "sha256": "4105e1ad016a55d8ed1c8a83569bdd88f306f5f3addbcd990e09d80d00a35cc7"
+      "sha256": "d9bd76dcc07cd1c60a41f241a62cae34d51fbac82999acdd51330389accfbf4e"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
@@ -183,7 +183,7 @@
       "resource_name": "PYTHON_PAYLOAD_0030",
       "source_path": "src/core/modules/authored_module_kmap_bridge.py",
       "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
-      "sha256": "e24a7335607ea75437f0b59f2f9db7ad20a2ec12eea8ffcec9789ff62063b9cf"
+      "sha256": "66e07340f12436d63fa90a117c5dd37ebfc4d2bf2fb0c2d404895cb16677f6d8"
     }
   ]
 }

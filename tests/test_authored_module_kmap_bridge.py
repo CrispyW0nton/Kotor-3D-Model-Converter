@@ -108,3 +108,43 @@ def test_t2640_kmap_bridge_promotes_complete_runtime_resources_to_export_candida
     assert readiness.can_export_candidate is True
     assert readiness.missing_runtime_resources == ()
     assert "warp grdev01" in readiness.next_action
+
+
+def test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+
+    payload = create_dev_test_authored_module_payload()
+    project = authored_project_from_kmap_payload(payload)
+    restored = authored_project_to_kmap_payload(project)
+
+    assert payload["module_root"] == "grdev01"
+    assert payload["rooms"][0]["primitive"]["type"] == "rectangular"
+    assert project.placements.entry_point.position == (0.0, -3.0, 0.0)
+    assert project.placements.placeables[0].template_resref == "plc_bench"
+    assert project.placements.waypoints[0].template_resref == "sw_startloc001"
+    assert restored["placements"]["placeables"][0]["tag"] == "grdev01_test_placeable"
+    assert restored["placements"]["waypoints"][0]["tag"] == "start"
+
+
+def test_t2642_controller_creates_authored_dev_room_in_kmap() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+
+    result = controller.create_dev_test_authored_module()
+
+    assert controller.project.name == "grdev01"
+    assert "authored_module" in controller.project.extra_sections
+    assert controller.project.dirty is True
+    assert result.readiness is not None
+    assert result.readiness.capability_stage == "previewable"
+    assert result.readiness.can_preview is True

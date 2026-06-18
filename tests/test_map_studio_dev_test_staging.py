@@ -54,3 +54,15 @@ def test_t2641_export_panel_exposes_dev_test_stage_action() -> None:
     assert "mapStudioStageDevTestModuleButton" in panel_source
     assert "Stage grdev01 Dev Test Module" in panel_source
     assert "self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)" in window_source
+
+
+def test_t2642_builder_tab_exposes_authored_dev_room_action() -> None:
+    builder_source = Path(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = Path(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Create grdev01 Dev Room" in builder_source
+    assert "self.controller.create_dev_test_authored_module()" in window_source

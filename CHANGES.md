@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Can Seed Authored Dev Room KMAP Data
+
+Owner: LordVaderCW
+Task: T2642
+Subsystem: Map Studio / authored KMAP payloads / Builder tab / native Python payloads
+
+- Added a two-way KMAP authored-module bridge so Map Studio can serialize the first editable `authored_module` section, not only read it for readiness.
+- Added a `Create grdev01 Dev Room` Builder tab action that stores a primitive-room authored module in the current KMAP with player start, waypoint, and test placeable intent.
+- Wired `ModuleEditorController.create_dev_test_authored_module()` through the Level Editor so the readiness panel updates from actual KMAP-authored module data.
+- Preserved the separation between editable KMAP intent and staged `.mod` export: creating the dev room makes the project previewable; export-candidate still comes from the staged package flow.
+
+Verification:
+- `python -m json.tool native\GhostRigger.Domain.Core.Modules\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Tools.Workflow.ModuleMeshes\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.GUI.Boundary.Panels\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Windows.Editor.Level\GhostRiggerPythonPayload.json`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_kmap_bridge.py tests\test_map_studio_dev_test_staging.py`
+- `python -m pytest tests\test_authored_module_kmap_bridge.py tests\test_map_studio_dev_test_staging.py -q --basetemp .pytest_tmp_map_studio_authored_kmap_t2642`
+
 ### [2026-06-18] Map Studio Exposes Dev-Test Module Staging
 
 Owner: LordVaderCW

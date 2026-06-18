@@ -8,7 +8,15 @@ from PySide6 import QtCore, QtWidgets
 class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
 
-    ACTIONS = ("Generate Module Files", "Validate Module", "Open Output", "Build ERF/RIM Preview", "Build Loose Override Package", "Generate Manifest")
+    ACTIONS = (
+        "Create grdev01 Dev Room",
+        "Generate Module Files",
+        "Validate Module",
+        "Open Output",
+        "Build ERF/RIM Preview",
+        "Build Loose Override Package",
+        "Generate Manifest",
+    )
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)

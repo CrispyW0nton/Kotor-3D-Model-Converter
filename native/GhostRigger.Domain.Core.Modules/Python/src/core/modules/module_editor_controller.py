@@ -11,7 +11,7 @@ from src.core.scene.module_scene_import import resolve_module_room_placement
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
-from .authored_module_kmap_bridge import build_kmap_authored_module_readiness
+from .authored_module_kmap_bridge import build_kmap_authored_module_readiness, create_dev_test_authored_module_payload
 from .dev_module_smoke import DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
@@ -94,6 +94,18 @@ class ModuleEditorController:
         """Return Map Studio authored-module readiness for the current KMAP."""
 
         return build_kmap_authored_module_readiness(self.project)
+
+    def create_dev_test_authored_module(self, *, module_root: str = "grdev01"):
+        """Store the editable first Map Studio dev-test module in the KMAP."""
+
+        root = str(module_root or "grdev01").strip() or "grdev01"
+        payload = create_dev_test_authored_module_payload(module_root=root, game=str(self.project.game or "K1").upper())
+        self.project.extra_sections["authored_module"] = payload
+        self.project.name = str(payload.get("module_root") or root)
+        self.project.game = str(payload.get("game") or self.project.game or "K1").upper()
+        self.project.dirty = True
+        self.model.log(f"Created authored Map Studio module {self.project.name}.")
+        return self.authored_module_readiness()
 
     def build_preview(self, output_dir: str | Path):
         return self.builder_service.build_preview(self.project, output_dir)
