@@ -227,11 +227,12 @@ def _derive_game_root_dir(resolved_modules_dir: str) -> str:
 
 
 def _launch_helper_command(*, game: str, proof_manifest_path: str, resolved_game_root_dir: str) -> str:
-    if str(game or "").upper() != "K1" or not proof_manifest_path or not resolved_game_root_dir:
+    if not proof_manifest_path or not resolved_game_root_dir:
         return ""
     return (
         "python scripts/launch_grdev01_smoke_test.py "
         f'--proof-manifest "{proof_manifest_path}" '
+        f'--game "{str(game or "K1").upper()}" '
         f'--game-root-dir "{resolved_game_root_dir}" '
         "--dry-run"
     )

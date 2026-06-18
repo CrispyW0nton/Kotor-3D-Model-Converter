@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Supports K2 Smoke Launch Handoff
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / dev-module smoke test / game-proof handoff
+
+- Made the `grdev01` launch helper game-aware so authored and dev smoke proof manifests can drive either KOTOR 1 (`swkotor.exe`) or KOTOR II (`swkotor2.exe`) dry-run launch checks.
+- Added the selected game to generated launch-handoff metadata and removed the old K1-only helper suppression from Domain and ModuleMeshes workflow payloads.
+- Updated readiness/status reporting so K2 installed smoke packages surface the correct launch helper and expected executable instead of silently falling back to manual launch.
+
+Verification:
+- `python -m pytest tests/test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_map_launch_k2`
+- `python -m pytest tests/test_dev_module_smoke.py::test_t2601_install_prep_copies_to_modules_without_overwrite tests/test_dev_module_smoke.py::test_t2601_install_prep_writes_k2_launch_handoff tests/test_dev_module_smoke.py::test_t2601_install_prep_can_auto_detect_modules_dir_from_settings -q --basetemp .pytest_tmp_map_dev_k2_handoff`
+- `python -m pytest tests/test_authored_module_readiness.py::test_t2684_readiness_reports_staged_and_installed_game_proof_state tests/test_authored_module_readiness.py::test_t2601_readiness_builds_k2_launch_helper -q --basetemp .pytest_tmp_map_readiness_k2_handoff`
+- `python -m pytest tests/test_install_grdev01_smoke_variant_script.py -q --basetemp .pytest_tmp_map_install_k2_handoff`
+- `python -m pytest tests/test_authored_module_export.py::test_t2683_controller_installs_authored_module_to_modules_folder_with_backup -q --basetemp .pytest_tmp_map_authored_export_handoff`
+- `python -m py_compile scripts/launch_grdev01_smoke_test.py scripts/check_grdev01_smoke_status.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_export.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_export.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/dev_module_smoke.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/dev_module_smoke.py`
+
 ### [2026-06-18] Map Studio Surfaces Dev Smoke Install Handoff
 
 Owner: LordVaderCW

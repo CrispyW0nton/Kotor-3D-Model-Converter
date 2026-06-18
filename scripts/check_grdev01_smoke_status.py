@@ -200,6 +200,7 @@ def _proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
 def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> dict[str, Any]:
     handoff = proof.get("launch_handoff") if isinstance(proof.get("launch_handoff"), dict) else {}
     warp_command = str(handoff.get("warp_command") or proof.get("warp_command") or "warp grdev01")
+    game = str(handoff.get("game") or proof.get("game") or "K1").upper()
     proof_path = str(proof_manifest)
     task = str(proof.get("task") or "").strip().upper()
     recorder_script = str(handoff.get("proof_recording_script_path") or "")
@@ -208,6 +209,7 @@ def _launch_handoff_summary(*, proof: dict[str, Any], proof_manifest: Path) -> d
     else:
         recorder_command_script = "scripts/record_authored_module_game_proof.py"
     return {
+        "game": "K2" if game == "K2" else "K1",
         "warp_command": warp_command,
         "resolved_modules_dir": str(handoff.get("resolved_modules_dir") or ""),
         "resolved_game_root_dir": str(handoff.get("resolved_game_root_dir") or ""),
@@ -283,8 +285,9 @@ def build_status(*, proof_manifest: Path, module_path: Path | None = None, game_
     elif proof_state.get("game_tested") and not proof_state.get("missing_checks"):
         next_action = "No action required; this package is recorded as game-tested."
     elif ready_for_game_launch:
+        game_label = "KOTOR II" if launch_handoff.get("game") == "K2" else "KOTOR"
         next_action = (
-            f"Launch KOTOR, run `{launch_handoff['warp_command']}`, verify floor/placeable/walkability, "
+            f"Launch {game_label}, run `{launch_handoff['warp_command']}`, verify floor/placeable/walkability, "
             "then capture evidence and run the proof recording command."
         )
     elif not installed.get("checked") or not installed.get("exists"):
@@ -325,6 +328,8 @@ def _print_human_summary(status: dict[str, Any]) -> None:
             print(f"Previous module backup: {installed['backup_module_path']}")
     print(f"Ready for game launch: {status['ready_for_game_launch']}")
     handoff = status.get("launch_handoff") or {}
+    if handoff.get("game"):
+        print(f"Game: {handoff['game']}")
     if handoff.get("launch_helper_command"):
         print(f"Launch helper: {handoff['launch_helper_command']}")
     if handoff.get("elevated_launch_script_path"):

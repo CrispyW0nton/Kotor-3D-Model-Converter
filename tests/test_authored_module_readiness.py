@@ -45,13 +45,13 @@ def _placements_with_templates(area_resref: str = "grdev01"):
     )
 
 
-def _floor_plan_project():
+def _floor_plan_project(game: str = "K1"):
     from src.core.modules.authored_module_project import create_floor_plan_room_project
     from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
 
     return create_floor_plan_room_project(
         module_root="grdev01",
-        game="K1",
+        game=game,
         display_name="GhostRigger Dev Test",
         floor_plan=FloorPlanRoomPrimitive(
             room_resref="grdev01_room01",
@@ -266,6 +266,27 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
     assert installed.metadata["elevated_launch_script_path"].endswith("grdev01_launch_kotor_as_admin.cmd")
     assert installed.metadata["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
     assert "Run the launch helper dry-run" in installed.next_action
+
+
+def test_t2601_readiness_builds_k2_launch_helper() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    installed = build_authored_module_readiness(
+        _floor_plan_project(game="K2"),
+        packaged_resources=_runtime_keys(),
+        proof_metadata={
+            "proof_manifest_path": "C:/tmp/grdev01_authored_module_game_manifest.json",
+            "installed_module_path": "C:/Games/KOTOR2/Modules/grdev01.mod",
+            "resolved_modules_dir": "C:/Games/KOTOR2/Modules",
+        },
+    )
+
+    assert installed.metadata["launch_status"] == "ready_for_launch_helper"
+    assert "launch_grdev01_smoke_test.py" in installed.metadata["launch_helper_command"]
+    assert '--game "K2"' in installed.metadata["launch_helper_command"]
+    assert installed.metadata["expected_executable_path"].endswith("swkotor2.exe")
 
 
 def test_t2639_game_tested_requires_recorded_proof_metadata(tmp_path: Path) -> None:

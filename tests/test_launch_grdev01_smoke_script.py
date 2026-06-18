@@ -22,17 +22,21 @@ def _run_script(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def _prepare_installed_smoke(tmp_path: Path, *, create_exe: bool = True) -> tuple[dict[str, object], Path]:
+def _prepare_installed_smoke(tmp_path: Path, *, create_exe: bool = True, game: str = "K1") -> tuple[dict[str, object], Path]:
     output_dir = tmp_path / "smoke"
-    game_root = tmp_path / "KOTOR"
+    game = game.upper()
+    game_root = tmp_path / ("KOTOR2" if game == "K2" else "KOTOR")
     modules_dir = game_root / "Modules"
     modules_dir.mkdir(parents=True)
     if create_exe:
-        (game_root / "swkotor.exe").write_bytes(b"fake exe")
+        executable_name = "swkotor2.exe" if game == "K2" else "swkotor.exe"
+        (game_root / executable_name).write_bytes(b"fake exe")
     result = _run_script(
         PREPARE_SCRIPT,
         "--output-dir",
         str(output_dir),
+        "--game",
+        game,
         "--game-modules-dir",
         str(modules_dir),
         "--json",
@@ -61,6 +65,7 @@ def test_t2649_launch_grdev01_smoke_dry_run_accepts_ready_install(tmp_path: Path
     assert result.returncode == 0, result.stderr + result.stdout
     payload = json.loads(result.stdout)
     assert payload["ok"] is True
+    assert payload["game"] == "K1"
     assert payload["code"] == "dry_run_ready"
     assert payload["status"] == "installed_ready_for_game_test"
     assert payload["ready_for_game_launch"] is True
@@ -72,6 +77,21 @@ def test_t2649_launch_grdev01_smoke_dry_run_accepts_ready_install(tmp_path: Path
     assert "warp grdev01" in payload["next_action"]
     assert payload["proof_recording_script_path"] == prep["proof_recording_script_path"]
     assert "record_game_proof.cmd" in payload["next_action"]
+
+
+def test_t2601_launch_grdev01_smoke_uses_k2_executable_from_proof_manifest(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path, game="K2")
+
+    result = _launch(str(prep["proof_manifest_path"]), game_root)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["game"] == "K2"
+    assert payload["code"] == "dry_run_ready"
+    assert payload["launch_command"] == [str(game_root / "swkotor2.exe")]
+    assert payload["ready_for_game_launch"] is True
+    assert "warp grdev01" in payload["next_action"]
 
 
 def test_t2649_launch_grdev01_smoke_blocks_missing_executable(tmp_path: Path) -> None:

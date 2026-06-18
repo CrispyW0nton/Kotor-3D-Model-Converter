@@ -437,6 +437,27 @@ def test_t2601_install_prep_copies_to_modules_without_overwrite(tmp_path: Path) 
     assert installed.read_bytes() == b"existing"
 
 
+def test_t2601_install_prep_writes_k2_launch_handoff(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleInstallPrepRequest, prepare_dev_test_module_install
+
+    modules_dir = tmp_path / "KOTOR2" / "Modules"
+    modules_dir.mkdir(parents=True)
+
+    result = prepare_dev_test_module_install(
+        DevModuleInstallPrepRequest(output_dir=str(tmp_path / "out"), game="K2", game_modules_dir=str(modules_dir))
+    )
+
+    assert result.ok is True
+    assert result.resolved_game_root_dir == str(modules_dir.parent)
+    assert '--game "K2"' in result.launch_helper_command
+    assert "launch_grdev01_smoke_test.py" in result.launch_helper_command
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["launch_handoff"]["game"] == "K2"
+    assert proof["launch_handoff"]["expected_executable_path"] == str(modules_dir.parent / "swkotor2.exe")
+
+
 def test_t2635_install_prep_overwrite_backs_up_existing_module(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

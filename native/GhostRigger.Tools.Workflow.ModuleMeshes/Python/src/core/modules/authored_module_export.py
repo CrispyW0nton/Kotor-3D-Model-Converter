@@ -994,11 +994,12 @@ def _derive_game_root_dir_from_modules_dir(modules_dir_text: str) -> str:
 
 
 def _authored_launch_helper_command(*, proof_manifest_path: Path, game: str, game_root_dir: str) -> str:
-    if not game_root_dir or str(game or "").upper() != "K1":
+    if not game_root_dir:
         return ""
     return (
         "python scripts/launch_grdev01_smoke_test.py "
         f'--proof-manifest "{proof_manifest_path}" '
+        f'--game "{str(game or "K1").upper()}" '
         f'--game-root-dir "{game_root_dir}" '
         "--dry-run"
     )
@@ -1191,6 +1192,7 @@ def _write_authored_install_proof_files(
         "game_tested": False,
         "warp_command": f"warp {module_root}",
         "launch_handoff": {
+            "game": str(game or "").upper() or "K1",
             "resolved_modules_dir": modules_dir,
             "resolved_game_root_dir": game_root_dir,
             "expected_executable_path": executable_path,
