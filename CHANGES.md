@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Checks Console Readiness for grdev01 Warp
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / launch handoff / in-game proof readiness
+
+- Added a read-only KOTOR INI preflight to `launch_grdev01_smoke_test.py` so the launch handoff reports whether `EnableCheats=1` is configured for `warp grdev01`.
+- Added `--require-console-ready` for strict smoke-test launch dry-runs and `--skip-console-check` for diagnostics.
+- Updated launch payloads with console readiness details, INI path, warnings, and actionable fix hints before the user starts the manual in-game proof pass.
+
+Verification:
+- `python -m pytest tests/test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_map_launch_console`
+- `python -m py_compile scripts/launch_grdev01_smoke_test.py tests/test_launch_grdev01_smoke_script.py`
+- `python scripts/launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --dry-run --require-console-ready --json`
+
 ### [2026-06-18] Map Studio Adds KotorMCP Smoke Visibility Check
 
 Owner: LordVaderCW

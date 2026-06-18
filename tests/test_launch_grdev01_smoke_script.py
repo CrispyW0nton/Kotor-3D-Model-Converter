@@ -77,10 +77,15 @@ def test_t2649_launch_grdev01_smoke_dry_run_accepts_ready_install(tmp_path: Path
     assert "warp grdev01" in payload["next_action"]
     assert payload["proof_recording_script_path"] == prep["proof_recording_script_path"]
     assert "record_game_proof.cmd" in payload["next_action"]
+    assert payload["console"]["checked"] is True
+    assert payload["console"]["ready"] is False
+    assert payload["warnings"]
+    assert "EnableCheats=1" in payload["console"]["fix_hint"]
 
 
 def test_t2601_launch_grdev01_smoke_uses_k2_executable_from_proof_manifest(tmp_path: Path) -> None:
     prep, game_root = _prepare_installed_smoke(tmp_path, game="K2")
+    (game_root / "swkotor2.ini").write_text("[Game Options]\nEnableCheats=1\n", encoding="utf-8")
 
     result = _launch(str(prep["proof_manifest_path"]), game_root)
 
@@ -92,6 +97,10 @@ def test_t2601_launch_grdev01_smoke_uses_k2_executable_from_proof_manifest(tmp_p
     assert payload["launch_command"] == [str(game_root / "swkotor2.exe")]
     assert payload["ready_for_game_launch"] is True
     assert "warp grdev01" in payload["next_action"]
+    assert payload["console"]["checked"] is True
+    assert payload["console"]["ready"] is True
+    assert payload["console"]["game_ini_path"] == str(game_root / "swkotor2.ini")
+    assert payload["console"]["enable_cheats_value"] == "1"
 
 
 def test_t2649_launch_grdev01_smoke_blocks_missing_executable(tmp_path: Path) -> None:
@@ -106,6 +115,53 @@ def test_t2649_launch_grdev01_smoke_blocks_missing_executable(tmp_path: Path) ->
     assert payload["status"] == "installed_ready_for_game_test"
     assert payload["ready_for_game_launch"] is True
     assert any("swkotor.exe" in issue for issue in payload["blocking_issues"])
+
+
+def test_t2601_launch_can_require_console_ready_for_warp(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+
+    result = _run_script(
+        LAUNCH_SCRIPT,
+        "--proof-manifest",
+        str(prep["proof_manifest_path"]),
+        "--game-root-dir",
+        str(game_root),
+        "--dry-run",
+        "--require-console-ready",
+        "--json",
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["code"] == "not_ready"
+    assert payload["ready_for_game_launch"] is True
+    assert payload["console"]["checked"] is True
+    assert payload["console"]["ready"] is False
+    assert any("EnableCheats=1" in issue for issue in payload["blocking_issues"])
+
+
+def test_t2601_launch_strict_console_ready_accepts_enabled_ini(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+    (game_root / "swkotor.ini").write_text("[Game Options]\nEnableCheats=1\n", encoding="utf-8")
+
+    result = _run_script(
+        LAUNCH_SCRIPT,
+        "--proof-manifest",
+        str(prep["proof_manifest_path"]),
+        "--game-root-dir",
+        str(game_root),
+        "--dry-run",
+        "--require-console-ready",
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["code"] == "dry_run_ready"
+    assert payload["console"]["ready"] is True
+    assert payload["console"]["game_ini_path"] == str(game_root / "swkotor.ini")
 
 
 def test_t2649_launch_grdev01_smoke_blocks_stale_installed_module(tmp_path: Path) -> None:
