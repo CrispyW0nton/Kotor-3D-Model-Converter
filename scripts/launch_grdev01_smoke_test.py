@@ -72,6 +72,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Launch even if status says the package is not ready. This is for diagnostics only.",
     )
     parser.add_argument(
+        "--elevated",
+        action="store_true",
+        help="Request an elevated KOTOR launch using PowerShell Start-Process -Verb RunAs.",
+    )
+    parser.add_argument(
         "--require-console-ready",
         action="store_true",
         help="Block launch unless the game INI has EnableCheats=1 so `warp grdev01` can be entered.",
@@ -119,6 +124,20 @@ def _game_ini_candidates(game_root_dir: Path, game: str) -> list[Path]:
     if _normal_game(game) == "K2":
         return [game_root_dir / "swkotor2.ini", game_root_dir / "swkotor.ini"]
     return [game_root_dir / "swkotor.ini"]
+
+
+def _powershell_single_quoted(value: Path | str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _elevated_launch_command(*, executable: Path, game_root_dir: Path) -> list[str]:
+    ps_command = (
+        "Start-Process "
+        f"-FilePath {_powershell_single_quoted(executable)} "
+        f"-WorkingDirectory {_powershell_single_quoted(game_root_dir)} "
+        "-Verb RunAs"
+    )
+    return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_command]
 
 
 def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False) -> dict[str, Any]:
@@ -204,6 +223,7 @@ def _summary(
     warp_command: str,
     dry_run: bool,
     console: dict[str, Any],
+    elevated: bool,
 ) -> dict[str, Any]:
     next_action = str(status.get("next_action", "") or "")
     if ok:
@@ -231,6 +251,7 @@ def _summary(
         "proof_recording_script_path": proof_recording_script_path,
         "warp_command": warp_command,
         "dry_run": dry_run,
+        "elevated": elevated,
         "console": console,
         "next_action": next_action,
         "warnings": warnings,
@@ -256,6 +277,8 @@ def _print_human_summary(payload: dict[str, Any]) -> None:
         print(f"Proof recorder: {payload['proof_recording_script_path']}")
     if payload["dry_run"]:
         print("Dry run: KOTOR was not launched.")
+    if payload.get("elevated"):
+        print("Elevated launch: requested")
     console = payload.get("console") or {}
     if console.get("checked"):
         print(f"Console/warp ready: {console['ready']}")
@@ -297,6 +320,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.require_console_ready and console.get("checked") and not console.get("ready"):
         blocking.append(console.get("fix_hint") or "KOTOR console is not ready for `warp grdev01`.")
     ready = bool(status.get("ready_for_game_launch", False)) and not blocking
+    launch_command = (
+        _elevated_launch_command(executable=executable, game_root_dir=game_root_dir)
+        if args.elevated
+        else launch_command
+    )
     if not ready and not args.force:
         status = dict(status)
         status["blocking_issues"] = blocking
@@ -313,6 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             warp_command=warp_command,
             dry_run=bool(args.dry_run),
             console=console,
+            elevated=bool(args.elevated),
         )
         if args.json:
             print(json.dumps(payload, indent=2))
@@ -331,11 +360,11 @@ def main(argv: list[str] | None = None) -> int:
                 message = "KOTOR was not launched because Windows requires elevation for this executable."
                 blocking.append(
                     (
-                        f"Windows requires elevation to launch {executable}. Run {elevated_launcher}, "
-                        f"or start KOTOR as administrator, then run `{warp_command}`."
+                        f"Windows requires elevation to launch {executable}. Re-run this helper with --elevated, "
+                        f"run {elevated_launcher}, or start KOTOR as administrator, then run `{warp_command}`."
                     )
                     if elevated_launcher
-                    else f"Windows requires elevation to launch {executable}. Start KOTOR as administrator, then run `{warp_command}`."
+                    else f"Windows requires elevation to launch {executable}. Re-run this helper with --elevated, or start KOTOR as administrator, then run `{warp_command}`."
                 )
             else:
                 code = "launch_failed"
@@ -355,6 +384,7 @@ def main(argv: list[str] | None = None) -> int:
                 warp_command=warp_command,
                 dry_run=False,
                 console=console,
+                elevated=bool(args.elevated),
             )
             if args.json:
                 print(json.dumps(payload, indent=2))
@@ -367,7 +397,11 @@ def main(argv: list[str] | None = None) -> int:
         message=(
             "Dry run passed; KOTOR launch command is ready."
             if args.dry_run
-            else "KOTOR launched for grdev01 smoke testing."
+            else (
+                "Elevated KOTOR launch request was submitted for grdev01 smoke testing."
+                if args.elevated
+                else "KOTOR launched for grdev01 smoke testing."
+            )
         ),
         status=status,
         executable=executable,
@@ -378,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
         warp_command=warp_command,
         dry_run=bool(args.dry_run),
         console=console,
+        elevated=bool(args.elevated),
     )
     if args.json:
         print(json.dumps(payload, indent=2))

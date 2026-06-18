@@ -164,6 +164,68 @@ def test_t2601_launch_strict_console_ready_accepts_enabled_ini(tmp_path: Path) -
     assert payload["console"]["game_ini_path"] == str(game_root / "swkotor.ini")
 
 
+def test_t2601_launch_elevated_dry_run_reports_powershell_command(tmp_path: Path) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+    (game_root / "swkotor.ini").write_text("[Game Options]\nEnableCheats=1\n", encoding="utf-8")
+
+    result = _run_script(
+        LAUNCH_SCRIPT,
+        "--proof-manifest",
+        str(prep["proof_manifest_path"]),
+        "--game-root-dir",
+        str(game_root),
+        "--dry-run",
+        "--require-console-ready",
+        "--elevated",
+        "--json",
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["elevated"] is True
+    assert payload["launch_command"][:4] == ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass"]
+    assert "Start-Process" in payload["launch_command"][-1]
+    assert "-Verb RunAs" in payload["launch_command"][-1]
+
+
+def test_t2601_launch_elevated_uses_powershell_start_process(tmp_path: Path, monkeypatch, capsys) -> None:
+    prep, game_root = _prepare_installed_smoke(tmp_path)
+    (game_root / "swkotor.ini").write_text("[Game Options]\nEnableCheats=1\n", encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("launch_grdev01_smoke_test_elevated_under_test", LAUNCH_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    captured: dict[str, object] = {}
+
+    def fake_popen(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr(module.subprocess, "Popen", fake_popen)
+
+    code = module.main(
+        [
+            "--proof-manifest",
+            str(prep["proof_manifest_path"]),
+            "--game-root-dir",
+            str(game_root),
+            "--require-console-ready",
+            "--elevated",
+            "--json",
+        ]
+    )
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["elevated"] is True
+    assert payload["message"].startswith("Elevated KOTOR launch request")
+    assert captured["command"] == payload["launch_command"]
+    assert captured["command"][0] == "powershell"
+
+
 def test_t2649_launch_grdev01_smoke_blocks_stale_installed_module(tmp_path: Path) -> None:
     prep, game_root = _prepare_installed_smoke(tmp_path)
     installed = game_root / "Modules" / "grdev01.mod"

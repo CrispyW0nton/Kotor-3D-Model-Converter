@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Elevated grdev01 Launch Option
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / launch handoff / in-game proof workflow
+
+- Added `--elevated` to `launch_grdev01_smoke_test.py` so the smoke-test launcher can request a Windows elevated KOTOR start with PowerShell `Start-Process -Verb RunAs`.
+- Updated launch summaries to report whether elevated launch was requested and to surface the exact elevated command in dry-run output.
+- Improved the Windows error 740 path so testers are told to rerun the helper with `--elevated`, use the generated elevated launcher, or start KOTOR as administrator before `warp grdev01`.
+
+Verification:
+- `python -m pytest tests/test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_map_launch_elevated`
+- `python -m py_compile scripts\launch_grdev01_smoke_test.py tests\test_launch_grdev01_smoke_script.py`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --dry-run --require-console-ready --elevated --json`
+
 ### [2026-06-18] Map Studio Includes Evidence Capture in Smoke Handoff
 
 Owner: LordVaderCW
