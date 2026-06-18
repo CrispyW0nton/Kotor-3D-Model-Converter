@@ -56,6 +56,15 @@ class FloorPlanInsetOperation:
 
 
 @dataclass(frozen=True)
+class FloorPlanBevelOperation:
+    """Corner chamfer operation for a convex authored floor-plan footprint."""
+
+    distance: float
+    room_resref: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FloorPlanRoomValidation:
     """Validation result for a floor-plan room primitive."""
 
@@ -303,6 +312,70 @@ def apply_floor_plan_inset(primitive: FloorPlanRoomPrimitive, operation: FloorPl
     )
 
 
+def bevel_floor_plan_points(points: tuple[Vec2, ...], distance: float) -> tuple[Vec2, ...]:
+    """Bevel every convex footprint corner by cutting along adjacent edges."""
+
+    source = _normalise_points(points)
+    if len(source) < 3:
+        raise ValueError("Floor-plan bevel requires at least three footprint points.")
+    if float(distance) <= 0.0:
+        raise ValueError("Floor-plan bevel distance must be positive.")
+    if _has_duplicate_or_zero_edges(source):
+        raise ValueError("Floor-plan bevel cannot use duplicate points or zero-length edges.")
+    if not _is_convex(source):
+        raise ValueError("Floor-plan bevel currently supports convex footprints only.")
+    ccw = _ccw_points(source)
+    distance_value = float(distance)
+    edge_lengths = [_edge_length(ccw[index], ccw[(index + 1) % len(ccw)]) for index in range(len(ccw))]
+    for edge_index, length in enumerate(edge_lengths):
+        if distance_value * 2.0 >= length:
+            raise ValueError(f"Floor-plan bevel distance overlaps edge {edge_index}.")
+    bevelled: list[Vec2] = []
+    for index, vertex in enumerate(ccw):
+        prev_vertex = ccw[index - 1]
+        next_vertex = ccw[(index + 1) % len(ccw)]
+        prev_length = edge_lengths[index - 1]
+        next_length = edge_lengths[index]
+        incoming = (
+            vertex[0] + ((prev_vertex[0] - vertex[0]) / prev_length) * distance_value,
+            vertex[1] + ((prev_vertex[1] - vertex[1]) / prev_length) * distance_value,
+        )
+        outgoing = (
+            vertex[0] + ((next_vertex[0] - vertex[0]) / next_length) * distance_value,
+            vertex[1] + ((next_vertex[1] - vertex[1]) / next_length) * distance_value,
+        )
+        bevelled.extend((incoming, outgoing))
+    result = tuple(bevelled)
+    if abs(polygon_signed_area(result)) <= 1.0e-7:
+        raise ValueError("Floor-plan bevel distance collapses the footprint.")
+    if not _is_convex(result):
+        raise ValueError("Floor-plan bevel distance produced a non-convex footprint.")
+    return result
+
+
+def apply_floor_plan_bevel(primitive: FloorPlanRoomPrimitive, operation: FloorPlanBevelOperation) -> FloorPlanRoomPrimitive:
+    """Return a new floor-plan primitive with all footprint corners bevelled."""
+
+    points = bevel_floor_plan_points(primitive.points, operation.distance)
+    metadata = {
+        **dict(primitive.metadata),
+        "operation": "bevel",
+        "bevel_distance": float(operation.distance),
+        **dict(operation.metadata),
+    }
+    return FloorPlanRoomPrimitive(
+        room_resref=_normalise_resref(operation.room_resref) or primitive.room_resref,
+        points=points,
+        z=primitive.z,
+        wall_height=primitive.wall_height,
+        floor_surface_id=primitive.floor_surface_id,
+        material=primitive.material,
+        include_walls=primitive.include_walls,
+        openings=(),
+        metadata=metadata,
+    )
+
+
 def build_floor_plan_floor_mesh(primitive: FloorPlanRoomPrimitive) -> PrimitiveMesh:
     """Build a triangulated floor mesh from a convex floor-plan footprint."""
 
@@ -471,11 +544,14 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
 
 
 __all__ = [
+    "FloorPlanBevelOperation",
     "FloorPlanInsetOperation",
     "FloorPlanRoomPrimitive",
     "FloorPlanRoomValidation",
     "FloorPlanWallOpening",
+    "apply_floor_plan_bevel",
     "apply_floor_plan_inset",
+    "bevel_floor_plan_points",
     "build_floor_plan_floor_mesh",
     "build_floor_plan_wall_meshes",
     "build_floor_plan_wok",

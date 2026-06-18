@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Floor-Plan Bevel Operation
+
+Owner: LordVaderCW
+Task: T2625
+Subsystem: Map Studio / authored floor-plan geometry / native Python payloads
+
+- Added a headless `FloorPlanBevelOperation` and convex-footprint bevel helper so future Map Studio UI tools can chamfer room corners before MDL/WOK export.
+- Preserved floor-plan metadata/material settings while clearing wall openings after bevel because the operation changes wall-edge indexing.
+- Mirrored the authored floor-plan change into the ModuleMeshes native Python payload and refreshed payload manifest hashes.
+- Added regression coverage for bevel geometry, compile-to-room output, metadata preservation, and invalid bevel inputs.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_authored_room_floorplan.py`
+- `python -m pytest tests/test_authored_room_floorplan.py tests/test_authored_module_project.py tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_floorplan_bevel_smoke`
+- Native Python payload hash check for the edited authored floor-plan module.
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Walkable Stair WOKs
 
 Owner: LordVaderCW

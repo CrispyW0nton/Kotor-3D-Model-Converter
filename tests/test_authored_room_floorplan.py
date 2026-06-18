@@ -198,3 +198,70 @@ def test_t2623_inset_rejects_invalid_operation_inputs() -> None:
         inset_floor_plan_points(((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)), 0.0)
     with pytest.raises(ValueError, match="convex footprints only"):
         inset_floor_plan_points(((0.0, 0.0), (2.0, 0.0), (1.0, 0.5), (2.0, 2.0), (0.0, 2.0)), 0.1)
+
+
+def test_t2625_bevels_convex_floor_plan_points() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import bevel_floor_plan_points, polygon_signed_area
+
+    bevelled = bevel_floor_plan_points(((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)), 0.5)
+
+    assert bevelled == (
+        (-3.0, -1.5),
+        (-2.5, -2.0),
+        (2.5, -2.0),
+        (3.0, -1.5),
+        (3.0, 1.5),
+        (2.5, 2.0),
+        (-2.5, 2.0),
+        (-3.0, 1.5),
+    )
+    assert polygon_signed_area(bevelled) == 23.5
+
+
+def test_t2625_apply_bevel_compiles_chamfered_floor_plan_room() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_floorplan import FloorPlanBevelOperation, FloorPlanRoomPrimitive, FloorPlanWallOpening, apply_floor_plan_bevel, compile_floor_plan_room_geometry
+
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="box_room",
+        points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        openings=(FloorPlanWallOpening(name="door", edge_index=0),),
+        metadata={"author_note": "blockout"},
+    )
+
+    bevelled = apply_floor_plan_bevel(
+        primitive,
+        FloorPlanBevelOperation(distance=0.25, room_resref="bevel_room", metadata={"operation_id": "bevel_a"}),
+    )
+    geometry = compile_floor_plan_room_geometry(bevelled)
+
+    assert bevelled.room_resref == "bevel_room"
+    assert len(bevelled.points) == 8
+    assert bevelled.openings == ()
+    assert bevelled.metadata["operation"] == "bevel"
+    assert bevelled.metadata["author_note"] == "blockout"
+    assert bevelled.metadata["operation_id"] == "bevel_a"
+    assert geometry.room_resref == "bevel_room"
+    assert geometry.room_mesh.name == "bevel_room_floor"
+    assert len(geometry.room_mesh.faces) == 6
+    assert geometry.wok.walkable_face_count() == 6
+    assert geometry.metadata["wall_count"] == 8
+    assert geometry.metadata["polygon_area"] == 23.875
+
+
+def test_t2625_bevel_rejects_invalid_operation_inputs() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_floorplan import bevel_floor_plan_points
+
+    with pytest.raises(ValueError, match="distance must be positive"):
+        bevel_floor_plan_points(((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)), 0.0)
+    with pytest.raises(ValueError, match="overlaps edge"):
+        bevel_floor_plan_points(((-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)), 1.0)
+    with pytest.raises(ValueError, match="convex footprints only"):
+        bevel_floor_plan_points(((0.0, 0.0), (2.0, 0.0), (1.0, 0.5), (2.0, 2.0), (0.0, 2.0)), 0.1)
