@@ -40,7 +40,9 @@ from .authored_module_placements import (
     update_authored_gameplay_placement_transform,
 )
 from .authored_room_operations import (
+    add_authored_room_composition_primitive,
     apply_authored_floor_plan_operation,
+    available_authored_composition_primitive_kinds,
     authored_room_composition_primitives,
     move_authored_floor_plan_point,
     set_authored_room_composition_primitive_transform,
@@ -153,6 +155,11 @@ class ModuleEditorController:
         """Return named WOK surface choices for authored room floors."""
 
         return authored_walkmesh_surface_palette()
+
+    def available_authored_composition_primitive_kinds(self):
+        """Return primitive kinds that can be added to authored composition rooms."""
+
+        return available_authored_composition_primitive_kinds()
 
     def available_authored_gameplay_placement_kinds(self):
         """Return supported authored gameplay placement kinds for Map Studio UI."""
@@ -339,6 +346,51 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Transformed Map Studio room primitive {primitive_name} in {room_resref or '(first room)'}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def add_authored_room_primitive(
+        self,
+        *,
+        primitive_kind: str,
+        room_resref: str = "",
+        primitive_name: str = "",
+        translation: Any = None,
+        rotation_degrees_z: float | None = None,
+        scale: Any = None,
+        pivot: Any = None,
+        texture: str = "",
+        floor_surface: Any = None,
+    ):
+        """Append a primitive instance to an authored composition room."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = add_authored_room_composition_primitive(
+            authored,
+            primitive_kind=primitive_kind,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            translation=translation,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+            pivot=pivot,
+            texture=texture,
+            floor_surface=floor_surface,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Added Map Studio room primitive {primitive_kind} {primitive_name or '(auto-named)'}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

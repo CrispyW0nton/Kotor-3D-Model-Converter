@@ -24,7 +24,15 @@ from .authored_room_floorplan import (
     apply_floor_plan_rectangular_cut,
 )
 from .authored_room_geometry import RectangularRoomPrimitive
-from .authored_room_primitives import PrimitiveMaterial
+from .authored_room_primitives import (
+    ArchPrimitive,
+    CubePrimitive,
+    CylinderPrimitive,
+    RampPrimitive,
+    StairsPrimitive,
+    WallPrimitive,
+    PrimitiveMaterial,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +46,32 @@ class AuthoredCompositionPrimitiveTransform:
     rotation_degrees_z: float
     scale: tuple[float, float, float]
     pivot: tuple[float, float, float]
+
+
+@dataclass(frozen=True)
+class AuthoredCompositionPrimitiveKind:
+    """UI-ready palette entry for adding one primitive to a composition room."""
+
+    kind: str
+    label: str
+    description: str
+    creates_walkmesh: bool = False
+
+
+_COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
+    AuthoredCompositionPrimitiveKind("wall", "Wall", "A rectangular wall/blockout slab."),
+    AuthoredCompositionPrimitiveKind("cube", "Cube", "A simple box primitive for room dressing or massing."),
+    AuthoredCompositionPrimitiveKind("ramp", "Ramp", "A sloped walkable ramp that contributes WOK faces.", creates_walkmesh=True),
+    AuthoredCompositionPrimitiveKind("stairs", "Stairs", "A visual staircase with a walkable ramp-style WOK proxy.", creates_walkmesh=True),
+    AuthoredCompositionPrimitiveKind("cylinder", "Cylinder", "A round column or pedestal primitive."),
+    AuthoredCompositionPrimitiveKind("arch", "Arch", "A doorway arch frame for blockout and portal tests."),
+)
+
+
+def available_authored_composition_primitive_kinds() -> tuple[AuthoredCompositionPrimitiveKind, ...]:
+    """Return primitive kinds the Builder can add to a composition room."""
+
+    return _COMPOSITION_PRIMITIVE_KINDS
 
 
 def _rectangular_to_floor_plan(primitive: RectangularRoomPrimitive, room_resref: str) -> FloorPlanRoomPrimitive:
@@ -135,6 +169,63 @@ def _primitive_type(primitive: Any) -> str:
     return name[:-9].lower() if name.endswith("Primitive") else name.lower()
 
 
+def _primitive_kind(value: Any) -> str:
+    kind = str(value or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "box": "cube",
+        "column": "cylinder",
+        "stair": "stairs",
+        "step": "stairs",
+        "door_arch": "arch",
+    }
+    kind = aliases.get(kind, kind)
+    known = {item.kind for item in _COMPOSITION_PRIMITIVE_KINDS}
+    if kind not in known:
+        raise ValueError(f"Unsupported authored room primitive kind '{value}'. Known kinds: {', '.join(sorted(known))}.")
+    return kind
+
+
+def _unique_primitive_name(composition: AuthoredRoomComposition, kind: str, requested_name: str = "") -> str:
+    used = {_primitive_name(primitive).lower() for primitive in composition.primitives if _primitive_name(primitive)}
+    base = str(requested_name or "").strip()
+    if not base:
+        base = f"{normalise_resref(composition.room_resref)}_{kind}"
+    candidate = base
+    index = 2
+    while candidate.lower() in used:
+        candidate = f"{base}_{index}"
+        index += 1
+    return candidate
+
+
+def _primitive_material(composition: AuthoredRoomComposition, texture: str = "") -> PrimitiveMaterial:
+    material = composition.floor.material
+    if texture:
+        return PrimitiveMaterial(
+            texture=str(texture),
+            diffuse=material.diffuse,
+            ambient=material.ambient,
+            metadata={**dict(material.metadata), "source": "map_studio:add_composition_primitive"},
+        )
+    return material
+
+
+def _default_primitive_for_kind(kind: str, name: str, material: PrimitiveMaterial, floor_surface: Any) -> Any:
+    if kind == "wall":
+        return WallPrimitive(name=name, width=4.0, height=3.0, thickness=0.15, center=(0.0, 0.0, 1.5), material=material)
+    if kind == "cube":
+        return CubePrimitive(name=name, size=(1.0, 1.0, 1.0), center=(0.0, 0.0, 0.5), material=material)
+    if kind == "ramp":
+        return RampPrimitive(name=name, width=2.0, length=3.0, height=1.0, surface_id=floor_surface, material=material)
+    if kind == "stairs":
+        return StairsPrimitive(name=name, width=2.0, depth=3.0, height=1.0, steps=4, surface_id=floor_surface, material=material)
+    if kind == "cylinder":
+        return CylinderPrimitive(name=name, radius=0.5, height=1.0, segments=16, center=(0.0, 0.0, 0.5), material=material)
+    if kind == "arch":
+        return ArchPrimitive(name=name, width=2.4, height=3.0, frame_thickness=0.3, depth=0.35, center=(0.0, 0.0, 1.5), material=material)
+    raise ValueError(f"Unsupported authored room primitive kind '{kind}'.")
+
+
 def authored_room_composition_primitives(
     project: AuthoredModuleProject,
     *,
@@ -170,6 +261,70 @@ def authored_room_composition_primitives(
                 )
             )
     return tuple(rows)
+
+
+def add_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    primitive_kind: str,
+    room_resref: str = "",
+    primitive_name: str = "",
+    translation: Any = None,
+    rotation_degrees_z: float | None = None,
+    scale: Any = None,
+    pivot: Any = None,
+    texture: str = "",
+    floor_surface: Any = None,
+) -> AuthoredModuleProject:
+    """Append a new editable primitive instance to a composition room."""
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    composition = _composition_for_room(room)
+    kind = _primitive_kind(primitive_kind)
+    name = _unique_primitive_name(composition, kind, primitive_name)
+    surface = floor_surface if floor_surface is not None else composition.floor.surface_id
+    material = _primitive_material(composition, texture)
+    base = _default_primitive_for_kind(kind, name, material, surface)
+    transform = _updated_transform(
+        PrimitiveTransform(),
+        translation=translation,
+        rotation_degrees_z=rotation_degrees_z,
+        scale=scale,
+        pivot=pivot,
+    )
+    updated_composition = replace(
+        composition,
+        primitives=tuple(composition.primitives)
+        + (
+            PlacedRoomPrimitive(
+                primitive=base,
+                transform=transform,
+                name=name,
+            ),
+        ),
+        metadata={
+            **dict(composition.metadata),
+            "last_added_primitive": name,
+            "last_added_primitive_kind": kind,
+        },
+    )
+    rooms[room_index] = replace(
+        room,
+        primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+        composition=updated_composition if room.composition is not None else room.composition,
+        metadata={
+            **dict(room.metadata),
+            "last_operation": "add_composition_primitive",
+            "last_added_primitive": name,
+        },
+    )
+    return _replace_rooms(
+        project,
+        tuple(rooms),
+        operation=f"add_composition_primitive:{kind}:{name}",
+    )
 
 
 def _vec3_or_existing(value: Any, existing: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -474,11 +629,14 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
 
 
 __all__ = [
+    "AuthoredCompositionPrimitiveKind",
     "AuthoredCompositionPrimitiveTransform",
+    "add_authored_room_composition_primitive",
     "apply_authored_floor_plan_bevel",
     "apply_authored_floor_plan_inset",
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
+    "available_authored_composition_primitive_kinds",
     "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
     "set_authored_room_composition_primitive_transform",

@@ -10,6 +10,7 @@ class BuilderTab(QtWidgets.QWidget):
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
     roomStyleRequested = QtCore.Signal(str, str)
+    roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
 
@@ -84,6 +85,23 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
         layout.addWidget(operation_box)
+        add_primitive_box = QtWidgets.QGroupBox("Add Room Primitive")
+        add_primitive_layout = QtWidgets.QFormLayout(add_primitive_box)
+        self.compositionPrimitiveKindComboBox = QtWidgets.QComboBox()
+        self.compositionPrimitiveKindComboBox.setObjectName("mapStudioCompositionPrimitiveKindComboBox")
+        self.compositionPrimitiveNameLineEdit = QtWidgets.QLineEdit()
+        self.compositionPrimitiveNameLineEdit.setObjectName("mapStudioCompositionPrimitiveNameLineEdit")
+        self.compositionPrimitiveNameLineEdit.setPlaceholderText("optional stable primitive name")
+        self.compositionPrimitiveKindHintLabel = QtWidgets.QLabel("Add a primitive to the current composition room, then transform it below.")
+        self.compositionPrimitiveKindHintLabel.setObjectName("mapStudioCompositionPrimitiveKindHintLabel")
+        self.compositionPrimitiveKindHintLabel.setWordWrap(True)
+        self.addCompositionPrimitiveButton = QtWidgets.QPushButton("Add Primitive to Room")
+        self.addCompositionPrimitiveButton.setObjectName("mapStudioAddCompositionPrimitiveButton")
+        add_primitive_layout.addRow("Kind:", self.compositionPrimitiveKindComboBox)
+        add_primitive_layout.addRow("Name:", self.compositionPrimitiveNameLineEdit)
+        add_primitive_layout.addRow(self.compositionPrimitiveKindHintLabel)
+        add_primitive_layout.addRow(self.addCompositionPrimitiveButton)
+        layout.addWidget(add_primitive_box)
         transform_box = QtWidgets.QGroupBox("Transform Room Primitive")
         transform_layout = QtWidgets.QFormLayout(transform_box)
         self.roomPrimitiveTransformComboBox = QtWidgets.QComboBox()
@@ -201,6 +219,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
+        self.compositionPrimitiveKindComboBox.currentIndexChanged.connect(self._update_composition_primitive_kind_hint)
+        self.addCompositionPrimitiveButton.clicked.connect(self._emit_add_composition_primitive)
         self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
         self.applyPrimitiveTransformButton.clicked.connect(self._emit_primitive_transform)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
@@ -211,6 +231,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
+        self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
         self._update_surface_hint()
 
@@ -260,6 +281,44 @@ class BuilderTab(QtWidgets.QWidget):
         module_root = self.moduleRootLineEdit.text().strip() or "grdev01"
         if preset_id:
             self.primitivePresetRequested.emit(preset_id, module_root)
+
+    def set_composition_primitive_kinds(self, kinds) -> None:
+        """Populate the add-primitive palette from the controller."""
+
+        self.compositionPrimitiveKindComboBox.clear()
+        for kind in kinds or ():
+            kind_id = str(getattr(kind, "kind", "") or "")
+            label = str(getattr(kind, "label", "") or kind_id)
+            description = str(getattr(kind, "description", "") or "")
+            creates_walkmesh = bool(getattr(kind, "creates_walkmesh", False))
+            self.compositionPrimitiveKindComboBox.addItem(
+                label,
+                {
+                    "kind": kind_id,
+                    "description": description,
+                    "creates_walkmesh": creates_walkmesh,
+                },
+            )
+        if self.compositionPrimitiveKindComboBox.count() <= 0:
+            self.compositionPrimitiveKindComboBox.addItem("Cube", {"kind": "cube", "description": "A simple box primitive.", "creates_walkmesh": False})
+        self._update_composition_primitive_kind_hint()
+
+    def _current_composition_primitive_kind_data(self) -> dict:
+        data = self.compositionPrimitiveKindComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_composition_primitive_kind_hint(self) -> None:
+        data = self._current_composition_primitive_kind_data()
+        description = data.get("description") or "Add a primitive to the current composition room, then transform it below."
+        if data.get("creates_walkmesh"):
+            description = f"{description} This primitive contributes generated walkmesh faces."
+        self.compositionPrimitiveKindHintLabel.setText(str(description))
+
+    def _emit_add_composition_primitive(self) -> None:
+        kind = str(self._current_composition_primitive_kind_data().get("kind") or "").strip()
+        name = self.compositionPrimitiveNameLineEdit.text().strip()
+        if kind:
+            self.roomPrimitiveAddRequested.emit(kind, name)
 
     def set_room_primitives(self, primitives) -> None:
         """Populate editable primitive transform choices from the controller."""

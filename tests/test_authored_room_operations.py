@@ -226,6 +226,37 @@ def test_t2671_controller_lists_composition_primitives_for_builder_tab() -> None
     assert ramp.scale == (1.0, 1.0, 1.0)
 
 
+def test_t2672_controller_adds_composition_primitive_for_builder_tab() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="gradd")
+
+    result = controller.add_authored_room_primitive(
+        primitive_kind="cube",
+        primitive_name="gradd_room01_crate",
+        translation=(1.0, 1.5, 0.0),
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    primitive_payload = payload["rooms"][0]["primitive"]
+    cube_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "gradd_room01_crate")
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert cube_payload["type"] == "cube"
+    assert cube_payload["transform"]["translation"] == [1.0, 1.5, 0.0]
+    assert controller.project.dirty is True
+    assert not build.blocking_issues
+    assert ("gradd_room01", "mdl") in build.resources
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (
@@ -289,3 +320,36 @@ def test_t2671_builder_tab_exposes_composition_primitive_transform_controls() ->
     assert "self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)" in window_source
     assert "self.controller.set_authored_room_primitive_transform" in window_source
     assert "self.builder_tab.set_room_primitives(authored_room_primitives)" in window_source
+
+
+def test_t2672_builder_tab_exposes_add_composition_primitive_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "roomPrimitiveAddRequested" in source
+    assert "mapStudioCompositionPrimitiveKindComboBox" in source
+    assert "mapStudioAddCompositionPrimitiveButton" in source
+    assert "def set_composition_primitive_kinds" in source
+    assert "self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())" in window_source
+    assert "self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)" in window_source
+    assert "self.controller.add_authored_room_primitive" in window_source

@@ -259,6 +259,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab = BuilderTab()
         self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
         self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
+        self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
         self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
@@ -362,6 +363,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
+        self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
@@ -614,6 +616,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Applied room operation {operation}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def add_authored_room_primitive(self, primitive_kind: str, primitive_name: str) -> None:
+        try:
+            result = self.controller.add_authored_room_primitive(
+                primitive_kind=primitive_kind,
+                primitive_name=primitive_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Room Primitive", str(exc))
+            return
+        readiness = result.readiness
+        label = primitive_name or primitive_kind
+        message = f"Added room primitive {label}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
