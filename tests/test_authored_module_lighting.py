@@ -96,6 +96,26 @@ def test_t2693_controller_adds_room_light_and_clears_runtime_state() -> None:
     assert result.readiness.metadata["lighting_count"] == 1
 
 
+def test_t2694_controller_lists_and_moves_authored_room_lights() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grlight")
+    controller.add_authored_room_light(name="selectable_key", position=(0.0, 0.0, 2.25))
+
+    row = controller.authored_room_lights()[0]
+    result = controller.set_authored_room_light_transform(row.light_id, position=(1.5, -0.5, 2.75))
+    moved = controller.authored_room_lights()[0]
+
+    assert row.light_id == "authored_light:selectable_key"
+    assert moved.position == (1.5, -0.5, 2.75)
+    assert result.readiness is not None
+    assert result.readiness.metadata["room_lights"][0]["position"] == [1.5, -0.5, 2.75]
+
+
 def test_t2693_export_manifest_records_room_lighting_intent(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -156,3 +176,58 @@ def test_t2693_builder_tab_exposes_room_light_controls() -> None:
     assert "self.controller.add_authored_room_light" in window_source
     assert "lighting_count" in readiness_source
     assert "room light(s)" in readiness_source
+
+
+def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    outliner_source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "module_editor_outliner.py"
+    ).read_text(encoding="utf-8")
+    properties_source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "module_editor_properties.py"
+    ).read_text(encoding="utf-8")
+    viewport_panel_source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "module_editor_viewport_panel.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Authored Room Lights" in outliner_source
+    assert "authored_room_light" in outliner_source
+    assert "Authored Room Light" in properties_source
+    assert "_authored_room_lights" in properties_source
+    assert "Authored Room Light" in viewport_panel_source
+    assert "authored_room_lights = self.controller.authored_room_lights()" in window_source
+    assert "self.controller.set_authored_room_light_transform(" in window_source

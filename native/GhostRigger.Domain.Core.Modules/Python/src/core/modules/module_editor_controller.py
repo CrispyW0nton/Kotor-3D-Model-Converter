@@ -32,7 +32,12 @@ from .authored_gameplay_marker_geometry import (
     authored_gameplay_marker_geometry_for_project,
 )
 from .authored_gameplay_preview import authored_gameplay_preview_markers
-from .authored_module_lighting import add_authored_room_light as add_authored_room_light_to_project
+from .authored_module_lighting import (
+    add_authored_room_light as add_authored_room_light_to_project,
+    authored_room_light_rows,
+    parse_authored_room_light_id,
+    update_authored_room_light_transform,
+)
 from .authored_module_placements import (
     SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
     add_authored_gameplay_placement,
@@ -196,6 +201,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_gameplay_placement_rows(authored)
+
+    def authored_room_lights(self):
+        """Return selectable authored room lights for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_light_rows(authored)
 
     def authored_gameplay_preview_markers(self):
         """Return UI-ready preview markers for authored gameplay placements."""
@@ -701,6 +720,29 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio {update.kind} placement {update.tag} to {update.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_light_transform(self, light_id: str, *, position: Any):
+        """Move one authored room light by virtual id."""
+
+        parse_authored_room_light_id(light_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_room_light_transform(authored, light_id, position=position)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Moved Map Studio room light {update.light.name} to {update.light.position}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

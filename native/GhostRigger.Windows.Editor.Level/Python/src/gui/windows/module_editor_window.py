@@ -1044,6 +1044,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._handle_tab_action(mapping.get(action, action))
 
     def _set_transform(self, item_id: str, transform: LevelTransform) -> None:
+        if item_id.startswith("authored_light:"):
+            try:
+                self.controller.set_authored_room_light_transform(
+                    item_id,
+                    position=transform.position,
+                )
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Move Authored Room Light", str(exc))
+                return
+            self._refresh_all()
+            return
         if item_id.startswith("authored:"):
             try:
                 self.controller.set_authored_gameplay_placement_transform(
@@ -1117,6 +1128,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
         authored_placements = self.controller.authored_gameplay_placements()
+        authored_room_lights = self.controller.authored_room_lights()
         authored_markers = self.controller.authored_gameplay_preview_markers()
         authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
@@ -1124,11 +1136,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         self.builder_tab.set_room_primitives(authored_room_primitives)
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
-        self.properties.set_project(self.project, authored_placements)
-        self.outliner.set_project(self.project, authored_placements)
+        self.properties.set_project(self.project, authored_placements, authored_room_lights)
+        self.outliner.set_project(self.project, authored_placements, authored_room_lights)
         self.viewport_panel.set_project(
             self.project,
             authored_placements,
+            authored_room_lights,
             authored_markers,
             authored_marker_geometry,
             authored_room_outline_geometry,

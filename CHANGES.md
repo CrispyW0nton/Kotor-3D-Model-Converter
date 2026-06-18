@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Surfaces Authored Room Lights In Editor Rows
+
+Owner: LordVaderCW
+Task: T2694
+Subsystem: Map Studio / authored room lights / outliner / properties / scene table
+
+- Added stable virtual IDs and UI rows for authored room lights so they can be selected in the Module Editor.
+- Added room-light position editing through the existing Module Editor transform path.
+- Displayed authored room lights in the outliner, properties panel, and scene table while keeping them separate from gameplay GIT placements.
+- Mirrored the selectable-light support into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_lighting.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_outliner.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_properties.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_lighting.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_outliner.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_properties.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_authored_module_lighting.py`
+- `python -m pytest tests\test_authored_module_lighting.py -q --basetemp .pytest_tmp_map_studio_room_light_rows`
+
 ### [2026-06-18] Map Studio Adds Authored Room Lighting Intent
 
 Owner: LordVaderCW

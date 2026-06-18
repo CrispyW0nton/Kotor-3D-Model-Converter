@@ -85,6 +85,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self,
         project: KMapProject,
         authored_gameplay_placements=(),
+        authored_room_lights=(),
         authored_gameplay_markers=(),
         authored_gameplay_marker_geometry=None,
         authored_room_outline_geometry=None,
@@ -123,6 +124,19 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     True,
                     marker=marker_label,
                     facing=f"{bearing:.2f} rad",
+                )
+            for light in authored_room_lights or ():
+                light_id = str(getattr(light, "light_id", "") or "")
+                label = str(getattr(light, "name", "") or light_id)
+                marker_label = str(getattr(light, "light_type", "point") or "point")
+                self._add_row(
+                    "Authored Room Light",
+                    label,
+                    light_id,
+                    getattr(light, "position", (0.0, 0.0, 0.0)),
+                    True,
+                    marker=marker_label,
+                    facing=f"R {float(getattr(light, 'radius', 0.0) or 0.0):.2f}",
                 )
         finally:
             self._table_updating = False
