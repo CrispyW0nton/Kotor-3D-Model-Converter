@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.core.level import KMapProject
+from src.core.level import KMapProject, LevelTransform
 from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
 
@@ -56,6 +56,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.scene_table.setMinimumHeight(58)
         self.scene_table.setMaximumHeight(118)
         self.scene_table.itemSelectionChanged.connect(self._table_selection)
+        self.scene_table.itemChanged.connect(self._table_item_changed)
         self.splitter.addWidget(self.viewport)
         self.splitter.addWidget(self.scene_table)
         self.splitter.setStretchFactor(0, 1)
@@ -65,6 +66,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
+        self._table_updating = False
 
     def set_project(
         self,
@@ -73,38 +75,42 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         authored_gameplay_markers=(),
         authored_gameplay_marker_geometry=None,
     ) -> None:
-        self.scene_table.setRowCount(0)
-        self._row_ids.clear()
-        self._placement_marker_geometry = authored_gameplay_marker_geometry
-        self._placement_markers = {
-            str(getattr(marker, "placement_id", "") or ""): marker
-            for marker in authored_gameplay_markers or ()
-            if str(getattr(marker, "placement_id", "") or "")
-        }
-        for module in project.modules:
-            pos = module.transform.position
-            self._add_row("Module", module.module_name, module.module_id, pos, module.visible)
-        for room in project.rooms:
-            pos = room.transform.position
-            self._add_row("Room", room.name, room.room_id, pos, room.visible)
-        for blueprint in project.blueprints:
-            self._add_row("Blueprint", blueprint.name, blueprint.blueprint_id, blueprint.position, True)
-        for placement in authored_gameplay_placements or ():
-            label = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or getattr(placement, "placement_id", ""))
-            kind = f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
-            placement_id = str(getattr(placement, "placement_id", ""))
-            marker = self._placement_markers.get(placement_id)
-            marker_label = str(getattr(marker, "shape", "") or "")
-            bearing = float(getattr(marker, "bearing", getattr(placement, "bearing", 0.0)) or 0.0)
-            self._add_row(
-                kind,
-                label,
-                placement_id,
-                getattr(placement, "position", (0.0, 0.0, 0.0)),
-                True,
-                marker=marker_label,
-                facing=f"{bearing:.2f} rad",
-            )
+        self._table_updating = True
+        try:
+            self.scene_table.setRowCount(0)
+            self._row_ids.clear()
+            self._placement_marker_geometry = authored_gameplay_marker_geometry
+            self._placement_markers = {
+                str(getattr(marker, "placement_id", "") or ""): marker
+                for marker in authored_gameplay_markers or ()
+                if str(getattr(marker, "placement_id", "") or "")
+            }
+            for module in project.modules:
+                pos = module.transform.position
+                self._add_row("Module", module.module_name, module.module_id, pos, module.visible)
+            for room in project.rooms:
+                pos = room.transform.position
+                self._add_row("Room", room.name, room.room_id, pos, room.visible)
+            for blueprint in project.blueprints:
+                self._add_row("Blueprint", blueprint.name, blueprint.blueprint_id, blueprint.position, True)
+            for placement in authored_gameplay_placements or ():
+                label = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or getattr(placement, "placement_id", ""))
+                kind = f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
+                placement_id = str(getattr(placement, "placement_id", ""))
+                marker = self._placement_markers.get(placement_id)
+                marker_label = str(getattr(marker, "shape", "") or "")
+                bearing = float(getattr(marker, "bearing", getattr(placement, "bearing", 0.0)) or 0.0)
+                self._add_row(
+                    kind,
+                    label,
+                    placement_id,
+                    getattr(placement, "position", (0.0, 0.0, 0.0)),
+                    True,
+                    marker=marker_label,
+                    facing=f"{bearing:.2f} rad",
+                )
+        finally:
+            self._table_updating = False
         self._update_marker_summary(authored_gameplay_markers, authored_gameplay_marker_geometry)
         self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)
 
@@ -206,9 +212,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             facing,
             "yes" if visible else "no",
         ]
+        editable_authored_columns = {2, 3, 4, 6}
+        authored = str(item_id).startswith("authored:")
         for column, value in enumerate(values):
             item = QtWidgets.QTableWidgetItem(value)
             item.setData(QtCore.Qt.UserRole, item_id)
+            flags = item.flags()
+            if authored and column in editable_authored_columns:
+                item.setFlags(flags | QtCore.Qt.ItemIsEditable)
+                item.setToolTip("Edit authored gameplay placement position or bearing.")
+            else:
+                item.setFlags(flags & ~QtCore.Qt.ItemIsEditable)
             self.scene_table.setItem(row, column, item)
         self._row_ids.append(item_id)
 
@@ -254,6 +268,36 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         row = rows[0].row()
         if 0 <= row < len(self._row_ids):
             self.itemSelected.emit(self._row_ids[row])
+
+    def _table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
+        if self._table_updating or item is None:
+            return
+        row = item.row()
+        column = item.column()
+        if column not in {2, 3, 4, 6} or row < 0 or row >= len(self._row_ids):
+            return
+        item_id = self._row_ids[row]
+        if not str(item_id).startswith("authored:"):
+            return
+        try:
+            position = (
+                self._table_float(row, 2),
+                self._table_float(row, 3),
+                self._table_float(row, 4),
+            )
+            bearing = self._table_float(row, 6)
+        except ValueError:
+            return
+        self.transformEdited.emit(
+            item_id,
+            LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
+        )
+
+    def _table_float(self, row: int, column: int) -> float:
+        item = self.scene_table.item(row, column)
+        text = item.text() if item is not None else ""
+        text = text.strip().lower().replace("rad", "").strip()
+        return float(text)
 
     def apply_ghost_theme(self, theme) -> None:
         if theme is not None and getattr(theme, "is_native", lambda: False)():

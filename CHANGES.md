@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Allows Inline Authored Placement Transform Edits
+
+Owner: LordVaderCW
+Task: T2661
+Subsystem: Map Studio / Module Editor authored gameplay placement editing / viewport table / native Python payloads
+
+- Made authored gameplay placement X, Y, Z, and Facing cells editable in the Module Editor viewport table while keeping non-placement rows read-only.
+- Added table-edit parsing that emits `LevelTransform` updates through the panel's existing `transformEdited` signal.
+- Wired viewport table transform edits into the Module Editor's existing authored-placement controller path, preserving stale export/proof invalidation and authored module readiness updates.
+- Mirrored the viewport panel editing changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_placement_table_editing.py tests\test_authored_gameplay_placement_selection.py`
+- `python -m pytest tests\test_map_studio_placement_table_editing.py tests\test_authored_gameplay_placement_selection.py -q --basetemp .pytest_tmp_map_studio_placement_table_editing`
+
 ### [2026-06-18] Map Studio Draws Authored Placement Marker Overlays
 
 Owner: LordVaderCW

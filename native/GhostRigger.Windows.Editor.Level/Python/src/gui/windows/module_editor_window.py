@@ -346,6 +346,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner.itemSelected.connect(self.select_item)
         self.outliner.actionRequested.connect(self._outliner_action)
         self.viewport_panel.itemSelected.connect(self.select_item)
+        self.viewport_panel.transformEdited.connect(self._set_transform)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.properties.transformChanged.connect(self._set_transform)
