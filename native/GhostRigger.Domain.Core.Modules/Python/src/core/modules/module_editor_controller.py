@@ -11,7 +11,12 @@ from src.core.scene.module_scene_import import resolve_module_room_placement
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
-from .authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+from .authored_module_export import (
+    AuthoredModuleExportRequest,
+    AuthoredModuleInstallPrepRequest,
+    export_authored_module_project,
+    prepare_authored_module_install,
+)
 from .authored_module_kmap_bridge import (
     authored_project_from_kmap_payload,
     build_kmap_authored_module_readiness,
@@ -159,6 +164,40 @@ class ModuleEditorController:
             payload = dict(payload)
             payload["runtime_resources"] = runtime_resources
             payload["game_tested"] = False
+            self.project.extra_sections["authored_module"] = payload
+            self.project.dirty = True
+        self.model.log(result.message)
+        return result
+
+    def stage_authored_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
+        """Stage the current authored KMAP module with a manual game-test checklist."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        output_path = Path(output_dir)
+        result = prepare_authored_module_install(
+            AuthoredModuleInstallPrepRequest(
+                project=authored,
+                output_dir=str(output_path),
+                dry_run=dry_run,
+                overwrite=overwrite,
+            )
+        )
+        export_result = result.export_result
+        if export_result is not None and export_result.resources:
+            runtime_resources = [f"{item.resref}.{item.restype}" for item in export_result.resources]
+            payload = dict(payload)
+            payload["runtime_resources"] = runtime_resources
+            payload["game_tested"] = False
+            payload["proof_manifest_path"] = result.proof_manifest_path
+            payload["checklist_path"] = result.checklist_path
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
         self.model.log(result.message)

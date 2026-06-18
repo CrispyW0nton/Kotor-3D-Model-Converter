@@ -9,6 +9,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
     exportRequested = QtCore.Signal(bool)
     devTestModuleRequested = QtCore.Signal(bool)
     authoredModuleRequested = QtCore.Signal(bool)
+    authoredModuleStageRequested = QtCore.Signal(bool)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,4 +40,9 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.authored_module_button.setToolTip("Compile the authored module stored in this KMAP and package it as an install-safe .mod.")
         self.authored_module_button.clicked.connect(lambda: self.authoredModuleRequested.emit(self.dry_run.isChecked()))
         root.addWidget(self.authored_module_button)
+        self.authored_stage_button = QtWidgets.QPushButton("Stage Authored Module for Game Test")
+        self.authored_stage_button.setObjectName("mapStudioStageAuthoredModuleButton")
+        self.authored_stage_button.setToolTip("Package the authored module and write a checklist/proof manifest for an in-game warp test.")
+        self.authored_stage_button.clicked.connect(lambda: self.authoredModuleStageRequested.emit(self.dry_run.isChecked()))
+        root.addWidget(self.authored_stage_button)
         root.addStretch(1)

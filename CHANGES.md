@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Stages Authored Modules for Game Proof
+
+Owner: LordVaderCW
+Task: T2644
+Subsystem: Map Studio / authored module install prep / proof manifest / Level Editor export UI / native Python payloads
+
+- Added generic authored-module install prep that packages the current KMAP-authored module, optionally copies it into a KOTOR `Modules` folder, writes a manual game-test checklist, and writes a proof manifest for the `warp <module>` validation loop.
+- Added authored-module proof recording so in-game evidence can update the `map_studio_authored_module` pack manifest from export-candidate to game-smoke-tested only after explicit acceptance checks are supplied.
+- Added `ModuleEditorController.stage_authored_module()` and a Level Editor Export tab action labeled `Stage Authored Module for Game Test`.
+- Preserved the existing hardcoded `grdev01` smoke-module staging path while making the same proof loop available to any KMAP-authored module payload.
+- Mirrored the core and panel changes across native Python payloads and refreshed payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_export.py`
+- `python -m pytest tests\test_authored_module_export.py tests\test_authored_module_kmap_bridge.py tests\test_map_studio_dev_test_staging.py -q --basetemp .pytest_tmp_map_studio_authored_install_smoke`
+
 ### [2026-06-18] Map Studio Exports Authored KMAP Modules
 
 Owner: LordVaderCW

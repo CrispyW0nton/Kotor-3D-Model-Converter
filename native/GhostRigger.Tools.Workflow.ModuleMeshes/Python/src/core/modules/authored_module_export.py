@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ from .authored_room_materials import compile_authored_room_material_preflight
 from .custom_module_packager import CustomModulePackRequest, CustomModulePackResult, PackagedModuleResource, package_custom_module
 from .dev_module_smoke import (
     DevModulePackageVerification,
+    discover_kotor_modules_dir,
     verify_dev_test_module_package,
 )
 from .module_format import LYTLayout, VISData, WOKData
@@ -92,6 +94,68 @@ class AuthoredModuleExportResult:
     blocking_issues: list[str] = field(default_factory=list)
     message: str = ""
     code: str = "not_run"
+
+
+@dataclass(frozen=True)
+class AuthoredModuleInstallPrepRequest:
+    """Options for staging an authored module for manual in-game proof."""
+
+    project: AuthoredModuleProject
+    output_dir: str = ""
+    game_modules_dir: str = ""
+    game_root_dir: str = ""
+    settings_path: str = ""
+    auto_detect_game_modules_dir: bool = False
+    overwrite: bool = False
+    dry_run: bool = False
+    export_request: AuthoredModuleExportRequest | None = None
+
+
+@dataclass
+class AuthoredModuleInstallPrepResult:
+    """Safe install-prep result for a manual ``warp <module>`` proof."""
+
+    ok: bool = False
+    export_result: AuthoredModuleExportResult | None = None
+    installed_module_path: str = ""
+    backup_module_path: str = ""
+    resolved_modules_dir: str = ""
+    checklist_path: str = ""
+    proof_manifest_path: str = ""
+    warnings: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    message: str = ""
+    code: str = "not_prepared"
+
+
+@dataclass(frozen=True)
+class AuthoredModuleGameProofRequest:
+    """Evidence supplied after a real authored-module in-game smoke test."""
+
+    proof_manifest_path: str
+    evidence_path: str
+    tester: str = ""
+    notes: str = ""
+    module_loads_in_game: bool = False
+    player_spawns_on_floor: bool = False
+    test_placeable_visible: bool = False
+    player_can_walk_on_floor: bool = False
+    allow_missing_evidence: bool = False
+
+
+@dataclass
+class AuthoredModuleGameProofResult:
+    """Result of recording in-game proof for an authored Map Studio module."""
+
+    ok: bool = False
+    proof_manifest_path: str = ""
+    pack_manifest_path: str = ""
+    evidence_path: str = ""
+    missing_checks: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    blocking_issues: list[str] = field(default_factory=list)
+    message: str = ""
+    code: str = "not_recorded"
 
 
 @dataclass(frozen=True)
@@ -490,11 +554,361 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
     )
 
 
+def _next_install_backup_path(path: Path) -> Path:
+    candidate = path.with_suffix(path.suffix + ".bak")
+    if not candidate.exists():
+        return candidate
+    for index in range(1, 1000):
+        candidate = path.with_suffix(path.suffix + f".bak{index}")
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"Could not find an available backup path for {path}.")
+
+
+def _verification_to_manifest(verification: DevModulePackageVerification | None) -> dict[str, Any]:
+    if verification is None:
+        return {"ok": False, "code": "not_verified"}
+    return {
+        "ok": verification.ok,
+        "code": verification.code,
+        "message": verification.message,
+        "parsed_gff": list(verification.parsed_gff),
+        "parsed_wok": list(verification.parsed_wok),
+        "model_pairs": list(verification.model_pairs),
+        "path_point_count": verification.path_point_count,
+        "path_connection_count": verification.path_connection_count,
+        "resources": [
+            {
+                "resref": resource.resref,
+                "restype": resource.restype,
+                "size": resource.size,
+                "offset": resource.offset,
+            }
+            for resource in verification.resources
+        ],
+        "warnings": list(verification.warnings),
+        "blocking_issues": list(verification.blocking_issues),
+    }
+
+
+def _authored_game_test_steps(module_root: str) -> list[str]:
+    return [
+        f"Install/copy `{module_root}.mod` into the selected KOTOR `Modules` folder.",
+        "Launch the matching KOTOR game.",
+        f"Open the console and run `warp {module_root}`.",
+        "Confirm the module loads without crashing or falling back to another area.",
+        "Confirm the player appears on the generated floor, not in the void.",
+        "Confirm the authored test placeable appears near the expected location when one is present.",
+        "Walk across the generated floor and confirm movement is not blocked unexpectedly.",
+        "Capture a screenshot or short clip as proof.",
+    ]
+
+
+def _authored_acceptance_checks() -> list[str]:
+    return [
+        "module_loads_in_game",
+        "player_spawns_on_floor",
+        "test_placeable_visible",
+        "player_can_walk_on_floor",
+        "screenshot_or_video_captured",
+    ]
+
+
+def _write_authored_install_proof_files(
+    *,
+    output_root: Path,
+    export_result: AuthoredModuleExportResult,
+    game: str,
+    install_path: str,
+    backup_path: str,
+    installed: bool,
+    dry_run: bool,
+    warnings: list[str],
+    blocking: list[str],
+) -> tuple[str, str]:
+    output_root.mkdir(parents=True, exist_ok=True)
+    module_root = export_result.module_root or "authored"
+    checklist_path = output_root / f"{module_root}_authored_module_game_checklist.md"
+    proof_manifest_path = output_root / f"{module_root}_authored_module_game_manifest.json"
+    steps = _authored_game_test_steps(module_root)
+    checklist_lines = [
+        f"# {module_root} Authored Module In-Game Test",
+        "",
+        "This checklist is the manual proof gate for authored Map Studio modules. The module is not game-tested until these boxes are checked from an actual KOTOR run.",
+        "",
+        f"- Package: `{export_result.module_path}`",
+        f"- Install target: `{install_path or '(not installed)'}`",
+        f"- Previous module backup: `{backup_path or '(none)'}`",
+        f"- Warp command: `warp {module_root}`",
+        "",
+        "## Steps",
+        "",
+    ]
+    checklist_lines.extend(f"- [ ] {step}" for step in steps)
+    checklist_lines.extend(
+        [
+            "",
+            "## Evidence",
+            "",
+            "- Screenshot/video path:",
+            "- Tester:",
+            "- Game/version:",
+            "- Result:",
+            "",
+        ]
+    )
+    checklist_path.write_text("\n".join(checklist_lines), encoding="utf-8")
+    proof_manifest = {
+        "task": "T2644",
+        "module_root": module_root,
+        "game": str(game or "K1").upper(),
+        "package": {
+            "module_path": export_result.module_path,
+            "pack_manifest_path": export_result.manifest_path,
+            "verification": _verification_to_manifest(export_result.package_verification),
+        },
+        "install": {
+            "installed": installed,
+            "dry_run": dry_run,
+            "installed_module_path": install_path,
+            "backup_module_path": backup_path,
+        },
+        "manual_proof_required": True,
+        "game_tested": False,
+        "warp_command": f"warp {module_root}",
+        "acceptance_checks": _authored_acceptance_checks(),
+        "steps": steps,
+        "warnings": warnings,
+        "blocking_issues": blocking,
+    }
+    proof_manifest_path.write_text(json.dumps(proof_manifest, indent=2), encoding="utf-8")
+    return str(checklist_path), str(proof_manifest_path)
+
+
+def _install_prep_export_request(request: AuthoredModuleInstallPrepRequest) -> AuthoredModuleExportRequest:
+    if request.export_request is not None:
+        return AuthoredModuleExportRequest(
+            project=request.export_request.project,
+            output_dir=request.export_request.output_dir or request.output_dir,
+            include_reference_check=request.export_request.include_reference_check,
+            include_wok_check=request.export_request.include_wok_check,
+            include_game_template_check=request.export_request.include_game_template_check,
+            game_root_dir=request.export_request.game_root_dir,
+            strict=request.export_request.strict,
+            dry_run=False,
+            create_backups=request.export_request.create_backups,
+            write_loose_resources=request.export_request.write_loose_resources,
+        )
+    return AuthoredModuleExportRequest(
+        project=request.project,
+        output_dir=request.output_dir,
+        strict=True,
+        dry_run=False,
+    )
+
+
+def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -> AuthoredModuleInstallPrepResult:
+    """Safely stage an authored KMAP module for a manual in-game warp test."""
+
+    export_request = _install_prep_export_request(request)
+    export_result = export_authored_module_project(export_request)
+    output_root = Path(export_request.output_dir or request.output_dir or ".")
+    warnings = list(export_result.warnings)
+    blocking = list(export_result.blocking_issues)
+    installed = False
+    install_path = ""
+    backup_path = ""
+    modules_dir_text = request.game_modules_dir
+    if not modules_dir_text and request.auto_detect_game_modules_dir:
+        modules_dir_text = discover_kotor_modules_dir(
+            request.project.game,
+            game_root_dir=request.game_root_dir,
+            settings_path=request.settings_path,
+        )
+        if modules_dir_text:
+            warnings.append(f"Auto-detected KOTOR Modules folder: {modules_dir_text}")
+        else:
+            warnings.append("Could not auto-detect a KOTOR Modules folder; package is staged for manual install.")
+    if not export_result.ok:
+        blocking.append(export_result.message or "Authored module export failed.")
+    else:
+        if not modules_dir_text:
+            warnings.append("No KOTOR Modules folder was supplied; package is staged but not installed for game testing.")
+        else:
+            modules_dir = Path(modules_dir_text)
+            if not modules_dir.is_dir():
+                blocking.append(f"KOTOR Modules folder does not exist: {modules_dir}")
+            else:
+                destination = modules_dir / f"{export_result.module_root}.mod"
+                install_path = str(destination)
+                if destination.exists() and not request.overwrite:
+                    blocking.append(f"{destination} already exists. Re-run with overwrite=True to replace it.")
+                elif request.dry_run:
+                    warnings.append(f"Dry run: would copy {export_result.module_path} to {destination}.")
+                else:
+                    if destination.exists():
+                        backup = _next_install_backup_path(destination)
+                        shutil.copy2(destination, backup)
+                        backup_path = str(backup)
+                        warnings.append(f"Backed up existing {destination.name} to {backup}.")
+                    shutil.copy2(export_result.module_path, destination)
+                    installed = True
+
+    checklist_path, proof_manifest_path = _write_authored_install_proof_files(
+        output_root=output_root,
+        export_result=export_result,
+        game=request.project.game,
+        install_path=install_path,
+        backup_path=backup_path,
+        installed=installed,
+        dry_run=request.dry_run,
+        warnings=warnings,
+        blocking=blocking,
+    )
+    ok = export_result.ok and not blocking and (installed or request.dry_run or not request.game_modules_dir)
+    code = "installed" if installed else "staged_for_manual_install"
+    if request.dry_run and not blocking:
+        code = "dry_run"
+    if blocking:
+        code = "install_preflight_failed"
+    return AuthoredModuleInstallPrepResult(
+        ok=ok,
+        export_result=export_result,
+        installed_module_path=install_path if installed else "",
+        backup_module_path=backup_path,
+        resolved_modules_dir=modules_dir_text,
+        checklist_path=checklist_path,
+        proof_manifest_path=proof_manifest_path,
+        warnings=warnings,
+        blocking_issues=blocking,
+        message=(
+            f"Installed {export_result.module_root}.mod to {install_path}."
+            if installed
+            else "Authored module staged with manual in-game checklist."
+        ),
+        code=code,
+    )
+
+
+def _proof_request_checks(request: AuthoredModuleGameProofRequest) -> dict[str, bool]:
+    return {
+        "module_loads_in_game": bool(request.module_loads_in_game),
+        "player_spawns_on_floor": bool(request.player_spawns_on_floor),
+        "test_placeable_visible": bool(request.test_placeable_visible),
+        "player_can_walk_on_floor": bool(request.player_can_walk_on_floor),
+        "screenshot_or_video_captured": bool(request.evidence_path and (request.allow_missing_evidence or Path(request.evidence_path).is_file())),
+    }
+
+
+def _update_authored_pack_manifest_for_game_proof(
+    *,
+    pack_manifest_path: str,
+    accepted: bool,
+    proof_payload: dict[str, Any],
+) -> list[str]:
+    warnings: list[str] = []
+    if not pack_manifest_path:
+        warnings.append("No pack manifest path was available to update with authored module in-game proof.")
+        return warnings
+    manifest_path = Path(pack_manifest_path)
+    if not manifest_path.is_file():
+        warnings.append(f"Pack manifest was not found for authored module in-game proof update: {manifest_path}")
+        return warnings
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        warnings.append(f"Pack manifest could not be read for authored module in-game proof update: {exc}")
+        return warnings
+    authored = manifest.setdefault("map_studio_authored_module", {})
+    authored["game_tested"] = bool(accepted)
+    if accepted:
+        authored["capability_stage"] = "game_smoke_tested"
+    authored["in_game_proof"] = proof_payload
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return warnings
+
+
+def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -> AuthoredModuleGameProofResult:
+    """Record the manual in-game proof gate for an authored Map Studio module."""
+
+    proof_manifest_path = Path(request.proof_manifest_path)
+    if not proof_manifest_path.is_file():
+        return AuthoredModuleGameProofResult(
+            ok=False,
+            proof_manifest_path=str(proof_manifest_path),
+            evidence_path=request.evidence_path,
+            blocking_issues=[f"Proof manifest does not exist: {proof_manifest_path}"],
+            message="Could not record authored module in-game proof because the proof manifest is missing.",
+            code="proof_manifest_missing",
+        )
+    try:
+        proof = json.loads(proof_manifest_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return AuthoredModuleGameProofResult(
+            ok=False,
+            proof_manifest_path=str(proof_manifest_path),
+            evidence_path=request.evidence_path,
+            blocking_issues=[f"Proof manifest could not be read: {exc}"],
+            message="Could not record authored module in-game proof because the proof manifest is unreadable.",
+            code="proof_manifest_unreadable",
+        )
+
+    required = list(proof.get("acceptance_checks") or _authored_acceptance_checks())
+    checks = _proof_request_checks(request)
+    missing = [name for name in required if not checks.get(name, False)]
+    accepted = not missing
+    tested_at = datetime.now(timezone.utc).isoformat()
+    proof_payload = {
+        "tested_at": tested_at,
+        "tester": request.tester,
+        "evidence_path": request.evidence_path,
+        "notes": request.notes,
+        "checks": checks,
+        "accepted": accepted,
+        "missing_checks": missing,
+    }
+    proof["game_test"] = proof_payload
+    proof["manual_proof_required"] = not accepted
+    proof["game_tested"] = accepted
+    if accepted:
+        proof["completed_at"] = tested_at
+    proof_manifest_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
+
+    pack_manifest_path = str((proof.get("package") or {}).get("pack_manifest_path") or "")
+    warnings = _update_authored_pack_manifest_for_game_proof(
+        pack_manifest_path=pack_manifest_path,
+        accepted=accepted,
+        proof_payload=proof_payload,
+    )
+    blocking = [f"In-game acceptance check is incomplete: {name}" for name in missing]
+    return AuthoredModuleGameProofResult(
+        ok=accepted,
+        proof_manifest_path=str(proof_manifest_path),
+        pack_manifest_path=pack_manifest_path,
+        evidence_path=request.evidence_path,
+        missing_checks=missing,
+        warnings=warnings,
+        blocking_issues=blocking,
+        message=(
+            "Recorded complete in-game proof for authored Map Studio module."
+            if accepted
+            else "Recorded incomplete authored module in-game proof attempt; module remains unproven."
+        ),
+        code="game_proof_recorded" if accepted else "game_proof_incomplete",
+    )
+
+
 __all__ = [
     "AuthoredModuleBuild",
     "AuthoredModuleExportRequest",
     "AuthoredModuleExportResult",
+    "AuthoredModuleGameProofRequest",
+    "AuthoredModuleGameProofResult",
+    "AuthoredModuleInstallPrepRequest",
+    "AuthoredModuleInstallPrepResult",
     "AuthoredModuleResourceSummary",
     "build_authored_module",
     "export_authored_module_project",
+    "prepare_authored_module_install",
+    "record_authored_module_game_proof",
 ]

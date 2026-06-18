@@ -110,3 +110,142 @@ def test_t2643_export_panel_exposes_authored_module_action() -> None:
     assert panel_source == boundary_panel_source
     assert "self.export_panel.authoredModuleRequested.connect(self.export_authored_module)" in window_source
     assert "self.controller.export_authored_module(path, dry_run=dry_run)" in window_source
+
+
+def _dev_authored_project():
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, create_dev_test_authored_module_payload
+
+    payload = create_dev_test_authored_module_payload(module_root="grdev01", game="K1")
+    return authored_project_from_kmap_payload(payload, fallback_name="grdev01", fallback_game="K1")
+
+
+def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install
+
+    result = prepare_authored_module_install(AuthoredModuleInstallPrepRequest(project=_dev_authored_project(), output_dir=str(tmp_path)))
+
+    assert result.ok is True
+    assert result.code == "staged_for_manual_install"
+    assert result.installed_module_path == ""
+    assert Path(result.checklist_path).is_file()
+    assert Path(result.proof_manifest_path).is_file()
+    assert "No KOTOR Modules folder was supplied" in "\n".join(result.warnings)
+    checklist = Path(result.checklist_path).read_text(encoding="utf-8")
+    assert "warp grdev01" in checklist
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["task"] == "T2644"
+    assert proof["manual_proof_required"] is True
+    assert proof["game_tested"] is False
+    assert proof["install"]["installed"] is False
+    assert proof["package"]["verification"]["ok"] is True
+
+
+def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install
+
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    installed = modules_dir / "grdev01.mod"
+    installed.write_bytes(b"existing")
+
+    result = prepare_authored_module_install(
+        AuthoredModuleInstallPrepRequest(
+            project=_dev_authored_project(),
+            output_dir=str(tmp_path / "out"),
+            game_modules_dir=str(modules_dir),
+            overwrite=True,
+        )
+    )
+
+    backup = modules_dir / "grdev01.mod.bak"
+    assert result.ok is True
+    assert result.code == "installed"
+    assert result.installed_module_path == str(installed)
+    assert result.backup_module_path == str(backup)
+    assert backup.read_bytes() == b"existing"
+    assert installed.read_bytes() != b"existing"
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["install"]["installed_module_path"] == str(installed)
+    assert proof["install"]["backup_module_path"] == str(backup)
+
+
+def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleGameProofRequest,
+        AuthoredModuleInstallPrepRequest,
+        prepare_authored_module_install,
+        record_authored_module_game_proof,
+    )
+
+    prep = prepare_authored_module_install(AuthoredModuleInstallPrepRequest(project=_dev_authored_project(), output_dir=str(tmp_path)))
+    evidence = tmp_path / "grdev01_authored_warp_proof.png"
+    evidence.write_bytes(b"fake screenshot bytes")
+
+    result = record_authored_module_game_proof(
+        AuthoredModuleGameProofRequest(
+            proof_manifest_path=prep.proof_manifest_path,
+            evidence_path=str(evidence),
+            tester="pytest",
+            module_loads_in_game=True,
+            player_spawns_on_floor=True,
+            test_placeable_visible=True,
+            player_can_walk_on_floor=True,
+        )
+    )
+
+    assert result.ok is True
+    assert result.code == "game_proof_recorded"
+    proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["manual_proof_required"] is False
+    assert proof["game_tested"] is True
+    assert proof["game_test"]["accepted"] is True
+
+    pack_manifest = json.loads(Path(result.pack_manifest_path).read_text(encoding="utf-8"))
+    authored = pack_manifest["map_studio_authored_module"]
+    assert authored["game_tested"] is True
+    assert authored["capability_stage"] == "game_smoke_tested"
+    assert authored["in_game_proof"]["checks"]["player_can_walk_on_floor"] is True
+
+
+def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+
+    result = controller.stage_authored_module(tmp_path)
+
+    assert result.ok is True
+    assert Path(result.checklist_path).is_file()
+    assert Path(result.proof_manifest_path).is_file()
+    payload = controller.project.extra_sections["authored_module"]
+    assert payload["proof_manifest_path"] == result.proof_manifest_path
+    assert "grdev01_room01.mdl" in payload["runtime_resources"]
+
+
+def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
+    panel_source = Path(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
+    ).read_text(encoding="utf-8")
+    boundary_panel_source = Path(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+    ).read_text(encoding="utf-8")
+    window_source = Path(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "authoredModuleStageRequested" in panel_source
+    assert "mapStudioStageAuthoredModuleButton" in panel_source
+    assert "Stage Authored Module for Game Test" in panel_source
+    assert panel_source == boundary_panel_source
+    assert "self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)" in window_source
+    assert "self.controller.stage_authored_module(path, dry_run=dry_run)" in window_source

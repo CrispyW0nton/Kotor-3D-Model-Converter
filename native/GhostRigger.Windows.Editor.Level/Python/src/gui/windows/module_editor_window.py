@@ -249,6 +249,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.exportRequested.connect(self.export_fbx)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
         self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
+        self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
@@ -405,6 +406,35 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for issue in result.blocking_issues:
             self._log(f"Blocking: {issue}")
         self._refresh_all("Authored module export state updated.")
+
+    def stage_authored_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module for game test", self._last_output_dir or "")
+        if not path:
+            return
+        try:
+            result = self.controller.stage_authored_module(path, dry_run=dry_run)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Stage Authored Module", str(exc))
+            return
+        self._last_output_dir = path
+        self._log(result.message)
+        export_result = result.export_result
+        if export_result is not None:
+            if export_result.module_path:
+                self._log(f"Package: {export_result.module_path}")
+            if export_result.manifest_path:
+                self._log(f"Manifest: {export_result.manifest_path}")
+        if result.installed_module_path:
+            self._log(f"Installed module: {result.installed_module_path}")
+        if result.checklist_path:
+            self._log(f"Game-test checklist: {result.checklist_path}")
+        if result.proof_manifest_path:
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+        self._refresh_all("Authored module game-test staging updated.")
 
     def export_fbx(self, dry_run: bool = False) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export KMAP Scene", f"{self.project.name}.fbx", "FBX files (*.fbx)")
