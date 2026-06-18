@@ -11,6 +11,26 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Gameplay Placement Contract Expansion
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / gameplay object placement / native Python payloads
+
+- Expanded the headless `authored_module_objects` contract beyond placeables and waypoints to include authored creatures, doors, triggers, encounters, sounds, cameras, and stores.
+- Added GIT serialization support for creature, door, and trigger placements using the existing GhostRigger GIT readback field contract.
+- Added placement validation for missing template resrefs and invalid positions, and routed that validation into authored module project validation.
+- Updated smoke manifest placement reporting with object-category counts and empty creature/door/trigger lists so future object placement work has stable manifest slots.
+- Extended template-resolution preflight coverage for authored creature, door, and trigger instances when present.
+- Mirrored the placement contract changes into the ModuleMeshes workflow payload and updated native payload manifests.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_module_objects.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_module_objects.py -q --basetemp .pytest_tmp_authored_module_objects`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Walkmesh Surface Authoring Policy
 
 Owner: LordVaderCW

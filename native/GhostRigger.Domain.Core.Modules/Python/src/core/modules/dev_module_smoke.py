@@ -532,6 +532,33 @@ def _validate_gameplay_templates(
     except Exception as exc:
         return [], [f"KOTOR template resolution could not initialize for {game_root}: {exc}"]
     checks: list[DevModuleTemplateReferenceCheck] = []
+    for creature in placement.creatures:
+        checks.append(
+            _template_reference_check(
+                installation=installation,
+                owner_type="creature",
+                resref=creature.template_resref,
+                restype_name="utc",
+            )
+        )
+    for door in placement.doors:
+        checks.append(
+            _template_reference_check(
+                installation=installation,
+                owner_type="door",
+                resref=door.template_resref,
+                restype_name="utd",
+            )
+        )
+    for trigger in placement.triggers:
+        checks.append(
+            _template_reference_check(
+                installation=installation,
+                owner_type="trigger",
+                resref=trigger.template_resref,
+                restype_name="utt",
+            )
+        )
     for placeable in placement.placeables:
         checks.append(
             _template_reference_check(
@@ -899,6 +926,50 @@ def _augment_manifest(
             "source": "src.core.modules.authored_module_objects",
             "entry_area": authored.module.placements.entry_point.area_resref if authored.module.placements else "",
             "player_start": list(authored.module.placements.entry_point.position) if authored.module.placements else [],
+            "counts": {
+                "creatures": len(authored.module.placements.creatures) if authored.module.placements else 0,
+                "doors": len(authored.module.placements.doors) if authored.module.placements else 0,
+                "triggers": len(authored.module.placements.triggers) if authored.module.placements else 0,
+                "encounters": len(authored.module.placements.encounters) if authored.module.placements else 0,
+                "sounds": len(authored.module.placements.sounds) if authored.module.placements else 0,
+                "cameras": len(authored.module.placements.cameras) if authored.module.placements else 0,
+                "stores": len(authored.module.placements.stores) if authored.module.placements else 0,
+                "placeables": len(authored.module.placements.placeables) if authored.module.placements else 0,
+                "waypoints": len(authored.module.placements.waypoints) if authored.module.placements else 0,
+            },
+            "creatures": [
+                {
+                    "template_resref": item.template_resref,
+                    "tag": item.tag,
+                    "position": list(item.position),
+                    "bearing": item.bearing,
+                }
+                for item in (authored.module.placements.creatures if authored.module.placements else ())
+            ],
+            "doors": [
+                {
+                    "template_resref": item.template_resref,
+                    "tag": item.tag,
+                    "position": list(item.position),
+                    "bearing": item.bearing,
+                    "linked_to": item.linked_to,
+                    "linked_to_module": item.linked_to_module,
+                    "transition_destination": item.transition_destination,
+                }
+                for item in (authored.module.placements.doors if authored.module.placements else ())
+            ],
+            "triggers": [
+                {
+                    "template_resref": item.template_resref,
+                    "tag": item.tag,
+                    "position": list(item.position),
+                    "geometry": [list(point) for point in item.geometry],
+                    "linked_to": item.linked_to,
+                    "linked_to_module": item.linked_to_module,
+                    "transition_destination": item.transition_destination,
+                }
+                for item in (authored.module.placements.triggers if authored.module.placements else ())
+            ],
             "placeables": [
                 {
                     "template_resref": item.template_resref,

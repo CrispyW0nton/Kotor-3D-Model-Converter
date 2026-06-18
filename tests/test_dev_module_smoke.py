@@ -164,6 +164,20 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_geometry"]["derived_wok"] is True
     assert smoke["authored_placements"]["source"] == "src.core.modules.authored_module_objects"
     assert smoke["authored_placements"]["entry_area"] == "grdev01"
+    assert smoke["authored_placements"]["counts"] == {
+        "creatures": 0,
+        "doors": 0,
+        "triggers": 0,
+        "encounters": 0,
+        "sounds": 0,
+        "cameras": 0,
+        "stores": 0,
+        "placeables": 1,
+        "waypoints": 1,
+    }
+    assert smoke["authored_placements"]["creatures"] == []
+    assert smoke["authored_placements"]["doors"] == []
+    assert smoke["authored_placements"]["triggers"] == []
     assert smoke["authored_placements"]["placeables"][0]["template_resref"] == "plc_bench"
     assert smoke["authored_placements"]["waypoints"][0]["template_resref"] == "sw_startloc001"
     assert smoke["authored_placements"]["waypoints"][0]["tag"] == "start"

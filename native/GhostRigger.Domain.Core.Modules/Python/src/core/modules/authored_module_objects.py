@@ -35,6 +35,29 @@ class AuthoredPlaceableInstance:
 
 
 @dataclass(frozen=True)
+class AuthoredCreatureInstance:
+    """Authored UTC-backed creature instance for a GIT Creature List entry."""
+
+    template_resref: str
+    tag: str = ""
+    position: Vec3 = (0.0, 0.0, 0.0)
+    bearing: float = 0.0
+
+
+@dataclass(frozen=True)
+class AuthoredDoorInstance:
+    """Authored UTD-backed door instance for a GIT Door List entry."""
+
+    template_resref: str
+    tag: str = ""
+    position: Vec3 = (0.0, 0.0, 0.0)
+    bearing: float = 0.0
+    linked_to: str = ""
+    linked_to_module: str = ""
+    transition_destination: int = 0
+
+
+@dataclass(frozen=True)
 class AuthoredWaypointInstance:
     """Authored waypoint/start marker for a GIT WaypointList entry."""
 
@@ -46,13 +69,148 @@ class AuthoredWaypointInstance:
 
 
 @dataclass(frozen=True)
+class AuthoredTriggerInstance:
+    """Authored UTT-backed trigger instance for a GIT TriggerList entry."""
+
+    template_resref: str
+    tag: str = ""
+    position: Vec3 = (0.0, 0.0, 0.0)
+    geometry: tuple[Vec3, ...] = ()
+    linked_to: str = ""
+    linked_to_module: str = ""
+    transition_destination: int = 0
+
+
+@dataclass(frozen=True)
+class AuthoredEncounterInstance:
+    """Authored UTE-backed encounter intent.
+
+    Export of detailed encounter fields is intentionally conservative in this
+    slice; Map Studio can store/validate the intent before the full GIT writer
+    grows richer encounter semantics.
+    """
+
+    template_resref: str
+    tag: str = ""
+    position: Vec3 = (0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class AuthoredSoundInstance:
+    """Authored UTS-backed sound intent for future GIT SoundList export."""
+
+    template_resref: str
+    tag: str = ""
+    position: Vec3 = (0.0, 0.0, 0.0)
+
+
+@dataclass(frozen=True)
+class AuthoredCameraInstance:
+    """Authored module camera intent for future camera-list export."""
+
+    camera_id: str
+    position: Vec3 = (0.0, 0.0, 0.0)
+    bearing: float = 0.0
+
+
+@dataclass(frozen=True)
+class AuthoredStoreInstance:
+    """Authored UTM-backed store intent for future GIT StoreList export."""
+
+    template_resref: str
+    tag: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredGameplayPlacement:
     """Compiled gameplay placements for one authored module."""
 
     entry_point: ModuleEntryPoint
+    creatures: tuple[AuthoredCreatureInstance, ...] = ()
+    doors: tuple[AuthoredDoorInstance, ...] = ()
+    triggers: tuple[AuthoredTriggerInstance, ...] = ()
+    encounters: tuple[AuthoredEncounterInstance, ...] = ()
+    sounds: tuple[AuthoredSoundInstance, ...] = ()
+    cameras: tuple[AuthoredCameraInstance, ...] = ()
+    stores: tuple[AuthoredStoreInstance, ...] = ()
     placeables: tuple[AuthoredPlaceableInstance, ...] = ()
     waypoints: tuple[AuthoredWaypointInstance, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class AuthoredGameplayPlacementValidation:
+    """Validation summary for authored GIT/IFO placement intent."""
+
+    ok: bool
+    warnings: tuple[str, ...] = ()
+    blocking_issues: tuple[str, ...] = ()
+
+
+def normalise_resource_resref(value: Any) -> str:
+    """Return a KOTOR-style lowercase resref fragment for placed resources."""
+
+    text = str(value or "").strip().lower()
+    if "." in text:
+        text = text.rsplit(".", 1)[0]
+    return text[:16]
+
+
+def _position_ok(position: Vec3) -> bool:
+    return len(position) == 3 and all(math.isfinite(float(value)) for value in position)
+
+
+def _validate_template(kind: str, template_resref: str, blocking: list[str]) -> None:
+    if not normalise_resource_resref(template_resref):
+        blocking.append(f"{kind} placement requires a template resref.")
+
+
+def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -> AuthoredGameplayPlacementValidation:
+    """Validate authored placement intent before compiling GIT/IFO bytes."""
+
+    warnings: list[str] = []
+    blocking: list[str] = []
+    if not normalise_resource_resref(placement.entry_point.area_resref):
+        blocking.append("Module entry point requires an area resref.")
+    if not _position_ok(placement.entry_point.position):
+        blocking.append("Module entry point position must contain finite XYZ values.")
+    for creature in placement.creatures:
+        _validate_template("Creature", creature.template_resref, blocking)
+        if not _position_ok(creature.position):
+            blocking.append(f"Creature {creature.template_resref or '(missing)'} has an invalid position.")
+    for door in placement.doors:
+        _validate_template("Door", door.template_resref, blocking)
+        if not _position_ok(door.position):
+            blocking.append(f"Door {door.template_resref or '(missing)'} has an invalid position.")
+    for trigger in placement.triggers:
+        _validate_template("Trigger", trigger.template_resref, blocking)
+        if not _position_ok(trigger.position):
+            blocking.append(f"Trigger {trigger.template_resref or '(missing)'} has an invalid position.")
+        if not trigger.geometry:
+            warnings.append(f"Trigger {trigger.template_resref or trigger.tag or '(unnamed)'} has no polygon geometry yet.")
+        for point in trigger.geometry:
+            if not _position_ok(point):
+                blocking.append(f"Trigger {trigger.template_resref or '(missing)'} has invalid polygon geometry.")
+                break
+    for placeable in placement.placeables:
+        _validate_template("Placeable", placeable.template_resref, blocking)
+        if not _position_ok(placeable.position):
+            blocking.append(f"Placeable {placeable.template_resref or '(missing)'} has an invalid position.")
+    for waypoint in placement.waypoints:
+        _validate_template("Waypoint", waypoint.template_resref, blocking)
+        if not _position_ok(waypoint.position):
+            blocking.append(f"Waypoint {waypoint.template_resref or '(missing)'} has an invalid position.")
+    for encounter in placement.encounters:
+        _validate_template("Encounter", encounter.template_resref, blocking)
+    for sound in placement.sounds:
+        _validate_template("Sound", sound.template_resref, blocking)
+    for store in placement.stores:
+        _validate_template("Store", store.template_resref, blocking)
+    return AuthoredGameplayPlacementValidation(
+        ok=not blocking,
+        warnings=tuple(warnings),
+        blocking_issues=tuple(blocking),
+    )
 
 
 def _empty_gff_list() -> Any:
@@ -87,18 +245,70 @@ def apply_entry_point_to_ifo(root: Any, entry: ModuleEntryPoint) -> None:
 
 def _add_placeable(list_value: Any, index: int, placeable: AuthoredPlaceableInstance) -> None:
     item = list_value.add(index)
-    item.set_resref("TemplateResRef", placeable.template_resref)
-    item.set_string("Tag", placeable.tag or placeable.template_resref)
+    resref = normalise_resource_resref(placeable.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", placeable.tag or resref)
     item.set_single("X", float(placeable.position[0]))
     item.set_single("Y", float(placeable.position[1]))
     item.set_single("Z", float(placeable.position[2]))
     item.set_single("Bearing", float(placeable.bearing))
 
 
+def _add_creature(list_value: Any, index: int, creature: AuthoredCreatureInstance) -> None:
+    item = list_value.add(index)
+    resref = normalise_resource_resref(creature.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", creature.tag or resref)
+    item.set_single("XPosition", float(creature.position[0]))
+    item.set_single("YPosition", float(creature.position[1]))
+    item.set_single("ZPosition", float(creature.position[2]))
+    item.set_single("XOrientation", float(creature.bearing))
+    item.set_single("Bearing", float(creature.bearing))
+
+
+def _add_door(list_value: Any, index: int, door: AuthoredDoorInstance) -> None:
+    item = list_value.add(index)
+    resref = normalise_resource_resref(door.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", door.tag or resref)
+    item.set_single("X", float(door.position[0]))
+    item.set_single("Y", float(door.position[1]))
+    item.set_single("Z", float(door.position[2]))
+    item.set_single("Bearing", float(door.bearing))
+    item.set_string("LinkedTo", door.linked_to)
+    item.set_string("LinkedToModule", door.linked_to_module)
+    item.set_int32("TransitionDestin", int(door.transition_destination))
+
+
+def _add_trigger_geometry(list_value: Any, points: tuple[Vec3, ...]) -> None:
+    for index, point in enumerate(points):
+        item = list_value.add(index)
+        item.set_single("PointX", float(point[0]))
+        item.set_single("PointY", float(point[1]))
+        item.set_single("PointZ", float(point[2]))
+
+
+def _add_trigger(list_value: Any, index: int, trigger: AuthoredTriggerInstance) -> None:
+    item = list_value.add(index)
+    resref = normalise_resource_resref(trigger.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", trigger.tag or resref)
+    item.set_single("XPosition", float(trigger.position[0]))
+    item.set_single("YPosition", float(trigger.position[1]))
+    item.set_single("ZPosition", float(trigger.position[2]))
+    item.set_string("LinkedTo", trigger.linked_to)
+    item.set_string("LinkedToModule", trigger.linked_to_module)
+    item.set_int32("TransitionDestin", int(trigger.transition_destination))
+    geometry = _empty_gff_list()
+    _add_trigger_geometry(geometry, trigger.geometry)
+    item.set_list("Geometry", geometry)
+
+
 def _add_waypoint(list_value: Any, index: int, waypoint: AuthoredWaypointInstance) -> None:
     item = list_value.add(index)
-    item.set_resref("TemplateResRef", waypoint.template_resref)
-    item.set_string("Tag", waypoint.tag or waypoint.template_resref)
+    resref = normalise_resource_resref(waypoint.template_resref)
+    item.set_resref("TemplateResRef", resref)
+    item.set_string("Tag", waypoint.tag or resref)
     item.set_string("LinkedTo", waypoint.linked_to)
     item.set_single("XPosition", float(waypoint.position[0]))
     item.set_single("YPosition", float(waypoint.position[1]))
@@ -110,17 +320,29 @@ def _add_waypoint(list_value: Any, index: int, waypoint: AuthoredWaypointInstanc
 def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
     """Compile authored gameplay placements into a GIT GFF."""
 
+    validation = validate_authored_gameplay_placement(placement)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
     gff = _new_gff("GIT")
     root = gff.root
     root.set_uint8("UseTemplates", 1)
-    for label in (
-        "Creature List",
-        "Door List",
-        "Encounter List",
-        "SoundList",
-        "StoreList",
-        "TriggerList",
-    ):
+
+    creatures = _empty_gff_list()
+    for index, creature in enumerate(placement.creatures):
+        _add_creature(creatures, index, creature)
+    root.set_list("Creature List", creatures)
+
+    doors = _empty_gff_list()
+    for index, door in enumerate(placement.doors):
+        _add_door(doors, index, door)
+    root.set_list("Door List", doors)
+
+    triggers = _empty_gff_list()
+    for index, trigger in enumerate(placement.triggers):
+        _add_trigger(triggers, index, trigger)
+    root.set_list("TriggerList", triggers)
+
+    for label in ("Encounter List", "SoundList", "StoreList"):
         root.set_list(label, _empty_gff_list())
 
     placeables = _empty_gff_list()
@@ -142,11 +364,21 @@ def build_git_bytes(placement: AuthoredGameplayPlacement) -> bytes:
 
 
 __all__ = [
+    "AuthoredCameraInstance",
+    "AuthoredCreatureInstance",
+    "AuthoredDoorInstance",
+    "AuthoredEncounterInstance",
     "AuthoredGameplayPlacement",
+    "AuthoredGameplayPlacementValidation",
     "AuthoredPlaceableInstance",
+    "AuthoredSoundInstance",
+    "AuthoredStoreInstance",
+    "AuthoredTriggerInstance",
     "AuthoredWaypointInstance",
     "ModuleEntryPoint",
     "apply_entry_point_to_ifo",
     "build_git_bytes",
     "build_git_gff",
+    "normalise_resource_resref",
+    "validate_authored_gameplay_placement",
 ]

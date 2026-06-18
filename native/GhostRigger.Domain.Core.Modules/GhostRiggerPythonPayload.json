@@ -105,7 +105,7 @@
       "resource_name": "PYTHON_PAYLOAD_0017",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "91dddd1758077691cf66eaa0914421a918ab289c808054907f73dff686beb0ee"
+      "sha256": "810960c97683a5236fc03518d59086f5fa96089108671c7e901bc9915746c1e0"
     },
     {
       "source_path": "src/core/modules/authored_walkmesh_surfaces.py",
@@ -129,13 +129,13 @@
       "resource_name": "PYTHON_PAYLOAD_0021",
       "source_path": "src/core/modules/authored_module_objects.py",
       "packaged_path": "Python/src/core/modules/authored_module_objects.py",
-      "sha256": "f4197363f80bcd0a57dd353e91ca7eb32041a1241b69ff5cb5b3c0a2b5990181"
+      "sha256": "1ff4a5fe9c3f5f2157b7b91c17ceefe415db3535a48686b6a30b37bc4b070dc0"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0022",
       "source_path": "src/core/modules/authored_module_project.py",
       "packaged_path": "Python/src/core/modules/authored_module_project.py",
-      "sha256": "99b6281c80ebd23270ae584d9e55cd1cca4fbc783ee2970bda12136b14450bc9"
+      "sha256": "e17898fe22a22d1341e858ec515349af59a8d59e208e141cadd45c8a2e1cc66e"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0023",

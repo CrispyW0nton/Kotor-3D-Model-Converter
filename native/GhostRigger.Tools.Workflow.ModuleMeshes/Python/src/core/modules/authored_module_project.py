@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .authored_module_objects import AuthoredGameplayPlacement
+from .authored_module_objects import AuthoredGameplayPlacement, validate_authored_gameplay_placement
 from .authored_room_composition import AuthoredRoomComposition, create_rectangular_room_composition
 from .authored_room_geometry import RectangularRoomPrimitive
 
@@ -111,6 +111,9 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
     entry_area = normalise_resref(project.placements.entry_point.area_resref)
     if entry_area != project.module_root:
         blocking.append(f"Module entry area {entry_area or '(missing)'} does not match module root {project.module_root}.")
+    placement_validation = validate_authored_gameplay_placement(project.placements)
+    warnings.extend(placement_validation.warnings)
+    blocking.extend(placement_validation.blocking_issues)
     return AuthoredModuleProjectValidation(
         ok=not blocking,
         warnings=tuple(warnings),
