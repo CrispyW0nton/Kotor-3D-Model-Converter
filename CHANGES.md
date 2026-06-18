@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Walkmesh Overlay Diagnostics
+
+Owner: LordVaderCW
+Task: T2638
+Subsystem: Map Studio / authored WOK diagnostics / native Python payloads
+
+- Added headless WOK overlay data for authored room validation so Map Studio can show face-level walkability, surface names, invalid material, degenerate face, and reversed winding issues without guessing from the viewport mesh.
+- Added edge overlay diagnostics for boundary edges and blocked transitions against non-walk faces, giving the future room editor a direct signal for floor holes, walls, cliffs, and non-walk borders.
+- Updated the area WOK integration tests to load the active native payloads and cover the new face and edge overlay contract.
+- Mirrored the diagnostics contract into the ModuleMeshes native Python payload and refreshed the affected payload manifest hashes.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\area_wok_integration.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\area_wok_integration.py tests\test_area_wok_integration.py`
+- `python -m pytest tests\test_area_wok_integration.py -q --basetemp .pytest_tmp_area_wok_overlay_t2638`
+
 ### [2026-06-18] Map Studio Primitive Transforms Keep Mesh and WOK Aligned
 
 Owner: LordVaderCW

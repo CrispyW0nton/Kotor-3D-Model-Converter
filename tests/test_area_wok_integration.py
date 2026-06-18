@@ -9,9 +9,11 @@ from dataclasses import dataclass, field
 
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-_SRC_DIR = _REPO_ROOT / "src"
-if str(_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(_SRC_DIR))
+_SCENE_PAYLOAD = _REPO_ROOT / "native" / "GhostRigger.Domain.Core.Scene" / "Python"
+_MODULES_PAYLOAD = _REPO_ROOT / "native" / "GhostRigger.Domain.Core.Modules" / "Python"
+for _payload in (_SCENE_PAYLOAD, _MODULES_PAYLOAD):
+    if str(_payload) not in sys.path:
+        sys.path.insert(0, str(_payload))
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
@@ -28,11 +30,11 @@ def _load_module_direct(name: str, path: pathlib.Path):
 
 lg = _load_module_direct(
     "ghostrigger_lyt_room_graph_for_wok_tests",
-    _SRC_DIR / "core" / "scene" / "lyt_room_graph.py",
+    _SCENE_PAYLOAD / "src" / "core" / "scene" / "lyt_room_graph.py",
 )
 awi = _load_module_direct(
     "ghostrigger_area_wok_integration_under_test",
-    _SRC_DIR / "core" / "modules" / "area_wok_integration.py",
+    _MODULES_PAYLOAD / "src" / "core" / "modules" / "area_wok_integration.py",
 )
 
 
@@ -188,6 +190,16 @@ def test_t1604_summarizes_room_woks_and_world_bounds(monkeypatch):
     assert report.transition_face_count == 2
     assert report.seams[0].ok is True
     assert report.seams[0].code == "seam_ok"
+    assert len(report.overlays) == 2
+    overlay = report.overlays[0]
+    assert overlay.room_id == "room_a"
+    assert len(overlay.faces) == 2
+    assert len(overlay.edges) == 4
+    assert overlay.faces[0].surface_name == "DIRT"
+    assert overlay.faces[0].walkable is True
+    assert overlay.faces[0].issue_codes == ()
+    assert {edge.kind for edge in overlay.edges} == {"boundary"}
+    assert {edge.issue_codes for edge in overlay.edges} == {("BOUNDARY_EDGE",)}
 
 
 def test_t1604_flags_missing_room_wok_as_blocking(monkeypatch):
@@ -215,6 +227,47 @@ def test_t1604_flags_invalid_material_reversed_and_degenerate_faces(monkeypatch)
     assert room_a.invalid_material_faces == (1,)
     assert room_a.reversed_faces == (0,)
     assert room_a.degenerate_faces == (1,)
+    overlay = [item for item in report.overlays if item.room_id == "room_a"][0]
+    assert overlay.faces[0].issue_codes == ("REVERSED_FACE_WINDING",)
+    assert overlay.faces[1].issue_codes == ("INVALID_WOK_MATERIAL", "DEGENERATE_FACE")
+    assert overlay.faces[1].walkable is False
+
+
+def test_t2638_wok_overlay_marks_edges_against_non_walk_faces_as_blocked(monkeypatch):
+    _install(monkeypatch)
+    lyt = _LYT([_Room("room_a", 0.0, 0.0, 0.0)])
+    vis = _VIS({"room_a": []})
+    module = _Hydrated(
+        module=_Module(
+            lyt=lyt,
+            vis=vis,
+            room_woks={
+                "room_a": _Wok(
+                    verts=[
+                        (0.0, 0.0, 0.0),
+                        (1.0, 0.0, 0.0),
+                        (0.0, 1.0, 0.0),
+                        (1.0, 1.0, 0.0),
+                    ],
+                    faces=[
+                        _Face(0, 1, 2, 1, -1, 1, -1),
+                        _Face(1, 3, 2, 7),
+                    ],
+                )
+            },
+        )
+    )
+
+    report = awi.validate_area_woks(module)
+
+    overlay = report.overlays[0]
+    blocked_edges = [edge for edge in overlay.edges if edge.kind == "blocked"]
+    assert len(blocked_edges) == 1
+    assert blocked_edges[0].face_index == 0
+    assert blocked_edges[0].edge_index == 1
+    assert blocked_edges[0].issue_codes == ("BLOCKED_EDGE",)
+    assert overlay.faces[1].surface_name == "NON_WALK"
+    assert overlay.faces[1].walkable is False
 
 
 def test_t1604_flags_seam_gap_between_connected_rooms(monkeypatch):
