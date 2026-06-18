@@ -13,13 +13,18 @@ from dataclasses import dataclass, field
 from typing import Any, Union
 
 from .authored_module_objects import AuthoredGameplayPlacement, validate_authored_gameplay_placement
-from .authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, create_rectangular_room_composition
+from .authored_room_composition import (
+    AuthoredRoomComposition,
+    compile_authored_room_composition,
+    create_rectangular_room_composition,
+    validate_authored_room_composition,
+)
 from .authored_room_floorplan import FloorPlanRoomPrimitive, compile_floor_plan_room_geometry, validate_floor_plan_room_primitive
 from .authored_room_geometry import AuthoredRoomGeometry, RectangularRoomPrimitive, build_rectangular_room_geometry
 
 
 Vec3 = tuple[float, float, float]
-RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive]
+RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive, AuthoredRoomComposition]
 _RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
 
@@ -127,7 +132,15 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
         if resref in seen_rooms:
             blocking.append(f"Duplicate authored room resref: {resref}")
         seen_rooms.add(resref)
-        if isinstance(room.primitive, FloorPlanRoomPrimitive):
+        if room.composition is not None:
+            composition_validation = validate_authored_room_composition(room.composition)
+            warnings.extend(composition_validation.warnings)
+            blocking.extend(composition_validation.blocking_issues)
+        if isinstance(room.primitive, AuthoredRoomComposition):
+            composition_validation = validate_authored_room_composition(room.primitive)
+            warnings.extend(composition_validation.warnings)
+            blocking.extend(composition_validation.blocking_issues)
+        elif isinstance(room.primitive, FloorPlanRoomPrimitive):
             floorplan_validation = validate_floor_plan_room_primitive(room.primitive)
             warnings.extend(floorplan_validation.warnings)
             blocking.extend(floorplan_validation.blocking_issues)
@@ -163,6 +176,8 @@ def compile_authored_room_spec(room: AuthoredRoomSpec) -> AuthoredRoomGeometry:
 
     if room.composition is not None:
         return compile_authored_room_composition(room.composition)
+    if isinstance(room.primitive, AuthoredRoomComposition):
+        return compile_authored_room_composition(room.primitive)
     if isinstance(room.primitive, FloorPlanRoomPrimitive):
         return compile_floor_plan_room_geometry(room.primitive)
     if isinstance(room.primitive, RectangularRoomPrimitive):
@@ -241,6 +256,44 @@ def create_floor_plan_room_project(
     )
 
 
+def create_composition_room_project(
+    *,
+    module_root: str,
+    game: str,
+    display_name: str,
+    composition: AuthoredRoomComposition,
+    placements: AuthoredGameplayPlacement,
+    notes: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
+) -> AuthoredModuleProject:
+    """Create a single-room project from a durable primitive composition."""
+
+    root = normalise_resref(module_root)
+    room_resref = normalise_resref(composition.room_resref)
+    room = AuthoredRoomSpec(
+        room_resref=room_resref,
+        primitive=composition,
+        composition=None,
+        visible_rooms=(room_resref,),
+        metadata={
+            "primitive": "authored_room_composition",
+            "source": "src.core.modules.authored_module_project",
+        },
+    )
+    return AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(
+            module_root=root,
+            game=str(game or "K1").upper(),
+            display_name=display_name,
+            tag=root,
+            metadata=dict(metadata or {}),
+        ),
+        rooms=(room,),
+        placements=placements,
+        notes=notes,
+    )
+
+
 __all__ = [
     "AuthoredModuleMetadata",
     "AuthoredModuleProject",
@@ -249,6 +302,7 @@ __all__ = [
     "RoomPrimitiveIntent",
     "authored_resref_blocking_issue",
     "compile_authored_room_spec",
+    "create_composition_room_project",
     "create_floor_plan_room_project",
     "create_single_room_project",
     "normalise_resref",

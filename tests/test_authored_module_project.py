@@ -132,3 +132,58 @@ def test_t2633_project_validation_blocks_unsafe_resrefs_before_truncation() -> N
     assert any("this_module_name_is_far_too_long" in issue and "16 characters or fewer" in issue for issue in validation.blocking_issues)
     assert any("bad room" in issue and "letters, numbers, and underscores" in issue for issue in validation.blocking_issues)
     assert any("entry/area" in issue and "letters, numbers, and underscores" in issue for issue in validation.blocking_issues)
+
+
+def test_t2667_composition_room_project_compiles_walkable_primitives() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_project import (
+        compile_authored_room_spec,
+        create_composition_room_project,
+        validate_authored_module_project,
+    )
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, AuthoredPlaceableInstance, ModuleEntryPoint
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
+    from src.core.modules.authored_room_primitives import ArchPrimitive, FloorPrimitive, RampPrimitive, StairsPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="grdev01_room01",
+        floor=FloorPrimitive(name="grdev01_floor", width=10.0, depth=10.0, surface_id="stone"),
+        primitives=(
+            PlacedRoomPrimitive(
+                primitive=RampPrimitive(name="grdev01_ramp", width=2.0, length=3.0, height=1.0, surface_id="metal"),
+                transform=PrimitiveTransform(translation=(2.0, 0.0, 0.0), rotation_degrees_z=90.0),
+            ),
+            StairsPrimitive(name="grdev01_steps", width=2.0, depth=3.0, height=1.0, steps=4, surface_id="stone"),
+            ArchPrimitive(name="grdev01_arch", width=2.25, height=3.0, frame_thickness=0.25),
+        ),
+    )
+    project = create_composition_room_project(
+        module_root="grdev01",
+        game="K1",
+        display_name="GhostRigger Composition Dev Room",
+        composition=composition,
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref="grdev01", position=(0.0, -3.0, 0.0)),
+            placeables=(
+                AuthoredPlaceableInstance(
+                    template_resref="plc_bench",
+                    tag="grdev01_test_placeable",
+                    position=(1.0, 1.0, 0.0),
+                ),
+            ),
+        ),
+    )
+
+    validation = validate_authored_module_project(project)
+    geometry = compile_authored_room_spec(project.rooms[0])
+
+    assert validation.ok is True
+    assert project.rooms[0].metadata["primitive"] == "authored_room_composition"
+    assert geometry.metadata["primitive"] == "authored_room_composition"
+    assert geometry.metadata["primitive_count"] == 3
+    assert geometry.metadata["walkmesh_primitive_count"] == 2
+    assert geometry.metadata["transformed_primitive_count"] == 1
+    assert geometry.wok.walkable_face_count() == 6
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10, 4, 4]
+    assert {mesh.name for mesh in geometry.helper_meshes} == {"grdev01_ramp", "grdev01_steps", "grdev01_arch"}

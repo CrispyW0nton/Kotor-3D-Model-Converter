@@ -31,10 +31,20 @@ from .authored_module_project import (
     normalise_resref,
 )
 from .authored_module_readiness import AuthoredModuleReadiness, build_authored_module_readiness
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, normalize_authored_room_texture
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import RectangularRoomPrimitive
-from .authored_room_primitives import PrimitiveMaterial
+from .authored_room_primitives import (
+    ArchPrimitive,
+    CubePrimitive,
+    CylinderPrimitive,
+    FloorPrimitive,
+    PrimitiveMaterial,
+    RampPrimitive,
+    StairsPrimitive,
+    WallPrimitive,
+)
 
 
 @dataclass(frozen=True)
@@ -94,6 +104,16 @@ def _material(data: Any) -> PrimitiveMaterial:
     )
 
 
+def _transform(data: Any) -> PrimitiveTransform:
+    source = _dict(data)
+    return PrimitiveTransform(
+        translation=_vec3(source.get("translation")),
+        rotation_degrees_z=_float(source.get("rotation_degrees_z"), 0.0),
+        scale=_vec3(source.get("scale"), (1.0, 1.0, 1.0)),
+        pivot=_vec3(source.get("pivot")),
+    )
+
+
 def _opening(data: Any) -> FloorPlanWallOpening:
     source = _dict(data)
     return FloorPlanWallOpening(
@@ -107,9 +127,114 @@ def _opening(data: Any) -> FloorPlanWallOpening:
     )
 
 
-def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPrimitive | FloorPlanRoomPrimitive:
+def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive:
+    source = _dict(data)
+    return FloorPrimitive(
+        name=str(source.get("name") or f"{room_resref}_floor"),
+        width=_float(source.get("width"), 10.0),
+        depth=_float(source.get("depth"), 10.0),
+        z=_float(source.get("z"), 0.0),
+        surface_id=source.get("surface_id", source.get("floor_surface_id", 4)),
+        material=_material(source.get("material")),
+    )
+
+
+def _base_room_primitive(data: Any, room_resref: str) -> WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive:
+    source = _dict(data)
+    primitive_type = str(source.get("type") or source.get("primitive") or "").strip().lower()
+    name = str(source.get("name") or f"{room_resref}_{primitive_type or 'primitive'}")
+    material = _material(source.get("material"))
+    if primitive_type == "wall":
+        return WallPrimitive(
+            name=name,
+            width=_float(source.get("width"), 4.0),
+            height=_float(source.get("height"), 3.0),
+            thickness=_float(source.get("thickness"), 0.15),
+            axis=str(source.get("axis") or "x"),
+            center=_vec3(source.get("center"), (0.0, 0.0, 1.5)),
+            material=material,
+        )
+    if primitive_type == "cube":
+        return CubePrimitive(
+            name=name,
+            size=_vec3(source.get("size"), (1.0, 1.0, 1.0)),
+            center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
+            material=material,
+        )
+    if primitive_type == "ramp":
+        return RampPrimitive(
+            name=name,
+            width=_float(source.get("width"), 2.0),
+            length=_float(source.get("length"), 4.0),
+            height=_float(source.get("height"), 1.0),
+            center=_vec3(source.get("center")),
+            surface_id=source.get("surface_id", 4),
+            material=material,
+        )
+    if primitive_type == "stairs":
+        return StairsPrimitive(
+            name=name,
+            width=_float(source.get("width"), 2.0),
+            depth=_float(source.get("depth"), 4.0),
+            height=_float(source.get("height"), 1.0),
+            steps=int(_float(source.get("steps"), 4.0)),
+            surface_id=source.get("surface_id", 4),
+            material=material,
+        )
+    if primitive_type == "cylinder":
+        return CylinderPrimitive(
+            name=name,
+            radius=_float(source.get("radius"), 0.5),
+            height=_float(source.get("height"), 1.0),
+            segments=int(_float(source.get("segments"), 16.0)),
+            center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
+            material=material,
+        )
+    if primitive_type == "arch":
+        return ArchPrimitive(
+            name=name,
+            width=_float(source.get("width"), 2.0),
+            height=_float(source.get("height"), 3.0),
+            frame_thickness=_float(source.get("frame_thickness"), 0.25),
+            depth=_float(source.get("depth"), 0.25),
+            segments=int(_float(source.get("segments"), 12.0)),
+            center=_vec3(source.get("center"), (0.0, 0.0, 1.5)),
+            material=material,
+        )
+    raise ValueError(f"Unsupported authored room composition primitive type: {primitive_type or '(missing)'}")
+
+
+def _composition_primitive(data: dict[str, Any], room_resref: str) -> AuthoredRoomComposition:
+    primitive = _dict(data.get("primitive"))
+    floor = _floor_primitive(primitive.get("floor"), room_resref)
+    primitives = []
+    for raw in primitive.get("primitives", ()) or ():
+        source = _dict(raw)
+        base = _base_room_primitive(source, room_resref)
+        transform_payload = source.get("transform")
+        if transform_payload is None:
+            primitives.append(base)
+        else:
+            primitives.append(
+                PlacedRoomPrimitive(
+                    primitive=base,
+                    transform=_transform(transform_payload),
+                    name=str(source.get("instance_name") or source.get("name") or getattr(base, "name", "")),
+                )
+            )
+    return AuthoredRoomComposition(
+        room_resref=normalise_resref(primitive.get("room_resref") or room_resref),
+        floor=floor,
+        primitives=tuple(primitives),
+        metadata=_dict(primitive.get("metadata")),
+    )
+
+
+def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition:
     primitive = _dict(data.get("primitive"))
     primitive_type = str(primitive.get("type") or primitive.get("primitive") or data.get("primitive_type") or "rectangular").lower()
+    if primitive_type in {"composition", "authored_room_composition"}:
+        return _composition_primitive(data, room_resref)
     if primitive_type in {"floor_plan", "floorplan", "floor_plan_extrusion"}:
         points = tuple(point for point in (_vec2(item) for item in primitive.get("points", ()) or ()) if point is not None)
         return FloorPlanRoomPrimitive(
@@ -263,7 +388,125 @@ def _vec3_payload(value: tuple[float, float, float]) -> list[float]:
     return [float(value[0]), float(value[1]), float(value[2])]
 
 
-def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimitive) -> dict[str, Any]:
+def _material_payload(material: PrimitiveMaterial) -> dict[str, Any]:
+    return {
+        "texture": material.texture,
+        "diffuse": _vec3_payload(material.diffuse),
+        "ambient": _vec3_payload(material.ambient),
+        "metadata": dict(material.metadata),
+    }
+
+
+def _transform_payload(transform: PrimitiveTransform) -> dict[str, Any]:
+    return {
+        "translation": _vec3_payload(transform.translation),
+        "rotation_degrees_z": float(transform.rotation_degrees_z),
+        "scale": _vec3_payload(transform.scale),
+        "pivot": _vec3_payload(transform.pivot),
+    }
+
+
+def _base_primitive_payload(primitive: WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive | PlacedRoomPrimitive) -> dict[str, Any]:
+    transform: PrimitiveTransform | None = None
+    instance_name = ""
+    if isinstance(primitive, PlacedRoomPrimitive):
+        transform = primitive.transform
+        instance_name = primitive.name
+        primitive = primitive.primitive
+    payload: dict[str, Any]
+    if isinstance(primitive, WallPrimitive):
+        payload = {
+            "type": "wall",
+            "name": primitive.name,
+            "width": float(primitive.width),
+            "height": float(primitive.height),
+            "thickness": float(primitive.thickness),
+            "axis": primitive.axis,
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, CubePrimitive):
+        payload = {
+            "type": "cube",
+            "name": primitive.name,
+            "size": _vec3_payload(primitive.size),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, RampPrimitive):
+        payload = {
+            "type": "ramp",
+            "name": primitive.name,
+            "width": float(primitive.width),
+            "length": float(primitive.length),
+            "height": float(primitive.height),
+            "center": _vec3_payload(primitive.center),
+            "surface_id": primitive.surface_id,
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, StairsPrimitive):
+        payload = {
+            "type": "stairs",
+            "name": primitive.name,
+            "width": float(primitive.width),
+            "depth": float(primitive.depth),
+            "height": float(primitive.height),
+            "steps": int(primitive.steps),
+            "surface_id": primitive.surface_id,
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, CylinderPrimitive):
+        payload = {
+            "type": "cylinder",
+            "name": primitive.name,
+            "radius": float(primitive.radius),
+            "height": float(primitive.height),
+            "segments": int(primitive.segments),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, ArchPrimitive):
+        payload = {
+            "type": "arch",
+            "name": primitive.name,
+            "width": float(primitive.width),
+            "height": float(primitive.height),
+            "frame_thickness": float(primitive.frame_thickness),
+            "depth": float(primitive.depth),
+            "segments": int(primitive.segments),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    else:
+        raise TypeError(f"Unsupported authored room composition primitive: {type(primitive)!r}")
+    if transform is not None:
+        payload["transform"] = _transform_payload(transform)
+        if instance_name:
+            payload["instance_name"] = instance_name
+    return payload
+
+
+def _composition_payload(composition: AuthoredRoomComposition) -> dict[str, Any]:
+    return {
+        "type": "composition",
+        "room_resref": composition.room_resref,
+        "floor": {
+            "type": "floor",
+            "name": composition.floor.name,
+            "width": float(composition.floor.width),
+            "depth": float(composition.floor.depth),
+            "z": float(composition.floor.z),
+            "surface_id": composition.floor.surface_id,
+            "material": _material_payload(composition.floor.material),
+        },
+        "primitives": [_base_primitive_payload(item) for item in composition.primitives],
+        "metadata": dict(composition.metadata),
+    }
+
+
+def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition) -> dict[str, Any]:
+    if isinstance(primitive, AuthoredRoomComposition):
+        return _composition_payload(primitive)
     if isinstance(primitive, FloorPlanRoomPrimitive):
         return {
             "type": "floor_plan",
@@ -272,12 +515,7 @@ def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimit
             "z": float(primitive.z),
             "wall_height": float(primitive.wall_height),
             "floor_surface_id": primitive.floor_surface_id,
-            "material": {
-                "texture": primitive.material.texture,
-                "diffuse": _vec3_payload(primitive.material.diffuse),
-                "ambient": _vec3_payload(primitive.material.ambient),
-                "metadata": dict(primitive.material.metadata),
-            },
+            "material": _material_payload(primitive.material),
             "include_walls": bool(primitive.include_walls),
             "openings": [
                 {

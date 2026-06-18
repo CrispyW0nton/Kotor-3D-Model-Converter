@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Promotes Primitive Composition Rooms to Project Intent
+
+Owner: LordVaderCW
+Task: T2667
+Subsystem: Map Studio / authored room composition projects / KMAP persistence / native Python payloads
+
+- Let `AuthoredModuleProject` carry `AuthoredRoomComposition` rooms directly so Map Studio can preserve multi-primitive room intent instead of flattening everything to rectangular or floor-plan rooms.
+- Added KMAP serialization and parsing for composition rooms with floor, ramp, stairs, arch, wall, cube, cylinder, material, and transform data.
+- Added focused coverage proving composition rooms validate, compile to helper meshes, preserve ramp/stair WOK faces, and round-trip through KMAP.
+- Mirrored the core project and KMAP bridge changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py tests\test_authored_module_project.py tests\test_authored_module_kmap_bridge.py`
+- `python -m pytest tests\test_authored_module_project.py tests\test_authored_module_kmap_bridge.py tests\test_authored_room_composition.py -q --basetemp .pytest_tmp_map_studio_composition_project`
+
 ### [2026-06-18] Map Studio Snaps Authored Drags to the Viewport Grid
 
 Owner: LordVaderCW

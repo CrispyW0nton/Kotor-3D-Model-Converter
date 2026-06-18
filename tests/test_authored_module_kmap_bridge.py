@@ -148,3 +148,53 @@ def test_t2642_controller_creates_authored_dev_room_in_kmap() -> None:
     assert result.readiness is not None
     assert result.readiness.capability_stage == "previewable"
     assert result.readiness.can_preview is True
+
+
+def test_t2667_kmap_round_trips_composition_room_primitives() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import compile_authored_room_spec, create_composition_room_project
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
+    from src.core.modules.authored_room_primitives import ArchPrimitive, FloorPrimitive, RampPrimitive, StairsPrimitive
+
+    project = create_composition_room_project(
+        module_root="grdev01",
+        game="K1",
+        display_name="GhostRigger Primitive Composition",
+        composition=AuthoredRoomComposition(
+            room_resref="grdev01_room01",
+            floor=FloorPrimitive(name="grdev01_floor", width=12.0, depth=8.0, surface_id="stone"),
+            primitives=(
+                PlacedRoomPrimitive(
+                    primitive=RampPrimitive(name="grdev01_ramp", width=2.0, length=4.0, height=1.25, surface_id="metal"),
+                    transform=PrimitiveTransform(translation=(2.0, 0.5, 0.0), rotation_degrees_z=90.0),
+                    name="grdev01_ramp_a",
+                ),
+                StairsPrimitive(name="grdev01_steps", width=2.0, depth=3.0, height=1.0, steps=4, surface_id="stone"),
+                ArchPrimitive(name="grdev01_arch", width=2.5, height=3.0, frame_thickness=0.3),
+            ),
+            metadata={"author_note": "composition round trip"},
+        ),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grdev01")),
+    )
+
+    payload = authored_project_to_kmap_payload(project)
+    restored = authored_project_from_kmap_payload(payload)
+    geometry = compile_authored_room_spec(restored.rooms[0])
+
+    primitive_payload = payload["rooms"][0]["primitive"]
+    assert primitive_payload["type"] == "composition"
+    assert primitive_payload["floor"]["surface_id"] == "stone"
+    assert primitive_payload["primitives"][0]["type"] == "ramp"
+    assert primitive_payload["primitives"][0]["instance_name"] == "grdev01_ramp_a"
+    assert primitive_payload["primitives"][0]["transform"]["rotation_degrees_z"] == 90.0
+    assert restored.module_root == "grdev01"
+    assert restored.rooms[0].metadata["primitive"] == "authored_room_composition"
+    assert geometry.metadata["primitive"] == "authored_room_composition"
+    assert geometry.metadata["primitive_count"] == 3
+    assert geometry.metadata["walkmesh_primitive_count"] == 2
+    assert geometry.metadata["transformed_primitive_count"] == 1
+    assert geometry.wok.walkable_face_count() == 6
+    assert {mesh.name for mesh in geometry.helper_meshes} == {"grdev01_ramp_a", "grdev01_steps", "grdev01_arch"}
