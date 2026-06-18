@@ -31,7 +31,7 @@ def test_t2650_room_primitive_presets_are_named_and_stable() -> None:
     presets = available_authored_room_primitive_presets()
     ids = {preset.preset_id for preset in presets}
 
-    assert {"rectangular_dev_room", "doorway_blockout", "wide_hall", "octagonal_room"} <= ids
+    assert {"rectangular_dev_room", "doorway_blockout", "wide_hall", "octagonal_room", "terrain_heightfield"} <= ids
     assert all(preset.label for preset in presets)
     assert all(len(preset.points) >= 3 for preset in presets)
 
@@ -116,3 +116,47 @@ def test_t2650_builder_tab_exposes_room_preset_controls() -> None:
     assert "primitivePresetRequested" in source
     assert "self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())" in window_source
     assert "self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)" in window_source
+
+
+def test_t2907_terrain_preset_builds_valid_terrain_project() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_project import compile_authored_room_spec, validate_authored_module_project
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="terrain_heightfield",
+        module_root="grterr01",
+        game="K1",
+    )
+    validation = validate_authored_module_project(project)
+    geometry = compile_authored_room_spec(project.rooms[0])
+
+    assert validation.ok
+    assert project.metadata.metadata["room_geometry_mode"] == "terrain_heightfield"
+    assert project.rooms[0].metadata["primitive"] == "terrain_heightfield"
+    assert project.rooms[0].primitive.metadata["preset_id"] == "terrain_heightfield"
+    assert geometry.metadata["primitive"] == "terrain_heightfield"
+    assert geometry.room_mesh.metadata["source"] == "src.core.modules.authored_terrain_builder"
+    assert geometry.wok.walkable_face_count() > 0
+    assert geometry.wok.non_walk_face_count() == 0
+
+
+def test_t2907_controller_stores_terrain_preset_as_kmap_authored_module() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+
+    result = controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grterr02")
+    payload = controller.project.extra_sections["authored_module"]
+
+    assert controller.project.name == "grterr02"
+    assert controller.project.dirty is True
+    assert payload["module_root"] == "grterr02"
+    assert payload["rooms"][0]["primitive"]["type"] == "terrain_heightfield"
+    assert payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "terrain_heightfield"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True

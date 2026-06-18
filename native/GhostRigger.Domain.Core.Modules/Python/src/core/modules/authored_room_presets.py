@@ -18,7 +18,14 @@ from .authored_module_objects import (
     AuthoredWaypointInstance,
     ModuleEntryPoint,
 )
-from .authored_module_project import AuthoredModuleProject, create_composition_room_project, create_floor_plan_room_project, normalise_resref
+from .authored_module_project import (
+    AuthoredModuleProject,
+    create_composition_room_project,
+    create_floor_plan_room_project,
+    create_terrain_room_project,
+    normalise_resref,
+)
+from .authored_terrain_builder import TerrainHeightfieldPrimitive
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import Vec2, Vec3
@@ -107,6 +114,21 @@ _PRESETS: tuple[AuthoredRoomPrimitivePreset, ...] = (
             "room_geometry_mode": "authored_room_composition",
             "supports_elevation_geometry": True,
             "supports_walkable_ramp_and_stairs": True,
+        },
+    ),
+    AuthoredRoomPrimitivePreset(
+        preset_id="terrain_heightfield",
+        label="Terrain Heightfield",
+        description="Gentle editable terrain patch with generated visible mesh, slope-aware WOK faces, and smoke-test gameplay placement.",
+        points=((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)),
+        floor_surface_id="grass",
+        entry_position=(0.0, -4.5, 0.0),
+        placeable_position=(3.5, 3.0, 0.0),
+        metadata={
+            "shape": "terrain_heightfield",
+            "room_geometry_mode": "terrain_heightfield",
+            "supports_terrain_authoring": True,
+            "supports_slope_walkability": True,
         },
     ),
 )
@@ -267,6 +289,82 @@ def _composition_project_from_preset(
     )
 
 
+def _terrain_project_from_preset(
+    *,
+    preset: AuthoredRoomPrimitivePreset,
+    root: str,
+    room_resref: str,
+    game: str,
+    display_name: str,
+) -> AuthoredModuleProject:
+    texture = normalize_authored_room_texture(preset.texture)
+    material = PrimitiveMaterial(
+        texture=texture,
+        metadata={
+            "source": "map_studio:room_primitive_preset",
+            "preset_id": preset.preset_id,
+        },
+    )
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref=room_resref,
+        width=10.0,
+        depth=10.0,
+        heights=(
+            (0.0, 0.0, 0.0, 0.0, 0.0),
+            (0.0, 0.12, 0.2, 0.12, 0.0),
+            (0.0, 0.2, 0.35, 0.2, 0.0),
+            (0.0, 0.12, 0.2, 0.12, 0.0),
+            (0.0, 0.0, 0.0, 0.0, 0.0),
+        ),
+        floor_surface_id=preset.floor_surface_id,
+        material=material,
+        metadata={
+            "preset_source": "map_studio:room_primitive_preset",
+            "preset_id": preset.preset_id,
+            **dict(preset.metadata),
+        },
+    )
+    placements = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref=root, position=preset.entry_position),
+        placeables=(
+            AuthoredPlaceableInstance(
+                template_resref="plc_bench",
+                tag=f"{root}_test_placeable",
+                position=preset.placeable_position,
+            ),
+        ),
+        waypoints=(
+            AuthoredWaypointInstance(
+                template_resref="sw_startloc001",
+                tag="start",
+                position=preset.entry_position,
+            ),
+        ),
+        metadata={
+            "source": "map_studio:room_primitive_preset",
+            "player_start_is_module_entry": True,
+            "preset_id": preset.preset_id,
+        },
+    )
+    return create_terrain_room_project(
+        module_root=root,
+        game=game,
+        display_name=display_name,
+        terrain=terrain,
+        placements=placements,
+        notes=(
+            f"Map Studio primitive preset: {preset.label}.",
+            "Editable KMAP-authored terrain heightfield with generated slope-aware WOK intent.",
+        ),
+        metadata={
+            "task": "T2907",
+            "source": "map_studio:room_primitive_preset",
+            "room_geometry_mode": "terrain_heightfield",
+            "preset_id": preset.preset_id,
+        },
+    )
+
+
 def create_authored_module_from_room_preset(
     *,
     preset_id: str,
@@ -281,6 +379,14 @@ def create_authored_module_from_room_preset(
     room_resref = normalise_resref(f"{root}_room01")
     if preset.metadata.get("room_geometry_mode") == "authored_room_composition":
         return _composition_project_from_preset(
+            preset=preset,
+            root=root,
+            room_resref=room_resref,
+            game=str(game or "K1").upper(),
+            display_name=display_name or preset.label,
+        )
+    if preset.metadata.get("room_geometry_mode") == "terrain_heightfield":
+        return _terrain_project_from_preset(
             preset=preset,
             root=root,
             room_resref=room_resref,

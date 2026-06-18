@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exposes Terrain Heightfield Preset
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / terrain authoring / Builder presets
+
+- Added a `Terrain Heightfield` room preset so Map Studio can create a starter terrain module through the same preset flow as rectangular, doorway, hall, octagonal, and elevation rooms.
+- Routed the terrain preset through the headless terrain project factory, preserving slope-aware visible mesh and WOK generation outside the GUI layer.
+- Added KMAP bridge serialization and deserialization for terrain heightfields so authored terrain modules can be saved, reopened, and evaluated through readiness.
+- Mirrored the preset and KMAP bridge changes into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests\test_authored_room_presets.py tests\test_authored_terrain_builder.py tests\test_authored_module_project.py -q --basetemp .pytest_tmp_map_terrain_preset`
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_terrain_preset_export`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_presets.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_presets.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py tests/test_authored_room_presets.py`
+
 ### [2026-06-18] Map Studio Adds Terrain Heightfield Foundations
 
 Owner: LordVaderCW

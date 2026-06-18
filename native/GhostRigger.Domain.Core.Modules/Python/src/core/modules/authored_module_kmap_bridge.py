@@ -40,6 +40,7 @@ from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimit
 from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, normalize_authored_room_texture
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import RectangularRoomPrimitive
+from .authored_terrain_builder import TerrainHeightfieldPrimitive
 from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
@@ -235,11 +236,31 @@ def _composition_primitive(data: dict[str, Any], room_resref: str) -> AuthoredRo
     )
 
 
-def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition:
+def _height_rows(value: Any) -> tuple[tuple[float, ...], ...]:
+    rows: list[tuple[float, ...]] = []
+    for row in value or ():
+        if isinstance(row, (list, tuple)):
+            rows.append(tuple(_float(item, 0.0) for item in row))
+    return tuple(rows)
+
+
+def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition | TerrainHeightfieldPrimitive:
     primitive = _dict(data.get("primitive"))
     primitive_type = str(primitive.get("type") or primitive.get("primitive") or data.get("primitive_type") or "rectangular").lower()
     if primitive_type in {"composition", "authored_room_composition"}:
         return _composition_primitive(data, room_resref)
+    if primitive_type in {"terrain_heightfield", "terrain", "heightfield"}:
+        return TerrainHeightfieldPrimitive(
+            room_resref=normalise_resref(primitive.get("room_resref") or room_resref),
+            heights=_height_rows(primitive.get("heights")) or ((0.0, 0.0), (0.0, 0.0)),
+            width=_float(primitive.get("width"), 10.0),
+            depth=_float(primitive.get("depth"), 10.0),
+            floor_surface_id=primitive.get("floor_surface_id", 4),
+            non_walk_surface_id=primitive.get("non_walk_surface_id", 7),
+            max_walkable_slope_degrees=_float(primitive.get("max_walkable_slope_degrees"), 35.0),
+            material=_material(primitive.get("material")),
+            metadata=_dict(primitive.get("metadata")),
+        )
     if primitive_type in {"floor_plan", "floorplan", "floor_plan_extrusion"}:
         points = tuple(point for point in (_vec2(item) for item in primitive.get("points", ()) or ()) if point is not None)
         return FloorPlanRoomPrimitive(
@@ -513,9 +534,22 @@ def _composition_payload(composition: AuthoredRoomComposition) -> dict[str, Any]
     }
 
 
-def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition) -> dict[str, Any]:
+def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition | TerrainHeightfieldPrimitive) -> dict[str, Any]:
     if isinstance(primitive, AuthoredRoomComposition):
         return _composition_payload(primitive)
+    if isinstance(primitive, TerrainHeightfieldPrimitive):
+        return {
+            "type": "terrain_heightfield",
+            "room_resref": primitive.room_resref,
+            "width": float(primitive.width),
+            "depth": float(primitive.depth),
+            "heights": [[float(value) for value in row] for row in primitive.heights],
+            "floor_surface_id": primitive.floor_surface_id,
+            "non_walk_surface_id": primitive.non_walk_surface_id,
+            "max_walkable_slope_degrees": float(primitive.max_walkable_slope_degrees),
+            "material": _material_payload(primitive.material),
+            "metadata": dict(primitive.metadata),
+        }
     if isinstance(primitive, FloorPlanRoomPrimitive):
         return {
             "type": "floor_plan",
