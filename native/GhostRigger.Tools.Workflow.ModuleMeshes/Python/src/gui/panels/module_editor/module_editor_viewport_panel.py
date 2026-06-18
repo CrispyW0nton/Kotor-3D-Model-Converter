@@ -76,6 +76,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
+        self._terrain_walkability_overlay: object | None = None
         self._marker_drag: dict[str, object] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_primitive_drag: dict[str, object] | None = None
@@ -89,6 +90,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         authored_gameplay_markers=(),
         authored_gameplay_marker_geometry=None,
         authored_room_outline_geometry=None,
+        authored_terrain_walkability_overlay=None,
     ) -> None:
         self._table_updating = True
         try:
@@ -96,6 +98,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._row_ids.clear()
             self._placement_marker_geometry = authored_gameplay_marker_geometry
             self._room_outline_geometry = authored_room_outline_geometry
+            self._terrain_walkability_overlay = authored_terrain_walkability_overlay
             self._placement_markers = {
                 str(getattr(marker, "placement_id", "") or ""): marker
                 for marker in authored_gameplay_markers or ()
@@ -140,9 +143,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 )
         finally:
             self._table_updating = False
-        self._update_marker_summary(authored_gameplay_markers, authored_gameplay_marker_geometry, authored_room_outline_geometry)
+        self._update_marker_summary(
+            authored_gameplay_markers,
+            authored_gameplay_marker_geometry,
+            authored_room_outline_geometry,
+            authored_terrain_walkability_overlay,
+        )
         self._sync_room_outline_overlay(authored_room_outline_geometry)
         self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)
+        self._sync_terrain_walkability_overlay(authored_terrain_walkability_overlay)
 
     def select_id(self, item_id: str) -> None:
         for row, row_id in enumerate(self._row_ids):
@@ -631,10 +640,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.scene_table.setItem(row, column, item)
         self._row_ids.append(item_id)
 
-    def _update_marker_summary(self, authored_gameplay_markers, authored_gameplay_marker_geometry=None, authored_room_outline_geometry=None) -> None:
+    def _update_marker_summary(
+        self,
+        authored_gameplay_markers,
+        authored_gameplay_marker_geometry=None,
+        authored_room_outline_geometry=None,
+        authored_terrain_walkability_overlay=None,
+    ) -> None:
         markers = tuple(authored_gameplay_markers or ())
         room_count = int(getattr(authored_room_outline_geometry, "room_count", 0) or 0)
-        if not markers and room_count <= 0:
+        terrain_triangles = tuple(getattr(authored_terrain_walkability_overlay, "triangles", ()) or ())
+        if not markers and room_count <= 0 and not terrain_triangles:
             self.marker_summary_label.setText("Gameplay markers: none")
             return
         counts: dict[str, int] = {}
@@ -648,6 +664,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if room_count > 0:
             parts_list.insert(0, f"room outline {room_count}")
         parts = ", ".join(parts_list)
+        if not parts and terrain_triangles:
+            parts = "terrain overlay"
         geometry_suffix = ""
         if authored_gameplay_marker_geometry is not None:
             footprints = len(tuple(getattr(authored_gameplay_marker_geometry, "footprints", ()) or ()))
@@ -663,6 +681,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     f"{geometry_suffix} | {polygons} room outline polygon(s), "
                     f"{room_lines} wall/opening guide(s), {primitive_handles} primitive handle(s)"
                 )
+        if terrain_triangles:
+            walkable = int(getattr(authored_terrain_walkability_overlay, "walkable_triangle_count", 0) or 0)
+            blocked = int(getattr(authored_terrain_walkability_overlay, "non_walk_triangle_count", 0) or 0)
+            max_slope = float(getattr(authored_terrain_walkability_overlay, "max_slope_degrees", 0.0) or 0.0)
+            geometry_suffix = f"{geometry_suffix} | terrain walkability {walkable} walk / {blocked} blocked, max slope {max_slope:.1f} deg"
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
         self.marker_summary_label.setText(f"Gameplay markers: {parts}{geometry_suffix}{suffix}")
 
@@ -695,6 +718,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         elif callable(setter):
             setter(None)
         self._install_marker_pick_filters()
+
+    def _sync_terrain_walkability_overlay(self, authored_terrain_walkability_overlay=None) -> None:
+        setter = getattr(self.viewport, "set_map_studio_terrain_walkability_overlay", None)
+        clearer = getattr(self.viewport, "clear_map_studio_terrain_walkability_overlay", None)
+        triangles = tuple(getattr(authored_terrain_walkability_overlay, "triangles", ()) or ())
+        if authored_terrain_walkability_overlay is not None and triangles and callable(setter):
+            setter(authored_terrain_walkability_overlay)
+            return
+        if callable(clearer):
+            clearer()
+        elif callable(setter):
+            setter(None)
 
     def _table_selection(self) -> None:
         rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []

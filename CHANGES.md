@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Draws Terrain Walkability Overlay
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / terrain authoring / viewport overlays
+
+- Added a headless terrain walkability overlay model that exposes terrain WOK triangles with walkable/non-walk status, surface names, slope angles, and blocked-triangle reasons.
+- Routed the overlay through the Module Editor controller and window into the Map Studio viewport panel while keeping slope and surface classification in core.
+- Added viewport overlay state and drawing for terrain walkability: walkable triangles render as translucent green, blocked triangles render as amber/red warning triangles below room outlines and gameplay markers.
+- Mirrored terrain walkability overlay support into the ModuleMeshes workflow payload.
+
+Verification:
+- `python -m pytest tests/test_authored_terrain_walkability_overlay.py -q --basetemp .pytest_tmp_map_terrain_overlay`
+- `python -m pytest tests/test_map_studio_room_outline_overlay.py tests/test_map_studio_marker_overlay.py tests/test_authored_room_operations.py::test_t2908_builder_tab_exposes_terrain_heightfield_controls -q --basetemp .pytest_tmp_map_terrain_overlay_smoke`
+- `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_walkability_overlay.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_walkability_overlay.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_terrain_walkability_overlay.py`
+
 ### [2026-06-18] Map Studio Shows Terrain Walkability Feedback
 
 Owner: LordVaderCW

@@ -1167,6 +1167,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_markers = self.controller.authored_gameplay_preview_markers()
         authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
+        authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         authored_terrain_rooms = self.controller.authored_terrain_room_choices()
@@ -1182,6 +1183,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             authored_markers,
             authored_marker_geometry,
             authored_room_outline_geometry,
+            authored_terrain_walkability_overlay,
         )
         readiness_result = self.controller.authored_module_readiness()
         self.readiness_panel.set_readiness(readiness_result.readiness)

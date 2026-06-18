@@ -438,6 +438,12 @@ def _triangle_slope_degrees(a: Vec3, b: Vec3, c: Vec3) -> float:
     return math.degrees(math.acos(cos_from_up))
 
 
+def terrain_triangle_slope_degrees(a: Vec3, b: Vec3, c: Vec3) -> float:
+    """Return the grade angle for one generated terrain triangle."""
+
+    return _triangle_slope_degrees(a, b, c)
+
+
 def _terrain_faces(row_count: int, column_count: int) -> tuple[Face, ...]:
     faces: list[Face] = []
     for row_index in range(row_count - 1):
@@ -610,5 +616,6 @@ __all__ = [
     "set_terrain_heightfield_sample",
     "smooth_terrain_heightfield",
     "terrain_height_range",
+    "terrain_triangle_slope_degrees",
     "validate_terrain_heightfield_primitive",
 ]

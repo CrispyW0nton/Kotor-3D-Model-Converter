@@ -314,6 +314,45 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio room outline overlay failed: %s", exc)
 
+    def _draw_map_studio_terrain_walkability(self, draw, w: int, h: int) -> None:
+        overlay = getattr(self, "_map_studio_terrain_walkability_overlay", None)
+        if overlay is None:
+            return
+        triangles = tuple(getattr(overlay, "triangles", ()) or ())
+        if not triangles:
+            return
+        try:
+            for triangle in triangles:
+                points = tuple(getattr(triangle, "points", ()) or ())
+                projected = []
+                for point in points:
+                    proj = self._map_studio_project_point(point, w, h)
+                    if proj is None:
+                        projected = []
+                        break
+                    projected.append((float(proj[0]), float(proj[1])))
+                if len(projected) < 3:
+                    continue
+                walkable = bool(getattr(triangle, "walkable", False))
+                color = self._map_studio_marker_rgba(
+                    getattr(triangle, "color", "#00ff7a" if walkable else "#ff9f1c"),
+                    225,
+                )
+                fill_alpha = 28 if walkable else 48
+                outline_alpha = 145 if walkable else 225
+                draw.polygon(projected, fill=(color[0], color[1], color[2], fill_alpha))
+                closed = projected + [projected[0]]
+                draw.line(closed, fill=(0, 0, 0, 120), width=3 if not walkable else 2)
+                draw.line(closed, fill=(color[0], color[1], color[2], outline_alpha), width=2 if not walkable else 1)
+                if not walkable:
+                    draw.line(
+                        [projected[0], projected[2]],
+                        fill=(255, 64, 64, 210),
+                        width=2,
+                    )
+        except Exception as exc:
+            log.debug("Map Studio terrain walkability overlay failed: %s", exc)
+
     def _draw_map_studio_room_primitive_handles(self, draw, primitive_handles: tuple[object, ...], w: int, h: int) -> None:
         for handle in primitive_handles:
             footprint = tuple(getattr(handle, "footprint", ()) or ())

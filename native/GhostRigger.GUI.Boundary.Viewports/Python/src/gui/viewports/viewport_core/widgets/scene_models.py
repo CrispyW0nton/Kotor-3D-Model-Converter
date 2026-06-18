@@ -610,6 +610,17 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_room_outline_geometry(None)
 
+    def set_map_studio_terrain_walkability_overlay(self, overlay: object | None) -> None:
+        """Display Map Studio terrain WOK walkability classification."""
+
+        self._map_studio_terrain_walkability_overlay = overlay
+        self._request_render(fast=True, reason="map studio terrain walkability changed", overlay=True)
+
+    def clear_map_studio_terrain_walkability_overlay(self) -> None:
+        """Remove Map Studio terrain walkability classification."""
+
+        self.set_map_studio_terrain_walkability_overlay(None)
+
     def _fit_external_skeleton_overlay(self, skeleton) -> None:
         """Fit a KOTOR template skeleton preview to the active source mesh."""
         if self.model is None or skeleton is None:
