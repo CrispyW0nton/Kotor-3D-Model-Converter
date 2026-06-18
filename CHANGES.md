@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds grdev01 Evidence Capture Helper
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / in-game proof capture / smoke-test handoff
+
+- Added `capture_grdev01_smoke_evidence.py` to capture Windows BMP screenshot evidence for the `warp grdev01` smoke test.
+- The helper defaults to capture-only so evidence alone does not mark the module game-tested; proof recording still requires explicit acceptance flags for module load, spawn floor, placeable visibility, and walking.
+- Added regression coverage for capture-only safety and capture-plus-proof recording through the existing authored-module proof manifest path.
+
+Verification:
+- `python -m pytest tests/test_capture_grdev01_smoke_evidence_script.py -q --basetemp .pytest_tmp_map_capture_proof`
+- `python -m py_compile scripts/capture_grdev01_smoke_evidence.py tests/test_capture_grdev01_smoke_evidence_script.py`
+- `python scripts/capture_grdev01_smoke_evidence.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --output .pytest_tmp_map_capture_live\grdev01_probe.bmp --json`
+
 ### [2026-06-18] Map Studio Checks Console Readiness for grdev01 Warp
 
 Owner: LordVaderCW
