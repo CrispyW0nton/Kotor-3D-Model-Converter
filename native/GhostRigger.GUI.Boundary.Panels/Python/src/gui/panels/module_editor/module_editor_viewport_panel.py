@@ -14,6 +14,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     itemSelected = QtCore.Signal(str)
     transformEdited = QtCore.Signal(str, object)
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
+    roomPrimitiveSelected = QtCore.Signal(str, str)
     roomPrimitiveMoved = QtCore.Signal(str, str, object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -416,6 +417,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "active": False,
             "pending_delta": (0.0, 0.0, 0.0),
         }
+        self.roomPrimitiveSelected.emit(room_resref, primitive_name)
         return True
 
     def _update_room_primitive_drag(self, event: QtCore.QEvent) -> bool:

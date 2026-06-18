@@ -63,6 +63,7 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
     for source in (panel_source, native_panel_source):
         assert "authored_room_outline_geometry=None" in source
         assert "roomOutlinePointEdited" in source
+        assert "roomPrimitiveSelected" in source
         assert "roomPrimitiveMoved" in source
         assert "_room_outline_point_drag" in source
         assert "_room_primitive_drag" in source
@@ -70,6 +71,7 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
         assert "def _room_primitive_at_event" in source
         assert "def _finish_room_outline_point_drag" in source
         assert "def _finish_room_primitive_drag" in source
+        assert "self.roomPrimitiveSelected.emit(room_resref, primitive_name)" in source
         assert "self._sync_room_outline_overlay(authored_room_outline_geometry)" in source
         assert "def _sync_room_outline_overlay" in source
         assert "set_map_studio_room_outline_geometry" in source
@@ -85,6 +87,33 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
     assert "authored_room_outline_geometry = self.controller.authored_room_outline_geometry()" in window_source
     assert "authored_room_outline_geometry," in window_source
     assert "roomOutlinePointEdited.connect(self._set_authored_room_outline_point)" in window_source
+    assert "roomPrimitiveSelected.connect(self._select_authored_room_primitive)" in window_source
     assert "roomPrimitiveMoved.connect(self._move_authored_room_primitive)" in window_source
     assert "self.controller.move_authored_room_outline_point" in window_source
     assert "self.controller.move_authored_room_primitive" in window_source
+
+
+def test_t2678_viewport_primitive_selection_syncs_builder_tab_controls() -> None:
+    panel_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    builder_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py"
+    )
+    native_builder_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+    )
+
+    assert "roomPrimitiveSelected = QtCore.Signal(str, str)" in panel_source
+    assert "self.roomPrimitiveSelected.emit(room_resref, primitive_name)" in panel_source
+    for source in (builder_source, native_builder_source):
+        assert "def select_room_primitive(self, room_resref: str, primitive_name: str) -> bool" in source
+        assert "self.roomPrimitiveTransformComboBox.setCurrentIndex(index)" in source
+        assert "self._update_primitive_transform_controls()" in source
+    assert "self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)" in window_source
+    assert "def _select_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None" in window_source
+    assert "self.workflow_tabs.setCurrentWidget(self.builder_tab)" in window_source
+    assert "self.builder_tab.select_room_primitive(room_resref, primitive_name)" in window_source

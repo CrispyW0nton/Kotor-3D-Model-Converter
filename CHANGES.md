@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Syncs Viewport Primitive Selection to Builder Controls
+
+Owner: LordVaderCW
+Task: T2678
+Subsystem: Map Studio / Module Editor viewport selection / Builder tab primitive editing / native Python payloads
+
+- Added a Builder-tab primitive selection API so viewport-authored room primitive picks can activate the matching transform, dimension, material, and WOK surface controls.
+- Emitted a dedicated `roomPrimitiveSelected` signal when a Map Studio primitive handle is clicked in the viewport, before any optional drag move begins.
+- Wired the standalone Module Editor window to switch to the Builder tab and select the clicked primitive so visual room composition edits remain understandable to modders.
+- Mirrored the Builder tab and viewport panel selection updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_room_outline_overlay.py`
+- `python -m pytest tests\test_map_studio_room_outline_overlay.py tests\test_authored_room_operations.py -q --basetemp .pytest_tmp_map_studio_primitive_selection`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Adds Viewport Drag Handles for Authored Primitives
 
 Owner: LordVaderCW

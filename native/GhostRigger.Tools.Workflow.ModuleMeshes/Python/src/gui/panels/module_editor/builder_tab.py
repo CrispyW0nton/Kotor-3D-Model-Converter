@@ -424,6 +424,23 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomPrimitiveTransformComboBox.blockSignals(False)
         self._update_primitive_transform_controls()
 
+    def select_room_primitive(self, room_resref: str, primitive_name: str) -> bool:
+        """Select an authored composition primitive in the editor controls."""
+
+        wanted = f"{str(room_resref or '').strip()}:{str(primitive_name or '').strip()}"
+        if wanted == ":":
+            return False
+        for index in range(self.roomPrimitiveTransformComboBox.count()):
+            data = self.roomPrimitiveTransformComboBox.itemData(index)
+            if not isinstance(data, dict):
+                continue
+            key = f"{data.get('room_resref', '')}:{data.get('primitive_name', '')}"
+            if key == wanted:
+                self.roomPrimitiveTransformComboBox.setCurrentIndex(index)
+                self._update_primitive_transform_controls()
+                return True
+        return False
+
     def set_walkmesh_surfaces(self, surfaces) -> None:
         """Populate the authored room WOK surface selector from the controller."""
 

@@ -349,6 +349,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.viewport_panel.transformEdited.connect(self._set_transform)
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
+        self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
@@ -916,6 +917,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Move Authored Room Outline Point", str(exc))
             return
         self._refresh_all()
+
+    def _select_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None:
+        selected = self.builder_tab.select_room_primitive(room_resref, primitive_name)
+        if selected:
+            self.workflow_tabs.setCurrentWidget(self.builder_tab)
+            self.statusBar().showMessage(f"Selected room primitive {primitive_name}")
 
     def _move_authored_room_primitive(self, room_resref: str, primitive_name: str, world_delta: object) -> None:
         try:
