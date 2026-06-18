@@ -70,6 +70,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\modules\authored_module_project.py" />
     <None Include="Python\src\core\modules\authored_module_layout.py" />
     <None Include="Python\src\core\modules\authored_module_metadata.py" />
+    <None Include="Python\src\core\modules\authored_module_pathing.py" />
     <None Include="Python\src\core\level\__init__.py" />
     <None Include="Python\src\core\level\kmap_model.py" />
     <None Include="Python\src\core\level\kmap_project.py" />

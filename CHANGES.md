@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Authored Pathing Compiler
+
+Owner: LordVaderCW
+Task: T2608
+Subsystem: Map Studio / module pathing / native Python payloads
+
+- Added a headless `authored_module_pathing` compiler that turns walkmesh/gameplay anchors into editable path points and directed PTH connections.
+- Grounded PTH serialization in PyKotor's engine-referenced `Path_Points` / `Path_Conections` contract so generated modules no longer ship an empty placeholder PTH.
+- Routed the `grdev01` smoke module through the pathing compiler using the walkmesh center, player start, and test placeable as path anchors when they are on the generated WOK.
+- Added package readback counts for PTH path points/connections and smoke manifest pathing provenance.
+- Mirrored the pathing compiler into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_module_pathing.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_module_pathing.py -q --basetemp .pytest_tmp_authored_module_pathing`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+
 ### [2026-06-17] Map Studio Authored Module Metadata Compiler
 
 Owner: LordVaderCW

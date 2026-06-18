@@ -48,6 +48,7 @@ from .authored_module_project import (
 )
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
+from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .module_format import LYTLayout, VISData, WOKData
 
 
@@ -131,6 +132,8 @@ class DevModulePackageVerification:
     parsed_gff: tuple[str, ...] = ()
     parsed_wok: tuple[str, ...] = ()
     model_pairs: tuple[str, ...] = ()
+    path_point_count: int = 0
+    path_connection_count: int = 0
     warnings: list[str] = field(default_factory=list)
     blocking_issues: list[str] = field(default_factory=list)
     message: str = ""
@@ -146,6 +149,7 @@ class AuthoredDevModule:
     module: Any
     project: AuthoredModuleProject | None = None
     metadata_provenance: dict[str, Any] = field(default_factory=dict)
+    pathing_provenance: dict[str, Any] = field(default_factory=dict)
     resources: dict[tuple[str, str], Any] = field(default_factory=dict)
     packaged_resources: list[PackagedModuleResource] = field(default_factory=list)
     resource_summaries: list[DevModuleResourceSummary] = field(default_factory=list)
@@ -276,35 +280,8 @@ def _import_mdl_runtime() -> tuple[Any, Any]:
         return md, writer_module.MDLBinaryWriter
 
 
-def _bytes_gff(gff: Any) -> bytes:
-    from pykotor.resource.formats.gff import bytes_gff
-
-    return bytes_gff(gff)
-
-
-def _new_gff(content_name: str) -> Any:
-    from pykotor.resource.formats.gff import GFF
-    from pykotor.resource.formats.gff.gff_data import GFFContent
-
-    return GFF(getattr(GFFContent, content_name))
-
-
-def _empty_gff_list() -> Any:
-    from pykotor.resource.formats.gff.gff_data import GFFList
-
-    return GFFList()
-
-
 def _make_git_bytes(request: DevModuleSmokeRequest) -> bytes:
     return build_git_bytes(_make_gameplay_placement(request))
-
-
-def _make_pth_bytes(_request: DevModuleSmokeRequest) -> bytes:
-    gff = _new_gff("PTH")
-    root = gff.root
-    root.set_list("Path_Points", _empty_gff_list())
-    root.set_list("Path_Conections", _empty_gff_list())
-    return _bytes_gff(gff)
 
 
 def _room_primitive(request: DevModuleSmokeRequest) -> RectangularRoomPrimitive:
@@ -606,6 +583,16 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     vis = layout.vis
     wok = geometry.wok
     walkability_checks = _validate_gameplay_anchors(request, wok)
+    walkability_by_label = {check.label: check for check in walkability_checks}
+    path_anchors = []
+    if walkability_by_label.get("player_start") and walkability_by_label["player_start"].ok:
+        path_anchors.append(AuthoredPathAnchor("player_start", request.player_start))
+    if walkability_by_label.get("test_placeable") and walkability_by_label["test_placeable"].ok:
+        path_anchors.append(AuthoredPathAnchor("test_placeable", request.test_placeable_position))
+    compiled_pathing = compile_authored_pathing_for_module(
+        wok,
+        anchors=tuple(path_anchors),
+    )
     template_checks, template_warnings = _validate_gameplay_templates(request, placements)
     module_state = _ModuleState(name=root, lyt=lyt, vis=vis, room_woks={room: wok}, room_geometry=geometry, placements=placements)
 
@@ -613,7 +600,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         _make_packaged(root, "are", compiled_metadata.are_bytes, "map_studio:t2601:are"),
         _make_packaged(root, "git", _make_git_bytes(request), "map_studio:t2601:git"),
         _make_packaged(root, "ifo", compiled_metadata.ifo_bytes, "map_studio:t2601:ifo"),
-        _make_packaged(root, "pth", _make_pth_bytes(request), "map_studio:t2601:pth"),
+        _make_packaged(root, "pth", compiled_pathing.pth_bytes, "map_studio:t2601:pth"),
     ]
     mdl_bytes, mdx_bytes = _make_room_model_bytes(request, geometry)
     packaged.extend(
@@ -647,6 +634,7 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         module=module_state,
         project=project,
         metadata_provenance=dict(compiled_metadata.metadata),
+        pathing_provenance=dict(compiled_pathing.metadata),
         resources=resources,
         packaged_resources=packaged,
         resource_summaries=summaries,
@@ -703,6 +691,15 @@ def _gff_content_name(data: bytes) -> str:
     return str(read_gff(data).content.name).lower()
 
 
+def _pth_counts(data: bytes) -> tuple[int, int]:
+    from pykotor.resource.generics.pth import read_pth
+
+    pth = read_pth(data)
+    point_count = len(pth)
+    connection_count = sum(len(pth.outgoing(index)) for index in range(point_count))
+    return point_count, connection_count
+
+
 def _verify_room_model_pair(room: str, mdl: bytes, mdx: bytes) -> tuple[bool, str]:
     if len(mdl) < 12:
         return False, f"{room}.mdl is too small to contain an MDL header."
@@ -753,6 +750,8 @@ def verify_dev_test_module_package(
     blocking = [f"Missing generated resource {resref}.{restype}." for resref, restype in sorted(expected - set(payloads))]
     warnings: list[str] = []
     parsed_gff: list[str] = []
+    path_point_count = 0
+    path_connection_count = 0
     for restype in ("are", "git", "ifo", "pth"):
         key = (module_root, restype)
         if key not in payloads:
@@ -763,6 +762,10 @@ def verify_dev_test_module_package(
                 blocking.append(f"{module_root}.{restype} parsed as {content.upper()}, expected {restype.upper()}.")
             else:
                 parsed_gff.append(f"{module_root}.{restype}")
+                if restype == "pth":
+                    path_point_count, path_connection_count = _pth_counts(payloads[key][1])
+                    if path_point_count < 1:
+                        blocking.append(f"{module_root}.pth parsed but contains no path points.")
         except Exception as exc:
             blocking.append(f"{module_root}.{restype} did not parse as GFF: {exc}")
 
@@ -807,6 +810,8 @@ def verify_dev_test_module_package(
         parsed_gff=tuple(parsed_gff),
         parsed_wok=tuple(parsed_wok),
         model_pairs=tuple(model_pairs),
+        path_point_count=path_point_count,
+        path_connection_count=path_connection_count,
         warnings=warnings,
         blocking_issues=blocking,
         message=(
@@ -828,6 +833,8 @@ def _verification_to_manifest(verification: DevModulePackageVerification | None)
         "parsed_gff": list(verification.parsed_gff),
         "parsed_wok": list(verification.parsed_wok),
         "model_pairs": list(verification.model_pairs),
+        "path_point_count": verification.path_point_count,
+        "path_connection_count": verification.path_connection_count,
         "resources": [
             {
                 "resref": resource.resref,
@@ -905,6 +912,13 @@ def _augment_manifest(
             "fog_far": authored.metadata_provenance.get("fog_far"),
             "dawn_hour": authored.metadata_provenance.get("dawn_hour"),
             "dusk_hour": authored.metadata_provenance.get("dusk_hour"),
+        },
+        "authored_pathing": {
+            "source": authored.pathing_provenance.get("source", "src.core.modules.authored_module_pathing"),
+            "point_count": authored.pathing_provenance.get("point_count", 0),
+            "connection_count": authored.pathing_provenance.get("connection_count", 0),
+            "anchor_labels": list(authored.pathing_provenance.get("anchor_labels", [])),
+            "walkmesh_bounds": list(authored.pathing_provenance.get("walkmesh_bounds", [])),
         },
         "authored_geometry": {
             "source": authored.module.room_geometry.metadata.get("source", "src.core.modules.authored_room_geometry")

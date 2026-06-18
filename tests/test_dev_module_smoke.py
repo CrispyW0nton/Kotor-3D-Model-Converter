@@ -176,6 +176,10 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_metadata"]["fog_far"] == 200.0
     assert smoke["authored_metadata"]["dawn_hour"] == 6
     assert smoke["authored_metadata"]["dusk_hour"] == 18
+    assert smoke["authored_pathing"]["source"] == "src.core.modules.authored_module_pathing"
+    assert smoke["authored_pathing"]["point_count"] == 3
+    assert smoke["authored_pathing"]["connection_count"] == 6
+    assert smoke["authored_pathing"]["anchor_labels"] == ["player_start", "test_placeable"]
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_composition"
     assert smoke["authored_geometry"]["primitive"] == "authored_room_composition"
     assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_mesh"
@@ -219,6 +223,8 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["package_verification"]["code"] == "verified"
     assert "grdev01_room01.wok" in smoke["package_verification"]["parsed_wok"]
     assert "grdev01_room01.mdl/.mdx" in smoke["package_verification"]["model_pairs"]
+    assert smoke["package_verification"]["path_point_count"] == 3
+    assert smoke["package_verification"]["path_connection_count"] == 6
     checks = {
         check["label"]: check
         for check in smoke["pre_game_checks"]["walkability_checks"]
