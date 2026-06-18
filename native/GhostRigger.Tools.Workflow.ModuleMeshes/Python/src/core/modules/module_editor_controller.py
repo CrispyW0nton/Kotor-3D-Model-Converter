@@ -23,6 +23,7 @@ from .authored_module_kmap_bridge import (
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
 )
+from .authored_module_placements import SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS, add_authored_gameplay_placement
 from .authored_room_operations import apply_authored_floor_plan_operation
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
@@ -132,6 +133,11 @@ class ModuleEditorController:
 
         return authored_walkmesh_surface_palette()
 
+    def available_authored_gameplay_placement_kinds(self):
+        """Return supported authored gameplay placement kinds for Map Studio UI."""
+
+        return SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS
+
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""
 
@@ -196,6 +202,43 @@ class ModuleEditorController:
         )
         for warning in update.warnings:
             self.model.log(f"Warning: {warning}")
+        return self.authored_module_readiness()
+
+    def add_authored_gameplay_placement(
+        self,
+        *,
+        kind: str,
+        template_resref: str = "",
+        tag: str = "",
+        position: Any = (0.0, 0.0, 0.0),
+        bearing: float = 0.0,
+    ):
+        """Append a gameplay object placement to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = add_authored_gameplay_placement(
+            authored,
+            kind=kind,
+            template_resref=template_resref,
+            tag=tag,
+            position=position,
+            bearing=bearing,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Added Map Studio {update.kind} placement {update.tag} at {update.position}; previous exports/proofs are now stale."
+        )
         return self.authored_module_readiness()
 
     def build_preview(self, output_dir: str | Path):

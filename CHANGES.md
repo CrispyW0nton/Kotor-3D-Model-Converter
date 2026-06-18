@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Gameplay Placement Authoring
+
+Owner: LordVaderCW
+Task: T2653
+Subsystem: Map Studio / authored gameplay placements / GIT serialization / Builder tab / native Python payloads
+
+- Added a headless authored gameplay-placement service for adding placeables, creatures, doors, waypoints, triggers, encounters, sounds, cameras, and stores to a KMAP-authored module.
+- Expanded authored-module KMAP serialization so the full GIT-supported placement set survives save/load instead of only placeables and waypoints.
+- Added controller APIs for supported placement kinds and current authored-module placement insertion, clearing stale runtime/export proof state after edits.
+- Updated the Map Studio Builder tab with `Gameplay Placement` controls for kind, template resref, tag, position, and bearing.
+- Mirrored the core/controller/UI changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_placements.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_placements.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_gameplay_placements.py`
+- `python -m pytest tests\test_authored_gameplay_placements.py tests\test_authored_room_style.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_gameplay_placements`
+
 ### [2026-06-18] Map Studio Exposes Room Material And Surface Controls
 
 Owner: LordVaderCW

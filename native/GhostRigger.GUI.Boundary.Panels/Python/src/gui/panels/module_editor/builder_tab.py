@@ -10,6 +10,7 @@ class BuilderTab(QtWidgets.QWidget):
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
     roomStyleRequested = QtCore.Signal(str, str)
+    gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -98,6 +99,46 @@ class BuilderTab(QtWidgets.QWidget):
         style_layout.addRow(self.roomSurfaceHintLabel)
         style_layout.addRow(self.applyRoomStyleButton)
         layout.addWidget(style_box)
+        placement_box = QtWidgets.QGroupBox("Gameplay Placement")
+        placement_layout = QtWidgets.QFormLayout(placement_box)
+        self.gameplayPlacementKindComboBox = QtWidgets.QComboBox()
+        self.gameplayPlacementKindComboBox.setObjectName("mapStudioGameplayPlacementKindComboBox")
+        self.gameplayTemplateLineEdit = QtWidgets.QLineEdit("plc_bench")
+        self.gameplayTemplateLineEdit.setObjectName("mapStudioGameplayTemplateLineEdit")
+        self.gameplayTemplateLineEdit.setPlaceholderText("template resref, e.g. plc_bench or c_drdmkone")
+        self.gameplayTagLineEdit = QtWidgets.QLineEdit("")
+        self.gameplayTagLineEdit.setObjectName("mapStudioGameplayTagLineEdit")
+        self.gameplayTagLineEdit.setPlaceholderText("optional in-module tag")
+        self.gameplayPosXSpinBox = QtWidgets.QDoubleSpinBox()
+        self.gameplayPosXSpinBox.setObjectName("mapStudioGameplayPosXSpinBox")
+        self.gameplayPosYSpinBox = QtWidgets.QDoubleSpinBox()
+        self.gameplayPosYSpinBox.setObjectName("mapStudioGameplayPosYSpinBox")
+        self.gameplayPosZSpinBox = QtWidgets.QDoubleSpinBox()
+        self.gameplayPosZSpinBox.setObjectName("mapStudioGameplayPosZSpinBox")
+        for spin in (self.gameplayPosXSpinBox, self.gameplayPosYSpinBox, self.gameplayPosZSpinBox):
+            spin.setRange(-1000.0, 1000.0)
+            spin.setDecimals(3)
+            spin.setSingleStep(0.25)
+            spin.setSuffix(" m")
+        self.gameplayPosXSpinBox.setValue(1.75)
+        self.gameplayPosYSpinBox.setValue(1.5)
+        self.gameplayBearingSpinBox = QtWidgets.QDoubleSpinBox()
+        self.gameplayBearingSpinBox.setObjectName("mapStudioGameplayBearingSpinBox")
+        self.gameplayBearingSpinBox.setRange(-360.0, 360.0)
+        self.gameplayBearingSpinBox.setDecimals(1)
+        self.gameplayBearingSpinBox.setSingleStep(15.0)
+        self.gameplayBearingSpinBox.setSuffix(" deg")
+        self.addGameplayPlacementButton = QtWidgets.QPushButton("Add Gameplay Placement")
+        self.addGameplayPlacementButton.setObjectName("mapStudioAddGameplayPlacementButton")
+        placement_layout.addRow("Kind:", self.gameplayPlacementKindComboBox)
+        placement_layout.addRow("Template:", self.gameplayTemplateLineEdit)
+        placement_layout.addRow("Tag:", self.gameplayTagLineEdit)
+        placement_layout.addRow("Pos X:", self.gameplayPosXSpinBox)
+        placement_layout.addRow("Pos Y:", self.gameplayPosYSpinBox)
+        placement_layout.addRow("Pos Z:", self.gameplayPosZSpinBox)
+        placement_layout.addRow("Bearing:", self.gameplayBearingSpinBox)
+        placement_layout.addRow(self.addGameplayPlacementButton)
+        layout.addWidget(placement_box)
         for label in self.ACTIONS:
             button = QtWidgets.QPushButton(label)
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
@@ -112,6 +153,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
+        self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
         self._update_surface_hint()
 
@@ -181,6 +223,29 @@ class BuilderTab(QtWidgets.QWidget):
         texture = self.roomTextureLineEdit.text().strip()
         surface_id = str(self._current_surface_data().get("surface_id") or self.roomSurfaceComboBox.currentData() or "4")
         self.roomStyleRequested.emit(texture, surface_id)
+
+    def set_gameplay_placement_kinds(self, kinds) -> None:
+        """Populate the gameplay placement kind selector from the controller."""
+
+        self.gameplayPlacementKindComboBox.clear()
+        for kind in kinds or ():
+            value = str(kind or "").strip()
+            if value:
+                self.gameplayPlacementKindComboBox.addItem(value.replace("_", " ").title(), value)
+        if self.gameplayPlacementKindComboBox.count() <= 0:
+            self.gameplayPlacementKindComboBox.addItem("Placeable", "placeable")
+
+    def _emit_gameplay_placement(self) -> None:
+        kind = str(self.gameplayPlacementKindComboBox.currentData() or "placeable")
+        self.gameplayPlacementRequested.emit(
+            kind,
+            self.gameplayTemplateLineEdit.text().strip(),
+            self.gameplayTagLineEdit.text().strip(),
+            float(self.gameplayPosXSpinBox.value()),
+            float(self.gameplayPosYSpinBox.value()),
+            float(self.gameplayPosZSpinBox.value()),
+            float(self.gameplayBearingSpinBox.value()),
+        )
 
     def _update_operation_controls(self) -> None:
         operation = str(self.roomOperationComboBox.currentData() or "")

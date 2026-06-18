@@ -11,8 +11,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .authored_module_objects import (
+    AuthoredCameraInstance,
+    AuthoredCreatureInstance,
+    AuthoredDoorInstance,
+    AuthoredEncounterInstance,
     AuthoredGameplayPlacement,
     AuthoredPlaceableInstance,
+    AuthoredSoundInstance,
+    AuthoredStoreInstance,
+    AuthoredTriggerInstance,
     AuthoredWaypointInstance,
     ModuleEntryPoint,
 )
@@ -69,6 +76,14 @@ def _vec3(value: Any, default: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> 
     return default
 
 
+def _vec4(value: Any, default: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)) -> tuple[float, float, float, float]:
+    if isinstance(value, dict):
+        value = (value.get("x"), value.get("y"), value.get("z"), value.get("w"))
+    if isinstance(value, (list, tuple)) and len(value) >= 4:
+        return (_float(value[0], default[0]), _float(value[1], default[1]), _float(value[2], default[2]), _float(value[3], default[3]))
+    return default
+
+
 def _material(data: Any) -> PrimitiveMaterial:
     source = _dict(data)
     return PrimitiveMaterial(
@@ -122,6 +137,74 @@ def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPr
 def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
     source = _dict(data)
     entry = _dict(source.get("entry_point"))
+    creatures = tuple(
+        AuthoredCreatureInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+            bearing=_float(item.get("bearing"), 0.0),
+        )
+        for item in (_dict(raw) for raw in source.get("creatures", ()) or ())
+    )
+    doors = tuple(
+        AuthoredDoorInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+            bearing=_float(item.get("bearing"), 0.0),
+            linked_to=str(item.get("linked_to") or ""),
+            linked_to_module=str(item.get("linked_to_module") or ""),
+            transition_destination=int(_float(item.get("transition_destination"), 0.0)),
+        )
+        for item in (_dict(raw) for raw in source.get("doors", ()) or ())
+    )
+    triggers = tuple(
+        AuthoredTriggerInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+            geometry=tuple(_vec3(point) for point in item.get("geometry", ()) or ()),
+            linked_to=str(item.get("linked_to") or ""),
+            linked_to_module=str(item.get("linked_to_module") or ""),
+            transition_destination=int(_float(item.get("transition_destination"), 0.0)),
+        )
+        for item in (_dict(raw) for raw in source.get("triggers", ()) or ())
+    )
+    encounters = tuple(
+        AuthoredEncounterInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+        )
+        for item in (_dict(raw) for raw in source.get("encounters", ()) or ())
+    )
+    sounds = tuple(
+        AuthoredSoundInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+        )
+        for item in (_dict(raw) for raw in source.get("sounds", ()) or ())
+    )
+    cameras = tuple(
+        AuthoredCameraInstance(
+            camera_id=item.get("camera_id", item.get("id", 0)),
+            position=_vec3(item.get("position")),
+            orientation=_vec4(item.get("orientation")),
+            field_of_view=_float(item.get("field_of_view"), 45.0),
+            height=_float(item.get("height"), 0.0),
+            mic_range=_float(item.get("mic_range"), 0.0),
+            pitch=_float(item.get("pitch"), 0.0),
+        )
+        for item in (_dict(raw) for raw in source.get("cameras", ()) or ())
+    )
+    stores = tuple(
+        AuthoredStoreInstance(
+            template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
+            tag=str(item.get("tag") or ""),
+        )
+        for item in (_dict(raw) for raw in source.get("stores", ()) or ())
+    )
     placeables = tuple(
         AuthoredPlaceableInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
@@ -147,6 +230,13 @@ def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
             position=_vec3(entry.get("position")),
             facing=_float(entry.get("facing"), 0.0),
         ),
+        creatures=creatures,
+        doors=doors,
+        triggers=triggers,
+        encounters=encounters,
+        sounds=sounds,
+        cameras=cameras,
+        stores=stores,
         placeables=placeables,
         waypoints=waypoints,
         metadata=_dict(source.get("metadata")),
@@ -222,6 +312,74 @@ def _placement_payload(placement: AuthoredGameplayPlacement) -> dict[str, Any]:
             "position": _vec3_payload(placement.entry_point.position),
             "facing": float(placement.entry_point.facing),
         },
+        "creatures": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+                "bearing": float(item.bearing),
+            }
+            for item in placement.creatures
+        ],
+        "doors": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+                "bearing": float(item.bearing),
+                "linked_to": item.linked_to,
+                "linked_to_module": item.linked_to_module,
+                "transition_destination": int(item.transition_destination),
+            }
+            for item in placement.doors
+        ],
+        "triggers": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+                "geometry": [_vec3_payload(point) for point in item.geometry],
+                "linked_to": item.linked_to,
+                "linked_to_module": item.linked_to_module,
+                "transition_destination": int(item.transition_destination),
+            }
+            for item in placement.triggers
+        ],
+        "encounters": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+            }
+            for item in placement.encounters
+        ],
+        "sounds": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+                "position": _vec3_payload(item.position),
+            }
+            for item in placement.sounds
+        ],
+        "cameras": [
+            {
+                "camera_id": item.camera_id,
+                "position": _vec3_payload(item.position),
+                "orientation": [float(value) for value in item.orientation],
+                "field_of_view": float(item.field_of_view),
+                "height": float(item.height),
+                "mic_range": float(item.mic_range),
+                "pitch": float(item.pitch),
+            }
+            for item in placement.cameras
+        ],
+        "stores": [
+            {
+                "template_resref": item.template_resref,
+                "tag": item.tag,
+            }
+            for item in placement.stores
+        ],
         "placeables": [
             {
                 "template_resref": item.template_resref,

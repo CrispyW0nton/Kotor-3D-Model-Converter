@@ -156,6 +156,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab = BuilderTab()
         self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
         self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
+        self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -257,6 +258,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
+        self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -488,6 +490,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = "Applied room material and walkmesh surface; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def add_authored_gameplay_placement(
+        self,
+        kind: str,
+        template_resref: str,
+        tag: str,
+        x: float,
+        y: float,
+        z: float,
+        bearing: float,
+    ) -> None:
+        try:
+            result = self.controller.add_authored_gameplay_placement(
+                kind=kind,
+                template_resref=template_resref,
+                tag=tag,
+                position=(x, y, z),
+                bearing=bearing,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Gameplay Placement", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Added authored {kind} placement; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
