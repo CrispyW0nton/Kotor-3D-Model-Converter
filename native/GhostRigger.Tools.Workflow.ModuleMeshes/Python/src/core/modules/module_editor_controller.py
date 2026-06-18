@@ -24,6 +24,7 @@ from .authored_module_kmap_bridge import (
     create_dev_test_authored_module_payload,
 )
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
+from .authored_room_operations import apply_authored_floor_plan_operation
 from .dev_module_smoke import DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
@@ -139,6 +140,26 @@ class ModuleEditorController:
         self.project.game = authored.game
         self.project.dirty = True
         self.model.log(f"Created authored Map Studio module {self.project.name} from primitive preset {preset_id}.")
+        return self.authored_module_readiness()
+
+    def apply_authored_room_operation(self, *, operation: str, **kwargs: Any):
+        """Apply a floor-plan shaping operation to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = apply_authored_floor_plan_operation(authored, operation, **kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(f"Applied Map Studio room operation {operation}.")
         return self.authored_module_readiness()
 
     def build_preview(self, output_dir: str | Path):

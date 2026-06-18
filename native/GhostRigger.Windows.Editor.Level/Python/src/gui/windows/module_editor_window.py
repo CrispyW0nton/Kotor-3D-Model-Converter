@@ -254,6 +254,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
+        self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -446,6 +447,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Created authored module {self.project.name} from primitive preset {preset_id}."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_operation(
+        self,
+        operation: str,
+        distance: float,
+        cut_center_x: float,
+        cut_center_y: float,
+        cut_width: float,
+        cut_depth: float,
+    ) -> None:
+        try:
+            if operation == "rectangular_cut":
+                result = self.controller.apply_authored_room_operation(
+                    operation=operation,
+                    center=(cut_center_x, cut_center_y),
+                    size=(cut_width, cut_depth),
+                )
+            else:
+                result = self.controller.apply_authored_room_operation(operation=operation, distance=distance)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Room Operation", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Applied room operation {operation}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

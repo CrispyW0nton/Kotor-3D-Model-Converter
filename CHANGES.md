@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exposes Room Shaping Operations
+
+Owner: LordVaderCW
+Task: T2651
+Subsystem: Map Studio / authored floor-plan operations / Builder tab / native Python payloads
+
+- Added a headless authored-room operation layer that applies floor-plan inset, bevel, and rectangular boolean-cut operations to the current KMAP-authored module.
+- Added controller support for applying room operations, clearing stale runtime/export proof state, and preserving a launchable smoke path by repairing default placement anchors after rectangular cuts.
+- Updated the Map Studio Builder tab with `Shape Current Room` controls for bevel, inset, and rectangular cut inputs.
+- Mirrored the operation/controller/UI changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_room_presets.py tests\test_authored_room_floorplan.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_room_operations`
+
 ### [2026-06-18] Map Studio Adds Primitive Room Presets
 
 Owner: LordVaderCW
