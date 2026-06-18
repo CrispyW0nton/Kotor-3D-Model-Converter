@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
-from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, build_composition_wok
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, build_composition_wok, compile_authored_room_composition
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_primitives import ArchPrimitive, WallPrimitive
@@ -39,12 +39,25 @@ class AuthoredRoomOutlineLine:
 
 
 @dataclass(frozen=True)
+class AuthoredRoomPrimitiveHandle:
+    """One draggable authored composition primitive handle for viewport editing."""
+
+    room_resref: str
+    primitive_name: str
+    primitive_type: str
+    center: Vec3
+    footprint: tuple[Vec3, ...]
+    color: str
+
+
+@dataclass(frozen=True)
 class AuthoredRoomOutlineGeometry:
     """UI/renderer-ready room outline data for authored Map Studio rooms."""
 
     room_count: int = 0
     polygons: tuple[AuthoredRoomOutlinePolygon, ...] = ()
     lines: tuple[AuthoredRoomOutlineLine, ...] = ()
+    primitive_handles: tuple[AuthoredRoomPrimitiveHandle, ...] = ()
     warnings: tuple[str, ...] = ()
 
 
@@ -195,11 +208,88 @@ def _composition_walkmesh_polygons(
     return tuple(polygons)
 
 
+def _composition_primitive_name(primitive: Any) -> str:
+    if isinstance(primitive, PlacedRoomPrimitive):
+        return str(primitive.name or getattr(primitive.primitive, "name", "") or "").strip()
+    return str(getattr(primitive, "name", "") or "").strip()
+
+
+def _composition_primitive_type(primitive: Any) -> str:
+    base = primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
+    name = type(base).__name__
+    return name[:-9].lower() if name.endswith("Primitive") else name.lower()
+
+
+def _bounds_handle_footprint(vertices: tuple[Vec3, ...]) -> tuple[Vec3, tuple[Vec3, ...]]:
+    xs = [float(point[0]) for point in vertices]
+    ys = [float(point[1]) for point in vertices]
+    zs = [float(point[2]) for point in vertices]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    min_z, max_z = min(zs), max(zs)
+    center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5, (min_z + max_z) * 0.5)
+    footprint_z = min_z
+    footprint = (
+        (min_x, min_y, footprint_z),
+        (max_x, min_y, footprint_z),
+        (max_x, max_y, footprint_z),
+        (min_x, max_y, footprint_z),
+    )
+    return center, footprint
+
+
+def _composition_primitive_handles(
+    *,
+    primitive: AuthoredRoomComposition,
+    room_resref: str,
+    offset: Vec3,
+) -> tuple[AuthoredRoomPrimitiveHandle, ...]:
+    primitive_types = {
+        _composition_primitive_name(item): _composition_primitive_type(item)
+        for item in tuple(primitive.primitives or ())
+        if _composition_primitive_name(item)
+    }
+    if not primitive_types:
+        return ()
+    try:
+        geometry = compile_authored_room_composition(primitive)
+    except Exception:
+        return ()
+    handles: list[AuthoredRoomPrimitiveHandle] = []
+    for mesh in tuple(getattr(geometry, "helper_meshes", ()) or ()):
+        name = str(getattr(mesh, "name", "") or "")
+        if name not in primitive_types:
+            continue
+        vertices = tuple(
+            (
+                float(vertex[0]) + offset[0],
+                float(vertex[1]) + offset[1],
+                float(vertex[2]) + offset[2],
+            )
+            for vertex in tuple(getattr(mesh, "vertices", ()) or ())
+        )
+        if not vertices:
+            continue
+        center, footprint = _bounds_handle_footprint(vertices)
+        handles.append(
+            AuthoredRoomPrimitiveHandle(
+                room_resref=room_resref,
+                primitive_name=name,
+                primitive_type=primitive_types[name],
+                center=center,
+                footprint=footprint,
+                color="#ff9f43",
+            )
+        )
+    return tuple(handles)
+
+
 def authored_room_outline_geometry_for_project(project: AuthoredModuleProject) -> AuthoredRoomOutlineGeometry:
     """Return viewport overlay outlines for authored rooms."""
 
     polygons: list[AuthoredRoomOutlinePolygon] = []
     lines: list[AuthoredRoomOutlineLine] = []
+    primitive_handles: list[AuthoredRoomPrimitiveHandle] = []
     warnings: list[str] = []
     for room in tuple(project.rooms or ()):
         room_resref = normalise_resref(room.room_resref)
@@ -223,6 +313,13 @@ def authored_room_outline_geometry_for_project(project: AuthoredModuleProject) -
                 room_resref=room_resref,
                 label=label,
                 offset=offset,
+            )
+            primitive_handles.extend(
+                _composition_primitive_handles(
+                    primitive=primitive,
+                    room_resref=room_resref,
+                    offset=offset,
+                )
             )
         else:
             warnings.append(f"Room {label} has no viewport outline for primitive type {type(primitive).__name__}.")
@@ -249,6 +346,7 @@ def authored_room_outline_geometry_for_project(project: AuthoredModuleProject) -
         room_count=len(tuple(project.rooms or ())),
         polygons=tuple(polygons),
         lines=tuple(lines),
+        primitive_handles=tuple(primitive_handles),
         warnings=tuple(warnings),
     )
 
@@ -257,5 +355,6 @@ __all__ = [
     "AuthoredRoomOutlineGeometry",
     "AuthoredRoomOutlineLine",
     "AuthoredRoomOutlinePolygon",
+    "AuthoredRoomPrimitiveHandle",
     "authored_room_outline_geometry_for_project",
 ]

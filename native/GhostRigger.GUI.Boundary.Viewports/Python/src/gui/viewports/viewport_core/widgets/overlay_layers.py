@@ -65,6 +65,46 @@ class ViewportOverlayLayersMixin:
         zone["point_index"] = int(point_index)
         zones.append(zone)
 
+    def _add_map_studio_room_primitive_hit_zone(self, room_resref: object, primitive_name: object, **zone: object) -> None:
+        room = str(room_resref or "")
+        primitive = str(primitive_name or "")
+        if not room or not primitive:
+            return
+        zones = getattr(self, "_map_studio_room_primitive_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_room_primitive_hit_zones = zones
+        zone["room_resref"] = room
+        zone["primitive_name"] = primitive
+        zones.append(zone)
+
+    def map_studio_room_primitive_at_screen(self, x: float, y: float) -> tuple[str, str, tuple[float, float, float]] | tuple[()]:
+        """Return the authored room primitive handle under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_room_primitive_hit_zones", ()) or ())):
+            kind = str(zone.get("kind", "") or "")
+            hit = False
+            if kind == "rect":
+                min_x, min_y, max_x, max_y = zone.get("bounds", (0.0, 0.0, -1.0, -1.0))
+                hit = float(min_x) <= px <= float(max_x) and float(min_y) <= py <= float(max_y)
+            elif kind == "circle":
+                cx, cy = zone.get("center", (0.0, 0.0))
+                radius = float(zone.get("radius", 0.0) or 0.0)
+                hit = ((px - float(cx)) ** 2 + (py - float(cy)) ** 2) <= radius * radius
+            if not hit:
+                continue
+            center = tuple(zone.get("world_center", (0.0, 0.0, 0.0)))
+            if len(center) < 3:
+                center = (0.0, 0.0, 0.0)
+            return (
+                str(zone.get("room_resref", "") or ""),
+                str(zone.get("primitive_name", "") or ""),
+                (float(center[0]), float(center[1]), float(center[2])),
+            )
+        return ()
+
     def map_studio_room_outline_point_at_screen(self, x: float, y: float) -> tuple[str, int, tuple[float, float, float]] | tuple[()]:
         """Return the authored room outline point under a viewport screen point."""
 
@@ -205,12 +245,14 @@ class ViewportOverlayLayersMixin:
 
     def _draw_map_studio_room_outlines(self, draw, w: int, h: int) -> None:
         self._map_studio_room_outline_hit_zones = []
+        self._map_studio_room_primitive_hit_zones = []
         geometry = getattr(self, "_map_studio_room_outline_geometry", None)
         if geometry is None:
             return
         polygons = tuple(getattr(geometry, "polygons", ()) or ())
         lines = tuple(getattr(geometry, "lines", ()) or ())
-        if not polygons and not lines:
+        primitive_handles = tuple(getattr(geometry, "primitive_handles", ()) or ())
+        if not polygons and not lines and not primitive_handles:
             return
         try:
             for polygon in polygons:
@@ -268,8 +310,56 @@ class ViewportOverlayLayersMixin:
                 else:
                     draw.line([(start[0], start[1]), (end[0], end[1])], fill=(0, 0, 0, 150), width=width + 2)
                     draw.line([(start[0], start[1]), (end[0], end[1])], fill=color, width=width)
+            self._draw_map_studio_room_primitive_handles(draw, primitive_handles, w, h)
         except Exception as exc:
             log.debug("Map Studio room outline overlay failed: %s", exc)
+
+    def _draw_map_studio_room_primitive_handles(self, draw, primitive_handles: tuple[object, ...], w: int, h: int) -> None:
+        for handle in primitive_handles:
+            footprint = tuple(getattr(handle, "footprint", ()) or ())
+            projected = []
+            for point in footprint:
+                proj = self._map_studio_project_point(point, w, h)
+                if proj is None:
+                    projected = []
+                    break
+                projected.append((float(proj[0]), float(proj[1])))
+            center = self._map_studio_project_point(getattr(handle, "center", ()), w, h)
+            if center is None:
+                continue
+            color = self._map_studio_marker_rgba(getattr(handle, "color", "#ff9f43"), 235)
+            room_resref = getattr(handle, "room_resref", "")
+            primitive_name = getattr(handle, "primitive_name", "")
+            world_center = tuple(getattr(handle, "center", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+            if len(projected) >= 3:
+                closed = projected + [projected[0]]
+                xs = [point[0] for point in projected]
+                ys = [point[1] for point in projected]
+                draw.polygon(projected, fill=(color[0], color[1], color[2], 18))
+                draw.line(closed, fill=(0, 0, 0, 145), width=4)
+                draw.line(closed, fill=color, width=2)
+                self._add_map_studio_room_primitive_hit_zone(
+                    room_resref,
+                    primitive_name,
+                    kind="rect",
+                    bounds=(min(xs) - 7.0, min(ys) - 7.0, max(xs) + 7.0, max(ys) + 7.0),
+                    world_center=world_center,
+                )
+            cx, cy = float(center[0]), float(center[1])
+            radius = 6
+            diamond = [(cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy), (cx, cy - radius)]
+            self._add_map_studio_room_primitive_hit_zone(
+                room_resref,
+                primitive_name,
+                kind="circle",
+                center=(cx, cy),
+                radius=11.0,
+                world_center=world_center,
+            )
+            draw.polygon(diamond, fill=(color[0], color[1], color[2], 225), outline=(0, 0, 0, 190))
+            label = str(getattr(handle, "primitive_type", "") or "")
+            if label:
+                draw.text((cx + 8, cy - 8), label, fill=color)
 
     @staticmethod
     def _draw_map_studio_dashed_line(draw, start, end, *, color: tuple[int, int, int, int], width: int = 2) -> None:

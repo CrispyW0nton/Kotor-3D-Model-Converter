@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Viewport Drag Handles for Authored Primitives
+
+Owner: LordVaderCW
+Task: T2677
+Subsystem: Map Studio / authored composition primitive viewport editing / room outline overlays / native Python payloads
+
+- Added core-authored primitive handle geometry derived from compiled composition helper meshes so ramp, stair, wall, arch, cube, and cylinder primitives can be represented as draggable viewport targets.
+- Added a delta-based primitive move operation in the authored room core and exposed it through `ModuleEditorController.move_authored_room_primitive`, preserving stale export/proof invalidation through the existing KMAP persistence path.
+- Extended the Map Studio viewport overlay to draw pickable primitive footprints and center handles without replacing the existing room outline, marker, or builder-tab editing paths.
+- Wired standalone Module Editor viewport dragging so a selected primitive can be moved directly in the room viewport using the same floor-plane delta and snap policy as authored room markers.
+- Mirrored the core/controller/panel payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\viewport_widget.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_operations.py tests\test_authored_room_outline_geometry.py tests\test_map_studio_room_outline_overlay.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_room_outline_geometry.py tests\test_map_studio_room_outline_overlay.py tests\test_map_studio_marker_overlay.py -q --basetemp .pytest_tmp_map_studio_primitive_drag`
+- `git diff --check`
+
 ### [2026-06-18] Map Studio Adds Composition Primitive Material and WOK Surface Editing
 
 Owner: LordVaderCW

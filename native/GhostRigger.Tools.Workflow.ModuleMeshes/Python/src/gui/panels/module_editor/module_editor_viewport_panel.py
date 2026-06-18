@@ -14,6 +14,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     itemSelected = QtCore.Signal(str)
     transformEdited = QtCore.Signal(str, object)
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
+    roomPrimitiveMoved = QtCore.Signal(str, str, object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -76,6 +77,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._placement_marker_geometry: object | None = None
         self._marker_drag: dict[str, object] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
+        self._room_primitive_drag: dict[str, object] | None = None
         self._table_updating = False
 
     def set_project(
@@ -173,6 +175,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         self.itemSelected.emit(placement_id)
                         self._begin_marker_drag(placement_id, event)
                         return True
+                    room_primitive = self._room_primitive_at_event(event)
+                    if room_primitive is not None:
+                        self._begin_room_primitive_drag(room_primitive, event)
+                        return True
                     room_point = self._room_outline_point_at_event(event)
                     if room_point is not None:
                         self._begin_room_outline_point_drag(room_point, event)
@@ -189,10 +195,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     return self._finish_room_outline_point_drag(event)
                 self._update_room_outline_point_drag(event)
                 return True
+            if event_type == QtCore.QEvent.MouseMove and self._room_primitive_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_room_primitive_drag(event)
+                self._update_room_primitive_drag(event)
+                return True
             if event_type == QtCore.QEvent.MouseButtonRelease and self._marker_drag is not None:
                 return self._finish_marker_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._room_outline_point_drag is not None:
                 return self._finish_room_outline_point_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._room_primitive_drag is not None:
+                return self._finish_room_primitive_drag(event)
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
             QtCore.QEvent.Resize,
@@ -253,6 +267,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if not room_resref or point_index < 0 or len(world_point) < 3:
             return None
         return (room_resref, point_index, world_point)
+
+    def _room_primitive_at_event(self, event: QtCore.QEvent) -> tuple[str, str, tuple[float, float, float]] | None:
+        primitive_at_screen = getattr(self.viewport, "map_studio_room_primitive_at_screen", None)
+        if not callable(primitive_at_screen):
+            return None
+        pos_fn = getattr(event, "position", None)
+        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
+        if pos is None:
+            return None
+        hit = primitive_at_screen(float(pos.x()), float(pos.y()))
+        if not hit or len(hit) < 3:
+            return None
+        room_resref = str(hit[0] or "")
+        primitive_name = str(hit[1] or "")
+        world_center = tuple(float(value) for value in tuple(hit[2])[:3])
+        if not room_resref or not primitive_name or len(world_center) < 3:
+            return None
+        return (room_resref, primitive_name, world_center)
 
     def _event_position(self, event: QtCore.QEvent) -> tuple[float, float] | None:
         pos_fn = getattr(event, "position", None)
@@ -367,6 +399,68 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             str(drag.get("room_resref", "") or ""),
             int(drag.get("point_index", -1)),
             position,
+        )
+        return True
+
+    def _begin_room_primitive_drag(self, hit: tuple[str, str, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
+        start_screen = self._event_position(event)
+        if start_screen is None:
+            self._room_primitive_drag = None
+            return False
+        room_resref, primitive_name, world_center = hit
+        self._room_primitive_drag = {
+            "room_resref": room_resref,
+            "primitive_name": primitive_name,
+            "start_screen": start_screen,
+            "start_center": world_center,
+            "active": False,
+            "pending_delta": (0.0, 0.0, 0.0),
+        }
+        return True
+
+    def _update_room_primitive_drag(self, event: QtCore.QEvent) -> bool:
+        if self._room_primitive_drag is None:
+            return False
+        current = self._event_position(event)
+        if current is None:
+            return False
+        start = self._room_primitive_drag.get("start_screen", current)
+        screen_dx = float(current[0]) - float(start[0])
+        screen_dy = float(current[1]) - float(start[1])
+        if screen_dx * screen_dx + screen_dy * screen_dy < 9.0:
+            return True
+        start_center = tuple(self._room_primitive_drag.get("start_center", (0.0, 0.0, 0.0)))
+        if len(start_center) < 3:
+            return False
+        world_dx, world_dy = self._screen_delta_to_floor_delta(start_center, screen_dx, screen_dy)
+        pending_center = self._snap_map_studio_position(
+            (float(start_center[0]) + world_dx, float(start_center[1]) + world_dy, float(start_center[2]))
+        )
+        delta = (
+            float(pending_center[0]) - float(start_center[0]),
+            float(pending_center[1]) - float(start_center[1]),
+            float(pending_center[2]) - float(start_center[2]),
+        )
+        self._room_primitive_drag["active"] = True
+        self._room_primitive_drag["pending_delta"] = delta
+        return True
+
+    def _finish_room_primitive_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._room_primitive_drag is None:
+            return False
+        if event is not None:
+            self._update_room_primitive_drag(event)
+        drag = self._room_primitive_drag
+        self._room_primitive_drag = None
+        if not bool(drag.get("active", False)):
+            return True
+        delta = tuple(float(v) for v in tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))[:3])
+        if len(delta) < 3:
+            return True
+        self.roomPrimitiveMoved.emit(
+            str(drag.get("room_resref", "") or ""),
+            str(drag.get("primitive_name", "") or ""),
+            delta,
         )
         return True
 
@@ -547,8 +641,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if authored_room_outline_geometry is not None:
             polygons = len(tuple(getattr(authored_room_outline_geometry, "polygons", ()) or ()))
             room_lines = len(tuple(getattr(authored_room_outline_geometry, "lines", ()) or ()))
-            if polygons or room_lines:
-                geometry_suffix = f"{geometry_suffix} | {polygons} room outline polygon(s), {room_lines} wall/opening guide(s)"
+            primitive_handles = len(tuple(getattr(authored_room_outline_geometry, "primitive_handles", ()) or ()))
+            if polygons or room_lines or primitive_handles:
+                geometry_suffix = (
+                    f"{geometry_suffix} | {polygons} room outline polygon(s), "
+                    f"{room_lines} wall/opening guide(s), {primitive_handles} primitive handle(s)"
+                )
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
         self.marker_summary_label.setText(f"Gameplay markers: {parts}{geometry_suffix}{suffix}")
 

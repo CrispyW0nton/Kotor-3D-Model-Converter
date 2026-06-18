@@ -104,6 +104,28 @@ def test_t2669_elevation_composition_outline_includes_walkable_primitive_guides(
     assert any(point[2] > 0.0 for polygon in walkable_guides for point in polygon.points)
 
 
+def test_t2677_elevation_composition_outline_exposes_draggable_primitive_handles() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_outline_geometry import authored_room_outline_geometry_for_project
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="elevation_test_room",
+        module_root="grhandle",
+        game="K1",
+    )
+    geometry = authored_room_outline_geometry_for_project(project)
+    handles = {handle.primitive_name: handle for handle in geometry.primitive_handles}
+
+    assert len(handles) >= 7
+    assert "grhandle_room01_ramp" in handles
+    assert handles["grhandle_room01_ramp"].room_resref == "grhandle_room01"
+    assert handles["grhandle_room01_ramp"].primitive_type == "ramp"
+    assert len(handles["grhandle_room01_ramp"].footprint) == 4
+    assert handles["grhandle_room01_ramp"].center[0] < 0.0
+
+
 def test_t2664_rectangular_cut_outline_tracks_split_authored_rooms() -> None:
     _install_native_payload_paths()
 

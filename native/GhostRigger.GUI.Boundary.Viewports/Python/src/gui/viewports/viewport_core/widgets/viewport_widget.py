@@ -254,6 +254,7 @@ class QtViewportWidget(
         self._map_studio_marker_geometry = None
         self._map_studio_marker_hit_zones: list[dict[str, object]] = []
         self._map_studio_room_outline_hit_zones: list[dict[str, object]] = []
+        self._map_studio_room_primitive_hit_zones: list[dict[str, object]] = []
         self._gpu_texture_snapshot_key = None
         self._gpu_texture_snapshot_cache: dict = {}
         self._gpu_texture_snapshot_rebuilds = 0

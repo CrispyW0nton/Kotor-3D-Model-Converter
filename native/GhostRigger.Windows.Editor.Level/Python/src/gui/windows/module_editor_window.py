@@ -349,6 +349,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.viewport_panel.transformEdited.connect(self._set_transform)
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
+        self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.properties.transformChanged.connect(self._set_transform)
@@ -913,6 +914,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Move Authored Room Outline Point", str(exc))
+            return
+        self._refresh_all()
+
+    def _move_authored_room_primitive(self, room_resref: str, primitive_name: str, world_delta: object) -> None:
+        try:
+            self.controller.move_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                world_delta=tuple(world_delta),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Move Authored Room Primitive", str(exc))
             return
         self._refresh_all()
 

@@ -846,6 +846,39 @@ def set_authored_room_composition_primitive_transform(
     return _replace_rooms(project, rooms, operation="set_primitive_transform")
 
 
+def move_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    world_delta: Any,
+) -> AuthoredModuleProject:
+    """Move one authored composition primitive by a viewport-authored world delta."""
+
+    delta = _vec3_or_existing(world_delta, (0.0, 0.0, 0.0))
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Primitive move operation requires a primitive name.")
+    for primitive in tuple(composition.primitives or ()):
+        if _primitive_name(primitive) != target:
+            continue
+        transform = _primitive_transform(primitive)
+        translation = tuple(float(transform.translation[i]) + float(delta[i]) for i in range(3))
+        return set_authored_room_composition_primitive_transform(
+            project,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            translation=translation,
+            rotation_degrees_z=transform.rotation_degrees_z,
+            scale=transform.scale,
+            pivot=transform.pivot,
+        )
+    raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
+
+
 def apply_authored_floor_plan_inset(
     project: AuthoredModuleProject,
     *,
@@ -1032,6 +1065,7 @@ __all__ = [
     "available_authored_composition_primitive_kinds",
     "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
+    "move_authored_room_composition_primitive",
     "remove_authored_room_composition_primitive",
     "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_style",

@@ -207,6 +207,37 @@ def test_t2670_transforming_missing_composition_primitive_fails_clearly() -> Non
         )
 
 
+def test_t2677_controller_moves_composition_primitive_by_viewport_delta() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grdrag")
+
+    result = controller.move_authored_room_primitive(
+        room_resref="grdrag_room01",
+        primitive_name="grdrag_room01_ramp",
+        world_delta=(0.5, -1.0, 0.0),
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    primitive_payload = payload["rooms"][0]["primitive"]
+    ramp_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grdrag_room01_ramp")
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    wok = build.module.room_geometry["grdrag_room01"].wok
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert ramp_payload["transform"]["translation"] == [-2.25, -0.5, 0.0]
+    assert wok.verts[4] == (-3.25, -2.25, 0.0)
+    assert controller.project.dirty is True
+    assert not build.blocking_issues
+
+
 def test_t2671_controller_lists_composition_primitives_for_builder_tab() -> None:
     _install_native_payload_paths()
 
