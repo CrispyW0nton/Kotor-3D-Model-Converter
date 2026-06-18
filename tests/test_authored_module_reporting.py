@@ -73,6 +73,7 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     ).read_text(encoding="utf-8")
 
     assert "mapStudioReadinessAuthoredSummaryLabel" in source
+    assert "mapStudioReadinessToolchainLabel" in source
     assert "mapStudioReadinessGameProofLabel" in source
     assert "mapStudioReadinessProofRecorderLabel" in source
     assert "mapStudioReadinessLaunchHandoffLabel" in source
@@ -80,6 +81,7 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     assert "launchHandoffRequested" in source
     assert "gameplay_counts" in source
     assert "room_styles" in source
+    assert "Pipeline:" in source
     assert "proof_status" in source
     assert "launch_helper_command" in source
     assert "elevated_launch_script_path" in source

@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Shows Full Authoring Pipeline Readiness
+
+Owner: LordVaderCW
+Task: T2692
+Subsystem: Map Studio / authored module readiness / readiness UI / native Python payloads
+
+- Added a headless Map Studio toolchain readiness contract that tracks geometry authoring, walkmesh, gameplay layout, runtime package resources, and in-game proof as separate stages.
+- The geometry stage now explicitly reflects the intended from-scratch authoring scope: primitives, floor-plan extrusion, bevel, inset, rectangular cut, and rectangular union.
+- Updated the Map Studio readiness panel with a stable pipeline label so modders can tell whether a project is previewable, packageable, or still awaiting game proof.
+- Mirrored the readiness model and panel changes into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py tests\test_authored_module_readiness.py tests\test_authored_module_reporting.py`
+- `python -m pytest tests\test_authored_module_readiness.py tests\test_authored_module_reporting.py -q --basetemp .pytest_tmp_map_studio_toolchain_readiness`
+
 ### [2026-06-18] Map Studio Launch Helper Reports Proof Recorder
 
 Owner: LordVaderCW

@@ -46,6 +46,17 @@ class AuthoredRoomReadiness:
 
 
 @dataclass(frozen=True)
+class AuthoredModuleToolchainStatus:
+    """One stage in the from-scratch Map Studio authoring pipeline."""
+
+    name: str
+    ready: bool
+    status: str
+    value_label: str = ""
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredModuleReadiness:
     """Capability-honest summary for a from-scratch Map Studio module."""
 
@@ -54,6 +65,7 @@ class AuthoredModuleReadiness:
     capability_stage: str
     inputs: tuple[AuthoredModuleInputStatus, ...] = ()
     rooms: tuple[AuthoredRoomReadiness, ...] = ()
+    toolchain: tuple[AuthoredModuleToolchainStatus, ...] = ()
     can_preview: bool = False
     can_export_candidate: bool = False
     ready_for_game_test: bool = False
@@ -185,6 +197,92 @@ def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInput
     )
 
 
+def _room_primitive_summary(rooms: tuple[AuthoredRoomReadiness, ...]) -> str:
+    names = []
+    for room in rooms:
+        label = room.primitive_type
+        if label == "FloorPlanRoomPrimitive":
+            label = "floor-plan extrusion"
+        elif label == "AuthoredRoomComposition":
+            label = "primitive composition"
+        elif label == "RectangularRoomPrimitive":
+            label = "rectangular primitive"
+        elif label.endswith("Primitive"):
+            label = label[:-9].lower()
+        names.append(label)
+    unique = tuple(dict.fromkeys(names))
+    return ", ".join(unique) if unique else "none"
+
+
+def _toolchain_statuses(
+    project: AuthoredModuleProject,
+    *,
+    rooms: tuple[AuthoredRoomReadiness, ...],
+    missing_runtime_resources: tuple[RuntimeResourceKey, ...],
+    expected_runtime_resources: tuple[RuntimeResourceKey, ...],
+    blocking_messages: tuple[str, ...],
+    proof_status: str,
+    game_tested: bool,
+    proof_recording_script_path: str,
+) -> tuple[AuthoredModuleToolchainStatus, ...]:
+    """Summarize the full Map Studio path from geometry intent to game proof."""
+
+    room_count = len(rooms)
+    walkable_faces = sum(room.walkable_face_count for room in rooms)
+    room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
+    geometry_ready = bool(room_count) and not room_blocking
+    entry = project.placements.entry_point
+    entry_ready = normalise_resref(entry.area_resref) == project.module_root and bool(project.module_root)
+    gameplay_counts = _gameplay_counts(project)
+    placement_total = sum(gameplay_counts.values())
+    packaged_count = len(expected_runtime_resources) - len(missing_runtime_resources)
+    package_ready = bool(expected_runtime_resources) and not missing_runtime_resources and not blocking_messages
+    proof_ready = bool(game_tested)
+    proof_label = "Recorded" if proof_ready else proof_status.replace("_", " ")
+    if proof_recording_script_path and not proof_ready:
+        proof_label = "Recorder ready after warp test"
+    return (
+        AuthoredModuleToolchainStatus(
+            "Geometry authoring",
+            geometry_ready,
+            "Ready" if geometry_ready else "Needs authored room geometry",
+            (
+                f"{room_count} room(s), {_room_primitive_summary(rooms)}; tools: primitives, "
+                "floor-plan extrusion, bevel, inset, rectangular cut, rectangular union"
+            ),
+            "Create a primitive/composition room or fix room geometry blockers.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Walkmesh",
+            walkable_faces > 0 and not room_blocking,
+            "Ready" if walkable_faces > 0 and not room_blocking else "Needs walkable WOK faces",
+            f"{walkable_faces} walkable face(s)",
+            "Set a walkable floor/ramp/stair WOK surface and keep gameplay objects on walkable faces.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Gameplay layout",
+            entry_ready,
+            "Ready" if entry_ready else "Needs module entry point",
+            f"Entry {normalise_resref(entry.area_resref) or '(missing)'} @ {tuple(entry.position)}; {placement_total} placement(s)",
+            "Place the player start inside the module root area; add placeables, creatures, doors, and waypoints as needed.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Runtime package",
+            package_ready,
+            "Ready" if package_ready else "Needs generated module resources",
+            f"{packaged_count}/{len(expected_runtime_resources)} resources present",
+            "Generate ARE/GIT/IFO/PTH/LYT/VIS, room MDL/MDX, WOK, and the installable .mod package.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "In-game proof",
+            proof_ready,
+            proof_label,
+            proof_recording_script_path or "No proof recorder yet",
+            "Run KOTOR, warp to the module, verify spawn/walk/placeables, then record screenshot/video evidence.",
+        ),
+    )
+
+
 def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadiness, ...]:
     rooms: list[AuthoredRoomReadiness] = []
     for room in project.rooms:
@@ -312,12 +410,23 @@ def build_authored_module_readiness(
         preview_status = "Not ready"
         export_status = "Not ready"
         next_action = "Fix the blocking project, room, or walkmesh issues before preview/export."
+    toolchain = _toolchain_statuses(
+        project,
+        rooms=rooms,
+        missing_runtime_resources=missing,
+        expected_runtime_resources=expected,
+        blocking_messages=blocking,
+        proof_status=proof_status,
+        game_tested=bool(game_tested and can_export_candidate),
+        proof_recording_script_path=proof_recording_script_path,
+    )
     return AuthoredModuleReadiness(
         module_root=project.module_root,
         game=project.game,
         capability_stage=stage,
         inputs=_input_statuses(project),
         rooms=rooms,
+        toolchain=toolchain,
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
         ready_for_game_test=ready_for_game_test,
@@ -359,6 +468,16 @@ def build_authored_module_readiness(
                 }
                 for room in rooms
             ],
+            "toolchain": [
+                {
+                    "name": status.name,
+                    "ready": status.ready,
+                    "status": status.status,
+                    "value_label": status.value_label,
+                    "fix_hint": status.fix_hint,
+                }
+                for status in toolchain
+            ],
         },
     )
 
@@ -366,6 +485,7 @@ def build_authored_module_readiness(
 __all__ = [
     "AuthoredModuleInputStatus",
     "AuthoredModuleReadiness",
+    "AuthoredModuleToolchainStatus",
     "AuthoredRoomReadiness",
     "RuntimeResourceKey",
     "build_authored_module_readiness",

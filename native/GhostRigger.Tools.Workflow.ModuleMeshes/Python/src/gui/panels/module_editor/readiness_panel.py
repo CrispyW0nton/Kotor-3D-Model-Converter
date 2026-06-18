@@ -35,6 +35,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.stage_label.setWordWrap(True)
         root.addWidget(self.stage_label)
 
+        self.toolchain_label = QtWidgets.QLabel("Pipeline: Not checked")
+        self.toolchain_label.setObjectName("mapStudioReadinessToolchainLabel")
+        self.toolchain_label.setWordWrap(True)
+        root.addWidget(self.toolchain_label)
+
         self.preview_label = QtWidgets.QLabel("Preview: Not ready")
         self.preview_label.setObjectName("mapStudioReadinessPreviewLabel")
         self.preview_label.setWordWrap(True)
@@ -98,6 +103,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         if readiness is None:
             self.header_label.setText("Map Studio readiness")
             self.stage_label.setText("Stage: No authored module project selected")
+            self.toolchain_label.setText("Pipeline: Not checked")
             self.preview_label.setText("Preview: Not ready")
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
@@ -121,6 +127,17 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
 
         self.header_label.setText(f"Module: {module_root} ({game})")
         self.stage_label.setText(f"Stage: {stage}")
+        toolchain = tuple(getattr(readiness, "toolchain", ()) or ())
+        if toolchain:
+            parts = []
+            for item in toolchain:
+                name = str(getattr(item, "name", "") or "Step")
+                status = str(getattr(item, "status", "") or "Not checked")
+                marker = "Ready" if bool(getattr(item, "ready", False)) else "Needs work"
+                parts.append(f"{name}: {marker} ({status})")
+            self.toolchain_label.setText("Pipeline: " + " | ".join(parts))
+        else:
+            self.toolchain_label.setText("Pipeline: Not checked")
         self.preview_label.setText(f"Preview: {getattr(readiness, 'preview_status', 'Not ready')}")
         self.export_label.setText(f"Export: {getattr(readiness, 'export_status', 'Not ready')}")
         if expected:

@@ -111,6 +111,42 @@ def test_t2639_runtime_resources_promote_project_to_export_candidate() -> None:
     assert "warp grdev01" in readiness.next_action
 
 
+def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    preview_only = build_authored_module_readiness(_floor_plan_project())
+    export_candidate = build_authored_module_readiness(
+        _floor_plan_project(),
+        packaged_resources=_runtime_keys(),
+        proof_metadata={"proof_recording_script_path": "C:/tmp/grdev01_record_game_proof.cmd"},
+    )
+
+    preview_steps = {step.name: step for step in preview_only.toolchain}
+    export_steps = {step.name: step for step in export_candidate.toolchain}
+
+    assert set(preview_steps) == {
+        "Geometry authoring",
+        "Walkmesh",
+        "Gameplay layout",
+        "Runtime package",
+        "In-game proof",
+    }
+    assert preview_steps["Geometry authoring"].ready is True
+    assert "floor-plan extrusion" in preview_steps["Geometry authoring"].value_label
+    assert "bevel" in preview_steps["Geometry authoring"].value_label
+    assert "rectangular union" in preview_steps["Geometry authoring"].value_label
+    assert preview_steps["Walkmesh"].ready is True
+    assert preview_steps["Gameplay layout"].ready is True
+    assert preview_steps["Runtime package"].ready is False
+    assert "ARE/GIT/IFO/PTH/LYT/VIS" in preview_steps["Runtime package"].fix_hint
+    assert export_steps["Runtime package"].ready is True
+    assert export_steps["In-game proof"].ready is False
+    assert export_steps["In-game proof"].status == "Recorder ready after warp test"
+    assert export_candidate.metadata["toolchain"][0]["name"] == "Geometry authoring"
+
+
 def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None:
     _install_native_payload_paths()
 
