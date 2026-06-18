@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SCRIPT = ROOT / "scripts" / "install_grdev01_smoke_variant.py"
+PREPARE_AUTHORED_SCRIPT = ROOT / "scripts" / "prepare_grdev01_authored_smoke.py"
 RECORD_SCRIPT = ROOT / "scripts" / "record_grdev01_smoke_proof.py"
 STATUS_SCRIPT = ROOT / "scripts" / "check_grdev01_smoke_status.py"
 
@@ -27,6 +28,19 @@ def _install_variant(tmp_path: Path, *args: str) -> dict[str, object]:
         INSTALL_SCRIPT,
         "--output-dir",
         str(tmp_path),
+        "--json",
+        *args,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    return json.loads(result.stdout)
+
+
+def _prepare_authored(tmp_path: Path, *args: str) -> dict[str, object]:
+    result = _run_script(
+        PREPARE_AUTHORED_SCRIPT,
+        "--output-dir",
+        str(tmp_path),
+        "--overwrite-kmap",
         "--json",
         *args,
     )
@@ -116,3 +130,46 @@ def test_t2619_status_reports_game_tested_after_complete_proof(tmp_path: Path) -
     assert payload["proof"]["missing_checks"] == []
     assert payload["ready_for_game_launch"] is False
     assert payload["next_action"].startswith("No action required")
+
+
+def test_t2698_status_accepts_authored_smoke_package_before_manual_install(tmp_path: Path) -> None:
+    authored = _prepare_authored(tmp_path / "authored", "--dry-run")
+
+    result = _status(str(authored["proof_manifest_path"]))
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ready_for_manual_install"
+    assert payload["package_verification"]["ok"] is True
+    assert payload["runtime_archive"]["missing_required_resource_keys"] == []
+    assert payload["runtime_archive"]["path_key_ok"] is True
+    assert payload["ready_for_game_launch"] is False
+    assert payload["proof"]["missing_checks"] == [
+        "module_loads_in_game",
+        "player_spawns_on_floor",
+        "test_placeable_visible",
+        "player_can_walk_on_floor",
+        "screenshot_or_video_captured",
+    ]
+
+
+def test_t2698_status_accepts_installed_authored_smoke_package(tmp_path: Path) -> None:
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    authored = _prepare_authored(
+        tmp_path / "authored",
+        "--game-modules-dir",
+        str(modules_dir),
+    )
+
+    result = _status(str(authored["proof_manifest_path"]), "--game-modules-dir", str(modules_dir))
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "installed_ready_for_game_test"
+    assert payload["package_verification"]["ok"] is True
+    assert payload["runtime_archive"]["missing_required_resource_keys"] == []
+    assert payload["installed"]["exists"] is True
+    assert payload["installed"]["matches_package"] is True
+    assert payload["ready_for_game_launch"] is True
+    assert payload["next_action"].startswith("Launch KOTOR")

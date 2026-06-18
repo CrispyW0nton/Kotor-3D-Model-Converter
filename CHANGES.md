@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Covers Authored Smoke Status Handoff
+
+Owner: LordVaderCW
+Task: T2698
+Subsystem: Map Studio / authored smoke status / launch handoff tests
+
+- Added status-script regression coverage for the authored `grdev01` smoke package produced by `prepare_grdev01_authored_smoke.py`.
+- Covered both pre-install `ready_for_manual_install` and installed `installed_ready_for_game_test` states for the authored Map Studio path.
+- Verified the authored package status gate requires all runtime resources, including PTH, before launch readiness.
+
+Verification:
+- `python -m py_compile tests\test_check_grdev01_smoke_status_script.py`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py tests\test_launch_grdev01_smoke_script.py -q --basetemp .pytest_tmp_map_studio_authored_status`
+
 ### [2026-06-18] Map Studio Requires Existing Evidence Files For Game Proof
 
 Owner: LordVaderCW
