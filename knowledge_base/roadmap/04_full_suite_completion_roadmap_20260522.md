@@ -116,11 +116,12 @@ Existing strong pieces:
 Map Studio is not only a room-layout editor or module-package helper. The intended product is a full KOTOR module creation studio where a modder can:
 
 1. Build custom room geometry from scratch with primitives, extrusion, bevel, inset, boolean-style cut/union/difference operations, snapping, materials, and generated room MDL/MDX output.
-2. Generate and validate WOK walkmeshes from authored floor/ramp/stair surfaces, including surface type assignment and blocked/invalid triangle diagnostics.
-3. Assemble rooms into a KOTOR area using LYT/VIS, starting with one-room authored modules and growing into multi-room layouts.
-4. Place gameplay objects such as creatures, placeables, doors, triggers, encounters, sounds, cameras, waypoints, and stores, then write the corresponding GIT/IFO data.
-5. Package ARE/GIT/IFO/PTH/LYT/VIS, room MDL/MDX/WOK, templates, scripts/dialog refs, and install metadata into a staged module package that can be copied into the game's `Modules` folder.
-6. Prove the package in-game. Capability labels must remain honest: `previewable`, `export_candidate`, `installed_ready_for_game_test`, and `game_tested` are separate states.
+2. Build terrain patches from modder-friendly tools such as heightfields, sculpt brushes, slope flattening, ramps, terraces, cliffs, and material layers, then compile them into visible room mesh geometry plus matching WOK walkmesh data.
+3. Generate and validate WOK walkmeshes from authored floor/ramp/stair/terrain surfaces, including surface type assignment, blocked/invalid triangle diagnostics, slope checks, and non-walk boundary blockers.
+4. Assemble rooms into a KOTOR area using LYT/VIS, starting with one-room authored modules and growing into multi-room layouts.
+5. Place gameplay objects such as creatures, placeables, doors, triggers, encounters, sounds, cameras, waypoints, and stores, then write the corresponding GIT/IFO data.
+6. Package ARE/GIT/IFO/PTH/LYT/VIS, room MDL/MDX/WOK, templates, scripts/dialog refs, and install metadata into a staged module package that can be copied into the game's `Modules` folder.
+7. Prove the package in-game. Capability labels must remain honest: `previewable`, `export_candidate`, `installed_ready_for_game_test`, and `game_tested` are separate states.
 
 The first proof remains `T2601 - grdev01`: a generated room with walkable floor, room resources, player start, one test placeable, minimal PTH, staged `.mod`, and recorded KOTOR evidence that `warp grdev01` loads, spawns on the floor, shows the placeable, and allows walking. Do not mark Map Studio game-tested until screenshot/video evidence is recorded through the proof manifest.
 
@@ -128,7 +129,7 @@ Main gaps:
 
 - Product consolidation: the headless authored-module services are strong, but the visible Map Studio workflow still needs one coherent shell for geometry, WOK, LYT/VIS, gameplay placement, readiness, export, and proof handoff.
 - Template editing: placement can reference UTC/UTP/UTD/UTT/UTE/UTS/UTM resrefs, but creating/cloning/editing those templates should route through Module Studio forms with reference safety.
-- Visual authoring maturity: primitive operations, placement markers, room outlines, WOK overlays, and package readiness need to feel like one modder workflow instead of separate test-backed capabilities.
+- Visual authoring maturity: primitive operations, terrain building, placement markers, room outlines, WOK overlays, and package readiness need to feel like one modder workflow instead of separate test-backed capabilities.
 - Conversion contracts: KMAX scene-object transforms, authored pivots, KMAP room transforms, LYT room positions, and generated room MDL/WOK coordinates need one documented roundtrip contract.
 - Proof: the current `grdev01.mod` candidate is installed and package-verified, but still lacks recorded in-game evidence.
 
@@ -270,6 +271,7 @@ Goal: make map/area layout editing visual and integrated while preserving the he
 | T2904 | Consolidate the visible Map Studio shell. | A modder sees one workflow for geometry, WOK, LYT/VIS, placements, readiness, package output, and proof state rather than scattered Module Editor panels. |
 | T2905 | Wire VIS and WOK editor UI into authored projects. | Users can author visibility links, preview culling, inspect WOK face types, paint surfaces, and see seam/invalid-triangle diagnostics from the same authored map session. |
 | T2906 | Document KMAP/KMAX/LYT/MDL/WOK transform contract. | Room positions, scene-object transforms, pivots, authored primitive transforms, generated model coordinates, and WOK coordinates have a tested roundtrip contract. |
+| T2907 | Add terrain builder foundations. | Users can create terrain patches from heightfields/sculpt controls, paint terrain materials, flatten playable paths, mark cliffs/non-walk areas, generate matching room MDL/MDX and WOK faces, and see slope/blocker diagnostics before export. |
 
 ### M30 - Map Studio Object and Encounter Setup
 

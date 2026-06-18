@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Terrain Builder Roadmap Scope
+
+Owner: LordVaderCW
+Task: T2907
+Subsystem: Map Studio / roadmap / terrain authoring
+
+- Added a first-class terrain builder task to the Map Studio roadmap so authored custom modules can cover heightfields, sculpt controls, slope flattening, cliffs, terraces, terrain material painting, and matching WOK generation.
+- Updated the full Map Studio scope so terrain is treated as exportable room geometry plus walkmesh data, not a viewport-only decoration.
+- Updated README module boundaries to keep terrain authoring inside Map Studio alongside primitive/floor-plan custom module creation.
+
+Verification:
+- Documentation-only change; checked roadmap and README placement against the Map Studio/Module Studio boundary rules.
+
 ### [2026-06-18] Map Studio Adds Authored WOK Boundary Walls
 
 Owner: LordVaderCW

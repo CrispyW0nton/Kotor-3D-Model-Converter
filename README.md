@@ -245,9 +245,10 @@ Module and map work belongs in Module Studio/Map Studio/KMAP surfaces.
 - **Module Studio** is for existing KOTOR module/resource editing: hydrate RIM/MOD
   data, inspect ARE/GIT/IFO/templates/WOK resources, edit fields safely, and save
   with backups/manifests.
-- **Map Studio** is for authored/custom module creation: build room geometry from
-  primitives and floor-plan operations, generate WOK/PTH/LYT/VIS, place gameplay
-  objects, and package a staged `.mod` that can be copied into the game.
+- **Map Studio** is for authored/custom module creation: build room and terrain
+  geometry from primitives, floor-plan operations, terrain heightfields/sculpt
+  tools, generate WOK/PTH/LYT/VIS, place gameplay objects, and package a staged
+  `.mod` that can be copied into the game.
 - `.kmap` stores module/room/resource references and lightweight overrides.
 - `.kmax` stores scene objects, transforms, cameras, lights, pivots, and editor
   scene state.
