@@ -191,16 +191,34 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
     assert "Run the launch helper dry-run" in installed.next_action
 
 
-def test_t2639_game_tested_flag_is_only_honored_for_export_candidates() -> None:
+def test_t2639_game_tested_requires_recorded_proof_metadata() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_readiness import build_authored_module_readiness
 
     preview_only = build_authored_module_readiness(_floor_plan_project(), game_tested=True)
-    proven = build_authored_module_readiness(_floor_plan_project(), packaged_resources=_runtime_keys(), game_tested=True)
+    bare_flag = build_authored_module_readiness(_floor_plan_project(), packaged_resources=_runtime_keys(), game_tested=True)
+    proven = build_authored_module_readiness(
+        _floor_plan_project(),
+        packaged_resources=_runtime_keys(),
+        game_tested=True,
+        proof_metadata={
+            "game_tested": True,
+            "manual_proof_required": False,
+            "game_test": {
+                "accepted": True,
+                "missing_checks": [],
+                "evidence_path": "C:/tmp/grdev01_warp_proof.png",
+            },
+        },
+    )
 
     assert preview_only.capability_stage == "previewable"
     assert preview_only.game_tested is False
+    assert bare_flag.capability_stage == "export_candidate"
+    assert bare_flag.game_tested is False
+    assert bare_flag.ready_for_game_test is True
     assert proven.capability_stage == "game_tested"
     assert proven.game_tested is True
+    assert proven.metadata["proof_game_tested"] is True
     assert proven.ready_for_game_test is False

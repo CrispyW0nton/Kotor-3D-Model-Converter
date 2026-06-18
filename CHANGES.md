@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Requires Recorded Proof For Game-Tested Readiness
+
+Owner: LordVaderCW
+Task: T2696
+Subsystem: Map Studio / authored module readiness / in-game proof gate
+
+- Tightened authored-module readiness so a package is only marked `game_tested` when proof metadata records accepted in-game checks and screenshot/video evidence.
+- Kept bare `game_tested=True` from upgrading an export candidate without recorded proof data.
+- Mirrored the proof-readiness gate into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py tests\test_authored_module_readiness.py`
+- `python -m pytest tests\test_authored_module_readiness.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_proof_readiness`
+
 ### [2026-06-18] Map Studio Requires PTH In Authored Runtime Readiness
 
 Owner: LordVaderCW

@@ -162,6 +162,20 @@ def _launch_helper_command(*, game: str, proof_manifest_path: str, resolved_game
     )
 
 
+def _recorded_game_proof_complete(proof: dict[str, Any]) -> bool:
+    game_test = proof.get("game_test")
+    if not isinstance(game_test, dict):
+        return False
+    evidence_path = str(game_test.get("evidence_path") or proof.get("in_game_proof_evidence_path") or proof.get("evidence_path") or "")
+    return (
+        bool(proof.get("game_tested"))
+        and proof.get("manual_proof_required") is False
+        and bool(game_test.get("accepted"))
+        and not list(game_test.get("missing_checks") or ())
+        and bool(evidence_path)
+    )
+
+
 def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInputStatus, ...]:
     root = project.module_root
     entry = project.placements.entry_point
@@ -368,7 +382,8 @@ def build_authored_module_readiness(
     warnings = tuple(validation.warnings)
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
-    ready_for_game_test = can_export_candidate and not bool(game_tested)
+    proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
+    ready_for_game_test = can_export_candidate and not proof_game_tested
     proof_manifest_path = str(proof.get("proof_manifest_path") or "")
     checklist_path = str(proof.get("checklist_path") or "")
     installed_module_path = str(proof.get("installed_module_path") or "")
@@ -388,7 +403,7 @@ def build_authored_module_readiness(
     )
     elevated_launch_script_path = str(proof.get("elevated_launch_script_path") or "")
     proof_recording_script_path = str(proof.get("proof_recording_script_path") or "")
-    if game_tested and can_export_candidate:
+    if proof_game_tested:
         proof_status = "game_smoke_tested"
         launch_status = "proof_recorded"
     elif installed_module_path:
@@ -403,7 +418,7 @@ def build_authored_module_readiness(
     else:
         proof_status = "not_ready"
         launch_status = "not_ready"
-    if game_tested and can_export_candidate:
+    if proof_game_tested:
         stage = "game_tested"
         preview_status = "Ready"
         export_status = "Game-tested"
@@ -438,7 +453,7 @@ def build_authored_module_readiness(
         expected_runtime_resources=expected,
         blocking_messages=blocking,
         proof_status=proof_status,
-        game_tested=bool(game_tested and can_export_candidate),
+        game_tested=proof_game_tested,
         proof_recording_script_path=proof_recording_script_path,
     )
     return AuthoredModuleReadiness(
@@ -451,7 +466,7 @@ def build_authored_module_readiness(
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
         ready_for_game_test=ready_for_game_test,
-        game_tested=bool(game_tested and can_export_candidate),
+        game_tested=proof_game_tested,
         preview_status=preview_status,
         export_status=export_status,
         next_action=next_action,
@@ -480,6 +495,7 @@ def build_authored_module_readiness(
                 for light in tuple(getattr(project, "lights", ()) or ())
             ],
             "proof_status": proof_status,
+            "proof_game_tested": proof_game_tested,
             "proof_manifest_path": proof_manifest_path,
             "checklist_path": checklist_path,
             "installed_module_path": installed_module_path,
