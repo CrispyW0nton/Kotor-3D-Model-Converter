@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Gates grdev01 Proof Capture on Running KOTOR
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / in-game proof capture / KotorMCP smoke validation
+
+- Added a KOTOR process preflight to `capture_grdev01_smoke_evidence.py` so `--record-proof` cannot promote `grdev01` to `game_tested` unless `swkotor` or `swkotor2` is currently running.
+- Kept capture-only mode available for diagnostics while requiring a live KOTOR process before proof metadata is written.
+- Added regression coverage for the blocked proof-recording path so desktop screenshots cannot accidentally satisfy the in-game smoke evidence gate.
+
+Verification:
+- `python -m pytest tests\test_capture_grdev01_smoke_evidence_script.py -q --basetemp .pytest_tmp_map_capture_process_gate`
+- `python -m py_compile scripts\capture_grdev01_smoke_evidence.py tests\test_capture_grdev01_smoke_evidence_script.py`
+- `python scripts\capture_grdev01_smoke_evidence.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --output .pytest_tmp_map_capture_process_gate\live_capture_probe.bmp --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --kotormcp --json` reported package verification OK, installed bytes matched, and KotorMCP saw all required module resource types; status remains `installed_ready_for_game_test` because real in-game proof is still pending.
+
 ### [2026-06-18] Map Studio Adds Elevated grdev01 Launch Option
 
 Owner: LordVaderCW

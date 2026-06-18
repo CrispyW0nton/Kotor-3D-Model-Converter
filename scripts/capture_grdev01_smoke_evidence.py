@@ -12,6 +12,7 @@ import argparse
 import ctypes
 import json
 import struct
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,7 @@ DEFAULT_PROOF_MANIFEST = (
     / "grdev01_authored_smoke_installed"
     / "grdev01_authored_module_game_manifest.json"
 )
+KOTOR_PROCESS_NAMES = ("swkotor", "swkotor2")
 PAYLOAD_PATHS = (
     "native/GhostRigger.Domain.Core.Modules/Python",
     "native/GhostRigger.Domain.Core.Game/Python",
@@ -83,6 +85,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tester", default="", help="Name or handle of the tester recording proof.")
     parser.add_argument("--notes", default="", help="Optional notes about the KOTOR build, install path, or result.")
     parser.add_argument("--record-proof", action="store_true", help="Record the captured evidence into the proof manifest.")
+    parser.add_argument(
+        "--skip-kotor-process-check",
+        action="store_true",
+        help="Allow proof recording without confirming a running KOTOR process. Intended only for scripted diagnostics.",
+    )
     parser.add_argument("--module-loads-in-game", action="store_true", help="Confirm `warp grdev01` loads the generated module.")
     parser.add_argument("--player-spawns-on-floor", action="store_true", help="Confirm the player appears on the generated floor.")
     parser.add_argument("--test-placeable-visible", action="store_true", help="Confirm the smoke-test placeable appears.")
@@ -192,6 +199,105 @@ def _capture_screen_bmp(output_path: Path) -> dict[str, Any]:
     }
 
 
+def _kotor_process_summary(*, skip_check: bool = False) -> dict[str, Any]:
+    if skip_check:
+        return {
+            "checked": False,
+            "required_for_recording": False,
+            "running": None,
+            "process_names": list(KOTOR_PROCESS_NAMES),
+            "processes": [],
+            "warnings": ["KOTOR process check was skipped by request."],
+            "blocking_issues": [],
+        }
+    if sys.platform != "win32":
+        return {
+            "checked": True,
+            "required_for_recording": True,
+            "running": False,
+            "process_names": list(KOTOR_PROCESS_NAMES),
+            "processes": [],
+            "warnings": [],
+            "blocking_issues": ["KOTOR process detection is currently implemented for Windows evidence capture only."],
+        }
+
+    process_filter = "|".join(KOTOR_PROCESS_NAMES)
+    command = (
+        "$ErrorActionPreference = 'Stop'; "
+        f"Get-Process | Where-Object {{ $_.ProcessName -match '^({process_filter})$' }} | "
+        "Select-Object ProcessName, Id, MainWindowTitle | ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", command],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except Exception as exc:
+        return {
+            "checked": True,
+            "required_for_recording": True,
+            "running": False,
+            "process_names": list(KOTOR_PROCESS_NAMES),
+            "processes": [],
+            "warnings": [],
+            "blocking_issues": [f"Could not check for a running KOTOR process: {exc}"],
+        }
+
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "").strip() or f"PowerShell exited with code {result.returncode}."
+        return {
+            "checked": True,
+            "required_for_recording": True,
+            "running": False,
+            "process_names": list(KOTOR_PROCESS_NAMES),
+            "processes": [],
+            "warnings": [],
+            "blocking_issues": [f"Could not check for a running KOTOR process: {message}"],
+        }
+
+    stdout = result.stdout.strip()
+    processes: list[dict[str, Any]] = []
+    if stdout:
+        try:
+            payload = json.loads(stdout)
+            rows = payload if isinstance(payload, list) else [payload]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                processes.append(
+                    {
+                        "process_name": str(row.get("ProcessName") or ""),
+                        "pid": int(row.get("Id") or 0),
+                        "window_title": str(row.get("MainWindowTitle") or ""),
+                    }
+                )
+        except Exception as exc:
+            return {
+                "checked": True,
+                "required_for_recording": True,
+                "running": False,
+                "process_names": list(KOTOR_PROCESS_NAMES),
+                "processes": [],
+                "warnings": [],
+                "blocking_issues": [f"Could not parse KOTOR process check output: {exc}"],
+            }
+
+    blocking = [] if processes else ["No running KOTOR process was detected. Launch KOTOR, warp to grdev01, then record proof."]
+    return {
+        "checked": True,
+        "required_for_recording": True,
+        "running": bool(processes),
+        "process_names": list(KOTOR_PROCESS_NAMES),
+        "processes": processes,
+        "warnings": [],
+        "blocking_issues": blocking,
+    }
+
+
 def _record_proof(
     *,
     proof_manifest: Path,
@@ -256,13 +362,20 @@ def _summary(
     output_path: Path,
     capture: dict[str, Any],
     record: dict[str, Any] | None,
+    kotor_process: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    ok = bool(capture.get("ok")) and (record is None or bool(record.get("ok")))
+    process_blocking = list((kotor_process or {}).get("blocking_issues", []))
+    record_blocking = [] if record is None else list(record.get("blocking_issues", []))
+    if process_blocking:
+        record_blocking = [issue for issue in record_blocking if issue not in process_blocking]
+    ok = bool(capture.get("ok")) and not process_blocking and (record is None or bool(record.get("ok")))
     next_action = (
         "Review the screenshot, verify the smoke-test checklist in-game, then rerun with "
         "`--record-proof --module-loads-in-game --player-spawns-on-floor --test-placeable-visible "
         "--player-can-walk-on-floor` to mark the package game-tested."
     )
+    if process_blocking:
+        next_action = "Launch KOTOR, run `warp grdev01`, verify the smoke-test checklist, then rerun evidence capture."
     if record is not None and record.get("ok"):
         next_action = "Proof manifest updated; run the status checker to confirm the package is game-tested."
     return {
@@ -272,9 +385,14 @@ def _summary(
         "proof_manifest_path": str(proof_manifest),
         "evidence_path": str(output_path),
         "capture": capture,
+        "kotor_process": kotor_process,
         "record": record,
         "next_action": next_action,
-        "blocking_issues": list(capture.get("blocking_issues", [])) + ([] if record is None else list(record.get("blocking_issues", []))),
+        "blocking_issues": (
+            list(capture.get("blocking_issues", []))
+            + process_blocking
+            + record_blocking
+        ),
     }
 
 
@@ -291,6 +409,9 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
             print("Missing checks:")
             for check in record["missing_checks"]:
                 print(f"- {check}")
+    process = summary.get("kotor_process")
+    if isinstance(process, dict) and process.get("checked"):
+        print("KOTOR process: " + ("running" if process.get("running") else "not detected"))
     if summary["next_action"]:
         print(f"Next action: {summary['next_action']}")
     if summary["blocking_issues"]:
@@ -306,18 +427,39 @@ def main(argv: list[str] | None = None) -> int:
     output_path = args.output or _default_output_path(proof_manifest)
     capture = _capture_screen_bmp(output_path)
     record = None
+    kotor_process = None
     if capture.get("ok") and args.record_proof:
-        record = _record_proof(
-            proof_manifest=proof_manifest,
-            evidence_path=output_path,
-            tester=str(args.tester),
-            notes=str(args.notes),
-            module_loads_in_game=bool(args.module_loads_in_game),
-            player_spawns_on_floor=bool(args.player_spawns_on_floor),
-            test_placeable_visible=bool(args.test_placeable_visible),
-            player_can_walk_on_floor=bool(args.player_can_walk_on_floor),
-        )
-    summary = _summary(proof_manifest=proof_manifest, output_path=output_path, capture=capture, record=record)
+        kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check))
+        if kotor_process.get("blocking_issues"):
+            record = {
+                "ok": False,
+                "code": "kotor_process_not_running",
+                "message": "Proof recording requires KOTOR to be running so the screenshot can be tied to an active game smoke test.",
+                "proof_manifest_path": str(proof_manifest),
+                "pack_manifest_path": "",
+                "evidence_path": str(output_path),
+                "missing_checks": [],
+                "warnings": list(kotor_process.get("warnings", [])),
+                "blocking_issues": list(kotor_process.get("blocking_issues", [])),
+            }
+        else:
+            record = _record_proof(
+                proof_manifest=proof_manifest,
+                evidence_path=output_path,
+                tester=str(args.tester),
+                notes=str(args.notes),
+                module_loads_in_game=bool(args.module_loads_in_game),
+                player_spawns_on_floor=bool(args.player_spawns_on_floor),
+                test_placeable_visible=bool(args.test_placeable_visible),
+                player_can_walk_on_floor=bool(args.player_can_walk_on_floor),
+            )
+    summary = _summary(
+        proof_manifest=proof_manifest,
+        output_path=output_path,
+        capture=capture,
+        record=record,
+        kotor_process=kotor_process,
+    )
     if args.json:
         print(json.dumps(summary, indent=2))
     else:

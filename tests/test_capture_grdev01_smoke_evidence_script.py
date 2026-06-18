@@ -85,6 +85,19 @@ def test_t2601_capture_grdev01_evidence_can_record_complete_authored_proof(tmp_p
         return {"ok": True, "message": "fake capture", "width": 10, "height": 10, "blocking_issues": []}
 
     monkeypatch.setattr(module, "_capture_screen_bmp", fake_capture)
+    monkeypatch.setattr(
+        module,
+        "_kotor_process_summary",
+        lambda *, skip_check=False: {
+            "checked": True,
+            "required_for_recording": True,
+            "running": True,
+            "process_names": ["swkotor", "swkotor2"],
+            "processes": [{"process_name": "swkotor", "pid": 1234, "window_title": "Knights of the Old Republic"}],
+            "warnings": [],
+            "blocking_issues": [],
+        },
+    )
 
     code = module.main(
         [
@@ -112,3 +125,60 @@ def test_t2601_capture_grdev01_evidence_can_record_complete_authored_proof(tmp_p
     assert status["status"] == "game_tested"
     assert status["proof"]["game_tested"] is True
     assert status["proof"]["evidence_accepted"] is True
+
+
+def test_t2601_capture_grdev01_evidence_blocks_proof_recording_without_kotor_process(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    authored = _prepare_authored(tmp_path)
+    proof_manifest = str(authored["proof_manifest_path"])
+    evidence = tmp_path / "proof.bmp"
+    module = _load_capture_module()
+
+    def fake_capture(output_path: Path) -> dict[str, object]:
+        output_path.write_bytes(b"BM fake screenshot evidence")
+        return {"ok": True, "message": "fake capture", "width": 10, "height": 10, "blocking_issues": []}
+
+    monkeypatch.setattr(module, "_capture_screen_bmp", fake_capture)
+    monkeypatch.setattr(
+        module,
+        "_kotor_process_summary",
+        lambda *, skip_check=False: {
+            "checked": True,
+            "required_for_recording": True,
+            "running": False,
+            "process_names": ["swkotor", "swkotor2"],
+            "processes": [],
+            "warnings": [],
+            "blocking_issues": ["No running KOTOR process was detected. Launch KOTOR, warp to grdev01, then record proof."],
+        },
+    )
+
+    code = module.main(
+        [
+            "--proof-manifest",
+            proof_manifest,
+            "--output",
+            str(evidence),
+            "--record-proof",
+            "--tester",
+            "pytest",
+            "--module-loads-in-game",
+            "--player-spawns-on-floor",
+            "--test-placeable-visible",
+            "--player-can-walk-on-floor",
+            "--json",
+        ]
+    )
+
+    assert code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["code"] == "kotor_process_not_running"
+    assert payload["kotor_process"]["running"] is False
+    assert payload["record"]["ok"] is False
+    assert evidence.is_file()
+    status = _status(proof_manifest)
+    assert status["proof"]["game_tested"] is False
