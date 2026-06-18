@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Reports Authored Room And Placement Summaries
+
+Owner: LordVaderCW
+Task: T2654
+Subsystem: Map Studio / authored module readiness / export metadata / readiness panel / native Python payloads
+
+- Extended authored-module readiness with per-room texture, WOK surface ID/name, and gameplay placement counts.
+- Added gameplay placement counts to authored-module build/export metadata so package manifests can show what content was authored before in-game proof.
+- Updated the Map Studio readiness panel with a stable authored-content summary label for room style and gameplay placement count.
+- Mirrored the readiness/export/panel changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py tests\test_authored_module_reporting.py`
+- `python -m pytest tests\test_authored_module_reporting.py tests\test_authored_gameplay_placements.py tests\test_authored_room_style.py tests\test_authored_module_readiness.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_reporting`
+
 ### [2026-06-18] Map Studio Adds Gameplay Placement Authoring
 
 Owner: LordVaderCW

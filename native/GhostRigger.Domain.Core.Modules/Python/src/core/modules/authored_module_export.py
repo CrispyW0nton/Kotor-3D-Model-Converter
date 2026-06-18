@@ -297,6 +297,20 @@ def _path_anchors_from_walkability(placements: AuthoredGameplayPlacement, checks
     return tuple(anchors)
 
 
+def _placement_counts(placements: AuthoredGameplayPlacement) -> dict[str, int]:
+    return {
+        "creatures": len(tuple(placements.creatures or ())),
+        "doors": len(tuple(placements.doors or ())),
+        "triggers": len(tuple(placements.triggers or ())),
+        "encounters": len(tuple(placements.encounters or ())),
+        "sounds": len(tuple(placements.sounds or ())),
+        "cameras": len(tuple(placements.cameras or ())),
+        "stores": len(tuple(placements.stores or ())),
+        "placeables": len(tuple(placements.placeables or ())),
+        "waypoints": len(tuple(placements.waypoints or ())),
+    }
+
+
 def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild:
     """Compile authored module intent into in-memory runtime resources."""
 
@@ -422,6 +436,7 @@ def build_authored_module(project: AuthoredModuleProject) -> AuthoredModuleBuild
             "entry_room": entry_room,
             "room_count": len(room_geometries),
             "resource_count": len(resources),
+            "gameplay_counts": _placement_counts(project.placements),
         },
     )
 
@@ -453,9 +468,12 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
                 "resref": resref,
                 "wok_faces": len(getattr(geometry.wok, "faces", []) or []),
                 "model_nodes": 1 + len(geometry.helper_meshes),
+                "texture": str(getattr(geometry.room_mesh, "texture", "") or ""),
+                "floor_surface_id": int(getattr((list(getattr(geometry.wok, "faces", []) or []) or [None])[0], "surface", -1)),
             }
             for resref, geometry in sorted(build.module.room_geometry.items())
         ],
+        "gameplay_counts": _placement_counts(build.project.placements),
         "resources": [summary.__dict__ for summary in build.resource_summaries],
         "package_ok": bool(package_result.ok),
         "package_verification": _verification_to_manifest(verification),

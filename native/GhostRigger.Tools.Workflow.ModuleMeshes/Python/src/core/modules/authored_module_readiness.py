@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
+from .authored_walkmesh_surfaces import walkmesh_surface_name
 
 
 RuntimeResourceKey = tuple[str, str]
@@ -35,6 +36,9 @@ class AuthoredRoomReadiness:
     primitive_type: str
     can_preview_geometry: bool
     mesh_name: str = ""
+    texture: str = ""
+    floor_surface_id: int = -1
+    floor_surface_name: str = ""
     helper_mesh_count: int = 0
     walkable_face_count: int = 0
     blocking_messages: tuple[str, ...] = ()
@@ -104,9 +108,27 @@ def _expected_keys(module_root: str, rooms: Iterable[AuthoredRoomReadiness]) -> 
     return tuple(sorted(keys))
 
 
+def _gameplay_counts(project: AuthoredModuleProject) -> dict[str, int]:
+    placements = project.placements
+    return {
+        "creatures": len(tuple(placements.creatures or ())),
+        "doors": len(tuple(placements.doors or ())),
+        "triggers": len(tuple(placements.triggers or ())),
+        "encounters": len(tuple(placements.encounters or ())),
+        "sounds": len(tuple(placements.sounds or ())),
+        "cameras": len(tuple(placements.cameras or ())),
+        "stores": len(tuple(placements.stores or ())),
+        "placeables": len(tuple(placements.placeables or ())),
+        "waypoints": len(tuple(placements.waypoints or ())),
+    }
+
+
 def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInputStatus, ...]:
     root = project.module_root
     entry = project.placements.entry_point
+    gameplay_counts = _gameplay_counts(project)
+    gameplay_total = sum(gameplay_counts.values())
+    gameplay_label = ", ".join(f"{count} {kind}" for kind, count in gameplay_counts.items() if count)
     return (
         AuthoredModuleInputStatus(
             "Module resref",
@@ -132,6 +154,12 @@ def _input_statuses(project: AuthoredModuleProject) -> tuple[AuthoredModuleInput
             f"{normalise_resref(entry.area_resref) or '(missing)'} @ {tuple(entry.position)}",
             "Place the player start inside the module's entry area on walkable WOK.",
         ),
+        AuthoredModuleInputStatus(
+            "Gameplay placements",
+            True,
+            gameplay_label or "No extra objects yet",
+            "Add creatures, placeables, doors, waypoints, triggers, sounds, cameras, or stores when this module needs gameplay content.",
+        ),
     )
 
 
@@ -153,6 +181,8 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
             )
             continue
         walkable_faces = int(getattr(geometry.wok, "walkable_face_count", lambda: 0)())
+        faces = tuple(getattr(geometry.wok, "faces", ()) or ())
+        floor_surface_id = int(getattr(faces[0], "surface", -1)) if faces else -1
         blockers: list[str] = []
         if not getattr(geometry.room_mesh, "faces", ()):
             blockers.append(f"Room {room_resref} has no renderable room mesh faces.")
@@ -164,6 +194,9 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
                 primitive_type=primitive_type,
                 can_preview_geometry=not blockers,
                 mesh_name=str(getattr(geometry.room_mesh, "name", "") or ""),
+                texture=str(getattr(geometry.room_mesh, "texture", "") or ""),
+                floor_surface_id=floor_surface_id,
+                floor_surface_name=walkmesh_surface_name(floor_surface_id) if floor_surface_id >= 0 else "",
                 helper_mesh_count=len(tuple(getattr(geometry, "helper_meshes", ()) or ())),
                 walkable_face_count=walkable_faces,
                 blocking_messages=tuple(blockers),
@@ -182,6 +215,7 @@ def build_authored_module_readiness(
 
     validation = validate_authored_module_project(project)
     rooms = _room_readiness(project)
+    gameplay_counts = _gameplay_counts(project)
     present = _present_keys(packaged_resources)
     expected = _expected_keys(project.module_root, rooms)
     present_set = set(present)
@@ -234,6 +268,17 @@ def build_authored_module_readiness(
             "source": "src.core.modules.authored_module_readiness",
             "room_count": len(rooms),
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
+            "gameplay_counts": gameplay_counts,
+            "gameplay_placement_count": sum(gameplay_counts.values()),
+            "room_styles": [
+                {
+                    "room_resref": room.room_resref,
+                    "texture": room.texture,
+                    "floor_surface_id": room.floor_surface_id,
+                    "floor_surface_name": room.floor_surface_name,
+                }
+                for room in rooms
+            ],
         },
     )
 

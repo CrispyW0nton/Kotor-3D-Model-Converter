@@ -49,6 +49,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.runtime_label.setWordWrap(True)
         root.addWidget(self.runtime_label)
 
+        self.authored_summary_label = QtWidgets.QLabel("Authored content: Not checked")
+        self.authored_summary_label.setObjectName("mapStudioReadinessAuthoredSummaryLabel")
+        self.authored_summary_label.setWordWrap(True)
+        root.addWidget(self.authored_summary_label)
+
         self.blocking_label = QtWidgets.QLabel("")
         self.blocking_label.setObjectName("mapStudioReadinessBlockingLabel")
         self.blocking_label.setWordWrap(True)
@@ -75,6 +80,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.preview_label.setText("Preview: Not ready")
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
+            self.authored_summary_label.setText("Authored content: Not checked")
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
             self.game_test_button.setEnabled(False)
@@ -96,6 +102,20 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.runtime_label.setText(f"Runtime resources: {len(expected) - len(missing)}/{len(expected)} present")
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
+        metadata = dict(getattr(readiness, "metadata", {}) or {})
+        styles = list(metadata.get("room_styles", ()) or ())
+        gameplay_counts = dict(metadata.get("gameplay_counts", {}) or {})
+        placement_total = int(metadata.get("gameplay_placement_count", sum(int(value) for value in gameplay_counts.values()) if gameplay_counts else 0))
+        room_text = ""
+        if styles:
+            first = dict(styles[0])
+            room_text = (
+                f"{first.get('room_resref', 'room')} uses {first.get('texture', '(no texture)')} / "
+                f"{first.get('floor_surface_name', 'surface')} {first.get('floor_surface_id', '')}"
+            )
+        self.authored_summary_label.setText(
+            f"Authored content: {room_text or 'No room style summary'}; {placement_total} gameplay placement(s)"
+        )
 
         if blocking:
             body = "Blocking: " + "; ".join(str(item) for item in blocking[:4])
