@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Documents grdev01 Launch-Ready Install
+
+Owner: LordVaderCW
+Task: T2648
+Subsystem: Map Studio / authored smoke proof status / knowledge base
+
+- Generated the current authored `grdev01.mod` smoke package, installed it into the detected KOTOR 1 `Modules` folder with backup-on-overwrite, and verified the installed copy matches the staged package SHA-256.
+- Added a knowledge-base status note recording the installed/staged paths, package hash, readback verification, required resources, and the remaining manual `warp grdev01` proof gate.
+- Kept the status capability-honest: the package is launch-ready, not game-tested, until screenshot/video evidence is recorded.
+
+Verification:
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_installed --overwrite-kmap --auto-detect-game-modules-dir --overwrite-module --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --json`
+
 ### [2026-06-18] Map Studio Adds One-Shot grdev01 Smoke Prep
 
 Owner: LordVaderCW
