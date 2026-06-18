@@ -40,6 +40,7 @@ from .authored_room_geometry import (
     RectangularRoomPrimitive,
     build_rectangular_room_geometry,
 )
+from .authored_room_composition import compile_authored_room_composition
 from .authored_module_project import (
     AuthoredModuleProject,
     create_single_room_project,
@@ -600,7 +601,11 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     root = project.module_root
     room_spec = project.rooms[0]
     room = room_spec.normalised_resref()
-    geometry = build_rectangular_room_geometry(room_spec.primitive)
+    geometry = (
+        compile_authored_room_composition(room_spec.composition)
+        if room_spec.composition is not None
+        else build_rectangular_room_geometry(room_spec.primitive)
+    )
     placements = project.placements
     lyt = LYTLayout(rooms=[LYTRoom(room, *room_spec.position)])
     visible = [target for target in room_spec.visible_rooms if target]
@@ -862,7 +867,7 @@ def _augment_manifest(
         "game_tested": False,
         "warp_command": f"warp {authored.module_root}",
         "contains": {
-            "single_primitive_room": True,
+            "primitive_composition_room": True,
             "simple_doorway_marker": True,
             "room_mdl_mdx": True,
             "floor_walkmesh": True,
@@ -879,7 +884,9 @@ def _augment_manifest(
             "metadata": dict(authored.project.metadata.metadata) if authored.project else {},
         },
         "authored_geometry": {
-            "source": "src.core.modules.authored_room_geometry",
+            "source": authored.module.room_geometry.metadata.get("source", "src.core.modules.authored_room_geometry")
+            if authored.module.room_geometry
+            else "unknown",
             "primitive": authored.module.room_geometry.metadata.get("primitive") if authored.module.room_geometry else "unknown",
             "room_mesh": authored.module.room_geometry.room_mesh.name if authored.module.room_geometry else "",
             "helper_meshes": [mesh.name for mesh in authored.module.room_geometry.helper_meshes] if authored.module.room_geometry else [],

@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Authored Room Composition
+
+Owner: LordVaderCW
+Task: T2603
+Subsystem: Map Studio / authored room composition / native Python payloads
+
+- Added a headless `authored_room_composition` contract that stores one editable room as a floor plus multiple primitive parts and helper meshes before compiling to room geometry.
+- Added validation for primitive composition names and floor dimensions so future Map Studio UI tools can catch broken room intent before package export.
+- Routed the `grdev01` smoke room through the composition compiler, producing a floor mesh plus four wall meshes and a doorway marker while preserving derived WOK generation and staged module packaging.
+- Mirrored the composition contract and touched Map Studio modules into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_project.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_project.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_authored_room_composition.py tests\test_authored_room_primitives.py tests\test_dev_module_smoke.py`
+- `python -m pytest tests/test_authored_room_composition.py tests/test_authored_room_primitives.py -q --basetemp .pytest_tmp_authored_room_core`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Primitive Mesh Builders
 
 Owner: LordVaderCW

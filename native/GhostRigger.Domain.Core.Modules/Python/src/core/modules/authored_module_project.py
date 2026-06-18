@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .authored_module_objects import AuthoredGameplayPlacement
+from .authored_room_composition import AuthoredRoomComposition, create_rectangular_room_composition
 from .authored_room_geometry import RectangularRoomPrimitive
 
 
@@ -49,6 +50,7 @@ class AuthoredRoomSpec:
 
     room_resref: str
     primitive: RectangularRoomPrimitive
+    composition: AuthoredRoomComposition | None = None
     position: Vec3 = (0.0, 0.0, 0.0)
     visible_rooms: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -132,8 +134,9 @@ def create_single_room_project(
     room = AuthoredRoomSpec(
         room_resref=normalise_resref(room_primitive.room_resref),
         primitive=room_primitive,
+        composition=create_rectangular_room_composition(room_primitive),
         visible_rooms=(normalise_resref(room_primitive.room_resref),),
-        metadata={"primitive": "rectangular_room"},
+        metadata={"primitive": "rectangular_room", "composition": "authored_room_composition"},
     )
     return AuthoredModuleProject(
         metadata=AuthoredModuleMetadata(

@@ -1,5 +1,5 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+#include "winres.h"
+
 PYTHON_PAYLOAD_0001 RCDATA "Python/src/core/modules/__init__.py"
 PYTHON_PAYLOAD_0002 RCDATA "Python/src/core/modules/area_wok_integration.py"
 PYTHON_PAYLOAD_0003 RCDATA "Python/src/core/modules/custom_module_packager.py"
@@ -18,6 +18,7 @@ PYTHON_PAYLOAD_0015 RCDATA "Python/src/core/modules/module_save_pipeline.py"
 PYTHON_PAYLOAD_0016 RCDATA "Python/src/core/modules/module_walkmesh_service.py"
 PYTHON_PAYLOAD_0017 RCDATA "Python/src/core/modules/dev_module_smoke.py"
 PYTHON_PAYLOAD_0018 RCDATA "Python/src/core/modules/authored_room_geometry.py"
-PYTHON_PAYLOAD_0019 RCDATA "Python/src/core/modules/authored_module_objects.py"
-PYTHON_PAYLOAD_0020 RCDATA "Python/src/core/modules/authored_module_project.py"
-PYTHON_PAYLOAD_0021 RCDATA "Python/src/core/modules/authored_room_primitives.py"
+PYTHON_PAYLOAD_0019 RCDATA "Python/src/core/modules/authored_room_composition.py"
+PYTHON_PAYLOAD_0020 RCDATA "Python/src/core/modules/authored_module_objects.py"
+PYTHON_PAYLOAD_0021 RCDATA "Python/src/core/modules/authored_module_project.py"
+PYTHON_PAYLOAD_0022 RCDATA "Python/src/core/modules/authored_room_primitives.py"

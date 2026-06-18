@@ -28,13 +28,14 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, build_dev_test_module
-    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive, build_rectangular_room_geometry
+    from src.core.modules.authored_room_composition import compile_authored_room_composition, create_rectangular_room_composition
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
     from src.core.modules.module_format import GITData, IFOData
 
     authored = build_dev_test_module(DevModuleSmokeRequest())
     keys = {(summary.resref, summary.restype) for summary in authored.resource_summaries}
     primitive = RectangularRoomPrimitive(room_resref="grdev01_room01")
-    primitive_geometry = build_rectangular_room_geometry(primitive)
+    primitive_geometry = compile_authored_room_composition(create_rectangular_room_composition(primitive))
     git = GITData.from_bytes(authored.resources[("grdev01", "git")].data)
     ifo = IFOData.from_bytes(authored.resources[("grdev01", "ifo")].data)
 
@@ -43,6 +44,7 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert authored.project.module_root == "grdev01"
     assert authored.project.game == "K1"
     assert authored.project.rooms[0].normalised_resref() == "grdev01_room01"
+    assert authored.project.rooms[0].composition is not None
     assert authored.project.metadata.metadata["task"] == "T2601"
     assert ("grdev01", "are") in keys
     assert ("grdev01", "git") in keys
@@ -58,7 +60,13 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert authored.module.room_geometry is not None
     assert authored.module.room_geometry.room_mesh.name == "grdev01_room01_mesh"
     assert authored.module.room_geometry.room_mesh.faces == primitive_geometry.room_mesh.faces
-    assert authored.module.room_geometry.helper_meshes[0].name == "grdev01_room01_door_marker"
+    assert {mesh.name for mesh in authored.module.room_geometry.helper_meshes} >= {
+        "grdev01_room01_wall_n",
+        "grdev01_room01_wall_s",
+        "grdev01_room01_wall_e",
+        "grdev01_room01_wall_w",
+        "grdev01_room01_door_marker",
+    }
     assert authored.module.room_geometry.wok.walkable_face_count() == primitive_geometry.wok.walkable_face_count()
     assert authored.module.placements is not None
     assert authored.module.placements.entry_point.area_resref == "grdev01"
@@ -136,15 +144,23 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_from_scratch"] is True
     assert smoke["game_tested"] is False
     assert smoke["warp_command"] == "warp grdev01"
+    assert smoke["contains"]["primitive_composition_room"] is True
     assert smoke["contains"]["simple_doorway_marker"] is True
     assert smoke["authored_project"]["source"] == "src.core.modules.authored_module_project"
     assert smoke["authored_project"]["module_root"] == "grdev01"
     assert smoke["authored_project"]["room_count"] == 1
     assert smoke["authored_project"]["metadata"]["task"] == "T2601"
-    assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_geometry"
-    assert smoke["authored_geometry"]["primitive"] == "rectangular_room"
+    assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_composition"
+    assert smoke["authored_geometry"]["primitive"] == "authored_room_composition"
     assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_mesh"
-    assert smoke["authored_geometry"]["helper_meshes"] == ["grdev01_room01_door_marker"]
+    assert set(smoke["authored_geometry"]["helper_meshes"]) >= {
+        "grdev01_room01_wall_n",
+        "grdev01_room01_wall_s",
+        "grdev01_room01_wall_e",
+        "grdev01_room01_wall_w",
+        "grdev01_room01_door_marker",
+    }
+    assert smoke["authored_geometry"]["metadata"]["compiled_mesh_count"] == 6
     assert smoke["authored_geometry"]["derived_wok"] is True
     assert smoke["authored_placements"]["source"] == "src.core.modules.authored_module_objects"
     assert smoke["authored_placements"]["entry_area"] == "grdev01"

@@ -63,6 +63,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\modules\module_walkmesh_service.py" />
     <None Include="Python\src\core\modules\dev_module_smoke.py" />
     <None Include="Python\src\core\modules\authored_room_geometry.py" />
+    <None Include="Python\src\core\modules\authored_room_composition.py" />
     <None Include="Python\src\core\modules\authored_room_primitives.py" />
     <None Include="Python\src\core\modules\authored_module_objects.py" />
     <None Include="Python\src\core\modules\authored_module_project.py" />
