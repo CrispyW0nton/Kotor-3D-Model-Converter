@@ -41,6 +41,7 @@ from .authored_module_placements import (
 )
 from .authored_room_operations import (
     apply_authored_floor_plan_operation,
+    authored_room_composition_primitives,
     move_authored_floor_plan_point,
     set_authored_room_composition_primitive_transform,
 )
@@ -223,6 +224,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_room_outline_geometry_for_project(authored)
+
+    def authored_room_primitive_transforms(self):
+        """Return editable composition primitive transform rows for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_composition_primitives(authored)
 
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""

@@ -10,6 +10,7 @@ class BuilderTab(QtWidgets.QWidget):
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
     roomStyleRequested = QtCore.Signal(str, str)
+    roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
 
     ACTIONS = (
@@ -83,6 +84,39 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
         layout.addWidget(operation_box)
+        transform_box = QtWidgets.QGroupBox("Transform Room Primitive")
+        transform_layout = QtWidgets.QFormLayout(transform_box)
+        self.roomPrimitiveTransformComboBox = QtWidgets.QComboBox()
+        self.roomPrimitiveTransformComboBox.setObjectName("mapStudioRoomPrimitiveTransformComboBox")
+        self.primitiveTransformHintLabel = QtWidgets.QLabel("Create a composition room preset to edit walls, ramps, stairs, arches, cubes, and cylinders.")
+        self.primitiveTransformHintLabel.setObjectName("mapStudioPrimitiveTransformHintLabel")
+        self.primitiveTransformHintLabel.setWordWrap(True)
+        self.primitiveTranslateXSpinBox = self._make_transform_spin("mapStudioPrimitiveTranslateXSpinBox", -1000.0, 1000.0, " m")
+        self.primitiveTranslateYSpinBox = self._make_transform_spin("mapStudioPrimitiveTranslateYSpinBox", -1000.0, 1000.0, " m")
+        self.primitiveTranslateZSpinBox = self._make_transform_spin("mapStudioPrimitiveTranslateZSpinBox", -1000.0, 1000.0, " m")
+        self.primitiveRotateZSpinBox = self._make_transform_spin("mapStudioPrimitiveRotateZSpinBox", -360.0, 360.0, " deg", decimals=1, step=15.0)
+        self.primitiveScaleXSpinBox = self._make_transform_spin("mapStudioPrimitiveScaleXSpinBox", 0.01, 100.0, "", value=1.0)
+        self.primitiveScaleYSpinBox = self._make_transform_spin("mapStudioPrimitiveScaleYSpinBox", 0.01, 100.0, "", value=1.0)
+        self.primitiveScaleZSpinBox = self._make_transform_spin("mapStudioPrimitiveScaleZSpinBox", 0.01, 100.0, "", value=1.0)
+        self.primitivePivotXSpinBox = self._make_transform_spin("mapStudioPrimitivePivotXSpinBox", -1000.0, 1000.0, " m")
+        self.primitivePivotYSpinBox = self._make_transform_spin("mapStudioPrimitivePivotYSpinBox", -1000.0, 1000.0, " m")
+        self.primitivePivotZSpinBox = self._make_transform_spin("mapStudioPrimitivePivotZSpinBox", -1000.0, 1000.0, " m")
+        self.applyPrimitiveTransformButton = QtWidgets.QPushButton("Apply Primitive Transform")
+        self.applyPrimitiveTransformButton.setObjectName("mapStudioApplyPrimitiveTransformButton")
+        transform_layout.addRow("Primitive:", self.roomPrimitiveTransformComboBox)
+        transform_layout.addRow(self.primitiveTransformHintLabel)
+        transform_layout.addRow("Move X:", self.primitiveTranslateXSpinBox)
+        transform_layout.addRow("Move Y:", self.primitiveTranslateYSpinBox)
+        transform_layout.addRow("Move Z:", self.primitiveTranslateZSpinBox)
+        transform_layout.addRow("Rotate Z:", self.primitiveRotateZSpinBox)
+        transform_layout.addRow("Scale X:", self.primitiveScaleXSpinBox)
+        transform_layout.addRow("Scale Y:", self.primitiveScaleYSpinBox)
+        transform_layout.addRow("Scale Z:", self.primitiveScaleZSpinBox)
+        transform_layout.addRow("Pivot X:", self.primitivePivotXSpinBox)
+        transform_layout.addRow("Pivot Y:", self.primitivePivotYSpinBox)
+        transform_layout.addRow("Pivot Z:", self.primitivePivotZSpinBox)
+        transform_layout.addRow(self.applyPrimitiveTransformButton)
+        layout.addWidget(transform_box)
         style_box = QtWidgets.QGroupBox("Room Material + Walkmesh")
         style_layout = QtWidgets.QFormLayout(style_box)
         self.roomTextureLineEdit = QtWidgets.QLineEdit("CM_Baremetal")
@@ -167,6 +201,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
+        self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
+        self.applyPrimitiveTransformButton.clicked.connect(self._emit_primitive_transform)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
@@ -175,7 +211,28 @@ class BuilderTab(QtWidgets.QWidget):
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
+        self._update_primitive_transform_controls()
         self._update_surface_hint()
+
+    @staticmethod
+    def _make_transform_spin(
+        object_name: str,
+        minimum: float,
+        maximum: float,
+        suffix: str,
+        *,
+        value: float = 0.0,
+        decimals: int = 3,
+        step: float = 0.25,
+    ) -> QtWidgets.QDoubleSpinBox:
+        spin = QtWidgets.QDoubleSpinBox()
+        spin.setObjectName(object_name)
+        spin.setRange(minimum, maximum)
+        spin.setDecimals(decimals)
+        spin.setSingleStep(step)
+        spin.setValue(value)
+        spin.setSuffix(suffix)
+        return spin
 
     def set_primitive_presets(self, presets) -> None:
         """Populate the primitive preset selector from the controller."""
@@ -203,6 +260,40 @@ class BuilderTab(QtWidgets.QWidget):
         module_root = self.moduleRootLineEdit.text().strip() or "grdev01"
         if preset_id:
             self.primitivePresetRequested.emit(preset_id, module_root)
+
+    def set_room_primitives(self, primitives) -> None:
+        """Populate editable primitive transform choices from the controller."""
+
+        current_key = ""
+        current = self.roomPrimitiveTransformComboBox.currentData()
+        if isinstance(current, dict):
+            current_key = f"{current.get('room_resref', '')}:{current.get('primitive_name', '')}"
+        self.roomPrimitiveTransformComboBox.blockSignals(True)
+        self.roomPrimitiveTransformComboBox.clear()
+        restore_index = -1
+        for primitive in primitives or ():
+            room = str(getattr(primitive, "room_resref", "") or "")
+            name = str(getattr(primitive, "primitive_name", "") or "")
+            primitive_type = str(getattr(primitive, "primitive_type", "") or "primitive")
+            key = f"{room}:{name}"
+            data = {
+                "room_resref": room,
+                "primitive_name": name,
+                "primitive_type": primitive_type,
+                "translation": tuple(getattr(primitive, "translation", (0.0, 0.0, 0.0))),
+                "rotation_degrees_z": float(getattr(primitive, "rotation_degrees_z", 0.0)),
+                "scale": tuple(getattr(primitive, "scale", (1.0, 1.0, 1.0))),
+                "pivot": tuple(getattr(primitive, "pivot", (0.0, 0.0, 0.0))),
+            }
+            self.roomPrimitiveTransformComboBox.addItem(f"{room} / {primitive_type} / {name}", data)
+            if key == current_key:
+                restore_index = self.roomPrimitiveTransformComboBox.count() - 1
+        if self.roomPrimitiveTransformComboBox.count() <= 0:
+            self.roomPrimitiveTransformComboBox.addItem("No editable composition primitives", None)
+        if restore_index >= 0:
+            self.roomPrimitiveTransformComboBox.setCurrentIndex(restore_index)
+        self.roomPrimitiveTransformComboBox.blockSignals(False)
+        self._update_primitive_transform_controls()
 
     def set_walkmesh_surfaces(self, surfaces) -> None:
         """Populate the authored room WOK surface selector from the controller."""
@@ -243,6 +334,81 @@ class BuilderTab(QtWidgets.QWidget):
         texture = self.roomTextureLineEdit.text().strip()
         surface_id = str(self._current_surface_data().get("surface_id") or self.roomSurfaceComboBox.currentData() or "4")
         self.roomStyleRequested.emit(texture, surface_id)
+
+    def _current_primitive_transform_data(self) -> dict:
+        data = self.roomPrimitiveTransformComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _fill_vec3(spins, values, default: tuple[float, float, float]) -> None:
+        source = tuple(values or default)
+        if len(source) < 3:
+            source = default
+        for spin, value in zip(spins, source):
+            spin.blockSignals(True)
+            spin.setValue(float(value))
+            spin.blockSignals(False)
+
+    def _update_primitive_transform_controls(self) -> None:
+        data = self._current_primitive_transform_data()
+        enabled = bool(data)
+        for widget in (
+            self.primitiveTranslateXSpinBox,
+            self.primitiveTranslateYSpinBox,
+            self.primitiveTranslateZSpinBox,
+            self.primitiveRotateZSpinBox,
+            self.primitiveScaleXSpinBox,
+            self.primitiveScaleYSpinBox,
+            self.primitiveScaleZSpinBox,
+            self.primitivePivotXSpinBox,
+            self.primitivePivotYSpinBox,
+            self.primitivePivotZSpinBox,
+            self.applyPrimitiveTransformButton,
+        ):
+            widget.setEnabled(enabled)
+        if not enabled:
+            self.primitiveTransformHintLabel.setText("Create a composition room preset to edit walls, ramps, stairs, arches, cubes, and cylinders.")
+            return
+        self._fill_vec3(
+            (self.primitiveTranslateXSpinBox, self.primitiveTranslateYSpinBox, self.primitiveTranslateZSpinBox),
+            data.get("translation"),
+            (0.0, 0.0, 0.0),
+        )
+        self.primitiveRotateZSpinBox.blockSignals(True)
+        self.primitiveRotateZSpinBox.setValue(float(data.get("rotation_degrees_z", 0.0)))
+        self.primitiveRotateZSpinBox.blockSignals(False)
+        self._fill_vec3(
+            (self.primitiveScaleXSpinBox, self.primitiveScaleYSpinBox, self.primitiveScaleZSpinBox),
+            data.get("scale"),
+            (1.0, 1.0, 1.0),
+        )
+        self._fill_vec3(
+            (self.primitivePivotXSpinBox, self.primitivePivotYSpinBox, self.primitivePivotZSpinBox),
+            data.get("pivot"),
+            (0.0, 0.0, 0.0),
+        )
+        self.primitiveTransformHintLabel.setText(
+            f"Editing {data.get('primitive_type', 'primitive')} {data.get('primitive_name', '')}; mesh and WOK will be regenerated together."
+        )
+
+    def _emit_primitive_transform(self) -> None:
+        data = self._current_primitive_transform_data()
+        if not data:
+            return
+        self.roomPrimitiveTransformRequested.emit(
+            str(data.get("room_resref") or ""),
+            str(data.get("primitive_name") or ""),
+            float(self.primitiveTranslateXSpinBox.value()),
+            float(self.primitiveTranslateYSpinBox.value()),
+            float(self.primitiveTranslateZSpinBox.value()),
+            float(self.primitiveRotateZSpinBox.value()),
+            float(self.primitiveScaleXSpinBox.value()),
+            float(self.primitiveScaleYSpinBox.value()),
+            float(self.primitiveScaleZSpinBox.value()),
+            float(self.primitivePivotXSpinBox.value()),
+            float(self.primitivePivotYSpinBox.value()),
+            float(self.primitivePivotZSpinBox.value()),
+        )
 
     def set_gameplay_placement_kinds(self, kinds) -> None:
         """Populate the gameplay placement kind selector from the controller."""

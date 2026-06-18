@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exposes Primitive Composition Transforms in Builder UI
+
+Owner: LordVaderCW
+Task: T2671
+Subsystem: Map Studio / Builder tab / authored room primitive transforms / native Python payloads
+
+- Added Builder-tab controls for selecting a named authored composition primitive and editing its move, Z rotation, scale, and pivot values.
+- Wired the Builder tab signal through the standalone Module Editor window into `ModuleEditorController.set_authored_room_primitive_transform`, keeping transform policy in core and the UI as a thin caller.
+- Refreshed editable primitive rows from controller state whenever the KMAP updates so composition room controls stay synchronized after preset creation or transform edits.
+- Added focused regression coverage for controller primitive row listing and UI/window source-contract wiring.
+- Mirrored the core/controller/panel payload updates into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_project.py -q --basetemp .pytest_tmp_map_studio_primitive_ui`
+
 ### [2026-06-18] Map Studio Adds Primitive Composition Transform Operations
 
 Owner: LordVaderCW

@@ -207,6 +207,25 @@ def test_t2670_transforming_missing_composition_primitive_fails_clearly() -> Non
         )
 
 
+def test_t2671_controller_lists_composition_primitives_for_builder_tab() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grui")
+
+    rows = controller.authored_room_primitive_transforms()
+    ramp = next(row for row in rows if row.primitive_name == "grui_room01_ramp")
+
+    assert len(rows) >= 7
+    assert ramp.room_resref == "grui_room01"
+    assert ramp.primitive_type == "ramp"
+    assert ramp.translation == (-2.75, 0.5, 0.0)
+    assert ramp.scale == (1.0, 1.0, 1.0)
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (
@@ -236,3 +255,37 @@ def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     assert "roomOperationRequested" in source
     assert "self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)" in window_source
     assert "self.controller.apply_authored_room_operation" in window_source
+
+
+def test_t2671_builder_tab_exposes_composition_primitive_transform_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "roomPrimitiveTransformRequested" in source
+    assert "mapStudioRoomPrimitiveTransformComboBox" in source
+    assert "mapStudioApplyPrimitiveTransformButton" in source
+    assert "def set_room_primitives" in source
+    assert "def _emit_primitive_transform" in source
+    assert "self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)" in window_source
+    assert "self.controller.set_authored_room_primitive_transform" in window_source
+    assert "self.builder_tab.set_room_primitives(authored_room_primitives)" in window_source

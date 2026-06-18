@@ -8,7 +8,7 @@ and return a new project that can be saved back into KMAP.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
@@ -25,6 +25,19 @@ from .authored_room_floorplan import (
 )
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_primitives import PrimitiveMaterial
+
+
+@dataclass(frozen=True)
+class AuthoredCompositionPrimitiveTransform:
+    """UI-ready transform row for one primitive in an authored room composition."""
+
+    room_resref: str
+    primitive_name: str
+    primitive_type: str
+    translation: tuple[float, float, float]
+    rotation_degrees_z: float
+    scale: tuple[float, float, float]
+    pivot: tuple[float, float, float]
 
 
 def _rectangular_to_floor_plan(primitive: RectangularRoomPrimitive, room_resref: str) -> FloorPlanRoomPrimitive:
@@ -110,6 +123,53 @@ def _primitive_name(primitive: Any) -> str:
     if isinstance(primitive, PlacedRoomPrimitive):
         return str(primitive.name or getattr(primitive.primitive, "name", "") or "").strip()
     return str(getattr(primitive, "name", "") or "").strip()
+
+
+def _primitive_transform(primitive: Any) -> PrimitiveTransform:
+    return primitive.transform if isinstance(primitive, PlacedRoomPrimitive) else PrimitiveTransform()
+
+
+def _primitive_type(primitive: Any) -> str:
+    base = primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
+    name = type(base).__name__
+    return name[:-9].lower() if name.endswith("Primitive") else name.lower()
+
+
+def authored_room_composition_primitives(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str = "",
+) -> tuple[AuthoredCompositionPrimitiveTransform, ...]:
+    """Return editable primitive transform rows for authored composition rooms."""
+
+    rows: list[AuthoredCompositionPrimitiveTransform] = []
+    rooms = tuple(project.rooms or ())
+    target = normalise_resref(room_resref)
+    for room in rooms:
+        room_name = normalise_resref(room.room_resref)
+        if target and room_name != target:
+            continue
+        try:
+            composition = _composition_for_room(room)
+        except ValueError:
+            continue
+        for primitive in tuple(composition.primitives or ()):
+            name = _primitive_name(primitive)
+            if not name:
+                continue
+            transform = _primitive_transform(primitive)
+            rows.append(
+                AuthoredCompositionPrimitiveTransform(
+                    room_resref=room_name,
+                    primitive_name=name,
+                    primitive_type=_primitive_type(primitive),
+                    translation=tuple(float(value) for value in transform.translation),
+                    rotation_degrees_z=float(transform.rotation_degrees_z),
+                    scale=tuple(float(value) for value in transform.scale),
+                    pivot=tuple(float(value) for value in transform.pivot),
+                )
+            )
+    return tuple(rows)
 
 
 def _vec3_or_existing(value: Any, existing: tuple[float, float, float]) -> tuple[float, float, float]:
@@ -414,10 +474,12 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
 
 
 __all__ = [
+    "AuthoredCompositionPrimitiveTransform",
     "apply_authored_floor_plan_bevel",
     "apply_authored_floor_plan_inset",
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
+    "authored_room_composition_primitives",
     "move_authored_floor_plan_point",
     "set_authored_room_composition_primitive_transform",
 ]
