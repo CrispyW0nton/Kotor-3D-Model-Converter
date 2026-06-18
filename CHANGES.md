@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exposes Dev-Test Module Staging
+
+Owner: LordVaderCW
+Task: T2641
+Subsystem: Map Studio / Level Editor export UI / dev module smoke staging / native Python payloads
+
+- Added a `ModuleEditorController.stage_dev_test_module()` entry point that calls the existing install-safe `grdev01` smoke-module staging path instead of duplicating package logic in the UI.
+- Added a Level Editor export-panel button labeled `Stage grdev01 Dev Test Module` so modders can stage the first from-scratch `.mod` proof package from the Map Studio surface.
+- Wired the Level Editor window to log the staged package, manifest, game-test checklist, proof manifest, warnings, and blockers.
+- Mirrored the controller and panel changes across native Python payloads and refreshed payload manifests.
+
+Verification:
+- `python -m json.tool native\GhostRigger.Domain.Core.Modules\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Tools.Workflow.ModuleMeshes\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.GUI.Boundary.Panels\GhostRiggerPythonPayload.json`
+- `python -m json.tool native\GhostRigger.Windows.Editor.Level\GhostRiggerPythonPayload.json`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\export_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_dev_test_staging.py`
+- `python -m pytest tests\test_map_studio_dev_test_staging.py tests\test_dev_module_smoke.py -q --basetemp .pytest_tmp_map_studio_dev_test_staging_t2641`
+
 ### [2026-06-18] Map Studio Readiness Reaches Level Editor Export Panel
 
 Owner: LordVaderCW

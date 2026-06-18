@@ -12,6 +12,7 @@ from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
 from .authored_module_kmap_bridge import build_kmap_authored_module_readiness
+from .dev_module_smoke import DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
 from .module_walkmesh_service import ModuleWalkmeshService
@@ -96,6 +97,24 @@ class ModuleEditorController:
 
     def build_preview(self, output_dir: str | Path):
         return self.builder_service.build_preview(self.project, output_dir)
+
+    def stage_dev_test_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
+        """Stage the first from-scratch Map Studio smoke module package."""
+
+        output_path = Path(output_dir)
+        game = str(self.project.game or "K1").upper()
+        return prepare_dev_test_module_install(
+            DevModuleInstallPrepRequest(
+                output_dir=str(output_path),
+                game=game,
+                dry_run=dry_run,
+                overwrite=overwrite,
+                smoke_request=DevModuleSmokeRequest(
+                    output_dir=str(output_path),
+                    game=game,
+                ),
+            )
+        )
 
     def export_fbx(self, output_path: str | Path, *, dry_run: bool = False):
         return self.export_bridge.export_fbx(self.project, output_path, LevelExportOptions(dry_run=dry_run))
