@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Primitive Mesh Builders
+
+Owner: LordVaderCW
+Task: T2602
+Subsystem: Map Studio / room geometry builder / native Python payloads
+
+- Added a headless `authored_room_primitives` geometry library for Map Studio creation tools, covering floor, wall, cube, ramp, stairs, and cylinder primitive mesh builders.
+- Added deterministic floor-to-WOK generation for authored floor primitives so future Room Geometry Builder tools can create walkable surfaces directly from primitive intent.
+- Mirrored the primitive library into the ModuleMeshes workflow payload and updated native payload manifests/project files.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_primitives.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_primitives.py tests\test_authored_room_primitives.py`
+- `python -m pytest tests/test_authored_room_primitives.py -q --basetemp .pytest_tmp_authored_room_primitives`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke`
+- Native payload manifest hash/count validation.
+
 ### [2026-06-17] Map Studio Dev Module Smoke Builder
 
 Owner: LordVaderCW

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Domain.Core.Modules",
-    "file_count": 20,
+    "file_count": 21,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -124,6 +124,12 @@
             "source_path": "src/core/modules/authored_module_project.py",
             "packaged_path": "Python/src/core/modules/authored_module_project.py",
             "sha256": "f532f8a4dabfd6ce8779d97089ab6ed0d8aa971e19fd76be768b9740c13b79f0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0021",
+            "source_path": "src/core/modules/authored_room_primitives.py",
+            "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
+            "sha256": "6bff43c9827fb6795b957a63b9dbf3b3363abd664954d48be9d38f30f18bd837"
         }
     ]
 }
