@@ -16,6 +16,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
     """Small modder-facing status card for scratch-built Map Studio modules."""
 
     gameTestRequested = QtCore.Signal()
+    launchHandoffRequested = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -78,6 +79,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.game_test_button.setObjectName("mapStudioRecordGameProofButton")
         self.game_test_button.clicked.connect(self.gameTestRequested.emit)
         root.addWidget(self.game_test_button)
+
+        self.launch_handoff_button = QtWidgets.QPushButton("Open Launch Handoff")
+        self.launch_handoff_button.setObjectName("mapStudioOpenLaunchHandoffButton")
+        self.launch_handoff_button.clicked.connect(self.launchHandoffRequested.emit)
+        root.addWidget(self.launch_handoff_button)
         root.addStretch(1)
         self.set_readiness(None)
 
@@ -96,6 +102,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
             self.game_test_button.setEnabled(False)
+            self.launch_handoff_button.setEnabled(False)
             return
 
         module_root = str(getattr(readiness, "module_root", "") or "(unnamed)")
@@ -177,6 +184,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.blocking_label.setText(body)
         self.next_action_label.setText(str(getattr(readiness, "next_action", "") or ""))
         self.game_test_button.setEnabled(bool(getattr(readiness, "ready_for_game_test", False)))
+        self.launch_handoff_button.setEnabled(bool(elevated_launch_script or proof_manifest or installed_path))
 
 
 __all__ = ["ModuleReadinessPanel"]

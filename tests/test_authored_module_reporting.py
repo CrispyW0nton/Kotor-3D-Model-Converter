@@ -75,9 +75,30 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     assert "mapStudioReadinessAuthoredSummaryLabel" in source
     assert "mapStudioReadinessGameProofLabel" in source
     assert "mapStudioReadinessLaunchHandoffLabel" in source
+    assert "mapStudioOpenLaunchHandoffButton" in source
+    assert "launchHandoffRequested" in source
     assert "gameplay_counts" in source
     assert "room_styles" in source
     assert "proof_status" in source
     assert "launch_helper_command" in source
     assert "elevated_launch_script_path" in source
     assert "Elevated launcher ready" in source
+
+
+def test_t2689_module_editor_wires_launch_handoff_button() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)" in source
+    assert "def open_map_studio_launch_handoff" in source
+    assert "elevated_launch_script_path" in source
+    assert "QDesktopServices.openUrl" in source

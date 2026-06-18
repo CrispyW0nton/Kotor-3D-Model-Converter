@@ -354,6 +354,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
+        self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
         self.properties.transformChanged.connect(self._set_transform)
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
@@ -653,6 +654,32 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if not getattr(result, "ok", False):
             QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", result.message)
         self._refresh_all("Map Studio game proof updated.")
+
+    def open_map_studio_launch_handoff(self) -> None:
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        launcher_path = Path(str(payload.get("elevated_launch_script_path") or ""))
+        proof_path = Path(str(payload.get("proof_manifest_path") or ""))
+        if launcher_path.is_file():
+            response = QtWidgets.QMessageBox.question(
+                self,
+                "Open Launch Handoff",
+                "Open the elevated KOTOR launcher for this authored module smoke test? Windows may ask for administrator approval. This only starts the game; you still need to run the warp command and record proof.",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            )
+            if response != QtWidgets.QMessageBox.Yes:
+                return
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(launcher_path)))
+            self._log(f"Opened launch handoff: {launcher_path}")
+            return
+        if proof_path.is_file():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(proof_path.parent)))
+            self._log(f"Opened proof folder: {proof_path.parent}")
+            return
+        QtWidgets.QMessageBox.information(
+            self,
+            "Open Launch Handoff",
+            "Stage or install an authored module game-test package before opening the launch handoff.",
+        )
 
     def create_authored_room_preset(self, preset_id: str, module_root: str) -> None:
         try:

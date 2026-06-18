@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Launch Handoff Button
+
+Owner: LordVaderCW
+Task: T2689
+Subsystem: Map Studio / Module Editor readiness UI / authored smoke proof workflow
+
+- Added an `Open Launch Handoff` button to the Map Studio readiness panel, separate from the `Record Game Smoke Proof` action.
+- Wired the Module Editor window to open the generated elevated launcher after confirmation, or open the proof manifest folder when no launcher is available yet.
+- Mirrored the readiness panel button/signal into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_module_reporting.py`
+- `python -m pytest tests\test_authored_module_reporting.py -q --basetemp .pytest_tmp_map_studio_launch_button`
+
 ### [2026-06-18] Map Studio Writes Elevated Authored Smoke Launcher
 
 Owner: LordVaderCW
