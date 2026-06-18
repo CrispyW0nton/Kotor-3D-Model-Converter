@@ -351,7 +351,7 @@
       "resource_name": "PYTHON_PAYLOAD_0058",
       "source_path": "src/core/modules/authored_module_export.py",
       "packaged_path": "Python/src/core/modules/authored_module_export.py",
-      "sha256": "50c215cfdb99819fb2587ee0f57ecd8c49b503bd307926267ad993212d36c2fe"
+        "sha256": "37fca671dd972271a5da45b801066c1752f68913d40722f36e64da06cf97ace9"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0059",

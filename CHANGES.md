@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Authored KMAP Proof Commands
+
+Owner: LordVaderCW
+Task: T2645
+Subsystem: Map Studio / authored KMAP staging CLI / proof CLI / native Python payloads
+
+- Added `scripts/stage_authored_module_from_kmap.py` so a saved KMAP `authored_module` section can be packaged, optionally installed into a KOTOR `Modules` folder, and staged with a checklist/proof manifest outside the hardcoded `grdev01` flow.
+- Added `scripts/record_authored_module_game_proof.py` so real KOTOR evidence can mark an authored module package as game-smoke-tested only after all acceptance checks are supplied.
+- Extended authored module pack manifests with package verification and explicit remaining in-game acceptance items, then clear those items only when full proof is recorded.
+- Mirrored the authored module export update into the ModuleMeshes native payload and refreshed payload manifests.
+
+Verification:
+- `python -m py_compile scripts\stage_authored_module_from_kmap.py scripts\record_authored_module_game_proof.py tests\test_authored_module_proof_scripts.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py`
+- `python -m pytest tests\test_authored_module_proof_scripts.py tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_authored_proof_scripts`
+
 ### [2026-06-18] Map Studio Stages Authored Modules for Game Proof
 
 Owner: LordVaderCW

@@ -431,6 +431,15 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
     if not manifest_path.exists():
         return
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    remaining_acceptance = [
+        f"Install/copy {build.module_root}.mod into the KOTOR Modules folder.",
+        f"Launch KOTOR and run 'warp {build.module_root}'.",
+        "Confirm the module loads in-game without crashing or falling back to another area.",
+        "Confirm the player appears on the generated floor, not in the void.",
+        "Confirm authored test placeables and waypoints resolve as expected.",
+        "Walk across the generated floor and confirm WOK/pathing behavior.",
+        "Capture screenshot or video evidence and record it in the proof manifest.",
+    ]
     data["map_studio_authored_module"] = {
         "task": "T2643",
         "module_root": build.module_root,
@@ -449,6 +458,7 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         ],
         "resources": [summary.__dict__ for summary in build.resource_summaries],
         "package_ok": bool(package_result.ok),
+        "package_verification": _verification_to_manifest(verification),
         "readback": {
             "ok": bool(verification.ok) if verification is not None else False,
             "code": verification.code if verification is not None else "not_verified",
@@ -469,6 +479,7 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             f"Start KOTOR and run 'warp {build.module_root}'.",
             "Confirm the room loads, player start works, and authored gameplay templates resolve.",
         ],
+        "remaining_acceptance": remaining_acceptance,
     }
     data["validation"]["warnings"] = sorted(set(list(data.get("validation", {}).get("warnings", [])) + build.warnings + package_result.warnings))
     manifest_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -823,6 +834,15 @@ def _update_authored_pack_manifest_for_game_proof(
     authored["game_tested"] = bool(accepted)
     if accepted:
         authored["capability_stage"] = "game_smoke_tested"
+        remaining = list(authored.get("remaining_acceptance", []))
+        authored["remaining_acceptance"] = [
+            item
+            for item in remaining
+            if not any(
+                needle in str(item).lower()
+                for needle in ("install/copy", "warp", "confirm the module", "confirm the player", "placeables", "waypoints", "walk across", "capture")
+            )
+        ]
     authored["in_game_proof"] = proof_payload
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return warnings
