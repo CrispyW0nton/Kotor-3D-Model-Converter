@@ -185,6 +185,9 @@
     <None Include="Python\src\core\modules\authored_module_objects.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
+    <None Include="Python\src\core\modules\authored_module_project.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
     <None Include="Python\src\core\level\__init__.py">
       <Filter>Python\src\core\level</Filter>
     </None>

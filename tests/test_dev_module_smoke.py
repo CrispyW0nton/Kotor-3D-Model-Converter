@@ -39,6 +39,11 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     ifo = IFOData.from_bytes(authored.resources[("grdev01", "ifo")].data)
 
     assert authored.module_root == "grdev01"
+    assert authored.project is not None
+    assert authored.project.module_root == "grdev01"
+    assert authored.project.game == "K1"
+    assert authored.project.rooms[0].normalised_resref() == "grdev01_room01"
+    assert authored.project.metadata.metadata["task"] == "T2601"
     assert ("grdev01", "are") in keys
     assert ("grdev01", "git") in keys
     assert ("grdev01", "ifo") in keys
@@ -132,6 +137,10 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["game_tested"] is False
     assert smoke["warp_command"] == "warp grdev01"
     assert smoke["contains"]["simple_doorway_marker"] is True
+    assert smoke["authored_project"]["source"] == "src.core.modules.authored_module_project"
+    assert smoke["authored_project"]["module_root"] == "grdev01"
+    assert smoke["authored_project"]["room_count"] == 1
+    assert smoke["authored_project"]["metadata"]["task"] == "T2601"
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_geometry"
     assert smoke["authored_geometry"]["primitive"] == "rectangular_room"
     assert smoke["authored_geometry"]["room_mesh"] == "grdev01_room01_mesh"

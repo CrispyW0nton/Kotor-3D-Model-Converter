@@ -40,6 +40,11 @@ from .authored_room_geometry import (
     RectangularRoomPrimitive,
     build_rectangular_room_geometry,
 )
+from .authored_module_project import (
+    AuthoredModuleProject,
+    create_single_room_project,
+    validate_authored_module_project,
+)
 from .module_format import LYTLayout, LYTRoom, VISData, WOKData
 
 
@@ -136,6 +141,7 @@ class AuthoredDevModule:
     module_root: str
     game: str
     module: Any
+    project: AuthoredModuleProject | None = None
     resources: dict[tuple[str, str], Any] = field(default_factory=dict)
     packaged_resources: list[PackagedModuleResource] = field(default_factory=list)
     resource_summaries: list[DevModuleResourceSummary] = field(default_factory=list)
@@ -388,6 +394,24 @@ def _make_gameplay_placement(request: DevModuleSmokeRequest) -> AuthoredGameplay
     )
 
 
+def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProject:
+    return create_single_room_project(
+        module_root=request.module_root,
+        game=request.game,
+        display_name="GhostRigger Dev Test",
+        room_primitive=_room_primitive(request),
+        placements=_make_gameplay_placement(request),
+        notes=(
+            "T2601 from-scratch smoke module.",
+            "Generated from authored primitive geometry and authored gameplay placements.",
+        ),
+        metadata={
+            "task": "T2601",
+            "source": "map_studio:authored_project",
+        },
+    )
+
+
 def _walkable_ids() -> set[int]:
     try:
         from .module_format import WALKABLE_IDS
@@ -572,12 +596,15 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
     """Build the in-memory resources for ``grdev01`` without writing files."""
 
     request = request or DevModuleSmokeRequest()
-    root = _normalise_resref(request.module_root)
-    room = _normalise_resref(request.room_resref)
-    geometry = build_rectangular_room_geometry(_room_primitive(request))
-    placements = _make_gameplay_placement(request)
-    lyt = LYTLayout(rooms=[LYTRoom(room, 0.0, 0.0, 0.0)])
-    vis = VISData(visibility={room: [room]})
+    project = _make_authored_project(request)
+    root = project.module_root
+    room_spec = project.rooms[0]
+    room = room_spec.normalised_resref()
+    geometry = build_rectangular_room_geometry(room_spec.primitive)
+    placements = project.placements
+    lyt = LYTLayout(rooms=[LYTRoom(room, *room_spec.position)])
+    visible = [target for target in room_spec.visible_rooms if target]
+    vis = VISData(visibility={room: visible or [room]})
     wok = geometry.wok
     walkability_checks = _validate_gameplay_anchors(request, wok)
     template_checks, template_warnings = _validate_gameplay_templates(request, placements)
@@ -612,10 +639,14 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         warnings.append("Game-library template reference validation is disabled for this smoke package.")
     blocking = [check.message for check in walkability_checks if not check.ok]
     blocking.extend(check.message for check in template_checks if not check.ok)
+    project_validation = validate_authored_module_project(project)
+    warnings.extend(project_validation.warnings)
+    blocking.extend(project_validation.blocking_issues)
     return AuthoredDevModule(
         module_root=root,
-        game=str(request.game).upper(),
+        game=project.game,
         module=module_state,
+        project=project,
         resources=resources,
         packaged_resources=packaged,
         resource_summaries=summaries,
@@ -837,6 +868,15 @@ def _augment_manifest(
             "floor_walkmesh": True,
             "player_start": True,
             "test_placeable_template": request.test_placeable_resref,
+        },
+        "authored_project": {
+            "source": "src.core.modules.authored_module_project",
+            "module_root": authored.project.module_root if authored.project else authored.module_root,
+            "game": authored.project.game if authored.project else authored.game,
+            "display_name": authored.project.metadata.display_name if authored.project else "",
+            "room_count": len(authored.project.rooms) if authored.project else 0,
+            "notes": list(authored.project.notes) if authored.project else [],
+            "metadata": dict(authored.project.metadata.metadata) if authored.project else {},
         },
         "authored_geometry": {
             "source": "src.core.modules.authored_room_geometry",
