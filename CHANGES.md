@@ -11,6 +11,21 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Writes Template Dependencies Into Package Manifests
+
+Owner: LordVaderCW
+Task: T2701
+Subsystem: Map Studio / authored module export / package manifest
+
+- Added gameplay template dependency rows to authored module build metadata and exported package manifests.
+- Recorded each placed gameplay template's kind, resource type, tag, packaged/external status, and resolution note for smoke-test handoff.
+- Kept base-game/Override template dependencies non-blocking while making them visible in the package artifact.
+- Mirrored the authored export contract into the ModuleMeshes workflow package.
+
+Verification:
+- `python -m pytest tests\test_authored_module_export.py -q --basetemp .pytest_tmp_map_manifest_templates`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_authored_module_export.py`
+
 ### [2026-06-18] Map Studio Surfaces Gameplay Template Dependencies
 
 Owner: LordVaderCW

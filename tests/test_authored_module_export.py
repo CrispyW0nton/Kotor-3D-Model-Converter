@@ -93,6 +93,14 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert walkability_by_label["waypoint:start"]["ok"] is True
     assert {"entry_point", "placeable:grdev01_test_placeable", "waypoint:start"} <= set(contract["pathing_anchor_labels"])
     assert authored_manifest["smoke_expectations"]["expected_runtime_observations"]["test_placeable_tags"] == ["grdev01_test_placeable"]
+    template_dependencies = authored_manifest["gameplay_template_dependencies"]
+    template_keys = {(row["template_resref"], row["restype"], row["kind"]) for row in template_dependencies}
+    assert authored_manifest["gameplay_template_dependency_count"] == 2
+    assert authored_manifest["gameplay_packaged_template_dependency_count"] == 0
+    assert authored_manifest["gameplay_external_template_dependency_count"] == 2
+    assert ("plc_bench", "utp", "placeable") in template_keys
+    assert ("sw_startloc001", "utw", "waypoint") in template_keys
+    assert all(row["status"] == "external_or_base_game" for row in template_dependencies)
 
 
 def test_t2643_controller_exports_current_kmap_authored_module(tmp_path: Path) -> None:
@@ -177,6 +185,17 @@ def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     assert build.metadata["gameplay_counts"]["doors"] == 1
     assert build.metadata["gameplay_counts"]["triggers"] == 1
     assert build.metadata["gameplay_counts"]["encounters"] == 1
+    template_dependencies = build.metadata["gameplay_template_dependencies"]
+    template_keys = {(row["template_resref"], row["restype"], row["kind"]) for row in template_dependencies}
+    assert build.metadata["gameplay_template_dependency_count"] >= 8
+    assert ("c_drdmkone", "utc", "creature") in template_keys
+    assert ("door_t01", "utd", "door") in template_keys
+    assert ("trg_test", "utt", "trigger") in template_keys
+    assert ("enc_test", "ute", "encounter") in template_keys
+    assert ("plc_bench", "utp", "placeable") in template_keys
+    assert ("wp_test", "utw", "waypoint") in template_keys
+    assert ("snd_test", "uts", "sound") in template_keys
+    assert ("stm_shop", "utm", "store") in template_keys
 
 
 def test_t2686_export_forwards_game_root_to_authored_material_preflight(tmp_path: Path, monkeypatch) -> None:

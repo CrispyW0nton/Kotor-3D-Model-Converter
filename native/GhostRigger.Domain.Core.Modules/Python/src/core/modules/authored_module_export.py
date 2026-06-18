@@ -20,7 +20,12 @@ from typing import Any
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_lighting import authored_room_light_payload
 from .authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
-from .authored_module_objects import AuthoredGameplayPlacement, build_git_bytes, validate_authored_gameplay_placement_against_walkmesh
+from .authored_module_objects import (
+    AuthoredGameplayPlacement,
+    build_git_bytes,
+    normalise_resource_resref,
+    validate_authored_gameplay_placement_against_walkmesh,
+)
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
@@ -382,6 +387,48 @@ def _positioned_expectations(kind: str, items: Any) -> list[dict[str, Any]]:
     return rows
 
 
+def _template_dependency_rows(
+    placements: AuthoredGameplayPlacement,
+    *,
+    packaged_keys: set[tuple[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    packaged = packaged_keys or set()
+    rows: list[dict[str, Any]] = []
+    for kind, restype, items in (
+        ("creature", "utc", tuple(placements.creatures or ())),
+        ("door", "utd", tuple(placements.doors or ())),
+        ("trigger", "utt", tuple(placements.triggers or ())),
+        ("encounter", "ute", tuple(placements.encounters or ())),
+        ("sound", "uts", tuple(placements.sounds or ())),
+        ("store", "utm", tuple(placements.stores or ())),
+        ("placeable", "utp", tuple(placements.placeables or ())),
+        ("waypoint", "utw", tuple(placements.waypoints or ())),
+    ):
+        for index, item in enumerate(items):
+            resref = normalise_resource_resref(getattr(item, "template_resref", ""))
+            if not resref:
+                continue
+            is_packaged = (resref, restype) in packaged
+            rows.append(
+                {
+                    "kind": kind,
+                    "index": index,
+                    "template_resref": resref,
+                    "restype": restype,
+                    "tag": str(getattr(item, "tag", "") or ""),
+                    "status": "packaged" if is_packaged else "external_or_base_game",
+                    "packaged": is_packaged,
+                    "required": True,
+                    "message": (
+                        f"{resref}.{restype} is included in this module package."
+                        if is_packaged
+                        else f"{resref}.{restype} must resolve from the base game, Override, or another installed mod."
+                    ),
+                }
+            )
+    return sorted(rows, key=lambda row: (row["kind"], row["template_resref"], row["restype"], row["tag"]))
+
+
 def _smoke_expectations_from_build_parts(
     project: AuthoredModuleProject,
     *,
@@ -547,6 +594,10 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         pathing=pathing_metadata,
     )
     room_lights = [authored_room_light_payload(light) for light in tuple(getattr(project, "lights", ()) or ())]
+    packaged_keys = set(resources)
+    template_dependencies = _template_dependency_rows(project.placements, packaged_keys=packaged_keys)
+    packaged_template_count = sum(1 for row in template_dependencies if row["packaged"])
+    external_template_count = len(template_dependencies) - packaged_template_count
     return AuthoredModuleBuild(
         module_root=root,
         game=project.game,
@@ -563,6 +614,10 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "room_count": len(room_geometries),
             "resource_count": len(resources),
             "gameplay_counts": _placement_counts(project.placements),
+            "gameplay_template_dependencies": template_dependencies,
+            "gameplay_template_dependency_count": len(template_dependencies),
+            "gameplay_packaged_template_dependency_count": packaged_template_count,
+            "gameplay_external_template_dependency_count": external_template_count,
             "lighting_count": len(room_lights),
             "room_lights": room_lights,
             "walkability": walkability_metadata,
@@ -606,6 +661,10 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             for resref, geometry in sorted(build.module.room_geometry.items())
         ],
         "gameplay_counts": _placement_counts(build.project.placements),
+        "gameplay_template_dependencies": list(build.metadata.get("gameplay_template_dependencies", []) or []),
+        "gameplay_template_dependency_count": int(build.metadata.get("gameplay_template_dependency_count", 0) or 0),
+        "gameplay_packaged_template_dependency_count": int(build.metadata.get("gameplay_packaged_template_dependency_count", 0) or 0),
+        "gameplay_external_template_dependency_count": int(build.metadata.get("gameplay_external_template_dependency_count", 0) or 0),
         "lighting_count": int(build.metadata.get("lighting_count", 0) or 0),
         "room_lights": list(build.metadata.get("room_lights", []) or []),
         "walkability": dict(build.metadata.get("walkability", {})),
