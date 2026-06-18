@@ -11,6 +11,24 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds KOTOR-Window Evidence Capture
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / in-game proof capture / smoke-test handoff
+
+- Added `--kotor-window-only` to `capture_grdev01_smoke_evidence.py` so evidence can target the running KOTOR window instead of the full multi-monitor desktop.
+- Updated authored-module and dev-smoke handoff commands in the Domain and ModuleMeshes payloads so newly generated `grdev01` proof bundles request KOTOR-window capture by default.
+- Confirmed the current installed `grdev01` package remains KotorMCP-visible and `installed_ready_for_game_test`; a live elevated KOTOR launch request succeeded, but the captured KOTOR window was still a black pre-warp window, so the package is not marked `game_tested`.
+
+Verification:
+- `python -m pytest tests\test_capture_grdev01_smoke_evidence_script.py -q --basetemp .pytest_tmp_map_capture_window`
+- `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_dev_module_smoke.py::test_t2601_install_prep_writes_manual_game_test_checklist -q --basetemp .pytest_tmp_map_capture_window_handoff`
+- `python -m py_compile scripts\capture_grdev01_smoke_evidence.py tests\test_capture_grdev01_smoke_evidence_script.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py`
+- `python scripts\launch_grdev01_smoke_test.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --require-console-ready --elevated --json`
+- `python scripts\capture_grdev01_smoke_evidence.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --output artifacts\map_studio\grdev01_authored_smoke_installed\evidence\grdev01_kotor_window_probe.bmp --kotor-window-only --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_installed\grdev01_authored_module_game_manifest.json --kotormcp --json` reported package verification OK, installed bytes matched, and KotorMCP saw all required module resource types; status remains `installed_ready_for_game_test` because real in-game `warp grdev01` proof is still pending.
+
 ### [2026-06-18] Map Studio Gates grdev01 Proof Capture on Running KOTOR
 
 Owner: LordVaderCW

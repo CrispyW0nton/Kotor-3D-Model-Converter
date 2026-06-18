@@ -182,3 +182,53 @@ def test_t2601_capture_grdev01_evidence_blocks_proof_recording_without_kotor_pro
     assert evidence.is_file()
     status = _status(proof_manifest)
     assert status["proof"]["game_tested"] is False
+
+
+def test_t2601_capture_grdev01_evidence_can_capture_kotor_window_only(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    authored = _prepare_authored(tmp_path)
+    proof_manifest = str(authored["proof_manifest_path"])
+    evidence = tmp_path / "proof.bmp"
+    module = _load_capture_module()
+
+    monkeypatch.setattr(
+        module,
+        "_kotor_process_summary",
+        lambda *, skip_check=False: {
+            "checked": True,
+            "required_for_recording": True,
+            "running": True,
+            "process_names": ["swkotor", "swkotor2"],
+            "processes": [{"process_name": "swkotor", "pid": 1234, "window_title": "Knights of the Old Republic", "window_handle": 5678}],
+            "warnings": [],
+            "blocking_issues": [],
+        },
+    )
+
+    def fake_window_capture(output_path: Path, kotor_process: dict[str, object]) -> dict[str, object]:
+        output_path.write_bytes(b"BM fake kotor window evidence")
+        return {
+            "ok": True,
+            "message": "fake window capture",
+            "capture_scope": "kotor_window",
+            "window_handle": kotor_process["processes"][0]["window_handle"],  # type: ignore[index]
+            "width": 640,
+            "height": 480,
+            "blocking_issues": [],
+        }
+
+    monkeypatch.setattr(module, "_capture_kotor_window_bmp", fake_window_capture)
+
+    code = module.main(["--proof-manifest", proof_manifest, "--output", str(evidence), "--kotor-window-only", "--json"])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["capture"]["capture_scope"] == "kotor_window"
+    assert payload["capture"]["window_handle"] == 5678
+    assert payload["kotor_process"]["running"] is True
+    assert payload["record"] is None
+    assert evidence.is_file()

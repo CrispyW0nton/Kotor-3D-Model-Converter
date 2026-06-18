@@ -61,6 +61,15 @@ class BITMAPINFO(ctypes.Structure):
     _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", ctypes.c_uint32 * 3)]
 
 
+class RECT(ctypes.Structure):
+    _fields_ = [
+        ("left", ctypes.c_long),
+        ("top", ctypes.c_long),
+        ("right", ctypes.c_long),
+        ("bottom", ctypes.c_long),
+    ]
+
+
 def _install_payload_paths() -> None:
     for rel in PAYLOAD_PATHS:
         path = str((ROOT / rel).resolve())
@@ -85,6 +94,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tester", default="", help="Name or handle of the tester recording proof.")
     parser.add_argument("--notes", default="", help="Optional notes about the KOTOR build, install path, or result.")
     parser.add_argument("--record-proof", action="store_true", help="Record the captured evidence into the proof manifest.")
+    parser.add_argument(
+        "--kotor-window-only",
+        action="store_true",
+        help="Capture the running KOTOR window instead of the full desktop.",
+    )
     parser.add_argument(
         "--skip-kotor-process-check",
         action="store_true",
@@ -193,6 +207,131 @@ def _capture_screen_bmp(output_path: Path) -> dict[str, Any]:
     return {
         "ok": True,
         "message": "Screenshot evidence captured.",
+        "capture_scope": "desktop",
+        "width": width,
+        "height": height,
+        "blocking_issues": [],
+    }
+
+
+def _capture_kotor_window_bmp(output_path: Path, kotor_process: dict[str, Any]) -> dict[str, Any]:
+    if sys.platform != "win32":
+        return {
+            "ok": False,
+            "message": "KOTOR window capture is currently implemented for Windows only.",
+            "capture_scope": "kotor_window",
+            "blocking_issues": ["Run this helper on the Windows machine where KOTOR is visible."],
+        }
+    if kotor_process.get("blocking_issues"):
+        return {
+            "ok": False,
+            "message": "KOTOR window capture requires a running KOTOR window.",
+            "capture_scope": "kotor_window",
+            "blocking_issues": list(kotor_process.get("blocking_issues", [])),
+        }
+
+    processes = [process for process in kotor_process.get("processes", []) if isinstance(process, dict)]
+    hwnd = next((int(process.get("window_handle") or 0) for process in processes if int(process.get("window_handle") or 0) > 0), 0)
+    if hwnd <= 0:
+        return {
+            "ok": False,
+            "message": "KOTOR is running, but no visible main window handle was found.",
+            "capture_scope": "kotor_window",
+            "blocking_issues": ["Bring the KOTOR window to the foreground, then capture evidence again."],
+        }
+
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+    if not user32.IsWindow(hwnd):
+        return {
+            "ok": False,
+            "message": "The detected KOTOR window handle is no longer valid.",
+            "capture_scope": "kotor_window",
+            "blocking_issues": ["KOTOR closed or changed windows before evidence capture."],
+        }
+
+    rect = RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return {
+            "ok": False,
+            "message": "Could not determine the KOTOR window bounds.",
+            "capture_scope": "kotor_window",
+            "blocking_issues": ["KOTOR window bounds were unavailable for evidence capture."],
+        }
+    width = int(rect.right - rect.left)
+    height = int(rect.bottom - rect.top)
+    if width <= 0 or height <= 0:
+        return {
+            "ok": False,
+            "message": "The KOTOR window bounds are empty.",
+            "capture_scope": "kotor_window",
+            "blocking_issues": ["Restore or unminimize KOTOR before evidence capture."],
+        }
+
+    window_dc = user32.GetWindowDC(hwnd)
+    memory_dc = gdi32.CreateCompatibleDC(window_dc)
+    bitmap = gdi32.CreateCompatibleBitmap(window_dc, width, height)
+    old_bitmap = gdi32.SelectObject(memory_dc, bitmap)
+    try:
+        if not gdi32.BitBlt(memory_dc, 0, 0, width, height, window_dc, 0, 0, 0x00CC0020):
+            raise OSError("BitBlt failed while capturing the KOTOR window.")
+
+        row_size = ((width * 24 + 31) // 32) * 4
+        image_size = row_size * height
+        pixels = ctypes.create_string_buffer(image_size)
+        info = BITMAPINFO()
+        info.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        info.bmiHeader.biWidth = width
+        info.bmiHeader.biHeight = height
+        info.bmiHeader.biPlanes = 1
+        info.bmiHeader.biBitCount = 24
+        info.bmiHeader.biCompression = 0
+        info.bmiHeader.biSizeImage = image_size
+        if not gdi32.GetDIBits(memory_dc, bitmap, 0, height, pixels, ctypes.byref(info), 0):
+            raise OSError("GetDIBits failed while reading the KOTOR window bitmap.")
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        file_header_size = 14
+        dib_header_size = 40
+        pixel_offset = file_header_size + dib_header_size
+        file_size = pixel_offset + image_size
+        with output_path.open("wb") as handle:
+            handle.write(struct.pack("<2sIHHI", b"BM", file_size, 0, 0, pixel_offset))
+            handle.write(
+                struct.pack(
+                    "<IiiHHIIiiII",
+                    dib_header_size,
+                    width,
+                    height,
+                    1,
+                    24,
+                    0,
+                    image_size,
+                    0,
+                    0,
+                    0,
+                    0,
+                )
+            )
+            handle.write(pixels.raw)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "message": f"KOTOR window capture failed: {exc}",
+            "capture_scope": "kotor_window",
+            "blocking_issues": [str(exc)],
+        }
+    finally:
+        gdi32.SelectObject(memory_dc, old_bitmap)
+        gdi32.DeleteObject(bitmap)
+        gdi32.DeleteDC(memory_dc)
+        user32.ReleaseDC(hwnd, window_dc)
+
+    return {
+        "ok": True,
+        "message": "KOTOR window evidence captured.",
+        "capture_scope": "kotor_window",
+        "window_handle": hwnd,
         "width": width,
         "height": height,
         "blocking_issues": [],
@@ -225,7 +364,7 @@ def _kotor_process_summary(*, skip_check: bool = False) -> dict[str, Any]:
     command = (
         "$ErrorActionPreference = 'Stop'; "
         f"Get-Process | Where-Object {{ $_.ProcessName -match '^({process_filter})$' }} | "
-        "Select-Object ProcessName, Id, MainWindowTitle | ConvertTo-Json -Compress"
+        "Select-Object ProcessName, Id, MainWindowTitle, MainWindowHandle | ConvertTo-Json -Compress"
     )
     try:
         result = subprocess.run(
@@ -273,6 +412,7 @@ def _kotor_process_summary(*, skip_check: bool = False) -> dict[str, Any]:
                         "process_name": str(row.get("ProcessName") or ""),
                         "pid": int(row.get("Id") or 0),
                         "window_title": str(row.get("MainWindowTitle") or ""),
+                        "window_handle": int(row.get("MainWindowHandle") or 0),
                     }
                 )
         except Exception as exc:
@@ -425,11 +565,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     proof_manifest = args.proof_manifest
     output_path = args.output or _default_output_path(proof_manifest)
-    capture = _capture_screen_bmp(output_path)
     record = None
     kotor_process = None
-    if capture.get("ok") and args.record_proof:
+    if args.kotor_window_only:
         kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check))
+        capture = _capture_kotor_window_bmp(output_path, kotor_process)
+    else:
+        capture = _capture_screen_bmp(output_path)
+    if capture.get("ok") and args.record_proof:
+        if kotor_process is None:
+            kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check))
         if kotor_process.get("blocking_issues"):
             record = {
                 "ok": False,

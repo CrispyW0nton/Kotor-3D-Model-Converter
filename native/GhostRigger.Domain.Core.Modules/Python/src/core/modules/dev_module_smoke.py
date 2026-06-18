@@ -1480,7 +1480,7 @@ def _capture_evidence_command(*, proof_manifest_path: Path, module_root: str) ->
     capture_path = _capture_grdev01_evidence_script_path()
     return (
         f'python "{capture_path}" --proof-manifest "{proof_manifest_path}" '
-        "--record-proof --module-loads-in-game --player-spawns-on-floor "
+        "--kotor-window-only --record-proof --module-loads-in-game --player-spawns-on-floor "
         "--test-placeable-visible --player-can-walk-on-floor"
     )
 
