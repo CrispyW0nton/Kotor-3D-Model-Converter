@@ -308,6 +308,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def set_library_rows(self, rows: list[dict[str, Any]]) -> None:
         self._library_rows = [dict(row) for row in rows]
         self.asset_browser.set_rows(self._library_rows)
+        self.builder_tab.set_gameplay_palette_entries(self.controller.authored_gameplay_palette_entries(self._library_rows))
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
         renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})

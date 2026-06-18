@@ -24,6 +24,7 @@ class BuilderTab(QtWidgets.QWidget):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
+        self._gameplay_palette_entries: list[object] = []
         layout = QtWidgets.QVBoxLayout(self)
         primitive_box = QtWidgets.QGroupBox("Authored Room Primitive")
         primitive_layout = QtWidgets.QFormLayout(primitive_box)
@@ -106,6 +107,17 @@ class BuilderTab(QtWidgets.QWidget):
         self.gameplayTemplateLineEdit = QtWidgets.QLineEdit("plc_bench")
         self.gameplayTemplateLineEdit.setObjectName("mapStudioGameplayTemplateLineEdit")
         self.gameplayTemplateLineEdit.setPlaceholderText("template resref, e.g. plc_bench or c_drdmkone")
+        self.gameplayPaletteSearchLineEdit = QtWidgets.QLineEdit()
+        self.gameplayPaletteSearchLineEdit.setObjectName("mapStudioGameplayPaletteSearchLineEdit")
+        self.gameplayPaletteSearchLineEdit.setPlaceholderText("Search game-library templates or models")
+        self.gameplayPaletteComboBox = QtWidgets.QComboBox()
+        self.gameplayPaletteComboBox.setObjectName("mapStudioGameplayPaletteComboBox")
+        self.gameplayPaletteComboBox.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.useGameplayPaletteButton = QtWidgets.QPushButton("Use Selected Resource")
+        self.useGameplayPaletteButton.setObjectName("mapStudioUseGameplayPaletteButton")
+        self.gameplayPaletteHintLabel = QtWidgets.QLabel("Scan the Game Library to search for creature, placeable, door, and template resources.")
+        self.gameplayPaletteHintLabel.setObjectName("mapStudioGameplayPaletteHintLabel")
+        self.gameplayPaletteHintLabel.setWordWrap(True)
         self.gameplayTagLineEdit = QtWidgets.QLineEdit("")
         self.gameplayTagLineEdit.setObjectName("mapStudioGameplayTagLineEdit")
         self.gameplayTagLineEdit.setPlaceholderText("optional in-module tag")
@@ -131,6 +143,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.addGameplayPlacementButton = QtWidgets.QPushButton("Add Gameplay Placement")
         self.addGameplayPlacementButton.setObjectName("mapStudioAddGameplayPlacementButton")
         placement_layout.addRow("Kind:", self.gameplayPlacementKindComboBox)
+        placement_layout.addRow("Search:", self.gameplayPaletteSearchLineEdit)
+        placement_layout.addRow("Library:", self.gameplayPaletteComboBox)
+        placement_layout.addRow(self.useGameplayPaletteButton)
+        placement_layout.addRow(self.gameplayPaletteHintLabel)
         placement_layout.addRow("Template:", self.gameplayTemplateLineEdit)
         placement_layout.addRow("Tag:", self.gameplayTagLineEdit)
         placement_layout.addRow("Pos X:", self.gameplayPosXSpinBox)
@@ -153,6 +169,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
+        self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
+        self.gameplayPaletteSearchLineEdit.textChanged.connect(self._apply_gameplay_palette_filter)
+        self.gameplayPaletteComboBox.currentIndexChanged.connect(self._update_gameplay_palette_hint)
+        self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
         self._update_operation_controls()
         self._update_surface_hint()
@@ -234,6 +254,83 @@ class BuilderTab(QtWidgets.QWidget):
                 self.gameplayPlacementKindComboBox.addItem(value.replace("_", " ").title(), value)
         if self.gameplayPlacementKindComboBox.count() <= 0:
             self.gameplayPlacementKindComboBox.addItem("Placeable", "placeable")
+        self._apply_gameplay_palette_filter()
+
+    def set_gameplay_palette_entries(self, entries) -> None:
+        """Populate searchable gameplay-placement resource choices."""
+
+        self._gameplay_palette_entries = list(entries or ())
+        self._apply_gameplay_palette_filter()
+
+    @staticmethod
+    def _entry_value(entry, key: str, default: str = "") -> str:
+        if isinstance(entry, dict):
+            value = entry.get(key, default)
+        else:
+            value = getattr(entry, key, default)
+        return str(value if value is not None else default)
+
+    def _current_palette_entry(self):
+        entry = self.gameplayPaletteComboBox.currentData()
+        return entry if entry not in (None, "") else None
+
+    def _apply_gameplay_palette_filter(self) -> None:
+        if not hasattr(self, "gameplayPaletteComboBox"):
+            return
+        kind = str(self.gameplayPlacementKindComboBox.currentData() or "").strip().lower()
+        needle = self.gameplayPaletteSearchLineEdit.text().strip().lower()
+        self.gameplayPaletteComboBox.blockSignals(True)
+        self.gameplayPaletteComboBox.clear()
+        count = 0
+        for entry in self._gameplay_palette_entries:
+            entry_kind = self._entry_value(entry, "kind").lower()
+            haystack = " ".join(
+                self._entry_value(entry, key)
+                for key in ("template_resref", "label", "category", "source")
+            ).lower()
+            if kind and entry_kind != kind:
+                continue
+            if needle and needle not in haystack:
+                continue
+            label = self._entry_value(entry, "label") or self._entry_value(entry, "template_resref")
+            self.gameplayPaletteComboBox.addItem(label, entry)
+            count += 1
+        if count <= 0:
+            self.gameplayPaletteComboBox.addItem("No compatible game-library resources", None)
+        self.gameplayPaletteComboBox.blockSignals(False)
+        self._update_gameplay_palette_hint()
+
+    def _update_gameplay_palette_hint(self) -> None:
+        entry = self._current_palette_entry()
+        if entry is None:
+            if self._gameplay_palette_entries:
+                self.gameplayPaletteHintLabel.setText("No matching resources for the current kind/search. You can still type a template resref manually.")
+            else:
+                self.gameplayPaletteHintLabel.setText("Scan the Game Library to search for creature, placeable, door, and template resources.")
+            return
+        warning = self._entry_value(entry, "warning")
+        confidence = self._entry_value(entry, "confidence")
+        template = self._entry_value(entry, "template_resref")
+        if warning:
+            self.gameplayPaletteHintLabel.setText(warning)
+        else:
+            self.gameplayPaletteHintLabel.setText(f"Ready to place template {template} ({confidence}).")
+
+    def _use_selected_gameplay_palette_entry(self) -> None:
+        entry = self._current_palette_entry()
+        if entry is None:
+            return
+        kind = self._entry_value(entry, "kind")
+        template = self._entry_value(entry, "template_resref")
+        tag = template[:32]
+        for index in range(self.gameplayPlacementKindComboBox.count()):
+            if str(self.gameplayPlacementKindComboBox.itemData(index) or "") == kind:
+                self.gameplayPlacementKindComboBox.setCurrentIndex(index)
+                break
+        self.gameplayTemplateLineEdit.setText(template)
+        if not self.gameplayTagLineEdit.text().strip():
+            self.gameplayTagLineEdit.setText(tag)
+        self._update_gameplay_palette_hint()
 
     def _emit_gameplay_placement(self) -> None:
         kind = str(self.gameplayPlacementKindComboBox.currentData() or "placeable")

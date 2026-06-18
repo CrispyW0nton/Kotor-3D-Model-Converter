@@ -23,6 +23,7 @@ from .authored_module_kmap_bridge import (
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
 )
+from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
 from .authored_module_placements import (
     SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
     add_authored_gameplay_placement,
@@ -143,6 +144,16 @@ class ModuleEditorController:
         """Return supported authored gameplay placement kinds for Map Studio UI."""
 
         return SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS
+
+    def authored_gameplay_palette_entries(self, rows, *, query: str = "", kind: str = ""):
+        """Return game-library-backed resources that can seed gameplay placements."""
+
+        return authored_gameplay_palette_from_library_rows(
+            rows,
+            game=str(getattr(self.project, "game", "") or ""),
+            query=query,
+            kind=kind,
+        )
 
     def authored_gameplay_placements(self):
         """Return selectable authored gameplay placements for the current KMAP."""

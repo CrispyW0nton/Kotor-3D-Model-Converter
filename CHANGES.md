@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Searchable Gameplay Placement Palette
+
+Owner: LordVaderCW
+Task: T2656
+Subsystem: Map Studio / authored gameplay placement palette / Builder tab / native Python payloads
+
+- Added a headless gameplay-placement palette that maps game-library rows and KOTOR template resource types (`UTC`, `UTP`, `UTD`, `UTT`, `UTE`, `UTS`, `UTM`, `UTW`) to authored Map Studio placement kinds.
+- The palette distinguishes real template resources from model/category fallback rows and warns modders when a selected resref may need a matching in-game template before it resolves.
+- Updated the Map Studio Builder tab with searchable library placement controls and a `Use Selected Resource` action that fills the placement kind, template resref, and tag fields.
+- Wired the Module Editor to feed scanned Game Library rows into the Builder tab palette without changing the existing asset-browser import behavior.
+- Mirrored the core/controller/Builder tab changes into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_gameplay_palette.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_gameplay_palette.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py tests\test_authored_gameplay_palette.py`
+- `python -m pytest tests\test_authored_gameplay_palette.py tests\test_authored_gameplay_placement_selection.py tests\test_authored_gameplay_placements.py -q --basetemp .pytest_tmp_map_studio_gameplay_palette`
+
 ### [2026-06-18] Map Studio Projects Authored Placements Into Editor Selection
 
 Owner: LordVaderCW
