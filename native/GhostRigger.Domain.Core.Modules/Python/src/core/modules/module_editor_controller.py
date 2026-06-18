@@ -39,7 +39,11 @@ from .authored_module_placements import (
     parse_authored_gameplay_placement_id,
     update_authored_gameplay_placement_transform,
 )
-from .authored_room_operations import apply_authored_floor_plan_operation, move_authored_floor_plan_point
+from .authored_room_operations import (
+    apply_authored_floor_plan_operation,
+    move_authored_floor_plan_point,
+    set_authored_room_composition_primitive_transform,
+)
 from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
@@ -281,6 +285,45 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio room {room_resref or '(first room)'} outline point {int(point_index)}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_primitive_transform(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        translation: Any = None,
+        rotation_degrees_z: float | None = None,
+        scale: Any = None,
+        pivot: Any = None,
+    ):
+        """Set one authored composition primitive transform in the current KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = set_authored_room_composition_primitive_transform(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            translation=translation,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+            pivot=pivot,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Transformed Map Studio room primitive {primitive_name} in {room_resref or '(first room)'}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

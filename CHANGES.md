@@ -11,6 +11,22 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Adds Primitive Composition Transform Operations
+
+Owner: LordVaderCW
+Task: T2670
+Subsystem: Map Studio / authored room operations / primitive composition editing / native Python payloads
+
+- Added a headless operation for setting a named primitive transform inside an authored composition room.
+- Exposed the operation through the Module Editor controller so future viewport/inspector controls can move, rotate, scale, and pivot individual ramp, stair, wall, arch, cube, or cylinder primitives without owning transform policy.
+- Preserved transformed primitive intent in KMAP as `AuthoredRoomComposition`, with visible mesh and derived WOK staying in lockstep through the existing composition compiler.
+- Added focused regression coverage proving a moved elevation-room ramp persists its transform, compiles without blocking issues, and moves the generated walkmesh vertices.
+- Mirrored the operation and controller bridge into the ModuleMeshes native payload.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_editor_controller.py tests\test_authored_room_operations.py`
+- `python -m pytest tests\test_authored_room_operations.py tests\test_authored_module_kmap_bridge.py tests\test_authored_module_project.py -q --basetemp .pytest_tmp_map_studio_primitive_transform`
+
 ### [2026-06-18] Map Studio Shows Primitive Composition Room Overlays
 
 Owner: LordVaderCW

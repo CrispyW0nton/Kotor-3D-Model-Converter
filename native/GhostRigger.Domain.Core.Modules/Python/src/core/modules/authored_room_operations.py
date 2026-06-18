@@ -13,6 +13,7 @@ from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import (
     FloorPlanBevelOperation,
     FloorPlanInsetOperation,
@@ -95,6 +96,147 @@ def _replace_rooms(
             "last_room_operation": operation,
         },
     )
+
+
+def _composition_for_room(room: AuthoredRoomSpec) -> AuthoredRoomComposition:
+    if isinstance(room.primitive, AuthoredRoomComposition):
+        return room.primitive
+    if room.composition is not None:
+        return room.composition
+    raise ValueError(f"Room {room.room_resref} does not have an editable primitive composition.")
+
+
+def _primitive_name(primitive: Any) -> str:
+    if isinstance(primitive, PlacedRoomPrimitive):
+        return str(primitive.name or getattr(primitive.primitive, "name", "") or "").strip()
+    return str(getattr(primitive, "name", "") or "").strip()
+
+
+def _vec3_or_existing(value: Any, existing: tuple[float, float, float]) -> tuple[float, float, float]:
+    if value is None:
+        return existing
+    if isinstance(value, dict):
+        value = (value.get("x"), value.get("y"), value.get("z"))
+    if not isinstance(value, (list, tuple)) or len(value) < 3:
+        raise ValueError("Primitive transforms require three numeric X/Y/Z values.")
+    return (float(value[0]), float(value[1]), float(value[2]))
+
+
+def _updated_transform(
+    existing: PrimitiveTransform,
+    *,
+    translation: Any = None,
+    rotation_degrees_z: float | None = None,
+    scale: Any = None,
+    pivot: Any = None,
+) -> PrimitiveTransform:
+    next_scale = _vec3_or_existing(scale, existing.scale)
+    if any(float(value) <= 0.0 for value in next_scale):
+        raise ValueError("Primitive transform scale values must be positive.")
+    return PrimitiveTransform(
+        translation=_vec3_or_existing(translation, existing.translation),
+        rotation_degrees_z=float(existing.rotation_degrees_z if rotation_degrees_z is None else rotation_degrees_z),
+        scale=next_scale,
+        pivot=_vec3_or_existing(pivot, existing.pivot),
+    )
+
+
+def _set_composition_primitive_transform(
+    composition: AuthoredRoomComposition,
+    *,
+    primitive_name: str,
+    translation: Any = None,
+    rotation_degrees_z: float | None = None,
+    scale: Any = None,
+    pivot: Any = None,
+) -> AuthoredRoomComposition:
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Primitive transform operation requires a primitive name.")
+    updated_primitives = []
+    found = False
+    for primitive in tuple(composition.primitives or ()):
+        name = _primitive_name(primitive)
+        if name != target:
+            updated_primitives.append(primitive)
+            continue
+        found = True
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(
+                replace(
+                    primitive,
+                    transform=_updated_transform(
+                        primitive.transform,
+                        translation=translation,
+                        rotation_degrees_z=rotation_degrees_z,
+                        scale=scale,
+                        pivot=pivot,
+                    ),
+                )
+            )
+        else:
+            updated_primitives.append(
+                PlacedRoomPrimitive(
+                    primitive=primitive,
+                    name=name,
+                    transform=_updated_transform(
+                        PrimitiveTransform(),
+                        translation=translation,
+                        rotation_degrees_z=rotation_degrees_z,
+                        scale=scale,
+                        pivot=pivot,
+                    ),
+                )
+            )
+    if not found:
+        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        raise ValueError(f"Room {composition.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+    return replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "set_primitive_transform",
+            "last_transformed_primitive": target,
+        },
+    )
+
+
+def set_authored_room_composition_primitive_transform(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    translation: Any = None,
+    rotation_degrees_z: float | None = None,
+    scale: Any = None,
+    pivot: Any = None,
+) -> AuthoredModuleProject:
+    """Set one primitive instance transform inside an authored composition room."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _set_composition_primitive_transform(
+        _composition_for_room(room),
+        primitive_name=primitive_name,
+        translation=translation,
+        rotation_degrees_z=rotation_degrees_z,
+        scale=scale,
+        pivot=pivot,
+    )
+    updated = replace(
+        room,
+        primitive=composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "set_primitive_transform",
+            "last_transformed_primitive": str(primitive_name or "").strip(),
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="set_primitive_transform")
 
 
 def apply_authored_floor_plan_inset(
@@ -277,4 +419,5 @@ __all__ = [
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
     "move_authored_floor_plan_point",
+    "set_authored_room_composition_primitive_transform",
 ]

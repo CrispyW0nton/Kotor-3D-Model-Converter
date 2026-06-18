@@ -149,6 +149,64 @@ def test_t2668_controller_creates_elevation_composition_room_preset() -> None:
     assert build.module.room_geometry["grelev01_room01"].wok.walkable_face_count() == 6
 
 
+def test_t2670_controller_sets_composition_primitive_transform_and_preserves_exportable_wok() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grprim")
+
+    readiness = controller.set_authored_room_primitive_transform(
+        room_resref="grprim_room01",
+        primitive_name="grprim_room01_ramp",
+        translation=(1.0, 2.0, 0.0),
+        rotation_degrees_z=0.0,
+        scale=(1.0, 1.0, 1.0),
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    primitive_payload = payload["rooms"][0]["primitive"]
+    ramp_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grprim_room01_ramp")
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    wok = build.module.room_geometry["grprim_room01"].wok
+
+    assert readiness.readiness is not None
+    assert readiness.readiness.can_preview is True
+    assert controller.project.dirty is True
+    assert primitive_payload["type"] == "composition"
+    assert ramp_payload["transform"]["translation"] == [1.0, 2.0, 0.0]
+    assert not build.blocking_issues
+    assert wok.verts[4] == (0.0, 0.25, 0.0)
+    assert wok.walkable_face_count() == 6
+
+
+def test_t2670_transforming_missing_composition_primitive_fails_clearly() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_room_operations import set_authored_room_composition_primitive_transform
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="elevation_test_room",
+        module_root="grprim",
+        game="K1",
+    )
+
+    with pytest.raises(ValueError, match="no primitive named 'missing_ramp'"):
+        set_authored_room_composition_primitive_transform(
+            project,
+            room_resref="grprim_room01",
+            primitive_name="missing_ramp",
+            translation=(0.0, 0.0, 0.0),
+        )
+
+
 def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (
