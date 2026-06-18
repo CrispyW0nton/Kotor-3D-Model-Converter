@@ -135,3 +135,27 @@ Write to the Output Log from the terminal:
 ```python
 window._log("Hello from the Python terminal", "info")
 ```
+
+## Map Studio Smoke Workflows
+
+Stage both `grdev01` Map Studio smoke-module variants for manual KOTOR testing:
+
+```powershell
+python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_variant_suite
+```
+
+Print the same result as JSON for automation:
+
+```powershell
+python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_variant_suite --json
+```
+
+Stage only the floor-plan/opening variant:
+
+```powershell
+python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_floor_plan_only --no-rectangular
+```
+
+Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
+into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
+video evidence before treating it as game-tested.

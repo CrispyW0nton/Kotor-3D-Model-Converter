@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Smoke Suite Staging Script
+
+Owner: LordVaderCW
+Task: T2616
+Subsystem: Map Studio / smoke-suite workflow / command-line tooling
+
+- Added `scripts/stage_grdev01_smoke_suite.py` as a thin CLI wrapper around the native `prepare_dev_test_module_variant_suite` API.
+- Exposed JSON and human-readable output for staging the rectangular and floor-plan/opening `grdev01` export candidates.
+- Kept the workflow honest: the script stages packages and proof manifests only, and still requires manual `warp grdev01` in-game proof before any variant is considered game-tested.
+- Documented pasteable smoke-suite commands in `CHEETSHEET.md`.
+
+Verification:
+- `python -m py_compile scripts/stage_grdev01_smoke_suite.py tests/test_stage_grdev01_smoke_suite_script.py`
+- `python -m pytest tests/test_stage_grdev01_smoke_suite_script.py -q --basetemp .pytest_tmp_stage_grdev01_smoke_suite`
+- `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_dev_module_smoke_script_regression`
+- `git diff --check`
+
 ### [2026-06-17] Map Studio Smoke Variant Suite Prep
 
 Owner: LordVaderCW
