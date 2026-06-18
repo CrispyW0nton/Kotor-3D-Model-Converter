@@ -11,6 +11,23 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-17
 
+### [2026-06-17] Map Studio Authored Floor-Plan Extrusion
+
+Owner: LordVaderCW
+Task: T2611
+Subsystem: Map Studio / authored room geometry / native Python payloads
+
+- Added a headless `authored_room_floorplan` contract for compiling a convex 2D room footprint into a floor mesh, vertical wall helper meshes, and a derived WOK.
+- Added validation for missing room resrefs, too few points, duplicate or zero-length edges, non-zero area, convex-only first-pass footprints, positive wall height, and walkable surface IDs.
+- Normalized clockwise-drawn footprints to counter-clockwise mesh/WOK output and generated deterministic WOK adjacency for fan-triangulated floor plans.
+- Mirrored the module into the ModuleMeshes workflow payload and refreshed native project/payload metadata so embedded builds include the new Map Studio primitive.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_room_floorplan.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_room_floorplan.py tests\test_authored_room_floorplan.py`
+- `python -m pytest tests/test_authored_room_floorplan.py -q --basetemp .pytest_tmp_authored_room_floorplan`
+- `python -m pytest tests/test_authored_room_primitives.py tests/test_authored_room_composition.py -q --basetemp .pytest_tmp_authored_room_geometry_ops`
+- Native payload manifest hash/count validation.
+
 ### [2026-06-17] Map Studio In-Game Smoke Proof Recorder
 
 Owner: LordVaderCW

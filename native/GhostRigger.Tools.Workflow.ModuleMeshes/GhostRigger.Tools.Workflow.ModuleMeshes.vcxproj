@@ -66,6 +66,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\modules\authored_room_geometry.py" />
     <None Include="Python\src\core\modules\authored_room_materials.py" />
     <None Include="Python\src\core\modules\authored_room_composition.py" />
+    <None Include="Python\src\core\modules\authored_room_floorplan.py" />
     <None Include="Python\src\core\modules\authored_room_primitives.py" />
     <None Include="Python\src\core\modules\authored_module_objects.py" />
     <None Include="Python\src\core\modules\authored_module_project.py" />

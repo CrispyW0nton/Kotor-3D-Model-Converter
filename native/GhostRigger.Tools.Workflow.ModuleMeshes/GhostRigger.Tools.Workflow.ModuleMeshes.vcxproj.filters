@@ -191,6 +191,9 @@
     <None Include="Python\src\core\modules\authored_room_composition.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
+    <None Include="Python\src\core\modules\authored_room_floorplan.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
     <None Include="Python\src\core\modules\authored_room_primitives.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
