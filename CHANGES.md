@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Exposes Authored Smoke Launch Helper
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / authored-module smoke test / script handoff
+
+- Updated `prepare_grdev01_authored_smoke.py` so its JSON and human summaries expose the resolved game root and launch dry-run helper command after installing/staging `grdev01`.
+- Added regression coverage that verifies the prepare-script output matches the proof manifest launch handoff, so modders see the same next-step command recorded for audit/proof.
+
+Verification:
+- `python -m pytest tests/test_prepare_grdev01_authored_smoke_script.py -q --basetemp .pytest_tmp_prepare_authored_handoff`
+- `python -m py_compile scripts/prepare_grdev01_authored_smoke.py tests/test_prepare_grdev01_authored_smoke_script.py`
+
 ### [2026-06-18] Map Studio Supports K2 Smoke Launch Handoff
 
 Owner: LordVaderCW
