@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CREATE_SCRIPT = ROOT / "scripts" / "create_grdev01_authored_kmap.py"
 STAGE_SCRIPT = ROOT / "scripts" / "stage_authored_module_from_kmap.py"
 PROOF_SCRIPT = ROOT / "scripts" / "record_authored_module_game_proof.py"
 
@@ -56,6 +57,64 @@ def _write_empty_kmap(path: Path) -> None:
     from src.core.level.kmap_serializer import KMapSerializer
 
     KMapSerializer.save(new_kmap_project(name="empty", game="K1"), path)
+
+
+def test_t2646_creates_grdev01_authored_kmap_as_json(tmp_path: Path) -> None:
+    kmap_path = tmp_path / "grdev01.kmap"
+
+    result = _run(CREATE_SCRIPT, "--output", str(kmap_path), "--json")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is True
+    assert payload["code"] == "created"
+    assert payload["output_path"] == str(kmap_path)
+    assert payload["module_root"] == "grdev01"
+    assert payload["game"] == "K1"
+    assert payload["authored_module_present"] is True
+    assert payload["can_preview"] is True
+    assert payload["can_export_candidate"] is False
+    assert payload["rooms"][0]["room_resref"] == "grdev01_room01"
+    assert "stage_authored_module_from_kmap.py" in payload["next_command"]
+
+    kmap = json.loads(kmap_path.read_text(encoding="utf-8"))
+    authored = kmap["authored_module"]
+    assert authored["module_root"] == "grdev01"
+    assert authored["rooms"][0]["primitive"]["type"] == "rectangular"
+    assert authored["placements"]["entry_point"]["area_resref"] == "grdev01"
+    assert authored["placements"]["placeables"][0]["template_resref"] == "plc_bench"
+
+
+def test_t2646_create_script_refuses_existing_kmap_without_overwrite(tmp_path: Path) -> None:
+    kmap_path = tmp_path / "grdev01.kmap"
+    kmap_path.write_text("existing", encoding="utf-8")
+
+    result = _run(CREATE_SCRIPT, "--output", str(kmap_path), "--json")
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["code"] == "output_exists"
+    assert kmap_path.read_text(encoding="utf-8") == "existing"
+
+
+def test_t2646_create_then_stage_grdev01_authored_kmap(tmp_path: Path) -> None:
+    kmap_path = tmp_path / "grdev01.kmap"
+    create = _run(CREATE_SCRIPT, "--output", str(kmap_path), "--json")
+    assert create.returncode == 0, create.stderr + create.stdout
+
+    stage = _run(STAGE_SCRIPT, "--kmap", str(kmap_path), "--output-dir", str(tmp_path / "stage"), "--json")
+
+    assert stage.returncode == 0, stage.stderr + stage.stdout
+    payload = json.loads(stage.stdout)
+    assert payload["ok"] is True
+    assert Path(payload["module_path"]).is_file()
+    assert Path(payload["proof_manifest_path"]).is_file()
+    pack_manifest = json.loads(Path(payload["pack_manifest_path"]).read_text(encoding="utf-8"))
+    authored = pack_manifest["map_studio_authored_module"]
+    assert authored["authored_from_scratch"] is True
+    assert authored["game_tested"] is False
+    assert authored["warp_command"] == "warp grdev01"
 
 
 def test_t2645_stages_authored_kmap_module_as_json(tmp_path: Path) -> None:

@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-18
 
+### [2026-06-18] Map Studio Can Seed the grdev01 Authored KMAP
+
+Owner: LordVaderCW
+Task: T2646
+Subsystem: Map Studio / authored KMAP seed CLI / proof command workflow
+
+- Added `scripts/create_grdev01_authored_kmap.py` to create the first saved from-scratch `grdev01.kmap` containing the T2601 authored module section: primitive room, generated WOK intent, player start, waypoint, and test placeable.
+- The seed command reports readiness, refuses to overwrite an existing KMAP unless explicitly requested, and prints the next staging command for the manual `warp grdev01` proof loop.
+- Extended the authored proof-script tests to cover `create -> stage` so the command workflow starts from a saved KMAP rather than only a hand-built test fixture.
+
+Verification:
+- `python -m py_compile scripts\create_grdev01_authored_kmap.py scripts\stage_authored_module_from_kmap.py scripts\record_authored_module_game_proof.py tests\test_authored_module_proof_scripts.py`
+- `python -m pytest tests\test_authored_module_proof_scripts.py -q --basetemp .pytest_tmp_map_studio_create_kmap`
+
 ### [2026-06-18] Map Studio Adds Authored KMAP Proof Commands
 
 Owner: LordVaderCW
