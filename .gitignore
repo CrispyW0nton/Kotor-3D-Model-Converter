@@ -37,6 +37,8 @@ game_data/
 *.bif
 *.key
 *.mdl
+!native/GhostRigger.Domain.Core.MDL/
+!native/GhostRigger.Domain.Core.MDL/**
 *.mdx
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -288,3 +290,4 @@ knowledge_base/test_artifacts/*.zip
 /knowledge_base/books
 /docs/architecture
 /docs
+/native/GhostRigger.Domain.Core.MDL/build

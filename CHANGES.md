@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Native MDL Project Git Ignore Exception
+
+Owner: LordVaderCW
+Subsystem: Native project source-control hygiene
+
+- Added a narrow `.gitignore` exception so `native/GhostRigger.Domain.Core.MDL` is not hidden by the broad `*.mdl` game-data ignore rule on case-insensitive filesystems.
+
+Verification:
+- `git check-ignore -v -n native/GhostRigger.Domain.Core.MDL/GhostRigger.Domain.Core.MDL.vcxproj` reported the matching unignore exception after the change.
+- `git status --short native/GhostRigger.Domain.Core.MDL` now reports the project as addable untracked files instead of an ignored directory.
+
 ### [2026-06-19] M7/T703 Content Browser 2DA Outfit Metadata
 
 Owner: LordVaderCW
