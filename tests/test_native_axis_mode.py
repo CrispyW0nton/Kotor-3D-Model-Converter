@@ -9,8 +9,8 @@ from src.core.scene import axis_mode
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Scene"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Scene.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Scene"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Scene.dll"
 
 
 Double9 = ctypes.c_double * 9
@@ -53,8 +53,8 @@ def _assert_matrix_close(actual: axis_mode.Matrix3, expected: axis_mode.Matrix3)
 
 
 def test_scene_project_declares_axis_mode_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Scene.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Scene.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.Scene.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.Scene.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerScene.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "AxisMode.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "AxisMode.cpp").read_text(encoding="utf-8")
@@ -64,8 +64,8 @@ def test_scene_project_declares_axis_mode_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_scene_normalize_axis_mode" in package_header
-    assert "namespace ghostrigger::domain::core::scene::core::scene::axis_mode" in public_header
-    assert "namespace ghostrigger::domain::core::scene::core::scene::axis_mode" in implementation
+    assert "namespace ghostrigger::core::scene::core::scene::axis_mode" in public_header
+    assert "namespace ghostrigger::core::scene::core::scene::axis_mode" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

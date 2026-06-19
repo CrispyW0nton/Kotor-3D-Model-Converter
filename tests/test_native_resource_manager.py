@@ -8,8 +8,8 @@ from src.core.assets import resource_manager
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Assets"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Assets.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Assets"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Assets.dll"
 
 
 def _load_assets_dll() -> ctypes.CDLL:
@@ -38,8 +38,8 @@ def _call_resource_key(dll: ctypes.CDLL, name: str, resource_type: int) -> str:
 
 
 def test_assets_project_declares_resource_manager_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Assets.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Assets.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.Assets.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.Assets.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerAssets.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "ResourceManager.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ResourceManager.cpp").read_text(encoding="utf-8")
@@ -49,8 +49,8 @@ def test_assets_project_declares_resource_manager_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_assets_resource_key" in package_header
-    assert "namespace ghostrigger::domain::core::assets::core::assets::resource_manager" in public_header
-    assert "namespace ghostrigger::domain::core::assets::core::assets::resource_manager" in implementation
+    assert "namespace ghostrigger::core::assets::core::assets::resource_manager" in public_header
+    assert "namespace ghostrigger::core::assets::core::assets::resource_manager" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

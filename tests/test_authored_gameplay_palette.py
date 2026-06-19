@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Domain.Core.Modules/Python",
-        "native/GhostRigger.Domain.Core.Level/Python",
-        "native/GhostRigger.Domain.Core.Game/Python",
-        "native/GhostRigger.Domain.Core.Scene/Python",
-        "native/GhostRigger.Domain.Core.Walkmesh/Python",
-        "native/GhostRigger.Domain.Core.Geometry/Python",
-        "native/GhostRigger.Domain.Core.Camera/Python",
-        "native/GhostRigger.Domain.Core.Math/Python",
-        "native/GhostRigger.Domain.Core.Lighting/Python",
+        "native/GhostRigger.Core.Modules/Python",
+        "native/GhostRigger.Core.Level/Python",
+        "native/GhostRigger.Core.Game/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Walkmesh/Python",
+        "native/GhostRigger.Core.Geometry/Python",
+        "native/GhostRigger.Core.Camera/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Lighting/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -90,7 +90,7 @@ def test_t2656_module_editor_builder_exposes_searchable_gameplay_palette() -> No
     builder_source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -101,7 +101,7 @@ def test_t2656_module_editor_builder_exposes_searchable_gameplay_palette() -> No
     controller_source = (
         repo
         / "native"
-        / "GhostRigger.Domain.Core.Modules"
+        / "GhostRigger.Core.Modules"
         / "Python"
         / "src"
         / "core"

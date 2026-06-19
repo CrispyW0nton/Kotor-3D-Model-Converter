@@ -1,4 +1,4 @@
-﻿# GhostRigger Native Project Templates
+# GhostRigger Native Project Templates
 
 These templates are Phase 1 scaffolding for new C++ packages in
 `GhostRigger.sln`. They are intentionally small and explicit so future agents
@@ -19,15 +19,15 @@ runtime contracts consumed by multiple renderer/toolbox packages.
 
 Toolbox and window migrations must use product-surface namespaces rather than
 being folded into the host or runtime projects. Native toolbox packages use
-`GhostRigger.Tools.Workflow.{Toolname}`, for example `GhostRigger.Tools.Workflow.Retargeting` or
-`GhostRigger.Tools.Workflow.Export`. The Phase 1 native main-window package is
+`GhostRigger.Core.Tools.{Toolname}`, for example `GhostRigger.Core.Tools.Retargeting` or
+`GhostRigger.Core.Tools.Export`. The Phase 1 native main-window package is
 `GhostRigger.Windows.Shell.Main`. Shared logic that more than one tool or
 window consumes still belongs in `GhostRigger.Native.Core.Foundation.*` or
 `GhostRigger.Runtime.Shared.*` first.
 
-Renderer contract packages use `GhostRigger.Renderer.Shared.Contracts`. Concrete
-renderer backend packages use `GhostRigger.Renderer.Backend.{Backend}`, for example
-`GhostRigger.Renderer.Backend.D3D12` or the diagnostic `GhostRigger.Renderer.Backend.Null`.
+Renderer contract packages use `GhostRigger.Graphics.Renderer.Shared.Contracts`. Concrete
+renderer backend packages use `GhostRigger.Graphics.Renderer.Backend.{Backend}`, for example
+`GhostRigger.Graphics.Renderer.Backend.D3D12` or the diagnostic `GhostRigger.Graphics.Renderer.Backend.Null`.
 
 Do not copy an existing feature project and then strip it down. Start from the
 matching template and replace every `{{TOKEN}}`.
@@ -36,7 +36,7 @@ matching template and replace every `{{TOKEN}}`.
 
 | Token | Meaning |
 |-------|---------|
-| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRigger.Tools.Workflow.Retargeting`, `GhostRigger.Windows.Shell.Main`, or `GhostRigger.Renderer.Backend.D3D12`. |
+| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRigger.Core.Tools.Retargeting`, `GhostRigger.Windows.Shell.Main`, or `GhostRigger.Graphics.Renderer.Backend.D3D12`. |
 | `{{PROJECT_GUID}}` | New project GUID in braces. |
 | `{{ROOT_NAMESPACE}}` | C++ root namespace or project namespace. |
 | `{{EXPORT_DEFINE}}` | DLL export preprocessor define, such as `GHOSTRIGGER_RENDERER_D3D12_EXPORTS`. |

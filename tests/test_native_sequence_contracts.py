@@ -11,15 +11,32 @@ from src.sequence.sequence_model import SequenceTime
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Sequence.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "GhostRigger.Domain.Core.Sequence.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "GhostRigger.Domain.Core.Sequence.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "Public" / "SequenceContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Sequence" / "Private" / "SequenceContracts.cpp"
+PROJECT = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "GhostRigger.Core.Tools.SequenceEditor.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "GhostRigger.Core.Tools.SequenceEditor.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "Public" / "SequenceContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "Private" / "SequenceContracts.cpp"
+
+
+def _dll_path() -> Path:
+    candidates = (
+        ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Tools.SequenceEditor.dll",
+        ROOT
+        / "native"
+        / "GhostRigger.Core.Tools.SequenceEditor"
+        / "build"
+        / "vs"
+        / "x64"
+        / "Release"
+        / "GhostRigger.Core.Tools.SequenceEditor.dll",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    raise AssertionError(f"Missing sequence contracts DLL: {candidates[0]} or {candidates[1]}")
 
 
 def _dll() -> ctypes.CDLL:
-    lib = ctypes.CDLL(str(DLL))
+    lib = ctypes.CDLL(str(_dll_path()))
     lib.gr_sequence_interpolation_mode.argtypes = [ctypes.c_char_p]
     lib.gr_sequence_interpolation_mode.restype = ctypes.c_char_p
     lib.gr_sequence_ease.argtypes = [ctypes.c_double, ctypes.c_char_p]
@@ -97,8 +114,8 @@ def test_sequence_contracts_are_explicit_in_visual_studio_project() -> None:
     assert 'ClInclude Include="Public\\SequenceContracts.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::domain::core::sequence::core::sequence::contracts" in source_text
-    assert "namespace ghostrigger::domain::core::sequence::core::sequence::contracts" in header_text
+    assert "namespace ghostrigger::core::tools::sequenceeditor::contracts" in source_text
+    assert "namespace ghostrigger::core::tools::sequenceeditor::contracts" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

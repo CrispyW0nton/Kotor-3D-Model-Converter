@@ -22,7 +22,7 @@ def test_t2600_module_editor_icon_opens_map_studio_level_editor() -> None:
         "application_core/shared/resource_panels.py"
     )
     integration_source = _read(
-        "native/GhostRigger.GUI.Boundary.Integration/Python/src/gui/"
+        "native/GhostRigger.Core.GUI.Integration/Python/src/gui/"
         "integration/tool_integration_registry.py"
     )
 

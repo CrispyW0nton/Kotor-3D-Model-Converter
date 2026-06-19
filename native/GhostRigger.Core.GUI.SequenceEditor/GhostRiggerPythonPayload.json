@@ -1,0 +1,75 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.GUI.SequenceEditor",
+    "file_count": 11,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_INIT",
+            "source_path": "src/gui/sequence_editor/__init__.py",
+            "packaged_path": "Python/src/gui/sequence_editor/__init__.py",
+            "sha256": "f3df282896de0f6aede61eee64c97d5f3d5046a3bcce5c468afd2980a655ce2d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_CURVE_EDITOR",
+            "source_path": "src/gui/sequence_editor/sequence_curve_editor.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_curve_editor.py",
+            "sha256": "6e34af89a18cbf94038ed093073c9fc1696097051d2022cd1a4fa49cd8eb6f5d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_DOPESHEET",
+            "source_path": "src/gui/sequence_editor/sequence_dopesheet.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_dopesheet.py",
+            "sha256": "5c2bd9ebd997b07e92fe27c771e97d58257329982929df55855c5cca8c6c1aa2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_EDITOR_WINDOW",
+            "source_path": "src/gui/sequence_editor/sequence_editor_window.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_editor_window.py",
+            "sha256": "6bf6a3a838c183429501016883f0b1154af43cb401e253a1aa5aecfab0dcedf9"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_OUTLINER",
+            "source_path": "src/gui/sequence_editor/sequence_outliner.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_outliner.py",
+            "sha256": "45c31fb154eebbdc835d4faf4fcada42017b259600166bb591cf44654773c55d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_PROPERTY_PANEL",
+            "source_path": "src/gui/sequence_editor/sequence_property_panel.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_property_panel.py",
+            "sha256": "85ed86dd838301c81e06235fdab3a47d656daadcae5cfda3afb1dbc139d40f8c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TIMELINE_WIDGET",
+            "source_path": "src/gui/sequence_editor/sequence_timeline_widget.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_timeline_widget.py",
+            "sha256": "3fd97c3e904bcd0c0b7960caaa5d79c7caada4a9f6a372c8c71b683024e38af7"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TOOLBAR",
+            "source_path": "src/gui/sequence_editor/sequence_toolbar.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_toolbar.py",
+            "sha256": "3a2981074c9931bfa73dd0a604e8882bcce3a0300e159f81aabe192be289f276"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TRACK_LIST_WIDGET",
+            "source_path": "src/gui/sequence_editor/sequence_track_list_widget.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_track_list_widget.py",
+            "sha256": "2c6506bf7cdec2244a4b7ede1383f763b2a29eb96567e0b7c8bc1a5e42327da4"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TRANSPORT_BAR",
+            "source_path": "src/gui/sequence_editor/sequence_transport_bar.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_transport_bar.py",
+            "sha256": "f190826ba50cbd232a0c88c4addcfce47f73eee46e56355dc45f761d0ede4774"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_VIEWPORT_PANEL",
+            "source_path": "src/gui/sequence_editor/sequence_viewport_panel.py",
+            "packaged_path": "Python/src/gui/sequence_editor/sequence_viewport_panel.py",
+            "sha256": "c9c2bf96837056fb937f596cd4992a947bd379e6070b7dd0d13e6e50e239ed21"
+        }
+    ]
+}

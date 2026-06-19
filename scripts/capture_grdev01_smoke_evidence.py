@@ -29,14 +29,14 @@ DEFAULT_PROOF_MANIFEST = (
 )
 KOTOR_PROCESS_NAMES = ("swkotor", "swkotor2")
 PAYLOAD_PATHS = (
-    "native/GhostRigger.Domain.Core.Modules/Python",
-    "native/GhostRigger.Domain.Core.Game/Python",
-    "native/GhostRigger.Domain.Core.Scene/Python",
-    "native/GhostRigger.Domain.Core.Walkmesh/Python",
-    "native/GhostRigger.Domain.Core.Geometry/Python",
-    "native/GhostRigger.Domain.Core.Camera/Python",
-    "native/GhostRigger.Domain.Core.Math/Python",
-    "native/GhostRigger.Domain.Core.Lighting/Python",
+    "native/GhostRigger.Core.Modules/Python",
+    "native/GhostRigger.Core.Game/Python",
+    "native/GhostRigger.Core.Scene/Python",
+    "native/GhostRigger.Core.Walkmesh/Python",
+    "native/GhostRigger.Core.Geometry/Python",
+    "native/GhostRigger.Core.Camera/Python",
+    "native/GhostRigger.Core.Math/Python",
+    "native/GhostRigger.Core.Lighting/Python",
     ".",
 )
 

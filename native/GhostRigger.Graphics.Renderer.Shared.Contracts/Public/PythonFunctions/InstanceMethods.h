@@ -1,0 +1,66 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::graphics::renderer::shared::contracts {
+
+#ifndef GHOSTRIGGER_RENDERER_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_RENDERER_CONTRACTS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& fallbackviewportrenderer_construct_line_115_b27ff4d3_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_getattr_line_139_3525630d_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_setattr_line_148_00c480a2_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_apply_pending_line_158_3fbb5f53_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_activate_next_line_171_7e857c90_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_create_surface_widget_line_203_cc8f49e9_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_constructialize_line_221_271835c7_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_render_line_227_0692d55f_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_set_settings_line_252_7f109032_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_shutdown_line_269_3b69a9fc_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_release_line_278_c21ad3d7_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_clear_caches_line_281_05d13aad_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_reset_framebuffers_line_286_636fd7cd_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_invalidate_node_line_291_417d0abc_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_invalidate_node_cache_line_296_0e4afc47_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_invalidate_transform_cache_line_301_4f760894_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_invalidate_all_line_311_a111cc0f_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_set_theme_colors_line_316_20198646_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_set_native_palette_colors_line_322_afefbe13_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_get_capabilities_line_332_e3cb3ced_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_is_available_line_343_cab40303_native();
+const NativeFunctionImplementation& fallbackviewportrenderer_get_diagnostics_line_346_2a7934c6_native();
+const NativeFunctionImplementation& renderercapabilities_to_dict_line_56_96c9be59_native();
+const NativeFunctionImplementation& renderercapabilities_status_text_line_152_fec5213f_native();
+const NativeFunctionImplementation& renderercapabilities_supports_display_mode_line_158_98c34e96_native();
+const NativeFunctionImplementation& iviewportrenderer_is_available_line_16_d8d6e763_native();
+const NativeFunctionImplementation& iviewportrenderer_get_capabilities_line_20_71760aee_native();
+const NativeFunctionImplementation& iviewportrenderer_constructialize_line_23_3c747f18_native();
+const NativeFunctionImplementation& iviewportrenderer_create_surface_widget_line_26_1ab290cd_native();
+const NativeFunctionImplementation& iviewportrenderer_resize_line_29_a241a354_native();
+const NativeFunctionImplementation& iviewportrenderer_render_line_33_528a49c1_native();
+const NativeFunctionImplementation& iviewportrenderer_render_overlay_line_36_0ea321a6_native();
+const NativeFunctionImplementation& iviewportrenderer_pick_line_39_e82673ef_native();
+const NativeFunctionImplementation& iviewportrenderer_shutdown_line_42_ff2b66e5_native();
+const NativeFunctionImplementation& iviewportrenderer_get_diagnostics_line_47_5c5843ca_native();
+const NativeFunctionImplementation& iviewportrenderer_upload_mesh_line_57_1fd39e44_native();
+const NativeFunctionImplementation& iviewportrenderer_upload_texture_line_60_26f8032d_native();
+const NativeFunctionImplementation& iviewportrenderer_release_resource_line_63_107b6898_native();
+const NativeFunctionImplementation& iviewportrenderer_invalidate_all_line_66_8f695e92_native();
+const NativeFunctionImplementation& renderersettings_to_settings_dict_line_115_56f97328_native();
+
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::graphics::renderer::shared::contracts

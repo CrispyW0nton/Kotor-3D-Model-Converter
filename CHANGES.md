@@ -10,6 +10,23 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-19
+### [2026-06-19] Native Project Namespace and Duplicate Merge Cleanup
+
+Owner: LordVaderCW
+Subsystem: Native C++ project layout / package registry / solution packaging
+
+- Merged the retired native BAS surface into the Body Attachment System tool package and promoted its canonical shipped project to `native/GhostRigger.Core.Tools.BAS`.
+- Merged native sequence runtime payload and contract exports from the retired sequence core package into `native/GhostRigger.Core.Tools.SequenceEditor`, including explicit `SequenceContracts` C++ sources.
+- Removed the duplicate tracked `GhostRigger.Systems.Feature.BAS` and `GhostRigger.Domain.Core.Sequence` projects so the host resolves one C++ BAS package and one C++ Sequence Editor package.
+- Renamed native project folders, Visual Studio project filenames, solution entries, target names, payload manifests, and generated native metadata from `GhostRigger.Domain.Core.*`, `GhostRigger.Tools.Workflow.*`, `GhostRigger.Renderer.*`, and `GhostRigger.GUI.Boundary.*` to `GhostRigger.Core.*`, `GhostRigger.Core.Tools.*`, `GhostRigger.Graphics.Renderer.*`, and `GhostRigger.Core.GUI.*`.
+- Preserved legacy DLL fallback probing for prior renderer/tool/BAS/sequence output names while making the new canonical DLLs the primary registry targets.
+
+Verification:
+- `python -m py_compile native\GhostRigger.Native.Core.Foundation\Python\src\adapters\native_core\package_registry.py tests\test_native_core_package_registry.py tests\test_native_module_package_sweep.py tests\test_native_project_templates.py tests\test_native_sequence_contracts.py tests\test_sequence_multichar_runtime.py`
+- `PYTHONPATH=native\GhostRigger.Native.Core.Foundation\Python;native\GhostRigger.Core.Tools.SequenceEditor\Python;native\GhostRigger.Core.Math\Python;native\GhostRigger.Core.Rendering\Python python -m pytest tests\test_native_core_package_registry.py tests\test_native_module_package_sweep.py tests\test_native_project_templates.py tests\test_native_sequence_contracts.py tests\test_sequence_multichar_runtime.py -q` passed 126 tests with the existing `.pytest_cache` permission warning.
+- `MSBuild native\GhostRigger.Core.Tools.BAS\GhostRigger.Core.Tools.BAS.vcxproj /p:Configuration=Release /p:Platform=x64 /m /v:minimal`
+- `MSBuild native\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj /p:Configuration=Release /p:Platform=x64 /m /v:minimal`
+
 ### [2026-06-19] Map Studio Workflow Exposes Warp-Test Handoff
 
 Owner: LordVaderCW

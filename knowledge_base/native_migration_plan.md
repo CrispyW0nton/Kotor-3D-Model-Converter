@@ -1,4 +1,4 @@
-﻿# GhostRigger Native Migration Plan
+# GhostRigger Native Migration Plan
 
 Date: 2026-06-04
 Branch: `qt-ghostrigger`
@@ -58,29 +58,29 @@ a launcher and native workspace first, not a rewrite of the application.
   submission are introduced.
 - `native/GhostRigger.Runtime.Core.Host/` verifies the native runtime ABI from its real
   `Debug|x64` target without requiring the GUI.
-- `native/GhostRigger.Renderer.Shared.Contracts/` owns the renderer-neutral backend,
+- `native/GhostRigger.Graphics.Renderer.Shared.Contracts/` owns the renderer-neutral backend,
   surface, draw-item, and frame-stat schema metadata that concrete renderer
   packages must share before D3D12/WGPU draw submission moves native.
-- `native/GhostRigger.Renderer.Shared.Contracts/` verifies the renderer contract ABI
+- `native/GhostRigger.Graphics.Renderer.Shared.Contracts/` verifies the renderer contract ABI
   from its real `Debug|x64` target without requiring the GUI.
-- `native/GhostRigger.Renderer.Backend.Null/` owns the first concrete renderer backend
+- `native/GhostRigger.Graphics.Renderer.Backend.Null/` owns the first concrete renderer backend
   package behind the renderer contract boundary. It is diagnostic-only and does
   not own GPU devices or draw submission.
-- `native/GhostRigger.Renderer.Backend.Null/` verifies the diagnostic renderer backend
+- `native/GhostRigger.Graphics.Renderer.Backend.Null/` verifies the diagnostic renderer backend
   ABI from its real `Debug|x64` target without requiring the GUI.
-- `native/GhostRigger.Renderer.Backend.ModernGL/` owns the Phase 1 renderer package
+- `native/GhostRigger.Graphics.Renderer.Backend.ModernGL/` owns the Phase 1 renderer package
   boundary for the existing Python ModernGL adapter. It reports package
   capabilities, backend metadata, and adapter-bridge fallback metadata while
   keeping ModernGL context/device ownership in Python.
-- `native/GhostRigger.Renderer.Backend.ModernGL/` verifies the ModernGL renderer package
+- `native/GhostRigger.Graphics.Renderer.Backend.ModernGL/` verifies the ModernGL renderer package
   ABI from its real `Debug|x64` target without requiring the GUI.
-- `native/GhostRigger.Renderer.Backend.PyGFX/` owns the Phase 1 renderer package
+- `native/GhostRigger.Graphics.Renderer.Backend.PyGFX/` owns the Phase 1 renderer package
   boundary for the existing Python PyGFX/WGPU adapter. It reports package
   capabilities, backend metadata, and adapter-bridge fallback metadata while
   keeping PyGFX/WGPU device ownership in Python.
-- `native/GhostRigger.Renderer.Backend.PyGFX/` verifies the PyGFX renderer package ABI
+- `native/GhostRigger.Graphics.Renderer.Backend.PyGFX/` verifies the PyGFX renderer package ABI
   from its real `Debug|x64` target without requiring the GUI.
-- `native/GhostRigger.Renderer.Backend.D3D12/` owns the first hardware renderer backend
+- `native/GhostRigger.Graphics.Renderer.Backend.D3D12/` owns the first hardware renderer backend
   package boundary behind the renderer contract boundary. It can probe DXGI
   adapters, probe D3D12 feature-level 12_0 device-readiness without retaining a
   device, report command-queue/swap-chain readiness requirements without
@@ -110,7 +110,7 @@ a launcher and native workspace first, not a rewrite of the application.
   not record draws or enable real draw submission yet.
   `Present` is only reachable through the guarded present-call diagnostic after
   prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
-- `native/GhostRigger.Renderer.Backend.D3D12/` verifies the D3D12 renderer package
+- `native/GhostRigger.Graphics.Renderer.Backend.D3D12/` verifies the D3D12 renderer package
   ABI, DXGI adapter-probe export, D3D12 device-readiness export,
   queue/swap-chain readiness export, diagnostic context create/destroy/export,
   descriptor-heap/command-allocator readiness export, command-list readiness
@@ -137,43 +137,43 @@ a launcher and native workspace first, not a rewrite of the application.
 - `src.adapters.native_core.package_registry` detects native package
   availability and capability metadata without starting the GUI. It now exposes
   a reusable package spec so future `GhostRigger.Native.Core.Foundation.*`,
-  `GhostRigger.Runtime.Shared.*`, and `GhostRigger.Renderer.*` packages can be
+  `GhostRigger.Runtime.Shared.*`, and `GhostRigger.Graphics.Renderer.*` packages can be
   added consistently. The D3D12 registry entry reports the complete guarded
   Phase 1 D3D12 metadata capability set advertised by the native DLL.
-- `native/GhostRigger.Tools.Workflow.Retargeting/` owns the first native toolbox package
+- `native/GhostRigger.Core.Tools.Retargeting/` owns the first native toolbox package
   boundary for the Retarget Workbench. It reports package capabilities,
   owner-boundary metadata, and a solve-packet schema placeholder while keeping
   native solve execution disabled and requiring Python fallback.
-- `native/GhostRigger.Tools.Workflow.Retargeting/` verifies the Retargeting toolbox
+- `native/GhostRigger.Core.Tools.Retargeting/` verifies the Retargeting toolbox
   package ABI, capabilities export, owner-boundary metadata, and solve-packet
   schema placeholder from Visual Studio without requiring Python.
-- `native/GhostRigger.Tools.Workflow.Export/` owns the native toolbox package boundary
+- `native/GhostRigger.Core.Tools.Export/` owns the native toolbox package boundary
   for export and validation helpers. It reports package capabilities,
   owner-boundary metadata, and a preflight-packet schema placeholder while
   keeping native file writes disabled and requiring Python fallback.
-- `native/GhostRigger.Tools.Workflow.Export/` verifies the Export toolbox package
+- `native/GhostRigger.Core.Tools.Export/` verifies the Export toolbox package
   ABI, capabilities export, owner-boundary metadata, and preflight-packet schema
   placeholder from Visual Studio without requiring Python.
-- `native/GhostRigger.Tools.Workflow.CharacterBuilder/` owns the native toolbox package
+- `native/GhostRigger.Core.Tools.CharacterBuilder/` owns the native toolbox package
   boundary for Character Studio helpers. It reports package capabilities,
   owner-boundary metadata, and an autofit-packet schema placeholder while
   keeping native autofit disabled and requiring Python fallback.
-- `native/GhostRigger.Tools.Workflow.CharacterBuilder/` verifies the Character
+- `native/GhostRigger.Core.Tools.CharacterBuilder/` verifies the Character
   Builder toolbox package ABI, capabilities export, owner-boundary metadata, and
   autofit-packet schema placeholder from Visual Studio without requiring Python.
-- `native/GhostRigger.Tools.Workflow.ContentBrowser/`,
-  `native/GhostRigger.Tools.Workflow.ResourceBrowser/`, and
-  `native/GhostRigger.Tools.Workflow.TwoDABrowser/` own Phase 1 browser/catalogue tool
+- `native/GhostRigger.Core.Tools.ContentBrowser/`,
+  `native/GhostRigger.Core.Tools.ResourceBrowser/`, and
+  `native/GhostRigger.Core.Tools.TwoDABrowser/` own Phase 1 browser/catalogue tool
   package boundaries. They report package capabilities, owner-boundary metadata,
   and catalogue/table schema placeholders while keeping native indexing and
   table queries disabled and requiring Python fallback.
 - Their real Debug targets or targeted ABI checks verify the browser/catalogue package ABIs,
   capabilities exports, owner-boundary metadata, and schema placeholders from
   Visual Studio without requiring Python.
-- `native/GhostRigger.Tools.Workflow.SceneInformation/`,
-  `native/GhostRigger.Tools.Workflow.Properties/`,
-  `native/GhostRigger.Tools.Workflow.Lighting/`, `native/GhostRigger.Tools.Workflow.Camera/`,
-  and `native/GhostRigger.Tools.Workflow.ModuleMeshes/` own Phase 1 scene/workbench tool
+- `native/GhostRigger.Core.Tools.SceneInformation/`,
+  `native/GhostRigger.Core.Tools.Properties/`,
+  `native/GhostRigger.Core.Tools.Lighting/`, `native/GhostRigger.Core.Tools.Camera/`,
+  and `native/GhostRigger.Core.Tools.ModuleMeshes/` own Phase 1 scene/workbench tool
   package boundaries. They report package capabilities, owner-boundary metadata,
   and scene/property/lighting/camera/module-mesh packet schema placeholders
   while keeping native scene querying, property edits, light/camera evaluation,
@@ -181,11 +181,11 @@ a launcher and native workspace first, not a rewrite of the application.
 - Their real Debug targets or targeted ABI checks verify the scene/workbench package ABIs, capabilities
   exports, owner-boundary metadata, and schema placeholders from Visual Studio
   without requiring Python.
-- `native/GhostRigger.Tools.Workflow.BodyAttachmentSystem/`,
-  `native/GhostRigger.Tools.Workflow.NodeSkeletonBrowser/`,
-  `native/GhostRigger.Tools.Workflow.SpriteMaterials/`,
-  `native/GhostRigger.Tools.Workflow.PivotControls/`, and
-  `native/GhostRigger.Tools.Workflow.SequenceEditor/` own the remaining requested Phase 1
+- `native/GhostRigger.Core.Tools.BAS/`,
+  `native/GhostRigger.Core.Tools.NodeSkeletonBrowser/`,
+  `native/GhostRigger.Core.Tools.SpriteMaterials/`,
+  `native/GhostRigger.Core.Tools.PivotControls/`, and
+  `native/GhostRigger.Core.Tools.SequenceEditor/` own the remaining requested Phase 1
   toolbox package boundaries. They report package capabilities, owner-boundary
   metadata, and attachment/node-tree/material/pivot/sequence packet schema
   placeholders while keeping native attachment evaluation, node-tree queries,
@@ -214,13 +214,13 @@ a launcher and native workspace first, not a rewrite of the application.
 - `native/GhostRigger.Native.Core.HostModulePackages.json` owns the Phase 1 full Python
   module sweep manifest. The generated package set adds diagnostic Visual
   Studio DLL project entries for the durable Python subsystems under
-  `src/`, including `GhostRigger.Domain.Core.Modules` for `src/core/modules`, core scene,
+  `src/`, including `GhostRigger.Core.Modules` for `src/core/modules`, core scene,
   level, animation, retargeting, character, MDL, geometry, gizmo, graphics,
   lighting, validation, project, resource, export, game, port, rendering,
   diagnostics, template, workflow, and walkmesh domains; top-level math,
   measurement, format, IO, IPC, converter, autorig, Unreal, workbench,
   mesh-tool, sequence, infrastructure, and KOTOR MCP packages; adapter
-  categories; GUI category packages; and `GhostRigger.Systems.Feature.BAS`.
+  categories; GUI category packages; and `GhostRigger.Core.Tools.BAS`.
 - The generated module package real Debug targets or targeted ABI checks verify C ABI version,
   capability, owner-boundary, and dependency-schema metadata from Visual Studio
   without requiring Python, while the Python implementations remain the active
@@ -258,20 +258,22 @@ Native project naming:
   `GhostRigger.Runtime.Core.Host`.
 - Shared core extensions: `GhostRigger.Native.Core.Foundation.{System}`.
 - Shared runtime contracts: `GhostRigger.Runtime.Shared.{System}`.
-- Renderer contracts: `GhostRigger.Renderer.Shared.Contracts`.
-- Renderer backends: `GhostRigger.Renderer.Backend.{Backend}`.
-- Toolbox migrations from Python: `GhostRigger.Tools.Workflow.{Toolname}`.
+- Renderer contracts: `GhostRigger.Graphics.Renderer.Shared.Contracts`.
+- Renderer backends: `GhostRigger.Graphics.Renderer.Backend.{Backend}`.
+- Toolbox migrations from Python: `GhostRigger.Core.Tools.{Toolname}`.
 - Phase 1 native main-window package: `GhostRigger.Windows.Shell.Main`.
 - Extra Phase 1 native window packages:
   `GhostRigger.Windows.Editor.Level`,
   `GhostRigger.Windows.Workbench.AnimationRetarget`,
   `GhostRigger.Windows.Legacy.Rigging`, and
   `GhostRigger.Windows.Workbench.UnrealAnimator`.
-- Python module sweep packages use `GhostRigger.Domain.Core.{Domain}` for core/top-level
+- Python module sweep packages use `GhostRigger.Core.{Domain}` for core/top-level
   domains, `GhostRigger.Adapters.<Type>.<AdapterName>` for adapter categories,
-  `GhostRigger.GUI.Boundary.{Category}` for GUI category boundaries, and
-  `GhostRigger.Systems.Feature.{SystemName}` for durable systems. `GhostRigger.Domain.Core.Modules`
-  is the native package boundary for `src/core/modules`.
+  and `GhostRigger.Core.GUI.{Category}` for GUI category boundaries. Durable
+  feature systems should merge into the owning `GhostRigger.Core.{Domain}` or
+  `GhostRigger.Core.Tools.{Toolname}` package instead of creating a parallel
+  `Systems.Feature` namespace. `GhostRigger.Core.Modules` is the native package
+  boundary for `src/core/modules`.
 
 The first concrete toolbox and window migration candidates are documented in
 `knowledge_base/native_toolbox_window_migration_candidates.md`.

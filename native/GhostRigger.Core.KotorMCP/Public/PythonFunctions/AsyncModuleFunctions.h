@@ -1,0 +1,124 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::kotormcp {
+
+#ifndef GHOSTRIGGER_KOTORMCP_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_KOTORMCP_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_KOTORMCP_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& list_resource_templates_line_42_cdaea7a6_native();
+const NativeFunctionImplementation& list_resources_line_62_684c6865_native();
+const NativeFunctionImplementation& read_resource_line_116_3752482a_native();
+const NativeFunctionImplementation& run_stdio_line_230_c0db7d2c_native();
+const NativeFunctionImplementation& run_sse_line_247_4b3aca42_native();
+const NativeFunctionImplementation& run_http_fallback_line_269_8d17548e_native();
+const NativeFunctionImplementation& handle_tool_line_100_504c7571_native();
+const NativeFunctionImplementation& handle_list_archive_line_83_396ef7aa_native();
+const NativeFunctionImplementation& handle_extract_resource_line_140_874dca15_native();
+const NativeFunctionImplementation& handle_list_materials_line_426_48903da5_native();
+const NativeFunctionImplementation& handle_list_textures_line_436_4c434297_native();
+const NativeFunctionImplementation& handle_get_material_info_line_461_77159ecc_native();
+const NativeFunctionImplementation& handle_get_texture_binding_info_line_474_1889f913_native();
+const NativeFunctionImplementation& handle_get_txi_info_line_496_da12a567_native();
+const NativeFunctionImplementation& handle_get_uv_channel_info_line_507_d5069748_native();
+const NativeFunctionImplementation& handle_get_supermodel_chain_line_528_553e2f72_native();
+const NativeFunctionImplementation& handle_list_body_parts_line_552_b8662b9d_native();
+const NativeFunctionImplementation& handle_get_missing_mesh_report_line_575_d076f5b5_native();
+const NativeFunctionImplementation& handle_get_node_classification_audit_line_598_fdd06228_native();
+const NativeFunctionImplementation& handle_get_vertex_space_audit_line_609_fe101de8_native();
+const NativeFunctionImplementation& handle_get_render_filter_audit_line_623_84f11c91_native();
+const NativeFunctionImplementation& handle_export_render_debug_bundle_line_652_ecd49ef2_native();
+const NativeFunctionImplementation& handle_get_render_filter_results_line_687_a2e91d6c_native();
+const NativeFunctionImplementation& handle_get_vbo_build_status_line_791_58eb699b_native();
+const NativeFunctionImplementation& handle_get_k1_vs_k2_model_differences_line_873_7e40b64e_native();
+const NativeFunctionImplementation& handle_launch_app_line_1240_94d777ad_native();
+const NativeFunctionImplementation& handle_close_app_line_1246_ca0b74e2_native();
+const NativeFunctionImplementation& handle_get_runtime_status_line_1252_0647d5e9_native();
+const NativeFunctionImplementation& handle_set_game_library_path_line_1268_b859be8b_native();
+const NativeFunctionImplementation& handle_verify_game_library_line_1277_6321289f_native();
+const NativeFunctionImplementation& handle_load_model_line_1282_614ac619_native();
+const NativeFunctionImplementation& handle_get_loaded_asset_info_line_1291_af5e2570_native();
+const NativeFunctionImplementation& handle_list_animations_line_1296_c7fa1fc9_native();
+const NativeFunctionImplementation& handle_set_animation_line_1302_8777880c_native();
+const NativeFunctionImplementation& handle_set_animation_time_line_1308_35377fbd_native();
+const NativeFunctionImplementation& handle_set_bind_pose_line_1314_856d3b43_native();
+const NativeFunctionImplementation& handle_set_camera_preset_line_1319_efd65fb9_native();
+const NativeFunctionImplementation& handle_capture_viewport_line_1325_1d4254b5_native();
+const NativeFunctionImplementation& handle_capture_validation_set_line_1333_528a01bf_native();
+const NativeFunctionImplementation& handle_get_skinning_state_line_1340_f2c7cb2a_native();
+const NativeFunctionImplementation& handle_get_renderer_state_line_1345_32d74c4a_native();
+const NativeFunctionImplementation& handle_get_bone_hierarchy_line_1350_f79a9889_native();
+const NativeFunctionImplementation& handle_get_bone_map_line_1355_1789cee7_native();
+const NativeFunctionImplementation& handle_get_palette_remap_table_line_1361_d43c35c8_native();
+const NativeFunctionImplementation& handle_get_bind_pose_matrices_line_1366_deec72a6_native();
+const NativeFunctionImplementation& handle_get_animated_pose_matrices_line_1372_9a8d6813_native();
+const NativeFunctionImplementation& handle_get_uploaded_palette_line_1378_031c4407_native();
+const NativeFunctionImplementation& handle_sample_vertex_influences_line_1383_75691b30_native();
+const NativeFunctionImplementation& handle_compare_cpu_gpu_line_1391_e788372a_native();
+const NativeFunctionImplementation& handle_export_debug_bundle_line_1399_d92a6d05_native();
+const NativeFunctionImplementation& handle_ping_line_295_582f3030_native();
+const NativeFunctionImplementation& handle_binary_info_line_321_0b4945ff_native();
+const NativeFunctionImplementation& handle_list_engine_funcs_line_336_dad995f0_native();
+const NativeFunctionImplementation& handle_decompile_function_line_355_c5ea6802_native();
+const NativeFunctionImplementation& handle_search_symbols_line_378_4c80073c_native();
+const NativeFunctionImplementation& handle_search_engine_strings_line_398_01134b51_native();
+const NativeFunctionImplementation& handle_get_references_line_418_f3b98d1e_native();
+const NativeFunctionImplementation& handle_call_graph_line_439_7e475007_native();
+const NativeFunctionImplementation& handle_data_flow_line_460_6838b4f0_native();
+const NativeFunctionImplementation& handle_inspect_memory_line_484_5df5368a_native();
+const NativeFunctionImplementation& handle_engine_script_line_506_c997f096_native();
+const NativeFunctionImplementation& handle_list_resources_line_320_15e692d0_native();
+const NativeFunctionImplementation& handle_describe_resource_line_366_dcd01d64_native();
+const NativeFunctionImplementation& handle_find_resource_line_390_f7d238ef_native();
+const NativeFunctionImplementation& handle_search_resources_line_422_3e248f66_native();
+const NativeFunctionImplementation& handle_journal_overview_line_111_d65c47dd_native();
+const NativeFunctionImplementation& handle_lookup_2da_line_147_5375ac9d_native();
+const NativeFunctionImplementation& handle_lookup_tlk_line_193_02219054_native();
+const NativeFunctionImplementation& handle_read_gff_line_119_a7efae7e_native();
+const NativeFunctionImplementation& handle_read_2da_line_143_0bdbc456_native();
+const NativeFunctionImplementation& handle_read_tlk_line_174_396fd010_native();
+const NativeFunctionImplementation& handle_open_model_line_369_41ab85b2_native();
+const NativeFunctionImplementation& handle_render_model_line_412_f26bb91b_native();
+const NativeFunctionImplementation& handle_model_info_line_562_e12cf595_native();
+const NativeFunctionImplementation& handle_list_game_models_line_601_7ad72b52_native();
+const NativeFunctionImplementation& handle_audit_line_633_10d92b66_native();
+const NativeFunctionImplementation& handle_export_model_for_unity_line_662_3becdfdb_native();
+const NativeFunctionImplementation& handle_validate_unity_import_line_715_4884f221_native();
+const NativeFunctionImplementation& handle_run_malak_unity_smoke_line_741_28e51919_native();
+const NativeFunctionImplementation& handle_detect_installations_line_53_89e51930_native();
+const NativeFunctionImplementation& handle_load_installation_line_78_d9e146a4_native();
+const NativeFunctionImplementation& handle_installation_info_line_91_ec438eb3_native();
+const NativeFunctionImplementation& handle_list_modules_line_74_47cc9f96_native();
+const NativeFunctionImplementation& handle_describe_module_line_87_8d1d62e0_native();
+const NativeFunctionImplementation& handle_module_resources_line_134_58d31ed8_native();
+const NativeFunctionImplementation& handle_get_quest_line_91_5bb2f18f_native();
+const NativeFunctionImplementation& handle_list_references_line_199_cbcb6e85_native();
+const NativeFunctionImplementation& handle_find_referrers_line_231_8ac0764a_native();
+const NativeFunctionImplementation& handle_find_strref_referrers_line_285_0afa8040_native();
+const NativeFunctionImplementation& handle_describe_dlg_line_373_9995d605_native();
+const NativeFunctionImplementation& handle_describe_jrl_line_399_5e6a8deb_native();
+const NativeFunctionImplementation& handle_describe_resource_refs_line_424_a1af7aee_native();
+const NativeFunctionImplementation& handle_get_resource_line_88_c3875331_native();
+const NativeFunctionImplementation& handle_get_retarget_skeleton_info_line_227_bc32b09a_native();
+const NativeFunctionImplementation& handle_build_retarget_map_line_281_15300a43_native();
+const NativeFunctionImplementation& handle_list_retarget_animations_line_324_35decdc0_native();
+const NativeFunctionImplementation& handle_export_unity_fbx_line_394_9436dbe7_native();
+const NativeFunctionImplementation& handle_walkmesh_validation_diagram_line_66_33afbf8d_native();
+
+const NativeFunctionImplementation* asyncmodulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::kotormcp

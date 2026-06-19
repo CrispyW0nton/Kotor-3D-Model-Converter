@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Domain.Core.Modules/Python",
-        "native/GhostRigger.Domain.Core.Level/Python",
-        "native/GhostRigger.Domain.Core.Game/Python",
-        "native/GhostRigger.Domain.Core.Scene/Python",
-        "native/GhostRigger.Domain.Core.Walkmesh/Python",
-        "native/GhostRigger.Domain.Core.Geometry/Python",
-        "native/GhostRigger.Domain.Core.Camera/Python",
-        "native/GhostRigger.Domain.Core.Math/Python",
-        "native/GhostRigger.Domain.Core.Lighting/Python",
+        "native/GhostRigger.Core.Modules/Python",
+        "native/GhostRigger.Core.Level/Python",
+        "native/GhostRigger.Core.Game/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Walkmesh/Python",
+        "native/GhostRigger.Core.Geometry/Python",
+        "native/GhostRigger.Core.Camera/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Lighting/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -684,7 +684,7 @@ def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -715,7 +715,7 @@ def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -726,7 +726,7 @@ def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
     native_source = (
         repo
         / "native"
-        / "GhostRigger.Tools.Workflow.ModuleMeshes"
+        / "GhostRigger.Core.Tools.ModuleMeshes"
         / "Python"
         / "src"
         / "gui"
@@ -769,7 +769,7 @@ def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -780,7 +780,7 @@ def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:
     native_source = (
         repo
         / "native"
-        / "GhostRigger.Tools.Workflow.ModuleMeshes"
+        / "GhostRigger.Core.Tools.ModuleMeshes"
         / "Python"
         / "src"
         / "gui"
@@ -817,7 +817,7 @@ def test_t2671_builder_tab_exposes_composition_primitive_transform_controls() ->
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -851,7 +851,7 @@ def test_t2672_builder_tab_exposes_add_composition_primitive_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -884,7 +884,7 @@ def test_t2673_builder_tab_exposes_primitive_dimension_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -916,7 +916,7 @@ def test_t2674_builder_tab_exposes_remove_composition_primitive_controls() -> No
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -947,7 +947,7 @@ def test_t2676_builder_tab_exposes_primitive_style_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Panels"
         / "Python"
         / "src"
         / "gui"

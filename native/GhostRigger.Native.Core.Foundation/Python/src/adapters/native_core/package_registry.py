@@ -13,9 +13,9 @@ from typing import Iterable
 
 _NATIVE_CORE_DLL = "GhostRigger.Native.Core.Foundation.dll"
 _LEGACY_NATIVE_CORE_DLL = "GhostRigger.Native.NativeCore.dll"
-_DOMAIN_CORE_DLL_PREFIX = "GhostRigger.Domain.Core."
-_GUI_BOUNDARY_DLL_PREFIX = "GhostRigger.GUI.Boundary."
-_TOOLS_WORKFLOW_DLL_PREFIX = "GhostRigger.Tools.Workflow."
+_CORE_DLL_PREFIX = "GhostRigger.Core."
+_CORE_GUI_DLL_PREFIX = "GhostRigger.Core.GUI."
+_CORE_TOOLS_DLL_PREFIX = "GhostRigger.Core.Tools."
 _ADAPTERS_CANONICAL_DLL_NAMES = {
     "GhostRigger.Adapters.IO.Files.dll": "GhostRigger.Adapters.Files.dll",
     "GhostRigger.Adapters.Hardware.GPU.dll": "GhostRigger.Adapters.GPU.dll",
@@ -25,8 +25,8 @@ _ADAPTERS_CANONICAL_DLL_NAMES = {
     "GhostRigger.Adapters.Rendering.Core.dll": "GhostRigger.Adapters.Rendering.dll",
     "GhostRigger.Adapters.Scripting.Core.dll": "GhostRigger.Adapters.Scripts.dll",
 }
-_SYSTEMS_CANONICAL_DLL_NAMES = {
-    "GhostRigger.Systems.Feature.BAS.dll": "GhostRigger.Systems.BAS.dll",
+_SYSTEMS_LEGACY_DLL_NAMES = {
+    "GhostRigger.Core.Tools.BAS.dll": "GhostRigger.Systems.BAS.dll",
 }
 _WINDOWS_CANONICAL_DLL_NAMES = {
     "GhostRigger.Windows.Workbench.AnimationRetarget.dll": (
@@ -97,173 +97,198 @@ RUNTIME_SHARED_RESOURCES_PACKAGE = NativePackageSpec(
 )
 
 RENDERER_CONTRACTS_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Renderer.Shared.Contracts",
-    dll_name="GhostRigger.Renderer.Shared.Contracts.dll",
-    fallback_dll_names=("GhostRigger.Renderer.Contracts.dll",),
+    name="GhostRigger.Graphics.Renderer.Shared.Contracts",
+    dll_name="GhostRigger.Graphics.Renderer.Shared.Contracts.dll",
+    fallback_dll_names=(
+        "GhostRigger.Renderer.Shared.Contracts.dll",
+        "GhostRigger.Renderer.Contracts.dll",
+    ),
     env_var="GHOSTRIGGER_RENDERER_CONTRACTS",
     version_export="gr_renderer_contracts_version",
     capabilities_export="gr_renderer_contracts_capabilities_json",
 )
 
 RENDERER_NULL_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Renderer.Backend.Null",
-    dll_name="GhostRigger.Renderer.Backend.Null.dll",
-    fallback_dll_names=("GhostRigger.Renderer.Null.dll",),
+    name="GhostRigger.Graphics.Renderer.Backend.Null",
+    dll_name="GhostRigger.Graphics.Renderer.Backend.Null.dll",
+    fallback_dll_names=(
+        "GhostRigger.Renderer.Backend.Null.dll",
+        "GhostRigger.Renderer.Null.dll",
+    ),
     env_var="GHOSTRIGGER_RENDERER_NULL",
     version_export="gr_renderer_null_version",
     capabilities_export="gr_renderer_null_capabilities_json",
 )
 
 RENDERER_D3D12_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Renderer.Backend.D3D12",
-    dll_name="GhostRigger.Renderer.Backend.D3D12.dll",
-    fallback_dll_names=("GhostRigger.Renderer.D3D12.dll",),
+    name="GhostRigger.Graphics.Renderer.Backend.D3D12",
+    dll_name="GhostRigger.Graphics.Renderer.Backend.D3D12.dll",
+    fallback_dll_names=(
+        "GhostRigger.Renderer.Backend.D3D12.dll",
+        "GhostRigger.Renderer.D3D12.dll",
+    ),
     env_var="GHOSTRIGGER_RENDERER_D3D12",
     version_export="gr_renderer_d3d12_version",
     capabilities_export="gr_renderer_d3d12_capabilities_json",
 )
 
 RENDERER_MODERNGL_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Renderer.Backend.ModernGL",
-    dll_name="GhostRigger.Renderer.Backend.ModernGL.dll",
-    fallback_dll_names=("GhostRigger.Renderer.ModernGL.dll",),
+    name="GhostRigger.Graphics.Renderer.Backend.ModernGL",
+    dll_name="GhostRigger.Graphics.Renderer.Backend.ModernGL.dll",
+    fallback_dll_names=(
+        "GhostRigger.Renderer.Backend.ModernGL.dll",
+        "GhostRigger.Renderer.ModernGL.dll",
+    ),
     env_var="GHOSTRIGGER_RENDERER_MODERNGL",
     version_export="gr_renderer_moderngl_version",
     capabilities_export="gr_renderer_moderngl_capabilities_json",
 )
 
 RENDERER_PYGFX_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Renderer.Backend.PyGFX",
-    dll_name="GhostRigger.Renderer.Backend.PyGFX.dll",
-    fallback_dll_names=("GhostRigger.Renderer.PyGFX.dll",),
+    name="GhostRigger.Graphics.Renderer.Backend.PyGFX",
+    dll_name="GhostRigger.Graphics.Renderer.Backend.PyGFX.dll",
+    fallback_dll_names=(
+        "GhostRigger.Renderer.Backend.PyGFX.dll",
+        "GhostRigger.Renderer.PyGFX.dll",
+    ),
     env_var="GHOSTRIGGER_RENDERER_PYGFX",
     version_export="gr_renderer_pygfx_version",
     capabilities_export="gr_renderer_pygfx_capabilities_json",
 )
 
 TOOLS_RETARGETING_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.Retargeting",
-    dll_name="GhostRigger.Tools.Workflow.Retargeting.dll",
+    name="GhostRigger.Core.Tools.Retargeting",
+    dll_name="GhostRigger.Core.Tools.Retargeting.dll",
     env_var="GHOSTRIGGER_TOOLS_RETARGETING",
     version_export="gr_tools_retargeting_version",
     capabilities_export="gr_tools_retargeting_capabilities_json",
 )
 
 TOOLS_EXPORT_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.Export",
-    dll_name="GhostRigger.Tools.Workflow.Export.dll",
+    name="GhostRigger.Core.Tools.Export",
+    dll_name="GhostRigger.Core.Tools.Export.dll",
     env_var="GHOSTRIGGER_TOOLS_EXPORT",
     version_export="gr_tools_export_version",
     capabilities_export="gr_tools_export_capabilities_json",
 )
 
 TOOLS_CHARACTER_BUILDER_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.CharacterBuilder",
-    dll_name="GhostRigger.Tools.Workflow.CharacterBuilder.dll",
+    name="GhostRigger.Core.Tools.CharacterBuilder",
+    dll_name="GhostRigger.Core.Tools.CharacterBuilder.dll",
     env_var="GHOSTRIGGER_TOOLS_CHARACTER_BUILDER",
     version_export="gr_tools_character_builder_version",
     capabilities_export="gr_tools_character_builder_capabilities_json",
 )
 
 TOOLS_CONTENT_BROWSER_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.ContentBrowser",
-    dll_name="GhostRigger.Tools.Workflow.ContentBrowser.dll",
+    name="GhostRigger.Core.Tools.ContentBrowser",
+    dll_name="GhostRigger.Core.Tools.ContentBrowser.dll",
     env_var="GHOSTRIGGER_TOOLS_CONTENT_BROWSER",
     version_export="gr_tools_content_browser_version",
     capabilities_export="gr_tools_content_browser_capabilities_json",
 )
 
 TOOLS_RESOURCE_BROWSER_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.ResourceBrowser",
-    dll_name="GhostRigger.Tools.Workflow.ResourceBrowser.dll",
+    name="GhostRigger.Core.Tools.ResourceBrowser",
+    dll_name="GhostRigger.Core.Tools.ResourceBrowser.dll",
     env_var="GHOSTRIGGER_TOOLS_RESOURCE_BROWSER",
     version_export="gr_tools_resource_browser_version",
     capabilities_export="gr_tools_resource_browser_capabilities_json",
 )
 
 TOOLS_TWO_DA_BROWSER_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.TwoDABrowser",
-    dll_name="GhostRigger.Tools.Workflow.TwoDABrowser.dll",
+    name="GhostRigger.Core.Tools.TwoDABrowser",
+    dll_name="GhostRigger.Core.Tools.TwoDABrowser.dll",
     env_var="GHOSTRIGGER_TOOLS_TWO_DA_BROWSER",
     version_export="gr_tools_two_da_browser_version",
     capabilities_export="gr_tools_two_da_browser_capabilities_json",
 )
 
 TOOLS_SCENE_INFORMATION_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.SceneInformation",
-    dll_name="GhostRigger.Tools.Workflow.SceneInformation.dll",
+    name="GhostRigger.Core.Tools.SceneInformation",
+    dll_name="GhostRigger.Core.Tools.SceneInformation.dll",
     env_var="GHOSTRIGGER_TOOLS_SCENE_INFORMATION",
     version_export="gr_tools_scene_information_version",
     capabilities_export="gr_tools_scene_information_capabilities_json",
 )
 
 TOOLS_PROPERTIES_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.Properties",
-    dll_name="GhostRigger.Tools.Workflow.Properties.dll",
+    name="GhostRigger.Core.Tools.Properties",
+    dll_name="GhostRigger.Core.Tools.Properties.dll",
     env_var="GHOSTRIGGER_TOOLS_PROPERTIES",
     version_export="gr_tools_properties_version",
     capabilities_export="gr_tools_properties_capabilities_json",
 )
 
 TOOLS_LIGHTING_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.Lighting",
-    dll_name="GhostRigger.Tools.Workflow.Lighting.dll",
+    name="GhostRigger.Core.Tools.Lighting",
+    dll_name="GhostRigger.Core.Tools.Lighting.dll",
     env_var="GHOSTRIGGER_TOOLS_LIGHTING",
     version_export="gr_tools_lighting_version",
     capabilities_export="gr_tools_lighting_capabilities_json",
 )
 
 TOOLS_CAMERA_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.Camera",
-    dll_name="GhostRigger.Tools.Workflow.Camera.dll",
+    name="GhostRigger.Core.Tools.Camera",
+    dll_name="GhostRigger.Core.Tools.Camera.dll",
     env_var="GHOSTRIGGER_TOOLS_CAMERA",
     version_export="gr_tools_camera_version",
     capabilities_export="gr_tools_camera_capabilities_json",
 )
 
 TOOLS_MODULE_MESHES_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.ModuleMeshes",
-    dll_name="GhostRigger.Tools.Workflow.ModuleMeshes.dll",
+    name="GhostRigger.Core.Tools.ModuleMeshes",
+    dll_name="GhostRigger.Core.Tools.ModuleMeshes.dll",
     env_var="GHOSTRIGGER_TOOLS_MODULE_MESHES",
     version_export="gr_tools_module_meshes_version",
     capabilities_export="gr_tools_module_meshes_capabilities_json",
 )
 
 TOOLS_BODY_ATTACHMENT_SYSTEM_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.BodyAttachmentSystem",
-    dll_name="GhostRigger.Tools.Workflow.BodyAttachmentSystem.dll",
+    name="GhostRigger.Core.Tools.BAS",
+    dll_name="GhostRigger.Core.Tools.BAS.dll",
+    fallback_dll_names=(
+        "GhostRigger.Tools.Workflow.BodyAttachmentSystem.dll",
+        "GhostRigger.Systems.Feature.BAS.dll",
+        "GhostRigger.Systems.BAS.dll",
+    ),
     env_var="GHOSTRIGGER_TOOLS_BODY_ATTACHMENT_SYSTEM",
     version_export="gr_tools_body_attachment_system_version",
     capabilities_export="gr_tools_body_attachment_system_capabilities_json",
 )
 
 TOOLS_NODES_SKELETON_BROWSER_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.NodeSkeletonBrowser",
-    dll_name="GhostRigger.Tools.Workflow.NodeSkeletonBrowser.dll",
+    name="GhostRigger.Core.Tools.NodeSkeletonBrowser",
+    dll_name="GhostRigger.Core.Tools.NodeSkeletonBrowser.dll",
     env_var="GHOSTRIGGER_TOOLS_NODES_SKELETON_BROWSER",
     version_export="gr_tools_nodes_skeleton_browser_version",
     capabilities_export="gr_tools_nodes_skeleton_browser_capabilities_json",
 )
 
 TOOLS_SPRITE_MATERIALS_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.SpriteMaterials",
-    dll_name="GhostRigger.Tools.Workflow.SpriteMaterials.dll",
+    name="GhostRigger.Core.Tools.SpriteMaterials",
+    dll_name="GhostRigger.Core.Tools.SpriteMaterials.dll",
     env_var="GHOSTRIGGER_TOOLS_SPRITE_MATERIALS",
     version_export="gr_tools_sprite_materials_version",
     capabilities_export="gr_tools_sprite_materials_capabilities_json",
 )
 
 TOOLS_PIVOT_CONTROLS_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.PivotControls",
-    dll_name="GhostRigger.Tools.Workflow.PivotControls.dll",
+    name="GhostRigger.Core.Tools.PivotControls",
+    dll_name="GhostRigger.Core.Tools.PivotControls.dll",
     env_var="GHOSTRIGGER_TOOLS_PIVOT_CONTROLS",
     version_export="gr_tools_pivot_controls_version",
     capabilities_export="gr_tools_pivot_controls_capabilities_json",
 )
 
 TOOLS_SEQUENCE_EDITOR_PACKAGE = NativePackageSpec(
-    name="GhostRigger.Tools.Workflow.SequenceEditor",
-    dll_name="GhostRigger.Tools.Workflow.SequenceEditor.dll",
+    name="GhostRigger.Core.Tools.SequenceEditor",
+    dll_name="GhostRigger.Core.Tools.SequenceEditor.dll",
+    fallback_dll_names=(
+        "GhostRigger.Tools.Workflow.SequenceEditor.dll",
+        "GhostRigger.Domain.Core.Sequence.dll",
+        "GhostRigger.Sequence.dll",
+    ),
     env_var="GHOSTRIGGER_TOOLS_SEQUENCE_EDITOR",
     version_export="gr_tools_sequence_editor_version",
     capabilities_export="gr_tools_sequence_editor_capabilities_json",
@@ -358,24 +383,24 @@ NATIVE_CORE_MATH_PACKAGE = NativePackageSpec(
 
 
 def _legacy_domain_dll_names(dll_name: str) -> tuple[str, ...]:
-    if not dll_name.startswith(_DOMAIN_CORE_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
+    if not dll_name.startswith(_CORE_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
         return ()
-    module_name = dll_name[len(_DOMAIN_CORE_DLL_PREFIX) : -len(_DLL_SUFFIX)]
+    module_name = dll_name[len(_CORE_DLL_PREFIX) : -len(_DLL_SUFFIX)]
     legacy_module_name = "Infra" if module_name == "Infrastructure" else module_name
     return (f"GhostRigger.{legacy_module_name}.dll",)
 
 
 def _legacy_gui_boundary_dll_names(dll_name: str) -> tuple[str, ...]:
-    if not dll_name.startswith(_GUI_BOUNDARY_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
+    if not dll_name.startswith(_CORE_GUI_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
         return ()
-    module_name = dll_name[len(_GUI_BOUNDARY_DLL_PREFIX) : -len(_DLL_SUFFIX)]
+    module_name = dll_name[len(_CORE_GUI_DLL_PREFIX) : -len(_DLL_SUFFIX)]
     return (f"GhostRigger.GUI.{module_name}.dll",)
 
 
 def _legacy_tools_workflow_dll_names(dll_name: str) -> tuple[str, ...]:
-    if not dll_name.startswith(_TOOLS_WORKFLOW_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
+    if not dll_name.startswith(_CORE_TOOLS_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
         return ()
-    module_name = dll_name[len(_TOOLS_WORKFLOW_DLL_PREFIX) : -len(_DLL_SUFFIX)]
+    module_name = dll_name[len(_CORE_TOOLS_DLL_PREFIX) : -len(_DLL_SUFFIX)]
     legacy_module_name = "NodesSkeletonBrowser" if module_name == "NodeSkeletonBrowser" else module_name
     return (f"GhostRigger.Tools.{legacy_module_name}.dll",)
 
@@ -391,7 +416,7 @@ def _legacy_adapters_dll_names(dll_name: str) -> tuple[str, ...]:
 
 
 def _legacy_systems_dll_names(dll_name: str) -> tuple[str, ...]:
-    legacy_name = _SYSTEMS_CANONICAL_DLL_NAMES.get(dll_name)
+    legacy_name = _SYSTEMS_LEGACY_DLL_NAMES.get(dll_name)
     return (legacy_name,) if legacy_name else ()
 
 
@@ -414,248 +439,242 @@ def _dll_names_for_spec(spec: NativePackageSpec) -> tuple[str, ...]:
 
 PYTHON_MODULE_PACKAGE_SPECS = (
     NativePackageSpec(
-        name="GhostRigger.Domain.Core.Modules",
-        dll_name="GhostRigger.Domain.Core.Modules.dll",
+        name="GhostRigger.Core.Modules",
+        dll_name="GhostRigger.Core.Modules.dll",
         env_var="GHOSTRIGGER_MODULES",
         version_export="gr_modules_version",
         capabilities_export="gr_modules_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Level",
-        dll_name="GhostRigger.Domain.Core.Level.dll",
+        name="GhostRigger.Core.Level",
+        dll_name="GhostRigger.Core.Level.dll",
         env_var="GHOSTRIGGER_LEVEL",
         version_export="gr_level_version",
         capabilities_export="gr_level_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Scene",
-        dll_name="GhostRigger.Domain.Core.Scene.dll",
+        name="GhostRigger.Core.Scene",
+        dll_name="GhostRigger.Core.Scene.dll",
         env_var="GHOSTRIGGER_SCENE",
         version_export="gr_scene_version",
         capabilities_export="gr_scene_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Animation",
-        dll_name="GhostRigger.Domain.Core.Animation.dll",
+        name="GhostRigger.Core.Animation",
+        dll_name="GhostRigger.Core.Animation.dll",
         env_var="GHOSTRIGGER_ANIMATION",
         version_export="gr_animation_version",
         capabilities_export="gr_animation_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.AnimationRetargeting",
-        dll_name="GhostRigger.Domain.Core.AnimationRetargeting.dll",
+        name="GhostRigger.Core.AnimationRetargeting",
+        dll_name="GhostRigger.Core.AnimationRetargeting.dll",
         env_var="GHOSTRIGGER_ANIMATION_RETARGETING",
         version_export="gr_animation_retargeting_version",
         capabilities_export="gr_animation_retargeting_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Retargeting",
-        dll_name="GhostRigger.Domain.Core.Retargeting.dll",
+        name="GhostRigger.Core.Retargeting",
+        dll_name="GhostRigger.Core.Retargeting.dll",
         env_var="GHOSTRIGGER_RETARGETING",
         version_export="gr_retargeting_version",
         capabilities_export="gr_retargeting_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Characters",
-        dll_name="GhostRigger.Domain.Core.Characters.dll",
+        name="GhostRigger.Core.Characters",
+        dll_name="GhostRigger.Core.Characters.dll",
         env_var="GHOSTRIGGER_CHARACTERS",
         version_export="gr_characters_version",
         capabilities_export="gr_characters_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Skeleton",
-        dll_name="GhostRigger.Domain.Core.Skeleton.dll",
+        name="GhostRigger.Core.Skeleton",
+        dll_name="GhostRigger.Core.Skeleton.dll",
         env_var="GHOSTRIGGER_SKELETON",
         version_export="gr_skeleton_version",
         capabilities_export="gr_skeleton_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.MDL",
-        dll_name="GhostRigger.Domain.Core.MDL.dll",
+        name="GhostRigger.Core.MDL",
+        dll_name="GhostRigger.Core.MDL.dll",
         env_var="GHOSTRIGGER_MDL",
         version_export="gr_mdl_version",
         capabilities_export="gr_mdl_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Geometry",
-        dll_name="GhostRigger.Domain.Core.Geometry.dll",
+        name="GhostRigger.Core.Geometry",
+        dll_name="GhostRigger.Core.Geometry.dll",
         env_var="GHOSTRIGGER_GEOMETRY",
         version_export="gr_geometry_version",
         capabilities_export="gr_geometry_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Gizmo",
-        dll_name="GhostRigger.Domain.Core.Gizmo.dll",
+        name="GhostRigger.Core.Gizmo",
+        dll_name="GhostRigger.Core.Gizmo.dll",
         env_var="GHOSTRIGGER_GIZMO",
         version_export="gr_gizmo_version",
         capabilities_export="gr_gizmo_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Graphics",
-        dll_name="GhostRigger.Domain.Core.Graphics.dll",
+        name="GhostRigger.Core.Graphics",
+        dll_name="GhostRigger.Core.Graphics.dll",
         env_var="GHOSTRIGGER_GRAPHICS",
         version_export="gr_graphics_version",
         capabilities_export="gr_graphics_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Lighting",
-        dll_name="GhostRigger.Domain.Core.Lighting.dll",
+        name="GhostRigger.Core.Lighting",
+        dll_name="GhostRigger.Core.Lighting.dll",
         env_var="GHOSTRIGGER_LIGHTING",
         version_export="gr_lighting_version",
         capabilities_export="gr_lighting_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Walkmesh",
-        dll_name="GhostRigger.Domain.Core.Walkmesh.dll",
+        name="GhostRigger.Core.Walkmesh",
+        dll_name="GhostRigger.Core.Walkmesh.dll",
         env_var="GHOSTRIGGER_WALKMESH",
         version_export="gr_walkmesh_version",
         capabilities_export="gr_walkmesh_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Validation",
-        dll_name="GhostRigger.Domain.Core.Validation.dll",
+        name="GhostRigger.Core.Validation",
+        dll_name="GhostRigger.Core.Validation.dll",
         env_var="GHOSTRIGGER_VALIDATION",
         version_export="gr_validation_version",
         capabilities_export="gr_validation_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Project",
-        dll_name="GhostRigger.Domain.Core.Project.dll",
+        name="GhostRigger.Core.Project",
+        dll_name="GhostRigger.Core.Project.dll",
         env_var="GHOSTRIGGER_PROJECT",
         version_export="gr_project_version",
         capabilities_export="gr_project_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Assets",
-        dll_name="GhostRigger.Domain.Core.Assets.dll",
+        name="GhostRigger.Core.Assets",
+        dll_name="GhostRigger.Core.Assets.dll",
         env_var="GHOSTRIGGER_ASSETS",
         version_export="gr_assets_version",
         capabilities_export="gr_assets_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Resources",
-        dll_name="GhostRigger.Domain.Core.Resources.dll",
+        name="GhostRigger.Core.Resources",
+        dll_name="GhostRigger.Core.Resources.dll",
         env_var="GHOSTRIGGER_RESOURCES",
         version_export="gr_resources_version",
         capabilities_export="gr_resources_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.GameLibrary",
-        dll_name="GhostRigger.Domain.Core.GameLibrary.dll",
+        name="GhostRigger.Core.GameLibrary",
+        dll_name="GhostRigger.Core.GameLibrary.dll",
         env_var="GHOSTRIGGER_GAME_LIBRARY",
         version_export="gr_game_library_version",
         capabilities_export="gr_game_library_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Export",
-        dll_name="GhostRigger.Domain.Core.Export.dll",
+        name="GhostRigger.Core.Export",
+        dll_name="GhostRigger.Core.Export.dll",
         env_var="GHOSTRIGGER_EXPORT",
         version_export="gr_export_version",
         capabilities_export="gr_export_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Game",
-        dll_name="GhostRigger.Domain.Core.Game.dll",
+        name="GhostRigger.Core.Game",
+        dll_name="GhostRigger.Core.Game.dll",
         env_var="GHOSTRIGGER_GAME",
         version_export="gr_game_version",
         capabilities_export="gr_game_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Ports",
-        dll_name="GhostRigger.Domain.Core.Ports.dll",
+        name="GhostRigger.Core.Ports",
+        dll_name="GhostRigger.Core.Ports.dll",
         env_var="GHOSTRIGGER_PORTS",
         version_export="gr_ports_version",
         capabilities_export="gr_ports_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Rendering",
-        dll_name="GhostRigger.Domain.Core.Rendering.dll",
+        name="GhostRigger.Core.Rendering",
+        dll_name="GhostRigger.Core.Rendering.dll",
         env_var="GHOSTRIGGER_RENDERING",
         version_export="gr_rendering_version",
         capabilities_export="gr_rendering_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Diagnostics",
-        dll_name="GhostRigger.Domain.Core.Diagnostics.dll",
+        name="GhostRigger.Core.Diagnostics",
+        dll_name="GhostRigger.Core.Diagnostics.dll",
         env_var="GHOSTRIGGER_DIAGNOSTICS",
         version_export="gr_diagnostics_version",
         capabilities_export="gr_diagnostics_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Special",
-        dll_name="GhostRigger.Domain.Core.Special.dll",
+        name="GhostRigger.Core.Special",
+        dll_name="GhostRigger.Core.Special.dll",
         env_var="GHOSTRIGGER_SPECIAL",
         version_export="gr_special_version",
         capabilities_export="gr_special_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Templates",
-        dll_name="GhostRigger.Domain.Core.Templates.dll",
+        name="GhostRigger.Core.Templates",
+        dll_name="GhostRigger.Core.Templates.dll",
         env_var="GHOSTRIGGER_TEMPLATES",
         version_export="gr_templates_version",
         capabilities_export="gr_templates_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Workflow",
-        dll_name="GhostRigger.Domain.Core.Workflow.dll",
+        name="GhostRigger.Core.Workflow",
+        dll_name="GhostRigger.Core.Workflow.dll",
         env_var="GHOSTRIGGER_WORKFLOW",
         version_export="gr_workflow_version",
         capabilities_export="gr_workflow_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Camera",
-        dll_name="GhostRigger.Domain.Core.Camera.dll",
+        name="GhostRigger.Core.Camera",
+        dll_name="GhostRigger.Core.Camera.dll",
         env_var="GHOSTRIGGER_CAMERA",
         version_export="gr_camera_version",
         capabilities_export="gr_camera_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Math",
-        dll_name="GhostRigger.Domain.Core.Math.dll",
+        name="GhostRigger.Core.Math",
+        dll_name="GhostRigger.Core.Math.dll",
         env_var="GHOSTRIGGER_MATH",
         version_export="gr_math_version",
         capabilities_export="gr_math_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Measurement",
-        dll_name="GhostRigger.Domain.Core.Measurement.dll",
+        name="GhostRigger.Core.Measurement",
+        dll_name="GhostRigger.Core.Measurement.dll",
         env_var="GHOSTRIGGER_MEASUREMENT",
         version_export="gr_measurement_version",
         capabilities_export="gr_measurement_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Formats",
-        dll_name="GhostRigger.Domain.Core.Formats.dll",
+        name="GhostRigger.Core.Formats",
+        dll_name="GhostRigger.Core.Formats.dll",
         env_var="GHOSTRIGGER_FORMATS",
         version_export="gr_formats_version",
         capabilities_export="gr_formats_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.IO",
-        dll_name="GhostRigger.Domain.Core.IO.dll",
+        name="GhostRigger.Core.IO",
+        dll_name="GhostRigger.Core.IO.dll",
         env_var="GHOSTRIGGER_IO",
         version_export="gr_io_version",
         capabilities_export="gr_io_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.IPC",
-        dll_name="GhostRigger.Domain.Core.IPC.dll",
+        name="GhostRigger.Core.IPC",
+        dll_name="GhostRigger.Core.IPC.dll",
         env_var="GHOSTRIGGER_IPC",
         version_export="gr_ipc_version",
         capabilities_export="gr_ipc_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Converters",
-        dll_name="GhostRigger.Domain.Core.Converters.dll",
+        name="GhostRigger.Core.Converters",
+        dll_name="GhostRigger.Core.Converters.dll",
         env_var="GHOSTRIGGER_CONVERTERS",
         version_export="gr_converters_version",
         capabilities_export="gr_converters_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Autorig",
-        dll_name="GhostRigger.Domain.Core.Autorig.dll",
+        name="GhostRigger.Core.Autorig",
+        dll_name="GhostRigger.Core.Autorig.dll",
         env_var="GHOSTRIGGER_AUTORIG",
         version_export="gr_autorig_version",
         capabilities_export="gr_autorig_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Unreal",
-        dll_name="GhostRigger.Domain.Core.Unreal.dll",
+        name="GhostRigger.Core.Unreal",
+        dll_name="GhostRigger.Core.Unreal.dll",
         env_var="GHOSTRIGGER_UNREAL",
         version_export="gr_unreal_version",
         capabilities_export="gr_unreal_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Workbench",
-        dll_name="GhostRigger.Domain.Core.Workbench.dll",
+        name="GhostRigger.Core.Workbench",
+        dll_name="GhostRigger.Core.Workbench.dll",
         env_var="GHOSTRIGGER_WORKBENCH",
         version_export="gr_workbench_version",
         capabilities_export="gr_workbench_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.MeshTools",
-        dll_name="GhostRigger.Domain.Core.MeshTools.dll",
+        name="GhostRigger.Core.MeshTools",
+        dll_name="GhostRigger.Core.MeshTools.dll",
         env_var="GHOSTRIGGER_MESH_TOOLS",
         version_export="gr_mesh_tools_version",
         capabilities_export="gr_mesh_tools_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Sequence",
-        dll_name="GhostRigger.Domain.Core.Sequence.dll",
-        env_var="GHOSTRIGGER_SEQUENCE",
-        version_export="gr_sequence_version",
-        capabilities_export="gr_sequence_capabilities_json",
-    ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.Infrastructure",
-        dll_name="GhostRigger.Domain.Core.Infrastructure.dll",
+        name="GhostRigger.Core.Infrastructure",
+        dll_name="GhostRigger.Core.Infrastructure.dll",
         env_var="GHOSTRIGGER_INFRA",
         version_export="gr_infra_version",
         capabilities_export="gr_infra_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.Domain.Core.KotorMCP",
-        dll_name="GhostRigger.Domain.Core.KotorMCP.dll",
+        name="GhostRigger.Core.KotorMCP",
+        dll_name="GhostRigger.Core.KotorMCP.dll",
         env_var="GHOSTRIGGER_KOTOR_MCP",
         version_export="gr_kotor_mcp_version",
         capabilities_export="gr_kotor_mcp_capabilities_json",
@@ -702,77 +721,71 @@ PYTHON_MODULE_PACKAGE_SPECS = (
         version_export="gr_adapters_scripts_version",
         capabilities_export="gr_adapters_scripts_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Dialogs",
-        dll_name="GhostRigger.GUI.Boundary.Dialogs.dll",
+        name="GhostRigger.Core.GUI.Dialogs",
+        dll_name="GhostRigger.Core.GUI.Dialogs.dll",
         env_var="GHOSTRIGGER_GUI_DIALOGS",
         version_export="gr_gui_dialogs_version",
         capabilities_export="gr_gui_dialogs_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Panels",
-        dll_name="GhostRigger.GUI.Boundary.Panels.dll",
+        name="GhostRigger.Core.GUI.Panels",
+        dll_name="GhostRigger.Core.GUI.Panels.dll",
         env_var="GHOSTRIGGER_GUI_PANELS",
         version_export="gr_gui_panels_version",
         capabilities_export="gr_gui_panels_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Viewports",
-        dll_name="GhostRigger.GUI.Boundary.Viewports.dll",
+        name="GhostRigger.Core.GUI.Viewports",
+        dll_name="GhostRigger.Core.GUI.Viewports.dll",
         env_var="GHOSTRIGGER_GUI_VIEWPORTS",
         version_export="gr_gui_viewports_version",
         capabilities_export="gr_gui_viewports_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Theme",
-        dll_name="GhostRigger.GUI.Boundary.Theme.dll",
+        name="GhostRigger.Core.GUI.Theme",
+        dll_name="GhostRigger.Core.GUI.Theme.dll",
         env_var="GHOSTRIGGER_GUI_THEME",
         version_export="gr_gui_theme_version",
         capabilities_export="gr_gui_theme_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Rendering",
-        dll_name="GhostRigger.GUI.Boundary.Rendering.dll",
+        name="GhostRigger.Core.GUI.Rendering",
+        dll_name="GhostRigger.Core.GUI.Rendering.dll",
         env_var="GHOSTRIGGER_GUI_RENDERING",
         version_export="gr_gui_rendering_version",
         capabilities_export="gr_gui_rendering_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Lighting",
-        dll_name="GhostRigger.GUI.Boundary.Lighting.dll",
+        name="GhostRigger.Core.GUI.Lighting",
+        dll_name="GhostRigger.Core.GUI.Lighting.dll",
         env_var="GHOSTRIGGER_GUI_LIGHTING",
         version_export="gr_gui_lighting_version",
         capabilities_export="gr_gui_lighting_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Gizmo",
-        dll_name="GhostRigger.GUI.Boundary.Gizmo.dll",
+        name="GhostRigger.Core.GUI.Gizmo",
+        dll_name="GhostRigger.Core.GUI.Gizmo.dll",
         env_var="GHOSTRIGGER_GUI_GIZMO",
         version_export="gr_gui_gizmo_version",
         capabilities_export="gr_gui_gizmo_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Camera",
-        dll_name="GhostRigger.GUI.Boundary.Camera.dll",
+        name="GhostRigger.Core.GUI.Camera",
+        dll_name="GhostRigger.Core.GUI.Camera.dll",
         env_var="GHOSTRIGGER_GUI_CAMERA",
         version_export="gr_gui_camera_version",
         capabilities_export="gr_gui_camera_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Textures",
-        dll_name="GhostRigger.GUI.Boundary.Textures.dll",
+        name="GhostRigger.Core.GUI.Textures",
+        dll_name="GhostRigger.Core.GUI.Textures.dll",
         env_var="GHOSTRIGGER_GUI_TEXTURES",
         version_export="gr_gui_textures_version",
         capabilities_export="gr_gui_textures_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.SequenceEditor",
-        dll_name="GhostRigger.GUI.Boundary.SequenceEditor.dll",
+        name="GhostRigger.Core.GUI.SequenceEditor",
+        dll_name="GhostRigger.Core.GUI.SequenceEditor.dll",
         env_var="GHOSTRIGGER_GUI_SEQUENCE_EDITOR",
         version_export="gr_gui_sequence_editor_version",
         capabilities_export="gr_gui_sequence_editor_capabilities_json",
     ),    NativePackageSpec(
-        name="GhostRigger.GUI.Boundary.Integration",
-        dll_name="GhostRigger.GUI.Boundary.Integration.dll",
+        name="GhostRigger.Core.GUI.Integration",
+        dll_name="GhostRigger.Core.GUI.Integration.dll",
         env_var="GHOSTRIGGER_GUI_INTEGRATION",
         version_export="gr_gui_integration_version",
         capabilities_export="gr_gui_integration_capabilities_json",
-    ),    NativePackageSpec(
-        name="GhostRigger.Systems.Feature.BAS",
-        dll_name="GhostRigger.Systems.Feature.BAS.dll",
-        env_var="GHOSTRIGGER_SYSTEMS_BAS",
-        version_export="gr_systems_bas_version",
-        capabilities_export="gr_systems_bas_capabilities_json",
     ), )
 
 

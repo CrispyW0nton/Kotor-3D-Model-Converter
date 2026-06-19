@@ -1,4 +1,4 @@
-﻿# GhostRigger Native Toolbox And Window Migration Candidates
+# GhostRigger Native Toolbox And Window Migration Candidates
 
 Date: 2026-06-07
 Branch: `qt-ghostrigger`
@@ -18,16 +18,16 @@ toolbox or window package consumes it.
 
 ## Naming Rules
 
-- Toolbox packages use `GhostRigger.Tools.Workflow.{Toolname}`.
+- Toolbox packages use `GhostRigger.Core.Tools.{Toolname}`.
 - The Phase 1 native main-window package uses `GhostRigger.Windows.Shell.Main`.
 - Do not add a generic `GhostRigger.Windows.<Type>.<WindowName>` project during Phase 1
   without first documenting the specific window owner and bridge boundary here.
 
 ## Candidate: Retargeting Tool
 
-Native project: `GhostRigger.Tools.Workflow.Retargeting`
+Native project: `GhostRigger.Core.Tools.Retargeting`
 Owner surface: Retarget Workbench
-Owner package: `native/GhostRigger.Tools.Workflow.Retargeting`
+Owner package: `native/GhostRigger.Core.Tools.Retargeting`
 Bridge method: C ABI DLL first; `.pyd` only if the retargeting API needs richer
 Python types after the C ABI contract proves too narrow.
 
@@ -40,7 +40,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Tools.Workflow.Retargeting` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.Tools.Retargeting` in `Debug|x64`.
 - Python adapter test: targeted adapter/package availability and solve-packet
   fallback checks.
 - Backend truth check: MCP animation fixture comparison when native retargeting
@@ -50,9 +50,9 @@ Verification gates:
 
 ## Candidate: Export Tool
 
-Native project: `GhostRigger.Tools.Workflow.Export`
+Native project: `GhostRigger.Core.Tools.Export`
 Owner surface: Export and validation workflow
-Owner package: `native/GhostRigger.Tools.Workflow.Export`
+Owner package: `native/GhostRigger.Core.Tools.Export`
 Bridge method: C ABI DLL for validator/readback helpers before any writer
 replacement.
 
@@ -66,7 +66,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Tools.Workflow.Export` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.Tools.Export` in `Debug|x64`.
 - Python adapter test: targeted export-helper fallback checks.
 - Backend truth check: PyKotor/GhostRigger reload comparison before any native
   helper becomes authoritative.
@@ -75,9 +75,9 @@ Verification gates:
 
 ## Candidate: Character Builder Tool
 
-Native project: `GhostRigger.Tools.Workflow.CharacterBuilder`
+Native project: `GhostRigger.Core.Tools.CharacterBuilder`
 Owner surface: Character Studio
-Owner package: `native/GhostRigger.Tools.Workflow.CharacterBuilder`
+Owner package: `native/GhostRigger.Core.Tools.CharacterBuilder`
 Bridge method: C ABI DLL for numeric autofit, skinning, and validation helpers.
 
 Data ownership:
@@ -89,7 +89,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Tools.Workflow.CharacterBuilder` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.Tools.CharacterBuilder` in `Debug|x64`.
 - Python adapter test: targeted helper availability and missing-DLL fallback.
 - Backend truth check: representative character fixtures before native helper
   output replaces Python behavior.

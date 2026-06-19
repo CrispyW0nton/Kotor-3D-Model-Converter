@@ -8,7 +8,7 @@ from src.ipc import client
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.IPC.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IPC.dll"
 
 
 def _load_dll() -> ctypes.CDLL:
@@ -110,5 +110,5 @@ def test_native_ipc_advertises_mesh_and_pivot_tool_routes() -> None:
     assert {"mesh_tool_command", "pivot_command"} <= route_actions
     mesh_route = next(route for route in routes["routes"] if route["action"] == "mesh_tool_command")
     pivot_route = next(route for route in routes["routes"] if route["action"] == "pivot_command")
-    assert mesh_route["owner_package"] == "native/GhostRigger.Domain.Core.MeshTools"
-    assert pivot_route["owner_package"] == "native/GhostRigger.Tools.Workflow.PivotControls"
+    assert mesh_route["owner_package"] == "native/GhostRigger.Core.MeshTools"
+    assert pivot_route["owner_package"] == "native/GhostRigger.Core.Tools.PivotControls"

@@ -8,15 +8,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Domain.Core.Modules/Python",
-        "native/GhostRigger.Domain.Core.Level/Python",
-        "native/GhostRigger.Domain.Core.Game/Python",
-        "native/GhostRigger.Domain.Core.Scene/Python",
-        "native/GhostRigger.Domain.Core.Walkmesh/Python",
-        "native/GhostRigger.Domain.Core.Geometry/Python",
-        "native/GhostRigger.Domain.Core.Camera/Python",
-        "native/GhostRigger.Domain.Core.Math/Python",
-        "native/GhostRigger.Domain.Core.Lighting/Python",
+        "native/GhostRigger.Core.Modules/Python",
+        "native/GhostRigger.Core.Level/Python",
+        "native/GhostRigger.Core.Game/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Walkmesh/Python",
+        "native/GhostRigger.Core.Geometry/Python",
+        "native/GhostRigger.Core.Camera/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Lighting/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -256,10 +256,10 @@ def test_t2643_dry_run_does_not_mark_runtime_resources(tmp_path: Path) -> None:
 
 def test_t2643_export_panel_exposes_authored_module_action() -> None:
     panel_source = Path(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     boundary_panel_source = Path(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
         "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
@@ -543,10 +543,10 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
 
 def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
     panel_source = Path(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     boundary_panel_source = Path(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
         "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"

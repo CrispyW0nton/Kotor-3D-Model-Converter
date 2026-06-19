@@ -9,9 +9,9 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 for path in reversed(
     (
-        ROOT / "native/GhostRigger.Domain.Core.Sequence/Python",
-        ROOT / "native/GhostRigger.Domain.Core.Math/Python",
-        ROOT / "native/GhostRigger.Domain.Core.Rendering/Python",
+        ROOT / "native/GhostRigger.Core.Tools.SequenceEditor/Python",
+        ROOT / "native/GhostRigger.Core.Math/Python",
+        ROOT / "native/GhostRigger.Core.Rendering/Python",
     )
 ):
     text = str(path)

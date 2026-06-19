@@ -1,0 +1,62 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::graphics::renderer::backend::moderngl {
+
+#ifndef GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_RENDERER_MODERNGL_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& modernglrenderer_is_available_line_16_4dce079c_native();
+const NativeFunctionImplementation& modernglrenderer_get_capabilities_line_22_9b254c23_native();
+const NativeFunctionImplementation& modernglrenderer_create_surface_widget_line_58_fcbf9cc9_native();
+const NativeFunctionImplementation& modernglrenderer_shutdown_line_71_30fcaa88_native();
+const NativeFunctionImplementation& modernglrenderer_get_diagnostics_line_74_95780033_native();
+const NativeFunctionImplementation& gpurenderer_construct_line_119_61df0576_native();
+const NativeFunctionImplementation& gpurenderer_set_theme_colors_line_225_f20578ea_native();
+const NativeFunctionImplementation& gpurenderer_reset_theme_colors_line_246_bda6efb5_native();
+const NativeFunctionImplementation& gpurenderer_set_native_palette_colors_line_281_b212e65d_native();
+const NativeFunctionImplementation& gpurenderer_ensure_context_line_314_25c2af90_native();
+const NativeFunctionImplementation& gpurenderer_release_line_385_6a0a4746_native();
+const NativeFunctionImplementation& gpurenderer_clear_caches_line_458_f2274f6d_native();
+const NativeFunctionImplementation& gpurenderer_reset_framebuffers_line_501_298c6e38_native();
+const NativeFunctionImplementation& gpurenderer_reset_frame_state_line_530_adf6e548_native();
+const NativeFunctionImplementation& gpurenderer_debug_log_gl_error_line_561_23d41a7f_native();
+const NativeFunctionImplementation& gpurenderer_ensure_grid_vao_line_575_bab3fab4_native();
+const NativeFunctionImplementation& gpurenderer_draw_grid_line_607_3baffd68_native();
+const NativeFunctionImplementation& gpurenderer_is_node_selected_for_render_line_625_88d25b76_native();
+const NativeFunctionImplementation& gpurenderer_draw_light_gizmos_line_631_24acd509_native();
+const NativeFunctionImplementation& gpurenderer_scene_light_records_line_791_f8eedc72_native();
+const NativeFunctionImplementation& gpurenderer_upload_scene_lights_line_825_ab053838_native();
+const NativeFunctionImplementation& gpurenderer_render_line_888_e766348d_native();
+const NativeFunctionImplementation& gpurenderer_render_gpu_line_939_db7b458b_native();
+const NativeFunctionImplementation& gpurenderer_render_cpu_line_2597_0fe124ae_native();
+const NativeFunctionImplementation& gpurenderer_invalidate_node_line_2606_87f04150_native();
+const NativeFunctionImplementation& gpurenderer_invalidate_all_line_2616_9f1ddf0d_native();
+const NativeFunctionImplementation& gpurenderer_invalidate_node_cache_line_2626_d6d8cc76_native();
+const NativeFunctionImplementation& gpurenderer_node_classification_signature_line_2689_6209b048_native();
+const NativeFunctionImplementation& gpurenderer_perf_summary_line_2720_a06e6064_native();
+const NativeFunctionImplementation& gltexcache_construct_line_53_8bba9174_native();
+const NativeFunctionImplementation& gltexcache_get_line_60_c67f2dd9_native();
+const NativeFunctionImplementation& gltexcache_upload_line_95_477dec88_native();
+const NativeFunctionImplementation& gltexcache_invalidate_line_181_cb708792_native();
+const NativeFunctionImplementation& gltexcache_clear_line_193_ec1ca963_native();
+const NativeFunctionImplementation& gpumesh_construct_line_782_20e603b4_native();
+const NativeFunctionImplementation& gpumesh_release_line_801_e6c9cdff_native();
+
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::graphics::renderer::backend::moderngl

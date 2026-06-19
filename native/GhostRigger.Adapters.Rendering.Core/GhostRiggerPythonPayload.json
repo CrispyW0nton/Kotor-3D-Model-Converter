@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER",
             "source_path": "src/adapters/rendering/moderngl_renderer.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer.py",
-            "sha256": "361dfa13daf03b2d3e785e4bb6ed87b55fc97b5dabde1334e7b16df82715df32"
+            "sha256": "b7a25aec1ec670dc38a6441b993cce435416acaceffa7f7dbb4e8b7c34601eeb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",

@@ -13,11 +13,11 @@ from src.math.camera_math import focal_length_to_fov, fov_to_focal_length, norma
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Camera.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Domain.Core.Camera" / "GhostRigger.Domain.Core.Camera.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Domain.Core.Camera" / "GhostRigger.Domain.Core.Camera.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Domain.Core.Camera" / "Public" / "CameraContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Domain.Core.Camera" / "Private" / "CameraContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Camera.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Core.Camera" / "GhostRigger.Core.Camera.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.Camera" / "GhostRigger.Core.Camera.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.Camera" / "Public" / "CameraContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Camera" / "Private" / "CameraContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -132,8 +132,8 @@ def test_camera_contracts_are_explicit_in_visual_studio_project() -> None:
     assert 'ClInclude Include="Public\\CameraContracts.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
-    assert "namespace ghostrigger::domain::core::camera::core::camera::contracts" in source_text
-    assert "namespace ghostrigger::domain::core::camera::core::camera::contracts" in header_text
+    assert "namespace ghostrigger::core::camera::core::camera::contracts" in source_text
+    assert "namespace ghostrigger::core::camera::core::camera::contracts" in header_text
 
     forbidden = ("*.cpp", "*.h", "using namespace", "phase15", "pyfn_")
     for token in forbidden:

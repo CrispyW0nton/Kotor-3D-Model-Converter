@@ -15,7 +15,7 @@ from src.core.rendering.viewport_display import normalize_display_mode
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Renderer.Shared.Contracts.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Graphics.Renderer.Shared.Contracts.dll"
 
 
 def _load_dll() -> ctypes.CDLL:

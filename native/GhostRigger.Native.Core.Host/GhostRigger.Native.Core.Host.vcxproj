@@ -184,147 +184,147 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
       <Project>{3DBC4B61-0299-4F16-82D5-F4E74E2BCE8E}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Animation\GhostRigger.Domain.Core.Animation.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Animation\GhostRigger.Core.Animation.vcxproj">
       <Project>{625D213D-42A5-426F-8D2F-E67D1A934E48}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.AnimationRetargeting\GhostRigger.Domain.Core.AnimationRetargeting.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.AnimationRetargeting\GhostRigger.Core.AnimationRetargeting.vcxproj">
       <Project>{136EE6FE-AB01-4D4B-B605-921BA58F8792}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Assets\GhostRigger.Domain.Core.Assets.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Assets\GhostRigger.Core.Assets.vcxproj">
       <Project>{2C822B25-22C8-408C-B4B8-57569B1FC96D}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Autorig\GhostRigger.Domain.Core.Autorig.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Autorig\GhostRigger.Core.Autorig.vcxproj">
       <Project>{21A1222A-FF06-47B3-8636-6404ED8619CE}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Camera\GhostRigger.Domain.Core.Camera.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Camera\GhostRigger.Core.Camera.vcxproj">
       <Project>{84FF1CFE-B7FB-46A7-862F-FE24E47B6E64}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Characters\GhostRigger.Domain.Core.Characters.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Characters\GhostRigger.Core.Characters.vcxproj">
       <Project>{B829569B-2B85-4D49-B3D5-6C2E3757335D}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Converters\GhostRigger.Domain.Core.Converters.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Converters\GhostRigger.Core.Converters.vcxproj">
       <Project>{37391545-88CA-4BEF-9011-8CF7C62FEB5E}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Diagnostics\GhostRigger.Domain.Core.Diagnostics.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Diagnostics\GhostRigger.Core.Diagnostics.vcxproj">
       <Project>{14BB065B-6C9C-443E-BEE5-44355D8BEB7D}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Export\GhostRigger.Domain.Core.Export.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Export\GhostRigger.Core.Export.vcxproj">
       <Project>{6BFD1F89-44D4-49FC-9363-817B0DBF5A72}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Formats\GhostRigger.Domain.Core.Formats.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Formats\GhostRigger.Core.Formats.vcxproj">
       <Project>{1619B644-FA71-454D-9BDA-E459A4D1D28C}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Camera\GhostRigger.GUI.Boundary.Camera.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Camera\GhostRigger.Core.GUI.Camera.vcxproj">
       <Project>{F7E038AA-CD16-455F-8B40-C68EB7A79023}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Dialogs\GhostRigger.GUI.Boundary.Dialogs.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Dialogs\GhostRigger.Core.GUI.Dialogs.vcxproj">
       <Project>{639623A8-B121-4D6D-8B54-0BF725AD5813}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Gizmo\GhostRigger.GUI.Boundary.Gizmo.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Gizmo\GhostRigger.Core.GUI.Gizmo.vcxproj">
       <Project>{87B2D6AB-516D-4776-A850-2CA9AD7B74CD}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Integration\GhostRigger.GUI.Boundary.Integration.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Integration\GhostRigger.Core.GUI.Integration.vcxproj">
       <Project>{10B9B40B-22CD-43ED-9469-D1908FDF2C04}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Lighting\GhostRigger.GUI.Boundary.Lighting.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Lighting\GhostRigger.Core.GUI.Lighting.vcxproj">
       <Project>{848E66E7-DAD4-4ABE-A766-420D48C4CDB7}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Panels\GhostRigger.GUI.Boundary.Panels.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Panels\GhostRigger.Core.GUI.Panels.vcxproj">
       <Project>{5BD65A60-FB6A-45C0-A2F7-1B57C80C4760}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Rendering\GhostRigger.GUI.Boundary.Rendering.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Rendering\GhostRigger.Core.GUI.Rendering.vcxproj">
       <Project>{8EDDCA16-3170-4DAE-B0C0-5F745CF722C9}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.SequenceEditor\GhostRigger.GUI.Boundary.SequenceEditor.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.SequenceEditor\GhostRigger.Core.GUI.SequenceEditor.vcxproj">
       <Project>{3F7DDCCE-2A2B-4E78-8A18-FF53C8FFF8DE}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Textures\GhostRigger.GUI.Boundary.Textures.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Textures\GhostRigger.Core.GUI.Textures.vcxproj">
       <Project>{6E768306-B234-436A-95E5-977140F962AD}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Theme\GhostRigger.GUI.Boundary.Theme.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Theme\GhostRigger.Core.GUI.Theme.vcxproj">
       <Project>{FE9E799F-FC92-45DF-8BD0-5947AE08EF56}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.GUI.Boundary.Viewports\GhostRigger.GUI.Boundary.Viewports.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GUI.Viewports\GhostRigger.Core.GUI.Viewports.vcxproj">
       <Project>{8D852646-F044-4A7E-8C6F-8382894DBE3B}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Game\GhostRigger.Domain.Core.Game.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Game\GhostRigger.Core.Game.vcxproj">
       <Project>{D5D8164B-1BAB-432E-9282-4AC3D00C85AF}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.GameLibrary\GhostRigger.Domain.Core.GameLibrary.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.GameLibrary\GhostRigger.Core.GameLibrary.vcxproj">
       <Project>{211E7042-9E73-4928-BBC3-2A30C85D19ED}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Geometry\GhostRigger.Domain.Core.Geometry.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Geometry\GhostRigger.Core.Geometry.vcxproj">
       <Project>{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Gizmo\GhostRigger.Domain.Core.Gizmo.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Gizmo\GhostRigger.Core.Gizmo.vcxproj">
       <Project>{6DF4CD22-59BB-43D1-BF9D-CF5CCA5BBBDF}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Graphics\GhostRigger.Domain.Core.Graphics.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Graphics\GhostRigger.Core.Graphics.vcxproj">
       <Project>{1FF8D739-7E70-4964-8F90-16B39DEBA33F}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.IO\GhostRigger.Domain.Core.IO.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.IO\GhostRigger.Core.IO.vcxproj">
       <Project>{F43E143D-6B16-4BB6-A061-651719BADAE7}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.IPC\GhostRigger.Domain.Core.IPC.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.IPC\GhostRigger.Core.IPC.vcxproj">
       <Project>{435BB99D-E527-4839-B216-B7D47D037B3D}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Infrastructure\GhostRigger.Domain.Core.Infrastructure.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Infrastructure\GhostRigger.Core.Infrastructure.vcxproj">
       <Project>{BE68DB6C-A1E3-473F-8D9D-86C447AB5C00}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.KotorMCP\GhostRigger.Domain.Core.KotorMCP.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.KotorMCP\GhostRigger.Core.KotorMCP.vcxproj">
       <Project>{F0D43CE9-D91A-4C47-A86B-65FEFF179721}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Level\GhostRigger.Domain.Core.Level.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Level\GhostRigger.Core.Level.vcxproj">
       <Project>{4C4C40E4-2B6D-48D2-850D-8C3036C93FF4}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Lighting\GhostRigger.Domain.Core.Lighting.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Lighting\GhostRigger.Core.Lighting.vcxproj">
       <Project>{68CA1DA1-2D82-4E3F-8AD7-C04DF2DEEEA5}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Math\GhostRigger.Domain.Core.Math.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Math\GhostRigger.Core.Math.vcxproj">
       <Project>{670F9463-11C9-4960-A034-97271902CA31}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Measurement\GhostRigger.Domain.Core.Measurement.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Measurement\GhostRigger.Core.Measurement.vcxproj">
       <Project>{0DED334F-4AF8-4CC6-B1C2-5008FBB0EBD9}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.MeshTools\GhostRigger.Domain.Core.MeshTools.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.MeshTools\GhostRigger.Core.MeshTools.vcxproj">
       <Project>{C074716A-BE8F-49D5-8850-37A1BA860F26}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Modules\GhostRigger.Domain.Core.Modules.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Modules\GhostRigger.Core.Modules.vcxproj">
       <Project>{E569AAF1-0F5C-49F8-94DC-D74C1E66306F}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
@@ -340,43 +340,43 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
       <Project>{9616A04C-9F40-4250-AAFC-2395BB20EE62}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Ports\GhostRigger.Domain.Core.Ports.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Ports\GhostRigger.Core.Ports.vcxproj">
       <Project>{1A26F4CD-7DDA-4DBB-95EF-1E25709AF454}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Project\GhostRigger.Domain.Core.Project.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Project\GhostRigger.Core.Project.vcxproj">
       <Project>{1690D345-1422-4085-96F2-EAA77EB1EFA2}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Renderer.Shared.Contracts\GhostRigger.Renderer.Shared.Contracts.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Graphics.Renderer.Shared.Contracts\GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj">
       <Project>{C6C4D5F5-E479-4679-874A-157EE2FF0B1B}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Renderer.Backend.D3D12\GhostRigger.Renderer.Backend.D3D12.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Graphics.Renderer.Backend.D3D12\GhostRigger.Graphics.Renderer.Backend.D3D12.vcxproj">
       <Project>{65C1E755-149D-4724-9B78-304EE4A0E950}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Renderer.Backend.ModernGL\GhostRigger.Renderer.Backend.ModernGL.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Graphics.Renderer.Backend.ModernGL\GhostRigger.Graphics.Renderer.Backend.ModernGL.vcxproj">
       <Project>{A7F6E93D-B001-4407-B669-4DCF8306DAD6}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Renderer.Backend.Null\GhostRigger.Renderer.Backend.Null.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Graphics.Renderer.Backend.Null\GhostRigger.Graphics.Renderer.Backend.Null.vcxproj">
       <Project>{5C081F00-412A-4ACC-BB37-1417A12724E8}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Renderer.Backend.PyGFX\GhostRigger.Renderer.Backend.PyGFX.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Graphics.Renderer.Backend.PyGFX\GhostRigger.Graphics.Renderer.Backend.PyGFX.vcxproj">
       <Project>{7D0E7023-54A0-4BA9-BD64-61EAB15F864C}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Rendering\GhostRigger.Domain.Core.Rendering.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Rendering\GhostRigger.Core.Rendering.vcxproj">
       <Project>{DCC0C99E-3639-41D0-BB69-B09086BCFE1C}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Resources\GhostRigger.Domain.Core.Resources.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Resources\GhostRigger.Core.Resources.vcxproj">
       <Project>{687E070F-306D-4243-9E8E-9A59BAACC80A}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Retargeting\GhostRigger.Domain.Core.Retargeting.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Retargeting\GhostRigger.Core.Retargeting.vcxproj">
       <Project>{56CEDC57-FE1B-4953-B28E-592B0014B2F6}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
@@ -396,103 +396,95 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
       <Project>{8E1494CC-2F54-4FE7-AA5F-56A23EC3E9BF}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Scene\GhostRigger.Domain.Core.Scene.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Scene\GhostRigger.Core.Scene.vcxproj">
       <Project>{C1F0F568-8298-4D7D-B624-D5B106CAF848}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Sequence\GhostRigger.Domain.Core.Sequence.vcxproj">
-      <Project>{1201D5DD-F397-438F-AAE7-3D09C326CCD8}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Skeleton\GhostRigger.Domain.Core.Skeleton.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Skeleton\GhostRigger.Core.Skeleton.vcxproj">
       <Project>{86C4EAD7-356C-4046-8028-A518F19B4F45}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Special\GhostRigger.Domain.Core.Special.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Special\GhostRigger.Core.Special.vcxproj">
       <Project>{7ABD4167-8C1A-4695-8476-EE2F10BE3473}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Systems.Feature.BAS\GhostRigger.Systems.Feature.BAS.vcxproj">
-      <Project>{438F6370-60F0-444C-BC78-062E17D9BA37}</Project>
-      <LinkLibraryDependencies>false</LinkLibraryDependencies>
-    </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Templates\GhostRigger.Domain.Core.Templates.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Templates\GhostRigger.Core.Templates.vcxproj">
       <Project>{F4993727-D9E8-4C53-B581-2EFD4A73BBFB}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.BodyAttachmentSystem\GhostRigger.Tools.Workflow.BodyAttachmentSystem.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.BAS\GhostRigger.Core.Tools.BAS.vcxproj">
       <Project>{4A330C33-90F8-420C-9579-798CF9DF2439}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.Camera\GhostRigger.Tools.Workflow.Camera.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.Camera\GhostRigger.Core.Tools.Camera.vcxproj">
       <Project>{73997F4F-CA67-4664-B4FE-B3428AAF5DA4}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.CharacterBuilder\GhostRigger.Tools.Workflow.CharacterBuilder.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.CharacterBuilder\GhostRigger.Core.Tools.CharacterBuilder.vcxproj">
       <Project>{FE876070-E8DE-449E-AC51-2DA5768DD511}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.ContentBrowser\GhostRigger.Tools.Workflow.ContentBrowser.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.ContentBrowser\GhostRigger.Core.Tools.ContentBrowser.vcxproj">
       <Project>{CC261B8E-7739-44CC-977C-BB4CFF707146}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.Export\GhostRigger.Tools.Workflow.Export.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.Export\GhostRigger.Core.Tools.Export.vcxproj">
       <Project>{94B0835D-C4BD-4800-8DC0-D05AA5A1C3EA}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.Lighting\GhostRigger.Tools.Workflow.Lighting.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.Lighting\GhostRigger.Core.Tools.Lighting.vcxproj">
       <Project>{7883A7B5-6CDE-4419-BC96-03D77E011EF7}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.ModuleMeshes\GhostRigger.Tools.Workflow.ModuleMeshes.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.ModuleMeshes\GhostRigger.Core.Tools.ModuleMeshes.vcxproj">
       <Project>{4136E712-C9E6-438E-A275-556B74CD91C8}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.NodeSkeletonBrowser\GhostRigger.Tools.Workflow.NodeSkeletonBrowser.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.NodeSkeletonBrowser\GhostRigger.Core.Tools.NodeSkeletonBrowser.vcxproj">
       <Project>{D09DCE24-085F-41D3-914F-B38E61F1AEA9}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.PivotControls\GhostRigger.Tools.Workflow.PivotControls.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.PivotControls\GhostRigger.Core.Tools.PivotControls.vcxproj">
       <Project>{25A4D932-355B-40F1-AE0E-B7638A629EEB}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.Properties\GhostRigger.Tools.Workflow.Properties.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.Properties\GhostRigger.Core.Tools.Properties.vcxproj">
       <Project>{CFA137C5-558A-410F-B5E0-2A519CB1544F}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.ResourceBrowser\GhostRigger.Tools.Workflow.ResourceBrowser.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.ResourceBrowser\GhostRigger.Core.Tools.ResourceBrowser.vcxproj">
       <Project>{AF55EF13-673C-4D75-AD10-3E61D7AB91BA}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.Retargeting\GhostRigger.Tools.Workflow.Retargeting.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.Retargeting\GhostRigger.Core.Tools.Retargeting.vcxproj">
       <Project>{50B9CAE6-81FD-4CA5-8430-22243D360507}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.SceneInformation\GhostRigger.Tools.Workflow.SceneInformation.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.SceneInformation\GhostRigger.Core.Tools.SceneInformation.vcxproj">
       <Project>{EF8A9296-347B-455D-90F9-CC0A1CD06C37}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.SequenceEditor\GhostRigger.Tools.Workflow.SequenceEditor.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj">
       <Project>{DB201E95-775A-4A72-86CB-CBF02F5C7DF0}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.SpriteMaterials\GhostRigger.Tools.Workflow.SpriteMaterials.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.SpriteMaterials\GhostRigger.Core.Tools.SpriteMaterials.vcxproj">
       <Project>{8620EE22-B25A-470E-9EE0-08F2B9D12186}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Tools.Workflow.TwoDABrowser\GhostRigger.Tools.Workflow.TwoDABrowser.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Tools.TwoDABrowser\GhostRigger.Core.Tools.TwoDABrowser.vcxproj">
       <Project>{A5364C10-CEFB-45D7-8FBA-BFA8957FD0F3}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Unreal\GhostRigger.Domain.Core.Unreal.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Unreal\GhostRigger.Core.Unreal.vcxproj">
       <Project>{92C60DB8-2198-44CD-B710-7DE912ACA628}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Validation\GhostRigger.Domain.Core.Validation.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Validation\GhostRigger.Core.Validation.vcxproj">
       <Project>{331CDC09-6EDA-4C3F-B425-FF666AED0BCB}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Walkmesh\GhostRigger.Domain.Core.Walkmesh.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Walkmesh\GhostRigger.Core.Walkmesh.vcxproj">
       <Project>{D3C999FE-3243-4E05-A7D8-38A40EEDE0E5}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
@@ -516,11 +508,11 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
       <Project>{35129522-C7B8-4B4D-8A03-4798B28CB7DC}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Workbench\GhostRigger.Domain.Core.Workbench.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Workbench\GhostRigger.Core.Workbench.vcxproj">
       <Project>{1EC72CE0-68F1-4A4F-BFA6-61B11AFD0F18}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
-    <ProjectReference Include="..\GhostRigger.Domain.Core.Workflow\GhostRigger.Domain.Core.Workflow.vcxproj">
+    <ProjectReference Include="..\GhostRigger.Core.Workflow\GhostRigger.Core.Workflow.vcxproj">
       <Project>{0875CBCA-985A-4999-949C-6CE7812F3647}</Project>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
