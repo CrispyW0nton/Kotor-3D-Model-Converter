@@ -73,7 +73,7 @@ _LIVE_RENDERERS = ("modern_gl", "wgpu_auto", "wgpu_d3d12", "wgpu_vulkan", "wgpu_
 _DEFAULT_TOOLS = (
     ToolIntegrationInfo(
         "module_editor",
-        "Open Module Editor",
+        "Open Map Studio Level Editor",
         "ModuleEditorWindow",
         "Modules menu",
         depends_on_viewport=True,
@@ -82,7 +82,7 @@ _DEFAULT_TOOLS = (
         supported_renderers=_LIVE_RENDERERS,
         null_supported=True,
         known_limitations="Null Diagnostic opens editor panels but does not render a live module scene.",
-        integration_notes="Standalone module viewport stays isolated; main shell resource loads route through content browser services.",
+        integration_notes="Module Editor icon opens the existing Level Editor as Map Studio; main shell resource loads route through content browser services.",
     ),
     ToolIntegrationInfo(
         "rigging_window",

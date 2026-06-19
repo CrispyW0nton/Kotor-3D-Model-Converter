@@ -389,12 +389,12 @@ class ResourcePanelsMixin:
     def _about_modular(self):
         QtWidgets.QMessageBox.information(
             self,
-            "Module Editor",
-            "GhostRigger Module Editor\n\n"
-            "The standalone Module Editor creates and opens KMAP level projects, "
-            "loads LYT/WOK data, tracks rooms/modules/blueprints, validates level "
-            "state, and generates build/export manifests without overwriting source "
-            "KOTOR data.",
+            "Map Studio Level Editor",
+            "GhostRigger Map Studio Level Editor\n\n"
+            "The Module Editor icon opens this unified Map Studio workspace for KMAP "
+            "projects. It loads LYT/WOK data, tracks terrain, rooms, modules, "
+            "blueprints, placements, validation, staged export, install handoff, and "
+            "game-test proof without overwriting source KOTOR data.",
         )
     def _validate_current_character(self):
         try:
