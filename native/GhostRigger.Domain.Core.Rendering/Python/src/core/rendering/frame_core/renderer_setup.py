@@ -146,6 +146,8 @@ class RendererSetupMixin:
 
         # Animation pose (set by AnimationsPanel)
         self._anim_pose = None   # Optional[AnimPose]
+        self._anim_poses_by_character: Dict[str, object] = {}
+        self._anim_pose_metadata_by_character: Dict[str, dict] = {}
         self._anim_name: str = ""   # current animation name for HUD display
         self._anim_time: float = 0.0   # current animation time for HUD display
         self._anim_length: float = 0.0  # current animation length for HUD display
@@ -330,6 +332,8 @@ class RendererSetupMixin:
             self._dangly_last_time = 0.0
 
         self._anim_pose = pose
+        self._anim_poses_by_character.clear()
+        self._anim_pose_metadata_by_character.clear()
         self._anim_name = name
         self._anim_time = time
         self._anim_length = length
@@ -362,11 +366,69 @@ class RendererSetupMixin:
     # consistent behaviour across viewport rendering, compute_bounds, and render_bounds.
     _BASE_SKELETONS = KOTOR_BASE_SKELETONS
 
+    def set_character_animation_pose(self, character_instance_id: str, pose, name: str = "", time: float = 0.0, length: float = 0.0):
+        """Set one character's pose without disturbing other sequence poses."""
+
+        character_id = str(character_instance_id or "").strip()
+        if not character_id:
+            return
+        if pose is None:
+            self._anim_poses_by_character.pop(character_id, None)
+            self._anim_pose_metadata_by_character.pop(character_id, None)
+        else:
+            self._anim_poses_by_character[character_id] = pose
+            self._anim_pose_metadata_by_character[character_id] = {
+                "name": str(name or getattr(pose, "_gr_animation_name", "") or ""),
+                "time": float(time),
+                "length": float(length),
+            }
+        scoped_pose = self._compose_scoped_animation_pose_set()
+        if scoped_pose is None:
+            self.set_animation_pose(None)
+            return
+        self._anim_pose = scoped_pose
+        metadata = list(self._anim_pose_metadata_by_character.values())
+        names = [str(item.get("name", "") or "") for item in metadata if str(item.get("name", "") or "")]
+        self._anim_name = " + ".join(names[:3]) + (" ..." if len(names) > 3 else "")
+        self._anim_time = max((float(item.get("time", 0.0) or 0.0) for item in metadata), default=0.0)
+        self._anim_length = max((float(item.get("length", 0.0) or 0.0) for item in metadata), default=0.0)
+        self._invalidate_animation_pose_caches()
+
+    def clear_character_animation_pose(self, character_instance_id: str) -> None:
+        self.set_character_animation_pose(character_instance_id, None)
+
+    def _compose_scoped_animation_pose_set(self):
+        poses = {character_id: pose for character_id, pose in self._anim_poses_by_character.items() if pose is not None}
+        if not poses:
+            return None
+        try:
+            from src.core.rendering.mesh_render_data import ScopedAnimationPoseSet
+
+            return ScopedAnimationPoseSet(poses)
+        except Exception:
+            return None
+
+    def _invalidate_animation_pose_caches(self) -> None:
+        self._wt_cache.clear()
+        self._bone_transforms_cache = None
+        self._bone_transforms_pose_id = -1
+        self._gpu_parity_skin_pose_id = -1
+        self._gpu_parity_skin_verts_cache = {}
+        self.is_interactive = False
+        _req = getattr(self, '_request_render', None)
+        if _req is not None:
+            try:
+                _req(fast=True)
+            except Exception:
+                pass
+
     def set_model(self, m: Optional[KotorModel]):
         self.model = m
         self._wt_cache: Dict[int, tuple] = {}   # node id → (wp, wo, is_id)
         self._cached_model_id = id(m) if m else -1  # track for cache invalidation
         self._anim_pose = None   # clear animation pose when model changes
+        self._anim_poses_by_character.clear()
+        self._anim_pose_metadata_by_character.clear()
         self._bone_transforms_cache = None   # invalidate bone-transform cache
         self._bone_transforms_pose_id = -1
         self._gpu_parity_skin_uploader = None

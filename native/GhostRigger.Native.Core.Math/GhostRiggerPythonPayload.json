@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_GPU_MATH",
             "source_path": "src/math/gpu_math.py",
             "packaged_path": "Python/src/math/gpu_math.py",
-            "sha256": "481ccfe067dcb13ad2ad3b119b87cd3a4e9d30a2d9fefca6934a3bb77dfa9407"
+            "sha256": "9ec4f83e22baa11eb08264f1bb7e3aad4286d304a0968ca83f5ffd062db40ec8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",

@@ -13,6 +13,7 @@ PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_MANAGER RCDATA "Python/src/sequence/sequence_ma
 PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_MODEL RCDATA "Python/src/sequence/sequence_model.py"
 PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_PLAYBACK RCDATA "Python/src/sequence/sequence_playback.py"
 PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_RENDER RCDATA "Python/src/sequence/sequence_render.py"
+PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_RUNTIME RCDATA "Python/src/sequence/sequence_runtime.py"
 PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_SERIALIZATION RCDATA "Python/src/sequence/sequence_serialization.py"
 PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_TRACK RCDATA "Python/src/sequence/sequence_track.py"
 PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_UNDO RCDATA "Python/src/sequence/sequence_undo.py"

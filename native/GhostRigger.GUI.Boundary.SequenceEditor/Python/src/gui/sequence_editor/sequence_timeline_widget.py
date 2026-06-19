@@ -313,14 +313,20 @@ class SequenceTimelineWidget(QtWidgets.QWidget):
                 raw_frame = float(round(raw_frame))
             if isinstance(key.value, dict):
                 if edge == "right":
-                    key.value["duration_frames"] = max(1.0, raw_frame - float(key.frame))
+                    duration = max(1.0, raw_frame - float(key.frame))
+                    key.value["duration_frames"] = duration
+                    key.value["clip_start_frame"] = int(key.frame)
+                    key.value["clip_end_frame"] = float(key.frame) + duration
                 else:
                     end_frame = start_frame + start_duration
                     new_start = min(raw_frame, end_frame - 1.0)
                     if event.modifiers() & QtCore.Qt.ShiftModifier:
                         new_start = float(round(new_start))
                     key.frame = int(round(new_start)) if not (event.modifiers() & QtCore.Qt.AltModifier) else int(new_start)
-                    key.value["duration_frames"] = max(1.0, end_frame - float(key.frame))
+                    duration = max(1.0, end_frame - float(key.frame))
+                    key.value["duration_frames"] = duration
+                    key.value["clip_start_frame"] = int(key.frame)
+                    key.value["clip_end_frame"] = float(key.frame) + duration
                 self.keyMoved.emit()
                 self.update()
         elif self._dragging_keys:

@@ -109,6 +109,9 @@ def _mat3_normal(model_mat: np.ndarray) -> np.ndarray:
 
 
 def _scene_gpu_root_for_node(node):
+    root_ref = getattr(node, "_gr_scene_object_root_ref", None)
+    if root_ref is not None and bool(getattr(root_ref, "_gr_scene_object_root", False)) and bool(getattr(root_ref, "_gr_scene_gpu_transform", False)):
+        return root_ref
     current = node
     visited = set()
     while current is not None and id(current) not in visited:

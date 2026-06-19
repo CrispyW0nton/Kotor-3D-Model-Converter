@@ -51,13 +51,13 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RENDERER",
             "source_path": "src/adapters/rendering/wgpu_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/renderer.py",
-            "sha256": "9925d7a6b10cc2385320419ac999798dcd39d7c3411091a7f799332b6b9bc059"
+            "sha256": "7b08c30a1314c3b723e9b2645df5b0026971ca4c5aa852b6b354de5c1a311dab"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RESOURCES",
             "source_path": "src/adapters/rendering/wgpu_core/resources.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/resources.py",
-            "sha256": "6391beb053e8ef812aa0648a5ec37d1d1813e5ed93abb2e05ff2943765b261e7"
+            "sha256": "6d23b4ff62a9105141c08b9b2ff9b3ccc5948f2abe4ddd0b2cd411108e7147bc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_SHARED",

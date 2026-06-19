@@ -11,6 +11,7 @@ from src.math.camera_math import euler_degrees_to_quat, quat_to_euler_degrees
 from .sequence_binding import SequenceBinding, SequenceTargetType
 from .sequence_manager import ensure_sequence_object_id
 from .sequence_model import GhostRiggerLevelSequence
+from .sequence_runtime import CharacterSequenceRuntimeState
 from .tracks.camera_cut_track import CameraCutTrack
 from .tracks.camera_property_track import CameraPropertyTrack
 from .tracks.character_track import CharacterTrack
@@ -117,7 +118,8 @@ class SequenceEvaluator:
         self.owner = owner
         self.resolver = SceneObjectResolver(viewport, owner)
         self._captured: dict[str, ObjectState] = {}
-        self._character_engines: dict[tuple[int, str], Any] = {}
+        self._character_engines: dict[tuple[str, int, str, str, str, str], Any] = {}
+        self._character_runtime_states: dict[str, CharacterSequenceRuntimeState] = {}
         self.restore_mode = "restore"
         self.last_warning = ""
         self.event_log: list[dict[str, Any]] = []
@@ -142,6 +144,7 @@ class SequenceEvaluator:
             if obj is not None and state is not None:
                 self._apply_snapshot(obj, state)
         self._captured.clear()
+        self._clear_sequence_animation_poses(sequence)
         self._refresh_viewport({"transforms", "visibility", "cameras", "lighting", "materials"})
 
     def evaluate(
@@ -161,6 +164,7 @@ class SequenceEvaluator:
             obj = self.resolver.resolve(binding)
             binding.metadata["missing"] = obj is None
             if obj is None or not binding.active:
+                self._clear_character_animation_pose(self._character_instance_id(binding, obj))
                 continue
             transform_target = self._binding_transform_target(binding, obj)
             self._prepare_binding_transform_eval(binding, transform_target, frame)
@@ -177,6 +181,8 @@ class SequenceEvaluator:
                     self._sync_binding_transform_owner(obj, transform_target)
             if character_tracks:
                 dirty.update(self._apply_character_tracks(sequence, binding, obj, character_tracks, frame))
+            else:
+                self._clear_character_animation_pose(self._character_instance_id(binding, obj))
         if self._apply_master_tracks(sequence, frame):
             dirty.add("cameras")
         if fire_events and previous_frame is not None:
@@ -236,19 +242,23 @@ class SequenceEvaluator:
         tracks: list[CharacterTrack],
         frame: int,
     ) -> set[str]:
+        character_id = self._character_instance_id(binding, obj)
+        self._character_runtime_state(binding, obj, character_id)
         active_keys = []
-        for track in tracks:
+        for track_order, track in enumerate(tracks):
             keys = track.active_animation_keys(frame) if hasattr(track, "active_animation_keys") else []
             for key in keys:
                 if isinstance(getattr(key, "value", None), dict) and str(key.value.get("animation") or "").strip():
+                    key.value.setdefault("character_instance_id", character_id)
+                    key.value.setdefault("track_id", getattr(track, "track_id", ""))
+                    key.value["_sequence_track_order"] = int(track_order)
                     active_keys.append(key)
         if not active_keys:
-            if self.viewport is not None and hasattr(self.viewport, "set_animation_pose"):
-                self.viewport.set_animation_pose(None)
+            if self._clear_character_animation_pose(character_id):
                 return {"animation"}
             return set()
         viewport = self.viewport
-        if viewport is None or not hasattr(viewport, "set_animation_pose"):
+        if viewport is None or not self._viewport_accepts_animation_pose(viewport):
             return set()
         model = self._character_animation_model(obj, binding=binding, key=active_keys[0])
         if model is None:
@@ -266,12 +276,13 @@ class SequenceEvaluator:
             with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
                 for key in active_keys:
                     anim_name = str(key.value.get("animation") or "").strip()
-                    engine_key = (id(model), anim_name.lower(), inheritance_game, inheritance_supermodel)
+                    clip_instance_id = self._clip_instance_id(key)
+                    engine_key = (character_id, id(model), clip_instance_id, anim_name.lower(), inheritance_game, inheritance_supermodel)
                     engine = self._character_engines.get(engine_key)
                     if engine is None or getattr(engine, "model", None) is not model:
                         engine = AnimationEngine(model)
                         self._character_engines[engine_key] = engine
-                    loop = bool(key.value.get("loop", True))
+                    loop = self._clip_loop_enabled(key)
                     if getattr(getattr(engine, "current_animation", None), "name", "").lower() != anim_name.lower():
                         if not engine.play(anim_name, loop=loop, blend=False):
                             self.last_warning = f"Animation '{anim_name}' is not available for {binding.display_name}."
@@ -288,6 +299,7 @@ class SequenceEvaluator:
                             "pose": pose,
                             "time": float(getattr(engine, "current_time", seconds) or 0.0),
                             "length": float(getattr(current, "length", key.value.get("length", 0.0)) or 0.0),
+                            "clip_instance_id": clip_instance_id,
                         }
                     )
             if not evaluated:
@@ -296,8 +308,25 @@ class SequenceEvaluator:
             names = [item["name"] for item in evaluated]
             length = max((float(item.get("length", 0.0) or 0.0) for item in evaluated), default=0.0)
             time_value = float(evaluated[0].get("time", 0.0) or 0.0)
-            self._tag_animation_pose(pose, model, " + ".join(names))
-            viewport.set_animation_pose(pose, name=" + ".join(names), time=time_value, length=length)
+            self._tag_animation_pose(
+                pose,
+                model,
+                " + ".join(names),
+                binding=binding,
+                obj=obj,
+                game=inheritance_game,
+                character_instance_id=character_id,
+            )
+            self._update_character_runtime_state(
+                sequence,
+                binding,
+                obj,
+                character_id,
+                pose,
+                frame,
+                tuple(str(item.get("clip_instance_id") or "") for item in evaluated),
+            )
+            self._set_character_animation_pose(character_id, pose, name=" + ".join(names), time=time_value, length=length)
             return {"animation"}
         except Exception as exc:
             self.last_warning = f"Animation track failed for {binding.display_name}: {exc}"
@@ -305,22 +334,42 @@ class SequenceEvaluator:
 
     def _animation_clip_seconds(self, sequence: GhostRiggerLevelSequence, key, frame: int) -> float:
         elapsed_frames = max(0.0, float(frame) - float(key.frame))
-        length = float(key.value.get("length", 0.0) or 0.0)
-        duration_frames = float(key.value.get("duration_frames", 0.0) or 0.0)
-        if length > 0.0 and duration_frames > 0.0:
-            return min(length, (elapsed_frames / max(0.001, duration_frames)) * length)
-        return elapsed_frames / max(0.001, float(sequence.frame_rate or 24.0))
+        value = key.value if isinstance(getattr(key, "value", None), dict) else {}
+        length = float(value.get("length", 0.0) or 0.0)
+        duration_frames = float(value.get("duration_frames", 0.0) or 0.0)
+        try:
+            duration_frames = max(duration_frames, float(value.get("clip_end_frame", 0.0) or 0.0) - float(key.frame))
+        except (TypeError, ValueError):
+            pass
+        source_in = max(0.0, float(value.get("source_in_seconds", 0.0) or 0.0))
+        source_out = float(value.get("source_out_seconds", 0.0) or 0.0)
+        if source_out <= source_in:
+            source_out = length if length > 0.0 else source_in
+        source_duration = max(0.0, source_out - source_in)
+        playback_speed = float(value.get("playback_speed", 1.0) if value.get("playback_speed", 1.0) is not None else 1.0)
+        time_scale = max(0.001, float(value.get("time_scale", 1.0) or 1.0))
+        if duration_frames > 0.0 and source_duration > 0.0:
+            local_seconds = (elapsed_frames / max(0.001, duration_frames)) * source_duration * playback_speed / time_scale
+        else:
+            local_seconds = (elapsed_frames / max(0.001, float(sequence.frame_rate or 24.0))) * playback_speed / time_scale
+        if source_duration > 0.0:
+            if self._clip_loop_enabled(key):
+                local_seconds = local_seconds % source_duration
+            else:
+                local_seconds = min(local_seconds, source_duration)
+        return source_in + max(0.0, local_seconds)
 
     def _compose_animation_poses(self, model, evaluated: list[dict[str, Any]], frame: int):
         ordered = sorted(
             evaluated,
             key=lambda item: (
+                int(item["key"].value.get("_sequence_track_order", 0) or 0),
                 float(item["key"].frame),
                 int(item["key"].value.get("priority", 0) or 0),
             ),
         )
         base_item = next((item for item in ordered if self._clip_blend_mode(item["key"], item["name"], 0) == "base"), ordered[0])
-        base_pose = base_item["pose"]
+        base_pose = self._copy_animation_pose(base_item["pose"])
         for item in ordered:
             if item is base_item:
                 continue
@@ -330,12 +379,15 @@ class SequenceEvaluator:
             if weight <= 0.0:
                 continue
             mask = self._clip_mask_nodes(model, key, item["name"], item["pose"], mode)
-            base_pose = self._blend_animation_pose(base_pose, item["pose"], weight, mask)
+            if mode == "additive":
+                base_pose = self._additive_animation_pose(model, base_pose, item["pose"], weight, mask)
+            else:
+                base_pose = self._blend_animation_pose(base_pose, item["pose"], weight, mask)
         return base_pose
 
     def _clip_blend_mode(self, key, anim_name: str, index: int) -> str:
-        mode = str(key.value.get("blend_mode", "auto") or "auto").strip().lower()
-        if mode in {"base", "replace", "overlay", "additive"}:
+        mode = str(key.value.get("layer_mode") or key.value.get("blend_mode", "auto") or "auto").strip().lower()
+        if mode in {"base", "replace", "override", "overlay", "additive"}:
             return "base" if mode == "replace" else mode
         if index == 0 and not self._is_partial_animation_name(anim_name):
             return "base"
@@ -348,8 +400,8 @@ class SequenceEvaluator:
         if duration <= 0.0:
             return base_weight
         elapsed = max(0.0, float(frame) - float(key.frame))
-        fade_in = max(0.0, min(float(value.get("fade_in_frames", 0.0) or 0.0), duration))
-        fade_out = max(0.0, min(float(value.get("fade_out_frames", 0.0) or 0.0), duration))
+        fade_in = max(0.0, min(float(value.get("blend_in_frames", value.get("fade_in_frames", 0.0)) or 0.0), duration))
+        fade_out = max(0.0, min(float(value.get("blend_out_frames", value.get("fade_out_frames", 0.0)) or 0.0), duration))
         factor = 1.0
         if fade_in > 0.0:
             factor = min(factor, elapsed / fade_in)
@@ -394,9 +446,137 @@ class SequenceEvaluator:
             return ("head", "neck", "face", "jaw", "mouth", "eye", "horn", "spine", "chest", "torso", "clav", "shldr", "shoulder", "arm", "fore", "hand", "wrist")
         return tuple(str(mask or "").split())
 
+    def _copy_animation_pose(self, pose):
+        if pose is None:
+            return None
+        pose_type = type(pose)
+        nodes = {
+            str(name).lower(): self._copy_node_pose(node)
+            for name, node in (getattr(pose, "nodes", {}) or {}).items()
+        }
+        try:
+            copied = pose_type(time=float(getattr(pose, "time", 0.0) or 0.0), nodes=nodes)
+        except Exception:
+            try:
+                from types import SimpleNamespace
+
+                copied = SimpleNamespace(time=float(getattr(pose, "time", 0.0) or 0.0), nodes=nodes)
+            except Exception:
+                return pose
+        for attr in (
+            "nodes_by_index",
+            "duplicate_node_names",
+            "_gr_animation_source_model_id",
+            "_gr_animation_source_model_name",
+            "_gr_animation_scene_object_id",
+            "_gr_animation_scene_import_id",
+            "_gr_animation_character_instance_id",
+            "_gr_animation_name",
+            "_gr_animation_game",
+        ):
+            if hasattr(pose, attr):
+                try:
+                    value = getattr(pose, attr)
+                    if attr == "nodes_by_index" and isinstance(value, dict):
+                        value = {
+                            index: nodes.get(str(getattr(node, "name", "") or "").lower(), self._copy_node_pose(node))
+                            for index, node in value.items()
+                        }
+                    setattr(copied, attr, value)
+                except Exception:
+                    pass
+        return copied
+
+    @staticmethod
+    def _copy_node_pose(node):
+        node_type = type(node)
+        try:
+            return node_type(
+                name=getattr(node, "name", ""),
+                position=tuple(float(value) for value in getattr(node, "position", (0.0, 0.0, 0.0))),
+                rotation=tuple(float(value) for value in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+                scale=float(getattr(node, "scale", 1.0) or 1.0),
+                alpha=getattr(node, "alpha", None),
+                selfillum=getattr(node, "selfillum", None),
+            )
+        except Exception:
+            return node
+
+    def _additive_animation_pose(self, model, base_pose, additive_pose, weight: float, mask: set[str] | None):
+        if base_pose is None:
+            return self._copy_animation_pose(additive_pose)
+        if additive_pose is None:
+            return base_pose
+        alpha = max(0.0, min(1.0, float(weight)))
+        if alpha <= 0.0:
+            return base_pose
+        for name, additive_node in list(getattr(additive_pose, "nodes", {}).items()):
+            node_key = str(name).lower()
+            if mask is not None and node_key not in mask:
+                continue
+            base_node = getattr(base_pose, "nodes", {}).get(node_key)
+            if base_node is None:
+                continue
+            reference_node = self._reference_node_pose(model, node_key, additive_node)
+            base_pose.nodes[node_key] = self._additive_node_pose(base_node, additive_node, reference_node, alpha)
+        return base_pose
+
+    def _reference_node_pose(self, model, node_key: str, fallback_node):
+        try:
+            nodes = model.all_nodes() if hasattr(model, "all_nodes") else []
+            for node in nodes:
+                if str(getattr(node, "name", "") or "").lower() == str(node_key).lower():
+                    return type(fallback_node)(
+                        name=getattr(fallback_node, "name", getattr(node, "name", "")),
+                        position=tuple(float(value) for value in getattr(node, "position", (0.0, 0.0, 0.0))),
+                        rotation=tuple(float(value) for value in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))),
+                        scale=float(getattr(node, "scale", getattr(node, "_gr_scale", 1.0)) or 1.0),
+                        alpha=getattr(node, "alpha", None),
+                        selfillum=getattr(node, "selfillum", None),
+                    )
+        except Exception:
+            pass
+        return type(fallback_node)(
+            name=getattr(fallback_node, "name", node_key),
+            position=(0.0, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+            scale=1.0,
+            alpha=None,
+            selfillum=None,
+        )
+
+    def _additive_node_pose(self, base_node, additive_node, reference_node, alpha: float):
+        node_type = type(additive_node)
+        bp = tuple(float(value) for value in getattr(base_node, "position", (0.0, 0.0, 0.0)))
+        ap = tuple(float(value) for value in getattr(additive_node, "position", bp))
+        rp = tuple(float(value) for value in getattr(reference_node, "position", (0.0, 0.0, 0.0)))
+        position = (
+            bp[0] + (ap[0] - rp[0]) * alpha,
+            bp[1] + (ap[1] - rp[1]) * alpha,
+            bp[2] + (ap[2] - rp[2]) * alpha,
+        )
+        base_rotation = tuple(float(value) for value in getattr(base_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        additive_rotation = tuple(float(value) for value in getattr(additive_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        reference_rotation = tuple(float(value) for value in getattr(reference_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        delta_rotation = self._quat_mul(additive_rotation, self._quat_inverse(reference_rotation))
+        target_rotation = self._quat_mul(delta_rotation, base_rotation)
+        rotation = self._slerp_quat(base_rotation, target_rotation, alpha)
+        base_scale = float(getattr(base_node, "scale", 1.0) or 1.0)
+        additive_scale = float(getattr(additive_node, "scale", 1.0) or 1.0)
+        reference_scale = float(getattr(reference_node, "scale", 1.0) or 1.0)
+        scale = base_scale + (additive_scale - reference_scale) * alpha
+        return node_type(
+            name=getattr(additive_node, "name", getattr(base_node, "name", "")),
+            position=position,
+            rotation=rotation,
+            scale=scale,
+            alpha=getattr(additive_node, "alpha", getattr(base_node, "alpha", None)),
+            selfillum=getattr(additive_node, "selfillum", getattr(base_node, "selfillum", None)),
+        )
+
     def _blend_animation_pose(self, base_pose, overlay_pose, weight: float, mask: set[str] | None):
         if base_pose is None:
-            return overlay_pose
+            return self._copy_animation_pose(overlay_pose)
         if overlay_pose is None:
             return base_pose
         alpha = max(0.0, min(1.0, float(weight)))
@@ -408,7 +588,7 @@ class SequenceEvaluator:
                 continue
             base_node = base_pose.nodes.get(node_key) if hasattr(base_pose, "nodes") else None
             if base_node is None:
-                base_pose.nodes[node_key] = overlay_node
+                base_pose.nodes[node_key] = self._copy_node_pose(overlay_node)
                 continue
             base_pose.nodes[node_key] = self._blend_node_pose(base_node, overlay_node, alpha)
         return base_pose
@@ -475,11 +655,142 @@ class SequenceEvaluator:
             return (0.0, 0.0, 0.0, 1.0)
         return tuple(value / mag for value in result)
 
+    @staticmethod
+    def _quat_inverse(q) -> tuple[float, float, float, float]:
+        x, y, z, w = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+        mag_sq = x * x + y * y + z * z + w * w
+        if mag_sq <= 1e-9:
+            return (0.0, 0.0, 0.0, 1.0)
+        return (-x / mag_sq, -y / mag_sq, -z / mag_sq, w / mag_sq)
+
+    @staticmethod
+    def _quat_mul(a, b) -> tuple[float, float, float, float]:
+        ax, ay, az, aw = (float(a[0]), float(a[1]), float(a[2]), float(a[3]))
+        bx, by, bz, bw = (float(b[0]), float(b[1]), float(b[2]), float(b[3]))
+        return (
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+            aw * bw - ax * bx - ay * by - az * bz,
+        )
+
+    def _character_instance_id(self, binding: SequenceBinding, obj: object | None = None) -> str:
+        metadata = getattr(binding, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            try:
+                binding.metadata = metadata
+            except Exception:
+                pass
+        existing = str(metadata.get("character_instance_id") or "").strip()
+        if existing:
+            return existing
+        object_id = str(getattr(binding, "target_object_id", "") or "")
+        if not object_id and obj is not None:
+            object_id = ensure_sequence_object_id(obj)
+        character_id = object_id or str(getattr(binding, "binding_id", "") or "")
+        if character_id:
+            metadata["character_instance_id"] = character_id
+        return character_id
+
+    def _character_runtime_state(self, binding: SequenceBinding, obj: object | None, character_id: str) -> CharacterSequenceRuntimeState:
+        state = self._character_runtime_states.get(character_id)
+        if state is None:
+            state = CharacterSequenceRuntimeState(
+                character_instance_id=character_id,
+                binding_id=str(getattr(binding, "binding_id", "") or ""),
+                target_object_id=str(getattr(binding, "target_object_id", "") or ""),
+                skeleton_instance_id=f"skeleton-{character_id}" if character_id else "",
+            )
+            self._character_runtime_states[character_id] = state
+        state.binding_id = str(getattr(binding, "binding_id", "") or state.binding_id)
+        state.target_object_id = str(getattr(binding, "target_object_id", "") or state.target_object_id)
+        state.animation_state["scene_object_name"] = str(getattr(obj, "name", getattr(binding, "display_name", "")) or "")
+        return state
+
+    def _update_character_runtime_state(
+        self,
+        sequence: GhostRiggerLevelSequence,
+        binding: SequenceBinding,
+        obj: object,
+        character_id: str,
+        pose,
+        frame: int,
+        active_clip_instance_ids: tuple[str, ...],
+    ) -> None:
+        state = self._character_runtime_state(binding, obj, character_id)
+        transform_target = self._binding_transform_target(binding, obj)
+        state.interpolation_state().update(
+            frame=frame,
+            time_seconds=sequence.frame_to_seconds(frame),
+            pose=pose,
+            root_transform=self._snapshot(transform_target),
+            active_clip_instance_ids=active_clip_instance_ids,
+        )
+
+    @staticmethod
+    def _viewport_accepts_animation_pose(viewport) -> bool:
+        return bool(
+            hasattr(viewport, "set_character_animation_pose")
+            or hasattr(viewport, "clear_character_animation_pose")
+            or hasattr(viewport, "set_animation_pose")
+        )
+
+    def _set_character_animation_pose(self, character_id: str, pose, *, name: str, time: float, length: float) -> None:
+        viewport = self.viewport
+        if viewport is None:
+            return
+        scoped = getattr(viewport, "set_character_animation_pose", None)
+        if callable(scoped):
+            scoped(character_id, pose, name=name, time=time, length=length)
+            return
+        legacy = getattr(viewport, "set_animation_pose", None)
+        if callable(legacy):
+            legacy(pose, name=name, time=time, length=length)
+
+    def _clear_character_animation_pose(self, character_id: str) -> bool:
+        if not character_id:
+            return False
+        viewport = self.viewport
+        if viewport is None:
+            return False
+        clear_scoped = getattr(viewport, "clear_character_animation_pose", None)
+        if callable(clear_scoped):
+            clear_scoped(character_id)
+            return True
+        set_scoped = getattr(viewport, "set_character_animation_pose", None)
+        if callable(set_scoped):
+            set_scoped(character_id, None)
+            return True
+        legacy = getattr(viewport, "set_animation_pose", None)
+        if callable(legacy):
+            legacy(None)
+            return True
+        return False
+
+    def _clear_sequence_animation_poses(self, sequence: GhostRiggerLevelSequence) -> None:
+        for binding in sequence.bindings:
+            self._clear_character_animation_pose(self._character_instance_id(binding))
+
+    @staticmethod
+    def _clip_instance_id(key) -> str:
+        value = key.value if isinstance(getattr(key, "value", None), dict) else {}
+        clip_id = str(value.get("clip_instance_id") or "").strip()
+        if not clip_id:
+            clip_id = str(getattr(key, "key_id", "") or "")
+            if clip_id:
+                value["clip_instance_id"] = clip_id
+        return clip_id
+
+    @staticmethod
+    def _clip_loop_enabled(key) -> bool:
+        value = key.value if isinstance(getattr(key, "value", None), dict) else {}
+        loop_mode = str(value.get("loop_mode", "") or "").strip().lower()
+        if loop_mode:
+            return loop_mode in {"loop", "repeat", "cycle", "cycled"}
+        return bool(value.get("loop", True))
+
     def _character_animation_model(self, obj: object | None, *, binding: SequenceBinding | None = None, key=None):
-        source_names = self._animation_source_names(binding, key)
-        named = self._find_named_animation_model(source_names)
-        if named is not None:
-            return named
         metadata = getattr(obj, "metadata", None)
         runtime_model = metadata.get("_runtime_model") if isinstance(metadata, dict) else None
         candidates = [
@@ -492,6 +803,10 @@ class SequenceEvaluator:
         for candidate in candidates:
             if self._is_animation_model(candidate):
                 return candidate
+        source_names = self._animation_source_names(binding, key)
+        named = self._find_named_animation_model(source_names)
+        if named is not None:
+            return named
         return None
 
     def _animation_source_names(self, binding: SequenceBinding | None, key) -> set[str]:
@@ -612,13 +927,54 @@ class SequenceEvaluator:
             if had_game_version:
                 model.game_version = original_game_version
 
-    def _tag_animation_pose(self, pose, model, anim_name: str) -> None:
+    def _scene_object_for_animation_pose(self, model, obj):
+        candidates = [obj]
+        try:
+            candidates.extend(self.resolver.all_objects())
+        except Exception:
+            pass
+        seen: set[int] = set()
+        for candidate in candidates:
+            if candidate is None or id(candidate) in seen:
+                continue
+            seen.add(id(candidate))
+            metadata = getattr(candidate, "metadata", None)
+            if not isinstance(metadata, dict):
+                continue
+            if metadata.get("_runtime_model") is model or metadata.get("_runtime_bas_body_model") is model:
+                return candidate
+        return None
+
+    def _tag_animation_pose(
+        self,
+        pose,
+        model,
+        anim_name: str,
+        *,
+        binding=None,
+        obj=None,
+        game: str = "",
+        character_instance_id: str = "",
+    ) -> None:
         if pose is None:
             return
         try:
             setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
             setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
+            if character_instance_id:
+                setattr(pose, "_gr_animation_character_instance_id", str(character_instance_id))
+            scene_object = self._scene_object_for_animation_pose(model, obj)
+            if scene_object is not None:
+                metadata = getattr(scene_object, "metadata", {}) or {}
+                scene_object_id = str(getattr(scene_object, "id", "") or getattr(binding, "target_object_id", "") or "")
+                if scene_object_id:
+                    setattr(pose, "_gr_animation_scene_object_id", scene_object_id)
+                scene_import_id = str(metadata.get("scene_import_id") or scene_object_id or "")
+                if scene_import_id:
+                    setattr(pose, "_gr_animation_scene_import_id", scene_import_id)
             setattr(pose, "_gr_animation_name", str(anim_name or ""))
+            if game:
+                setattr(pose, "_gr_animation_game", str(game))
         except Exception:
             pass
 

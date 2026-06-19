@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_GPU_SKINNING",
             "source_path": "src/core/animation/gpu_skinning.py",
             "packaged_path": "Python/src/core/animation/gpu_skinning.py",
-            "sha256": "cba5a061fe5c2d3b5762aeffa5b9381a90caab4299ab30e0b445b5d94b0f1b39"
+            "sha256": "b1cb73694e450cbec9320d23520f0633e40919de19c12bd88aad29cffb154fb0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_INIT",

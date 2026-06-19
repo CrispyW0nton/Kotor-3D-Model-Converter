@@ -228,6 +228,7 @@ class ViewportSceneModelMixin:
                 continue
             instance_metadata = getattr(instance, "metadata", {}) or {}
             import_id = str(instance_metadata.get("scene_import_id") or instance.id)
+            animation_source_model = instance_metadata.get("_runtime_bas_body_model") or runtime_model
             scene_identity = classify_scene_model(runtime_model, getattr(instance, "source_ref", None))
             first_model = first_model or runtime_model
             try:
@@ -244,6 +245,7 @@ class ViewportSceneModelMixin:
             node.position = scene_position
             node.rotation = scene_rotation
             node._gr_scale = scene_scale
+            setattr(node, "_gr_runtime_source_model_id", id(animation_source_model))
             setattr(node, "_gr_scene_object_id", instance.id)
             setattr(node, "_gr_scene_import_id", import_id)
             setattr(node, "_gr_scene_object_root", True)
@@ -273,7 +275,7 @@ class ViewportSceneModelMixin:
             # Preserve authored MDL node names for animations, skin bone maps,
             # and qBone/tBone rows while keeping scene placement as metadata.
             self._tag_scene_object_nodes(node, instance.id, node, import_id=import_id, identity=scene_identity)
-            self._tag_scene_source_indices(node, runtime_model)
+            self._tag_scene_source_indices(node, animation_source_model)
             root.children.append(node)
         if not root.children:
             return None

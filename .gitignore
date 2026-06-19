@@ -79,6 +79,7 @@ game_data/
 !/tests/test_animation_export_slot_gate.py
 !/tests/test_aurora_animation_controller_semantics.py
 !/tests/test_mdl_animation_override_roundtrip.py
+!/tests/test_sequence_multichar_runtime.py
 !/tests/test_ue_fbx_source_import.py
 !/tests/test_retarget_mapping_profile.py
 !/tests/test_retarget_reference_pose.py

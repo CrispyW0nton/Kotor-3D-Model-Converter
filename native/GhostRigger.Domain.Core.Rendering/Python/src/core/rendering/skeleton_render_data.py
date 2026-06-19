@@ -179,10 +179,10 @@ def _cached_world_position_resolver(anim_pose=None):
         return lambda node: _node_world_position(node, None)
     try:
         from src.core.geometry.model_data import _quat_mul, _quat_normalize_bind, _quat_rotate
+        from src.core.rendering.mesh_render_data import _pose_node_for_transform
     except Exception:
         return lambda node: _node_world_position(node, anim_pose)
 
-    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
     cache: dict[int, tuple[tuple[float, float, float], tuple[float, float, float, float]]] = {}
     visiting: set[int] = set()
 
@@ -198,7 +198,7 @@ def _cached_world_position_resolver(anim_pose=None):
         visiting.add(node_id)
         parent = getattr(node, "parent", None)
         parent_pos, parent_rot = world_transform(parent)
-        pose = pose_nodes.get(str(getattr(node, "name", "") or "").lower())
+        pose = _pose_node_for_transform(node, anim_pose)
         if pose is not None:
             pos = getattr(pose, "position", getattr(node, "position", (0.0, 0.0, 0.0)))
             rot = getattr(pose, "rotation", getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
@@ -314,17 +314,21 @@ def cpu_skin_vbo_arrays(
     try:
         import numpy as np
         from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
+        from src.core.rendering.mesh_render_data import animation_pose_for_node
     except Exception:
         return positions, normals
 
     source_model = _skinning_palette_model_for_node(node, model)
     if source_model is None:
         return positions, normals
+    node_anim_pose = animation_pose_for_node(node, anim_pose) if anim_pose is not None else None
+    if node_anim_pose is None and not is_bas_attachment:
+        return positions, normals
     try:
         uploader = _cached_matrix_palette_uploader(source_model, MAX_BONES, MatrixPaletteUploader)
-        uploader.compute_skin_node_palette(node, anim_pose)
+        uploader.compute_skin_node_palette(node, node_anim_pose)
         palette = uploader.as_numpy_array()
-        palette = bas_attachment_root_local_skin_palette(node, palette, anim_pose)
+        palette = bas_attachment_root_local_skin_palette(node, palette, node_anim_pose)
         if palette is None or len(palette) == 0:
             return positions, normals
 
@@ -529,18 +533,22 @@ def cpu_skin_positions(node, positions, skinning: SkinningArrays, anim_pose, mod
     try:
         import numpy as np
         from src.core.animation.gpu_skinning import MatrixPaletteUploader, MAX_BONES
+        from src.core.rendering.mesh_render_data import animation_pose_for_node
     except Exception:
         return positions
 
     source_model = model or _root_model_from_node(node)
     if source_model is None:
         return positions
+    node_anim_pose = animation_pose_for_node(node, anim_pose)
+    if node_anim_pose is None:
+        return positions
     try:
         uploader = MatrixPaletteUploader(max_bones=MAX_BONES)
         uploader.build_inverse_bind_pose(source_model)
         if anim_base_pose is not None:
             uploader.set_bind_pose_from_anim(anim_base_pose)
-        uploader.compute_skin_node_palette(node, anim_pose)
+        uploader.compute_skin_node_palette(node, node_anim_pose)
         palette = uploader.as_numpy_array()
         if palette is None or len(palette) == 0:
             return positions
@@ -634,6 +642,7 @@ def _node_world_position(node, anim_pose=None) -> tuple[float, float, float]:
 def _animated_world_position(node, anim_pose) -> tuple[float, float, float]:
     try:
         from src.core.geometry.model_data import _quat_mul, _quat_normalize_bind, _quat_rotate
+        from src.core.rendering.mesh_render_data import _pose_node_for_transform
     except Exception:
         return _node_world_position(node, None)
 
@@ -651,9 +660,8 @@ def _animated_world_position(node, anim_pose) -> tuple[float, float, float]:
 
     wx = wy = wz = 0.0
     parent_orientation = [0.0, 0.0, 0.0, 1.0]
-    pose_nodes = getattr(anim_pose, "nodes", {}) or {}
     for chain_node in chain:
-        pose = pose_nodes.get(str(getattr(chain_node, "name", "") or "").lower())
+        pose = _pose_node_for_transform(chain_node, anim_pose)
         if pose is not None:
             pos = getattr(pose, "position", getattr(chain_node, "position", (0.0, 0.0, 0.0)))
             rot = getattr(pose, "rotation", getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))

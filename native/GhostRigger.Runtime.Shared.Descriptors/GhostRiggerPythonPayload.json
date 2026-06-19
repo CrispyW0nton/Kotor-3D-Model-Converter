@@ -21,13 +21,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "7eba0e2f10f5348305eafb64e8ad3c2b74a4658ce6ed26fb4e49a331708259b1"
+            "sha256": "5cd1fa04f32bc134fb66eb529fdb9a2ca3c8b199f328de32d51a682f482a9f60"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",
             "source_path": "src/core/rendering/skeleton_render_data.py",
             "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
-            "sha256": "bd641d24cd96058659311383fcf295880702c59e03f87e204c3410d02470965d"
+            "sha256": "d5e563da0c1435b38a8795d5a94fe9f2f10992ba5afcbaa5de67bcb4de02a5c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT",

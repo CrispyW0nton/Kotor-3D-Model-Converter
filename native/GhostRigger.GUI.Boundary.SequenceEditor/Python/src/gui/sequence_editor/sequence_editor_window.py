@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -768,16 +769,29 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             return False
         length = float(entry.get("length", 0.0) or 0.0)
         duration_frames = length * float(self.sequence.frame_rate or 24.0) if length > 0.0 else float(self.sequence.frame_rate or 24.0)
+        binding = self.sequence.binding_by_id(getattr(track, "parent_binding_id", ""))
+        character_instance_id = ""
+        if binding is not None:
+            character_instance_id = str(
+                getattr(binding, "metadata", {}).get("character_instance_id")
+                or getattr(binding, "target_object_id", "")
+                or getattr(binding, "binding_id", "")
+            )
         track.add_animation_key(
             self.sequence.current_frame,
             entry["name"],
+            character_instance_id=character_instance_id,
+            source_clip_id=str(entry.get("source_clip_id") or entry.get("source") or entry["name"]),
             source=entry.get("source", ""),
             source_type=entry.get("source_type", ""),
             source_model_name=entry.get("source_model_name", ""),
             length=length,
             duration_frames=duration_frames,
+            source_in_seconds=0.0,
+            source_out_seconds=length,
             loop=False,
             blend_mode=blend_mode,
+            layer_mode=blend_mode,
             mask=mask,
             priority=priority,
             select=True,
@@ -789,6 +803,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _play_from_current_animation_clip(self) -> None:
         if self.sequence is None:
             return
+        self._stop_animation_browser_preview_for_sequence()
         self._set_preview_playback_active(True)
         if not self.playback.playing:
             self.playback.play()
@@ -884,13 +899,19 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
             manager = getter() if callable(getter) else getattr(self.main_window, "resource_manager", None)
             if manager is not None:
                 SuperModelResolver.configure(manager)
-            engine = AnimationEngine(model)
-            rows = engine.list_all_animations()
+            game = self._animation_game_for_object(obj, model)
+            supermodel = self._animation_supermodel_for_object(model)
+            with self._animation_resolution_context_for_model(model, game, supermodel):
+                engine = AnimationEngine(model)
+                rows = engine.list_all_animations()
+            filter_entries = getattr(self.main_window, "_filter_animation_browser_entries", None)
+            if callable(filter_entries):
+                rows = list(filter_entries(model, rows))
         except Exception:
             rows = []
         entries: list[dict[str, Any]] = []
         seen: set[str] = set()
-        game = str(getattr(self.main_window, "_current_game", "") or getattr(model, "game", "") or "")
+        game = self._animation_game_for_object(obj, model)
         for row in rows:
             name = str(row.get("name") if isinstance(row, dict) else row[0] if row else "").strip()
             if not name or name.lower() in seen:
@@ -905,11 +926,83 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                     "name": name,
                     "source": source,
                     "source_type": source_type,
+                    "source_model_name": str(row.get("source_model_name", source) if isinstance(row, dict) else ""),
                     "length": length,
                     "label": animation_row_label(name, inherited=inherited, source=source, game=game),
                 }
             )
         return entries
+
+    def _animation_game_for_object(self, obj, model) -> str:
+        ref = getattr(obj, "source_ref", None)
+        value = str(getattr(ref, "game", "") or "").upper()
+        if value:
+            return value
+        getter = getattr(self.main_window, "_animation_inheritance_game", None)
+        if callable(getter):
+            try:
+                value = str(getter(model) or "").upper()
+                if value:
+                    return value
+            except Exception:
+                pass
+        infer = getattr(self.main_window, "_infer_game_from_model", None)
+        if callable(infer):
+            try:
+                value = str(infer(model) or "").upper()
+                if value:
+                    return value
+            except Exception:
+                pass
+        game = getattr(model, "game_version", None)
+        try:
+            value = str(game.value if hasattr(game, "value") else game or "").upper()
+        except Exception:
+            value = ""
+        return "K2" if "K2" in value else str(getattr(self.main_window, "_current_game", "") or "K1").upper()
+
+    def _animation_supermodel_for_object(self, model) -> str:
+        getter = getattr(self.main_window, "_animation_inheritance_supermodel", None)
+        if callable(getter):
+            try:
+                value = str(getter(model) or "").strip()
+                if value:
+                    return value
+            except Exception:
+                pass
+        return str(getattr(model, "supermodel", "") or "").strip()
+
+    @contextmanager
+    def _animation_resolution_context_for_model(self, model, game: str, supermodel: str = ""):
+        owner_context = getattr(self.main_window, "_animation_resolution_context", None)
+        if callable(owner_context):
+            with owner_context(model, game, supermodel):
+                yield
+            return
+        had_game_version = hasattr(model, "game_version")
+        original_game_version = getattr(model, "game_version", None)
+        original_supermodel = getattr(model, "supermodel", None)
+        try:
+            apply_game = getattr(self.main_window, "_apply_animation_resolution_game", None)
+            if callable(apply_game):
+                apply_game(model, game)
+            else:
+                game = str(game or "").upper()
+                if game in {"K1", "K2"}:
+                    try:
+                        from src.core.geometry.model_data import GameVersion
+
+                        model.game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+                    except Exception:
+                        pass
+            if supermodel:
+                model.supermodel = supermodel
+            yield
+        finally:
+            if original_supermodel is not None or hasattr(model, "supermodel"):
+                model.supermodel = original_supermodel
+            if had_game_version:
+                model.game_version = original_game_version
 
     def _animation_model_for_object(self, obj):
         candidates = [
@@ -1058,11 +1151,45 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
     def _toggle_play(self) -> None:
         self.playback.toggle_play()
         self.transport.set_playing(self.playback.playing)
+        if self.playback.playing:
+            self._stop_animation_browser_preview_for_sequence()
         self._set_preview_playback_active(self.playback.playing)
         if self.playback.playing:
             self._play_timer.start()
         else:
             self._play_timer.stop()
+
+    def _stop_animation_browser_preview_for_sequence(self) -> None:
+        main_window = getattr(self, "main_window", None)
+        if main_window is None:
+            return
+        timer = getattr(main_window, "_animation_timer", None)
+        if timer is not None and hasattr(timer, "stop"):
+            try:
+                timer.stop()
+            except Exception:
+                pass
+        for attr, value in (
+            ("_animation_last_tick", None),
+            ("_animation_status_last_update", 0.0),
+        ):
+            try:
+                setattr(main_window, attr, value)
+            except Exception:
+                pass
+        engine = getattr(main_window, "_animation_engine", None)
+        if engine is not None and hasattr(engine, "stop"):
+            try:
+                engine.stop()
+            except Exception:
+                pass
+        panel = getattr(main_window, "animations_panel", None)
+        info = getattr(panel, "info", None)
+        if info is not None and hasattr(info, "setPlainText"):
+            try:
+                info.setPlainText("Animation Browser preview paused for Sequence playback.")
+            except Exception:
+                pass
 
     def _set_preview_playback_active(self, active: bool) -> None:
         viewport = self._preview_viewport()

@@ -222,6 +222,17 @@ class ViewportHistoryAnimationMixin:
         self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
         self._request_render(fast=True, reason="animation pose changed", animation=True, overlay=True, hud=True)
 
+    def set_character_animation_pose(self, character_instance_id: str, pose, name: str = "", time: float = 0.0, length: float = 0.0) -> None:
+        setter = getattr(self._renderer, "set_character_animation_pose", None)
+        if callable(setter):
+            setter(character_instance_id, pose, name=name, time=time, length=length)
+        else:
+            self._renderer.set_animation_pose(pose, name=name, time=time, length=length)
+        if pose is not None:
+            self._clear_mesh_hover(request=False, reason="sequence animation pose active")
+        self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
+        self._request_render(fast=True, reason="sequence character pose changed", animation=True, overlay=True, hud=True)
+
     def set_animation_playback_active(self, active: bool, reason: str = "animation playback") -> None:
         self._frame_governor.set_animation_playing(bool(active), reason)
         if active:
@@ -233,6 +244,15 @@ class ViewportHistoryAnimationMixin:
         self._frame_governor.set_animation_playing(False)
         self._fast_frame_until = 0.0
         self._request_render(reason="animation pose cleared", scene=True, overlay=True, hud=True)
+
+    def clear_character_animation_pose(self, character_instance_id: str) -> None:
+        clearer = getattr(self._renderer, "clear_character_animation_pose", None)
+        if callable(clearer):
+            clearer(character_instance_id)
+        else:
+            self._renderer.set_animation_pose(None)
+        self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
+        self._request_render(reason="sequence character pose cleared", animation=True, overlay=True, hud=True)
 
     def load_walkmesh(self, wok_data_or_path, world_offset=(0.0, 0.0, 0.0)) -> None:
         self._renderer.load_walkmesh(wok_data_or_path, world_offset)

@@ -3605,6 +3605,13 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     root.children.append(skin)
     skin.parent = root
     model = KotorModel(name="N_Bith", root_node=root)
+    body_root = ModelNode(name="N_Bith", flags=int(NodeFlags.HEADER), position=(9.0, 8.0, 7.0))
+    body_head_bone = ModelNode(name="head_g", flags=int(NodeFlags.HEADER))
+    body_skin = ModelNode(name="Head", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN))
+    body_root.children.extend([body_head_bone, body_skin])
+    body_head_bone.parent = body_root
+    body_skin.parent = body_root
+    body_model = KotorModel(name="N_Bith", root_node=body_root)
 
     fake_viewport = SimpleNamespace()
     fake_viewport._tag_scene_object_nodes = MethodType(QtViewportWidget._tag_scene_object_nodes, fake_viewport)
@@ -3615,7 +3622,7 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
         id="scene-object-1",
         name="Bith Actor",
         visible=True,
-        metadata={"_runtime_model": model, "scene_import_id": "import-1"},
+        metadata={"_runtime_model": model, "_runtime_bas_body_model": body_model, "scene_import_id": "import-1"},
         transform=SimpleNamespace(position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0)),
     )
 
@@ -3629,6 +3636,8 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert getattr(placed_root, "_gr_scene_gpu_transform") is True
     assert getattr(placed_root, "_gr_scene_object_name") == "Bith Actor"
     assert getattr(placed_root, "_gr_scene_import_id") == "import-1"
+    assert getattr(placed_root, "_gr_runtime_source_model_id") == id(body_model)
+    assert getattr(placed_skin, "_gr_source_model_id") == id(body_model)
     assert getattr(placed_root, "_gr_scene_node_key") == "import-1:n_bith"
     assert getattr(placed_skin, "_gr_scene_node_key") == "import-1:head"
     assert getattr(placed_root, "_gr_scene_animation_kind") in {"skeletal", "skeletal_static"}
@@ -3645,6 +3654,58 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._model_node_count == 3
     uploader.compute_skin_node_palette(placed_skin, SimpleNamespace(nodes={}))
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
+def test_scene_skin_palette_keeps_dragged_root_source_relative() -> None:
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene_root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+    model_root = ModelNode(
+        name="N_Actor",
+        flags=int(NodeFlags.HEADER),
+        parent=scene_root,
+        position=(30.0, -4.0, 1.5),
+    )
+    pelvis = ModelNode(name="pelvis_g", flags=int(NodeFlags.HEADER), parent=model_root, position=(0.0, 1.0, 0.0))
+    skin = ModelNode(
+        name="body",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
+        parent=model_root,
+    )
+    skin.bone_map = ["N_Actor", "pelvis_g"]
+    scene_root.children = [model_root]
+    model_root.children = [pelvis, skin]
+    model_root._gr_scene_object_root = True
+    model_root._gr_scene_gpu_transform = True
+    model_root._gr_scene_source_position = (9.0, 8.0, 7.0)
+
+    model = KotorModel(name="scene", root_node=scene_root)
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+
+    bind_root = uploader._world_pose_matrix("n_actor", {}, {})
+    bind_pelvis = uploader._world_pose_matrix("pelvis_g", {}, {})
+    assert bind_root[0][3] == pytest.approx(0.0)
+    assert bind_root[1][3] == pytest.approx(0.0)
+    assert bind_root[2][3] == pytest.approx(0.0)
+    assert bind_pelvis[1][3] == pytest.approx(1.0)
+
+    pose = SimpleNamespace(
+        nodes={
+            "n_actor": SimpleNamespace(position=(11.0, 8.0, 7.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "pelvis_g": SimpleNamespace(position=(0.0, 1.5, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        }
+    )
+    pose_root = uploader._world_pose_matrix("n_actor", pose.nodes, {})
+    pose_pelvis = uploader._world_pose_matrix("pelvis_g", pose.nodes, {})
+
+    assert pose_root[0][3] == pytest.approx(2.0)
+    assert pose_root[1][3] == pytest.approx(0.0)
+    assert pose_root[2][3] == pytest.approx(0.0)
+    assert pose_pelvis[0][3] == pytest.approx(2.0)
+    assert pose_pelvis[1][3] == pytest.approx(1.5)
+    assert pose_pelvis[2][3] == pytest.approx(0.0)
 
 
 def test_kmax_scene_manager_records_import_identity_and_model_classification() -> None:
@@ -3937,10 +3998,15 @@ def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
 
     authored_pos, _authored_rot = _scene_authored_world_transform(child)
     scene_mat = _scene_gpu_model_matrix(child)
+    child.parent = None
+    child._gr_scene_object_root_ref = root
+    scene_mat_from_ref = _scene_gpu_model_matrix(child)
 
     assert authored_pos == pytest.approx((11.0, 8.0, 7.0))
     assert scene_mat[0, 3] == pytest.approx(100.0)
     assert scene_mat[0, 0] == pytest.approx(3.0)
+    assert scene_mat_from_ref[0, 3] == pytest.approx(100.0)
+    assert scene_mat_from_ref[0, 0] == pytest.approx(3.0)
 
 
 def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
@@ -6738,7 +6804,7 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
     assert animated_row.source_revision[-1] == 1
 
 
-def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
+def test_wgpu_animation_queue_key_uses_pose_revision() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
@@ -6748,13 +6814,25 @@ def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
     renderer._active_textures = {}
     options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)
 
-    renderer._active_anim_pose = SimpleNamespace(time=0.1)
+    renderer._active_anim_pose = SimpleNamespace(
+        time=0.1,
+        _gr_animation_name="walk",
+        _gr_animation_source_model_id=101,
+        _gr_animation_scene_object_id="scene-a",
+        _gr_animation_scene_import_id="import-a",
+    )
     first = renderer._render_queue_revision_key(
         options,
         force_untextured=False,
         force_no_lightmaps=True,
     )
-    renderer._active_anim_pose = SimpleNamespace(time=0.6)
+    renderer._active_anim_pose = SimpleNamespace(
+        time=0.6,
+        _gr_animation_name="walk",
+        _gr_animation_source_model_id=101,
+        _gr_animation_scene_object_id="scene-a",
+        _gr_animation_scene_import_id="import-a",
+    )
     second = renderer._render_queue_revision_key(
         options,
         force_untextured=False,
@@ -6767,7 +6845,7 @@ def test_wgpu_animation_queue_key_uses_mode_not_pose_time() -> None:
         force_no_lightmaps=True,
     )
 
-    assert first == second
+    assert first != second
     assert first != stopped
 
 
@@ -7936,6 +8014,113 @@ def test_sequence_frame_range_edit_keeps_playback_end_tracking_sequence_end() ->
 
     assert sequence.playback_start_frame == 10
     assert sequence.playback_end_frame == 24
+
+
+def test_sequence_animation_pose_tags_bound_scene_object() -> None:
+    from src.sequence.sequence_evaluator import SequenceEvaluator
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        metadata={
+            "_runtime_model": runtime_model,
+            "scene_import_id": "import-malak",
+        },
+    )
+    scene_manager = SimpleNamespace(get_scene_objects=lambda: [scene_object])
+    viewport = SimpleNamespace(parent=lambda: None)
+    evaluator = SequenceEvaluator(viewport, owner=SimpleNamespace(scene_manager=scene_manager))
+    pose = SimpleNamespace()
+    binding = SimpleNamespace(target_object_id="scene-malak")
+
+    evaluator._tag_animation_pose(pose, runtime_model, "walk", binding=binding, obj=scene_object, game="K1")
+
+    assert pose._gr_animation_source_model_id == id(runtime_model)
+    assert pose._gr_animation_source_model_name == "N_DarthMalak"
+    assert pose._gr_animation_scene_object_id == "scene-malak"
+    assert pose._gr_animation_scene_import_id == "import-malak"
+    assert pose._gr_animation_name == "walk"
+    assert pose._gr_animation_game == "K1"
+
+
+def test_sequence_editor_lists_inherited_body_clips_with_bound_object_game(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from src.core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+
+    observed_contexts = []
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            game = getattr(self.model, "game_version", "")
+            game_tag = str(game.value if hasattr(game, "value") else game or "").upper()
+            observed_contexts.append((game_tag, str(getattr(self.model, "supermodel", "") or "")))
+            if game_tag in {"1", "K1"} and str(getattr(self.model, "supermodel", "") or "") == "S_Female03":
+                return [
+                    {
+                        "name": "walk",
+                        "source": "S_Female03",
+                        "source_type": "inherited",
+                        "inherited": True,
+                        "length": 1.0,
+                    }
+                ]
+            return [{"name": "pause1", "source": "P_BastilaBB", "source_type": "local", "length": 0.5}]
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+
+    body = KotorModel(name="P_BastilaBB", root_node=ModelNode(name="p_bastilabb"))
+    body.supermodel = "S_Female03"
+    body.game_version = None
+    scene_object = SimpleNamespace(
+        id="bastila-body",
+        source_ref=SimpleNamespace(game="K1"),
+        metadata={"_runtime_model": body},
+    )
+    binding = SimpleNamespace(target_object_id="bastila-body", display_name="P_BastilaBB")
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.main_window = SimpleNamespace(_current_game="")
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+
+    entries = editor._character_animation_entries(binding)
+
+    assert observed_contexts == [("1", "S_Female03")]
+    assert [entry["name"] for entry in entries] == ["walk"]
+    assert entries[0]["source_type"] == "inherited"
+    assert entries[0]["source_model_name"] == "S_Female03"
+    assert body.game_version is None
+
+
+def test_sequence_editor_playback_stops_animation_browser_preview() -> None:
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+
+    calls: list[str] = []
+    timer = SimpleNamespace(stop=lambda: calls.append("timer_stop"))
+    engine = SimpleNamespace(stop=lambda: calls.append("engine_stop"))
+    info = SimpleNamespace(setPlainText=lambda text: calls.append(text))
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.main_window = SimpleNamespace(
+        _animation_timer=timer,
+        _animation_engine=engine,
+        _animation_last_tick=123.0,
+        _animation_status_last_update=9.0,
+        animations_panel=SimpleNamespace(info=info),
+    )
+
+    editor._stop_animation_browser_preview_for_sequence()
+
+    assert calls == [
+        "timer_stop",
+        "engine_stop",
+        "Animation Browser preview paused for Sequence playback.",
+    ]
+    assert editor.main_window._animation_last_tick is None
+    assert editor.main_window._animation_status_last_update == 0.0
 
 
 def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable() -> None:
@@ -10483,6 +10668,10 @@ def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
         ROOT
         / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
     ).read_text(encoding="utf-8")
+    chrome_source = (
+        ROOT
+        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/shared/window_chrome.py"
+    ).read_text(encoding="utf-8")
 
     assert '"sequence_editor": (1180, 720)' in layout_source
     assert '"diagnostics": (760, 560)' in layout_source
@@ -10495,6 +10684,10 @@ def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
     assert 'self._show_workspace_dock("sequence_editor")' in workflow_source
     assert 'self._show_workspace_dock("diagnostics")' in diagnostics_source
     assert 'key in {"output_log", "python_terminal", "sequence_editor"}' in default_area_source
+    assert "if checked and callable(show_callback):" in default_area_source
+    assert "show_callback()" in default_area_source
+    assert "Sequence Editor (Window)" not in chrome_source
+    assert "sequence_editor_window_action" not in chrome_source
 
 
 def test_main_window_bottom_area_uses_detachable_log_and_terminal_docks() -> None:
@@ -10870,6 +11063,67 @@ def test_scene_animation_pose_only_drives_matching_scene_object() -> None:
     assert matrix_b[0, 3] == pytest.approx(20.0)
     assert matrix_b[1, 3] == pytest.approx(1.0)
 
+    copied_root = SimpleNamespace(
+        name="root",
+        index=0,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_runtime_source_model_id=101,
+    )
+    copied_child = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=copied_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+    )
+    copied_root.children = [copied_child]
+
+    assert animation_pose_applies_to_node(copied_child, pose)
+    assert _pose_node_for_transform(copied_child, pose) is pose.nodes["shared_bone"]
+
+    attachment_root = SimpleNamespace(
+        name="head_root",
+        index=2,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=copied_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_bas_attachment_source_model_id=303,
+    )
+    attachment_child = SimpleNamespace(
+        name="head_g",
+        index=3,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=attachment_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+    )
+    attachment_root.children = [attachment_child]
+    copied_root.children.append(attachment_root)
+    attachment_pose = SimpleNamespace(
+        _gr_animation_scene_object_id="obj-a",
+        _gr_animation_scene_import_id="import-a",
+        _gr_animation_source_model_id=303,
+        nodes={"head_g": SimpleNamespace(position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0))},
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    assert animation_pose_applies_to_node(attachment_child, attachment_pose)
+    assert _pose_node_for_transform(attachment_child, attachment_pose) is attachment_pose.nodes["head_g"]
+
 
 def test_animation_pose_source_tags_selected_scene_object() -> None:
     from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
@@ -10929,6 +11183,50 @@ def test_scene_root_animation_pose_preserves_world_placement() -> None:
 
     assert matrix[0, 3] == pytest.approx(10.0)
     assert matrix[1, 3] == pytest.approx(2.0)
+
+
+def test_scene_animation_pose_cache_tracks_dragged_nonskin_children() -> None:
+    from src.core.geometry.model_data import ModelNode
+    from src.core.rendering.mesh_render_data import node_world_matrix
+
+    scene_root = ModelNode(name="scene_root")
+    model_root = ModelNode(name="N_DarthMalak", parent=scene_root, position=(10.0, 0.0, 0.0))
+    head = ModelNode(name="head_g", parent=model_root, position=(0.0, 0.0, 1.5))
+    eye = ModelNode(name="f_rlweye_g", parent=head, position=(0.18, -0.05, 0.07))
+    scene_root.children = [model_root]
+    model_root.children = [head]
+    head.children = [eye]
+
+    model_root._gr_scene_object_root = True
+    model_root._gr_scene_source_position = (0.08, 0.0, 0.0)
+    model_root._gr_source_model_id = 101
+    head._gr_source_model_id = 101
+    eye._gr_source_model_id = 101
+
+    pose = SimpleNamespace(
+        _gr_animation_source_model_id=101,
+        nodes={
+            "n_darthmalak": SimpleNamespace(position=(0.08, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "head_g": SimpleNamespace(position=(0.0, 0.0, 1.75), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "f_rlweye_g": SimpleNamespace(position=(0.2, -0.05, 0.1), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    before = node_world_matrix(eye, anim_pose=pose)
+    model_root.position = (12.5, -1.0, 0.25)
+    after = node_world_matrix(eye, anim_pose=pose)
+
+    assert after[0, 3] == pytest.approx(before[0, 3] + 2.5)
+    assert after[1, 3] == pytest.approx(before[1, 3] - 1.0)
+    assert after[2, 3] == pytest.approx(before[2, 3] + 0.25)
+
+    pose.time = 0.5
+    pose.nodes["f_rlweye_g"].position = (0.45, -0.05, 0.1)
+    next_frame = node_world_matrix(eye, anim_pose=pose)
+
+    assert next_frame[0, 3] == pytest.approx(after[0, 3] + 0.25)
 
 
 def test_quinn_bone_map_loads_as_unreal_target_model() -> None:

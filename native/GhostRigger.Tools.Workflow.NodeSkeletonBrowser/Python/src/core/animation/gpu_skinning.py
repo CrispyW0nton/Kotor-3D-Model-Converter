@@ -310,6 +310,34 @@ def _mat4_rotation_only_py(m: List[List[float]]) -> List[List[float]]:
     ]
 
 
+def _scene_root_source_relative_position(node, position, *, pose_space: bool) -> tuple[float, float, float]:
+    """Return scene-object root position in source-model space.
+
+    KMAX scene roots store the current object placement on ``node.position`` and
+    keep the imported MDL root's authored position in ``_gr_scene_source_position``.
+    Skin palettes must not bake the scene placement; ModernGL applies that once
+    through the per-draw model matrix.  For a scene root, bind pose is therefore
+    zero and animated pose is the clip's authored root delta from the source root.
+    """
+
+    try:
+        px, py, pz = (float(position[0]), float(position[1]), float(position[2]))
+    except Exception:
+        px, py, pz = 0.0, 0.0, 0.0
+    if not bool(getattr(node, "_gr_scene_object_root", False)):
+        return (px, py, pz)
+    try:
+        sx, sy, sz = (
+            float(v)
+            for v in tuple(getattr(node, "_gr_scene_source_position", (px, py, pz)) or (px, py, pz))[:3]
+        )
+    except Exception:
+        sx, sy, sz = px, py, pz
+    if not pose_space:
+        return (0.0, 0.0, 0.0)
+    return (px - sx, py - sy, pz - sz)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  BoneMatrix  – one palette entry
 # ─────────────────────────────────────────────────────────────────────────────
@@ -524,6 +552,7 @@ class MatrixPaletteUploader:
             quat = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0))
             if pos is None:  pos = (0.0, 0.0, 0.0)
             if quat is None: quat = (0.0, 0.0, 0.0, 1.0)
+            pos = _scene_root_source_relative_position(node, pos, pose_space=False)
 
             qx, qy, qz, qw = float(quat[0]), float(quat[1]), float(quat[2]), float(quat[3])
             qlen = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
@@ -630,11 +659,11 @@ class MatrixPaletteUploader:
             _world_base_active.add(bone_name_lower)
 
             pn = pose_nodes.get(bone_name_lower)
+            node = self._node_lookup.get(bone_name_lower)
             if pn is not None:
                 p = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
                 q = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
             else:
-                node = self._node_lookup.get(bone_name_lower)
                 if node is not None:
                     p = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
                     q = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
@@ -643,6 +672,8 @@ class MatrixPaletteUploader:
                     _world_base_cache[bone_name_lower] = m
                     _world_base_active.discard(bone_name_lower)
                     return m
+            if node is not None:
+                p = _scene_root_source_relative_position(node, p, pose_space=pn is not None)
 
             qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
             ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
@@ -700,11 +731,11 @@ class MatrixPaletteUploader:
         _active.add(bone_name_lower)
 
         pn = pose_nodes.get(bone_name_lower)
+        node = self._node_lookup.get(bone_name_lower)
         if pn is not None:
             p = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
             q = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
         else:
-            node = self._node_lookup.get(bone_name_lower)
             if node is not None:
                 p = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
                 q = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
@@ -713,6 +744,8 @@ class MatrixPaletteUploader:
                 cache[bone_name_lower] = m
                 _active.discard(bone_name_lower)
                 return m
+        if node is not None:
+            p = _scene_root_source_relative_position(node, p, pose_space=pn is not None)
 
         qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
         ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)
@@ -1165,11 +1198,11 @@ class MatrixPaletteUploader:
 
             # Get animated or bind-pose local transform
             pn = pose_nodes.get(bone_name_lower)
+            node = self._node_lookup.get(bone_name_lower)
             if pn is not None:
                 p = getattr(pn, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
                 q = getattr(pn, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
             else:
-                node = self._node_lookup.get(bone_name_lower)
                 if node is not None:
                     p = getattr(node, 'position', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
                     q = getattr(node, 'rotation', (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
@@ -1178,6 +1211,8 @@ class MatrixPaletteUploader:
                     _world_anim_cache[bone_name_lower] = m
                     _world_anim_active.discard(bone_name_lower)
                     return m
+            if node is not None:
+                p = _scene_root_source_relative_position(node, p, pose_space=pn is not None)
 
             qx, qy, qz, qw = float(q[0]), float(q[1]), float(q[2]), float(q[3])
             ql = math.sqrt(qx*qx + qy*qy + qz*qz + qw*qw)

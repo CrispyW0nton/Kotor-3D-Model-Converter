@@ -81,7 +81,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_GEOMETRY",
             "source_path": "src/core/rendering/frame_core/renderer_geometry.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_geometry.py",
-            "sha256": "b28882dc73d2a02ca2b7fe572743b532305dab015af763e5be0110ea59ff9172"
+            "sha256": "873edb7790bf82ecf2718095d1f0d4233ccee083dddfdc154c652b762e361c51"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_MESHES",
@@ -105,7 +105,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_SETUP",
             "source_path": "src/core/rendering/frame_core/renderer_setup.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_setup.py",
-            "sha256": "8c01fd55656715ee7687d7d093a05c57c603e3d9d6fc306637c0166c7ff66eaf"
+            "sha256": "12317bf3b40ec9262770b15573c8e5852ae53bfa22209c700f7ac378d434f055"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_TEXTURES",
@@ -165,7 +165,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "51fc70788a4dccd7b6b36ded69c5ca450a08d6fd81f019a66d9b563139ffeee1"
+            "sha256": "db072318aa59192452f8ad6530e9518bf4616c9fe07dff9e175543556193bb5b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",
@@ -213,7 +213,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",
             "source_path": "src/core/rendering/skeleton_render_data.py",
             "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
-            "sha256": "bd641d24cd96058659311383fcf295880702c59e03f87e204c3410d02470965d"
+            "sha256": "d5e563da0c1435b38a8795d5a94fe9f2f10992ba5afcbaa5de67bcb4de02a5c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_VIEWPORT_DISPLAY",

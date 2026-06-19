@@ -22,7 +22,7 @@ from .mixin_imports import (
     math,
     np,
 )
-from src.core.rendering.mesh_render_data import _pose_node_for_transform
+from src.core.rendering.mesh_render_data import _pose_node_for_transform, animation_pose_for_node
 from src.math.gpu_math import _scene_authored_world_transform, _scene_gpu_root_for_node
 
 
@@ -691,8 +691,12 @@ class RendererGeometryMixin:
         ):
             return None
 
+        node_anim_pose = animation_pose_for_node(node, self._anim_pose)
+        if node_anim_pose is None:
+            return None
+
         model_id = id(self.model)
-        pose_id = id(self._anim_pose)
+        pose_id = id(node_anim_pose)
         node_id = id(node)
         if (
             self._gpu_parity_skin_model_id == model_id
@@ -721,7 +725,7 @@ class RendererGeometryMixin:
 
         try:
             uploader = self._gpu_parity_skin_uploader
-            uploader.compute_skin_node_palette(node, self._anim_pose)
+            uploader.compute_skin_node_palette(node, node_anim_pose)
             palette = uploader.as_numpy_array()
         except Exception as exc:
             log.debug("GPU-parity overlay skin palette failed for %s: %s", getattr(node, "name", "?"), exc)

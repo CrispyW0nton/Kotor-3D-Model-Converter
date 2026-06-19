@@ -11,6 +11,50 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] T1403 Multi-Character Sequence Runtime Isolation
+
+Owner: LordVaderCW
+Subsystem: Sequence Editor clip instances, layered animation evaluation, renderer pose scoping, and viewport interpolation state
+
+- Added character-scoped sequence runtime state for pose/interpolation caches, root transform ownership, active clip instance IDs, and per-binding skeleton instance IDs.
+- Expanded `CharacterTrack` animation keys into non-destructive clip instances with source clip IDs, character IDs, track IDs, source in/out ranges, clip start/end frames, time scale, playback speed, loop mode, blend durations, layer mode, additive reference settings, weight, mute, and solo flags.
+- Changed sequence evaluation to group active animation clips by character, evaluate each clip instance through a character/clip-specific engine cache, compose base/override/additive layers, and dispatch poses through character-scoped viewport calls instead of the global animation pose setter.
+- Added per-character renderer pose storage plus `ScopedAnimationPoseSet` filtering so matching bone names, skin palettes, skeleton overlays, mesh transforms, and WGPU resources select only the pose owned by the scene object being rendered.
+- Updated the Sequence Editor and timeline resize/move paths so scaling, trimming, and moving clips update only clip instance timing data, never source animation clip metadata.
+- Added focused multi-character sequence regression coverage and a `.gitignore` exception so the test file is tracked.
+- Regenerated native Python payload manifests for the touched Sequence, Rendering, Viewports, Sequence Editor, WGPU, shared renderer contract, runtime descriptor, PyGFX, and D3D12 packages.
+
+Verification:
+- `python -m py_compile tests\test_sequence_multichar_runtime.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_runtime.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\tracks\character_track.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\sequence_runtime.py native\GhostRigger.Tools.Workflow.SequenceEditor\Python\src\sequence\tracks\character_track.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\skeleton_render_data.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_setup.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\frame_core\renderer_geometry.py native\GhostRigger.Runtime.Shared.Descriptors\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Runtime.Shared.Descriptors\Python\src\core\rendering\skeleton_render_data.py native\GhostRigger.Renderer.Shared.Contracts\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Renderer.Backend.D3D12\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Adapters.Rendering.Core\Python\src\adapters\rendering\wgpu_core\resources.py native\GhostRigger.Renderer.Backend.PyGFX\Python\src\adapters\rendering\wgpu_core\resources.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.GUI.Boundary.SequenceEditor\Python\src\gui\sequence_editor\sequence_timeline_widget.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\history_animation.py` passed.
+- `python -m pytest tests\test_sequence_multichar_runtime.py -q` passed (`5 passed`), covering multi-character pose isolation, duplicate/stacked non-destructive clip instances, additive layering, root transform tracks, and scoped bone-name collision protection.
+- Backend MCP validation tools were not available in this session, so no game-file MDL comparison was run; this change avoided MDL parser/loader changes and used focused headless sequence/rendering regressions.
+
+### [2026-06-19] T1403 Scene Animation Preview and Sequencer Dock Repair
+
+Owner: LordVaderCW
+Subsystem: Animation preview playback, KMAX scene viewport composition, and Sequence Editor dock workflow
+
+- Restored animation pose targeting for imported scene-composite models by preserving the runtime source-model id on copied scene roots and resolving source ids through ancestor nodes during renderer-neutral pose filtering.
+- Preserved BAS body source ids when scene-composite runtime models are body/head/attachment previews, and let BAS attachment nodes override inherited body ids with their own source model id.
+- Included the active animation pose identity/time/source metadata in the WGPU render-queue key so cached draw rows are rebuilt for each sampled animation pose.
+- Fixed animated world-transform cache invalidation for dragged scene roots and reused pose objects so non-skinned child meshes such as Malak eye meshes remain attached while an animation is playing.
+- Mirrored Animation Browser pose source tagging in Sequence Editor clip evaluation by stamping sequence poses with the bound scene object id, scene import id, source model id/name, animation name, and game.
+- Aligned the Sequence Editor animation entry lookup with the Animation Browser's game/supermodel resolution context so inherited body clips such as Bastila's `walk` can be added as sequencer clips after previewing.
+- Fixed the lazy Sequence Editor dock toggle so the first button/menu click can create and show the dock instead of reporting it as unmigrated.
+- Removed the redundant direct "Sequence Editor (Window)" action from the Modules menu; the dock remains detachable/promotable through the dock workflow.
+- Updated the native Python payload hashes for the touched Rendering, Sequence, Sequence Editor, Viewports, PyGFX, Adapter Rendering, and Shell modules.
+
+Verification:
+- KotorMCP `compare_model_pipelines(k1, n_darthmalak)` returned `match=True` with 0 diffs; `inspect_mdl` and `inspect_mdl_ghostrigger` both reported 111 nodes for `N_DarthMalak`.
+- `python -m py_compile native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\toolboxes\workspace_docks.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Domain.Core.Rendering\Python\src\core\rendering\mesh_render_data.py native\GhostRigger.Domain.Core.Sequence\Python\src\sequence\sequence_evaluator.py native\GhostRigger.GUI.Boundary.Viewports\Python\src\gui\viewports\viewport_core\widgets\scene_models.py tests\test_core_contracts.py` passed.
+- `pytest tests/test_core_contracts.py::test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinning tests/test_core_contracts.py::test_sequence_and_diagnostics_use_detachable_dock_registry tests/test_core_contracts.py::test_scene_animation_pose_only_drives_matching_scene_object tests/test_core_contracts.py::test_scene_root_animation_pose_preserves_world_placement -q -p no:cacheprovider` passed (`4 passed`) when invoked through `scripts.qa_common.configure_paths()`.
+- `pytest tests/test_core_contracts.py::test_scene_animation_pose_cache_tracks_dragged_nonskin_children tests/test_core_contracts.py::test_sequence_animation_pose_tags_bound_scene_object tests/test_core_contracts.py::test_scene_root_animation_pose_preserves_world_placement tests/test_core_contracts.py::test_scene_animation_pose_only_drives_matching_scene_object tests/test_core_contracts.py::test_animation_pose_source_tags_selected_scene_object -q -p no:cacheprovider` passed (`5 passed`) when invoked through `scripts.qa_common.configure_paths()`.
+- `pytest tests/test_core_contracts.py::test_sequence_editor_lists_inherited_body_clips_with_bound_object_game tests/test_core_contracts.py::test_sequence_animation_pose_tags_bound_scene_object -q` passed (`2 passed`) when invoked through `scripts.qa_common.configure_paths()`.
+- `pytest tests/test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q -p no:cacheprovider` passed (`2 passed`).
+- `MSBuild.exe GhostRigger.sln /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` passed after closing the test app instance that held Debug DLL handles.
+- Visible Debug app checks passed without starting a new `devenv`: `Ctrl+Alt+Q` opened the Sequence Editor dock in the main window; IPC loaded K1 `N_DarthMalak`, the Animation Browser opened, and `walk` played looped from the toolbox with the panel reporting `Playing walk`. A later body-area screenshot diff from the rebuilt Debug app showed 21,888 changed pixels between animation frames, confirming the rendered character pose updates on screen. The rebuilt `GhostRigger.exe` was then driven through IPC to move the walking Malak scene object to `[2, 0, 0]`, capture the viewport with eye meshes still attached, open the Sequence Editor dock, bind Malak, add a `walk` clip, and capture the sequence clip playback active on the viewport.
+- Extended visible IPC sweep coverage across 12 animation-capable fixtures: K1 `N_DarthMalak`, `P_CarthBB`, `P_CarthBBH`, `P_BastilaBB`, `P_BastilaH`, `PMBAM`, `PFBAM`, `P_HK47`, `N_Bith`, `c_turret02`, `L_Astro02`, and K2 `C_DrdAstro`. Final sweep summary `artifacts/animation_fixture_sweep_20260619/sweep_summary_final.json` reports 12 passed, 0 failed; the fixed Bastila body rerun added inherited `walk` as a Sequence Editor clip and captured browser-before, browser-after-move, and sequence playback frames.
+
 ### [2026-06-19] M7/T703 Player Outfit Taxonomy Sweep
 
 Owner: LordVaderCW

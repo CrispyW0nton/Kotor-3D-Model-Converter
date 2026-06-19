@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_EDITOR_WINDOW",
             "source_path": "src/gui/sequence_editor/sequence_editor_window.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_editor_window.py",
-            "sha256": "b28e5ee30b3b116953e19689e21577fb155bf279c4fbe331f6ed5476a9822825"
+            "sha256": "6bf6a3a838c183429501016883f0b1154af43cb401e253a1aa5aecfab0dcedf9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_OUTLINER",
@@ -45,7 +45,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TIMELINE_WIDGET",
             "source_path": "src/gui/sequence_editor/sequence_timeline_widget.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_timeline_widget.py",
-            "sha256": "8f3e91b796c9c19b644cdef32065acf5c4ea2424982b92364676d38ba42840c4"
+            "sha256": "3fd97c3e904bcd0c0b7960caaa5d79c7caada4a9f6a372c8c71b683024e38af7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TOOLBAR",

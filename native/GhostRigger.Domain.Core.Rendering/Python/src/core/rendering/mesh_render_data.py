@@ -62,6 +62,46 @@ class MeshRenderData:
     skinning_warning: str = ""
 
 
+class ScopedAnimationPoseSet:
+    """Renderer-facing collection of independently evaluated character poses."""
+
+    _gr_animation_pose_set = True
+
+    def __init__(self, poses_by_character: dict[str, object] | None = None):
+        self.poses_by_character = {
+            str(character_id): pose
+            for character_id, pose in (poses_by_character or {}).items()
+            if str(character_id) and pose is not None
+        }
+        self.time = max((float(getattr(pose, "time", 0.0) or 0.0) for pose in self.poses_by_character.values()), default=0.0)
+        self.nodes = {}
+
+    def __bool__(self) -> bool:
+        return bool(self.poses_by_character)
+
+    def active_poses(self) -> tuple[object, ...]:
+        return tuple(self.poses_by_character.values())
+
+    def pose_for_node(self, node) -> object | None:
+        if node is None:
+            return None
+        node_object_id = _scene_object_id_for_node(node)
+        if node_object_id:
+            direct = self.poses_by_character.get(node_object_id)
+            if direct is not None:
+                return direct
+        node_import_id = _scene_import_id_for_node(node)
+        if node_import_id:
+            for pose in self.poses_by_character.values():
+                if str(getattr(pose, "_gr_animation_scene_import_id", "") or "") == node_import_id:
+                    return pose
+        node_source_id = _source_model_id_for_node(node)
+        for pose in self.poses_by_character.values():
+            if _animation_pose_matches_node_identity(node, pose, node_object_id=node_object_id, node_import_id=node_import_id, node_source_id=node_source_id):
+                return pose
+        return None
+
+
 def iter_mesh_render_data(
     model,
     *,
@@ -84,9 +124,7 @@ def iter_mesh_render_data(
     for node in nodes:
         if not _node_is_renderable_mesh(node):
             continue
-        node_anim_pose = _bas_attachment_effective_pose_for_node(node, anim_pose)
-        if node_anim_pose is not None and not animation_pose_applies_to_node(node, node_anim_pose):
-            node_anim_pose = None
+        node_anim_pose = _effective_animation_pose_for_node(node, anim_pose)
         try:
             (
                 positions,
@@ -581,12 +619,20 @@ def bas_attachment_palette_model_for_node(node):
 def mesh_model_matrix_for_node(node, *, anim_pose=None):
     """Return the world/model matrix a renderer should apply to one mesh node."""
 
-    anim_pose = _bas_attachment_effective_pose_for_node(node, anim_pose)
+    anim_pose = _effective_animation_pose_for_node(node, anim_pose)
     if bool(getattr(node, "_gr_bas_attachment_layer", False)):
         root = _bas_attachment_root_for_node(node)
         if root is not None and bool(getattr(node, "is_skin", False)):
             return node_world_matrix(root, anim_pose=anim_pose)
     return node_world_matrix(node, anim_pose=anim_pose)
+
+
+def _effective_animation_pose_for_node(node, anim_pose):
+    node_anim_pose = animation_pose_for_node(node, anim_pose)
+    node_anim_pose = _bas_attachment_effective_pose_for_node(node, node_anim_pose)
+    if node_anim_pose is not None and not animation_pose_applies_to_node(node, node_anim_pose):
+        return None
+    return node_anim_pose
 
 
 def _bas_attachment_subtree_nodes(root) -> list:
@@ -1108,6 +1154,9 @@ def _bas_head_attachment_local_pose_node_allowed_name(name: str) -> bool:
 def _pose_node_for_transform(node, anim_pose):
     if node is None or anim_pose is None:
         return None
+    anim_pose = animation_pose_for_node(node, anim_pose)
+    if anim_pose is None:
+        return None
     if not animation_pose_applies_to_node(node, anim_pose):
         return None
     pose_nodes = getattr(anim_pose, "nodes", {}) or {}
@@ -1149,27 +1198,67 @@ def _scene_import_id_for_node(node) -> str:
     return ""
 
 
+def _source_model_id_for_node(node) -> int:
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        for attr in ("_gr_bas_attachment_source_model_id", "_gr_source_model_id", "_gr_runtime_source_model_id"):
+            try:
+                source_id = int(getattr(current, attr, 0) or 0)
+            except Exception:
+                source_id = 0
+            if source_id:
+                return source_id
+        current = getattr(current, "parent", None)
+    return 0
+
+
+def animation_pose_for_node(node, anim_pose):
+    """Return the single character pose allowed to drive ``node``."""
+
+    if node is None or anim_pose is None:
+        return None
+    if bool(getattr(anim_pose, "_gr_animation_pose_set", False)):
+        selector = getattr(anim_pose, "pose_for_node", None)
+        return selector(node) if callable(selector) else None
+    return anim_pose
+
+
 def animation_pose_applies_to_node(node, anim_pose) -> bool:
     """Return whether an animation pose is allowed to drive this runtime node."""
 
     if node is None or anim_pose is None:
         return False
+    scoped_pose = animation_pose_for_node(node, anim_pose)
+    if scoped_pose is not anim_pose:
+        return scoped_pose is not None
+    return _animation_pose_matches_node_identity(node, anim_pose)
+
+
+def _animation_pose_matches_node_identity(
+    node,
+    anim_pose,
+    *,
+    node_object_id: str | None = None,
+    node_import_id: str | None = None,
+    node_source_id: int | None = None,
+) -> bool:
     pose_object_id = str(getattr(anim_pose, "_gr_animation_scene_object_id", "") or "")
     if pose_object_id:
-        node_object_id = _scene_object_id_for_node(node)
+        node_object_id = _scene_object_id_for_node(node) if node_object_id is None else node_object_id
         if node_object_id and node_object_id != pose_object_id:
             return False
     pose_import_id = str(getattr(anim_pose, "_gr_animation_scene_import_id", "") or "")
     if pose_import_id:
-        node_import_id = _scene_import_id_for_node(node)
+        node_import_id = _scene_import_id_for_node(node) if node_import_id is None else node_import_id
         if node_import_id and node_import_id != pose_import_id:
             return False
     try:
         pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
-        node_source_id = int(getattr(node, "_gr_source_model_id", 0) or 0)
     except Exception:
         pose_source_id = 0
-        node_source_id = 0
+    node_source_id = _source_model_id_for_node(node) if node_source_id is None else node_source_id
     if pose_source_id and node_source_id and pose_source_id != node_source_id:
         return False
     return True
@@ -1217,6 +1306,53 @@ def _bas_attachment_local_transform(node, bas_root):
     return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_orientation[:4])
 
 
+def _animated_world_cache_key_from_chain(chain) -> tuple:
+    key_parts = []
+    for chain_node in chain:
+        try:
+            position = tuple(round(float(v), 6) for v in tuple(getattr(chain_node, "position", (0.0, 0.0, 0.0)))[:3])
+        except Exception:
+            position = (0.0, 0.0, 0.0)
+        try:
+            rotation = tuple(round(float(v), 6) for v in tuple(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))[:4])
+        except Exception:
+            rotation = (0.0, 0.0, 0.0, 1.0)
+        try:
+            source_position = tuple(
+                round(float(v), 6)
+                for v in tuple(getattr(chain_node, "_gr_scene_source_position", position))[:3]
+            )
+        except Exception:
+            source_position = position
+        key_parts.append(
+            (
+                id(chain_node),
+                int(getattr(chain_node, "_gr_revision", 0) or 0),
+                bool(getattr(chain_node, "_gr_scene_object_root", False)),
+                position,
+                source_position,
+                rotation,
+            )
+        )
+    return tuple(key_parts)
+
+
+def _animated_pose_cache_stamp(anim_pose) -> tuple:
+    def _stamp_value(name: str, fallback=0.0):
+        try:
+            return round(float(getattr(anim_pose, name, fallback) or fallback), 6)
+        except Exception:
+            return fallback
+
+    return (
+        _stamp_value("time"),
+        _stamp_value("current_time"),
+        _stamp_value("_gr_animation_time"),
+        int(getattr(anim_pose, "_gr_revision", 0) or 0),
+        str(getattr(anim_pose, "_gr_animation_name", "") or ""),
+    )
+
+
 def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
     import math
 
@@ -1234,10 +1370,6 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
             setattr(anim_pose, "_gr_mesh_world_cache", cache)
         except Exception:
             pass
-    cached = cache.get(id(node))
-    if cached is not None:
-        return cached
-
     chain = []
     current = node
     visited: set[int] = set()
@@ -1249,6 +1381,10 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
         chain.append(current)
         current = getattr(current, "parent", None)
     chain.reverse()
+    cache_key = (id(node), _animated_pose_cache_stamp(anim_pose), _animated_world_cache_key_from_chain(chain))
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     wx = wy = wz = 0.0
     parent_orientation = [0.0, 0.0, 0.0, 1.0]
@@ -1295,7 +1431,7 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
             scale = 1.0 / math.sqrt(length_sq)
             wo = tuple(float(v) * scale for v in wo[:4])
         result = ((float(wx), float(wy), float(wz)), tuple(float(v) for v in wo[:4]))
-    cache[id(node)] = result
+    cache[cache_key] = result
     return result
 
 

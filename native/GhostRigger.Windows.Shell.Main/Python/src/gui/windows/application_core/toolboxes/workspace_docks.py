@@ -26,8 +26,12 @@ class WorkspaceDockMixin:
     def _toggle_dock_action(self, key: str, checked: bool, show_callback) -> None:
         dock = getattr(self, "_detachable_panels", {}).get(key)
         if dock is None:
-            self._not_migrated(key)
-            self._sync_dock_toggle_action(key, False)
+            if checked and callable(show_callback):
+                show_callback()
+                dock = getattr(self, "_detachable_panels", {}).get(key)
+            if dock is None:
+                self._not_migrated(key)
+                self._sync_dock_toggle_action(key, False)
             return
         if checked:
             show_callback()
