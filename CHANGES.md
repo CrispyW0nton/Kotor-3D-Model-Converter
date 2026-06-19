@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Wires Outliner Camera and Light Authoring
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / outliner authoring actions
+Intersects: KMAP outliner context actions and authored camera/light placement services.
+
+- Wired the advertised outliner `Add Camera` action to the existing authored gameplay placement service so cameras can be added as real Map Studio camera markers instead of logging an experimental hook.
+- Wired the advertised outliner `Add Light` action to the authored room-light service so a modder can add a default room light from the project tree and then tune it in Map Studio controls.
+- Kept creation logic in the existing core/module services; the Level Editor only routes actions, updates context text, and refreshes UI state.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_camera_light`; `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-19] Map Studio Clarifies Outliner Selection Workflow
 
 Owner: LordVaderCW

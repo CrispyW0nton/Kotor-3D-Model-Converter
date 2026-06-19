@@ -440,6 +440,27 @@ def test_t2600_map_studio_outliner_explains_selection_editing_workflow() -> None
         assert "Right-click for Rename, Duplicate, Delete, Focus, and Validate actions" in source
 
 
+def test_t2600_map_studio_outliner_add_camera_and_light_are_wired_to_services() -> None:
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    assert "def add_map_studio_camera" in window_source
+    assert "def add_map_studio_room_light" in window_source
+    assert '"add_camera": "Add Camera"' in window_source
+    assert '"add_light": "Add Light"' in window_source
+    assert 'if action == "Add Camera":' in window_source
+    assert 'self.add_map_studio_camera()' in window_source
+    assert 'if action == "Add Light":' in window_source
+    assert 'self.add_map_studio_room_light()' in window_source
+    assert 'self.add_authored_gameplay_placement(' in window_source
+    assert '"camera",' in window_source
+    assert "self.add_authored_room_light(" in window_source
+    assert "Camera: authored camera marker added" in window_source
+    assert "Lighting: authored room light added" in window_source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

@@ -629,6 +629,50 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             0.0,
         )
 
+    def add_map_studio_camera(self) -> None:
+        """Add an authored camera marker through the existing gameplay placement service."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        camera_count = sum(
+            1
+            for placement in self.controller.authored_gameplay_placements()
+            if str(getattr(placement, "kind", "") or "").lower() == "camera"
+        )
+        self.add_authored_gameplay_placement(
+            "camera",
+            "",
+            str(camera_count + 1),
+            0.0,
+            -2.5,
+            1.6,
+            0.0,
+        )
+        self.workflow_panel.set_active_authoring_context(
+            "Camera: authored camera marker added. Move it in Properties or the viewport, then validate before export."
+        )
+
+    def add_map_studio_room_light(self) -> None:
+        """Add an authored room light through the room-light service."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        light_count = len(tuple(self.controller.authored_room_lights() or ()))
+        self.add_authored_room_light(
+            "",
+            f"key_light_{light_count + 1}",
+            0.0,
+            0.0,
+            2.25,
+            1.0,
+            0.92,
+            0.78,
+            8.0,
+            1.0,
+            "point",
+        )
+        self.workflow_panel.set_active_authoring_context(
+            "Lighting: authored room light added. Tune color, radius, and position before export/lightmap checks."
+        )
+
     def create_map_studio_starter_room(self) -> None:
         """Create a small authored room through the existing Builder preset path."""
 
@@ -1293,6 +1337,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             blueprint = self.controller.add_blueprint(blueprint_type=self.blueprints_tab.type_combo.currentText())
             self._refresh_all(f"Added blueprint {blueprint.name}.")
             return
+        if action == "Add Camera":
+            self.add_map_studio_camera()
+            return
+        if action == "Add Light":
+            self.add_map_studio_room_light()
+            return
         if action == "Send to GModular":
             ok, message = self.controller.blueprint_service.send_to_gmodular(None)
             self._log(message if not ok else "Sent blueprint to GModular.")
@@ -1309,6 +1359,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "add_module": "Add Module",
             "add_room": "Add Room",
             "add_blueprint": "Add Blueprint",
+            "add_camera": "Add Camera",
+            "add_light": "Add Light",
             "delete": "Remove Room",
             "duplicate": "Duplicate Room",
             "focus_in_viewport": "Focus in Viewport",
