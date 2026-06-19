@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Workflow Exposes Warp-Test Handoff
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / game-test handoff
+Intersects: existing Level Editor launch handoff and Map Studio readiness panel.
+
+- Added an `Open Warp Test Handoff` action to the existing Map Studio workflow panel so the Level Editor's main workflow spine now shows stage, install, launch/warp handoff, and proof recording together.
+- Wired the new panel signal to the existing `open_map_studio_launch_handoff()` method; no launch, packaging, proof, or module-policy logic moved into the UI.
+- Mirrored the workflow action in the ModuleMeshes payload copy and updated source-contract coverage for the panel, Level Editor wiring, and mirrored package.
+
+Verification:
+- `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_launch_handoff`
+- `python -m py_compile native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\__init__.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py`
 ### [2026-06-19] Map Studio Level Editor Workflow Spine
 
 Owner: LordVaderCW

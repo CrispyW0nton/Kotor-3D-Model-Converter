@@ -39,6 +39,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowValidateButton" in panel_source
     assert "mapStudioWorkflowStageButton" in panel_source
     assert "mapStudioWorkflowInstallButton" in panel_source
+    assert "mapStudioWorkflowLaunchHandoffButton" in panel_source
     assert "mapStudioWorkflowProofButton" in panel_source
     assert "builderRequested = QtCore.Signal()" in panel_source
     assert "starterRoomRequested = QtCore.Signal()" in panel_source
@@ -51,6 +52,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "validateRequested = QtCore.Signal()" in panel_source
     assert "stageRequested = QtCore.Signal()" in panel_source
     assert "installRequested = QtCore.Signal()" in panel_source
+    assert "launchHandoffRequested = QtCore.Signal()" in panel_source
     assert "proofRequested = QtCore.Signal()" in panel_source
     assert "Create Starter Room" in panel_source
     assert "Create Doorway Blockout" in panel_source
@@ -59,6 +61,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Open Placement Tools" in panel_source
     assert "Add Test Placeable" in panel_source
     assert "Open Walkmesh Tools" in panel_source
+    assert "Open Warp Test Handoff" in panel_source
     assert "Not game-ready until a live KOTOR warp test is recorded" in panel_source
     assert "Capability: Export candidate" in panel_source
     assert "Capability: Installed test build" in panel_source
@@ -101,6 +104,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.validateRequested.connect(self.validate_kmap)" in window_source
     assert "self.workflow_panel.stageRequested.connect(lambda: self.stage_authored_module" in window_source
     assert "self.workflow_panel.installRequested.connect(lambda: self.install_authored_module" in window_source
+    assert "self.workflow_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)" in window_source
     assert "self.workflow_panel.proofRequested.connect(self.record_game_smoke_proof)" in window_source
     assert "def show_map_studio_builder" in window_source
     assert "def create_map_studio_starter_room" in window_source
@@ -147,6 +151,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowTestPlaceableButton" in mirror_source
     assert "mapStudioWorkflowWalkmeshToolsButton" in mirror_source
     assert "mapStudioWorkflowStageButton" in mirror_source
+    assert "mapStudioWorkflowLaunchHandoffButton" in mirror_source
     assert "builderRequested = QtCore.Signal()" in mirror_source
     assert "starterRoomRequested = QtCore.Signal()" in mirror_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in mirror_source
@@ -155,6 +160,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "placementToolsRequested = QtCore.Signal()" in mirror_source
     assert "testPlaceableRequested = QtCore.Signal()" in mirror_source
     assert "walkmeshToolsRequested = QtCore.Signal()" in mirror_source
+    assert "launchHandoffRequested = QtCore.Signal()" in mirror_source
     assert "Capability: Export candidate" in mirror_source
     assert "Required resources missing" in mirror_source
     assert "Geometry authoring" in mirror_source

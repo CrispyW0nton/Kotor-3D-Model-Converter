@@ -376,6 +376,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.validateRequested.connect(self.validate_kmap)
         self.workflow_panel.stageRequested.connect(lambda: self.stage_authored_module(self.export_panel.dry_run.isChecked()))
         self.workflow_panel.installRequested.connect(lambda: self.install_authored_module(self.export_panel.dry_run.isChecked()))
+        self.workflow_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
         self.workflow_panel.proofRequested.connect(self.record_game_smoke_proof)
         self.properties.transformChanged.connect(self._set_transform)
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))

@@ -25,6 +25,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
     validateRequested = QtCore.Signal()
     stageRequested = QtCore.Signal()
     installRequested = QtCore.Signal()
+    launchHandoffRequested = QtCore.Signal()
     proofRequested = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -125,6 +126,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.stage_button.setObjectName("mapStudioWorkflowStageButton")
         self.install_button = QtWidgets.QPushButton("Install for Game Test")
         self.install_button.setObjectName("mapStudioWorkflowInstallButton")
+        self.launch_handoff_button = QtWidgets.QPushButton("Open Warp Test Handoff")
+        self.launch_handoff_button.setObjectName("mapStudioWorkflowLaunchHandoffButton")
         self.proof_button = QtWidgets.QPushButton("Record Proof")
         self.proof_button.setObjectName("mapStudioWorkflowProofButton")
         self.open_builder_button.clicked.connect(self.builderRequested.emit)
@@ -138,6 +141,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.validate_button.clicked.connect(self.validateRequested.emit)
         self.stage_button.clicked.connect(self.stageRequested.emit)
         self.install_button.clicked.connect(self.installRequested.emit)
+        self.launch_handoff_button.clicked.connect(self.launchHandoffRequested.emit)
         self.proof_button.clicked.connect(self.proofRequested.emit)
         actions.addWidget(self.open_builder_button, 0, 0)
         actions.addWidget(self.starter_room_button, 0, 1)
@@ -150,7 +154,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         actions.addWidget(self.validate_button, 4, 0)
         actions.addWidget(self.stage_button, 4, 1)
         actions.addWidget(self.install_button, 5, 0)
-        actions.addWidget(self.proof_button, 5, 1)
+        actions.addWidget(self.launch_handoff_button, 5, 1)
+        actions.addWidget(self.proof_button, 6, 0, 1, 2)
         root.addLayout(actions)
 
     def set_state(self, project: Any | None, readiness: Any | None) -> None:
@@ -216,6 +221,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self._set_action_enabled(
             True,
             can_place=has_authored_module,
+            can_launch=bool(proof_manifest or installed_path or ready_for_game_test),
             can_proof=bool(proof_manifest or installed_path or ready_for_game_test),
         )
 
@@ -266,7 +272,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.proof_label.setText("Game proof: Not game-ready until a live KOTOR warp test is recorded.")
         self.next_action_label.setText(f"Next: {next_action}" if next_action else "")
 
-    def _set_action_enabled(self, enabled: bool, *, can_place: bool, can_proof: bool) -> None:
+    def _set_action_enabled(self, enabled: bool, *, can_place: bool, can_proof: bool, can_launch: bool = False) -> None:
         for button in (
             self.open_builder_button,
             self.starter_room_button,
@@ -281,6 +287,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         ):
             button.setEnabled(enabled)
         self.test_placeable_button.setEnabled(bool(enabled and can_place))
+        self.launch_handoff_button.setEnabled(bool(enabled and can_launch))
         self.proof_button.setEnabled(bool(can_proof))
 
     @staticmethod
