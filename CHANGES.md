@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Explains Builder Room and Terrain Workflow
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / Builder geometry-terrain guidance
+Intersects: Builder tab room/terrain authoring controls and ModuleMeshes mirror.
+
+- Added Builder-level guidance that shows the intended workflow for flat test rooms, doorway blockouts, corridors, terrain patches, materials, WOK surfaces, validation, and game proof.
+- Added room-geometry guidance for presets, workflow shortcuts, bevel/inset/cut shaping, primitive composition, and material/WOK assignment.
+- Added terrain workflow guidance for terrain patch selection, shape presets, raise/lower/smooth/flatten sample editing, and walkability validation.
+- Mirrored the Builder tab into the ModuleMeshes package and expanded source-contract coverage for the Builder guidance labels.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_builder_guidance`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Explains Walkmesh Authoring Workflow
 
 Owner: LordVaderCW

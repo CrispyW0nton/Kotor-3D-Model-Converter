@@ -234,6 +234,16 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     )
 
     for source in (builder_source, builder_mirror_source):
+        assert "mapStudioBuilderGuideLabel" in source
+        assert "flat test room, doorway blockout, corridor, or terrain patch" in source
+        assert "mapStudioRoomGeometryWorkflowLabel" in source
+        assert "Starter Room, Doorway Blockout, and Corridor" in source
+        assert "Shape it with bevel/inset/cuts, add primitives, then assign material and WOK surface" in source
+        assert "mapStudioRoomOperationHintLabel" in source
+        assert "rectangular cut creates openings or blockout detail before WOK validation" in source
+        assert "mapStudioTerrainWorkflowLabel" in source
+        assert "apply a shape preset, then raise/lower/smooth/flatten samples" in source
+        assert "Validate WOK slopes and walkability before export" in source
         assert "scriptHookRequested = QtCore.Signal(str, str, str)" in source
         assert "gameplayPlacementStatusChanged = QtCore.Signal(str)" in source
         assert "Script Hooks" in source

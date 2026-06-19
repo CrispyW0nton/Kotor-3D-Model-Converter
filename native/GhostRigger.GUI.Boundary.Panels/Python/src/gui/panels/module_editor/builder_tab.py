@@ -36,8 +36,19 @@ class BuilderTab(QtWidgets.QWidget):
         super().__init__(parent)
         self._gameplay_palette_entries: list[object] = []
         layout = QtWidgets.QVBoxLayout(self)
+        self.builderGuideLabel = QtWidgets.QLabel(
+            "Builder workflow: create a flat test room, doorway blockout, corridor, or terrain patch; edit shape/materials/WOK; then validate before export or game proof."
+        )
+        self.builderGuideLabel.setObjectName("mapStudioBuilderGuideLabel")
+        self.builderGuideLabel.setWordWrap(True)
+        layout.addWidget(self.builderGuideLabel)
         primitive_box = QtWidgets.QGroupBox("Authored Room Primitive")
         primitive_layout = QtWidgets.QFormLayout(primitive_box)
+        self.roomGeometryWorkflowLabel = QtWidgets.QLabel(
+            "Room geometry: choose a preset here or use the workflow shortcuts for Starter Room, Doorway Blockout, and Corridor. Shape it with bevel/inset/cuts, add primitives, then assign material and WOK surface."
+        )
+        self.roomGeometryWorkflowLabel.setObjectName("mapStudioRoomGeometryWorkflowLabel")
+        self.roomGeometryWorkflowLabel.setWordWrap(True)
         self.moduleRootLineEdit = QtWidgets.QLineEdit("grdev01")
         self.moduleRootLineEdit.setObjectName("mapStudioModuleRootLineEdit")
         self.moduleRootLineEdit.setPlaceholderText("module resref, e.g. grdev01")
@@ -48,6 +59,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomPrimitiveDescriptionLabel.setWordWrap(True)
         self.createPrimitiveButton = QtWidgets.QPushButton("Create Authored Room Primitive")
         self.createPrimitiveButton.setObjectName("mapStudioCreatePrimitiveRoomButton")
+        primitive_layout.addRow(self.roomGeometryWorkflowLabel)
         primitive_layout.addRow("Module:", self.moduleRootLineEdit)
         primitive_layout.addRow("Primitive:", self.roomPrimitivePresetComboBox)
         primitive_layout.addRow(self.roomPrimitiveDescriptionLabel)
@@ -55,6 +67,11 @@ class BuilderTab(QtWidgets.QWidget):
         layout.addWidget(primitive_box)
         operation_box = QtWidgets.QGroupBox("Shape Current Room")
         operation_layout = QtWidgets.QFormLayout(operation_box)
+        self.roomOperationHintLabel = QtWidgets.QLabel(
+            "Shape operations modify generated room geometry. Bevel/inset affect the footprint; rectangular cut creates openings or blockout detail before WOK validation."
+        )
+        self.roomOperationHintLabel.setObjectName("mapStudioRoomOperationHintLabel")
+        self.roomOperationHintLabel.setWordWrap(True)
         self.roomOperationComboBox = QtWidgets.QComboBox()
         self.roomOperationComboBox.setObjectName("mapStudioRoomOperationComboBox")
         self.roomOperationComboBox.addItem("Bevel corners", "bevel")
@@ -85,6 +102,7 @@ class BuilderTab(QtWidgets.QWidget):
             spin.setSuffix(" m")
         self.applyRoomOperationButton = QtWidgets.QPushButton("Apply Room Operation")
         self.applyRoomOperationButton.setObjectName("mapStudioApplyRoomOperationButton")
+        operation_layout.addRow(self.roomOperationHintLabel)
         operation_layout.addRow("Operation:", self.roomOperationComboBox)
         operation_layout.addRow("Distance:", self.operationDistanceSpinBox)
         operation_layout.addRow("Cut X:", self.cutCenterXSpinBox)
@@ -95,6 +113,11 @@ class BuilderTab(QtWidgets.QWidget):
         layout.addWidget(operation_box)
         terrain_box = QtWidgets.QGroupBox("Terrain Heightfield")
         terrain_layout = QtWidgets.QFormLayout(terrain_box)
+        self.terrainWorkflowLabel = QtWidgets.QLabel(
+            "Terrain workflow: create a terrain patch, choose the heightfield room, apply a shape preset, then raise/lower/smooth/flatten samples. Validate WOK slopes and walkability before export."
+        )
+        self.terrainWorkflowLabel.setObjectName("mapStudioTerrainWorkflowLabel")
+        self.terrainWorkflowLabel.setWordWrap(True)
         self.terrainRoomComboBox = QtWidgets.QComboBox()
         self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
         self.terrainShapePresetComboBox = QtWidgets.QComboBox()
@@ -129,6 +152,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.flattenTerrainButton.setObjectName("mapStudioFlattenTerrainButton")
         self.applyTerrainShapeButton = QtWidgets.QPushButton("Apply Terrain Shape")
         self.applyTerrainShapeButton.setObjectName("mapStudioApplyTerrainShapePresetButton")
+        terrain_layout.addRow(self.terrainWorkflowLabel)
         terrain_layout.addRow("Terrain:", self.terrainRoomComboBox)
         terrain_layout.addRow("Shape:", self.terrainShapePresetComboBox)
         terrain_layout.addRow("Shape height:", self.terrainShapeHeightSpinBox)
