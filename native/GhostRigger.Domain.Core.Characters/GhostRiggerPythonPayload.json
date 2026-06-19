@@ -21,13 +21,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
             "source_path": "src/core/characters/character_builder.py",
             "packaged_path": "Python/src/core/characters/character_builder.py",
-            "sha256": "170031acd119e80849480d0f055ae414d34f9e6f6b6f168d059060b157a9a15f"
+            "sha256": "fd07c12790f25ad9e630a3482b74a74b73464dac62952d3e36ee141a657e49a9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
             "source_path": "src/core/characters/character_export_preflight.py",
             "packaged_path": "Python/src/core/characters/character_export_preflight.py",
-            "sha256": "ffaf410af41f78fc10efe1607a2a4db2bd892d9580e149addbf32f195b4b0ec5"
+            "sha256": "461fbd37528b5d0b57c40855ca5ef08c8b04be7bfbd049d2d77787077ffa050e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_TRANSACTION",
@@ -39,7 +39,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_OVERRIDE_PACKAGE",
             "source_path": "src/core/characters/character_override_package.py",
             "packaged_path": "Python/src/core/characters/character_override_package.py",
-            "sha256": "483e842566563ececfa5b3196bd8102b05955d8b1d6770321ae4400157f8d547"
+            "sha256": "2dae3d04476f2fb52d8033fbb53484e421f5a21561d871ce1999a3da2de9cfdf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_RIG_STATE",
@@ -51,7 +51,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_VALIDATION_REPORT",
             "source_path": "src/core/characters/character_validation_report.py",
             "packaged_path": "Python/src/core/characters/character_validation_report.py",
-            "sha256": "040d4f12fedcedaa8bb7363a9659079b4ffd80339162ddae4e958c7e225582f2"
+            "sha256": "f89a207cc5f98e6dc659fd729eb6903d1a5ff4e8c25a20a6945aabd690939823"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_APPEARANCE",
@@ -69,7 +69,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "a3dcd786ac1b37c5ac347c0fbdd43a6d1fa3084b2658ec994064a9c6d9cbd7e3"
+            "sha256": "5b6e45b7d052eb5ecc3d07d12604aa3275045121d665be404109c6c20a0e7fe5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",

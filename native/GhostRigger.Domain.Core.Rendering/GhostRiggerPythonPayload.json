@@ -81,7 +81,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_GEOMETRY",
             "source_path": "src/core/rendering/frame_core/renderer_geometry.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_geometry.py",
-            "sha256": "873edb7790bf82ecf2718095d1f0d4233ccee083dddfdc154c652b762e361c51"
+            "sha256": "772cb28845fc8e5c19f458a503df8be0f39262696078fd573841751ef96ad78a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_MESHES",
@@ -213,7 +213,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",
             "source_path": "src/core/rendering/skeleton_render_data.py",
             "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
-            "sha256": "d5e563da0c1435b38a8795d5a94fe9f2f10992ba5afcbaa5de67bcb4de02a5c6"
+            "sha256": "f635366cb3e97538b24cf9fea72c70b559587724085f77360cfbee66b0167c02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_VIEWPORT_DISPLAY",

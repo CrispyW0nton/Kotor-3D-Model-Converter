@@ -15,7 +15,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_SKELETON_SKELETON_BUILDER",
             "source_path": "src/core/skeleton/skeleton_builder.py",
             "packaged_path": "Python/src/core/skeleton/skeleton_builder.py",
-            "sha256": "fca1d01b1d630998c3a776309563625d012923407eaa368a914fa8a23c9bb652"
+            "sha256": "f5c4d10af8e034a68cb7a7486dacaa09d1fec4642098897b215776617b0b8253"
         }
     ]
 }
