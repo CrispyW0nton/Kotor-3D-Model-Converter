@@ -11,10 +11,31 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
     itemSelected = QtCore.Signal(str)
     actionRequested = QtCore.Signal(str, str)
 
+    CONTEXT_ACTIONS = (
+        ("Add Module", "add_module", "mapStudioOutlinerAddModuleAction"),
+        ("Add Room", "add_room", "mapStudioOutlinerAddRoomAction"),
+        ("Add Blueprint", "add_blueprint", "mapStudioOutlinerAddBlueprintAction"),
+        ("Add Camera", "add_camera", "mapStudioOutlinerAddCameraAction"),
+        ("Add Light", "add_light", "mapStudioOutlinerAddLightAction"),
+        ("Rename", "rename", "mapStudioOutlinerRenameAction"),
+        ("Duplicate", "duplicate", "mapStudioOutlinerDuplicateAction"),
+        ("Delete", "delete", "mapStudioOutlinerDeleteAction"),
+        ("Focus in Viewport", "focus_in_viewport", "mapStudioOutlinerFocusViewportAction"),
+        ("Validate Selected", "validate_selected", "mapStudioOutlinerValidateSelectedAction"),
+        ("Reveal Source File", "reveal_source_file", "mapStudioOutlinerRevealSourceAction"),
+    )
+
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("ModuleEditorOutliner")
-        self.setHeaderLabels(["KMAP Project"])
+        self.setAccessibleName("Map Studio project outliner")
+        self.setAccessibleDescription(
+            "Shows modules, rooms, walkmeshes, authored placements, lights, blueprints, and resources in the current KMAP project."
+        )
+        self.setToolTip(
+            "Outliner workflow: select resources, double-click or use Rename, then duplicate/delete/focus selected items through the context menu or workflow panel."
+        )
+        self.setHeaderLabels(["KMAP Project / Resources"])
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
         self.itemSelectionChanged.connect(self._selection_changed)
@@ -97,12 +118,14 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         item = QtWidgets.QTreeWidgetItem([text])
         item.setData(0, QtCore.Qt.UserRole, item_id)
         item.setData(0, QtCore.Qt.UserRole + 1, kind)
+        item.setToolTip(0, f"{kind}: {text}\nRight-click for Rename, Duplicate, Delete, Focus, and Validate actions.")
         item.setFlags(item.flags() | QtCore.Qt.ItemIsEditable)
         return item
 
     def _category(self, text: str) -> QtWidgets.QTreeWidgetItem:
         item = QtWidgets.QTreeWidgetItem([text])
         item.setData(0, QtCore.Qt.UserRole + 1, "category")
+        item.setToolTip(0, f"{text} category")
         return item
 
     def _selection_changed(self) -> None:
@@ -123,9 +146,12 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         item = self.itemAt(pos)
         item_id = str(item.data(0, QtCore.Qt.UserRole) or "") if item else ""
         menu = QtWidgets.QMenu(self)
-        for action in ("Add Module", "Add Room", "Add Blueprint", "Add Camera", "Add Light", "Duplicate", "Delete", "Focus in Viewport", "Validate Selected", "Reveal Source File"):
-            qaction = menu.addAction(action)
-            qaction.triggered.connect(lambda _checked=False, text=action: self.actionRequested.emit(text.lower().replace(" ", "_"), item_id))
+        menu.setObjectName("mapStudioOutlinerContextMenu")
+        for label, action_name, object_name in self.CONTEXT_ACTIONS:
+            qaction = menu.addAction(label)
+            qaction.setObjectName(object_name)
+            qaction.setToolTip(f"{label} for the selected KMAP item")
+            qaction.triggered.connect(lambda _checked=False, text=action_name: self.actionRequested.emit(text, item_id))
         menu.exec(self.viewport().mapToGlobal(pos))
 
 

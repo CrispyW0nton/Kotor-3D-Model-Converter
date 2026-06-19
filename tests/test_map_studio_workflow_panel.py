@@ -414,6 +414,32 @@ def test_t2600_map_studio_validation_panel_explains_actionable_fixes() -> None:
         assert "Fix:" in source
 
 
+def test_t2600_map_studio_outliner_explains_selection_editing_workflow() -> None:
+    outliner_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_outliner.py"
+    )
+    outliner_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_outliner.py"
+    )
+
+    for source in (outliner_source, outliner_mirror_source):
+        assert "Map Studio project outliner" in source
+        assert "modules, rooms, walkmeshes, authored placements, lights, blueprints, and resources" in source
+        assert "Outliner workflow: select resources" in source
+        assert "double-click or use Rename" in source
+        assert "KMAP Project / Resources" in source
+        assert "mapStudioOutlinerContextMenu" in source
+        assert "mapStudioOutlinerRenameAction" in source
+        assert '("Rename", "rename", "mapStudioOutlinerRenameAction")' in source
+        assert "mapStudioOutlinerDuplicateAction" in source
+        assert "mapStudioOutlinerDeleteAction" in source
+        assert "mapStudioOutlinerFocusViewportAction" in source
+        assert "mapStudioOutlinerValidateSelectedAction" in source
+        assert "Right-click for Rename, Duplicate, Delete, Focus, and Validate actions" in source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

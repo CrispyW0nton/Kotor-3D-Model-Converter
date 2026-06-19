@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Clarifies Outliner Selection Workflow
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / outliner selection and editing
+Intersects: KMAP outliner context actions and ModuleMeshes mirror.
+
+- Added modder-facing outliner guidance for selecting resources, renaming, duplicating, deleting, focusing, and validating authored KMAP items.
+- Added a visible Rename context action alongside duplicate/delete/focus/validate actions so renaming is not hidden behind double-click editing.
+- Added stable object names for outliner context menu actions to support future UI automation and regression checks.
+- Mirrored the outliner into the ModuleMeshes package and expanded source-contract coverage for the selection/editing workflow.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_outliner_workflow`; `python -m py_compile` on active and mirrored outliners plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Clarifies Validation Fix Workflow
 
 Owner: LordVaderCW
