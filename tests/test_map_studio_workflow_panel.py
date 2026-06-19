@@ -245,6 +245,11 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
         assert "set_script_hook_fields" in source
         assert "set_script_hooks" in source
         assert "_emit_assign_script_hook" in source
+        assert "mapStudioGameplaySupportedKindsLabel" in source
+        assert "Placement types:" in source
+        assert "stores/merchants are module-level" in source
+        assert "_update_gameplay_supported_kinds_label" in source
+        assert "Scan the Game Library to search for creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores/merchants." in source
         assert "mapStudioGameplaySpatialHintLabel" in source
         assert "_update_gameplay_spatial_controls" in source
         assert "Stores/merchants are module-level resources" in source

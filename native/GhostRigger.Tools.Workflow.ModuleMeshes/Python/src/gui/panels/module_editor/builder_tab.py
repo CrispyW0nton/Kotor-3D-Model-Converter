@@ -319,6 +319,9 @@ class BuilderTab(QtWidgets.QWidget):
         placement_layout = QtWidgets.QFormLayout(placement_box)
         self.gameplayPlacementKindComboBox = QtWidgets.QComboBox()
         self.gameplayPlacementKindComboBox.setObjectName("mapStudioGameplayPlacementKindComboBox")
+        self.gameplaySupportedKindsLabel = QtWidgets.QLabel("Placement types: loading KOTOR resource kinds.")
+        self.gameplaySupportedKindsLabel.setObjectName("mapStudioGameplaySupportedKindsLabel")
+        self.gameplaySupportedKindsLabel.setWordWrap(True)
         self.gameplayTemplateLineEdit = QtWidgets.QLineEdit("plc_bench")
         self.gameplayTemplateLineEdit.setObjectName("mapStudioGameplayTemplateLineEdit")
         self.gameplayTemplateLineEdit.setPlaceholderText("template resref, e.g. plc_bench or c_drdmkone")
@@ -360,6 +363,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.gameplayBearingSpinBox.setSuffix(" deg")
         self.addGameplayPlacementButton = QtWidgets.QPushButton("Add Gameplay Placement")
         self.addGameplayPlacementButton.setObjectName("mapStudioAddGameplayPlacementButton")
+        placement_layout.addRow(self.gameplaySupportedKindsLabel)
         placement_layout.addRow("Kind:", self.gameplayPlacementKindComboBox)
         placement_layout.addRow("Search:", self.gameplayPaletteSearchLineEdit)
         placement_layout.addRow("Library:", self.gameplayPaletteComboBox)
@@ -1090,6 +1094,7 @@ class BuilderTab(QtWidgets.QWidget):
                 self.gameplayPlacementKindComboBox.addItem(value.replace("_", " ").title(), value)
         if self.gameplayPlacementKindComboBox.count() <= 0:
             self.gameplayPlacementKindComboBox.addItem("Placeable", "placeable")
+        self._update_gameplay_supported_kinds_label()
         self._apply_gameplay_palette_filter()
 
     def set_gameplay_palette_entries(self, entries) -> None:
@@ -1158,13 +1163,45 @@ class BuilderTab(QtWidgets.QWidget):
             self.gameplaySpatialHintLabel.setText("Stores/merchants are module-level resources. They appear in the outliner and export to the GIT StoreList, but they do not get viewport markers.")
         self._emit_gameplay_placement_status()
 
+    @staticmethod
+    def _gameplay_kind_label(value: str) -> str:
+        labels = {
+            "placeable": "placeables",
+            "creature": "creatures",
+            "door": "doors",
+            "waypoint": "waypoints",
+            "trigger": "triggers",
+            "encounter": "encounters",
+            "sound": "sounds",
+            "camera": "cameras",
+            "store": "stores/merchants",
+            "merchant": "stores/merchants",
+        }
+        return labels.get(str(value or "").strip().lower(), str(value or "").replace("_", " "))
+
+    def _update_gameplay_supported_kinds_label(self) -> None:
+        if not hasattr(self, "gameplaySupportedKindsLabel"):
+            return
+        labels: list[str] = []
+        for index in range(self.gameplayPlacementKindComboBox.count()):
+            kind = str(self.gameplayPlacementKindComboBox.itemData(index) or "").strip().lower()
+            label = self._gameplay_kind_label(kind)
+            if label and label not in labels:
+                labels.append(label)
+        if not labels:
+            labels = ["placeables"]
+        text = ", ".join(labels)
+        self.gameplaySupportedKindsLabel.setText(
+            f"Placement types: {text}. Spatial resources appear as viewport markers; stores/merchants are module-level."
+        )
+
     def _update_gameplay_palette_hint(self) -> None:
         entry = self._current_palette_entry()
         if entry is None:
             if self._gameplay_palette_entries:
                 self.gameplayPaletteHintLabel.setText("No matching resources for the current kind/search. You can still type a template resref manually.")
             else:
-                self.gameplayPaletteHintLabel.setText("Scan the Game Library to search for creature, placeable, door, and template resources.")
+                self.gameplayPaletteHintLabel.setText("Scan the Game Library to search for creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores/merchants.")
             return
         warning = self._entry_value(entry, "warning")
         confidence = self._entry_value(entry, "confidence")

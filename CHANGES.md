@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Shows Placement Resource Type Coverage
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / placement palette clarity
+Intersects: Builder gameplay placement controls and ModuleMeshes mirror.
+
+- Added visible placement-type coverage in the Builder gameplay placement panel so modders can see supported KOTOR resource kinds before choosing a template.
+- Updated placement palette hints to name creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores/merchants while keeping placement rules in core services.
+- Mirrored the Builder tab into the ModuleMeshes package and expanded source-contract coverage for placement-kind visibility.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_types`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Clarifies Target Game and Test State
 
 Owner: LordVaderCW
