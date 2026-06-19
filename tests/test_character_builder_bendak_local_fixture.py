@@ -67,6 +67,18 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert result.apply_result.get("replaced_native_render_nodes")
     built_model = result.apply_result.get("model")
     assert built_model is not None
+    skin_binding = built_model.metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "imported_source_skin_remap"
+    assert skin_binding["quality_stage"] == "source_skin_remap_first_pass"
+    assert skin_binding["source_skin_remap"] is True
+    assert skin_binding["source_hand_refinement"] is True
+    assert skin_binding["donor_weight_transfer"] is False
+    mesh_reports = skin_binding["mesh_reports"]
+    assert mesh_reports
+    assert mesh_reports[0]["source_skin_vertices"] == mesh_reports[0]["vertex_count"]
+    assert mesh_reports[0]["source_hand_refinement_vertices"] > 0
+    assert mesh_reports[0]["fallback_vertices"] == 0
+    assert mesh_reports[0]["bone_map_count"] >= 20
     leaked_guides = [
         node for node in built_model.all_nodes()
         if getattr(node, "_gr_imported_armature_joint", False)
@@ -91,14 +103,14 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     assert target_frame.get("toe_forward_alignment") > 0.90
     fit_transform = fit_report.get("fit_transform", {})
     alignment = fit_transform.get("landmark_alignment", {})
-    assert fit_report.get("scale_basis") == "paired_skeleton_similarity_scale"
+    assert fit_report.get("scale_basis") == "paired_skeleton_landmark_height"
     assert fit_transform.get("scale") == pytest.approx(
-        alignment.get("solved_scale")
+        alignment.get("height_scale")
     )
     assert alignment.get("height_scale_basis") == "paired_skeleton_landmark_height"
-    assert alignment.get("applied_scale_basis") == "paired_skeleton_similarity_scale"
+    assert alignment.get("applied_scale_basis") == "paired_skeleton_landmark_height"
     assert alignment.get("applied_scale") == pytest.approx(
-        alignment.get("solved_scale")
+        alignment.get("height_scale")
     )
     assert alignment.get("similarity_transform_accepted") is True
     assert alignment.get("rotation_basis") == "paired_skeleton_similarity"
@@ -152,3 +164,46 @@ def test_t1205_local_bendak_to_mandalorian_native_template_launch_proof(
     ]
     assert packaged_alignment["similarity_transform_accepted"] is True
     assert packaged_alignment["rotation_basis"] == "paired_skeleton_similarity"
+
+
+def test_t1205_local_bendak_smale02_preview_preserves_native_export_supermodel(
+    tmp_path: Path,
+) -> None:
+    """Previewing S_Male02 clips must not poison the n_mandalorian export DAG."""
+    mesh_path = _bendak_fixture_path()
+    if not mesh_path.exists():
+        pytest.skip(f"Local Bendak fixture not present: {mesh_path}")
+
+    native_base = character_builder.load_game_skeleton_source(
+        "n_mandalorian",
+        game="K1",
+    )
+    if native_base is None:
+        pytest.skip("Configured K1 install cannot load n_mandalorian")
+
+    result = run_external_mesh_native_template_launch_workflow(
+        str(mesh_path),
+        "n_mandalorian",
+        game_version="K1",
+        out_dir=str(tmp_path),
+        formats=["kotor"],
+        motion_supermodel="S_Male02",
+    )
+
+    assert result.ok is True
+    assert result.code == "export_candidate_verified"
+    assert result.capability_stage == "export_candidate"
+    assert result.supermodel == "S_Female02"
+    assert result.motion_result is not None
+    assert result.motion_result.supermodel == "S_Male02"
+    assert "export keeps the native KOTOR base supermodel S_Female02" in (
+        result.motion_result.message
+    )
+    assert result.animation_library_result is not None
+    assert result.animation_library_result.code == "listed"
+    animation_names = {
+        name for _label, name in result.animation_library_result.available
+    }
+    assert {"animloop01", "walk", "tlknorm"}.issubset(animation_names)
+    assert Path(result.mdl_path).exists()
+    assert Path(result.mdx_path).exists()

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.GUI.Boundary.Panels",
-    "file_count": 43,
+    "file_count": 44,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_INIT",
             "source_path": "src/gui/panels/module_editor/__init__.py",
             "packaged_path": "Python/src/gui/panels/module_editor/__init__.py",
-            "sha256": "fee806473115b27c6a04bc8f0707b63fd38024853b98ed70dd59c96a506942a2"
+            "sha256": "ee1a2526dce3b64a9341148ee056b3072755740012ccb06294f4613c3986e779"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BLUEPRINTS_TAB",
@@ -39,13 +39,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BUILDER_TAB",
             "source_path": "src/gui/panels/module_editor/builder_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-            "sha256": "6eb00e73976b76a22c768478ea2868380664b43def11af7b7b0a6d8370049046"
+            "sha256": "487f79ea96d4975663e2901960c5f9c130972e1edebdf21c3c0865cc056b71c2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_EXPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/export_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/export_panel.py",
-            "sha256": "c3662765402e3b29d6bb957cfad7a8a3d16fbc58f0dc457f9510b2165140fb22"
+            "sha256": "fa274bb94b83d6f1698fb617f22dc789b15b9c4dc95d7d64071885733ee644d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_ASSET_BROWSER",
@@ -262,6 +262,12 @@
             "source_path": "src/gui/panels/qt_workflow_rail.py",
             "packaged_path": "Python/src/gui/panels/qt_workflow_rail.py",
             "sha256": "e0a74e9e3a6251bb031f19b208f58905da3f532a67231daa165807a8fa6ed51b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_0044",
+            "source_path": "src/gui/panels/module_editor/readiness_panel.py",
+            "packaged_path": "Python/src/gui/panels/module_editor/readiness_panel.py",
+            "sha256": "6929cd2855e6cb3d7530b25cdfbdb4d11d516f5502907271ffe2e58e258bb2c9"
         }
     ]
 }

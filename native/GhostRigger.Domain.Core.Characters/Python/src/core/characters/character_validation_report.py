@@ -45,7 +45,7 @@ CAPABILITY_STAGE_GAME_TESTED = "game_tested"
 _GAME_READY_GATE_ACCEPTED_STAGES: dict[str, frozenset[str]] = {
     "fit": frozenset({"passed"}),
     "bind": frozenset({"passed"}),
-    "weight": frozenset({"trusted_donor_transfer"}),
+    "weight": frozenset({"trusted_donor_transfer", "trusted_source_skin_remap"}),
     "animation": frozenset({"passed"}),
     "material": frozenset({"passed"}),
     "engine": frozenset({"passed"}),
@@ -552,10 +552,13 @@ def character_builder_evidence_gates(
     weighting_method = str(skin_binding.get("weighting_method") or "")
     quality_stage = str(skin_binding.get("quality_stage") or "")
     donor_weight_transfer = bool(skin_binding.get("donor_weight_transfer"))
+    source_skin_remap = bool(skin_binding.get("source_skin_remap"))
+    source_hand_refinement = bool(skin_binding.get("source_hand_refinement"))
     weight_stage = _weight_gate_stage(
         weight_codes,
         skin_binding_present=bool(skin_binding),
         donor_weight_transfer=donor_weight_transfer,
+        source_skin_remap=source_skin_remap,
         quality_stage=quality_stage,
         weighting_method=weighting_method,
     )
@@ -565,6 +568,8 @@ def character_builder_evidence_gates(
         "weighting_method": weighting_method,
         "quality_stage": quality_stage,
         "donor_weight_transfer": donor_weight_transfer,
+        "source_skin_remap": source_skin_remap,
+        "source_hand_refinement": source_hand_refinement,
         "mesh_report_count": len(list(skin_binding.get("mesh_reports") or [])),
         "blocking_issue_codes": weight_codes["blocking"],
         "warning_issue_codes": weight_codes["warning"],
@@ -907,6 +912,7 @@ def _weight_gate_stage(
     *,
     skin_binding_present: bool,
     donor_weight_transfer: bool,
+    source_skin_remap: bool,
     quality_stage: str,
     weighting_method: str,
 ) -> str:
@@ -920,8 +926,19 @@ def _weight_gate_stage(
     ):
         return "donor_transfer_landmarks_incomplete"
     if (
+        weighting_method == "imported_source_skin_remap"
+        and quality_stage == "source_skin_remap_first_pass"
+        and source_skin_remap
+        and not codes.get("warning")
+    ):
+        return "trusted_source_skin_remap"
+    if (
         weighting_method == "nearest_kotor_bone_segment"
-        or quality_stage in {"fallback_first_pass", "donor_transfer_partial"}
+        or quality_stage in {
+            "fallback_first_pass",
+            "donor_transfer_partial",
+            "source_skin_remap_partial",
+        }
         or not donor_weight_transfer
         or codes.get("warning")
     ):

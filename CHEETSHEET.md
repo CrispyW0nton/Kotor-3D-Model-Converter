@@ -135,3 +135,53 @@ Write to the Output Log from the terminal:
 ```python
 window._log("Hello from the Python terminal", "info")
 ```
+
+## Map Studio Smoke Workflows
+
+Stage both `grdev01` Map Studio smoke-module variants for manual KOTOR testing:
+
+```powershell
+python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_variant_suite
+```
+
+Print the same result as JSON for automation:
+
+```powershell
+python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_variant_suite --json
+```
+
+Stage only the floor-plan/opening variant:
+
+```powershell
+python scripts/stage_grdev01_smoke_suite.py --output-dir artifacts/map_studio/grdev01_floor_plan_only --no-rectangular
+```
+
+Build and safely install one selected `grdev01` variant into a KOTOR `Modules`
+folder for the `warp grdev01` test:
+
+```powershell
+python scripts/install_grdev01_smoke_variant.py --variant floor-plan --game-modules-dir "C:\Path\To\KOTOR\Modules"
+```
+
+Preview the same install without copying files:
+
+```powershell
+python scripts/install_grdev01_smoke_variant.py --variant rectangular --game-modules-dir "C:\Path\To\KOTOR\Modules" --dry-run
+```
+
+After a real in-game `warp grdev01` test, record proof with the evidence file
+and every verified acceptance check:
+
+```powershell
+python scripts/record_grdev01_smoke_proof.py --proof-manifest artifacts/map_studio/grdev01_install/floor_plan_opening/grdev01_in_game_smoke_manifest.json --evidence "C:\Path\To\grdev01-proof.png" --tester LordVaderCW --module-loads-in-game --player-spawns-on-floor --test-placeable-visible --player-can-walk-on-floor
+```
+
+Audit the current proof state before or after recording evidence:
+
+```powershell
+python scripts/check_grdev01_smoke_status.py --proof-manifest artifacts/map_studio/grdev01_install/floor_plan_opening/grdev01_in_game_smoke_manifest.json --game-modules-dir "C:\Path\To\KOTOR\Modules"
+```
+
+Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
+into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
+video evidence before treating it as game-tested.

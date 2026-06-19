@@ -1022,6 +1022,7 @@ def apply_template_rig(
                 setattr(mesh_node, "_gr_bound_to_kotor_skeleton", True)
                 setattr(mesh_node, "_gr_kotor_skeleton_root", str(getattr(skel_root, "name", "") or ""))
                 setattr(mesh_node, "_gr_kotor_bone_map_source", "character_builder_template_rig")
+                setattr(mesh_node, "_gr_use_animation_base_bind_for_preview", True)
             metadata = getattr(result_model, "metadata", None)
             if not isinstance(metadata, dict):
                 metadata = {}
@@ -1054,6 +1055,8 @@ def apply_template_rig(
                 for mesh_node in mesh_payloads
             )
             donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
+            source_skin_remap = bool(getattr(bind_report, "source_skin_remap", False))
+            source_hand_refinement = bool(getattr(bind_report, "source_hand_refinement", False))
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
@@ -1090,8 +1093,21 @@ def apply_template_rig(
                         "fallback_first_pass",
                     ),
                     "donor_weight_transfer": donor_weight_transfer,
+                    "source_skin_remap": source_skin_remap,
+                    "source_hand_refinement": source_hand_refinement,
                     "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
                     "note": (
+                        "Imported source skin weights were remapped onto the "
+                        "selected native KOTOR skeleton by semantic bone role. "
+                        "Native hand/finger refinement was applied. "
+                        "Preview inherited animations before claiming "
+                        "launch-quality deformation."
+                        if source_skin_remap and source_hand_refinement else
+                        "Imported source skin weights were remapped onto the "
+                        "selected native KOTOR skeleton by semantic bone role. "
+                        "Preview inherited animations before claiming "
+                        "launch-quality deformation."
+                        if source_skin_remap else
                         "Native-template donor weights were transferred by nearest "
                         "surface vertex. Preview inherited animations before "
                         "claiming launch-quality deformation."
@@ -1322,6 +1338,8 @@ def _clean_mesh_payload_node(node: Any) -> Any:
         from src.core.geometry.model_data import NodeFlags  # type: ignore
 
     cleaned = copy.deepcopy(node)
+    source_bone_map = list(getattr(node, "bone_map", []) or [])
+    source_skin_data = copy.deepcopy(list(getattr(node, "skin_data", []) or []))
     vertices_are_world = bool(getattr(node, "_gr_vertices_in_kotor_world", False))
     if vertices_are_world:
         world_pos = (0.0, 0.0, 0.0)
@@ -1374,6 +1392,10 @@ def _clean_mesh_payload_node(node: Any) -> Any:
     cleaned.qbone_list = []
     cleaned.tbone_list = []
     setattr(cleaned, "_external_imported", True)
+    if source_bone_map and source_skin_data:
+        setattr(cleaned, "_gr_source_bone_map", source_bone_map)
+        setattr(cleaned, "_gr_source_skin_data", source_skin_data)
+        setattr(cleaned, "_gr_source_skin_weight_role", "imported_fbx_payload")
     if vertices_are_world:
         setattr(cleaned, "_gr_vertices_in_kotor_world", True)
     try:

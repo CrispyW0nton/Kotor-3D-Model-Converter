@@ -29,8 +29,6 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const wchar_t* kDefaultPython313 = L"C:\\Users\\KingJamesIX\\AppData\\Local\\Programs\\Python\\Python313\\python.exe";
-constexpr const wchar_t* kDefaultPython313Home = L"C:\\Users\\KingJamesIX\\AppData\\Local\\Programs\\Python\\Python313";
 constexpr const wchar_t* kNativeHostDebugArg = L"--native-host-debug";
 constexpr const wchar_t* kNativeEmbedInitDebugArg = L"--native-embed-init-debug";
 
@@ -423,14 +421,56 @@ std::optional<fs::path> python_home_from_override(const std::wstring& python_ove
     return std::nullopt;
 }
 
+bool is_valid_python313_home(const fs::path& path) {
+    return fs::exists(path / L"python313.dll") &&
+        fs::exists(path / L"python.exe") &&
+        fs::exists(path / L"Lib");
+}
+
+std::optional<fs::path> python_home_from_directory(const fs::path& path) {
+    if (path.empty()) {
+        return std::nullopt;
+    }
+    if (is_valid_python313_home(path)) {
+        return path;
+    }
+    return std::nullopt;
+}
+
 std::optional<fs::path> find_python_home() {
+    if (auto explicit_home = python_home_from_directory(get_env_wstring(L"GHOSTRIGGER_PYTHON_HOME"))) {
+        return explicit_home;
+    }
+
     if (auto override_home = python_home_from_override(get_env_wstring(L"GHOSTRIGGER_PYTHON"))) {
         return override_home;
     }
 
-    const fs::path default_home = kDefaultPython313Home;
-    if (fs::exists(default_home / L"python313.dll") && fs::exists(default_home / L"Lib")) {
-        return default_home;
+    const std::wstring local_app_data = get_env_wstring(L"LOCALAPPDATA");
+    if (!local_app_data.empty()) {
+        if (auto local_home = python_home_from_directory(
+            fs::path(local_app_data) / L"Programs" / L"Python" / L"Python313"
+        )) {
+            return local_home;
+        }
+    }
+
+    const std::wstring program_files = get_env_wstring(L"ProgramFiles");
+    if (!program_files.empty()) {
+        if (auto machine_home = python_home_from_directory(
+            fs::path(program_files) / L"Python313"
+        )) {
+            return machine_home;
+        }
+    }
+
+    const std::wstring program_files_x64 = get_env_wstring(L"ProgramW6432");
+    if (!program_files_x64.empty() && program_files_x64 != program_files) {
+        if (auto machine_home = python_home_from_directory(
+            fs::path(program_files_x64) / L"Python313"
+        )) {
+            return machine_home;
+        }
     }
 
     return std::nullopt;

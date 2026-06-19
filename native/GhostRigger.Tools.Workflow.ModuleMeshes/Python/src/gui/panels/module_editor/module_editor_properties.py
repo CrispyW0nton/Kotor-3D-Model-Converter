@@ -17,6 +17,8 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         super().__init__(parent)
         self.setObjectName("ModuleEditorPropertiesPanel")
         self._project: KMapProject | None = None
+        self._authored_placements: dict[str, object] = {}
+        self._authored_room_lights: dict[str, object] = {}
         self._item_id = ""
         root = QtWidgets.QVBoxLayout(self)
         self.title = QtWidgets.QLabel("No Selection")
@@ -44,18 +46,70 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         for spin in (*self.position, *self.rotation, *self.scale):
             spin.valueChanged.connect(lambda _value: self._transform_changed())
 
-    def set_project(self, project: KMapProject) -> None:
+    def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_room_lights=()) -> None:
         self._project = project
+        self._authored_placements = {
+            str(getattr(row, "placement_id", "") or ""): row
+            for row in authored_gameplay_placements or ()
+            if str(getattr(row, "placement_id", "") or "")
+        }
+        self._authored_room_lights = {
+            str(getattr(row, "light_id", "") or ""): row
+            for row in authored_room_lights or ()
+            if str(getattr(row, "light_id", "") or "")
+        }
 
     def set_selection(self, item_id: str) -> None:
         self._item_id = item_id
         project = self._project
         item = (project.find_room(item_id) or project.find_module(item_id) or project.find_blueprint(item_id)) if project else None
-        self.setEnabled(item is not None)
-        if item is None:
+        authored = self._authored_placements.get(item_id)
+        authored_light = self._authored_room_lights.get(item_id)
+        self.setEnabled(item is not None or authored is not None or authored_light is not None)
+        if item is None and authored is None and authored_light is None:
             self.title.setText("No Selection")
             return
         self.blockSignals(True)
+        for widget in (self.name_edit, self.visible_box, self.locked_box, *self.position, *self.rotation, *self.scale):
+            widget.setEnabled(True)
+        if authored is not None:
+            kind = str(getattr(authored, "kind", "object") or "object").title()
+            tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
+            self.title.setText(f"Authored {kind} Placement")
+            self.name_edit.setText(tag)
+            self.name_edit.setEnabled(False)
+            self.source_label.setText(str(getattr(authored, "template_resref", "") or ""))
+            self.visible_box.setChecked(True)
+            self.locked_box.setChecked(False)
+            self.visible_box.setEnabled(False)
+            self.locked_box.setEnabled(False)
+            self._set_vector(self.position, getattr(authored, "position", (0.0, 0.0, 0.0)))
+            self._set_vector(self.rotation, (0.0, 0.0, float(getattr(authored, "bearing", 0.0) or 0.0)))
+            self._set_vector(self.scale, (1.0, 1.0, 1.0))
+            for spin in self.scale:
+                spin.setEnabled(False)
+            self.blockSignals(False)
+            return
+        if authored_light is not None:
+            self.title.setText("Authored Room Light")
+            self.name_edit.setText(str(getattr(authored_light, "name", "") or item_id))
+            self.name_edit.setEnabled(False)
+            self.source_label.setText(
+                f"{getattr(authored_light, 'light_type', 'point')} in {getattr(authored_light, 'room_resref', '')}; "
+                f"radius {float(getattr(authored_light, 'radius', 0.0) or 0.0):.2f}, "
+                f"intensity {float(getattr(authored_light, 'intensity', 0.0) or 0.0):.2f}"
+            )
+            self.visible_box.setChecked(True)
+            self.locked_box.setChecked(False)
+            self.visible_box.setEnabled(False)
+            self.locked_box.setEnabled(False)
+            self._set_vector(self.position, getattr(authored_light, "position", (0.0, 0.0, 0.0)))
+            self._set_vector(self.rotation, (0.0, 0.0, 0.0))
+            self._set_vector(self.scale, (1.0, 1.0, 1.0))
+            for spin in (*self.rotation, *self.scale):
+                spin.setEnabled(False)
+            self.blockSignals(False)
+            return
         kind = "Blueprint" if hasattr(item, "blueprint_id") else "Room" if hasattr(item, "room_id") else "Module"
         self.title.setText(f"{kind} Properties")
         self.name_edit.setText(getattr(item, "name", getattr(item, "module_name", "")))

@@ -284,6 +284,12 @@ class ViewportDragInteractionsMixin:
                     self._joint_dragging = True
                     self._renderer.is_interactive = True
             if self._joint_dragging:
+                if (
+                    self._snap_key_down
+                    and self._snap_joint_drag_to_visible_bone_at_cursor(x, y)
+                ):
+                    self._request_render(fast=True)
+                    return
                 self._apply_joint_drag(x, y)
                 self._clear_viewport_hover(request=False, reason="joint drag hover suppressed")
                 self._request_render(fast=True)

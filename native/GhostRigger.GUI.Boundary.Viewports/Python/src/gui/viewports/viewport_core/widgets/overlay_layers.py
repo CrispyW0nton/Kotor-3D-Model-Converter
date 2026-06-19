@@ -8,6 +8,413 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportOverlayLayersMixin:
+    @staticmethod
+    def _map_studio_distance_to_segment(px: float, py: float, ax: float, ay: float, bx: float, by: float) -> float:
+        dx = bx - ax
+        dy = by - ay
+        denom = dx * dx + dy * dy
+        if denom <= 1.0e-9:
+            return ((px - ax) ** 2 + (py - ay) ** 2) ** 0.5
+        t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / denom))
+        cx = ax + dx * t
+        cy = ay + dy * t
+        return ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+
+    def _map_studio_marker_rgba(self, color: object, alpha: int = 220) -> tuple[int, int, int, int]:
+        text = str(color or "").strip()
+        if text.startswith("#") and len(text) == 7:
+            try:
+                return (
+                    int(text[1:3], 16),
+                    int(text[3:5], 16),
+                    int(text[5:7], 16),
+                    max(0, min(255, int(alpha))),
+                )
+            except ValueError:
+                pass
+        return (82, 255, 122, max(0, min(255, int(alpha))))
+
+    def _map_studio_project_point(self, point: object, w: int, h: int):
+        try:
+            x, y, z = point
+            return self._renderer._proj(float(x), float(y), float(z), w, h)
+        except Exception:
+            return None
+
+    def _add_map_studio_marker_hit_zone(self, placement_id: object, kind: str, **zone: object) -> None:
+        placement = str(placement_id or "")
+        if not placement:
+            return
+        zones = getattr(self, "_map_studio_marker_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_marker_hit_zones = zones
+        zone["placement_id"] = placement
+        zone["kind"] = kind
+        zones.append(zone)
+
+    def _add_map_studio_room_outline_hit_zone(self, room_resref: object, point_index: int, **zone: object) -> None:
+        room = str(room_resref or "")
+        if not room:
+            return
+        zones = getattr(self, "_map_studio_room_outline_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_room_outline_hit_zones = zones
+        zone["room_resref"] = room
+        zone["point_index"] = int(point_index)
+        zones.append(zone)
+
+    def _add_map_studio_room_primitive_hit_zone(self, room_resref: object, primitive_name: object, **zone: object) -> None:
+        room = str(room_resref or "")
+        primitive = str(primitive_name or "")
+        if not room or not primitive:
+            return
+        zones = getattr(self, "_map_studio_room_primitive_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_room_primitive_hit_zones = zones
+        zone["room_resref"] = room
+        zone["primitive_name"] = primitive
+        zones.append(zone)
+
+    def map_studio_room_primitive_at_screen(self, x: float, y: float) -> tuple[str, str, tuple[float, float, float]] | tuple[()]:
+        """Return the authored room primitive handle under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_room_primitive_hit_zones", ()) or ())):
+            kind = str(zone.get("kind", "") or "")
+            hit = False
+            if kind == "rect":
+                min_x, min_y, max_x, max_y = zone.get("bounds", (0.0, 0.0, -1.0, -1.0))
+                hit = float(min_x) <= px <= float(max_x) and float(min_y) <= py <= float(max_y)
+            elif kind == "circle":
+                cx, cy = zone.get("center", (0.0, 0.0))
+                radius = float(zone.get("radius", 0.0) or 0.0)
+                hit = ((px - float(cx)) ** 2 + (py - float(cy)) ** 2) <= radius * radius
+            if not hit:
+                continue
+            center = tuple(zone.get("world_center", (0.0, 0.0, 0.0)))
+            if len(center) < 3:
+                center = (0.0, 0.0, 0.0)
+            return (
+                str(zone.get("room_resref", "") or ""),
+                str(zone.get("primitive_name", "") or ""),
+                (float(center[0]), float(center[1]), float(center[2])),
+            )
+        return ()
+
+    def map_studio_room_outline_point_at_screen(self, x: float, y: float) -> tuple[str, int, tuple[float, float, float]] | tuple[()]:
+        """Return the authored room outline point under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_room_outline_hit_zones", ()) or ())):
+            cx, cy = zone.get("center", (0.0, 0.0))
+            radius = float(zone.get("radius", 0.0) or 0.0)
+            if ((px - float(cx)) ** 2 + (py - float(cy)) ** 2) <= radius * radius:
+                point = tuple(zone.get("world_point", (0.0, 0.0, 0.0)))
+                if len(point) < 3:
+                    point = (0.0, 0.0, 0.0)
+                return (
+                    str(zone.get("room_resref", "") or ""),
+                    int(zone.get("point_index", -1)),
+                    (float(point[0]), float(point[1]), float(point[2])),
+                )
+        return ()
+
+    def map_studio_marker_at_screen(self, x: float, y: float) -> str:
+        """Return the authored placement id under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_marker_hit_zones", ()) or ())):
+            kind = str(zone.get("kind", "") or "")
+            if kind == "rect":
+                min_x, min_y, max_x, max_y = zone.get("bounds", (0.0, 0.0, -1.0, -1.0))
+                if float(min_x) <= px <= float(max_x) and float(min_y) <= py <= float(max_y):
+                    return str(zone.get("placement_id", "") or "")
+            elif kind == "circle":
+                cx, cy = zone.get("center", (0.0, 0.0))
+                radius = float(zone.get("radius", 0.0) or 0.0)
+                if ((px - float(cx)) ** 2 + (py - float(cy)) ** 2) <= radius * radius:
+                    return str(zone.get("placement_id", "") or "")
+            elif kind == "line":
+                ax, ay = zone.get("start", (0.0, 0.0))
+                bx, by = zone.get("end", (0.0, 0.0))
+                tolerance = float(zone.get("tolerance", 0.0) or 0.0)
+                if self._map_studio_distance_to_segment(px, py, float(ax), float(ay), float(bx), float(by)) <= tolerance:
+                    return str(zone.get("placement_id", "") or "")
+        return ""
+
+    def _draw_map_studio_placement_markers(self, draw, w: int, h: int) -> None:
+        self._map_studio_marker_hit_zones = []
+        geometry = getattr(self, "_map_studio_marker_geometry", None)
+        if geometry is None:
+            return
+        footprints = tuple(getattr(geometry, "footprints", ()) or ())
+        lines = tuple(getattr(geometry, "lines", ()) or ())
+        if not footprints and not lines:
+            return
+        try:
+            for footprint in footprints:
+                points = tuple(getattr(footprint, "points", ()) or ())
+                projected = []
+                for point in points:
+                    proj = self._map_studio_project_point(point, w, h)
+                    if proj is None:
+                        projected = []
+                        break
+                    projected.append((proj[0], proj[1]))
+                if len(projected) >= 3:
+                    color = self._map_studio_marker_rgba(getattr(footprint, "color", ""), 220)
+                    fill = (color[0], color[1], color[2], 34)
+                    outline = (color[0], color[1], color[2], 205)
+                    closed = projected + [projected[0]]
+                    xs = [float(p[0]) for p in projected]
+                    ys = [float(p[1]) for p in projected]
+                    self._add_map_studio_marker_hit_zone(
+                        getattr(footprint, "placement_id", ""),
+                        "rect",
+                        bounds=(min(xs) - 8.0, min(ys) - 8.0, max(xs) + 8.0, max(ys) + 8.0),
+                    )
+                    draw.polygon(projected, fill=fill)
+                    draw.line(closed, fill=(0, 0, 0, 125), width=4)
+                    draw.line(closed, fill=outline, width=2)
+            for guide in lines:
+                start = self._map_studio_project_point(getattr(guide, "start", ()), w, h)
+                end = self._map_studio_project_point(getattr(guide, "end", ()), w, h)
+                if start is None or end is None:
+                    continue
+                color = self._map_studio_marker_rgba(getattr(guide, "color", ""), 235)
+                role = str(getattr(guide, "role", "") or "")
+                width = 3 if role == "facing" else 2
+                sx, sy = float(start[0]), float(start[1])
+                ex, ey = float(end[0]), float(end[1])
+                self._add_map_studio_marker_hit_zone(
+                    getattr(guide, "placement_id", ""),
+                    "line",
+                    start=(sx, sy),
+                    end=(ex, ey),
+                    tolerance=8.0 if role == "facing" else 6.0,
+                )
+                if role == "height":
+                    segments = 6
+                    for index in range(segments):
+                        if index % 2:
+                            continue
+                        t0 = index / segments
+                        t1 = (index + 1) / segments
+                        p0 = (sx + (ex - sx) * t0, sy + (ey - sy) * t0)
+                        p1 = (sx + (ex - sx) * t1, sy + (ey - sy) * t1)
+                        draw.line([p0, p1], fill=(0, 0, 0, 145), width=width + 2)
+                        draw.line([p0, p1], fill=color, width=width)
+                else:
+                    draw.line([(sx, sy), (ex, ey)], fill=(0, 0, 0, 145), width=width + 2)
+                    draw.line([(sx, sy), (ex, ey)], fill=color, width=width)
+                radius = 4
+                self._add_map_studio_marker_hit_zone(
+                    getattr(guide, "placement_id", ""),
+                    "circle",
+                    center=(sx, sy),
+                    radius=9.0,
+                )
+                draw.ellipse(
+                    [sx - radius, sy - radius, sx + radius, sy + radius],
+                    fill=color,
+                    outline=(0, 0, 0, 180),
+                    width=1,
+                )
+                if role == "facing":
+                    radius = 3
+                    self._add_map_studio_marker_hit_zone(
+                        getattr(guide, "placement_id", ""),
+                        "circle",
+                        center=(ex, ey),
+                        radius=8.0,
+                    )
+                    draw.ellipse(
+                        [ex - radius, ey - radius, ex + radius, ey + radius],
+                        fill=color,
+                        outline=(0, 0, 0, 180),
+                        width=1,
+                    )
+        except Exception as exc:
+            log.debug("Map Studio placement marker overlay failed: %s", exc)
+
+    def _draw_map_studio_room_outlines(self, draw, w: int, h: int) -> None:
+        self._map_studio_room_outline_hit_zones = []
+        self._map_studio_room_primitive_hit_zones = []
+        geometry = getattr(self, "_map_studio_room_outline_geometry", None)
+        if geometry is None:
+            return
+        polygons = tuple(getattr(geometry, "polygons", ()) or ())
+        lines = tuple(getattr(geometry, "lines", ()) or ())
+        primitive_handles = tuple(getattr(geometry, "primitive_handles", ()) or ())
+        if not polygons and not lines and not primitive_handles:
+            return
+        try:
+            for polygon in polygons:
+                points = tuple(getattr(polygon, "points", ()) or ())
+                projected = []
+                for point in points:
+                    proj = self._map_studio_project_point(point, w, h)
+                    if proj is None:
+                        projected = []
+                        break
+                    projected.append((proj[0], proj[1]))
+                if len(projected) < 3:
+                    continue
+                role = str(getattr(polygon, "role", "") or "")
+                color = self._map_studio_marker_rgba(getattr(polygon, "color", ""), 230)
+                closed = projected + [projected[0]]
+                fill_alpha = 24 if role == "floor" else 8
+                draw.polygon(projected, fill=(color[0], color[1], color[2], fill_alpha))
+                width = 3 if role == "floor" else 2
+                dash = role == "ceiling"
+                if dash:
+                    for start, end in zip(closed, closed[1:]):
+                        self._draw_map_studio_dashed_line(draw, start, end, color=color, width=width)
+                else:
+                    draw.line(closed, fill=(0, 0, 0, 150), width=width + 2)
+                    draw.line(closed, fill=color, width=width)
+                if role == "floor":
+                    room_resref = getattr(polygon, "room_resref", "")
+                    for index, (point, projected_point) in enumerate(zip(points, projected)):
+                        sx, sy = float(projected_point[0]), float(projected_point[1])
+                        self._add_map_studio_room_outline_hit_zone(
+                            room_resref,
+                            index,
+                            center=(sx, sy),
+                            radius=10.0,
+                            world_point=point,
+                        )
+                        radius = 4
+                        draw.ellipse(
+                            [sx - radius, sy - radius, sx + radius, sy + radius],
+                            fill=(color[0], color[1], color[2], 235),
+                            outline=(0, 0, 0, 190),
+                            width=1,
+                        )
+            for guide in lines:
+                start = self._map_studio_project_point(getattr(guide, "start", ()), w, h)
+                end = self._map_studio_project_point(getattr(guide, "end", ()), w, h)
+                if start is None or end is None:
+                    continue
+                color = self._map_studio_marker_rgba(getattr(guide, "color", ""), 220)
+                role = str(getattr(guide, "role", "") or "")
+                width = 3 if role == "opening" else 2
+                if role == "wall_height":
+                    self._draw_map_studio_dashed_line(draw, (start[0], start[1]), (end[0], end[1]), color=color, width=width)
+                else:
+                    draw.line([(start[0], start[1]), (end[0], end[1])], fill=(0, 0, 0, 150), width=width + 2)
+                    draw.line([(start[0], start[1]), (end[0], end[1])], fill=color, width=width)
+            self._draw_map_studio_room_primitive_handles(draw, primitive_handles, w, h)
+        except Exception as exc:
+            log.debug("Map Studio room outline overlay failed: %s", exc)
+
+    def _draw_map_studio_terrain_walkability(self, draw, w: int, h: int) -> None:
+        overlay = getattr(self, "_map_studio_terrain_walkability_overlay", None)
+        if overlay is None:
+            return
+        triangles = tuple(getattr(overlay, "triangles", ()) or ())
+        if not triangles:
+            return
+        try:
+            for triangle in triangles:
+                points = tuple(getattr(triangle, "points", ()) or ())
+                projected = []
+                for point in points:
+                    proj = self._map_studio_project_point(point, w, h)
+                    if proj is None:
+                        projected = []
+                        break
+                    projected.append((float(proj[0]), float(proj[1])))
+                if len(projected) < 3:
+                    continue
+                walkable = bool(getattr(triangle, "walkable", False))
+                color = self._map_studio_marker_rgba(
+                    getattr(triangle, "color", "#00ff7a" if walkable else "#ff9f1c"),
+                    225,
+                )
+                fill_alpha = 28 if walkable else 48
+                outline_alpha = 145 if walkable else 225
+                draw.polygon(projected, fill=(color[0], color[1], color[2], fill_alpha))
+                closed = projected + [projected[0]]
+                draw.line(closed, fill=(0, 0, 0, 120), width=3 if not walkable else 2)
+                draw.line(closed, fill=(color[0], color[1], color[2], outline_alpha), width=2 if not walkable else 1)
+                if not walkable:
+                    draw.line(
+                        [projected[0], projected[2]],
+                        fill=(255, 64, 64, 210),
+                        width=2,
+                    )
+        except Exception as exc:
+            log.debug("Map Studio terrain walkability overlay failed: %s", exc)
+
+    def _draw_map_studio_room_primitive_handles(self, draw, primitive_handles: tuple[object, ...], w: int, h: int) -> None:
+        for handle in primitive_handles:
+            footprint = tuple(getattr(handle, "footprint", ()) or ())
+            projected = []
+            for point in footprint:
+                proj = self._map_studio_project_point(point, w, h)
+                if proj is None:
+                    projected = []
+                    break
+                projected.append((float(proj[0]), float(proj[1])))
+            center = self._map_studio_project_point(getattr(handle, "center", ()), w, h)
+            if center is None:
+                continue
+            color = self._map_studio_marker_rgba(getattr(handle, "color", "#ff9f43"), 235)
+            room_resref = getattr(handle, "room_resref", "")
+            primitive_name = getattr(handle, "primitive_name", "")
+            world_center = tuple(getattr(handle, "center", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+            if len(projected) >= 3:
+                closed = projected + [projected[0]]
+                xs = [point[0] for point in projected]
+                ys = [point[1] for point in projected]
+                draw.polygon(projected, fill=(color[0], color[1], color[2], 18))
+                draw.line(closed, fill=(0, 0, 0, 145), width=4)
+                draw.line(closed, fill=color, width=2)
+                self._add_map_studio_room_primitive_hit_zone(
+                    room_resref,
+                    primitive_name,
+                    kind="rect",
+                    bounds=(min(xs) - 7.0, min(ys) - 7.0, max(xs) + 7.0, max(ys) + 7.0),
+                    world_center=world_center,
+                )
+            cx, cy = float(center[0]), float(center[1])
+            radius = 6
+            diamond = [(cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy), (cx, cy - radius)]
+            self._add_map_studio_room_primitive_hit_zone(
+                room_resref,
+                primitive_name,
+                kind="circle",
+                center=(cx, cy),
+                radius=11.0,
+                world_center=world_center,
+            )
+            draw.polygon(diamond, fill=(color[0], color[1], color[2], 225), outline=(0, 0, 0, 190))
+            label = str(getattr(handle, "primitive_type", "") or "")
+            if label:
+                draw.text((cx + 8, cy - 8), label, fill=color)
+
+    @staticmethod
+    def _draw_map_studio_dashed_line(draw, start, end, *, color: tuple[int, int, int, int], width: int = 2) -> None:
+        sx, sy = float(start[0]), float(start[1])
+        ex, ey = float(end[0]), float(end[1])
+        segments = 10
+        for index in range(segments):
+            if index % 2:
+                continue
+            t0 = index / segments
+            t1 = (index + 1) / segments
+            p0 = (sx + (ex - sx) * t0, sy + (ey - sy) * t0)
+            p1 = (sx + (ex - sx) * t1, sy + (ey - sy) * t1)
+            draw.line([p0, p1], fill=(0, 0, 0, 150), width=width + 2)
+            draw.line([p0, p1], fill=color, width=width)
+
     def _draw_wgpu_helper_markers(self, draw, w: int, h: int) -> None:
         if self.model is None:
             return

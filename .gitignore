@@ -136,10 +136,17 @@ proof_*/
 *_diagnostic*.py
 !src/adapters/rendering/gpu_diagnostics_exports.py
 !src/io/fbx/fbx_diagnostics.py
+!src/core/rendering/gpu_diagnostics_config.py
 !src/core/rendering/gpu_diagnostics_records.py
+!src/gui/panels/qt_diagnostics_panel.py
+!native/**/Python/src/**/*diagnostic*.py
 
 # ── Reproducible audit dumps (regenerate via scripts/dump_*.py) ───────────────
 diagnostics/
+!src/core/diagnostics/
+!src/core/diagnostics/*.py
+!native/**/Python/src/**/diagnostics/
+!native/**/Python/src/**/diagnostics/*.py
 /exports/baseline_renders/
 /exports/current_renders/
 /exports/skin_*/
@@ -238,6 +245,8 @@ devlog/
 scripts/
 !src/adapters/scripts/
 !src/adapters/scripts/*.py
+!native/**/Python/src/**/scripts/
+!native/**/Python/src/**/scripts/*.py
 !/scripts/
 !/scripts/generate_manifest.py
 !/scripts/full_scan.py

@@ -920,7 +920,7 @@ class MatrixPaletteUploader:
         )
         return _SKIN_FORMULA_G5
 
-    def compute_skin_node_palette(self, skin_node, anim_pose) -> List[BoneMatrix]:
+    def compute_skin_node_palette(self, skin_node, anim_pose, anim_base_pose=None) -> List[BoneMatrix]:
         """Compute a local skin-node palette using qBone/tBone inverse binds.
 
         3g wrapper attempts were visually rejected. Keep the production path at
@@ -966,12 +966,32 @@ class MatrixPaletteUploader:
         100%. G5 stays env-gated until 3j-5 (the joint visual gate plus
         the 50-model render-diff suite) clears it for production.
         """
+        # Imported/custom payload skins that are bound to a native KOTOR DAG can
+        # have normal skin weights but no qBone/tBone arrays. In that case the
+        # animation's first frame is the only reliable bind reference for live
+        # preview skinning, matching compute_palette(..., anim_base_pose=...).
+        if anim_base_pose is not None:
+            self.set_bind_pose_from_anim(anim_base_pose)
         self._palette = []
         self._skin_local_inv_bind_by_slot = {}
         self._skin_local_direct_bind_by_slot = {}
         self._skin_bind_matrix = None
         self._skin_bind_inverse_matrix = None
+        force_anim_base_bind = (
+            anim_base_pose is not None
+            and bool(getattr(
+                skin_node,
+                "_gr_use_animation_base_bind_for_preview",
+                False,
+            ))
+        )
         active_formula = self._resolve_skin_formula_for_skin_node(skin_node)
+        if force_anim_base_bind:
+            active_formula = _SKIN_FORMULA_F1
+            self._skin_profile_reason = (
+                "character_builder:animation_base_bind_preview "
+                f"model={self._model_name or '?'}"
+            )
         self._skin_palette_formula = active_formula
         self._skin_inverse_bind_source = "qBone_tBone_inverse_TR"
         pose_cache_key = (
@@ -994,6 +1014,7 @@ class MatrixPaletteUploader:
                 }
             except Exception:
                 pass
+        active_inv_bind = self._inv_bind_anim if self._inv_bind_anim is not None else self._inv_bind
         skin_key = str(getattr(skin_node, 'name', '') or '').lower()
         if skin_key:
             skin_bind = self._world_pose_matrix(skin_key, {}, {})
@@ -1022,7 +1043,9 @@ class MatrixPaletteUploader:
         qbones = list(getattr(skin_node, 'qbone_list', []) or [])
         tbones = list(getattr(skin_node, 'tbone_list', []) or [])
         formula_env_raw = os.environ.get(_SKIN_FORMULA_ENV, '').strip()
-        if active_formula == _SKIN_FORMULA_G5 and not formula_env_raw and (not qbones or not tbones):
+        if force_anim_base_bind:
+            self._skin_inverse_bind_source = "animation_base_pose_imported_payload"
+        elif active_formula == _SKIN_FORMULA_G5 and not formula_env_raw and (not qbones or not tbones):
             # Imported FBX skin meshes, such as the Unreal Animator Quinn target,
             # have normal bone maps and skin weights but no KotOR qBone/tBone
             # arrays. G5 would otherwise use identity inverse-bind matrices and
@@ -1057,11 +1080,14 @@ class MatrixPaletteUploader:
                 self._world_pose_matrix(bkey, pose_nodes, world_cache)
                 if bkey else _mat4_identity_py()
             )
-            cached_bind = static_bind_by_slot.get(idx)
+            cached_bind = None if force_anim_base_bind else static_bind_by_slot.get(idx)
             if cached_bind is not None:
                 inv_bind, direct_bind = cached_bind
             else:
-                if active_formula == _SKIN_FORMULA_G5:
+                if force_anim_base_bind:
+                    inv_bind = active_inv_bind.get(bkey, _mat4_identity_py())
+                    direct_bind = _mat4_invert_py(inv_bind)
+                elif active_formula == _SKIN_FORMULA_G5:
                     # Resolve the bone's DFS index; fall back to identity if
                     # the bone is missing from the lookup so a malformed
                     # bone_map entry never crashes the renderer.
@@ -1080,14 +1106,15 @@ class MatrixPaletteUploader:
                     inv_bind = (
                         self.qbone_inverse_bind_matrix(qbones[idx], tbones[idx])
                         if idx < len(qbones) and idx < len(tbones)
-                        else self._inv_bind.get(bkey, _mat4_identity_py())
+                        else active_inv_bind.get(bkey, _mat4_identity_py())
                     )
                     direct_bind = (
                         self.qbone_direct_bind_matrix(qbones[idx], tbones[idx])
                         if idx < len(qbones) and idx < len(tbones)
                         else _mat4_invert_py(inv_bind)
                     )
-                static_bind_by_slot[idx] = (inv_bind, direct_bind)
+                if not force_anim_base_bind:
+                    static_bind_by_slot[idx] = (inv_bind, direct_bind)
             self._skin_local_inv_bind_by_slot[idx] = inv_bind
             self._skin_local_direct_bind_by_slot[idx] = direct_bind
             if active_formula == _SKIN_FORMULA_F11 and skin_bind_rot_only is not None and inv_skin_bind_rot_only is not None:

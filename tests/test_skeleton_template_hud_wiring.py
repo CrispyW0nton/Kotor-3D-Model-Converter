@@ -13,6 +13,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+_NATIVE_SOURCE_ROOTS = (
+    ROOT / "native" / "GhostRigger.GUI.Boundary.Integration" / "Python",
+    ROOT / "native" / "GhostRigger.GUI.Boundary.Viewports" / "Python",
+    ROOT / "native" / "GhostRigger.GUI.Boundary.Panels" / "Python",
+    ROOT / "native" / "GhostRigger.GUI.Rendering.Frame" / "Python",
+    ROOT / "native" / "GhostRigger.Adapters.Rendering.Core" / "Python",
+    ROOT / "native" / "GhostRigger.Domain.Core.Rendering" / "Python",
+    ROOT / "native" / "GhostRigger.Domain.Core.Animation" / "Python",
+    ROOT / "native" / "GhostRigger.Domain.Core.Characters" / "Python",
+)
+
 _VIEWPORT_SOURCE_FILES = (
     "src/gui/viewports/viewport_core/shared/dependencies.py",
     "src/gui/viewports/viewport_core/shared/icons.py",
@@ -52,9 +63,16 @@ _SPLIT_SOURCE_MAP = {
 
 def _read(relpath: str) -> str:
     if relpath == "src/gui/viewports/qt_viewport.py":
-        return "\n".join((ROOT / path).read_text(encoding="utf-8") for path in _VIEWPORT_SOURCE_FILES)
+        return "\n".join(_read(path) for path in _VIEWPORT_SOURCE_FILES)
     relpath = _SPLIT_SOURCE_MAP.get(relpath, relpath)
-    return (ROOT / relpath).read_text(encoding="utf-8")
+    path = ROOT / relpath
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    for source_root in _NATIVE_SOURCE_ROOTS:
+        native_path = source_root / relpath
+        if native_path.exists():
+            return native_path.read_text(encoding="utf-8")
+    raise FileNotFoundError(relpath)
 
 
 def test_inspector_exposes_skeleton_template_picker_controls() -> None:
@@ -104,6 +122,20 @@ def test_builder_wires_template_selection_to_preview_and_apply() -> None:
     assert "apply_template_rig(" in src
     assert 'scale_mode="manual"' in src
     assert "scene.assign" in src
+
+
+def test_template_apply_replaces_scene_and_viewport_with_rigged_model() -> None:
+    src = _read("src/gui/panels/qt_character_builder_panel.py")
+    start = src.index("def _on_apply_skeleton_template_requested")
+    end = src.index("\n    @QtCore.Slot()\n    def _on_validate_requested", start)
+    block = src[start:end]
+
+    assert 'rigged_model = result.get("model")' in block
+    assert "_md.PartSlot.HEADLESS_BODY" in block
+    assert "self.scene.assign(\n            _md.PartSlot.HEADLESS_BODY,\n            rigged_model," in block
+    assert "_load_model_in_viewport_with_textures(\n                    rigged_model," in block
+    assert "self._push_import_fit_report_to_inspector(rigged_model)" in block
+    assert 'self._schedule_live_validation("skeleton_template_applied")' in block
 
 
 def test_humanoid_mode_uses_five_step_character_builder_rail() -> None:
@@ -403,9 +435,12 @@ def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:
     assert "self.auto_snap_external_skeleton_to_imported_unreal()" not in viewport
     assert "def _nearest_imported_bone_at" in viewport
     assert "def _snap_selected_external_bones_to_imported_at_cursor" in viewport
+    assert "def _nearest_visible_bone_dot_at" in viewport
+    assert "def _snap_joint_drag_to_visible_bone_at_cursor" in viewport
     assert "self._snap_key_down = True" in viewport
     assert "self._snap_key_down = False" in viewport
     assert "_snap_selected_external_bones_to_imported_at_cursor(x, y)" in viewport
+    assert "_snap_joint_drag_to_visible_bone_at_cursor(x, y)" in viewport
 
 
 def test_gimbal_translation_uses_projected_visible_axis_direction() -> None:

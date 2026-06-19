@@ -8,6 +8,7 @@ from typing import Any
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject, LevelScene, LevelTransform
+from src.core.modules.authored_module_export import authored_module_smoke_summary_lines
 from src.core.modules.module_editor_controller import ModuleEditorController
 from src.gui.panels.module_editor.blueprints_tab import BlueprintsTab
 from src.gui.panels.module_editor.builder_tab import BuilderTab
@@ -18,11 +19,115 @@ from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPr
 from src.gui.panels.module_editor.module_editor_toolbar import ModuleEditorToolbar
 from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
 from src.gui.panels.module_editor.porter_tab import PorterTab
+from src.gui.panels.module_editor.readiness_panel import ModuleReadinessPanel
 from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
 from src.gui.panels.module_editor.walkmesh_tab import WalkmeshTab
 from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+
+
+class _MapStudioGameProofDialog(QtWidgets.QDialog):
+    """Collect manual KOTOR smoke-test proof before marking a module tested."""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None, *, proof_manifest_path: str = "") -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Record Map Studio Game Proof")
+        self.setModal(True)
+        layout = QtWidgets.QVBoxLayout(self)
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
+
+        self.proof_manifest_edit = QtWidgets.QLineEdit(proof_manifest_path)
+        self.proof_manifest_edit.setObjectName("mapStudioProofManifestLineEdit")
+        proof_browse = QtWidgets.QPushButton("Browse...")
+        proof_browse.setObjectName("mapStudioProofManifestBrowseButton")
+        proof_row = QtWidgets.QHBoxLayout()
+        proof_row.addWidget(self.proof_manifest_edit, 1)
+        proof_row.addWidget(proof_browse)
+        form.addRow("Proof manifest", proof_row)
+
+        self.evidence_edit = QtWidgets.QLineEdit()
+        self.evidence_edit.setObjectName("mapStudioProofEvidenceLineEdit")
+        evidence_browse = QtWidgets.QPushButton("Browse...")
+        evidence_browse.setObjectName("mapStudioProofEvidenceBrowseButton")
+        evidence_row = QtWidgets.QHBoxLayout()
+        evidence_row.addWidget(self.evidence_edit, 1)
+        evidence_row.addWidget(evidence_browse)
+        form.addRow("Screenshot/video", evidence_row)
+
+        self.tester_edit = QtWidgets.QLineEdit()
+        self.tester_edit.setObjectName("mapStudioProofTesterLineEdit")
+        form.addRow("Tester", self.tester_edit)
+
+        self.notes_edit = QtWidgets.QPlainTextEdit()
+        self.notes_edit.setObjectName("mapStudioProofNotesEdit")
+        self.notes_edit.setMaximumHeight(90)
+        form.addRow("Notes", self.notes_edit)
+
+        checks_box = QtWidgets.QGroupBox("KOTOR in-game acceptance checks")
+        checks_box.setObjectName("mapStudioProofChecksGroupBox")
+        checks_layout = QtWidgets.QVBoxLayout(checks_box)
+        self.module_loads_box = QtWidgets.QCheckBox("`warp` loads the generated module in KOTOR")
+        self.module_loads_box.setObjectName("mapStudioProofModuleLoadsCheckBox")
+        self.player_floor_box = QtWidgets.QCheckBox("Player appears on the generated floor, not in void")
+        self.player_floor_box.setObjectName("mapStudioProofPlayerFloorCheckBox")
+        self.placeable_visible_box = QtWidgets.QCheckBox("Authored/test placeable appears where expected")
+        self.placeable_visible_box.setObjectName("mapStudioProofPlaceableVisibleCheckBox")
+        self.walkable_floor_box = QtWidgets.QCheckBox("Player can walk across the generated floor")
+        self.walkable_floor_box.setObjectName("mapStudioProofWalkableFloorCheckBox")
+        self.allow_missing_evidence_box = QtWidgets.QCheckBox("Record incomplete attempt if evidence file is missing")
+        self.allow_missing_evidence_box.setObjectName("mapStudioProofAllowMissingEvidenceCheckBox")
+        for widget in (
+            self.module_loads_box,
+            self.player_floor_box,
+            self.placeable_visible_box,
+            self.walkable_floor_box,
+            self.allow_missing_evidence_box,
+        ):
+            checks_layout.addWidget(widget)
+        layout.addWidget(checks_box)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        proof_browse.clicked.connect(self._browse_proof_manifest)
+        evidence_browse.clicked.connect(self._browse_evidence)
+
+    def values(self) -> dict[str, Any]:
+        return {
+            "proof_manifest_path": self.proof_manifest_edit.text().strip(),
+            "evidence_path": self.evidence_edit.text().strip(),
+            "tester": self.tester_edit.text().strip(),
+            "notes": self.notes_edit.toPlainText().strip(),
+            "module_loads_in_game": self.module_loads_box.isChecked(),
+            "player_spawns_on_floor": self.player_floor_box.isChecked(),
+            "test_placeable_visible": self.placeable_visible_box.isChecked(),
+            "player_can_walk_on_floor": self.walkable_floor_box.isChecked(),
+            "allow_missing_evidence": self.allow_missing_evidence_box.isChecked(),
+        }
+
+    def _browse_proof_manifest(self) -> None:
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select Map Studio proof manifest",
+            self.proof_manifest_edit.text().strip(),
+            "Proof manifest (*.json);;All files (*.*)",
+        )
+        if path:
+            self.proof_manifest_edit.setText(path)
+
+    def _browse_evidence(self) -> None:
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select KOTOR screenshot or video evidence",
+            self.evidence_edit.text().strip(),
+            "Evidence (*.png *.jpg *.jpeg *.bmp *.mp4 *.mov *.mkv);;All files (*.*)",
+        )
+        if path:
+            self.evidence_edit.setText(path)
 
 
 class ModuleEditorWindow(QtWidgets.QMainWindow):
@@ -153,6 +258,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.walkmesh_tab = WalkmeshTab()
         self.porter_tab = PorterTab()
         self.builder_tab = BuilderTab()
+        self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
+        self.builder_tab.set_terrain_shape_presets(self.controller.available_authored_terrain_shape_presets())
+        self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
+        self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
+        self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -185,10 +295,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.properties = ModuleEditorPropertiesPanel(right)
+        self.readiness_panel = ModuleReadinessPanel(right)
         self.export_panel = ModuleExportPanel(right)
         right_tabs = QtWidgets.QTabWidget()
         right_tabs.addTab(self.properties, "Properties")
-        right_tabs.addTab(self.export_panel, "Export")
+        export_page = QtWidgets.QWidget(right_tabs)
+        export_layout = QtWidgets.QVBoxLayout(export_page)
+        export_layout.setContentsMargins(0, 0, 0, 0)
+        export_layout.addWidget(self.readiness_panel)
+        export_layout.addWidget(self.export_panel)
+        right_tabs.addTab(export_page, "Export")
         right_layout.addWidget(right_tabs, 1)
         self.main_splitter.addWidget(right)
 
@@ -233,14 +349,36 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner.itemSelected.connect(self.select_item)
         self.outliner.actionRequested.connect(self._outliner_action)
         self.viewport_panel.itemSelected.connect(self.select_item)
+        self.viewport_panel.transformEdited.connect(self._set_transform)
+        self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
+        self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
+        self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.validation_panel.issueActivated.connect(self.select_item)
+        self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
+        self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
         self.properties.transformChanged.connect(self._set_transform)
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
         self.properties.propertyChanged.connect(self._set_property)
         self.export_panel.exportRequested.connect(self.export_fbx)
+        self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
+        self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
+        self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)
+        self.export_panel.authoredModuleInstallRequested.connect(self.install_authored_module)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
+        self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
+        self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
+        self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
+        self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)
+        self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
+        self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
+        self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)
+        self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)
+        self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)
+        self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
+        self.builder_tab.roomLightRequested.connect(self.add_authored_room_light)
+        self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -290,6 +428,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def set_library_rows(self, rows: list[dict[str, Any]]) -> None:
         self._library_rows = [dict(row) for row in rows]
         self.asset_browser.set_rows(self._library_rows)
+        self.builder_tab.set_gameplay_palette_entries(self.controller.authored_gameplay_palette_entries(self._library_rows))
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
         renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
@@ -353,6 +492,469 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Manifest: {result.manifest_path}")
         self.validate_kmap()
 
+    def stage_dev_test_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage grdev01 dev test module", self._last_output_dir or "")
+        if not path:
+            return
+        result = self.controller.stage_dev_test_module(path, dry_run=dry_run)
+        self._last_output_dir = path
+        self._log(result.message)
+        export_result = result.export_result
+        if export_result is not None:
+            if export_result.module_path:
+                self._log(f"Package: {export_result.module_path}")
+            if export_result.manifest_path:
+                self._log(f"Manifest: {export_result.manifest_path}")
+        if result.checklist_path:
+            self._log(f"Game-test checklist: {result.checklist_path}")
+        if result.proof_manifest_path:
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if getattr(result, "launch_helper_command", ""):
+            self._log(f"Launch dry-run helper: {result.launch_helper_command}")
+        if getattr(result, "elevated_launch_script_path", ""):
+            self._log(f"Elevated launch helper: {result.elevated_launch_script_path}")
+        if getattr(result, "proof_recording_script_path", ""):
+            self._log(f"Proof recorder: {result.proof_recording_script_path}")
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+
+    def export_authored_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Export authored KMAP module", self._last_output_dir or "")
+        if not path:
+            return
+        try:
+            result = self.controller.export_authored_module(path, dry_run=dry_run)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Export Authored Module", str(exc))
+            return
+        self._last_output_dir = path
+        self._log(result.message)
+        if result.module_path:
+            self._log(f"Package: {result.module_path}")
+        if result.manifest_path:
+            self._log(f"Manifest: {result.manifest_path}")
+        for line in authored_module_smoke_summary_lines(result):
+            self._log(line)
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+        self._refresh_all("Authored module export state updated.")
+
+    def stage_authored_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module for game test", self._last_output_dir or "")
+        if not path:
+            return
+        try:
+            result = self.controller.stage_authored_module(path, dry_run=dry_run)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Stage Authored Module", str(exc))
+            return
+        self._last_output_dir = path
+        self._log(result.message)
+        export_result = result.export_result
+        if export_result is not None:
+            if export_result.module_path:
+                self._log(f"Package: {export_result.module_path}")
+            if export_result.manifest_path:
+                self._log(f"Manifest: {export_result.manifest_path}")
+        if result.installed_module_path:
+            self._log(f"Installed module: {result.installed_module_path}")
+        if result.checklist_path:
+            self._log(f"Game-test checklist: {result.checklist_path}")
+        if result.proof_manifest_path:
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if export_result is not None:
+            for line in authored_module_smoke_summary_lines(export_result):
+                self._log(line)
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+        self._refresh_all("Authored module game-test staging updated.")
+
+    def install_authored_module(self, dry_run: bool = False) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module package and proof files", self._last_output_dir or "")
+        if not path:
+            return
+        modules_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select KOTOR Modules folder", "")
+        if not modules_path:
+            return
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "authored").strip().lower()
+        destination = Path(modules_path) / f"{module_root}.mod"
+        overwrite = False
+        if destination.exists():
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Install Authored Module",
+                f"{destination.name} already exists in the selected Modules folder.\n\n"
+                "GhostRigger will create a .bak backup before replacing it. Continue?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer != QtWidgets.QMessageBox.Yes:
+                return
+            overwrite = True
+        try:
+            result = self.controller.stage_authored_module(
+                path,
+                dry_run=dry_run,
+                game_modules_dir=modules_path,
+                overwrite=overwrite,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Install Authored Module", str(exc))
+            return
+        self._last_output_dir = path
+        self._log(result.message)
+        export_result = result.export_result
+        if export_result is not None:
+            if export_result.module_path:
+                self._log(f"Package: {export_result.module_path}")
+            if export_result.manifest_path:
+                self._log(f"Manifest: {export_result.manifest_path}")
+        if result.installed_module_path:
+            self._log(f"Installed module: {result.installed_module_path}")
+        if result.backup_module_path:
+            self._log(f"Backup module: {result.backup_module_path}")
+        if result.checklist_path:
+            self._log(f"Game-test checklist: {result.checklist_path}")
+        if result.proof_manifest_path:
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if export_result is not None:
+            for line in authored_module_smoke_summary_lines(export_result):
+                self._log(line)
+        for warning in result.warnings:
+            self._log(f"Warning: {warning}")
+        for issue in result.blocking_issues:
+            self._log(f"Blocking: {issue}")
+        if not result.ok:
+            QtWidgets.QMessageBox.warning(self, "Install Authored Module", result.message)
+        self._refresh_all("Authored module game-test install updated.")
+
+    def record_game_smoke_proof(self) -> None:
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        default_manifest = str(payload.get("proof_manifest_path") or "")
+        dialog = _MapStudioGameProofDialog(self, proof_manifest_path=default_manifest)
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return
+        values = dialog.values()
+        if not values["proof_manifest_path"]:
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", "Choose the proof manifest written by the Map Studio stage action.")
+            return
+        if not values["evidence_path"] and not values["allow_missing_evidence"]:
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", "Choose screenshot or video evidence from the actual KOTOR test.")
+            return
+        result = self.controller.record_map_studio_game_proof(**values)
+        self._log(result.message)
+        if getattr(result, "proof_manifest_path", ""):
+            self._log(f"Proof manifest: {result.proof_manifest_path}")
+        if getattr(result, "pack_manifest_path", ""):
+            self._log(f"Pack manifest: {result.pack_manifest_path}")
+        if getattr(result, "evidence_path", ""):
+            self._log(f"Evidence: {result.evidence_path}")
+        for warning in getattr(result, "warnings", ()):
+            self._log(f"Warning: {warning}")
+        for issue in getattr(result, "blocking_issues", ()):
+            self._log(f"Blocking: {issue}")
+        if not getattr(result, "ok", False):
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", result.message)
+        self._refresh_all("Map Studio game proof updated.")
+
+    def open_map_studio_launch_handoff(self) -> None:
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        launcher_path = Path(str(payload.get("elevated_launch_script_path") or ""))
+        proof_path = Path(str(payload.get("proof_manifest_path") or ""))
+        proof_recorder_path = Path(str(payload.get("proof_recording_script_path") or ""))
+        if launcher_path.is_file():
+            recorder_line = (
+                f"\n\nAfter capturing screenshot/video evidence, run:\n{proof_recorder_path}"
+                if proof_recorder_path.is_file()
+                else ""
+            )
+            response = QtWidgets.QMessageBox.question(
+                self,
+                "Open Launch Handoff",
+                "Open the elevated KOTOR launcher for this authored module smoke test? Windows may ask for administrator approval. This only starts the game; you still need to run the warp command and record proof."
+                + recorder_line,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            )
+            if response != QtWidgets.QMessageBox.Yes:
+                return
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(launcher_path)))
+            self._log(f"Opened launch handoff: {launcher_path}")
+            return
+        if proof_path.is_file():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(proof_path.parent)))
+            self._log(f"Opened proof folder: {proof_path.parent}")
+            return
+        QtWidgets.QMessageBox.information(
+            self,
+            "Open Launch Handoff",
+            "Stage or install an authored module game-test package before opening the launch handoff.",
+        )
+
+    def create_authored_room_preset(self, preset_id: str, module_root: str) -> None:
+        try:
+            result = self.controller.create_authored_room_preset_module(preset_id=preset_id, module_root=module_root)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Create Authored Room Primitive", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Created authored module {self.project.name} from primitive preset {preset_id}."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_operation(
+        self,
+        operation: str,
+        distance: float,
+        cut_center_x: float,
+        cut_center_y: float,
+        cut_width: float,
+        cut_depth: float,
+    ) -> None:
+        try:
+            if operation == "rectangular_cut":
+                result = self.controller.apply_authored_room_operation(
+                    operation=operation,
+                    center=(cut_center_x, cut_center_y),
+                    size=(cut_width, cut_depth),
+                )
+            else:
+                result = self.controller.apply_authored_room_operation(operation=operation, distance=distance)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Room Operation", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Applied room operation {operation}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_terrain_operation(
+        self,
+        operation: str,
+        room_resref: str,
+        row_index: int,
+        column_index: int,
+        height: float,
+        delta: float,
+        radius: int,
+        iterations: int,
+        strength: float,
+    ) -> None:
+        try:
+            result = self.controller.apply_authored_terrain_operation(
+                operation=operation,
+                room_resref=room_resref,
+                row_index=row_index,
+                column_index=column_index,
+                height=height,
+                delta=delta,
+                radius=radius,
+                iterations=iterations,
+                strength=strength,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Terrain Operation", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Applied terrain operation {operation} to {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def merge_authored_floor_plan_rooms(self, first_room_resref: str, second_room_resref: str, result_room_resref: str) -> None:
+        try:
+            result = self.controller.merge_authored_floor_plan_rooms(
+                first_room_resref=first_room_resref,
+                second_room_resref=second_room_resref,
+                result_room_resref=result_room_resref,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Union Rectangular Rooms", str(exc))
+            return
+        readiness = result.readiness
+        label = result_room_resref.strip() or first_room_resref
+        message = f"Merged floor-plan rooms {first_room_resref} and {second_room_resref} into {label}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def add_authored_room_primitive(self, primitive_kind: str, primitive_name: str) -> None:
+        try:
+            result = self.controller.add_authored_room_primitive(
+                primitive_kind=primitive_kind,
+                primitive_name=primitive_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Room Primitive", str(exc))
+            return
+        readiness = result.readiness
+        label = primitive_name or primitive_kind
+        message = f"Added room primitive {label}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_primitive_transform(
+        self,
+        room_resref: str,
+        primitive_name: str,
+        tx: float,
+        ty: float,
+        tz: float,
+        rot_z: float,
+        sx: float,
+        sy: float,
+        sz: float,
+        px: float,
+        py: float,
+        pz: float,
+    ) -> None:
+        try:
+            result = self.controller.set_authored_room_primitive_transform(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                translation=(tx, ty, tz),
+                rotation_degrees_z=rot_z,
+                scale=(sx, sy, sz),
+                pivot=(px, py, pz),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Primitive Transform", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Transformed room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_primitive_dimensions(self, room_resref: str, primitive_name: str, dimensions: object) -> None:
+        try:
+            result = self.controller.set_authored_room_primitive_dimensions(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                dimensions=dimensions,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Primitive Dimensions", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Edited room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_primitive_style(self, room_resref: str, primitive_name: str, texture: str, surface_id: str) -> None:
+        try:
+            result = self.controller.set_authored_room_primitive_style(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                texture=texture,
+                surface_id=surface_id,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Primitive Material + Surface", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Styled room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def remove_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None:
+        try:
+            result = self.controller.remove_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Remove Room Primitive", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Removed room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_room_style(self, texture: str, floor_surface: str) -> None:
+        try:
+            result = self.controller.apply_authored_room_style(texture=texture, floor_surface=floor_surface)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Room Material + Surface", str(exc))
+            return
+        readiness = result.readiness
+        message = "Applied room material and walkmesh surface; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def add_authored_room_light(
+        self,
+        room_resref: str,
+        name: str,
+        pos_x: float,
+        pos_y: float,
+        pos_z: float,
+        color_r: float,
+        color_g: float,
+        color_b: float,
+        radius: float,
+        intensity: float,
+        light_type: str,
+    ) -> None:
+        try:
+            result = self.controller.add_authored_room_light(
+                room_resref=room_resref,
+                name=name,
+                position=(pos_x, pos_y, pos_z),
+                color=(color_r, color_g, color_b),
+                radius=radius,
+                intensity=intensity,
+                light_type=light_type,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Room Light", str(exc))
+            return
+        readiness = result.readiness
+        message = "Added authored room light; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def add_authored_gameplay_placement(
+        self,
+        kind: str,
+        template_resref: str,
+        tag: str,
+        x: float,
+        y: float,
+        z: float,
+        bearing: float,
+    ) -> None:
+        try:
+            result = self.controller.add_authored_gameplay_placement(
+                kind=kind,
+                template_resref=template_resref,
+                tag=tag,
+                position=(x, y, z),
+                bearing=bearing,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Gameplay Placement", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Added authored {kind} placement; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
     def export_fbx(self, dry_run: bool = False) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export KMAP Scene", f"{self.project.name}.fbx", "FBX files (*.fbx)")
         if not path:
@@ -401,6 +1003,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             callback()
 
     def _handle_tab_action(self, action: str) -> None:
+        if action == "Create grdev01 Dev Room":
+            result = self.controller.create_dev_test_authored_module()
+            readiness = result.readiness
+            message = "Created grdev01 authored module with one primitive room, generated walkmesh intent, player start, and test placeable."
+            if readiness is not None:
+                message = f"{message} Readiness: {readiness.capability_stage}."
+            self._refresh_all(message)
+            return
         if action == "Load LYT":
             path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load LYT", "", "LYT files (*.lyt);;All files (*.*)")
             if path:
@@ -475,18 +1085,77 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._handle_tab_action(mapping.get(action, action))
 
     def _set_transform(self, item_id: str, transform: LevelTransform) -> None:
+        if item_id.startswith("authored_light:"):
+            try:
+                self.controller.set_authored_room_light_transform(
+                    item_id,
+                    position=transform.position,
+                )
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Move Authored Room Light", str(exc))
+                return
+            self._refresh_all()
+            return
+        if item_id.startswith("authored:"):
+            try:
+                self.controller.set_authored_gameplay_placement_transform(
+                    item_id,
+                    position=transform.position,
+                    bearing=float(transform.rotation[2]) if len(transform.rotation) >= 3 else None,
+                )
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Move Authored Gameplay Placement", str(exc))
+                return
+            self._refresh_all()
+            return
         if LevelScene(self.project).set_transform(item_id, transform):
             self._refresh_all()
 
+    def _set_authored_room_outline_point(self, room_resref: str, point_index: int, world_position: object) -> None:
+        try:
+            self.controller.move_authored_room_outline_point(
+                room_resref=room_resref,
+                point_index=int(point_index),
+                world_position=tuple(world_position),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Move Authored Room Outline Point", str(exc))
+            return
+        self._refresh_all()
+
+    def _select_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None:
+        selected = self.builder_tab.select_room_primitive(room_resref, primitive_name)
+        if selected:
+            self.workflow_tabs.setCurrentWidget(self.builder_tab)
+            self.statusBar().showMessage(f"Selected room primitive {primitive_name}")
+
+    def _move_authored_room_primitive(self, room_resref: str, primitive_name: str, world_delta: object) -> None:
+        try:
+            self.controller.move_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                world_delta=tuple(world_delta),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Move Authored Room Primitive", str(exc))
+            return
+        self._refresh_all()
+
     def _set_visibility(self, item_id: str, visible: bool) -> None:
+        if item_id.startswith("authored:"):
+            return
         if LevelScene(self.project).set_visibility(item_id, visible):
             self._refresh_all()
 
     def _set_locked(self, item_id: str, locked: bool) -> None:
+        if item_id.startswith("authored:"):
+            return
         if LevelScene(self.project).set_locked(item_id, locked):
             self._refresh_all()
 
     def _set_property(self, item_id: str, key: str, value: Any) -> None:
+        if item_id.startswith("authored:"):
+            return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:
             return
@@ -499,9 +1168,31 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
-        self.properties.set_project(self.project)
-        self.outliner.set_project(self.project)
-        self.viewport_panel.set_project(self.project)
+        authored_placements = self.controller.authored_gameplay_placements()
+        authored_room_lights = self.controller.authored_room_lights()
+        authored_markers = self.controller.authored_gameplay_preview_markers()
+        authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
+        authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
+        authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
+        authored_room_primitives = self.controller.authored_room_primitive_transforms()
+        authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
+        authored_terrain_rooms = self.controller.authored_terrain_room_choices()
+        self.builder_tab.set_room_primitives(authored_room_primitives)
+        self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
+        self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
+        self.properties.set_project(self.project, authored_placements, authored_room_lights)
+        self.outliner.set_project(self.project, authored_placements, authored_room_lights)
+        self.viewport_panel.set_project(
+            self.project,
+            authored_placements,
+            authored_room_lights,
+            authored_markers,
+            authored_marker_geometry,
+            authored_room_outline_geometry,
+            authored_terrain_walkability_overlay,
+        )
+        readiness_result = self.controller.authored_module_readiness()
+        self.readiness_panel.set_readiness(readiness_result.readiness)
         if self.controller.model.selected_ids:
             self.select_item(self.controller.model.selected_ids[0])
         if message:

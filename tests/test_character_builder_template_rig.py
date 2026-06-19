@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 from src.core.characters.character_builder import apply_template_rig
 from src.core.characters.character_rig_state import get_character_rig_state
+from src.core.animation.animation_engine import AnimPose, NodePose
+from src.core.animation.gpu_skinning import MatrixPaletteUploader
 from src.core.geometry.model_data import (
     BoneWeight,
     CharacterScene,
@@ -284,6 +286,100 @@ def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -
     assert rigged_mesh._gr_vertices_in_kotor_world is True
 
 
+def test_apply_template_rig_generated_skin_bind_palette_survives_kotor_parent_flip() -> None:
+    src_root = _node("Bendak_UE")
+    mesh = _node("BendakFit", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(2.0, 0.0, 0.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh._gr_vertices_in_kotor_world = True
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    kotor_root.rotation = (0.0, 0.0, 1.0, 0.0)
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    rootdummy.position = (1.0, 0.0, 0.0)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Male02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("BendakFit")
+    assert rigged_mesh is not None
+    assert rigged_mesh.bone_map == ["rootdummy"]
+
+    uploader = MatrixPaletteUploader()
+    uploader.build_inverse_bind_pose(result["model"])
+    palette = uploader.compute_skin_node_palette(rigged_mesh, AnimPose(time=0.0))
+
+    assert len(palette) == 1
+    identity_col_major = [
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ]
+    for actual, expected in zip(palette[0].flat_col, identity_col_major):
+        assert math.isclose(actual, expected, abs_tol=1.0e-6)
+
+
+def test_apply_template_rig_live_palette_uses_animation_base_pose_for_imported_skin() -> None:
+    src_root = _node("Bendak_UE")
+    mesh = _node("BendakFit", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(2.0, 0.0, 0.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh._gr_vertices_in_kotor_world = True
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    rootdummy = _node("rootdummy", parent=kotor_root)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Male02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("BendakFit")
+    assert rigged_mesh is not None
+    rigged_mesh.qbone_list = []
+    rigged_mesh.tbone_list = []
+    assert rigged_mesh.qbone_list == []
+    assert rigged_mesh.tbone_list == []
+
+    base_pose = AnimPose(
+        time=0.0,
+        nodes={
+            "rootdummy": NodePose(
+                name="rootdummy",
+                position=(0.5, 0.0, 0.0),
+            )
+        },
+    )
+    current_pose = AnimPose(
+        time=0.5,
+        nodes={
+            "rootdummy": NodePose(
+                name="rootdummy",
+                position=(0.5, 0.0, 0.0),
+            )
+        },
+    )
+    uploader = MatrixPaletteUploader()
+    uploader.build_inverse_bind_pose(result["model"])
+    palette = uploader.compute_skin_node_palette(
+        rigged_mesh,
+        current_pose,
+        anim_base_pose=base_pose,
+    )
+
+    identity_col_major = [
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ]
+    for actual, expected in zip(palette[0].flat_col, identity_col_major):
+        assert math.isclose(actual, expected, abs_tol=1.0e-6)
+
+
 def test_apply_template_rig_does_not_scale_native_template_in_manual_mode() -> None:
     src_root = _node("import_root")
     mesh = _node("body_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
@@ -355,6 +451,84 @@ def test_apply_template_rig_transfers_native_template_donor_weights_by_nearest_v
     assert skin_binding["mesh_reports"][0]["donor_vertices"] == 2
     assert skin_binding["mesh_reports"][0]["fallback_vertices"] == 0
     assert skin_binding["mesh_reports"][0]["donor_vertex_count"] == 2
+
+
+def test_apply_template_rig_remaps_imported_source_skin_weights_to_kotor_bones() -> None:
+    src_root = _node("import_root")
+    mesh = _node(
+        "bendak_payload",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=src_root,
+    )
+    mesh.vertices = [(-0.5, 0.0, 1.0), (0.5, 0.0, 0.1)]
+    mesh.faces = [(0, 1, 1)]
+    mesh.bone_map = ["L_Hand", "R_Foot"]
+    mesh.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    _node("Lhand_g", parent=kotor_root)
+    _node("rfoot_g", parent=kotor_root)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("bendak_payload")
+    assert rigged_mesh is not None
+    left_hand_index = rigged_mesh.bone_map.index("Lhand_g")
+    right_foot_index = rigged_mesh.bone_map.index("rfoot_g")
+    assert rigged_mesh.skin_data[0].influences[0].bone_index == left_hand_index
+    assert math.isclose(rigged_mesh.skin_data[0].influences[0].weight, 1.0)
+    assert rigged_mesh.skin_data[1].influences[0].bone_index == right_foot_index
+    assert math.isclose(rigged_mesh.skin_data[1].influences[0].weight, 1.0)
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["weighting_method"] == "imported_source_skin_remap"
+    assert skin_binding["quality_stage"] == "source_skin_remap_first_pass"
+    assert skin_binding["source_skin_remap"] is True
+    assert skin_binding["donor_weight_transfer"] is False
+    assert skin_binding["mesh_reports"][0]["source_skin_vertices"] == 2
+    assert skin_binding["mesh_reports"][0]["fallback_vertices"] == 0
+
+
+def test_apply_template_rig_refines_source_hand_weights_with_native_fingers() -> None:
+    src_root = _node("import_root")
+    mesh = _node(
+        "bendak_hand_payload",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=src_root,
+    )
+    mesh.vertices = [(-0.62, 0.1, 1.0)]
+    mesh.faces = [(0, 0, 0)]
+    mesh.bone_map = ["L_Hand"]
+    mesh.skin_data = [VertexSkinData([BoneWeight(0, 1.0)])]
+    mesh_model = KotorModel(name="bendak", root_node=src_root)
+
+    kotor_root = _node("N_Mandalorian")
+    hand = _node("Lhand_g", parent=kotor_root)
+    hand.position = (-0.50, 0.0, 1.0)
+    finger = _node("LaFngrB_g", parent=hand)
+    finger.position = (-0.10, 0.1, 0.0)
+    finger_tip = _node("LaFngrT_g", parent=finger)
+    finger_tip.position = (-0.10, 0.1, 0.0)
+    template = KotorModel(name="n_mandalorian", root_node=kotor_root, supermodel="S_Female02")
+
+    result = apply_template_rig(mesh_model, template, game="K1", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("bendak_hand_payload")
+    assert rigged_mesh is not None
+    assert "Lhand_g" in rigged_mesh.bone_map
+    assert "LaFngrB_g" in rigged_mesh.bone_map
+    finger_index = rigged_mesh.bone_map.index("LaFngrB_g")
+    assert any(inf.bone_index == finger_index for inf in rigged_mesh.skin_data[0].influences)
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["source_skin_remap"] is True
+    assert skin_binding["source_hand_refinement"] is True
+    assert skin_binding["mesh_reports"][0]["source_hand_refinement_vertices"] == 1
 
 
 def test_apply_template_rig_records_replaced_native_render_payload_nodes() -> None:

@@ -118,8 +118,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Domain.Core.Cha
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Domain.Core.Skeleton", "native\GhostRigger.Domain.Core.Skeleton\GhostRigger.Domain.Core.Skeleton.vcxproj", "{86C4EAD7-356C-4046-8028-A518F19B4F45}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Domain.Core.MDL", "native\GhostRigger.Domain.Core.MDL\GhostRigger.Domain.Core.MDL.vcxproj", "{9B733388-ACF1-412C-BB32-A3D091C3000C}"
-EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Domain.Core.Geometry", "native\GhostRigger.Domain.Core.Geometry\GhostRigger.Domain.Core.Geometry.vcxproj", "{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Domain.Core.Gizmo", "native\GhostRigger.Domain.Core.Gizmo\GhostRigger.Domain.Core.Gizmo.vcxproj", "{6DF4CD22-59BB-43D1-BF9D-CF5CCA5BBBDF}"
@@ -569,14 +567,6 @@ Global
 		{86C4EAD7-356C-4046-8028-A518F19B4F45}.Release|Win32.Build.0 = Release|Win32
 		{86C4EAD7-356C-4046-8028-A518F19B4F45}.Release|x64.ActiveCfg = Release|x64
 		{86C4EAD7-356C-4046-8028-A518F19B4F45}.Release|x64.Build.0 = Release|x64
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Debug|Win32.ActiveCfg = Debug|Win32
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Debug|Win32.Build.0 = Debug|Win32
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Debug|x64.ActiveCfg = Debug|x64
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Debug|x64.Build.0 = Debug|x64
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Release|Win32.ActiveCfg = Release|Win32
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Release|Win32.Build.0 = Release|Win32
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Release|x64.ActiveCfg = Release|x64
-		{9B733388-ACF1-412C-BB32-A3D091C3000C}.Release|x64.Build.0 = Release|x64
 		{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}.Debug|Win32.ActiveCfg = Debug|Win32
 		{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}.Debug|Win32.Build.0 = Debug|Win32
 		{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}.Debug|x64.ActiveCfg = Debug|x64

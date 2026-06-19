@@ -46,6 +46,41 @@ class RoomWOKSummary:
 
 
 @dataclass(frozen=True)
+class WOKFaceOverlay:
+    """Viewport-ready annotation for one WOK face."""
+
+    room_id: str
+    face_index: int
+    vertices: tuple[tuple[float, float, float], ...]
+    surface_id: int
+    surface_name: str
+    walkable: bool
+    issue_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class WOKEdgeOverlay:
+    """Viewport-ready annotation for one WOK boundary/blocking edge."""
+
+    room_id: str
+    face_index: int
+    edge_index: int
+    start: tuple[float, float, float]
+    end: tuple[float, float, float]
+    kind: str = "boundary"
+    issue_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class RoomWOKOverlay:
+    """Overlay geometry a Map Studio viewport can draw for WOK diagnostics."""
+
+    room_id: str
+    faces: tuple[WOKFaceOverlay, ...] = ()
+    edges: tuple[WOKEdgeOverlay, ...] = ()
+
+
+@dataclass(frozen=True)
 class WOKSeamReport:
     """Approximate walkmesh seam relationship between two rooms."""
 
@@ -65,6 +100,7 @@ class AreaWOKIntegrationReport:
 
     ok: bool = False
     rooms: list[RoomWOKSummary] = field(default_factory=list)
+    overlays: list[RoomWOKOverlay] = field(default_factory=list)
     seams: list[WOKSeamReport] = field(default_factory=list)
     issues: list[AreaWOKIssue] = field(default_factory=list)
     walkable_face_count: int = 0
@@ -75,17 +111,31 @@ class AreaWOKIntegrationReport:
 
 
 def _import_lyt_room_graph():
-    try:
-        return import_module("core.lyt_room_graph")
-    except ImportError:
-        return import_module("src.core.lyt_room_graph")
+    for name in (
+        "src.core.scene.lyt_room_graph",
+        "core.scene.lyt_room_graph",
+        "core.lyt_room_graph",
+        "src.core.lyt_room_graph",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module("src.core.scene.lyt_room_graph")
 
 
 def _import_walkmesh_editor():
-    try:
-        return import_module("core.walkmesh_editor")
-    except ImportError:
-        return import_module("src.core.walkmesh_editor")
+    for name in (
+        "src.core.walkmesh.walkmesh_editor",
+        "core.walkmesh.walkmesh_editor",
+        "core.walkmesh_editor",
+        "src.core.walkmesh_editor",
+    ):
+        try:
+            return import_module(name)
+        except ImportError:
+            continue
+    return import_module("src.core.walkmesh.walkmesh_editor")
 
 
 def _normalise_resref(value: Any) -> str:
@@ -143,6 +193,31 @@ def _triangle_area_xy(points: list[tuple[float, float, float]]) -> float:
         return 0.0
     a, b, c = points
     return 0.5 * ((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]))
+
+
+def _triangle_area_3d(points: list[tuple[float, float, float]]) -> float:
+    if len(points) != 3:
+        return 0.0
+    a, b, c = points
+    ab = (b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    ac = (c[0] - a[0], c[1] - a[1], c[2] - a[2])
+    cross = (
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    )
+    return 0.5 * ((cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]) ** 0.5)
+
+
+def _is_degenerate_wok_face(face: Any, points: list[tuple[float, float, float]], *, winding_epsilon: float) -> bool:
+    area_xy = _triangle_area_xy(points)
+    if abs(area_xy) > winding_epsilon:
+        return False
+    # Authored perimeter walls are intentional vertical NON_WALK triangles:
+    # degenerate in XY, but valid in 3D and useful to the Odyssey camera/LOS.
+    if _face_surface(face) == 7 and _triangle_area_3d(points) > winding_epsilon:
+        return False
+    return True
 
 
 def _bounds(points: list[tuple[float, float, float]]) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
@@ -230,7 +305,7 @@ def _room_summary(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKSumm
             continue
         points = [world[index] for index in indices]
         area = _triangle_area_xy(points)
-        if abs(area) <= winding_epsilon:
+        if _is_degenerate_wok_face(face, points, winding_epsilon=winding_epsilon):
             degenerate.append(face_index)
         elif area < 0:
             reversed_faces.append(face_index)
@@ -252,6 +327,74 @@ def _room_summary(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKSumm
         bounds_min=bmin,
         bounds_max=bmax,
     )
+
+
+def _edge_vertices(face: Any, edge_index: int) -> tuple[int, int]:
+    indices = _face_indices(face)
+    return indices[edge_index], indices[(edge_index + 1) % 3]
+
+
+def _edge_adjacent(face: Any, edge_index: int) -> int:
+    return (int(getattr(face, "adj1", -1)), int(getattr(face, "adj2", -1)), int(getattr(face, "adj3", -1)))[edge_index]
+
+
+def _room_overlay(room: Any, wok: Any, *, winding_epsilon: float) -> RoomWOKOverlay:
+    room_id = _normalise_resref(getattr(room, "room_id", ""))
+    if wok is None:
+        return RoomWOKOverlay(room_id=room_id)
+    offset = tuple(getattr(room, "position", (0.0, 0.0, 0.0)))
+    world = _world_vertices(wok, offset)
+    known_surfaces = _surface_names()
+    walkable = _walkable_ids()
+    face_overlays: list[WOKFaceOverlay] = []
+    edge_overlays: list[WOKEdgeOverlay] = []
+    faces = _faces(wok)
+    for face_index, face in enumerate(faces):
+        indices = _face_indices(face)
+        valid_indices = all(0 <= index < len(world) for index in indices)
+        points = tuple(world[index] for index in indices) if valid_indices else ()
+        area = _triangle_area_xy(list(points)) if len(points) == 3 else 0.0
+        surface_id = _face_surface(face)
+        issue_codes: list[str] = []
+        if surface_id not in known_surfaces:
+            issue_codes.append("INVALID_WOK_MATERIAL")
+        if not valid_indices or _is_degenerate_wok_face(face, list(points), winding_epsilon=winding_epsilon):
+            issue_codes.append("DEGENERATE_FACE")
+        elif area < 0:
+            issue_codes.append("REVERSED_FACE_WINDING")
+        face_overlays.append(
+            WOKFaceOverlay(
+                room_id=room_id,
+                face_index=face_index,
+                vertices=points,
+                surface_id=surface_id,
+                surface_name=str(known_surfaces.get(surface_id, f"SURFACE_{surface_id}")),
+                walkable=surface_id in walkable,
+                issue_codes=tuple(issue_codes),
+            )
+        )
+        if surface_id not in walkable or not valid_indices:
+            continue
+        for edge_index in range(3):
+            adjacent = _edge_adjacent(face, edge_index)
+            if adjacent >= 0 and adjacent < len(faces) and _face_surface(faces[adjacent]) in walkable:
+                continue
+            va, vb = _edge_vertices(face, edge_index)
+            if not (0 <= va < len(world) and 0 <= vb < len(world)):
+                continue
+            kind = "blocked" if adjacent >= 0 and adjacent < len(faces) else "boundary"
+            edge_overlays.append(
+                WOKEdgeOverlay(
+                    room_id=room_id,
+                    face_index=face_index,
+                    edge_index=edge_index,
+                    start=world[va],
+                    end=world[vb],
+                    kind=kind,
+                    issue_codes=("BLOCKED_EDGE",) if kind == "blocked" else ("BOUNDARY_EDGE",),
+                )
+            )
+    return RoomWOKOverlay(room_id=room_id, faces=tuple(face_overlays), edges=tuple(edge_overlays))
 
 
 def _seam_report(
@@ -328,11 +471,13 @@ def validate_area_woks(
 
     room_by_id = {_normalise_resref(getattr(room, "room_id", "")): room for room in graph.rooms}
     summaries: list[RoomWOKSummary] = []
+    overlays: list[RoomWOKOverlay] = []
     for room in graph.rooms:
         room_id = _normalise_resref(getattr(room, "room_id", ""))
         wok = _wok_for_room(module_like, room_id)
         summary = _room_summary(room, wok, winding_epsilon=winding_epsilon)
         summaries.append(summary)
+        overlays.append(_room_overlay(room, wok, winding_epsilon=winding_epsilon))
         if not summary.has_wok:
             issues.append(
                 AreaWOKIssue(
@@ -431,6 +576,7 @@ def validate_area_woks(
     return AreaWOKIntegrationReport(
         ok=not has_errors,
         rooms=summaries,
+        overlays=overlays,
         seams=seams,
         issues=issues,
         walkable_face_count=sum(summary.walkable_face_count for summary in summaries),
@@ -447,7 +593,10 @@ def validate_area_woks(
 
 __all__ = [
     "AreaWOKIssue",
+    "RoomWOKOverlay",
     "RoomWOKSummary",
+    "WOKEdgeOverlay",
+    "WOKFaceOverlay",
     "WOKSeamReport",
     "AreaWOKIntegrationReport",
     "validate_area_woks",

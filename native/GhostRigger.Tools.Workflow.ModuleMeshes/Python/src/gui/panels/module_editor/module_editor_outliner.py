@@ -22,7 +22,7 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         self.itemChanged.connect(self._item_changed)
         self._project: KMapProject | None = None
 
-    def set_project(self, project: KMapProject) -> None:
+    def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_room_lights=()) -> None:
         self._project = project
         self.blockSignals(True)
         self.clear()
@@ -66,6 +66,20 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
                 item_id = getattr(row, key, "") if not isinstance(row, dict) else str(row.get(key) or row.get("id") or "")
                 name = getattr(row, "name", "") if not isinstance(row, dict) else str(row.get("name") or row.get("resref") or item_id)
                 cat.addChild(self._item(name or item_id, item_id, kind))
+        authored = self._category("Authored Gameplay")
+        root.addChild(authored)
+        for placement in authored_gameplay_placements or ():
+            placement_id = str(getattr(placement, "placement_id", "") or "")
+            kind = str(getattr(placement, "kind", "object") or "object")
+            tag = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or placement_id)
+            authored.addChild(self._item(f"{kind}: {tag}", placement_id, "authored_gameplay"))
+        authored_lights = self._category("Authored Room Lights")
+        root.addChild(authored_lights)
+        for light in authored_room_lights or ():
+            light_id = str(getattr(light, "light_id", "") or "")
+            name = str(getattr(light, "name", "") or light_id)
+            room = str(getattr(light, "room_resref", "") or "")
+            authored_lights.addChild(self._item(f"{name} ({room})", light_id, "authored_room_light"))
         root.addChild(self._category("Validation Issues"))
         self.expandToDepth(1)
         self.blockSignals(False)

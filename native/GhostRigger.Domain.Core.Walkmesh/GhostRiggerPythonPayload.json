@@ -15,7 +15,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_WALKMESH_WALKMESH_EDITOR",
             "source_path": "src/core/walkmesh/walkmesh_editor.py",
             "packaged_path": "Python/src/core/walkmesh/walkmesh_editor.py",
-            "sha256": "5b292b15766827a617b3f30ecadc9e9e83549356a783d07318018a5037d9a082"
+            "sha256": "4c82e080747008673095f555ef2c91671de894072b8c58d2f1be2ec951384125"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WALKMESH_WALKMESH_RENDERER",

@@ -55,6 +55,22 @@ def test_t1204_character_builder_motion_and_export_handlers_use_safe_workflow_im
         assert "_workflow_module()" in block
 
 
+def test_t1205_character_builder_preview_sets_gpu_skinning_base_pose():
+    source = _read("src/gui/panels/qt_character_builder_panel.py")
+    block = _method_block(source, "_start_preview_animation")
+
+    assert "base_pose = engine.evaluate(0.0)" in block
+    assert "viewport.set_anim_base_pose(base_pose)" in block
+    assert "viewport.set_animation_pose(" in block
+
+
+def test_t1205_character_builder_preview_fallback_uses_live_viewport():
+    source = _read("src/gui/panels/qt_character_builder_panel.py")
+    block = _method_block(source, "_on_play_preview_animation_requested")
+
+    assert 'viewport=getattr(self, "viewport", None)' in block
+
+
 def test_t1204_workflow_exports_motion_assignment_api():
     source = _read("src/core/characters/headless_body_workflow.py")
 

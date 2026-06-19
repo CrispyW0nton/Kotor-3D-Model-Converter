@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,65 @@ from src.core.scene.module_scene_import import resolve_module_room_placement
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
 from .module_editor_model import ModuleEditorModel
+from .authored_module_export import (
+    AuthoredModuleExportRequest,
+    AuthoredModuleGameProofRequest,
+    AuthoredModuleInstallPrepRequest,
+    export_authored_module_project,
+    prepare_authored_module_install,
+    record_authored_module_game_proof,
+)
+from .authored_module_kmap_bridge import (
+    authored_project_from_kmap_payload,
+    authored_project_to_kmap_payload,
+    build_kmap_authored_module_readiness,
+    create_dev_test_authored_module_payload,
+)
+from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
+from .authored_gameplay_marker_geometry import (
+    AuthoredGameplayMarkerGeometry,
+    authored_gameplay_marker_geometry_for_project,
+)
+from .authored_gameplay_preview import authored_gameplay_preview_markers
+from .authored_module_lighting import (
+    add_authored_room_light as add_authored_room_light_to_project,
+    authored_room_light_rows,
+    parse_authored_room_light_id,
+    update_authored_room_light_transform,
+)
+from .authored_module_placements import (
+    SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
+    add_authored_gameplay_placement,
+    authored_gameplay_placement_rows,
+    parse_authored_gameplay_placement_id,
+    update_authored_gameplay_placement_transform,
+)
+from .authored_room_operations import (
+    add_authored_room_composition_primitive,
+    apply_authored_terrain_operation,
+    apply_authored_floor_plan_rectangular_union,
+    apply_authored_floor_plan_operation,
+    available_authored_composition_primitive_kinds,
+    authored_floor_plan_room_choices,
+    authored_terrain_room_choices,
+    authored_room_composition_primitives,
+    move_authored_floor_plan_point,
+    move_authored_room_composition_primitive,
+    remove_authored_room_composition_primitive,
+    set_authored_room_composition_primitive_dimensions,
+    set_authored_room_composition_primitive_style,
+    set_authored_room_composition_primitive_transform,
+)
+from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
+from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
+from .authored_room_style import update_authored_room_style
+from .authored_terrain_builder import available_terrain_shape_presets
+from .authored_terrain_walkability_overlay import (
+    AuthoredTerrainWalkabilityOverlay,
+    authored_terrain_walkability_overlay_for_project,
+)
+from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
+from .dev_module_smoke import DevModuleGameProofRequest, DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install, record_dev_module_game_proof
 from .module_layout_service import ModuleLayoutService
 from .module_porter_service import ModulePorterService
 from .module_walkmesh_service import ModuleWalkmeshService
@@ -88,8 +148,815 @@ class ModuleEditorController:
     def validate(self):
         return self.validator.validate(self.project)
 
+    def authored_module_readiness(self):
+        """Return Map Studio authored-module readiness for the current KMAP."""
+
+        return build_kmap_authored_module_readiness(self.project)
+
+    def create_dev_test_authored_module(self, *, module_root: str = "grdev01"):
+        """Store the editable first Map Studio dev-test module in the KMAP."""
+
+        root = str(module_root or "grdev01").strip() or "grdev01"
+        payload = create_dev_test_authored_module_payload(module_root=root, game=str(self.project.game or "K1").upper())
+        self.project.extra_sections["authored_module"] = payload
+        self.project.name = str(payload.get("module_root") or root)
+        self.project.game = str(payload.get("game") or self.project.game or "K1").upper()
+        self.project.dirty = True
+        self.model.log(f"Created authored Map Studio module {self.project.name}.")
+        return self.authored_module_readiness()
+
+    def available_authored_room_presets(self):
+        """Return named primitive room presets for the Map Studio Builder tab."""
+
+        return available_authored_room_primitive_presets()
+
+    def available_authored_terrain_shape_presets(self):
+        """Return named terrain shape presets for the Map Studio Builder tab."""
+
+        return available_terrain_shape_presets()
+
+    def available_authored_walkmesh_surfaces(self):
+        """Return named WOK surface choices for authored room floors."""
+
+        return authored_walkmesh_surface_palette()
+
+    def available_authored_composition_primitive_kinds(self):
+        """Return primitive kinds that can be added to authored composition rooms."""
+
+        return available_authored_composition_primitive_kinds()
+
+    def available_authored_gameplay_placement_kinds(self):
+        """Return supported authored gameplay placement kinds for Map Studio UI."""
+
+        return SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS
+
+    def authored_gameplay_palette_entries(self, rows, *, query: str = "", kind: str = ""):
+        """Return game-library-backed resources that can seed gameplay placements."""
+
+        return authored_gameplay_palette_from_library_rows(
+            rows,
+            game=str(getattr(self.project, "game", "") or ""),
+            query=query,
+            kind=kind,
+        )
+
+    def authored_gameplay_placements(self):
+        """Return selectable authored gameplay placements for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_gameplay_placement_rows(authored)
+
+    def authored_room_lights(self):
+        """Return selectable authored room lights for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_light_rows(authored)
+
+    def authored_gameplay_preview_markers(self):
+        """Return UI-ready preview markers for authored gameplay placements."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_gameplay_preview_markers(authored)
+
+    def authored_gameplay_marker_geometry(self):
+        """Return renderer-ready geometry for authored gameplay placement markers."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return AuthoredGameplayMarkerGeometry()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_gameplay_marker_geometry_for_project(authored)
+
+    def authored_room_outline_geometry(self):
+        """Return renderer-ready outlines for authored Map Studio rooms."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return AuthoredRoomOutlineGeometry()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_outline_geometry_for_project(authored)
+
+    def authored_room_primitive_transforms(self):
+        """Return editable composition primitive transform rows for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_composition_primitives(authored)
+
+    def authored_floor_plan_room_choices(self):
+        """Return floor-plan rooms that can participate in Builder boolean operations."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_floor_plan_room_choices(authored)
+
+    def authored_terrain_room_choices(self):
+        """Return terrain rooms that can participate in Builder heightfield operations."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_terrain_room_choices(authored)
+
+    def authored_terrain_walkability_overlay(self):
+        """Return renderer-ready terrain WOK walkability feedback."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return AuthoredTerrainWalkabilityOverlay()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_terrain_walkability_overlay_for_project(authored)
+
+    def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
+        """Store an authored module created from a named primitive room preset."""
+
+        root = str(module_root or "grdev01").strip() or "grdev01"
+        authored = create_authored_module_from_room_preset(
+            preset_id=preset_id,
+            module_root=root,
+            game=str(self.project.game or "K1").upper(),
+        )
+        payload = authored_project_to_kmap_payload(authored)
+        self.project.extra_sections["authored_module"] = payload
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        self.model.log(f"Created authored Map Studio module {self.project.name} from primitive preset {preset_id}.")
+        return self.authored_module_readiness()
+
+    def apply_authored_room_operation(self, *, operation: str, **kwargs: Any):
+        """Apply a floor-plan shaping operation to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = apply_authored_floor_plan_operation(authored, operation, **kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(f"Applied Map Studio room operation {operation}.")
+        return self.authored_module_readiness()
+
+    def apply_authored_terrain_operation(self, *, operation: str, **kwargs: Any):
+        """Apply a terrain heightfield operation to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = apply_authored_terrain_operation(authored, operation, **kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(f"Applied Map Studio terrain operation {operation}.")
+        return self.authored_module_readiness()
+
+    def merge_authored_floor_plan_rooms(
+        self,
+        *,
+        first_room_resref: str,
+        second_room_resref: str,
+        result_room_resref: str = "",
+    ):
+        """Union two compatible floor-plan rooms in the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = apply_authored_floor_plan_rectangular_union(
+            authored,
+            first_room_resref=first_room_resref,
+            second_room_resref=second_room_resref,
+            result_room_resref=result_room_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Merged Map Studio floor-plan rooms {first_room_resref} and {second_room_resref}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def move_authored_room_outline_point(self, *, room_resref: str, point_index: int, world_position: Any):
+        """Move one authored room outline vertex through the headless floor-plan operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = move_authored_floor_plan_point(
+            authored,
+            room_resref=room_resref,
+            point_index=int(point_index),
+            world_position=tuple(world_position),
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Moved Map Studio room {room_resref or '(first room)'} outline point {int(point_index)}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_primitive_transform(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        translation: Any = None,
+        rotation_degrees_z: float | None = None,
+        scale: Any = None,
+        pivot: Any = None,
+    ):
+        """Set one authored composition primitive transform in the current KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = set_authored_room_composition_primitive_transform(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            translation=translation,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+            pivot=pivot,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Transformed Map Studio room primitive {primitive_name} in {room_resref or '(first room)'}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def move_authored_room_primitive(self, *, room_resref: str, primitive_name: str, world_delta: Any):
+        """Move one authored composition primitive by a viewport-authored world delta."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = move_authored_room_composition_primitive(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            world_delta=world_delta,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Moved Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def add_authored_room_primitive(
+        self,
+        *,
+        primitive_kind: str,
+        room_resref: str = "",
+        primitive_name: str = "",
+        translation: Any = None,
+        rotation_degrees_z: float | None = None,
+        scale: Any = None,
+        pivot: Any = None,
+        texture: str = "",
+        floor_surface: Any = None,
+    ):
+        """Append a primitive instance to an authored composition room."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = add_authored_room_composition_primitive(
+            authored,
+            primitive_kind=primitive_kind,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            translation=translation,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+            pivot=pivot,
+            texture=texture,
+            floor_surface=floor_surface,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Added Map Studio room primitive {primitive_kind} {primitive_name or '(auto-named)'}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_primitive_dimensions(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        dimensions: Any,
+    ):
+        """Set editable dimensions for one authored composition primitive."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = set_authored_room_composition_primitive_dimensions(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            dimensions=dimensions,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Edited Map Studio room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_primitive_style(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        texture: str = "",
+        surface_id: Any = None,
+    ):
+        """Set material and optional WOK surface intent for one composition primitive."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = set_authored_room_composition_primitive_style(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            texture=texture,
+            surface_id=surface_id,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Styled Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def remove_authored_room_primitive(self, *, room_resref: str, primitive_name: str):
+        """Remove one authored composition primitive from the current KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = remove_authored_room_composition_primitive(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Removed Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def apply_authored_room_style(self, *, texture: str = "", floor_surface: Any = 4, room_resref: str = ""):
+        """Apply room texture and WOK surface intent to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_room_style(
+            authored,
+            texture=texture,
+            floor_surface=floor_surface,
+            room_resref=room_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Applied Map Studio room style texture {update.texture}, surface {update.floor_surface_id} ({update.floor_surface_name})."
+        )
+        for warning in update.warnings:
+            self.model.log(f"Warning: {warning}")
+        return self.authored_module_readiness()
+
+    def add_authored_gameplay_placement(
+        self,
+        *,
+        kind: str,
+        template_resref: str = "",
+        tag: str = "",
+        position: Any = (0.0, 0.0, 0.0),
+        bearing: float = 0.0,
+    ):
+        """Append a gameplay object placement to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = add_authored_gameplay_placement(
+            authored,
+            kind=kind,
+            template_resref=template_resref,
+            tag=tag,
+            position=position,
+            bearing=bearing,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Added Map Studio {update.kind} placement {update.tag} at {update.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def add_authored_room_light(
+        self,
+        *,
+        room_resref: str = "",
+        name: str = "",
+        position: Any = (0.0, 0.0, 2.25),
+        color: Any = (1.0, 0.92, 0.78),
+        radius: float = 8.0,
+        intensity: float = 1.0,
+        light_type: str = "point",
+    ):
+        """Append room-light authoring intent to the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = add_authored_room_light_to_project(
+            authored,
+            room_resref=room_resref,
+            name=name,
+            position=position,
+            color=color,
+            radius=radius,
+            intensity=intensity,
+            light_type=light_type,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Added Map Studio {update.light.light_type} room light {update.light.name} in {update.light.room_resref}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_gameplay_placement_transform(self, placement_id: str, *, position: Any, bearing: float | None = None):
+        """Move one authored gameplay placement by virtual id."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_gameplay_placement_transform(
+            authored,
+            placement_id,
+            position=position,
+            bearing=bearing,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Moved Map Studio {update.kind} placement {update.tag} to {update.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_light_transform(self, light_id: str, *, position: Any):
+        """Move one authored room light by virtual id."""
+
+        parse_authored_room_light_id(light_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_room_light_transform(authored, light_id, position=position)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Moved Map Studio room light {update.light.name} to {update.light.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
     def build_preview(self, output_dir: str | Path):
         return self.builder_service.build_preview(self.project, output_dir)
+
+    def stage_dev_test_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
+        """Stage the first from-scratch Map Studio smoke module package."""
+
+        output_path = Path(output_dir)
+        game = str(self.project.game or "K1").upper()
+        return prepare_dev_test_module_install(
+            DevModuleInstallPrepRequest(
+                output_dir=str(output_path),
+                game=game,
+                dry_run=dry_run,
+                overwrite=overwrite,
+                smoke_request=DevModuleSmokeRequest(
+                    output_dir=str(output_path),
+                    game=game,
+                ),
+            )
+        )
+
+    def export_authored_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
+        """Export the authored module currently stored in the KMAP project."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        output_path = Path(output_dir)
+        result = export_authored_module_project(
+            AuthoredModuleExportRequest(
+                project=authored,
+                output_dir=str(output_path),
+                dry_run=dry_run,
+                strict=not dry_run,
+            )
+        )
+        if not dry_run and result.resources:
+            runtime_resources = [f"{item.resref}.{item.restype}" for item in result.resources]
+            payload = dict(payload)
+            payload["runtime_resources"] = runtime_resources
+            payload["game_tested"] = False
+            self.project.extra_sections["authored_module"] = payload
+            self.project.dirty = True
+        self.model.log(result.message)
+        return result
+
+    def stage_authored_module(
+        self,
+        output_dir: str | Path,
+        *,
+        dry_run: bool = False,
+        overwrite: bool = False,
+        game_modules_dir: str | Path = "",
+        auto_detect_game_modules_dir: bool = False,
+    ):
+        """Stage the current authored KMAP module with a manual game-test checklist."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        output_path = Path(output_dir)
+        result = prepare_authored_module_install(
+            AuthoredModuleInstallPrepRequest(
+                project=authored,
+                output_dir=str(output_path),
+                game_modules_dir=str(game_modules_dir or ""),
+                dry_run=dry_run,
+                overwrite=overwrite,
+                auto_detect_game_modules_dir=bool(auto_detect_game_modules_dir),
+            )
+        )
+        export_result = result.export_result
+        if export_result is not None and export_result.resources:
+            runtime_resources = [f"{item.resref}.{item.restype}" for item in export_result.resources]
+            payload = dict(payload)
+            payload["runtime_resources"] = runtime_resources
+            payload["game_tested"] = False
+            payload["proof_manifest_path"] = result.proof_manifest_path
+            payload["checklist_path"] = result.checklist_path
+            payload["resolved_modules_dir"] = result.resolved_modules_dir
+            payload["resolved_game_root_dir"] = result.resolved_game_root_dir
+            payload["launch_helper_command"] = result.launch_helper_command
+            payload["elevated_launch_script_path"] = result.elevated_launch_script_path
+            payload["proof_recording_script_path"] = result.proof_recording_script_path
+            payload["installed_module_path"] = result.installed_module_path
+            payload["backup_module_path"] = result.backup_module_path
+            self.project.extra_sections["authored_module"] = payload
+            self.project.dirty = True
+        self.model.log(result.message)
+        return result
+
+    def record_map_studio_game_proof(
+        self,
+        *,
+        proof_manifest_path: str | Path,
+        evidence_path: str | Path,
+        tester: str = "",
+        notes: str = "",
+        module_loads_in_game: bool = False,
+        player_spawns_on_floor: bool = False,
+        test_placeable_visible: bool = False,
+        player_can_walk_on_floor: bool = False,
+        allow_missing_evidence: bool = False,
+    ):
+        """Record in-game proof for a staged Map Studio module proof manifest."""
+
+        proof_path = Path(proof_manifest_path)
+        try:
+            proof = json.loads(proof_path.read_text(encoding="utf-8"))
+        except Exception:
+            proof = {}
+        task = str(proof.get("task") or "").strip().upper()
+        proof_filename = proof_path.name.lower()
+        common = {
+            "proof_manifest_path": str(proof_path),
+            "evidence_path": str(evidence_path),
+            "tester": tester,
+            "notes": notes,
+            "module_loads_in_game": bool(module_loads_in_game),
+            "player_spawns_on_floor": bool(player_spawns_on_floor),
+            "test_placeable_visible": bool(test_placeable_visible),
+            "player_can_walk_on_floor": bool(player_can_walk_on_floor),
+            "allow_missing_evidence": bool(allow_missing_evidence),
+        }
+        if task == "T2601" or proof_filename.endswith("_in_game_smoke_manifest.json"):
+            result = record_dev_module_game_proof(DevModuleGameProofRequest(**common))
+        else:
+            result = record_authored_module_game_proof(AuthoredModuleGameProofRequest(**common))
+            if getattr(result, "ok", False):
+                payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+                if payload:
+                    payload["game_tested"] = True
+                    payload["proof_manifest_path"] = str(getattr(result, "proof_manifest_path", "") or proof_path)
+                    payload["pack_manifest_path"] = str(getattr(result, "pack_manifest_path", "") or "")
+                    payload["in_game_proof_evidence_path"] = str(getattr(result, "evidence_path", "") or evidence_path)
+                    self.project.extra_sections["authored_module"] = payload
+                    self.project.dirty = True
+        self.model.log(getattr(result, "message", "Recorded Map Studio game proof."))
+        return result
 
     def export_fbx(self, output_path: str | Path, *, dry_run: bool = False):
         return self.export_bridge.export_fbx(self.project, output_path, LevelExportOptions(dry_run=dry_run))

@@ -2232,7 +2232,11 @@ class GpuRenderer:
                         and 'u_skin_enabled' in _u
                         and 'u_bone_count' in _u):
                     try:
-                        self._skin_uploader.compute_skin_node_palette(node, anim_pose)
+                        self._skin_uploader.compute_skin_node_palette(
+                            node,
+                            anim_pose,
+                            anim_base_pose=anim_base_pose,
+                        )
                         _skin_local_bone_count = len(getattr(node, 'bone_map', []) or [])
                         _skin_local_bone_count = min(_skin_local_bone_count, _SKIN_MAX_BONES)
                         if 'u_bones' in _u and _skin_local_bone_count > 0:

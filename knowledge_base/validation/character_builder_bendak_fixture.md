@@ -127,6 +127,20 @@ Headless workflow proof on 2026-06-04 confirmed:
   Bendak fixture asserts that inherited/local names such as `pause1`, `pause2`,
   `walk`, and `tlknorm` are available before treating the export as a verified
   candidate.
+- Visual Character Builder playback evidence on 2026-06-07 confirmed the
+  actual `Bendak.fbx` payload, bound to the native K1 `n_mandalorian`
+  template, stays visually coherent under GPU-skinned inherited animation
+  preview when the viewport receives the AnimationEngine t=0 base pose before
+  live frames. The proof bundle loaded the external
+  `bendakstarkiller_basecolor` texture and rendered:
+  - `b5a1` from `S_Male02`,
+  - `c2d1` from `S_Male01`,
+  - `c2p1` from `S_Male01`.
+  The current K1 library reports `b5a1` as an `S_Male02` clip, not a direct
+  `S_Male01` clip; use `c2d1`/`c2p1` or another `S_Male01`-sourced clip when
+  direct S_Male01 coverage is required. Local proof frames and the contact
+  sheet are stored under
+  `artifacts/character_builder_bendak_multianim_proof/`.
 - Staged validation reports now keep this as a separate animation evidence
   gate alongside fit, bind, and weight. The report records motion source,
   assigned/effective/resolved supermodel, available clip count, sample

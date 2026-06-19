@@ -735,6 +735,72 @@ def test_skin_node_palette_records_species_profile_reason(monkeypatch) -> None:
     assert "auto:dfs_qbone" in uploader._skin_profile_reason
 
 
+def test_character_builder_payload_preview_uses_animation_base_bind(monkeypatch) -> None:
+    """Generated Character Builder payloads keep qBone/tBone for export, but
+    viewport preview must deform relative to the inherited animation's first
+    frame so the imported mesh does not collapse away from the driven skeleton.
+    """
+    from types import SimpleNamespace
+
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+
+    monkeypatch.delenv("GHOSTRIGGER_SKIN_FORMULA", raising=False)
+    root = SimpleNamespace(
+        name="N_Mandalorian",
+        parent=None,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    arm = SimpleNamespace(
+        name="torso_g",
+        parent=root,
+        position=(1.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+    )
+    skin_node = SimpleNamespace(
+        name="Bendak",
+        parent=root,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        bone_map=["torso_g"],
+        qbone_list=[(0.0, 0.0, 0.0, 1.0)],
+        tbone_list=[(100.0, 0.0, 0.0)],
+        _gr_use_animation_base_bind_for_preview=True,
+    )
+    model = SimpleNamespace(
+        name="bendak",
+        supermodel="S_Female02",
+        all_nodes=lambda: [root, arm, skin_node],
+    )
+    pose = SimpleNamespace(
+        nodes={
+            "N_Mandalorian": SimpleNamespace(
+                position=(0.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            ),
+            "torso_g": SimpleNamespace(
+                position=(2.0, 0.0, 0.0),
+                rotation=(0.0, 0.0, 0.0, 1.0),
+            ),
+        }
+    )
+
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+    uploader.compute_skin_node_palette(skin_node, pose, anim_base_pose=pose)
+
+    assert uploader._skin_inverse_bind_source == "animation_base_pose_imported_payload"
+    assert uploader._skin_palette_formula.startswith("F1_current_TR_inverse")
+    assert "character_builder:animation_base_bind_preview" in uploader._skin_profile_reason
+    # The qBone/tBone entry above is intentionally bogus. If it were consumed,
+    # the base-pose palette would translate by roughly -98 units. The animation
+    # base-pose inverse bind must make the first frame an identity deformation.
+    flat = uploader.palette[0].flat_col
+    assert flat[12] == pytest.approx(0.0)
+    assert flat[13] == pytest.approx(0.0)
+    assert flat[14] == pytest.approx(0.0)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3j Step 4 — env-gated G5_FULL_REF (DFS-indexed, W-first, no invert) tests
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1115,7 +1181,8 @@ def test_gpu_renderer_uploads_skin_node_local_palette() -> None:
 
     source = inspect.getsource(GpuRenderer._render_gpu)
 
-    assert "compute_skin_node_palette(node, anim_pose)" in source
+    assert "compute_skin_node_palette(" in source
+    assert "anim_base_pose=anim_base_pose" in source
     assert "self._skin_uploader.bone_index(_bmname)" not in source
 
 

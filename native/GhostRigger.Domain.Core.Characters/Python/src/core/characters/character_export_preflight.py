@@ -423,6 +423,8 @@ def _validate_skin_binding_evidence(
     weighting_method = str(skin_binding.get("weighting_method") or "")
     quality_stage = str(skin_binding.get("quality_stage") or "")
     donor_weight_transfer = bool(skin_binding.get("donor_weight_transfer"))
+    source_skin_remap = bool(skin_binding.get("source_skin_remap"))
+    source_hand_refinement = bool(skin_binding.get("source_hand_refinement"))
     mesh_reports = list(skin_binding.get("mesh_reports") or [])
     if donor_weight_transfer:
         landmark_gaps = _donor_weight_fit_landmark_gaps(fit_report)
@@ -450,23 +452,28 @@ def _validate_skin_binding_evidence(
         weighting_method == "nearest_kotor_bone_segment"
         or quality_stage == "fallback_first_pass"
         or quality_stage == "donor_transfer_partial"
-        or not donor_weight_transfer
+        or quality_stage == "source_skin_remap_partial"
+        or (not donor_weight_transfer and not source_skin_remap)
     ):
         report.add(_issue(
             "warning",
             "character.export.fallback_skin_binding",
             (
-                "Character Builder is using fallback or partial skin weights. "
-                "This is exportable but not launch-quality deformation evidence."
+                "Character Builder is using fallback, partial, or unproven skin "
+                "weights. This is exportable but not launch-quality deformation "
+                "evidence."
             ),
             fix_hint=(
-                "Use native-template/donor weight transfer and preview inherited "
-                "animations before treating this character as game-ready."
+                "Use imported source skin remap or native-template/donor weight "
+                "transfer and preview inherited animations before treating this "
+                "character as game-ready."
             ),
             details={
                 "weighting_method": weighting_method,
                 "quality_stage": quality_stage,
                 "donor_weight_transfer": donor_weight_transfer,
+                "source_skin_remap": source_skin_remap,
+                "source_hand_refinement": source_hand_refinement,
                 "mesh_reports": mesh_reports,
             },
         ))

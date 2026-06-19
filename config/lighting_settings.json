@@ -10,14 +10,14 @@
     "radius",
     "intensity"
   ],
-  "lightmap_intensity": 0.5,
-  "lightmap_map": false,
+  "lightmap_intensity": 0.85,
+  "lightmap_map": true,
   "lightmap_mode": "disabled",
-  "normal_map": false,
+  "normal_map": true,
   "scene_lighting_mode": "scene",
   "selected_lighting_rig_preset": "none",
   "shader_complexity_mode": "full_complexity",
   "show_light_helpers": false,
   "show_light_radius_volumes": false,
-  "specular_map": false
+  "specular_map": true
 }

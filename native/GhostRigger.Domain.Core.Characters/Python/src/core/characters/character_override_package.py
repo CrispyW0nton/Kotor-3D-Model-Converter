@@ -53,7 +53,7 @@ _VALIDATION_SCHEMA = "ghostrigger.character_export_validation.v1"
 _GAME_READY_GATE_ACCEPTED_STAGES: dict[str, frozenset[str]] = {
     "fit": frozenset({"passed"}),
     "bind": frozenset({"passed"}),
-    "weight": frozenset({"trusted_donor_transfer"}),
+    "weight": frozenset({"trusted_donor_transfer", "trusted_source_skin_remap"}),
     "animation": frozenset({"passed"}),
     "material": frozenset({"passed"}),
     "engine": frozenset({"passed"}),
