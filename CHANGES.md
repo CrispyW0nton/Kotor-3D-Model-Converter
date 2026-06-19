@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Explains Blueprint Template Workflow
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / Blueprint template guidance
+Intersects: Blueprints tab resource-template controls and ModuleMeshes mirror.
+
+- Added Blueprints tab guidance for editing KOTOR resource templates, validating them, and placing instances through Map Studio placement tools.
+- Clarified supported template types: UTC creatures, UTP placeables, UTD doors, UTT triggers, UTW waypoints, UTS sounds, UTE encounters, and UTM merchants/stores.
+- Added stable object names for Blueprint type and action controls so future UI automation can target template workflows directly.
+- Mirrored the Blueprints tab into the ModuleMeshes package and expanded source-contract coverage for the template workflow labels and buttons.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_blueprints_workflow`; `python -m py_compile` on active and mirrored Blueprints tabs plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Explains Room Graph Workflow
 
 Owner: LordVaderCW

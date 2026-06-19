@@ -362,6 +362,34 @@ def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
         assert "mapStudioRoomsSnapToGridButton" in source
 
 
+def test_t2600_map_studio_blueprints_tab_explains_template_workflow() -> None:
+    blueprints_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/blueprints_tab.py"
+    )
+    blueprints_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/blueprints_tab.py"
+    )
+
+    for source in (blueprints_source, blueprints_mirror_source):
+        assert "mapStudioBlueprintWorkflowLabel" in source
+        assert "mapStudioBlueprintResourceTypesLabel" in source
+        assert "mapStudioBlueprintPlacementHintLabel" in source
+        assert "edit KOTOR resource templates, validate them, then place instances" in source
+        assert "UTC creatures, UTP placeables, UTD doors, UTT triggers" in source
+        assert "UTW waypoints, UTS sounds, UTE encounters, and UTM merchants/stores" in source
+        assert "position, bearing, transition/script fields, and walkmesh validation" in source
+        assert "mapStudioBlueprintTypeComboBox" in source
+        assert "mapStudioBlueprintOpenButton" in source
+        assert "mapStudioBlueprintSaveButton" in source
+        assert "mapStudioBlueprintAddButton" in source
+        assert "mapStudioBlueprintRemoveButton" in source
+        assert "mapStudioBlueprintSendToGModularButton" in source
+        assert "mapStudioBlueprintPlaceInSceneButton" in source
+        assert "mapStudioBlueprintValidateButton" in source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
