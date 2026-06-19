@@ -22,6 +22,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
     deleteSelectedRequested = QtCore.Signal()
     focusSelectedRequested = QtCore.Signal()
     builderRequested = QtCore.Signal()
+    geometryToolsRequested = QtCore.Signal()
     starterRoomRequested = QtCore.Signal()
     doorwayBlockoutRequested = QtCore.Signal()
     corridorRequested = QtCore.Signal()
@@ -185,6 +186,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         actions.setVerticalSpacing(4)
         self.open_builder_button = QtWidgets.QPushButton("Open Builder")
         self.open_builder_button.setObjectName("mapStudioWorkflowOpenBuilderButton")
+        self.geometry_tools_button = QtWidgets.QPushButton("Open Geometry Tools")
+        self.geometry_tools_button.setObjectName("mapStudioWorkflowGeometryToolsButton")
         self.starter_room_button = QtWidgets.QPushButton("Create Starter Room")
         self.starter_room_button.setObjectName("mapStudioWorkflowStarterRoomButton")
         self.doorway_blockout_button = QtWidgets.QPushButton("Create Doorway Blockout")
@@ -216,6 +219,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.proof_button = QtWidgets.QPushButton("Record Proof")
         self.proof_button.setObjectName("mapStudioWorkflowProofButton")
         self.open_builder_button.clicked.connect(self.builderRequested.emit)
+        self.geometry_tools_button.clicked.connect(self.geometryToolsRequested.emit)
         self.starter_room_button.clicked.connect(self.starterRoomRequested.emit)
         self.doorway_blockout_button.clicked.connect(self.doorwayBlockoutRequested.emit)
         self.corridor_button.clicked.connect(self.corridorRequested.emit)
@@ -232,16 +236,17 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.launch_handoff_button.clicked.connect(self.launchHandoffRequested.emit)
         self.proof_button.clicked.connect(self.proofRequested.emit)
         actions.addWidget(self.open_builder_button, 0, 0)
-        actions.addWidget(self.starter_room_button, 0, 1)
-        actions.addWidget(self.doorway_blockout_button, 1, 0)
-        actions.addWidget(self.corridor_button, 1, 1)
-        actions.addWidget(self.starter_terrain_button, 2, 0)
-        actions.addWidget(self.terrain_tools_button, 2, 1)
-        actions.addWidget(self.lighting_tools_button, 3, 0)
-        actions.addWidget(self.placement_tools_button, 3, 1)
-        actions.addWidget(self.script_tools_button, 4, 0)
-        actions.addWidget(self.walkmesh_tools_button, 4, 1)
-        actions.addWidget(self.test_placeable_button, 5, 0, 1, 2)
+        actions.addWidget(self.geometry_tools_button, 0, 1)
+        actions.addWidget(self.starter_room_button, 1, 0)
+        actions.addWidget(self.doorway_blockout_button, 1, 1)
+        actions.addWidget(self.corridor_button, 2, 0)
+        actions.addWidget(self.starter_terrain_button, 2, 1)
+        actions.addWidget(self.terrain_tools_button, 3, 0)
+        actions.addWidget(self.lighting_tools_button, 3, 1)
+        actions.addWidget(self.placement_tools_button, 4, 0)
+        actions.addWidget(self.script_tools_button, 4, 1)
+        actions.addWidget(self.walkmesh_tools_button, 5, 0)
+        actions.addWidget(self.test_placeable_button, 5, 1)
         actions.addWidget(self.validate_button, 6, 0)
         actions.addWidget(self.stage_button, 6, 1)
         actions.addWidget(self.install_button, 7, 0)
@@ -411,6 +416,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
     def _set_action_enabled(self, enabled: bool, *, can_place: bool, can_proof: bool, can_launch: bool = False) -> None:
         for button in (
             self.open_builder_button,
+            self.geometry_tools_button,
             self.starter_room_button,
             self.doorway_blockout_button,
             self.corridor_button,

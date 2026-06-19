@@ -42,6 +42,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowDeleteSelectedButton" in panel_source
     assert "mapStudioWorkflowFocusSelectedButton" in panel_source
     assert "mapStudioWorkflowOpenBuilderButton" in panel_source
+    assert "mapStudioWorkflowGeometryToolsButton" in panel_source
     assert "mapStudioWorkflowStarterRoomButton" in panel_source
     assert "mapStudioWorkflowDoorwayBlockoutButton" in panel_source
     assert "mapStudioWorkflowCorridorButton" in panel_source
@@ -65,6 +66,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "deleteSelectedRequested = QtCore.Signal()" in panel_source
     assert "focusSelectedRequested = QtCore.Signal()" in panel_source
     assert "builderRequested = QtCore.Signal()" in panel_source
+    assert "geometryToolsRequested = QtCore.Signal()" in panel_source
     assert "starterRoomRequested = QtCore.Signal()" in panel_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in panel_source
     assert "corridorRequested = QtCore.Signal()" in panel_source
@@ -87,6 +89,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Duplicate Selected" in panel_source
     assert "Delete Selected" in panel_source
     assert "Focus Selected" in panel_source
+    assert "Open Geometry Tools" in panel_source
     assert "Create Starter Room" in panel_source
     assert "Create Doorway Blockout" in panel_source
     assert "Create Corridor" in panel_source
@@ -154,6 +157,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.deleteSelectedRequested.connect(self.delete_selected)" in window_source
     assert "self.workflow_panel.focusSelectedRequested.connect(self.viewport_panel.focus_selected)" in window_source
     assert "self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)" in window_source
+    assert "self.workflow_panel.geometryToolsRequested.connect(self.show_map_studio_geometry_tools)" in window_source
     assert "self.validation_panel.set_issues(self.controller.validate())" in window_source
     assert "self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)" in window_source
     assert "self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)" in window_source
@@ -176,6 +180,9 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert 'self.workflow_panel.set_selection_context("")' in window_source
     assert "def show_map_studio_builder" in window_source
     assert "Builder: room, terrain, placement, lighting, and script authoring" in window_source
+    assert "def show_map_studio_geometry_tools" in window_source
+    assert "roomPrimitivePresetComboBox" in window_source
+    assert "Geometry: primitive rooms, extrusion, bevel/inset, rectangular cuts, boolean union, and modular room pieces" in window_source
     assert "def create_map_studio_starter_room" in window_source
     assert "preset_id=\"rectangular_dev_room\"" in window_source
     assert "def create_map_studio_doorway_blockout" in window_source
@@ -323,6 +330,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowDuplicateSelectedButton" in mirror_source
     assert "mapStudioWorkflowDeleteSelectedButton" in mirror_source
     assert "mapStudioWorkflowFocusSelectedButton" in mirror_source
+    assert "mapStudioWorkflowGeometryToolsButton" in mirror_source
     assert "mapStudioWorkflowMissingResourcesLabel" in mirror_source
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
@@ -353,6 +361,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "deleteSelectedRequested = QtCore.Signal()" in mirror_source
     assert "focusSelectedRequested = QtCore.Signal()" in mirror_source
     assert "builderRequested = QtCore.Signal()" in mirror_source
+    assert "geometryToolsRequested = QtCore.Signal()" in mirror_source
     assert "starterRoomRequested = QtCore.Signal()" in mirror_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in mirror_source
     assert "corridorRequested = QtCore.Signal()" in mirror_source

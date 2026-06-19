@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Adds Geometry Workflow Shortcut
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / room geometry authoring
+Intersects: Level Editor workflow panel, Builder geometry focus routing, and ModuleMeshes mirror.
+
+- Added an Open Geometry Tools button to the Map Studio workflow spine so modders can directly enter room/primitive geometry authoring from the Level Editor status workflow.
+- Wired the shortcut to focus the existing Builder primitive controls and label the active mode as primitive rooms, extrusion, bevel/inset, rectangular cuts, boolean union, and modular room pieces.
+- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for the geometry shortcut.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_geometry_workflow`; `python -m py_compile` on active and mirrored workflow panels, the Level Editor window, and focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Surfaces Selected-Object Actions
 
 Owner: LordVaderCW

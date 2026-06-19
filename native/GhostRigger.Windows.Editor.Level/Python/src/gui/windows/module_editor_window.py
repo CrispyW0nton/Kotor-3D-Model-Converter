@@ -374,6 +374,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.deleteSelectedRequested.connect(self.delete_selected)
         self.workflow_panel.focusSelectedRequested.connect(self.viewport_panel.focus_selected)
         self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)
+        self.workflow_panel.geometryToolsRequested.connect(self.show_map_studio_geometry_tools)
         self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)
         self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)
         self.workflow_panel.corridorRequested.connect(self.create_map_studio_corridor)
@@ -551,6 +552,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
+
+    def show_map_studio_geometry_tools(self) -> None:
+        """Focus Builder's primitive, operation, and modular room controls."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        primitive = getattr(self.builder_tab, "roomPrimitivePresetComboBox", None)
+        if primitive is not None:
+            primitive.setFocus()
+        self.workflow_panel.set_active_authoring_context(
+            "Geometry: primitive rooms, extrusion, bevel/inset, rectangular cuts, boolean union, and modular room pieces"
+        )
+        self._log("Map Studio geometry tools focused. Use Builder to create rooms, edit primitives, apply bevels/cuts, and compose modular pieces.")
 
     def show_map_studio_walkmesh_tools(self) -> None:
         """Focus the existing Walkmesh tab inside the Map Studio Level Editor."""
