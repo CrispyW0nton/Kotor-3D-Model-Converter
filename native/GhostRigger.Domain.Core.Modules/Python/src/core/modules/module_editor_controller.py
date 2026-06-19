@@ -41,6 +41,12 @@ from .authored_module_lighting import (
     rename_authored_room_light,
     update_authored_room_light_transform,
 )
+from .authored_module_scripts import (
+    authored_script_hook_field_choices,
+    authored_script_hooks,
+    remove_authored_script_hook,
+    set_authored_script_hook,
+)
 from .authored_module_placements import (
     SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
     add_authored_gameplay_placement,
@@ -253,6 +259,25 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_room_light_rows(authored)
+
+    def authored_script_hook_field_choices(self):
+        """Return editable ARE/IFO script hook fields for Map Studio controls."""
+
+        return authored_script_hook_field_choices()
+
+    def authored_script_hooks(self):
+        """Return current authored script hooks for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return {"area": {}, "module": {}}
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_script_hooks(authored)
 
     def authored_gameplay_preview_markers(self):
         """Return UI-ready preview markers for authored gameplay placements."""
@@ -967,6 +992,59 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Removed Map Studio room light {update.light.name}; previous exports/proofs are now stale."
+        )
+        return update
+
+    def set_authored_script_hook(self, *, scope: Any, field_name: Any, script_resref: Any):
+        """Assign one authored module/area script hook in the current KMAP payload."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = set_authored_script_hook(
+            authored,
+            scope=scope,
+            field_name=field_name,
+            script_resref=script_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Assigned Map Studio {update.scope} script hook {update.field_name} -> {update.script_resref}; previous exports/proofs are now stale."
+        )
+        return update
+
+    def remove_authored_script_hook(self, *, scope: Any, field_name: Any):
+        """Clear one authored module/area script hook in the current KMAP payload."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = remove_authored_script_hook(
+            authored,
+            scope=scope,
+            field_name=field_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Cleared Map Studio {update.scope} script hook {update.field_name}; previous exports/proofs are now stale."
         )
         return update
 

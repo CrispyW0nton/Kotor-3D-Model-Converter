@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Edits Authored Script Hooks
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored ARE-IFO script hooks
+Intersects: authored module metadata compiler, Level Editor Builder tab, authored module readiness, and ModuleMeshes payload mirror.
+
+- Added a core authored script-hook editing service for validated ARE and IFO hook assignments in KMAP metadata.
+- Routed Map Studio Builder tab script-hook controls through controller methods that clear stale runtime resources and game-test proof when script metadata changes.
+- Added visible Builder tab controls for script hook scope, field, script resref, assign, and clear actions, populated from the core KOTOR field policy.
+- Mirrored the script service, controller, and Builder tab updates into the ModuleMeshes payload copy.
+- Verification: `python -m pytest tests/test_authored_module_metadata.py tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_script_hooks_full`; `python -m py_compile` on active and mirrored script/controller/Builder tab modules plus the Level Editor window and focused tests; `git diff --check` on touched files.
 ### [2026-06-19] Map Studio Edits Authored Room Lights
 
 Owner: LordVaderCW

@@ -19,6 +19,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
     roomLightRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, str)
+    scriptHookRequested = QtCore.Signal(str, str, str)
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -368,6 +369,35 @@ class BuilderTab(QtWidgets.QWidget):
         placement_layout.addRow("Bearing:", self.gameplayBearingSpinBox)
         placement_layout.addRow(self.addGameplayPlacementButton)
         layout.addWidget(placement_box)
+        script_box = QtWidgets.QGroupBox("Script Hooks")
+        script_layout = QtWidgets.QFormLayout(script_box)
+        self._script_hook_fields: dict[str, tuple[str, ...]] = {"area": (), "module": ()}
+        self._script_hooks: dict[str, dict[str, str]] = {"area": {}, "module": {}}
+        self.scriptHookScopeComboBox = QtWidgets.QComboBox()
+        self.scriptHookScopeComboBox.setObjectName("mapStudioScriptHookScopeComboBox")
+        self.scriptHookScopeComboBox.addItem("Area / ARE", "area")
+        self.scriptHookScopeComboBox.addItem("Module / IFO", "module")
+        self.scriptHookFieldComboBox = QtWidgets.QComboBox()
+        self.scriptHookFieldComboBox.setObjectName("mapStudioScriptHookFieldComboBox")
+        self.scriptHookResrefLineEdit = QtWidgets.QLineEdit()
+        self.scriptHookResrefLineEdit.setObjectName("mapStudioScriptHookResrefLineEdit")
+        self.scriptHookResrefLineEdit.setPlaceholderText("script resref, e.g. gr_onenter")
+        self.scriptHookHintLabel = QtWidgets.QLabel(
+            "Assign optional KOTOR script hooks. Referenced .ncs files must resolve from the module package, Override, or base game."
+        )
+        self.scriptHookHintLabel.setObjectName("mapStudioScriptHookHintLabel")
+        self.scriptHookHintLabel.setWordWrap(True)
+        self.assignScriptHookButton = QtWidgets.QPushButton("Assign Script Hook")
+        self.assignScriptHookButton.setObjectName("mapStudioAssignScriptHookButton")
+        self.clearScriptHookButton = QtWidgets.QPushButton("Clear Script Hook")
+        self.clearScriptHookButton.setObjectName("mapStudioClearScriptHookButton")
+        script_layout.addRow("Scope:", self.scriptHookScopeComboBox)
+        script_layout.addRow("Field:", self.scriptHookFieldComboBox)
+        script_layout.addRow("Script:", self.scriptHookResrefLineEdit)
+        script_layout.addRow(self.scriptHookHintLabel)
+        script_layout.addRow(self.assignScriptHookButton)
+        script_layout.addRow(self.clearScriptHookButton)
+        layout.addWidget(script_box)
         for label in self.ACTIONS:
             button = QtWidgets.QPushButton(label)
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
@@ -407,6 +437,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.gameplayPaletteComboBox.currentIndexChanged.connect(self._update_gameplay_palette_hint)
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
+        self.scriptHookScopeComboBox.currentIndexChanged.connect(self._update_script_hook_field_choices)
+        self.scriptHookFieldComboBox.currentIndexChanged.connect(self._update_script_hook_value)
+        self.assignScriptHookButton.clicked.connect(self._emit_assign_script_hook)
+        self.clearScriptHookButton.clicked.connect(self._emit_clear_script_hook)
         self._update_operation_controls()
         self.set_terrain_room_choices(())
         self.set_terrain_shape_presets(())
@@ -416,6 +450,7 @@ class BuilderTab(QtWidgets.QWidget):
         self._update_primitive_dimension_controls()
         self._update_primitive_style_controls()
         self._update_surface_hint()
+        self._update_script_hook_field_choices()
 
     @staticmethod
     def _make_transform_spin(
@@ -1134,6 +1169,78 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.gameplayPosZSpinBox.value()),
             float(self.gameplayBearingSpinBox.value()),
         )
+
+    def set_script_hook_fields(self, choices) -> None:
+        """Populate script hook field choices from the controller/core policy."""
+
+        data = dict(choices or {})
+        self._script_hook_fields = {
+            "area": tuple(str(item) for item in data.get("area", ()) or ()),
+            "module": tuple(str(item) for item in data.get("module", ()) or ()),
+        }
+        self._update_script_hook_field_choices()
+
+    def set_script_hooks(self, hooks) -> None:
+        """Show current authored script hooks in the editor controls."""
+
+        data = dict(hooks or {})
+        self._script_hooks = {
+            "area": {str(key): str(value) for key, value in dict(data.get("area") or {}).items()},
+            "module": {str(key): str(value) for key, value in dict(data.get("module") or {}).items()},
+        }
+        self._update_script_hook_value()
+
+    def _current_script_hook_scope(self) -> str:
+        return str(self.scriptHookScopeComboBox.currentData() or "area")
+
+    def _current_script_hook_field(self) -> str:
+        return str(self.scriptHookFieldComboBox.currentData() or self.scriptHookFieldComboBox.currentText() or "").strip()
+
+    def _update_script_hook_field_choices(self) -> None:
+        scope = self._current_script_hook_scope()
+        current = self._current_script_hook_field()
+        fields = tuple(self._script_hook_fields.get(scope, ()) or ())
+        self.scriptHookFieldComboBox.blockSignals(True)
+        self.scriptHookFieldComboBox.clear()
+        restore_index = -1
+        for field_name in fields:
+            self.scriptHookFieldComboBox.addItem(field_name, field_name)
+            if field_name == current:
+                restore_index = self.scriptHookFieldComboBox.count() - 1
+        if self.scriptHookFieldComboBox.count() <= 0:
+            self.scriptHookFieldComboBox.addItem("No script hook fields available", "")
+        if restore_index >= 0:
+            self.scriptHookFieldComboBox.setCurrentIndex(restore_index)
+        self.scriptHookFieldComboBox.blockSignals(False)
+        self._update_script_hook_value()
+
+    def _update_script_hook_value(self) -> None:
+        scope = self._current_script_hook_scope()
+        field_name = self._current_script_hook_field()
+        script = str(dict(self._script_hooks.get(scope) or {}).get(field_name, ""))
+        self.scriptHookResrefLineEdit.blockSignals(True)
+        self.scriptHookResrefLineEdit.setText(script)
+        self.scriptHookResrefLineEdit.blockSignals(False)
+        has_field = bool(field_name)
+        self.scriptHookResrefLineEdit.setEnabled(has_field)
+        self.assignScriptHookButton.setEnabled(has_field)
+        self.clearScriptHookButton.setEnabled(bool(has_field and script))
+        if script:
+            self.scriptHookHintLabel.setText(f"{scope.title()} hook {field_name} is assigned to {script}.ncs.")
+        else:
+            self.scriptHookHintLabel.setText(
+                "Assign optional KOTOR script hooks. Referenced .ncs files must resolve from the module package, Override, or base game."
+            )
+
+    def _emit_assign_script_hook(self) -> None:
+        field_name = self._current_script_hook_field()
+        if field_name:
+            self.scriptHookRequested.emit(self._current_script_hook_scope(), field_name, self.scriptHookResrefLineEdit.text().strip())
+
+    def _emit_clear_script_hook(self) -> None:
+        field_name = self._current_script_hook_field()
+        if field_name:
+            self.scriptHookRequested.emit(self._current_script_hook_scope(), field_name, "")
 
     def _emit_room_light(self) -> None:
         self.roomLightRequested.emit(

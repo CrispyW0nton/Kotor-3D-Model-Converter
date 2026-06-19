@@ -6,6 +6,7 @@ def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
         "native/GhostRigger.Domain.Core.Modules/Python",
+        "native/GhostRigger.Domain.Core.Level/Python",
         "native/GhostRigger.Domain.Core.Game/Python",
         "native/GhostRigger.Domain.Core.Scene/Python",
         "native/GhostRigger.Domain.Core.Walkmesh/Python",
@@ -197,3 +198,58 @@ def test_t2600_metadata_validation_blocks_unknown_or_unsafe_script_hooks() -> No
     assert validation.ok is False
     assert any("OnTeleportMaybe" in issue and "Known fields" in issue for issue in validation.blocking_issues)
     assert any("this_script_name_is_too_long" in issue and "16 characters or fewer" in issue for issue in validation.blocking_issues)
+
+
+def test_t2600_authored_script_hook_editor_updates_project_metadata() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_scripts import (
+        authored_script_hooks,
+        remove_authored_script_hook,
+        set_authored_script_hook,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(preset_id="rectangular_dev_room", module_root="grscript", game="K1")
+    update = set_authored_script_hook(project, scope="area", field_name="onenter", script_resref="gr_enter")
+    update = set_authored_script_hook(update.project, scope="module", field_name="Mod_OnModLoad", script_resref="gr_load")
+    hooks = authored_script_hooks(update.project)
+
+    assert update.project.metadata.metadata["area_scripts"] == {"OnEnter": "gr_enter"}
+    assert update.project.metadata.metadata["module_scripts"] == {"Mod_OnModLoad": "gr_load"}
+    assert hooks["area"]["OnEnter"] == "gr_enter"
+    assert hooks["module"]["Mod_OnModLoad"] == "gr_load"
+
+    cleared = remove_authored_script_hook(update.project, scope="area", field_name="OnEnter")
+    assert cleared.removed is True
+    assert "area_scripts" not in cleared.project.metadata.metadata
+    assert authored_script_hooks(cleared.project)["module"]["Mod_OnModLoad"] == "gr_load"
+
+
+def test_t2600_controller_script_hook_edit_actions_clear_export_and_proof_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grscript")
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["grscript.git"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    update = controller.set_authored_script_hook(scope="area", field_name="OnEnter", script_resref="gr_enter")
+    payload = controller.project.extra_sections["authored_module"]
+
+    assert update.scope == "area"
+    assert update.field_name == "OnEnter"
+    assert payload["metadata"]["area_scripts"] == {"OnEnter": "gr_enter"}
+    assert payload["runtime_resources"] == []
+    assert payload["game_tested"] is False
+    assert controller.authored_script_hooks()["area"]["OnEnter"] == "gr_enter"
+
+    cleared = controller.remove_authored_script_hook(scope="area", field_name="OnEnter")
+    payload = controller.project.extra_sections["authored_module"]
+    assert cleared.removed is True
+    assert "area_scripts" not in payload["metadata"]

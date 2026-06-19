@@ -270,6 +270,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
         self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
         self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
+        self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -401,6 +402,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.builder_tab.roomLightRequested.connect(self.add_authored_room_light)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
+        self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -1085,6 +1087,26 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
 
+    def set_authored_script_hook(self, scope: str, field_name: str, script_resref: str) -> None:
+        try:
+            if str(script_resref or "").strip():
+                update = self.controller.set_authored_script_hook(
+                    scope=scope,
+                    field_name=field_name,
+                    script_resref=script_resref,
+                )
+                message = f"Assigned {update.scope} script hook {update.field_name} -> {update.script_resref}."
+            else:
+                update = self.controller.remove_authored_script_hook(
+                    scope=scope,
+                    field_name=field_name,
+                )
+                message = f"Cleared {update.scope} script hook {update.field_name}."
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Script Hook", str(exc))
+            return
+        self._refresh_all(f"{message} Previous exports/proofs are now stale.")
+
     def export_fbx(self, dry_run: bool = False) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export KMAP Scene", f"{self.project.name}.fbx", "FBX files (*.fbx)")
         if not path:
@@ -1326,6 +1348,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_room_primitives(authored_room_primitives)
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
         self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
+        self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())
         self.properties.set_project(self.project, authored_placements, authored_room_lights)
         self.outliner.set_project(self.project, authored_placements, authored_room_lights)
         self.viewport_panel.set_project(

@@ -366,7 +366,7 @@ def test_t2600_readiness_reports_authored_room_light_coverage() -> None:
     lighting = {step.name: step for step in readiness.toolchain}["Lighting"]
 
     assert lighting.ready is True
-    assert lighting.status == "Planned"
+    assert lighting.status == "1 authored light(s)"
     assert "1 authored light(s) across 1 room(s)" in lighting.value_label
     assert readiness.metadata["lighting_count"] == 1
     assert readiness.metadata["lighting_room_count"] == 1

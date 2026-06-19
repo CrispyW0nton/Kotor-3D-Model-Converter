@@ -142,6 +142,38 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "MapStudioWorkflowPanel" in init_source
 
 
+def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
+    builder_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    builder_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (builder_source, builder_mirror_source):
+        assert "scriptHookRequested = QtCore.Signal(str, str, str)" in source
+        assert "Script Hooks" in source
+        assert "mapStudioScriptHookScopeComboBox" in source
+        assert "mapStudioScriptHookFieldComboBox" in source
+        assert "mapStudioScriptHookResrefLineEdit" in source
+        assert "mapStudioAssignScriptHookButton" in source
+        assert "mapStudioClearScriptHookButton" in source
+        assert "set_script_hook_fields" in source
+        assert "set_script_hooks" in source
+        assert "_emit_assign_script_hook" in source
+
+    assert "self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())" in window_source
+    assert "self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())" in window_source
+    assert "self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)" in window_source
+    assert "def set_authored_script_hook" in window_source
+
+
 def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     mirror_source = _read(
         "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
