@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Explains Safe Export and Install Path
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / export-install handoff
+Intersects: Map Studio export panel and ModuleMeshes mirror.
+
+- Added export-panel guidance that distinguishes FBX scene handoff from authored KMAP `.mod` packaging.
+- Added safe-install language for staged output, chosen KOTOR Modules folder install, backup behavior, and live warp-test proof before calling a module game-ready.
+- Added dry-run help text so modders know when actions are preview-only versus writing staged files or installing for testing.
+- Mirrored the export panel into the ModuleMeshes package and added focused source-contract coverage for the safety labels.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_export_safety`; `python -m py_compile` on active and mirrored export panels plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Explains Placement Resource Kinds
 
 Owner: LordVaderCW

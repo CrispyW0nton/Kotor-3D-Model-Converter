@@ -273,6 +273,28 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     assert "def set_authored_script_hook" in window_source
 
 
+def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof() -> None:
+    export_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/export_panel.py"
+    )
+    export_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/export_panel.py"
+    )
+
+    for source in (export_source, export_mirror_source):
+        assert "mapStudioExportScopeLabel" in source
+        assert "mapStudioExportSafetyLabel" in source
+        assert "mapStudioExportDryRunCheckBox" in source
+        assert "mapStudioExportDryRunHintLabel" in source
+        assert "authored KMAP module as a KOTOR .mod package" in source
+        assert "install to a chosen Modules folder with backup" in source
+        assert "not game-ready until a live warp test is recorded" in source
+        assert "Preview the export/install action without writing final files" in source
+        assert "Clear it only when you are ready to write staged files or install for testing" in source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
