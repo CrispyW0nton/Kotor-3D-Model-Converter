@@ -295,6 +295,33 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "Clear it only when you are ready to write staged files or install for testing" in source
 
 
+def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
+    walkmesh_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/walkmesh_tab.py"
+    )
+    walkmesh_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/walkmesh_tab.py"
+    )
+
+    for source in (walkmesh_source, walkmesh_mirror_source):
+        assert "mapStudioWalkmeshWorkflowLabel" in source
+        assert "mapStudioWalkmeshSurfaceLabel" in source
+        assert "mapStudioWalkmeshValidationHintLabel" in source
+        assert "mapStudioWalkmeshFaceTypeComboBox" in source
+        assert "create or load room geometry, generate WOK faces" in source
+        assert "1 WALK for reachable floors" in source
+        assert "7 NON_WALK for walls/blockers" in source
+        assert "18 DOOR for doorway portals" in source
+        assert "23 WATER for water surfaces" in source
+        assert "player start, doors, triggers, waypoints, creatures, and placeables sit on walkable faces" in source
+        assert "mapStudioWalkmeshGenerateButton" in source
+        assert "mapStudioWalkmeshAssignFaceTypeButton" in source
+        assert "mapStudioWalkmeshValidateButton" in source
+        assert "mapStudioWalkmeshShowWalkableButton" in source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

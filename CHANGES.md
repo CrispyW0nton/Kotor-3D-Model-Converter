@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Explains Walkmesh Authoring Workflow
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / walkmesh authoring clarity
+Intersects: Walkmesh tab and ModuleMeshes mirror.
+
+- Added Walkmesh tab guidance for the manual WOK workflow: create/load room geometry, generate WOK faces, paint face types, validate, and preview before staging.
+- Added KOTOR face-type explanations for `1 WALK`, `7 NON_WALK`, `18 DOOR`, and `23 WATER`.
+- Added validation guidance that player start, doors, triggers, waypoints, creatures, and placeables should sit on walkable faces before export/install.
+- Added stable object names for Walkmesh tab controls and mirrored the tab into the ModuleMeshes package.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_walkmesh_ui`; `python -m py_compile` on active and mirrored Walkmesh tabs plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Explains Safe Export and Install Path
 
 Owner: LordVaderCW
