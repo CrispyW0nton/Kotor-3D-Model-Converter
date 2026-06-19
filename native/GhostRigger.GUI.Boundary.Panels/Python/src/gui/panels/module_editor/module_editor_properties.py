@@ -96,7 +96,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         if authored_light is not None:
             self.title.setText("Authored Room Light")
             self.name_edit.setText(str(getattr(authored_light, "name", "") or item_id))
-            self.name_edit.setEnabled(False)
+            self.name_edit.setEnabled(True)
             self.source_label.setText(
                 f"{getattr(authored_light, 'light_type', 'point')} in {getattr(authored_light, 'room_resref', '')}; "
                 f"radius {float(getattr(authored_light, 'radius', 0.0) or 0.0):.2f}, "

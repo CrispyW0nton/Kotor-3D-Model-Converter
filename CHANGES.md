@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Edits Authored Room Lights
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored room light editing
+Intersects: authored room lighting services, authored module readiness, Level Editor selection actions, and ModuleMeshes payload mirror.
+
+- Added core authored room light rename, duplicate, and remove operations so Map Studio can edit room lighting intent outside the UI layer.
+- Routed the existing Level Editor delete, duplicate, rename, and properties-name workflows through the authored light service for selected room lights.
+- Kept authored light edits export-safe by clearing stale runtime resources and game-test proof when the KMAP light payload changes.
+- Updated authored light readiness so the Map Studio toolchain reports the actual authored light count instead of a generic planned state.
+- Mirrored the lighting service, controller, readiness, and properties updates into the ModuleMeshes payload copy.
+- Verification: `python -m pytest tests/test_authored_module_lighting.py tests/test_authored_gameplay_placement_selection.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_light_edit_full`; `python -m py_compile` on active and mirrored lighting/readiness/controller/properties modules plus the Level Editor window and focused test; `git diff --check` on touched files.
 ### [2026-06-19] Map Studio Edits Authored Resource Placements
 
 Owner: LordVaderCW

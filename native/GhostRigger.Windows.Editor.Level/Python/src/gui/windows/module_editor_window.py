@@ -502,6 +502,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     return
                 self._refresh_all("Renamed authored gameplay placement.")
             return
+        if item_id.startswith("authored_light:"):
+            light = next((row for row in self.controller.authored_room_lights() if getattr(row, "light_id", "") == item_id), None)
+            if light is None:
+                return
+            current = str(getattr(light, "name", "") or item_id)
+            name, ok = QtWidgets.QInputDialog.getText(self, "Rename Authored Room Light", "Name:", text=current)
+            if ok and name.strip():
+                try:
+                    self.controller.rename_authored_room_light(item_id, name=name.strip())
+                except Exception as exc:
+                    QtWidgets.QMessageBox.warning(self, "Rename Authored Room Light", str(exc))
+                    return
+                self._refresh_all("Renamed authored room light.")
+            return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:
             return
@@ -1278,6 +1292,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
                     return
                 self._refresh_all("Renamed authored gameplay placement.")
+            return
+        if item_id.startswith("authored_light:"):
+            if key == "name":
+                try:
+                    self.controller.rename_authored_room_light(item_id, name=str(value or "").strip())
+                except Exception as exc:
+                    QtWidgets.QMessageBox.warning(self, "Rename Authored Room Light", str(exc))
+                    return
+                self._refresh_all("Renamed authored room light.")
             return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:

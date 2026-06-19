@@ -116,6 +116,65 @@ def test_t2694_controller_lists_and_moves_authored_room_lights() -> None:
     assert result.readiness.metadata["room_lights"][0]["position"] == [1.5, -0.5, 2.75]
 
 
+def test_t2600_room_light_rename_duplicate_and_remove_update_project() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_lighting import (
+        add_authored_room_light,
+        authored_room_light_rows,
+        duplicate_authored_room_light,
+        remove_authored_room_light,
+        rename_authored_room_light,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(preset_id="rectangular_dev_room", module_root="grlight", game="K1")
+    project = add_authored_room_light(project, name="key_light", position=(1.0, 2.0, 2.5)).project
+
+    renamed = rename_authored_room_light(project, "authored_light:key_light", name="warm_key")
+    duplicated = duplicate_authored_room_light(renamed.project, "authored_light:warm_key")
+    removed = remove_authored_room_light(duplicated.project, "authored_light:warm_key")
+    rows = authored_room_light_rows(removed.project)
+
+    assert renamed.light.name == "warm_key"
+    assert renamed.light_id == "authored_light:warm_key"
+    assert duplicated.light.name == "warm_key_copy"
+    assert duplicated.light_id == "authored_light:warm_key_copy"
+    assert duplicated.light.position == (1.5, 2.5, 2.5)
+    assert removed.light.name == "warm_key"
+    assert removed.count == 1
+    assert rows[0].light_id == "authored_light:warm_key_copy"
+
+
+def test_t2600_controller_room_light_edit_actions_clear_export_and_proof_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grlight")
+    controller.add_authored_room_light(name="key_light", position=(0.0, 0.0, 2.25))
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["grlight.git"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    renamed = controller.rename_authored_room_light("authored_light:key_light", name="warm_key")
+    duplicated = controller.duplicate_authored_room_light("authored_light:warm_key")
+    controller.model.select(duplicated.light_id)
+    removed = controller.remove_authored_room_light(duplicated.light_id)
+    updated = controller.project.extra_sections["authored_module"]
+
+    assert renamed.light.name == "warm_key"
+    assert duplicated.light_id == "authored_light:warm_key_copy"
+    assert removed.light.name == "warm_key_copy"
+    assert updated["runtime_resources"] == []
+    assert updated["game_tested"] is False
+    assert updated["lights"][0]["name"] == "warm_key"
+    assert controller.project.dirty is True
+
+
 def test_t2693_export_manifest_records_room_lighting_intent(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -228,6 +287,8 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     assert "authored_room_light" in outliner_source
     assert "Authored Room Light" in properties_source
     assert "_authored_room_lights" in properties_source
+    assert "self.name_edit.setEnabled(True)" in properties_source
     assert "Authored Room Light" in viewport_panel_source
     assert "authored_room_lights = self.controller.authored_room_lights()" in window_source
     assert "self.controller.set_authored_room_light_transform(" in window_source
+    assert "rename_authored_room_light" in window_source

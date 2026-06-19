@@ -37,6 +37,7 @@ class AuthoredRoomLightUpdate:
     project: Any
     light: AuthoredRoomLight
     count: int
+    light_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -162,6 +163,40 @@ def authored_room_light_rows(project: Any) -> tuple[AuthoredRoomLightRow, ...]:
     return tuple(rows)
 
 
+def _copy_light_name(name: str, count: int) -> str:
+    base = str(name or "").strip() or f"room_light_{count + 1}"
+    suffix = "_copy"
+    if len(base) + len(suffix) <= 32:
+        return f"{base}{suffix}"
+    return f"{base[: 32 - len(suffix)]}{suffix}"
+
+
+def _offset_position(position: Vec3, offset: Vec3 = (0.5, 0.5, 0.0)) -> Vec3:
+    return (
+        float(position[0]) + float(offset[0]),
+        float(position[1]) + float(offset[1]),
+        float(position[2]) + float(offset[2]),
+    )
+
+
+def _light_items_for_id(project: Any, light_id: str) -> tuple[str, list[AuthoredRoomLight], int, AuthoredRoomLight]:
+    name = parse_authored_room_light_id(light_id)
+    lights = list(tuple(getattr(project, "lights", ()) or ()))
+    for index, light in enumerate(lights):
+        if light.name == name:
+            return name, lights, index, light
+    raise ValueError(f"Unknown authored room light: {name}.")
+
+
+def _validate_all_lights(project: Any, lights: tuple[AuthoredRoomLight, ...]) -> None:
+    validation = validate_authored_room_lights(
+        lights,
+        room_resrefs={room.normalised_resref() for room in tuple(getattr(project, "rooms", ()) or ())},
+    )
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+
+
 def validate_authored_room_lights(
     lights: tuple[AuthoredRoomLight, ...],
     *,
@@ -248,7 +283,7 @@ def add_authored_room_light(
             "last_room_light": metadata,
         },
     )
-    return AuthoredRoomLightUpdate(project=updated, light=light, count=len(updated_lights))
+    return AuthoredRoomLightUpdate(project=updated, light=light, count=len(updated_lights), light_id=authored_room_light_id(light.name))
 
 
 def update_authored_room_light_transform(
@@ -259,30 +294,88 @@ def update_authored_room_light_transform(
 ) -> AuthoredRoomLightUpdate:
     """Move one authored room light by virtual id."""
 
-    name = parse_authored_room_light_id(light_id)
-    lights = list(tuple(getattr(project, "lights", ()) or ()))
-    for index, light in enumerate(lights):
-        if light.name != name:
-            continue
-        updated_light = replace(light, position=_finite_vec3(position, default=light.position))
-        validation = validate_authored_room_lights(
-            (updated_light,),
-            room_resrefs={room.normalised_resref() for room in tuple(getattr(project, "rooms", ()) or ())},
-        )
-        if not validation.ok:
-            raise ValueError("; ".join(validation.blocking_issues))
-        lights[index] = updated_light
-        updated = replace(
-            project,
-            lights=tuple(lights),
-            notes=tuple(project.notes) + (f"Moved Map Studio room light: {updated_light.name}.",),
-            extra={
-                **dict(project.extra),
-                "last_room_light": authored_room_light_payload(updated_light),
-            },
-        )
-        return AuthoredRoomLightUpdate(project=updated, light=updated_light, count=len(lights))
-    raise ValueError(f"Unknown authored room light: {name}.")
+    _name, lights, index, light = _light_items_for_id(project, light_id)
+    updated_light = replace(light, position=_finite_vec3(position, default=light.position))
+    lights[index] = updated_light
+    _validate_all_lights(project, tuple(lights))
+    updated = replace(
+        project,
+        lights=tuple(lights),
+        notes=tuple(project.notes) + (f"Moved Map Studio room light: {updated_light.name}.",),
+        extra={
+            **dict(project.extra),
+            "last_room_light": authored_room_light_payload(updated_light),
+        },
+    )
+    return AuthoredRoomLightUpdate(project=updated, light=updated_light, count=len(lights), light_id=authored_room_light_id(updated_light.name))
+
+
+def rename_authored_room_light(
+    project: Any,
+    light_id: str,
+    *,
+    name: Any,
+) -> AuthoredRoomLightUpdate:
+    """Rename one authored room light by virtual id."""
+
+    label = str(name or "").strip()[:32]
+    if not label:
+        raise ValueError("Authored room light name cannot be empty.")
+    _old_name, lights, index, light = _light_items_for_id(project, light_id)
+    updated_light = replace(light, name=label)
+    lights[index] = updated_light
+    _validate_all_lights(project, tuple(lights))
+    updated = replace(
+        project,
+        lights=tuple(lights),
+        notes=tuple(project.notes) + (f"Renamed Map Studio room light: {light.name} to {updated_light.name}.",),
+        extra={
+            **dict(project.extra),
+            "last_room_light_rename": authored_room_light_payload(updated_light),
+        },
+    )
+    return AuthoredRoomLightUpdate(project=updated, light=updated_light, count=len(lights), light_id=authored_room_light_id(updated_light.name))
+
+
+def duplicate_authored_room_light(project: Any, light_id: str) -> AuthoredRoomLightUpdate:
+    """Duplicate one authored room light by virtual id."""
+
+    _name, lights, _index, light = _light_items_for_id(project, light_id)
+    duplicated = replace(
+        light,
+        name=_copy_light_name(light.name, len(lights)),
+        position=_offset_position(light.position),
+    )
+    lights.append(duplicated)
+    _validate_all_lights(project, tuple(lights))
+    updated = replace(
+        project,
+        lights=tuple(lights),
+        notes=tuple(project.notes) + (f"Duplicated Map Studio room light: {light.name} to {duplicated.name}.",),
+        extra={
+            **dict(project.extra),
+            "last_room_light_duplicate": authored_room_light_payload(duplicated),
+        },
+    )
+    return AuthoredRoomLightUpdate(project=updated, light=duplicated, count=len(lights), light_id=authored_room_light_id(duplicated.name))
+
+
+def remove_authored_room_light(project: Any, light_id: str) -> AuthoredRoomLightUpdate:
+    """Remove one authored room light by virtual id."""
+
+    _name, lights, index, light = _light_items_for_id(project, light_id)
+    del lights[index]
+    _validate_all_lights(project, tuple(lights))
+    updated = replace(
+        project,
+        lights=tuple(lights),
+        notes=tuple(project.notes) + (f"Removed Map Studio room light: {light.name}.",),
+        extra={
+            **dict(project.extra),
+            "last_room_light_remove": authored_room_light_payload(light),
+        },
+    )
+    return AuthoredRoomLightUpdate(project=updated, light=light, count=len(lights), light_id="")
 
 
 __all__ = [
@@ -294,8 +387,11 @@ __all__ = [
     "authored_room_light_id",
     "authored_room_light_payload",
     "authored_room_light_rows",
+    "duplicate_authored_room_light",
     "normalise_authored_room_light",
     "parse_authored_room_light_id",
+    "remove_authored_room_light",
+    "rename_authored_room_light",
     "update_authored_room_light_transform",
     "validate_authored_room_lights",
 ]

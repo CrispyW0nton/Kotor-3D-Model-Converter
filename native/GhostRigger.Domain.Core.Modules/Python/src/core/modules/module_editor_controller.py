@@ -35,7 +35,10 @@ from .authored_gameplay_preview import authored_gameplay_preview_markers
 from .authored_module_lighting import (
     add_authored_room_light as add_authored_room_light_to_project,
     authored_room_light_rows,
+    duplicate_authored_room_light,
     parse_authored_room_light_id,
+    remove_authored_room_light,
+    rename_authored_room_light,
     update_authored_room_light_transform,
 )
 from .authored_module_placements import (
@@ -128,6 +131,11 @@ class ModuleEditorController:
             self.model.select("")
             self.model.log(f"Deleted Map Studio {update.kind} placement {update.tag}.")
             return True
+        if item_id.startswith("authored_light:"):
+            update = self.remove_authored_room_light(item_id)
+            self.model.select("")
+            self.model.log(f"Deleted Map Studio room light {update.light.name}.")
+            return True
         scene = LevelScene(self.project)
         changed = scene.remove_room(item_id) or scene.remove_module(item_id)
         if changed:
@@ -141,6 +149,11 @@ class ModuleEditorController:
             update = self.duplicate_authored_gameplay_placement(item_id)
             self.model.select(update.placement_id)
             self.model.log(f"Duplicated Map Studio {update.kind} placement {update.tag}.")
+            return update
+        if item_id.startswith("authored_light:"):
+            update = self.duplicate_authored_room_light(item_id)
+            self.model.select(update.light_id)
+            self.model.log(f"Duplicated Map Studio room light {update.light.name}.")
             return update
         clone = LevelScene(self.project).duplicate_room(item_id)
         if clone is not None:
@@ -887,6 +900,75 @@ class ModuleEditorController:
             f"Moved Map Studio room light {update.light.name} to {update.light.position}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
+
+    def rename_authored_room_light(self, light_id: str, *, name: Any):
+        """Rename one authored room light by virtual id."""
+
+        parse_authored_room_light_id(light_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = rename_authored_room_light(authored, light_id, name=name)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Renamed Map Studio room light to {update.light.name}; previous exports/proofs are now stale."
+        )
+        return update
+
+    def duplicate_authored_room_light(self, light_id: str):
+        """Duplicate one authored room light by virtual id."""
+
+        parse_authored_room_light_id(light_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = duplicate_authored_room_light(authored, light_id)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Duplicated Map Studio room light {update.light.name}; previous exports/proofs are now stale."
+        )
+        return update
+
+    def remove_authored_room_light(self, light_id: str):
+        """Remove one authored room light by virtual id."""
+
+        parse_authored_room_light_id(light_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = remove_authored_room_light(authored, light_id)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Removed Map Studio room light {update.light.name}; previous exports/proofs are now stale."
+        )
+        return update
 
     def build_preview(self, output_dir: str | Path):
         return self.builder_service.build_preview(self.project, output_dir)

@@ -557,7 +557,7 @@ def _toolchain_statuses(
     light_count = _lighting_count(project)
     rooms_with_lights, rooms_without_lights = _lighting_room_coverage(project, rooms)
     if light_count:
-        lighting_status = "Planned"
+        lighting_status = f"{light_count} authored light(s)"
         lighting_value = (
             f"{light_count} authored light(s) across {len(rooms_with_lights)} room(s); "
             f"{len(rooms_without_lights)} room(s) still need lighting/lightmap planning"
