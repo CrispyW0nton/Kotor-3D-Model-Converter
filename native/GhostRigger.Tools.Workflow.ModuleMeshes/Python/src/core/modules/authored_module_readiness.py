@@ -72,6 +72,20 @@ class AuthoredGameplayTemplateReference:
 
 
 @dataclass(frozen=True)
+class AuthoredModuleTransitionReference:
+    """One authored transition/area-link candidate from door, trigger, or waypoint data."""
+
+    kind: str
+    tag: str
+    template_resref: str = ""
+    linked_to: str = ""
+    linked_to_module: str = ""
+    status: str = "unlinked"
+    complete: bool = False
+    message: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredModuleReadiness:
     """Capability-honest summary for a from-scratch Map Studio module."""
 
@@ -212,6 +226,65 @@ def _gameplay_template_references(
     return tuple(sorted(refs, key=lambda item: (item.kind, item.template_resref, item.restype, item.tag)))
 
 
+def _transition_reference_entry(
+    *,
+    kind: str,
+    template_resref: Any,
+    tag: Any,
+    linked_to: Any,
+    linked_to_module: Any = "",
+) -> AuthoredModuleTransitionReference | None:
+    destination = str(linked_to or "").strip()
+    destination_module = normalise_resref(linked_to_module)
+    if not destination and not destination_module:
+        return None
+    label = str(tag or template_resref or kind).strip()
+    template = normalise_resource_resref(template_resref)
+    if destination and destination_module:
+        status = "module_transition"
+        complete = True
+        message = f"{kind.title()} {label} links to {destination} in module {destination_module}."
+    elif destination:
+        status = "local_transition"
+        complete = True
+        message = f"{kind.title()} {label} links to local destination {destination}."
+    else:
+        status = "missing_destination"
+        complete = False
+        message = f"{kind.title()} {label} names module {destination_module} but no destination tag/waypoint."
+    return AuthoredModuleTransitionReference(
+        kind=kind,
+        tag=label,
+        template_resref=template,
+        linked_to=destination,
+        linked_to_module=destination_module,
+        status=status,
+        complete=complete,
+        message=message,
+    )
+
+
+def _transition_references(project: AuthoredModuleProject) -> tuple[AuthoredModuleTransitionReference, ...]:
+    placements = project.placements
+    refs: list[AuthoredModuleTransitionReference] = []
+    for kind, items in (
+        ("door", tuple(placements.doors or ())),
+        ("trigger", tuple(placements.triggers or ())),
+        ("waypoint", tuple(placements.waypoints or ())),
+    ):
+        for item in items:
+            ref = _transition_reference_entry(
+                kind=kind,
+                template_resref=getattr(item, "template_resref", ""),
+                tag=getattr(item, "tag", ""),
+                linked_to=getattr(item, "linked_to", ""),
+                linked_to_module=getattr(item, "linked_to_module", ""),
+            )
+            if ref is not None:
+                refs.append(ref)
+    return tuple(sorted(refs, key=lambda item: (item.kind, item.tag, item.linked_to_module, item.linked_to)))
+
+
 def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
@@ -344,6 +417,7 @@ def _toolchain_statuses(
     *,
     rooms: tuple[AuthoredRoomReadiness, ...],
     template_references: tuple[AuthoredGameplayTemplateReference, ...],
+    transition_references: tuple[AuthoredModuleTransitionReference, ...],
     missing_runtime_resources: tuple[RuntimeResourceKey, ...],
     expected_runtime_resources: tuple[RuntimeResourceKey, ...],
     blocking_messages: tuple[str, ...],
@@ -375,6 +449,19 @@ def _toolchain_statuses(
     proof_label = "Recorded" if proof_ready else proof_status.replace("_", " ")
     if proof_recording_script_path and not proof_ready:
         proof_label = "Recorder ready after warp test"
+    transition_count = len(transition_references)
+    complete_transitions = sum(1 for ref in transition_references if ref.complete)
+    incomplete_transitions = transition_count - complete_transitions
+    if transition_count:
+        transition_ready = incomplete_transitions == 0
+        transition_status = "Ready" if transition_ready else "Needs destination"
+        transition_value = f"{complete_transitions}/{transition_count} authored transition(s) linked"
+        transition_fix = "Set a destination tag/waypoint and module resref for each authored transition."
+    else:
+        transition_ready = True
+        transition_status = "Optional"
+        transition_value = "No authored transitions yet"
+        transition_fix = "Add a door, trigger, or waypoint transition when this module needs exits."
     return (
         AuthoredModuleToolchainStatus(
             "Geometry authoring",
@@ -406,6 +493,13 @@ def _toolchain_statuses(
             "Ready" if entry_ready else "Needs module entry point",
             f"Entry {normalise_resref(entry.area_resref) or '(missing)'} @ {tuple(entry.position)}; {placement_total} placement(s){template_label}",
             "Place the player start inside the module root area; add or package custom templates when placements should not rely on base-game resources.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Transitions",
+            transition_ready,
+            transition_status,
+            transition_value,
+            transition_fix,
         ),
         AuthoredModuleToolchainStatus(
             "Runtime package",
@@ -484,7 +578,9 @@ def build_authored_module_readiness(
     expected = _expected_keys(project.module_root, rooms)
     present_set = set(present)
     template_references = _gameplay_template_references(project, present=present_set)
+    transition_references = _transition_references(project)
     external_template_count = sum(1 for ref in template_references if not ref.packaged)
+    incomplete_transition_count = sum(1 for ref in transition_references if not ref.complete)
     missing = tuple(key for key in expected if key not in present_set)
     room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
     blocking = tuple(validation.blocking_issues) + room_blocking
@@ -494,7 +590,12 @@ def build_authored_module_readiness(
             f"{external_template_count} gameplay template reference(s) rely on base-game, Override, "
             "or another installed mod resource instead of being packaged in this .mod.",
         )
-    warnings = tuple(validation.warnings) + template_warnings
+    transition_warnings: tuple[str, ...] = ()
+    if incomplete_transition_count:
+        transition_warnings = (
+            f"{incomplete_transition_count} authored transition(s) name a module but are missing a destination tag/waypoint.",
+        )
+    warnings = tuple(validation.warnings) + template_warnings + transition_warnings
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
@@ -565,6 +666,7 @@ def build_authored_module_readiness(
         project,
         rooms=rooms,
         template_references=template_references,
+        transition_references=transition_references,
         missing_runtime_resources=missing,
         expected_runtime_resources=expected,
         blocking_messages=blocking,
@@ -612,6 +714,22 @@ def build_authored_module_readiness(
                     "message": ref.message,
                 }
                 for ref in template_references
+            ],
+            "transition_count": len(transition_references),
+            "transition_complete_count": sum(1 for ref in transition_references if ref.complete),
+            "transition_incomplete_count": incomplete_transition_count,
+            "transition_references": [
+                {
+                    "kind": ref.kind,
+                    "tag": ref.tag,
+                    "template_resref": ref.template_resref,
+                    "linked_to": ref.linked_to,
+                    "linked_to_module": ref.linked_to_module,
+                    "status": ref.status,
+                    "complete": ref.complete,
+                    "message": ref.message,
+                }
+                for ref in transition_references
             ],
             "lighting_count": lighting_count,
             "room_lights": [
@@ -666,6 +784,7 @@ def build_authored_module_readiness(
 
 __all__ = [
     "AuthoredGameplayTemplateReference",
+    "AuthoredModuleTransitionReference",
     "AuthoredModuleInputStatus",
     "AuthoredModuleReadiness",
     "AuthoredModuleToolchainStatus",

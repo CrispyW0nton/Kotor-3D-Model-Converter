@@ -25,6 +25,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowGeometryLabel" in panel_source
     assert "mapStudioWorkflowWalkmeshLabel" in panel_source
     assert "mapStudioWorkflowLayoutLabel" in panel_source
+    assert "mapStudioWorkflowTransitionsLabel" in panel_source
     assert "mapStudioWorkflowValidationLabel" in panel_source
     assert "mapStudioWorkflowExportLabel" in panel_source
     assert "mapStudioWorkflowProofLabel" in panel_source
@@ -73,6 +74,9 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Walkmesh" in panel_source
     assert "Spawn/layout:" in panel_source
     assert "Gameplay layout" in panel_source
+    assert "Transitions:" in panel_source
+    assert '"Transitions"' in panel_source
+    assert "doors, triggers, or waypoints" in panel_source
     assert "player start" in panel_source
     assert "Use Builder to create terrain, rooms, or a dev-test map" in panel_source
     assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX" in panel_source
@@ -142,6 +146,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
     assert "mapStudioWorkflowLayoutLabel" in mirror_source
+    assert "mapStudioWorkflowTransitionsLabel" in mirror_source
     assert "mapStudioWorkflowProofLabel" in mirror_source
     assert "mapStudioWorkflowStarterRoomButton" in mirror_source
     assert "mapStudioWorkflowDoorwayBlockoutButton" in mirror_source
@@ -166,4 +171,5 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Geometry authoring" in mirror_source
     assert "Walkmesh" in mirror_source
     assert "Gameplay layout" in mirror_source
+    assert "Transitions:" in mirror_source
     assert "MapStudioWorkflowPanel" in mirror_init

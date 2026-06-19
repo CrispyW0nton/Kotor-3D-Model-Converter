@@ -81,6 +81,52 @@ def test_t2653_kmap_payload_preserves_authored_gameplay_placement_types() -> Non
     assert roundtrip.placements.sounds[0].tag == "ambient_sound"
 
 
+def test_t2600_readiness_reports_authored_transitions() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="wide_hall",
+        module_root="grlink01",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="exit_door",
+        position=(2.0, 0.0, 0.0),
+        linked_to="wp_grlink02_start",
+        linked_to_module="grlink02",
+    ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="trigger",
+        template_resref="newgeneric001",
+        tag="missing_destination_trigger",
+        position=(0.5, 0.5, 0.0),
+        linked_to_module="grlink03",
+    ).project
+
+    readiness = build_authored_module_readiness(project)
+    transition_status = next(item for item in readiness.toolchain if item.name == "Transitions")
+    transition_refs = readiness.metadata["transition_references"]
+
+    assert readiness.metadata["transition_count"] == 2
+    assert readiness.metadata["transition_complete_count"] == 1
+    assert readiness.metadata["transition_incomplete_count"] == 1
+    assert transition_status.status == "Needs destination"
+    assert transition_status.ready is False
+    assert "1/2 authored transition(s) linked" in transition_status.value_label
+    assert transition_refs[0]["linked_to"] == "wp_grlink02_start"
+    assert transition_refs[0]["linked_to_module"] == "grlink02"
+    assert transition_refs[0]["status"] == "module_transition"
+    assert any("missing a destination" in warning for warning in readiness.warnings)
+
+
 def test_t2653_controller_adds_placement_and_clears_runtime_state() -> None:
     _install_native_payload_paths()
 

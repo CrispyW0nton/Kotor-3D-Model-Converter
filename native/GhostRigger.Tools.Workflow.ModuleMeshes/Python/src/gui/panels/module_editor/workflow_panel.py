@@ -80,6 +80,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.layout_label.setWordWrap(True)
         root.addWidget(self.layout_label)
 
+        self.transitions_label = QtWidgets.QLabel("Transitions: Not checked")
+        self.transitions_label.setObjectName("mapStudioWorkflowTransitionsLabel")
+        self.transitions_label.setWordWrap(True)
+        root.addWidget(self.transitions_label)
+
         self.validation_label = QtWidgets.QLabel("Validation: Not checked")
         self.validation_label.setObjectName("mapStudioWorkflowValidationLabel")
         self.validation_label.setWordWrap(True)
@@ -171,6 +176,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.geometry_label.setText("Geometry: Create or open a KMAP before authoring rooms.")
             self.walkmesh_label.setText("Walkmesh: Create authored rooms before generating walkable WOK faces.")
             self.layout_label.setText("Spawn/layout: Create authored geometry before placing the player start or gameplay objects.")
+            self.transitions_label.setText("Transitions: Add doors, triggers, or waypoints when this map needs exits.")
             self.validation_label.setText("Validation: Not checked")
             self.export_label.setText("Export/install: Not ready")
             self.proof_label.setText("Game proof: Required before game-ready")
@@ -193,6 +199,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.geometry_label.setText("Geometry: Waiting for readiness check.")
             self.walkmesh_label.setText("Walkmesh: Waiting for readiness check.")
             self.layout_label.setText("Spawn/layout: Waiting for readiness check.")
+            self.transitions_label.setText("Transitions: Waiting for readiness check.")
         else:
             self.authoring_label.setText("Authoring: No authored module yet. Use Builder to create terrain, rooms, or a dev-test map.")
             self.resources_label.setText("Runtime resources: create authored terrain or rooms before packaging ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX.")
@@ -200,6 +207,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.geometry_label.setText("Geometry: Use Builder to create room, corridor, doorway, or terrain geometry.")
             self.walkmesh_label.setText("Walkmesh: No authored room yet. Create geometry before checking walkability.")
             self.layout_label.setText("Spawn/layout: Create an authored module, then place the player start and gameplay objects.")
+            self.transitions_label.setText("Transitions: Add doors, triggers, or waypoints when this map needs exits.")
 
         if readiness is None:
             self._set_action_enabled(True, can_place=has_authored_module, can_proof=False)
@@ -260,6 +268,13 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         else:
             gameplay_count = int(metadata.get("gameplay_placement_count", 0) or 0)
             self.layout_label.setText(f"Spawn/layout: {gameplay_count} gameplay placement(s); entry point status unavailable.")
+        self._set_toolchain_label(
+            self.transitions_label,
+            readiness,
+            "Transitions",
+            "Transitions",
+            "Transition status unavailable.",
+        )
         if installed_path:
             self.export_label.setText(f"Export/install: Installed for warp test. {installed_path}")
         elif proof_manifest:

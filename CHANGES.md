@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Surfaces Authored Transition Readiness
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / transition readiness
+Intersects: existing authored gameplay placement, KMAP transition fields, and Map Studio readiness panel.
+
+- Added core transition readiness metadata for authored doors, triggers, and waypoints with `linked_to` / `linked_to_module` fields, including complete/incomplete transition counts and per-transition messages.
+- Added a `Transitions` toolchain status so the Level Editor can tell modders whether exits are absent, linked, or missing a destination before staging a module.
+- Added a dedicated `mapStudioWorkflowTransitionsLabel` to the existing Map Studio workflow panel and mirrored it into the ModuleMeshes package; the UI renders readiness only and does not own transition policy.
+- Added focused regression coverage for core transition metadata/status and the workflow panel source contract.
+- Verification: `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_readiness_reports_authored_transitions tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_transition_readiness`; `python -m py_compile` on the active and mirrored authored readiness modules plus active and mirrored workflow panels.
+
 ### [2026-06-19] Map Studio Workflow Exposes Warp-Test Handoff
 
 Owner: LordVaderCW
