@@ -37,7 +37,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowDoorwayBlockoutButton" in panel_source
     assert "mapStudioWorkflowCorridorButton" in panel_source
     assert "mapStudioWorkflowStarterTerrainButton" in panel_source
+    assert "mapStudioWorkflowTerrainToolsButton" in panel_source
+    assert "mapStudioWorkflowLightingToolsButton" in panel_source
     assert "mapStudioWorkflowPlacementToolsButton" in panel_source
+    assert "mapStudioWorkflowScriptToolsButton" in panel_source
     assert "mapStudioWorkflowTestPlaceableButton" in panel_source
     assert "mapStudioWorkflowWalkmeshToolsButton" in panel_source
     assert "mapStudioWorkflowValidateButton" in panel_source
@@ -50,7 +53,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "doorwayBlockoutRequested = QtCore.Signal()" in panel_source
     assert "corridorRequested = QtCore.Signal()" in panel_source
     assert "starterTerrainRequested = QtCore.Signal()" in panel_source
+    assert "terrainToolsRequested = QtCore.Signal()" in panel_source
+    assert "lightingToolsRequested = QtCore.Signal()" in panel_source
     assert "placementToolsRequested = QtCore.Signal()" in panel_source
+    assert "scriptToolsRequested = QtCore.Signal()" in panel_source
     assert "testPlaceableRequested = QtCore.Signal()" in panel_source
     assert "walkmeshToolsRequested = QtCore.Signal()" in panel_source
     assert "validateRequested = QtCore.Signal()" in panel_source
@@ -62,7 +68,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Create Doorway Blockout" in panel_source
     assert "Create Corridor" in panel_source
     assert "Create Terrain Patch" in panel_source
+    assert "Open Terrain Tools" in panel_source
+    assert "Open Lighting Tools" in panel_source
     assert "Open Placement Tools" in panel_source
+    assert "Open Script Hooks" in panel_source
     assert "Add Test Placeable" in panel_source
     assert "Open Walkmesh Tools" in panel_source
     assert "Open Warp Test Handoff" in panel_source
@@ -116,7 +125,10 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)" in window_source
     assert "self.workflow_panel.corridorRequested.connect(self.create_map_studio_corridor)" in window_source
     assert "self.workflow_panel.starterTerrainRequested.connect(self.create_map_studio_starter_terrain)" in window_source
+    assert "self.workflow_panel.terrainToolsRequested.connect(self.show_map_studio_terrain_tools)" in window_source
+    assert "self.workflow_panel.lightingToolsRequested.connect(self.show_map_studio_lighting_tools)" in window_source
     assert "self.workflow_panel.placementToolsRequested.connect(self.show_map_studio_placement_tools)" in window_source
+    assert "self.workflow_panel.scriptToolsRequested.connect(self.show_map_studio_script_tools)" in window_source
     assert "self.workflow_panel.testPlaceableRequested.connect(self.add_map_studio_test_placeable)" in window_source
     assert "self.workflow_panel.walkmeshToolsRequested.connect(self.show_map_studio_walkmesh_tools)" in window_source
     assert "self.workflow_panel.validateRequested.connect(self.validate_kmap)" in window_source
@@ -133,8 +145,14 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "preset_id=\"wide_hall\"" in window_source
     assert "def create_map_studio_starter_terrain" in window_source
     assert "preset_id=\"terrain_heightfield\"" in window_source
+    assert "def show_map_studio_terrain_tools" in window_source
+    assert "terrainRoomComboBox" in window_source
+    assert "def show_map_studio_lighting_tools" in window_source
+    assert "roomLightNameLineEdit" in window_source
     assert "def show_map_studio_placement_tools" in window_source
     assert "gameplayPaletteSearchLineEdit" in window_source
+    assert "def show_map_studio_script_tools" in window_source
+    assert "scriptHookResrefLineEdit" in window_source
     assert "def show_map_studio_walkmesh_tools" in window_source
     assert "self.workflow_tabs.setCurrentWidget(self.walkmesh_tab)" in window_source
     assert "def add_map_studio_test_placeable" in window_source
@@ -253,7 +271,10 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
     assert "mapStudioWorkflowLightingLabel" in mirror_source
+    assert "mapStudioWorkflowTerrainToolsButton" in mirror_source
+    assert "mapStudioWorkflowLightingToolsButton" in mirror_source
     assert "mapStudioWorkflowPlacementLabel" in mirror_source
+    assert "mapStudioWorkflowScriptToolsButton" in mirror_source
     assert "mapStudioWorkflowLayoutLabel" in mirror_source
     assert "mapStudioWorkflowTransitionsLabel" in mirror_source
     assert "mapStudioWorkflowScriptsLabel" in mirror_source

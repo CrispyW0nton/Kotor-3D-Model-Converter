@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Adds Workflow Shortcuts for Terrain, Lighting, and Scripts
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authoring mode discoverability
+Intersects: Level Editor workflow panel, Builder tab focus routing, and ModuleMeshes mirror.
+
+- Added direct Map Studio workflow buttons for opening terrain tools, room lighting tools, and script-hook tools from the Level Editor export/workflow spine.
+- Wired the new actions to focus the existing Builder controls instead of moving terrain, lighting, or script policy into UI code.
+- Mirrored the workflow panel updates into the ModuleMeshes package and expanded source-contract coverage for the new modder-facing shortcuts.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_workflow_shortcuts`; `python -m py_compile` on active and mirrored workflow panels, the Level Editor window, and focused tests.
+
 ### [2026-06-19] Map Studio Shows Copyable Warp-Test Handoff
 
 Owner: LordVaderCW

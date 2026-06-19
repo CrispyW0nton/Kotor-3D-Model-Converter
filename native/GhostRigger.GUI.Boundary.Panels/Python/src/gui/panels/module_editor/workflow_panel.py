@@ -19,7 +19,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
     doorwayBlockoutRequested = QtCore.Signal()
     corridorRequested = QtCore.Signal()
     starterTerrainRequested = QtCore.Signal()
+    terrainToolsRequested = QtCore.Signal()
+    lightingToolsRequested = QtCore.Signal()
     placementToolsRequested = QtCore.Signal()
+    scriptToolsRequested = QtCore.Signal()
     testPlaceableRequested = QtCore.Signal()
     walkmeshToolsRequested = QtCore.Signal()
     validateRequested = QtCore.Signal()
@@ -134,8 +137,14 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.corridor_button.setObjectName("mapStudioWorkflowCorridorButton")
         self.starter_terrain_button = QtWidgets.QPushButton("Create Terrain Patch")
         self.starter_terrain_button.setObjectName("mapStudioWorkflowStarterTerrainButton")
+        self.terrain_tools_button = QtWidgets.QPushButton("Open Terrain Tools")
+        self.terrain_tools_button.setObjectName("mapStudioWorkflowTerrainToolsButton")
+        self.lighting_tools_button = QtWidgets.QPushButton("Open Lighting Tools")
+        self.lighting_tools_button.setObjectName("mapStudioWorkflowLightingToolsButton")
         self.placement_tools_button = QtWidgets.QPushButton("Open Placement Tools")
         self.placement_tools_button.setObjectName("mapStudioWorkflowPlacementToolsButton")
+        self.script_tools_button = QtWidgets.QPushButton("Open Script Hooks")
+        self.script_tools_button.setObjectName("mapStudioWorkflowScriptToolsButton")
         self.test_placeable_button = QtWidgets.QPushButton("Add Test Placeable")
         self.test_placeable_button.setObjectName("mapStudioWorkflowTestPlaceableButton")
         self.walkmesh_tools_button = QtWidgets.QPushButton("Open Walkmesh Tools")
@@ -155,7 +164,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.doorway_blockout_button.clicked.connect(self.doorwayBlockoutRequested.emit)
         self.corridor_button.clicked.connect(self.corridorRequested.emit)
         self.starter_terrain_button.clicked.connect(self.starterTerrainRequested.emit)
+        self.terrain_tools_button.clicked.connect(self.terrainToolsRequested.emit)
+        self.lighting_tools_button.clicked.connect(self.lightingToolsRequested.emit)
         self.placement_tools_button.clicked.connect(self.placementToolsRequested.emit)
+        self.script_tools_button.clicked.connect(self.scriptToolsRequested.emit)
         self.test_placeable_button.clicked.connect(self.testPlaceableRequested.emit)
         self.walkmesh_tools_button.clicked.connect(self.walkmeshToolsRequested.emit)
         self.validate_button.clicked.connect(self.validateRequested.emit)
@@ -168,14 +180,17 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         actions.addWidget(self.doorway_blockout_button, 1, 0)
         actions.addWidget(self.corridor_button, 1, 1)
         actions.addWidget(self.starter_terrain_button, 2, 0)
-        actions.addWidget(self.placement_tools_button, 2, 1)
-        actions.addWidget(self.walkmesh_tools_button, 3, 0)
-        actions.addWidget(self.test_placeable_button, 3, 1)
-        actions.addWidget(self.validate_button, 4, 0)
-        actions.addWidget(self.stage_button, 4, 1)
-        actions.addWidget(self.install_button, 5, 0)
-        actions.addWidget(self.launch_handoff_button, 5, 1)
-        actions.addWidget(self.proof_button, 6, 0, 1, 2)
+        actions.addWidget(self.terrain_tools_button, 2, 1)
+        actions.addWidget(self.lighting_tools_button, 3, 0)
+        actions.addWidget(self.placement_tools_button, 3, 1)
+        actions.addWidget(self.script_tools_button, 4, 0)
+        actions.addWidget(self.walkmesh_tools_button, 4, 1)
+        actions.addWidget(self.test_placeable_button, 5, 0, 1, 2)
+        actions.addWidget(self.validate_button, 6, 0)
+        actions.addWidget(self.stage_button, 6, 1)
+        actions.addWidget(self.install_button, 7, 0)
+        actions.addWidget(self.launch_handoff_button, 7, 1)
+        actions.addWidget(self.proof_button, 8, 0, 1, 2)
         root.addLayout(actions)
 
     def set_state(self, project: Any | None, readiness: Any | None) -> None:
@@ -339,7 +354,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.doorway_blockout_button,
             self.corridor_button,
             self.starter_terrain_button,
+            self.terrain_tools_button,
+            self.lighting_tools_button,
             self.placement_tools_button,
+            self.script_tools_button,
             self.walkmesh_tools_button,
             self.validate_button,
             self.stage_button,

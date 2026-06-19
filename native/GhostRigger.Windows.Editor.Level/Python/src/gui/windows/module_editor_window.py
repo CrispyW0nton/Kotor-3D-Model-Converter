@@ -371,7 +371,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)
         self.workflow_panel.corridorRequested.connect(self.create_map_studio_corridor)
         self.workflow_panel.starterTerrainRequested.connect(self.create_map_studio_starter_terrain)
+        self.workflow_panel.terrainToolsRequested.connect(self.show_map_studio_terrain_tools)
+        self.workflow_panel.lightingToolsRequested.connect(self.show_map_studio_lighting_tools)
         self.workflow_panel.placementToolsRequested.connect(self.show_map_studio_placement_tools)
+        self.workflow_panel.scriptToolsRequested.connect(self.show_map_studio_script_tools)
         self.workflow_panel.testPlaceableRequested.connect(self.add_map_studio_test_placeable)
         self.workflow_panel.walkmeshToolsRequested.connect(self.show_map_studio_walkmesh_tools)
         self.workflow_panel.validateRequested.connect(self.validate_kmap)
@@ -546,6 +549,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_tabs.setCurrentWidget(self.walkmesh_tab)
         self._log("Map Studio Walkmesh tools focused. Use these to inspect, load, or paint walkable faces.")
 
+    def show_map_studio_terrain_tools(self) -> None:
+        """Focus Builder's terrain heightfield controls."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        terrain = getattr(self.builder_tab, "terrainRoomComboBox", None)
+        if terrain is not None:
+            terrain.setFocus()
+        self._log("Map Studio terrain tools focused. Create a terrain patch, choose a heightfield room, then sculpt samples.")
+
+    def show_map_studio_lighting_tools(self) -> None:
+        """Focus Builder's authored room-light controls."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        name = getattr(self.builder_tab, "roomLightNameLineEdit", None)
+        if name is not None:
+            name.setFocus()
+            name.selectAll()
+        self._log("Map Studio lighting tools focused. Add authored room lights before staging lightmap-ready test builds.")
+
     def show_map_studio_placement_tools(self) -> None:
         """Focus Builder's authored gameplay placement controls."""
 
@@ -555,6 +577,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             search.setFocus()
             search.selectAll()
         self._log("Map Studio placement tools focused. Search the game-library palette or type a template resref.")
+
+    def show_map_studio_script_tools(self) -> None:
+        """Focus Builder's authored module/area script-hook controls."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        script = getattr(self.builder_tab, "scriptHookResrefLineEdit", None)
+        if script is not None:
+            script.setFocus()
+            script.selectAll()
+        self._log("Map Studio script-hook tools focused. Assign ARE/IFO script resrefs that resolve from the package, Override, or base game.")
 
     def add_map_studio_test_placeable(self) -> None:
         """Add a known-safe test placeable through the existing authored placement service."""
