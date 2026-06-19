@@ -31,6 +31,23 @@ def _minimal_gff(file_type: str, fields: dict[str, tuple[str, object]]) -> bytes
     return GffWriter(GffFile(file_type=file_type, root=root)).serialize()
 
 
+class _FakeTwoDARow(dict):
+    def __init__(self, index: int, **values: object):
+        super().__init__({key.lower(): value for key, value in values.items()})
+        self.index = index
+
+    def get(self, key: str, default: object = "") -> object:
+        return super().get(key.lower(), default)
+
+
+class _FakeTwoDA:
+    def __init__(self, rows: list[_FakeTwoDARow]):
+        self._rows = rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
 def test_content_browser_merges_models_modules_templates_and_animations() -> None:
     _qapp()
 
@@ -1060,6 +1077,69 @@ def test_content_browser_uses_item_template_metadata_for_subcategories() -> None
     assert by_name["a_generic_001"].metadata["template"] == "g_a_class4001"
     assert by_name["a_generic_001"].metadata["metadata source"] == "UTI"
     assert by_name["w_generic_001"].metadata["subcategory"] == "Blaster Rifles"
+
+
+def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
+
+    class FakeResourceManager:
+        def get_k1(self):
+            return object()
+
+        def get_k2(self):
+            return None
+
+        def get(self, _name: str, _res_type: int, _game: str = "K1"):
+            return None
+
+        def get_2da(self, name: str, game: str = "K1"):
+            assert game == "K1"
+            if name == "appearance":
+                return _FakeTwoDA([
+                    _FakeTwoDARow(
+                        0,
+                        label="P_MAL_C_MED",
+                        modeltype="B",
+                        modeld="pmbdm",
+                        normalhead="pmhc",
+                    ),
+                ])
+            if name == "baseitems":
+                return _FakeTwoDA([
+                    _FakeTwoDARow(38, label="combat_suit", bodyvar="D", name="1000"),
+                ])
+            return None
+
+        def get_tlk_string(self, strref: int, game: str = "K1") -> str:
+            assert (strref, game) == (1000, "K1")
+            return "Combat Suit"
+
+    rows = enrich_library_rows(enrich_library_rows_with_resource_metadata([
+        {"game": "K1", "resref": "pmbdm", "source": "swkotor"},
+        {"game": "K1", "resref": "pmhc", "source": "swkotor"},
+    ], FakeResourceManager()))
+    by_row = {row["resref"]: row for row in rows}
+
+    assert by_row["pmbdm"]["category"] == "Armor"
+    assert by_row["pmbdm"]["subcategory"] == "Light Armor"
+    assert by_row["pmbdm"]["item_display_name"] == "Combat Suit"
+    assert by_row["pmbdm"]["outfit_gender"] == "Male"
+    assert by_row["pmbdm"]["outfit_size"] == "Medium"
+    assert by_row["pmbdm"]["metadata_source"] == "appearance.2da; baseitems.2da"
+    assert by_row["pmhc"]["category"] == "Player Characters"
+    assert by_row["pmhc"]["metadata_source"] == "appearance.2da"
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows(rows)
+    by_asset = {asset.name: asset for asset in panel.visible_assets()}
+
+    assert by_asset["pmbdm"].category == "Armor"
+    assert by_asset["pmbdm"].display_name == "Combat Suit Male Medium"
+    assert by_asset["pmbdm"].metadata["item"] == "Combat Suit"
+    assert by_asset["pmbdm"].metadata["bodyvar"] == "D"
 
 
 def test_content_browser_sorts_doors_by_level_metadata_and_prefixes() -> None:

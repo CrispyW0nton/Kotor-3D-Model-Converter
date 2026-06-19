@@ -33,16 +33,21 @@ log = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TwoDARow:
-    __slots__ = ('_idx', '_cols', '_data')
+    __slots__ = ('_idx', '_cols', '_data', '_label')
 
-    def __init__(self, idx: int, columns: List[str], data: List[str]):
+    def __init__(self, idx: int, columns: List[str], data: List[str], label: Optional[str] = None):
         self._idx  = idx
         self._cols = columns
         self._data = data
+        self._label = str(label) if label is not None else str(idx)
 
     @property
     def index(self) -> int:
         return self._idx
+
+    @property
+    def label(self) -> str:
+        return self._label
 
     def __getitem__(self, key) -> str:
         if isinstance(key, int):
@@ -85,6 +90,7 @@ class TwoDA:
         self.name:    str         = name
         self.columns: List[str]   = []
         self._rows:   List[List[str]] = []   # list of raw cell value lists
+        self._labels: List[str]   = []
 
     # ── Constructors ─────────────────────────────────────────────────────────
 
@@ -93,6 +99,9 @@ class TwoDA:
         """Auto-detect binary or ASCII format and parse."""
         if not data:
             raise ValueError("Empty data")
+        pykotor_table = cls._parse_with_pykotor(data, name)
+        if pykotor_table is not None:
+            return pykotor_table
         native_format = _detect_twoda_format(data)
         if native_format == "binary_v2b":
             return cls._parse_binary(data, name)
@@ -107,6 +116,37 @@ class TwoDA:
             elif ver.startswith(b'V2.'):
                 return cls._parse_ascii(data, name)
         raise ValueError(f"Unknown 2DA format: {data[:16]!r}")
+
+    @classmethod
+    def _parse_with_pykotor(cls, data: bytes, name: str) -> Optional['TwoDA']:
+        """Parse through PyKotor when available, then normalize to this API."""
+        try:
+            from pykotor.resource.formats.twoda import read_2da
+
+            parsed = read_2da(data)
+        except Exception:
+            return None
+
+        tda = cls(name)
+        try:
+            tda.columns = [str(column) for column in parsed.get_headers()]
+        except Exception:
+            return None
+
+        rows: List[List[str]] = []
+        labels: List[str] = []
+        for row in parsed:
+            labels.append(str(getattr(row, "label", "")))
+            values: List[str] = []
+            for column in tda.columns:
+                try:
+                    values.append(str(row.get_string(column) or ""))
+                except Exception:
+                    values.append("")
+            rows.append(values)
+        tda._rows = rows
+        tda._labels = labels
+        return tda
 
     @classmethod
     def from_file(cls, path: str) -> 'TwoDA':
@@ -160,8 +200,9 @@ class TwoDA:
         row_block_end = data.find(b'\x00', pos)
         if row_block_end < 0:
             return tda
-        # Row labels are just "0\t1\t2\t...\tn-1" – we don't need them,
-        # but we must advance past them.
+        row_block = data[pos:row_block_end].decode('latin-1', errors='replace')
+        tda._labels = [label for label in row_block.split('\t') if label][:n_rows]
+        # Preserve labels because some game 2DAs use them as durable row ids.
         pos = row_block_end + 1
 
         # ── 4. uint16 cell-offset table (n_rows × n_cols entries) ───────────
@@ -191,6 +232,8 @@ class TwoDA:
             return raw_s.decode('latin-1', errors='replace')
 
         tda._rows = []
+        while len(tda._labels) < n_rows:
+            tda._labels.append(str(len(tda._labels)))
         for r in range(n_rows):
             row = []
             for c in range(n_cols):
@@ -228,6 +271,7 @@ class TwoDA:
 
         n_cols = len(tda.columns)
         tda._rows = []
+        tda._labels = []
 
         for line in lines[3:]:
             line = line.strip()
@@ -237,6 +281,7 @@ class TwoDA:
             if not tokens:
                 continue
             # First token is row index (integer label), skip it
+            tda._labels.append(tokens[0])
             row_data = tokens[1:] if len(tokens) > 1 else []
             # Pad / trim to n_cols
             while len(row_data) < n_cols:
@@ -250,12 +295,17 @@ class TwoDA:
     def __len__(self) -> int:
         return len(self._rows)
 
+    def _row_label(self, idx: int) -> str:
+        if idx < len(self._labels):
+            return self._labels[idx]
+        return str(idx)
+
     def __iter__(self) -> Iterator[TwoDARow]:
         for i, row_data in enumerate(self._rows):
-            yield TwoDARow(i, self.columns, row_data)
+            yield TwoDARow(i, self.columns, row_data, self._row_label(i))
 
     def __getitem__(self, idx: int) -> TwoDARow:
-        return TwoDARow(idx, self.columns, self._rows[idx])
+        return TwoDARow(idx, self.columns, self._rows[idx], self._row_label(idx))
 
     def get(self, row: int, col: str, default: str = '') -> str:
         """Get cell value at (row, col_name). Returns default if missing/blank."""
@@ -305,7 +355,7 @@ class TwoDA:
             cell = row_data[ci] if ci < len(row_data) else ''
             cell_cmp = cell if case_sensitive else cell.lower()
             if cell_cmp == v_cmp:
-                results.append(TwoDARow(i, self.columns, row_data))
+                results.append(TwoDARow(i, self.columns, row_data, self._row_label(i)))
         return results
 
     def find_first(self, col: str, value: str) -> Optional[TwoDARow]:
@@ -328,7 +378,7 @@ class TwoDA:
         with open(path, 'w', encoding='utf-8') as f:
             f.write('\t'.join(['#'] + self.columns) + '\n')
             for i, row_data in enumerate(self._rows):
-                cells = [str(i)] + [(c if c else '') for c in row_data]
+                cells = [self._row_label(i)] + [(c if c else '') for c in row_data]
                 f.write('\t'.join(cells) + '\n')
 
     def to_ascii_2da(self) -> str:
@@ -338,7 +388,7 @@ class TwoDA:
         lines.append('          ' + '  '.join(c.ljust(16) for c in self.columns))
         for i, row_data in enumerate(self._rows):
             cells = [(c if c else self.BLANK) for c in row_data]
-            row_str = f"{i:<10}" + '  '.join(c.ljust(16) for c in cells)
+            row_str = f"{self._row_label(i):<10}" + '  '.join(c.ljust(16) for c in cells)
             lines.append(row_str)
         return '\n'.join(lines) + '\n'
 

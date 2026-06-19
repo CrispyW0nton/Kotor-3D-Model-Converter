@@ -9,6 +9,24 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-19
+
+### [2026-06-19] M7/T703 Content Browser 2DA Outfit Metadata
+
+Owner: LordVaderCW
+Subsystem: Shared 2DA parsing and Content Browser model categorization
+
+- Changed the shared `TwoDA` parser to use PyKotor as the first parser when available, while preserving GhostRigger's existing normalized row/cell API and row labels.
+- Routed Content Browser 2DA loading through the shared parser instead of importing PyKotor directly in the panel layer.
+- Added `appearance.2da` and `baseitems.2da` enrichment for model rows so player body models such as `pmbdm` and `pmbjm` classify as equippable armor/outfits with bodyvar, baseitem, subcategory, and display metadata.
+- Updated Content Browser descriptors/display names to prefer real game metadata when available, and regenerated the Content Browser and Templates embedded Python payload manifests.
+
+Verification:
+- GhostRigger MCP tools were not exposed in this thread, so installed-game validation used `ResourceManager` plus PyKotor against `h:\steam\steamapps\common\swkotor` and `h:\steam\steamapps\common\Knights of the Old Republic II`; `pmbdm` resolved to Armor / Light Armor from `appearance.2da; baseitems.2da`, and `pmbjm` resolved to Armor / Jedi Robes from the same sources.
+- `python -m py_compile native\GhostRigger.Tools.Workflow.ContentBrowser\Python\src\gui\panels\qt_library_panel.py native\GhostRigger.Tools.Workflow.ContentBrowser\Python\src\gui\panels\qt_content_browser_panel.py native\GhostRigger.Domain.Core.Templates\Python\src\core\templates\twoda.py tests\test_content_browser_panel.py` passed.
+- `pytest tests/test_native_templates_contracts.py::test_twoda_format_and_cell_contracts_match_python_behavior -q -p no:cacheprovider` passed (`1 passed`).
+- `pytest tests/test_content_browser_panel.py::test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits tests/test_content_browser_panel.py::test_content_browser_display_names_decode_character_model_resrefs tests/test_content_browser_panel.py::test_content_browser_uses_item_template_metadata_for_subcategories -q -p no:cacheprovider` passed (`3 passed`).
+
 ## 2026-06-17
 
 ### [2026-06-17] Animation Browser Source-Scoped Clips

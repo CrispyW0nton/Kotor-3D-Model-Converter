@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_TEMPLATES_TWODA",
             "source_path": "src/core/templates/twoda.py",
             "packaged_path": "Python/src/core/templates/twoda.py",
-            "sha256": "36c1faf87de1e4f7360f9bc6438c1aa5d328094149938b41c512bae8520b9435"
+            "sha256": "df402e05a4c10d8a966f7030337b84ba47ea79b4ecb42bcf60c5666a0ddfa2a0"
         }
     ]
 }
