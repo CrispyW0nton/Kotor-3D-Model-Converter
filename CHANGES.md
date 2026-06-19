@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Clarifies Validation Fix Workflow
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / validation feedback
+Intersects: Validation issue panel and ModuleMeshes mirror.
+
+- Added modder-facing validation guidance to the Level Editor validation table, including accessible descriptions, fix-first tooltip text, and double-click focus instructions.
+- Added a visible no-issues empty state so the panel does not appear blank after validation and still reminds modders that staged export, install, and in-game proof are required before game-ready status.
+- Added issue tooltips that summarize severity, message, affected item, and suggested fix without moving validation policy into the UI.
+- Mirrored the validation panel into the ModuleMeshes package and expanded source-contract coverage for actionable validation feedback.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_validation_panel`; `python -m py_compile` on active and mirrored validation panels plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Explains Blueprint Template Workflow
 
 Owner: LordVaderCW

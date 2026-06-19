@@ -390,6 +390,30 @@ def test_t2600_map_studio_blueprints_tab_explains_template_workflow() -> None:
         assert "mapStudioBlueprintValidateButton" in source
 
 
+def test_t2600_map_studio_validation_panel_explains_actionable_fixes() -> None:
+    validation_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/validation_panel.py"
+    )
+    validation_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/validation_panel.py"
+    )
+
+    for source in (validation_source, validation_mirror_source):
+        assert "Map Studio validation issues" in source
+        assert "Shows blocking issues, warnings, affected items, and suggested fixes" in source
+        assert "Validation workflow: fix blocking issues first" in source
+        assert "Double-click an issue to focus its item" in source
+        assert "No validation issues are currently listed" in source
+        assert "export/install still requires staged output and in-game proof" in source
+        assert "Validate again after edits" in source
+        assert "NoEditTriggers" in source
+        assert "_add_empty_state_row" in source
+        assert "_issue_tooltip" in source
+        assert "Fix:" in source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
