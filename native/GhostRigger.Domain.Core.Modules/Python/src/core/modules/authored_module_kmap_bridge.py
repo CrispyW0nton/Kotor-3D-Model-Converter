@@ -832,7 +832,7 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
     payload_dict = _dict(payload)
     resources = _runtime_resources(payload_dict.get("runtime_resources"))
     proof_metadata = {
-        key: payload_dict.get(key)
+        key: payload_dict[key]
         for key in (
             "proof_manifest_path",
             "checklist_path",
@@ -844,8 +844,12 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
             "elevated_launch_script_path",
             "proof_recording_script_path",
             "in_game_proof_evidence_path",
+            "evidence_path",
+            "game_tested",
+            "manual_proof_required",
+            "game_test",
         )
-        if payload_dict.get(key)
+        if key in payload_dict and payload_dict[key] not in ("", None)
     }
     readiness = build_authored_module_readiness(
         project,

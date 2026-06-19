@@ -1238,10 +1238,17 @@ class ModuleEditorController:
             if getattr(result, "ok", False):
                 payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
                 if payload:
+                    try:
+                        recorded_proof = json.loads(Path(getattr(result, "proof_manifest_path", "") or proof_path).read_text(encoding="utf-8"))
+                    except Exception:
+                        recorded_proof = {}
                     payload["game_tested"] = True
                     payload["proof_manifest_path"] = str(getattr(result, "proof_manifest_path", "") or proof_path)
                     payload["pack_manifest_path"] = str(getattr(result, "pack_manifest_path", "") or "")
                     payload["in_game_proof_evidence_path"] = str(getattr(result, "evidence_path", "") or evidence_path)
+                    for key in ("manual_proof_required", "game_test"):
+                        if key in recorded_proof:
+                            payload[key] = recorded_proof[key]
                     self.project.extra_sections["authored_module"] = payload
                     self.project.dirty = True
         self.model.log(getattr(result, "message", "Recorded Map Studio game proof."))

@@ -90,6 +90,47 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     assert "Proof recorder: Ready" in source
 
 
+def test_t2600_readiness_panel_exposes_copyable_warp_test_handoff() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "readiness_panel.py"
+    ).read_text(encoding="utf-8")
+    mirror = (
+        repo
+        / "native"
+        / "GhostRigger.Tools.Workflow.ModuleMeshes"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "readiness_panel.py"
+    ).read_text(encoding="utf-8")
+
+    for text in (source, mirror):
+        assert "mapStudioReadinessWarpCommandLineEdit" in text
+        assert "mapStudioReadinessCopyWarpCommandButton" in text
+        assert "mapStudioReadinessLaunchHelperLineEdit" in text
+        assert "mapStudioReadinessCopyLaunchHelperButton" in text
+        assert "mapStudioReadinessProofManifestLineEdit" in text
+        assert "mapStudioReadinessCopyProofManifestButton" in text
+        assert "Stage or install a module to get the warp command" in text
+        assert "Install for game test to create a launch helper" in text
+        assert "Stage for game test to create a proof manifest" in text
+        assert "QtWidgets.QApplication.clipboard().setText(value)" in text
+        assert "self.warp_command_edit.setText(warp_command" in text
+        assert "self.launch_helper_edit.setText(elevated_launch_script or launch_helper)" in text
+        assert "self.proof_manifest_edit.setText(proof_manifest)" in text
+
+
 def test_t2689_module_editor_wires_launch_handoff_button() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (

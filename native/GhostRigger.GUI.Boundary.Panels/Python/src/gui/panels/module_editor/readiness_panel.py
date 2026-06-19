@@ -70,6 +70,60 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.launch_label.setWordWrap(True)
         root.addWidget(self.launch_label)
 
+        self.warp_command_label = QtWidgets.QLabel("Warp test command")
+        self.warp_command_label.setObjectName("mapStudioReadinessWarpCommandLabel")
+        root.addWidget(self.warp_command_label)
+
+        warp_row = QtWidgets.QHBoxLayout()
+        warp_row.setContentsMargins(0, 0, 0, 0)
+        warp_row.setSpacing(4)
+        self.warp_command_edit = QtWidgets.QLineEdit()
+        self.warp_command_edit.setObjectName("mapStudioReadinessWarpCommandLineEdit")
+        self.warp_command_edit.setReadOnly(True)
+        self.warp_command_edit.setPlaceholderText("Stage or install a module to get the warp command")
+        self.copy_warp_command_button = QtWidgets.QPushButton("Copy Warp")
+        self.copy_warp_command_button.setObjectName("mapStudioReadinessCopyWarpCommandButton")
+        self.copy_warp_command_button.clicked.connect(lambda: self._copy_text(self.warp_command_edit.text()))
+        warp_row.addWidget(self.warp_command_edit, 1)
+        warp_row.addWidget(self.copy_warp_command_button)
+        root.addLayout(warp_row)
+
+        self.launch_helper_label = QtWidgets.QLabel("Launch helper")
+        self.launch_helper_label.setObjectName("mapStudioReadinessLaunchHelperPathLabel")
+        root.addWidget(self.launch_helper_label)
+
+        launch_helper_row = QtWidgets.QHBoxLayout()
+        launch_helper_row.setContentsMargins(0, 0, 0, 0)
+        launch_helper_row.setSpacing(4)
+        self.launch_helper_edit = QtWidgets.QLineEdit()
+        self.launch_helper_edit.setObjectName("mapStudioReadinessLaunchHelperLineEdit")
+        self.launch_helper_edit.setReadOnly(True)
+        self.launch_helper_edit.setPlaceholderText("Install for game test to create a launch helper")
+        self.copy_launch_helper_button = QtWidgets.QPushButton("Copy Helper")
+        self.copy_launch_helper_button.setObjectName("mapStudioReadinessCopyLaunchHelperButton")
+        self.copy_launch_helper_button.clicked.connect(lambda: self._copy_text(self.launch_helper_edit.text()))
+        launch_helper_row.addWidget(self.launch_helper_edit, 1)
+        launch_helper_row.addWidget(self.copy_launch_helper_button)
+        root.addLayout(launch_helper_row)
+
+        self.proof_manifest_label = QtWidgets.QLabel("Proof manifest")
+        self.proof_manifest_label.setObjectName("mapStudioReadinessProofManifestPathLabel")
+        root.addWidget(self.proof_manifest_label)
+
+        proof_manifest_row = QtWidgets.QHBoxLayout()
+        proof_manifest_row.setContentsMargins(0, 0, 0, 0)
+        proof_manifest_row.setSpacing(4)
+        self.proof_manifest_edit = QtWidgets.QLineEdit()
+        self.proof_manifest_edit.setObjectName("mapStudioReadinessProofManifestLineEdit")
+        self.proof_manifest_edit.setReadOnly(True)
+        self.proof_manifest_edit.setPlaceholderText("Stage for game test to create a proof manifest")
+        self.copy_proof_manifest_button = QtWidgets.QPushButton("Copy Manifest")
+        self.copy_proof_manifest_button.setObjectName("mapStudioReadinessCopyProofManifestButton")
+        self.copy_proof_manifest_button.clicked.connect(lambda: self._copy_text(self.proof_manifest_edit.text()))
+        proof_manifest_row.addWidget(self.proof_manifest_edit, 1)
+        proof_manifest_row.addWidget(self.copy_proof_manifest_button)
+        root.addLayout(proof_manifest_row)
+
         self.authored_summary_label = QtWidgets.QLabel("Authored content: Not checked")
         self.authored_summary_label.setObjectName("mapStudioReadinessAuthoredSummaryLabel")
         self.authored_summary_label.setWordWrap(True)
@@ -115,6 +169,10 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_label.setText("Game proof: Not staged")
             self.proof_recorder_label.setText("Proof recorder: Not ready")
             self.launch_label.setText("Launch handoff: Not ready")
+            self.warp_command_edit.clear()
+            self.launch_helper_edit.clear()
+            self.proof_manifest_edit.clear()
+            self._update_copy_buttons()
             self.authored_summary_label.setText("Authored content: Not checked")
             self.template_references_label.setText("Template references: Not checked")
             self.blocking_label.setText("Create or open a Map Studio module project first.")
@@ -161,6 +219,10 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         proof_recorder_script = str(metadata.get("proof_recording_script_path") or "")
         expected_executable = str(metadata.get("expected_executable_path") or "")
         warp_command = str(metadata.get("warp_command") or f"warp {module_root}")
+        self.warp_command_edit.setText(warp_command if module_root and module_root != "(unnamed)" else "")
+        self.launch_helper_edit.setText(elevated_launch_script or launch_helper)
+        self.proof_manifest_edit.setText(proof_manifest)
+        self._update_copy_buttons()
         if bool(getattr(readiness, "game_tested", False)):
             suffix = f" Evidence: {evidence_path}" if evidence_path else ""
             self.proof_label.setText(f"Game proof: Recorded.{suffix}")
@@ -244,6 +306,17 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.next_action_label.setText(str(getattr(readiness, "next_action", "") or ""))
         self.game_test_button.setEnabled(bool(getattr(readiness, "ready_for_game_test", False)))
         self.launch_handoff_button.setEnabled(bool(elevated_launch_script or proof_manifest or installed_path))
+
+    def _copy_text(self, text: str) -> None:
+        value = str(text or "").strip()
+        if not value:
+            return
+        QtWidgets.QApplication.clipboard().setText(value)
+
+    def _update_copy_buttons(self) -> None:
+        self.copy_warp_command_button.setEnabled(bool(self.warp_command_edit.text().strip()))
+        self.copy_launch_helper_button.setEnabled(bool(self.launch_helper_edit.text().strip()))
+        self.copy_proof_manifest_button.setEnabled(bool(self.proof_manifest_edit.text().strip()))
 
 
 __all__ = ["ModuleReadinessPanel"]

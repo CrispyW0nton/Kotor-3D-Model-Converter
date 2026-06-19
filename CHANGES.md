@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Shows Copyable Warp-Test Handoff
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / game-test handoff
+Intersects: Map Studio readiness panel, authored module KMAP bridge, ModuleMeshes mirror, and game-proof recording tests.
+
+- Added copyable warp command, launch helper, and proof-manifest fields to the existing Map Studio readiness panel so modders can manually run and document the in-game smoke test from the Level Editor UI.
+- Preserved recorded proof metadata when rebuilding KMAP authored-module readiness, including the accepted `game_test` checklist and `manual_proof_required` state.
+- Updated the Module Editor controller to persist the recorded proof checklist back into the authored KMAP payload so proven modules remain marked game-tested after UI refresh.
+- Verification: `python -m pytest tests/test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness -q --basetemp .pytest_tmp_map_studio_game_proof_bridge`; `python -m pytest tests/test_authored_module_reporting.py tests/test_map_studio_game_proof_ui.py -q --basetemp .pytest_tmp_map_studio_warp_handoff_ui`; `python -m py_compile` on active and mirrored readiness panels, KMAP bridge/controller modules, and focused tests.
+
 ### [2026-06-19] Map Studio Projects Readiness Into Validation Rows
 
 Owner: LordVaderCW
