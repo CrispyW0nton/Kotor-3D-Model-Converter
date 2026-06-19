@@ -322,6 +322,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.gameplaySupportedKindsLabel = QtWidgets.QLabel("Placement types: loading KOTOR resource kinds.")
         self.gameplaySupportedKindsLabel.setObjectName("mapStudioGameplaySupportedKindsLabel")
         self.gameplaySupportedKindsLabel.setWordWrap(True)
+        self.gameplayKindDetailLabel = QtWidgets.QLabel("Choose a KOTOR resource kind to see how it exports.")
+        self.gameplayKindDetailLabel.setObjectName("mapStudioGameplayKindDetailLabel")
+        self.gameplayKindDetailLabel.setWordWrap(True)
         self.gameplayTemplateLineEdit = QtWidgets.QLineEdit("plc_bench")
         self.gameplayTemplateLineEdit.setObjectName("mapStudioGameplayTemplateLineEdit")
         self.gameplayTemplateLineEdit.setPlaceholderText("template resref, e.g. plc_bench or c_drdmkone")
@@ -365,6 +368,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.addGameplayPlacementButton.setObjectName("mapStudioAddGameplayPlacementButton")
         placement_layout.addRow(self.gameplaySupportedKindsLabel)
         placement_layout.addRow("Kind:", self.gameplayPlacementKindComboBox)
+        placement_layout.addRow(self.gameplayKindDetailLabel)
         placement_layout.addRow("Search:", self.gameplayPaletteSearchLineEdit)
         placement_layout.addRow("Library:", self.gameplayPaletteComboBox)
         placement_layout.addRow(self.useGameplayPaletteButton)
@@ -1161,6 +1165,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.gameplaySpatialHintLabel.setText("Spatial resources are placed in the viewport and can be moved after creation.")
         else:
             self.gameplaySpatialHintLabel.setText("Stores/merchants are module-level resources. They appear in the outliner and export to the GIT StoreList, but they do not get viewport markers.")
+        self._update_gameplay_kind_detail_label()
         self._emit_gameplay_placement_status()
 
     @staticmethod
@@ -1193,6 +1198,26 @@ class BuilderTab(QtWidgets.QWidget):
         text = ", ".join(labels)
         self.gameplaySupportedKindsLabel.setText(
             f"Placement types: {text}. Spatial resources appear as viewport markers; stores/merchants are module-level."
+        )
+
+    def _update_gameplay_kind_detail_label(self) -> None:
+        if not hasattr(self, "gameplayKindDetailLabel"):
+            return
+        kind = str(self.gameplayPlacementKindComboBox.currentData() or "").strip().lower()
+        details = {
+            "placeable": "Placeable: uses a UTP template, creates a viewport marker, and exports into the module GIT Placeable List.",
+            "creature": "Creature: uses a UTC template, creates a viewport marker, and exports into the module GIT Creature List.",
+            "door": "Door: uses a UTD template, creates a viewport marker, and can be configured as a transition.",
+            "waypoint": "Waypoint: creates a named navigation/start marker and can be used for transitions or spawn/layout checks.",
+            "trigger": "Trigger: uses a UTT template, creates generated trigger geometry, and can be configured as a transition.",
+            "encounter": "Encounter: uses a UTE template and creates a spatial encounter marker in the module.",
+            "sound": "Sound: uses a UTS template and creates a spatial ambient/audio marker in the module.",
+            "camera": "Camera: creates a camera marker; the template field can stay empty.",
+            "store": "Store/merchant: uses a UTM template and exports as a module-level store without a viewport marker.",
+            "merchant": "Store/merchant: uses a UTM template and exports as a module-level store without a viewport marker.",
+        }
+        self.gameplayKindDetailLabel.setText(
+            details.get(kind, "Choose a KOTOR resource kind, then select or type a template resref before adding it.")
         )
 
     def _update_gameplay_palette_hint(self) -> None:

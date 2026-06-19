@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Explains Placement Resource Kinds
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / placement-kind guidance
+Intersects: Builder gameplay placement controls and ModuleMeshes mirror.
+
+- Added selected-kind guidance to the Builder gameplay placement panel so modders can see whether the current resource is a UTC creature, UTP placeable, UTD door, UTT trigger, UTE encounter, UTS sound, UTM store/merchant, waypoint, or camera marker.
+- Clarified which placement kinds create viewport markers, which support transitions, and which stores/merchants are module-level resources.
+- Mirrored the Builder tab into the ModuleMeshes package and expanded source-contract coverage for the KOTOR resource-kind help text.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_kind_guidance`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Shows Placement Resource Type Coverage
 
 Owner: LordVaderCW

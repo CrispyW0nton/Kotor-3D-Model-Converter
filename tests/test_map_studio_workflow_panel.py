@@ -250,6 +250,17 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
         assert "stores/merchants are module-level" in source
         assert "_update_gameplay_supported_kinds_label" in source
         assert "Scan the Game Library to search for creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores/merchants." in source
+        assert "mapStudioGameplayKindDetailLabel" in source
+        assert "_update_gameplay_kind_detail_label" in source
+        assert "UTP template" in source
+        assert "UTC template" in source
+        assert "UTD template" in source
+        assert "UTT template" in source
+        assert "UTE template" in source
+        assert "UTS template" in source
+        assert "UTM template" in source
+        assert "can be configured as a transition" in source
+        assert "without a viewport marker" in source
         assert "mapStudioGameplaySpatialHintLabel" in source
         assert "_update_gameplay_spatial_controls" in source
         assert "Stores/merchants are module-level resources" in source
