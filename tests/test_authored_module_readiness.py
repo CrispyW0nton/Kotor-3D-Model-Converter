@@ -46,6 +46,41 @@ def _placements_with_templates(area_resref: str = "grdev01"):
     )
 
 
+def _placements_with_all_resource_categories(area_resref: str = "grdev01"):
+    from src.core.modules.authored_module_objects import (
+        AuthoredCameraInstance,
+        AuthoredCreatureInstance,
+        AuthoredDoorInstance,
+        AuthoredEncounterInstance,
+        AuthoredGameplayPlacement,
+        AuthoredPlaceableInstance,
+        AuthoredSoundInstance,
+        AuthoredStoreInstance,
+        AuthoredTriggerInstance,
+        AuthoredWaypointInstance,
+        ModuleEntryPoint,
+    )
+
+    return AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref=area_resref),
+        creatures=(AuthoredCreatureInstance(template_resref="g_tresgencorp001", tag="TestCreature"),),
+        placeables=(AuthoredPlaceableInstance(template_resref="PLC_bench", tag="TestBench"),),
+        doors=(AuthoredDoorInstance(template_resref="plc_door01", tag="TestDoor"),),
+        triggers=(
+            AuthoredTriggerInstance(
+                template_resref="gr_exit_trig",
+                tag="TestTrigger",
+                geometry=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)),
+            ),
+        ),
+        encounters=(AuthoredEncounterInstance(template_resref="gr_encounter", tag="TestEncounter"),),
+        cameras=(AuthoredCameraInstance(camera_id=1),),
+        sounds=(AuthoredSoundInstance(template_resref="gr_ambient", tag="TestSound"),),
+        stores=(AuthoredStoreInstance(template_resref="gr_store", tag="TestStore"),),
+        waypoints=(AuthoredWaypointInstance(template_resref="sw_startloc001", tag="StartWaypoint"),),
+    )
+
+
 def _floor_plan_project(game: str = "K1"):
     from src.core.modules.authored_module_project import create_floor_plan_room_project
     from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
@@ -75,6 +110,22 @@ def _floor_plan_project_with_templates():
             points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
         ),
         placements=_placements_with_templates(),
+    )
+
+
+def _floor_plan_project_with_all_resources():
+    from src.core.modules.authored_module_project import create_floor_plan_room_project
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+
+    return create_floor_plan_room_project(
+        module_root="grdev01",
+        game="K1",
+        display_name="GhostRigger Dev Test",
+        floor_plan=FloorPlanRoomPrimitive(
+            room_resref="grdev01_room01",
+            points=((-3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        ),
+        placements=_placements_with_all_resource_categories(),
     )
 
 
@@ -167,6 +218,7 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
         "Geometry authoring",
         "Walkmesh",
         "Lighting",
+        "Resource placement",
         "Gameplay layout",
         "Transitions",
         "Scripts",
@@ -180,6 +232,11 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert preview_steps["Walkmesh"].ready is True
     assert preview_steps["Lighting"].ready is True
     assert preview_steps["Lighting"].status == "Optional"
+    assert preview_steps["Resource placement"].ready is True
+    assert preview_steps["Resource placement"].status == "Optional"
+    assert "No extra KOTOR resources placed yet" in preview_steps["Resource placement"].value_label
+    assert "creatures, placeables, doors, triggers" in preview_steps["Resource placement"].value_label
+    assert "merchants/stores" in preview_steps["Resource placement"].value_label
     assert preview_steps["Gameplay layout"].ready is True
     assert preview_steps["Transitions"].ready is True
     assert preview_steps["Transitions"].status == "Optional"
@@ -191,6 +248,37 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert export_steps["In-game proof"].ready is False
     assert export_steps["In-game proof"].status == "Recorder ready after warp test"
     assert export_candidate.metadata["toolchain"][0]["name"] == "Geometry authoring"
+
+
+def test_t2600_readiness_reports_resource_placement_palette_and_counts() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    readiness = build_authored_module_readiness(
+        _floor_plan_project_with_all_resources(),
+        packaged_resources=_runtime_keys(),
+    )
+    placement = {step.name: step for step in readiness.toolchain}["Resource placement"]
+    palette = {item["kind"]: item for item in readiness.metadata["resource_placement_palette"]}
+
+    assert placement.ready is True
+    assert placement.status == "Planned"
+    assert "1 creatures" in placement.value_label
+    assert "1 merchants/stores" in placement.value_label
+    assert readiness.metadata["resource_placement_summary"] == (
+        "1 creatures, 1 placeables, 1 doors, 1 triggers, 1 encounters, "
+        "1 cameras, 1 sounds, 1 merchants/stores, 1 waypoints"
+    )
+    assert palette["creatures"] == {"kind": "creatures", "label": "creatures", "restype": "utc", "count": 1}
+    assert palette["placeables"] == {"kind": "placeables", "label": "placeables", "restype": "utp", "count": 1}
+    assert palette["doors"] == {"kind": "doors", "label": "doors", "restype": "utd", "count": 1}
+    assert palette["triggers"] == {"kind": "triggers", "label": "triggers", "restype": "utt", "count": 1}
+    assert palette["encounters"] == {"kind": "encounters", "label": "encounters", "restype": "ute", "count": 1}
+    assert palette["cameras"] == {"kind": "cameras", "label": "cameras", "restype": "git", "count": 1}
+    assert palette["sounds"] == {"kind": "sounds", "label": "sounds", "restype": "uts", "count": 1}
+    assert palette["stores"] == {"kind": "stores", "label": "merchants/stores", "restype": "utm", "count": 1}
+    assert palette["waypoints"] == {"kind": "waypoints", "label": "waypoints", "restype": "utw", "count": 1}
 
 
 def test_t2700_readiness_reports_external_gameplay_template_references_without_blocking_export() -> None:

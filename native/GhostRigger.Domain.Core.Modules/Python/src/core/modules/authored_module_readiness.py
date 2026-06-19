@@ -180,6 +180,44 @@ def _gameplay_counts(project: AuthoredModuleProject) -> dict[str, int]:
     }
 
 
+_RESOURCE_PLACEMENT_LABELS: tuple[tuple[str, str, str], ...] = (
+    ("creatures", "creatures", "utc"),
+    ("placeables", "placeables", "utp"),
+    ("doors", "doors", "utd"),
+    ("triggers", "triggers", "utt"),
+    ("encounters", "encounters", "ute"),
+    ("cameras", "cameras", "git"),
+    ("sounds", "sounds", "uts"),
+    ("stores", "merchants/stores", "utm"),
+    ("waypoints", "waypoints", "utw"),
+)
+
+
+def _resource_placement_palette(gameplay_counts: dict[str, int]) -> tuple[dict[str, Any], ...]:
+    return tuple(
+        {
+            "kind": key,
+            "label": label,
+            "restype": restype,
+            "count": int(gameplay_counts.get(key, 0) or 0),
+        }
+        for key, label, restype in _RESOURCE_PLACEMENT_LABELS
+    )
+
+
+def _resource_placement_summary(gameplay_counts: dict[str, int]) -> str:
+    parts = [
+        f"{int(gameplay_counts.get(key, 0) or 0)} {label}"
+        for key, label, _restype in _RESOURCE_PLACEMENT_LABELS
+        if int(gameplay_counts.get(key, 0) or 0) > 0
+    ]
+    return ", ".join(parts) if parts else "No extra KOTOR resources placed yet"
+
+
+def _resource_placement_palette_label() -> str:
+    return ", ".join(label for _key, label, _restype in _RESOURCE_PLACEMENT_LABELS)
+
+
 def _template_reference_entry(
     *,
     kind: str,
@@ -507,6 +545,8 @@ def _toolchain_statuses(
     entry_ready = normalise_resref(entry.area_resref) == project.module_root and bool(project.module_root)
     gameplay_counts = _gameplay_counts(project)
     placement_total = sum(gameplay_counts.values())
+    placement_summary = _resource_placement_summary(gameplay_counts)
+    placement_status = "Planned" if placement_total else "Optional"
     packaged_templates = sum(1 for ref in template_references if ref.packaged)
     external_templates = len(template_references) - packaged_templates
     template_label = (
@@ -579,6 +619,13 @@ def _toolchain_statuses(
             lighting_status,
             lighting_value,
             "Add key/fill/ambient room lights before baking or exporting lighting-sensitive modules.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Resource placement",
+            True,
+            placement_status,
+            f"{placement_summary}; palette: {_resource_placement_palette_label()}",
+            "Place KOTOR resources from the game library when the module needs creatures, objects, exits, sounds, cameras, or merchants.",
         ),
         AuthoredModuleToolchainStatus(
             "Gameplay layout",
@@ -808,6 +855,8 @@ def build_authored_module_readiness(
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
+            "resource_placement_summary": _resource_placement_summary(gameplay_counts),
+            "resource_placement_palette": list(_resource_placement_palette(gameplay_counts)),
             "gameplay_template_reference_count": len(template_references),
             "gameplay_packaged_template_count": sum(1 for ref in template_references if ref.packaged),
             "gameplay_external_template_count": external_template_count,

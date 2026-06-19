@@ -25,6 +25,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowGeometryLabel" in panel_source
     assert "mapStudioWorkflowWalkmeshLabel" in panel_source
     assert "mapStudioWorkflowLightingLabel" in panel_source
+    assert "mapStudioWorkflowPlacementLabel" in panel_source
     assert "mapStudioWorkflowLayoutLabel" in panel_source
     assert "mapStudioWorkflowTransitionsLabel" in panel_source
     assert "mapStudioWorkflowScriptsLabel" in panel_source
@@ -77,6 +78,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Lighting/lightmaps:" in panel_source
     assert '"Lighting"' in panel_source
     assert "lightmap" in panel_source
+    assert "Resource placement:" in panel_source
+    assert '"Resource placement"' in panel_source
+    assert "creatures, placeables, doors, triggers, encounters, cameras, sounds, merchants, and waypoints" in panel_source
+    assert "placing KOTOR resources" in panel_source
     assert "Spawn/layout:" in panel_source
     assert "Gameplay layout" in panel_source
     assert "Transitions:" in panel_source
@@ -154,6 +159,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
     assert "mapStudioWorkflowLightingLabel" in mirror_source
+    assert "mapStudioWorkflowPlacementLabel" in mirror_source
     assert "mapStudioWorkflowLayoutLabel" in mirror_source
     assert "mapStudioWorkflowTransitionsLabel" in mirror_source
     assert "mapStudioWorkflowScriptsLabel" in mirror_source
@@ -182,6 +188,9 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Walkmesh" in mirror_source
     assert "Lighting/lightmaps:" in mirror_source
     assert '"Lighting"' in mirror_source
+    assert "Resource placement:" in mirror_source
+    assert '"Resource placement"' in mirror_source
+    assert "creatures, placeables, doors, triggers, encounters, cameras, sounds, merchants, and waypoints" in mirror_source
     assert "Gameplay layout" in mirror_source
     assert "Transitions:" in mirror_source
     assert "Scripts:" in mirror_source

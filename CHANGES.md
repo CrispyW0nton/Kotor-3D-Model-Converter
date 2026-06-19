@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Surfaces Resource Placement Readiness
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / KOTOR resource placement readiness
+Intersects: authored module readiness toolchain and Map Studio workflow panel.
+
+- Added core readiness metadata for the Map Studio resource placement palette: creatures, placeables, doors, triggers, encounters, cameras, sounds, merchants/stores, and waypoints.
+- Added a dedicated `Resource placement` toolchain status so authored modules distinguish optional/no-placement drafts from planned KOTOR resource layout.
+- Added a dedicated `mapStudioWorkflowPlacementLabel` to the existing Level Editor workflow panel and mirrored it into the ModuleMeshes payload copy.
+- Added focused regression coverage for placement palette metadata, placement counts, and the active/mirrored workflow panel source contract.
+- Verification: `python -m pytest tests/test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope tests/test_authored_module_readiness.py::test_t2600_readiness_reports_resource_placement_palette_and_counts tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_resource_placement`; `python -m pytest tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_resource_placement_full`; `python -m py_compile` on active and mirrored readiness/workflow panel modules plus focused tests.
+
 ### [2026-06-19] Map Studio Surfaces Lighting and Lightmap Readiness
 
 Owner: LordVaderCW
