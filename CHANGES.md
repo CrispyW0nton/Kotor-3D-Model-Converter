@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Surfaces Lighting and Lightmap Readiness
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / room lighting readiness
+Intersects: authored module readiness toolchain and Map Studio workflow panel.
+
+- Added room-coverage metadata for authored room lights so Map Studio can report which rooms have lighting intent and which rooms still need lighting/lightmap planning.
+- Updated the `Lighting` toolchain status to distinguish optional/no-light drafts from planned room lighting without making lighting a hard export blocker.
+- Added a dedicated `mapStudioWorkflowLightingLabel` to the existing Level Editor workflow panel and mirrored it into the ModuleMeshes payload copy.
+- Added focused regression coverage for authored light readiness metadata and the workflow panel source contract.
+- Verification: `python -m pytest tests/test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope tests/test_authored_module_readiness.py::test_t2600_readiness_reports_authored_room_light_coverage tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_lighting_readiness`; `python -m pytest tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_lighting_full`; `python -m py_compile` on active and mirrored readiness/workflow panel modules plus focused tests.
+
+
 ### [2026-06-19] Map Studio Tracks Authored Script Hooks
 
 Owner: LordVaderCW

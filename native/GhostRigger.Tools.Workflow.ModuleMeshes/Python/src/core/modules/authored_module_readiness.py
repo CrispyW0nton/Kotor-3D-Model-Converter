@@ -348,6 +348,18 @@ def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
 
+def _lighting_room_coverage(project: AuthoredModuleProject, rooms: tuple[AuthoredRoomReadiness, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    room_resrefs = tuple(room.room_resref for room in rooms if room.room_resref)
+    lit_rooms = {
+        normalise_resref(getattr(light, "room_resref", ""))
+        for light in tuple(getattr(project, "lights", ()) or ())
+        if normalise_resref(getattr(light, "room_resref", ""))
+    }
+    rooms_with_lights = tuple(room for room in room_resrefs if room in lit_rooms)
+    rooms_without_lights = tuple(room for room in room_resrefs if room not in lit_rooms)
+    return rooms_with_lights, rooms_without_lights
+
+
 def _game_executable_name(game: str) -> str:
     return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
 
@@ -503,6 +515,16 @@ def _toolchain_statuses(
         else "; no template refs"
     )
     light_count = _lighting_count(project)
+    rooms_with_lights, rooms_without_lights = _lighting_room_coverage(project, rooms)
+    if light_count:
+        lighting_status = "Planned"
+        lighting_value = (
+            f"{light_count} authored light(s) across {len(rooms_with_lights)} room(s); "
+            f"{len(rooms_without_lights)} room(s) still need lighting/lightmap planning"
+        )
+    else:
+        lighting_status = "Optional"
+        lighting_value = "No authored room lights yet; lightmap planning not started"
     packaged_count = len(expected_runtime_resources) - len(missing_runtime_resources)
     package_ready = bool(expected_runtime_resources) and not missing_runtime_resources and not blocking_messages
     proof_ready = bool(game_tested)
@@ -554,8 +576,8 @@ def _toolchain_statuses(
         AuthoredModuleToolchainStatus(
             "Lighting",
             True,
-            f"{light_count} authored light(s)" if light_count else "Optional",
-            "Stored as room-light intent for room MDL/lightmap export",
+            lighting_status,
+            lighting_value,
             "Add key/fill/ambient room lights before baking or exporting lighting-sensitive modules.",
         ),
         AuthoredModuleToolchainStatus(
@@ -652,6 +674,7 @@ def build_authored_module_readiness(
     rooms = _room_readiness(project)
     gameplay_counts = _gameplay_counts(project)
     lighting_count = _lighting_count(project)
+    rooms_with_lights, rooms_without_lights = _lighting_room_coverage(project, rooms)
     present = _present_keys(packaged_resources)
     expected = _expected_keys(project.module_root, rooms)
     present_set = set(present)
@@ -833,6 +856,10 @@ def build_authored_module_readiness(
                 for ref in script_references
             ],
             "lighting_count": lighting_count,
+            "lighting_room_count": len(rooms_with_lights),
+            "rooms_with_authored_lights": list(rooms_with_lights),
+            "rooms_without_authored_lights": list(rooms_without_lights),
+            "lightmap_planning_status": "planned" if lighting_count else "not_started",
             "room_lights": [
                 {
                     "name": light.name,

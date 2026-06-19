@@ -24,6 +24,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowMissingResourcesLabel" in panel_source
     assert "mapStudioWorkflowGeometryLabel" in panel_source
     assert "mapStudioWorkflowWalkmeshLabel" in panel_source
+    assert "mapStudioWorkflowLightingLabel" in panel_source
     assert "mapStudioWorkflowLayoutLabel" in panel_source
     assert "mapStudioWorkflowTransitionsLabel" in panel_source
     assert "mapStudioWorkflowScriptsLabel" in panel_source
@@ -73,6 +74,9 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "generate or stage these module files before export/install" in panel_source
     assert "Geometry authoring" in panel_source
     assert "Walkmesh" in panel_source
+    assert "Lighting/lightmaps:" in panel_source
+    assert '"Lighting"' in panel_source
+    assert "lightmap" in panel_source
     assert "Spawn/layout:" in panel_source
     assert "Gameplay layout" in panel_source
     assert "Transitions:" in panel_source
@@ -149,6 +153,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowMissingResourcesLabel" in mirror_source
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
+    assert "mapStudioWorkflowLightingLabel" in mirror_source
     assert "mapStudioWorkflowLayoutLabel" in mirror_source
     assert "mapStudioWorkflowTransitionsLabel" in mirror_source
     assert "mapStudioWorkflowScriptsLabel" in mirror_source
@@ -175,6 +180,8 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Required resources missing" in mirror_source
     assert "Geometry authoring" in mirror_source
     assert "Walkmesh" in mirror_source
+    assert "Lighting/lightmaps:" in mirror_source
+    assert '"Lighting"' in mirror_source
     assert "Gameplay layout" in mirror_source
     assert "Transitions:" in mirror_source
     assert "Scripts:" in mirror_source

@@ -254,6 +254,40 @@ def test_t2600_readiness_reports_authored_script_hooks() -> None:
     assert any("script hook" in warning and "Override" in warning for warning in readiness.warnings)
 
 
+def test_t2600_readiness_reports_authored_room_light_coverage() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_lighting import AuthoredRoomLight
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    project = replace(
+        _floor_plan_project(),
+        lights=(
+            AuthoredRoomLight(
+                name="key_light",
+                room_resref="grdev01_room01",
+                position=(0.0, -1.5, 2.5),
+                color=(1.0, 0.86, 0.62),
+                radius=9.5,
+                intensity=1.2,
+            ),
+        ),
+    )
+
+    readiness = build_authored_module_readiness(project)
+    lighting = {step.name: step for step in readiness.toolchain}["Lighting"]
+
+    assert lighting.ready is True
+    assert lighting.status == "Planned"
+    assert "1 authored light(s) across 1 room(s)" in lighting.value_label
+    assert readiness.metadata["lighting_count"] == 1
+    assert readiness.metadata["lighting_room_count"] == 1
+    assert readiness.metadata["rooms_with_authored_lights"] == ["grdev01_room01"]
+    assert readiness.metadata["rooms_without_authored_lights"] == []
+    assert readiness.metadata["lightmap_planning_status"] == "planned"
+    assert readiness.metadata["room_lights"][0]["name"] == "key_light"
+
+
 def test_t2700_packaged_gameplay_template_references_are_marked_as_packaged() -> None:
     _install_native_payload_paths()
 

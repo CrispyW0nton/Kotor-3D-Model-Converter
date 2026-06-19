@@ -75,6 +75,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.walkmesh_label.setWordWrap(True)
         root.addWidget(self.walkmesh_label)
 
+        self.lighting_label = QtWidgets.QLabel("Lighting/lightmaps: Not checked")
+        self.lighting_label.setObjectName("mapStudioWorkflowLightingLabel")
+        self.lighting_label.setWordWrap(True)
+        root.addWidget(self.lighting_label)
+
         self.layout_label = QtWidgets.QLabel("Spawn/layout: Not checked")
         self.layout_label.setObjectName("mapStudioWorkflowLayoutLabel")
         self.layout_label.setWordWrap(True)
@@ -180,6 +185,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.missing_resources_label.setText("Required resources: open a KMAP before checking module files.")
             self.geometry_label.setText("Geometry: Create or open a KMAP before authoring rooms.")
             self.walkmesh_label.setText("Walkmesh: Create authored rooms before generating walkable WOK faces.")
+            self.lighting_label.setText("Lighting/lightmaps: Create authored rooms before planning room lights or lightmaps.")
             self.layout_label.setText("Spawn/layout: Create authored geometry before placing the player start or gameplay objects.")
             self.transitions_label.setText("Transitions: Add doors, triggers, or waypoints when this map needs exits.")
             self.scripts_label.setText("Scripts: Add module or area script hooks when this map needs scripted behavior.")
@@ -204,6 +210,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.missing_resources_label.setText("Required resources: waiting for readiness check.")
             self.geometry_label.setText("Geometry: Waiting for readiness check.")
             self.walkmesh_label.setText("Walkmesh: Waiting for readiness check.")
+            self.lighting_label.setText("Lighting/lightmaps: Waiting for readiness check.")
             self.layout_label.setText("Spawn/layout: Waiting for readiness check.")
             self.transitions_label.setText("Transitions: Waiting for readiness check.")
             self.scripts_label.setText("Scripts: Waiting for readiness check.")
@@ -213,6 +220,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.missing_resources_label.setText("Required resources: no authored room resources yet.")
             self.geometry_label.setText("Geometry: Use Builder to create room, corridor, doorway, or terrain geometry.")
             self.walkmesh_label.setText("Walkmesh: No authored room yet. Create geometry before checking walkability.")
+            self.lighting_label.setText("Lighting/lightmaps: No authored room yet. Create geometry before planning room lights.")
             self.layout_label.setText("Spawn/layout: Create an authored module, then place the player start and gameplay objects.")
             self.transitions_label.setText("Transitions: Add doors, triggers, or waypoints when this map needs exits.")
             self.scripts_label.setText("Scripts: Add module or area script hooks when this map needs scripted behavior.")
@@ -265,6 +273,13 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             readiness,
             "Walkmesh",
             "Walkmesh status unavailable.",
+        )
+        self._set_toolchain_label(
+            self.lighting_label,
+            readiness,
+            "Lighting/lightmaps",
+            "Lighting",
+            "Lighting/lightmap status unavailable.",
         )
         layout_status = self._toolchain_status(readiness, "Gameplay layout")
         if layout_status is not None:
