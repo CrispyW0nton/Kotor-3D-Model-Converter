@@ -34,6 +34,7 @@ class AuthoredGameplayPlacementUpdate:
     tag: str
     position: Vec3
     count: int
+    placement_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,47 @@ def _placement_template(item: Any) -> str:
 
 def _placement_tag(item: Any, kind: str, index: int) -> str:
     return str(getattr(item, "tag", "") or _placement_template(item) or authored_gameplay_placement_id(kind, index))
+
+
+def _copy_label(label: str, kind: str, count: int) -> str:
+    base = str(label or "").strip() or f"{kind}_{count + 1}"
+    suffix = "_copy"
+    if len(base) + len(suffix) <= 32:
+        return f"{base}{suffix}"
+    return f"{base[: 32 - len(suffix)]}{suffix}"
+
+
+def _with_label(item: Any, label: str) -> Any:
+    if hasattr(item, "tag"):
+        return replace(item, tag=label)
+    if hasattr(item, "camera_id"):
+        return replace(item, camera_id=label)
+    return item
+
+
+def _offset_position(item: Any, offset: Vec3 = (0.5, 0.5, 0.0)) -> Any:
+    if not hasattr(item, "position"):
+        return item
+    pos = _vec3(getattr(item, "position", (0.0, 0.0, 0.0)))
+    moved = (pos[0] + offset[0], pos[1] + offset[1], pos[2] + offset[2])
+    updated = replace(item, position=moved)
+    if hasattr(updated, "geometry"):
+        geometry = tuple(
+            (float(point[0]) + offset[0], float(point[1]) + offset[1], float(point[2]) + offset[2])
+            for point in tuple(getattr(updated, "geometry", ()) or ())
+            if len(point) >= 3
+        )
+        updated = replace(updated, geometry=geometry)
+    return updated
+
+
+def _placement_items_for_id(project: AuthoredModuleProject, placement_id: Any) -> tuple[str, int, str, list[Any], Any]:
+    kind, index = parse_authored_gameplay_placement_id(placement_id)
+    field_name = _KIND_FIELDS[kind]
+    items = list(tuple(getattr(project.placements, field_name, ()) or ()))
+    if index >= len(items):
+        raise ValueError(f"Authored gameplay placement '{placement_id}' does not exist.")
+    return kind, index, field_name, items, items[index]
 
 
 def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[AuthoredGameplayPlacementRow, ...]:
@@ -313,6 +355,7 @@ def add_authored_gameplay_placement(
         tag=label,
         position=pos,
         count=count,
+        placement_id=authored_gameplay_placement_id(normalized_kind, count - 1),
     )
 
 
@@ -325,12 +368,7 @@ def update_authored_gameplay_placement_transform(
 ) -> AuthoredGameplayPlacementUpdate:
     """Move/rotate one authored gameplay placement selected in Map Studio."""
 
-    kind, index = parse_authored_gameplay_placement_id(placement_id)
-    field_name = _KIND_FIELDS[kind]
-    items = list(tuple(getattr(project.placements, field_name, ()) or ()))
-    if index >= len(items):
-        raise ValueError(f"Authored gameplay placement '{placement_id}' does not exist.")
-    current = items[index]
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
     if not hasattr(current, "position"):
         raise ValueError(f"Authored gameplay placement '{placement_id}' is not a spatial map object.")
     pos = _vec3(position) if position is not None else _vec3(getattr(current, "position", (0.0, 0.0, 0.0)))
@@ -371,6 +409,154 @@ def update_authored_gameplay_placement_transform(
         tag=_placement_tag(updated_item, kind, index),
         position=pos,
         count=len(items),
+        placement_id=authored_gameplay_placement_id(kind, index),
+    )
+
+
+def rename_authored_gameplay_placement(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+    *,
+    tag: Any,
+) -> AuthoredGameplayPlacementUpdate:
+    """Rename one authored gameplay placement selected in Map Studio."""
+
+    label = str(tag or "").strip()[:32]
+    if not label:
+        raise ValueError("Authored gameplay placement name cannot be empty.")
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
+    updated_item = _with_label(current, label)
+    items[index] = updated_item
+    metadata = {
+        "placement_id": str(placement_id),
+        "kind": kind,
+        "index": index,
+        "tag": label,
+    }
+    updated_placements = replace(
+        project.placements,
+        **{
+            field_name: tuple(items),
+            "metadata": {
+                **dict(project.placements.metadata),
+                "last_gameplay_placement_rename": metadata,
+            },
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Renamed Map Studio gameplay placement: {placement_id} to {label}.",),
+        extra={
+            **dict(project.extra),
+            "last_gameplay_placement_rename": metadata,
+        },
+    )
+    position = _vec3(getattr(updated_item, "position", (0.0, 0.0, 0.0))) if hasattr(updated_item, "position") else (0.0, 0.0, 0.0)
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=_placement_template(updated_item),
+        tag=_placement_tag(updated_item, kind, index),
+        position=position,
+        count=len(items),
+        placement_id=authored_gameplay_placement_id(kind, index),
+    )
+
+
+def duplicate_authored_gameplay_placement(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+) -> AuthoredGameplayPlacementUpdate:
+    """Duplicate one authored gameplay placement selected in Map Studio."""
+
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
+    duplicated = _offset_position(_with_label(current, _copy_label(_placement_tag(current, kind, index), kind, len(items))))
+    items.append(duplicated)
+    new_index = len(items) - 1
+    new_id = authored_gameplay_placement_id(kind, new_index)
+    metadata = {
+        "source_placement_id": str(placement_id),
+        "placement_id": new_id,
+        "kind": kind,
+        "index": new_index,
+        "tag": _placement_tag(duplicated, kind, new_index),
+    }
+    updated_placements = replace(
+        project.placements,
+        **{
+            field_name: tuple(items),
+            "metadata": {
+                **dict(project.placements.metadata),
+                "last_gameplay_placement_duplicate": metadata,
+            },
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Duplicated Map Studio gameplay placement: {placement_id} to {new_id}.",),
+        extra={
+            **dict(project.extra),
+            "last_gameplay_placement_duplicate": metadata,
+        },
+    )
+    position = _vec3(getattr(duplicated, "position", (0.0, 0.0, 0.0))) if hasattr(duplicated, "position") else (0.0, 0.0, 0.0)
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=_placement_template(duplicated),
+        tag=_placement_tag(duplicated, kind, new_index),
+        position=position,
+        count=len(items),
+        placement_id=new_id,
+    )
+
+
+def remove_authored_gameplay_placement(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+) -> AuthoredGameplayPlacementUpdate:
+    """Remove one authored gameplay placement selected in Map Studio."""
+
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
+    removed_tag = _placement_tag(current, kind, index)
+    removed_template = _placement_template(current)
+    removed_position = _vec3(getattr(current, "position", (0.0, 0.0, 0.0))) if hasattr(current, "position") else (0.0, 0.0, 0.0)
+    del items[index]
+    metadata = {
+        "placement_id": str(placement_id),
+        "kind": kind,
+        "index": index,
+        "tag": removed_tag,
+    }
+    updated_placements = replace(
+        project.placements,
+        **{
+            field_name: tuple(items),
+            "metadata": {
+                **dict(project.placements.metadata),
+                "last_gameplay_placement_remove": metadata,
+            },
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Removed Map Studio gameplay placement: {placement_id}.",),
+        extra={
+            **dict(project.extra),
+            "last_gameplay_placement_remove": metadata,
+        },
+    )
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=removed_template,
+        tag=removed_tag,
+        position=removed_position,
+        count=len(items),
+        placement_id="",
     )
 
 
@@ -381,6 +567,9 @@ __all__ = [
     "add_authored_gameplay_placement",
     "authored_gameplay_placement_id",
     "authored_gameplay_placement_rows",
+    "duplicate_authored_gameplay_placement",
     "parse_authored_gameplay_placement_id",
+    "remove_authored_gameplay_placement",
+    "rename_authored_gameplay_placement",
     "update_authored_gameplay_placement_transform",
 ]

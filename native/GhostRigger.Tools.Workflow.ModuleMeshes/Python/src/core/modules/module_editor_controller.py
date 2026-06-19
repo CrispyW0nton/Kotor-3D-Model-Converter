@@ -42,7 +42,10 @@ from .authored_module_placements import (
     SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS,
     add_authored_gameplay_placement,
     authored_gameplay_placement_rows,
+    duplicate_authored_gameplay_placement,
     parse_authored_gameplay_placement_id,
+    remove_authored_gameplay_placement,
+    rename_authored_gameplay_placement,
     update_authored_gameplay_placement_transform,
 )
 from .authored_room_operations import (
@@ -120,6 +123,11 @@ class ModuleEditorController:
         item_id = self.model.selected_ids[0] if self.model.selected_ids else ""
         if not item_id:
             return False
+        if item_id.startswith("authored:"):
+            update = self.remove_authored_gameplay_placement(item_id)
+            self.model.select("")
+            self.model.log(f"Deleted Map Studio {update.kind} placement {update.tag}.")
+            return True
         scene = LevelScene(self.project)
         changed = scene.remove_room(item_id) or scene.remove_module(item_id)
         if changed:
@@ -129,6 +137,11 @@ class ModuleEditorController:
 
     def duplicate_selected(self):
         item_id = self.model.selected_ids[0] if self.model.selected_ids else ""
+        if item_id.startswith("authored:"):
+            update = self.duplicate_authored_gameplay_placement(item_id)
+            self.model.select(update.placement_id)
+            self.model.log(f"Duplicated Map Studio {update.kind} placement {update.tag}.")
+            return update
         clone = LevelScene(self.project).duplicate_room(item_id)
         if clone is not None:
             self.model.select(clone.room_id)
@@ -782,6 +795,75 @@ class ModuleEditorController:
             f"Moved Map Studio {update.kind} placement {update.tag} to {update.position}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
+
+    def rename_authored_gameplay_placement(self, placement_id: str, *, tag: Any):
+        """Rename one authored gameplay placement by virtual id."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = rename_authored_gameplay_placement(authored, placement_id, tag=tag)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Renamed Map Studio {update.kind} placement to {update.tag}; previous exports/proofs are now stale."
+        )
+        return update
+
+    def duplicate_authored_gameplay_placement(self, placement_id: str):
+        """Duplicate one authored gameplay placement by virtual id."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = duplicate_authored_gameplay_placement(authored, placement_id)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Duplicated Map Studio {update.kind} placement {update.tag}; previous exports/proofs are now stale."
+        )
+        return update
+
+    def remove_authored_gameplay_placement(self, placement_id: str):
+        """Remove one authored gameplay placement by virtual id."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = remove_authored_gameplay_placement(authored, placement_id)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Removed Map Studio {update.kind} placement {update.tag}; previous exports/proofs are now stale."
+        )
+        return update
 
     def set_authored_room_light_transform(self, light_id: str, *, position: Any):
         """Move one authored room light by virtual id."""

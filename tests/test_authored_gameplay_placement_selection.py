@@ -100,6 +100,48 @@ def test_t2655_transform_update_moves_authored_placement_and_preserves_build_con
     assert ("grmove01", "git") in build.resources
 
 
+def test_t2600_authored_placement_rename_duplicate_and_remove_update_project() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import (
+        add_authored_gameplay_placement,
+        authored_gameplay_placement_rows,
+        duplicate_authored_gameplay_placement,
+        remove_authored_gameplay_placement,
+        rename_authored_gameplay_placement,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="gredit01",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="creature",
+        template_resref="c_drdmkone",
+        tag="guard_a",
+        position=(1.0, 2.0, 0.0),
+    ).project
+
+    renamed = rename_authored_gameplay_placement(project, "authored:creature:0", tag="guard_renamed")
+    duplicated = duplicate_authored_gameplay_placement(renamed.project, "authored:creature:0")
+    removed = remove_authored_gameplay_placement(duplicated.project, "authored:creature:0")
+    rows = authored_gameplay_placement_rows(removed.project)
+
+    creature_rows = [row for row in rows if row.kind == "creature"]
+
+    assert renamed.project.placements.creatures[0].tag == "guard_renamed"
+    assert duplicated.placement_id == "authored:creature:1"
+    assert duplicated.project.placements.creatures[1].tag == "guard_renamed_copy"
+    assert duplicated.project.placements.creatures[1].position == (1.5, 2.5, 0.0)
+    assert removed.count == 1
+    assert len(creature_rows) == 1
+    assert creature_rows[0].placement_id == "authored:creature:0"
+    assert creature_rows[0].tag == "guard_renamed_copy"
+
+
 def test_t2655_controller_transform_update_clears_stale_runtime_state() -> None:
     _install_native_payload_paths()
 
@@ -132,6 +174,40 @@ def test_t2655_controller_transform_update_clears_stale_runtime_state() -> None:
     assert updated["placements"]["creatures"][0]["bearing"] == 0.75
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+
+
+def test_t2600_controller_placement_edit_actions_clear_export_and_proof_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grctledit")
+    controller.add_authored_gameplay_placement(
+        kind="creature",
+        template_resref="c_drdmkone",
+        tag="grctledit_guard",
+        position=(0.0, 0.0, 0.0),
+    )
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["grctledit.git"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    renamed = controller.rename_authored_gameplay_placement("authored:creature:0", tag="grctledit_renamed")
+    duplicated = controller.duplicate_authored_gameplay_placement("authored:creature:0")
+    controller.model.select(duplicated.placement_id)
+    removed = controller.remove_authored_gameplay_placement(duplicated.placement_id)
+    updated = controller.project.extra_sections["authored_module"]
+
+    assert renamed.tag == "grctledit_renamed"
+    assert duplicated.placement_id == "authored:creature:1"
+    assert removed.tag == "grctledit_renamed_copy"
+    assert updated["runtime_resources"] == []
+    assert updated["game_tested"] is False
+    assert updated["placements"]["creatures"][0]["tag"] == "grctledit_renamed"
+    assert controller.project.dirty is True
 
 
 def test_t2655_module_editor_projects_authored_placements_into_selection_surfaces() -> None:
@@ -185,6 +261,8 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     assert "authored_gameplay" in outliner_source
     assert "_authored_placements" in properties_source
     assert "Authored {kind} Placement" in properties_source
+    assert "self.name_edit.setEnabled(True)" in properties_source
     assert "self.controller.authored_gameplay_placements()" in window_source
     assert "set_authored_gameplay_placement_transform" in window_source
+    assert "rename_authored_gameplay_placement" in window_source
     assert 'item_id.startswith("authored:")' in window_source

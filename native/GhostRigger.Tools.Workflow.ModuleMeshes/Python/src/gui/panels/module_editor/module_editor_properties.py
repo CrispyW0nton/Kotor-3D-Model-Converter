@@ -77,8 +77,11 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
             self.title.setText(f"Authored {kind} Placement")
             self.name_edit.setText(tag)
-            self.name_edit.setEnabled(False)
-            self.source_label.setText(str(getattr(authored, "template_resref", "") or ""))
+            self.name_edit.setEnabled(True)
+            self.source_label.setText(
+                f"{str(getattr(authored, 'template_resref', '') or '(no template)')} "
+                f"[{str(getattr(authored, 'kind', 'object') or 'object')}]"
+            )
             self.visible_box.setChecked(True)
             self.locked_box.setChecked(False)
             self.visible_box.setEnabled(False)

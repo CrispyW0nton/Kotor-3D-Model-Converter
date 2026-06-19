@@ -482,11 +482,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def duplicate_selected(self) -> None:
         if self.controller.duplicate_selected() is not None:
-            self._refresh_all("Duplicated selected room.")
+            self._refresh_all("Duplicated selected item.")
 
     def rename_selected(self) -> None:
         item_id = self.controller.model.selected_ids[0] if self.controller.model.selected_ids else ""
         if not item_id:
+            return
+        if item_id.startswith("authored:"):
+            authored = next((row for row in self.controller.authored_gameplay_placements() if getattr(row, "placement_id", "") == item_id), None)
+            if authored is None:
+                return
+            current = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
+            name, ok = QtWidgets.QInputDialog.getText(self, "Rename Authored Placement", "Name:", text=current)
+            if ok and name.strip():
+                try:
+                    self.controller.rename_authored_gameplay_placement(item_id, tag=name.strip())
+                except Exception as exc:
+                    QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
+                    return
+                self._refresh_all("Renamed authored gameplay placement.")
             return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:
@@ -1257,6 +1271,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _set_property(self, item_id: str, key: str, value: Any) -> None:
         if item_id.startswith("authored:"):
+            if key == "name":
+                try:
+                    self.controller.rename_authored_gameplay_placement(item_id, tag=str(value or "").strip())
+                except Exception as exc:
+                    QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
+                    return
+                self._refresh_all("Renamed authored gameplay placement.")
             return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:

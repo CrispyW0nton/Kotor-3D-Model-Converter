@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Edits Authored Resource Placements
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored resource placement editing
+Intersects: authored gameplay placement services, Level Editor selection actions, and ModuleMeshes payload mirror.
+
+- Added core authored gameplay placement rename, duplicate, and remove operations so Map Studio can edit KOTOR resource placements outside the UI layer.
+- Routed the existing Level Editor delete, duplicate, rename, and properties-name workflows through the authored placement service for selected gameplay resources.
+- Kept authored placement edits export-safe by clearing stale runtime resources and game-test proof when the KMAP placement payload changes.
+- Mirrored the placement service/controller/properties updates into the ModuleMeshes payload copy.
+- Verification: `python -m pytest tests/test_authored_gameplay_placement_selection.py::test_t2600_authored_placement_rename_duplicate_and_remove_update_project tests/test_authored_gameplay_placement_selection.py::test_t2600_controller_placement_edit_actions_clear_export_and_proof_state tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces -q --basetemp .pytest_tmp_map_studio_placement_edit`; `python -m pytest tests/test_authored_gameplay_placement_selection.py tests/test_authored_gameplay_placements.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_edit_full`; `python -m py_compile` on active and mirrored placement/controller/properties modules plus the Level Editor window and focused test.
+
 ### [2026-06-19] Map Studio Surfaces Resource Placement Readiness
 
 Owner: LordVaderCW
