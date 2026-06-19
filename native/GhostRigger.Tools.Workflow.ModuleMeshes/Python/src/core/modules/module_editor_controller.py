@@ -86,6 +86,7 @@ from .authored_terrain_walkability_overlay import (
     AuthoredTerrainWalkabilityOverlay,
     authored_terrain_walkability_overlay_for_project,
 )
+from .authored_walkmesh_status import AuthoredWalkmeshStatus, authored_walkmesh_status_for_project
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
 from .dev_module_smoke import DevModuleGameProofRequest, DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install, record_dev_module_game_proof
 from .module_layout_service import ModuleLayoutService
@@ -397,6 +398,24 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_terrain_walkability_overlay_for_project(authored)
+
+    def authored_walkmesh_status(self):
+        """Return modder-facing walkmesh status for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return AuthoredWalkmeshStatus(
+                ready=False,
+                summary="Walkmesh: no authored Map Studio module is loaded.",
+                next_action="Create or open a KMAP with authored rooms before inspecting walkmesh.",
+            )
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_walkmesh_status_for_project(authored)
 
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""

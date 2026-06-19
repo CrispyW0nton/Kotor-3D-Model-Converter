@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Shows Authored Walkmesh Status
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored walkmesh readiness
+Intersects: authored terrain walkability overlay, Walkmesh tab status UI, Level Editor refresh wiring, and ModuleMeshes mirror.
+
+- Added a core authored-walkmesh status contract that summarizes flat/composition WOK intent and terrain walkability triangle counts.
+- Exposed the status in the Walkmesh tab with live summary and next-action labels refreshed from the Level Editor.
+- Mirrored the core/controller/panel changes into the ModuleMeshes package.
+- Verification: `python -m pytest tests/test_authored_walkmesh_status.py -q --basetemp .pytest_tmp_authored_walkmesh_status`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_walkmesh_tab_explains_wok_workflow -q --basetemp .pytest_tmp_map_studio_walkmesh_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_walkmesh_workflow_full`; `python -m py_compile` on touched core, panel, window, and test files.
+
 ### [2026-06-19] Map Studio Adds Explicit New KMAP Setup
 
 Owner: LordVaderCW

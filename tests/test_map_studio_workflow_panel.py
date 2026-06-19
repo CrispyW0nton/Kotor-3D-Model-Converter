@@ -353,12 +353,28 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
         "module_editor/walkmesh_tab.py"
     )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    mirror_controller_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
 
     for source in (walkmesh_source, walkmesh_mirror_source):
         assert "mapStudioWalkmeshWorkflowLabel" in source
         assert "mapStudioWalkmeshSurfaceLabel" in source
         assert "mapStudioWalkmeshValidationHintLabel" in source
+        assert "mapStudioWalkmeshStatusLabel" in source
+        assert "mapStudioWalkmeshNextActionLabel" in source
         assert "mapStudioWalkmeshFaceTypeComboBox" in source
+        assert "def set_walkmesh_status" in source
+        assert "Walkmesh status unavailable" in source
         assert "create or load room geometry, generate WOK faces" in source
         assert "1 WALK for reachable floors" in source
         assert "7 NON_WALK for walls/blockers" in source
@@ -369,6 +385,12 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         assert "mapStudioWalkmeshAssignFaceTypeButton" in source
         assert "mapStudioWalkmeshValidateButton" in source
         assert "mapStudioWalkmeshShowWalkableButton" in source
+    assert "authored_walkmesh_status = self.controller.authored_walkmesh_status()" in window_source
+    assert "self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)" in window_source
+    for source in (controller_source, mirror_controller_source):
+        assert "AuthoredWalkmeshStatus" in source
+        assert "authored_walkmesh_status_for_project" in source
+        assert "def authored_walkmesh_status(self)" in source
 
 
 def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:

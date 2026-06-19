@@ -41,9 +41,17 @@ class WalkmeshTab(QtWidgets.QWidget):
         )
         self.validation_label.setObjectName("mapStudioWalkmeshValidationHintLabel")
         self.validation_label.setWordWrap(True)
+        self.status_label = QtWidgets.QLabel("Walkmesh status: no authored module loaded.")
+        self.status_label.setObjectName("mapStudioWalkmeshStatusLabel")
+        self.status_label.setWordWrap(True)
+        self.next_action_label = QtWidgets.QLabel("Next: create a starter room or terrain patch.")
+        self.next_action_label.setObjectName("mapStudioWalkmeshNextActionLabel")
+        self.next_action_label.setWordWrap(True)
         layout.addWidget(self.workflow_label)
         layout.addWidget(self.surface_label)
         layout.addWidget(self.validation_label)
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.next_action_label)
         self.face_type = QtWidgets.QComboBox()
         self.face_type.setObjectName("mapStudioWalkmeshFaceTypeComboBox")
         self.face_type.addItems(["1 WALK", "7 NON_WALK", "18 DOOR", "23 WATER"])
@@ -54,3 +62,17 @@ class WalkmeshTab(QtWidgets.QWidget):
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
             layout.addWidget(button)
         layout.addStretch(1)
+
+    def set_walkmesh_status(self, status) -> None:
+        """Display core-authored walkmesh status without mutating the project."""
+
+        if status is None:
+            self.status_label.setText("Walkmesh status: no authored module loaded.")
+            self.next_action_label.setText("Next: create a starter room or terrain patch.")
+            return
+        summary = str(getattr(status, "summary", "") or "Walkmesh status unavailable.")
+        next_action = str(getattr(status, "next_action", "") or "Validate walkmesh before staging.")
+        warnings = tuple(getattr(status, "warnings", ()) or ())
+        warning_suffix = f" Warning: {warnings[0]}" if warnings else ""
+        self.status_label.setText(f"{summary}{warning_suffix}")
+        self.next_action_label.setText(f"Next: {next_action}")

@@ -1605,6 +1605,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
         authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
+        authored_walkmesh_status = self.controller.authored_walkmesh_status()
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         authored_terrain_rooms = self.controller.authored_terrain_room_choices()
@@ -1612,6 +1613,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
         self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
         self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())
+        self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)
         self.properties.set_project(self.project, authored_placements, authored_room_lights)
         self.outliner.set_project(self.project, authored_placements, authored_room_lights)
         self.viewport_panel.set_project(
