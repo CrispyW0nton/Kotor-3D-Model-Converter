@@ -7,6 +7,7 @@ inspector can call the same compiler used by smoke exports.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,6 +16,23 @@ from .authored_module_project import AuthoredModuleMetadata, authored_resref_blo
 
 
 RGB = tuple[int, int, int]
+AREA_SCRIPT_FIELDS: tuple[str, ...] = ("OnEnter", "OnExit", "OnHeartbeat", "OnUserDefined")
+MODULE_SCRIPT_FIELDS: tuple[str, ...] = (
+    "Mod_OnHeartbeat",
+    "Mod_OnModLoad",
+    "Mod_OnModStart",
+    "Mod_OnClientEntr",
+    "Mod_OnClientLeav",
+    "Mod_OnActvtItem",
+    "Mod_OnAcquirItem",
+    "Mod_OnUsrDefined",
+    "Mod_OnUnAqreItem",
+    "Mod_OnPlrDeath",
+    "Mod_OnPlrDying",
+    "Mod_OnPlrLvlUp",
+    "Mod_OnSpawnBtnDn",
+    "Mod_OnPlrRest",
+)
 
 
 @dataclass(frozen=True)
@@ -72,6 +90,18 @@ def _new_gff(content_name: str) -> Any:
     return GFF(getattr(GFFContent, content_name))
 
 
+def _new_struct() -> Any:
+    from pykotor.resource.formats.gff.gff_data import GFFStruct
+
+    return GFFStruct()
+
+
+def _empty_gff_list() -> Any:
+    from pykotor.resource.formats.gff.gff_data import GFFList
+
+    return GFFList()
+
+
 def _bytes_gff(gff: Any) -> bytes:
     from pykotor.resource.formats.gff import bytes_gff
 
@@ -82,6 +112,12 @@ def _locstring(text: str) -> Any:
     from pykotor.common.language import LocalizedString
 
     return LocalizedString.from_english(text)
+
+
+def _empty_locstring() -> Any:
+    from pykotor.common.language import LocalizedString
+
+    return LocalizedString.from_invalid()
 
 
 def _set_loc(root: Any, label: str, text: str) -> None:
@@ -100,6 +136,171 @@ def _rgb(value: RGB) -> int:
 
 def _byte(value: bool) -> int:
     return 1 if bool(value) else 0
+
+
+def _is_k2_game(game: Any) -> bool:
+    text = str(game or "K1").strip().upper()
+    return text in {"K2", "TSL", "KOTOR2", "KOTOR II"}
+
+
+def _are_version_for_game(game: Any) -> int:
+    return 345 if _is_k2_game(game) else 193
+
+
+def _module_id_bytes(root_resref: str) -> bytes:
+    """Return a stable 16-byte module ID for deterministic smoke packages."""
+
+    root = normalise_resref(root_resref)
+    return hashlib.md5(f"ghostrigger:module:{root}".encode("ascii", errors="ignore")).digest()
+
+
+def authored_module_id_bytes(root_resref: str) -> bytes:
+    """Return GhostRigger's deterministic runtime module identity bytes."""
+
+    return _module_id_bytes(root_resref)
+
+
+def _set_empty_resref(root: Any, label: str) -> None:
+    root.set_resref(label, "")
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _script_field_name(value: Any, fields: tuple[str, ...]) -> str:
+    wanted = str(value or "").strip().lower()
+    for field_name in fields:
+        if field_name.lower() == wanted:
+            return field_name
+    return ""
+
+
+def _script_hook_source(metadata: dict[str, Any], *keys: str) -> dict[str, Any]:
+    for key in keys:
+        value = metadata.get(key)
+        if isinstance(value, dict):
+            return dict(value)
+    return {}
+
+
+def _normalise_script_hooks(*sources: dict[str, Any], fields: tuple[str, ...]) -> dict[str, str]:
+    hooks: dict[str, str] = {}
+    for source in sources:
+        for field_name, script_resref in source.items():
+            normalized_field = _script_field_name(field_name, fields)
+            if not normalized_field:
+                continue
+            script = normalise_resref(script_resref)
+            if script:
+                hooks[normalized_field] = script
+    return hooks
+
+
+def authored_area_script_hooks(module: AuthoredModuleMetadata, area: AuthoredAreaMetadata | None = None) -> dict[str, str]:
+    """Return normalized ARE script hooks authored in KMAP metadata."""
+
+    area = area or AuthoredAreaMetadata()
+    module_metadata = _dict(module.metadata)
+    area_metadata = _dict(area.metadata)
+    return _normalise_script_hooks(
+        _script_hook_source(module_metadata, "area_scripts", "are_scripts"),
+        _script_hook_source(area_metadata, "scripts", "area_scripts", "are_scripts"),
+        fields=AREA_SCRIPT_FIELDS,
+    )
+
+
+def authored_module_script_hooks(module: AuthoredModuleMetadata) -> dict[str, str]:
+    """Return normalized IFO/module script hooks authored in KMAP metadata."""
+
+    module_metadata = _dict(module.metadata)
+    return _normalise_script_hooks(
+        _script_hook_source(module_metadata, "module_scripts", "ifo_scripts"),
+        fields=MODULE_SCRIPT_FIELDS,
+    )
+
+
+def _validate_script_hook_source(
+    *,
+    source: Any,
+    fields: tuple[str, ...],
+    scope: str,
+    blocking: list[str],
+) -> None:
+    if source in (None, ""):
+        return
+    if not isinstance(source, dict):
+        blocking.append(f"{scope} script hooks must be stored as a field-to-resref mapping.")
+        return
+    known = ", ".join(fields)
+    for field_name, script_resref in source.items():
+        normalized_field = _script_field_name(field_name, fields)
+        if not normalized_field:
+            blocking.append(f"{scope} script field '{field_name}' is not supported. Known fields: {known}.")
+            continue
+        if str(script_resref or "").strip():
+            issue = authored_resref_blocking_issue(f"{scope} script {normalized_field}", script_resref)
+            if issue:
+                blocking.append(issue)
+
+
+def _set_empty_loc(root: Any, label: str) -> None:
+    try:
+        root.set_locstring(label, _empty_locstring())
+    except Exception:
+        root.set_string(label, "")
+
+
+def _default_area_map_struct() -> Any:
+    """Build the small minimap struct stock KOTOR ARE files carry."""
+
+    item = _new_struct()
+    item.set_int32("MapResX", 0)
+    item.set_int32("NorthAxis", 0)
+    item.set_single("WorldPt1X", -5.0)
+    item.set_single("WorldPt1Y", -5.0)
+    item.set_single("WorldPt2X", 5.0)
+    item.set_single("WorldPt2Y", 5.0)
+    item.set_single("MapPt1X", 0.0)
+    item.set_single("MapPt1Y", 0.0)
+    item.set_single("MapPt2X", 1.0)
+    item.set_single("MapPt2Y", 1.0)
+    item.set_int32("MapZoom", 1)
+    return item
+
+
+def _normalised_unique_room_resrefs(room_resrefs: tuple[str, ...], fallback: str) -> tuple[str, ...]:
+    seen: set[str] = set()
+    rooms: list[str] = []
+    for raw in room_resrefs or ():
+        room = normalise_resref(raw)
+        if room and room not in seen:
+            seen.add(room)
+            rooms.append(room)
+    if not rooms and fallback:
+        rooms.append(normalise_resref(fallback))
+    return tuple(rooms)
+
+
+def _room_list(room_resrefs: tuple[str, ...], fallback: str) -> Any:
+    """Build ARE Rooms entries naming the room MDL/WOK resources."""
+
+    rooms = _empty_gff_list()
+    for index, room in enumerate(_normalised_unique_room_resrefs(room_resrefs, fallback)):
+        item = rooms.add(index)
+        item.set_string("RoomName", room)
+        item.set_int32("EnvAudio", 0)
+        item.set_single("AmbientScale", 1.0)
+    return rooms
+
+
+def _area_list(area_resref: str) -> Any:
+    """Build IFO Mod_Area_list with the authored area resref."""
+
+    areas = _empty_gff_list()
+    item = areas.add(6)
+    item.set_resref("Area_Name", normalise_resref(area_resref))
+    return areas
 
 
 def validate_authored_module_metadata(
@@ -134,6 +335,26 @@ def validate_authored_module_metadata(
         blocking.append("Dusk hour must be between 0 and 23.")
     if int(time.minutes_per_hour) <= 0:
         blocking.append("Minutes per hour must be positive.")
+    module_metadata = _dict(module.metadata)
+    area_metadata = _dict(area.metadata)
+    _validate_script_hook_source(
+        source=module_metadata.get("module_scripts", module_metadata.get("ifo_scripts")),
+        fields=MODULE_SCRIPT_FIELDS,
+        scope="Module",
+        blocking=blocking,
+    )
+    _validate_script_hook_source(
+        source=module_metadata.get("area_scripts", module_metadata.get("are_scripts")),
+        fields=AREA_SCRIPT_FIELDS,
+        scope="Area",
+        blocking=blocking,
+    )
+    _validate_script_hook_source(
+        source=area_metadata.get("scripts", area_metadata.get("area_scripts", area_metadata.get("are_scripts"))),
+        fields=AREA_SCRIPT_FIELDS,
+        scope="Area",
+        blocking=blocking,
+    )
     return AuthoredModuleMetadataValidation(
         ok=not blocking,
         warnings=tuple(warnings),
@@ -141,29 +362,90 @@ def validate_authored_module_metadata(
     )
 
 
-def build_authored_are_gff(module: AuthoredModuleMetadata, area: AuthoredAreaMetadata | None = None) -> Any:
+def build_authored_are_gff(
+    module: AuthoredModuleMetadata,
+    area: AuthoredAreaMetadata | None = None,
+    *,
+    room_resrefs: tuple[str, ...] = (),
+) -> Any:
     """Build an ARE GFF from authored area metadata."""
 
     area = area or AuthoredAreaMetadata()
     root_resref = module.normalised_root()
     display_name = str(area.name or module.display_name or root_resref)
     tag = normalise_resref(area.tag or module.tag or root_resref)
+    is_k2 = _is_k2_game(module.game)
     gff = _new_gff("ARE")
     root = gff.root
+    root.set_int32("ID", 0)
+    root.set_int32("Creator_ID", 0)
+    root.set_uint32("Version", _are_version_for_game(module.game))
     _set_loc(root, "Name", display_name)
     root.set_string("Tag", tag)
     root.set_string("Comments", area.comments)
-    root.set_uint8("Unescapable", _byte(area.unescapable))
-    root.set_uint8("DisableTransit", _byte(area.disable_transit))
-    root.set_uint8("Natural", _byte(area.natural))
+    root.set_struct("Map", _default_area_map_struct())
+    root.set_list("Expansion_List", _empty_gff_list())
+    root.set_uint32("Flags", 7 if not is_k2 else 0)
+    root.set_int32("ModSpotCheck", 0)
+    root.set_int32("ModListenCheck", 0)
+    root.set_single("AlphaTest", 0.2)
+    root.set_int32("CameraStyle", 1 if not is_k2 else 0)
+    _set_empty_resref(root, "DefaultEnvMap")
+    _set_empty_resref(root, "Grass_TexName")
+    root.set_single("Grass_Density", 0.0)
+    root.set_single("Grass_QuadSize", 0.0)
+    root.set_uint32("Grass_Ambient", 0)
+    root.set_uint32("Grass_Diffuse", 0)
+    grass_probability = 0.0 if is_k2 else 0.25
+    root.set_single("Grass_Prob_LL", grass_probability)
+    root.set_single("Grass_Prob_LR", grass_probability)
+    root.set_single("Grass_Prob_UL", grass_probability)
+    root.set_single("Grass_Prob_UR", grass_probability)
+    root.set_uint32("MoonAmbientColor", 0)
+    root.set_uint32("MoonDiffuseColor", 0)
+    root.set_uint8("MoonFogOn", 0)
+    root.set_single("MoonFogNear", float(area.fog_near) if is_k2 else 99.0)
+    root.set_single("MoonFogFar", float(area.fog_far) if is_k2 else 100.0)
+    root.set_uint32("MoonFogColor", 0)
+    root.set_uint8("MoonShadows", 0)
+    root.set_uint8("Unescapable", _byte(area.unescapable or not is_k2))
+    if is_k2:
+        root.set_uint8("DisableTransit", _byte(area.disable_transit))
+        root.set_uint8("Natural", _byte(area.natural))
     root.set_uint8("PlayerVsPlayer", _byte(area.player_vs_player))
     root.set_uint8("NoRest", _byte(area.no_rest))
+    root.set_uint8("NoHangBack", 0)
+    root.set_uint8("PlayerOnly", 0)
+    root.set_uint8("StealthXPEnabled", 0)
+    root.set_uint32("StealthXPLoss", 0)
+    root.set_uint32("StealthXPMax", 0)
     root.set_uint32("SunAmbientColor", _rgb(area.sun_ambient))
     root.set_uint32("SunDiffuseColor", _rgb(area.sun_diffuse))
-    root.set_uint32("FogColor", _rgb(area.fog_color))
-    root.set_single("FogNearDist", float(area.fog_near))
-    root.set_single("FogFarDist", float(area.fog_far))
-    root.set_uint8("SunFog", _byte(area.sun_fog_on))
+    if is_k2:
+        root.set_uint32("FogColor", _rgb(area.fog_color))
+        root.set_single("FogNearDist", float(area.fog_near))
+        root.set_single("FogFarDist", float(area.fog_far))
+        root.set_uint8("SunFog", _byte(area.sun_fog_on))
+    root.set_uint8("SunFogOn", _byte(area.sun_fog_on))
+    root.set_single("SunFogNear", float(area.fog_near) if is_k2 else 99.0)
+    root.set_single("SunFogFar", float(area.fog_far) if is_k2 else 100.0)
+    root.set_uint32("SunFogColor", _rgb(area.fog_color))
+    root.set_uint8("SunShadows", 0)
+    root.set_uint32("DynAmbientColor", _rgb(area.sun_ambient))
+    root.set_uint8("IsNight", 0)
+    root.set_uint8("LightingScheme", 0)
+    root.set_uint8("ShadowOpacity", 128 if is_k2 else 50)
+    root.set_uint8("DayNightCycle", 0)
+    root.set_int32("ChanceRain", 0)
+    root.set_int32("ChanceSnow", 0)
+    root.set_int32("ChanceLightning", 0)
+    root.set_int32("WindPower", 0)
+    root.set_uint16("LoadScreenID", 0)
+    root.set_list("Rooms", _room_list(room_resrefs, root_resref))
+    for label in AREA_SCRIPT_FIELDS:
+        _set_empty_resref(root, label)
+    for label, script in authored_area_script_hooks(module, area).items():
+        root.set_resref(label, script)
     return gff
 
 
@@ -171,35 +453,64 @@ def build_authored_ifo_gff(
     module: AuthoredModuleMetadata,
     entry_point: ModuleEntryPoint,
     time: AuthoredModuleTimeMetadata | None = None,
+    *,
+    area_resrefs: tuple[str, ...] = (),
 ) -> Any:
     """Build an IFO GFF from authored module metadata and entry point."""
 
     time = time or AuthoredModuleTimeMetadata()
     root_resref = module.normalised_root()
     display_name = str(module.display_name or root_resref)
-    tag = normalise_resref(module.tag or root_resref)
     gff = _new_gff("IFO")
     root = gff.root
+    root.set_binary("Mod_ID", _module_id_bytes(root_resref))
+    root.set_int32("Mod_Creator_ID", 0)
+    root.set_uint32("Mod_Version", 3)
+    root.set_string("Mod_VO_ID", root_resref)
+    root.set_uint16("Expansion_Pack", int(time.expansion_pack))
     _set_loc(root, "Mod_Name", display_name)
-    root.set_string("Mod_Tag", tag)
+    root.set_string("Mod_Tag", "MODULE")
+    root.set_string("Mod_Hak", "")
+    _set_empty_loc(root, "Mod_Description")
+    root.set_uint8("Mod_IsSaveGame", 0)
     apply_entry_point_to_ifo(root, entry_point)
+    root.set_list("Mod_Expan_List", _empty_gff_list())
     root.set_uint8("Mod_DawnHour", int(time.dawn_hour))
     root.set_uint8("Mod_DuskHour", int(time.dusk_hour))
     root.set_uint8("Mod_MinPerHour", int(time.minutes_per_hour))
-    root.set_uint32("Expansion_Pack", int(time.expansion_pack))
+    root.set_uint8("Mod_StartMonth", 1)
+    root.set_uint8("Mod_StartDay", 1)
+    root.set_uint8("Mod_StartHour", int(time.dawn_hour))
+    root.set_uint32("Mod_StartYear", 0)
+    root.set_uint8("Mod_XPScale", 10)
+    for label in (*MODULE_SCRIPT_FIELDS, "Mod_StartMovie"):
+        _set_empty_resref(root, label)
+    for label, script in authored_module_script_hooks(module).items():
+        root.set_resref(label, script)
+    root.set_list("Mod_CutSceneList", _empty_gff_list())
+    root.set_list("Mod_GVar_List", _empty_gff_list())
+    area_names = tuple(normalise_resref(value) for value in area_resrefs if normalise_resref(value))
+    root.set_list("Mod_Area_list", _area_list(area_names[0] if area_names else entry_point.area_resref))
     return gff
 
 
-def build_authored_are_bytes(module: AuthoredModuleMetadata, area: AuthoredAreaMetadata | None = None) -> bytes:
-    return _bytes_gff(build_authored_are_gff(module, area))
+def build_authored_are_bytes(
+    module: AuthoredModuleMetadata,
+    area: AuthoredAreaMetadata | None = None,
+    *,
+    room_resrefs: tuple[str, ...] = (),
+) -> bytes:
+    return _bytes_gff(build_authored_are_gff(module, area, room_resrefs=room_resrefs))
 
 
 def build_authored_ifo_bytes(
     module: AuthoredModuleMetadata,
     entry_point: ModuleEntryPoint,
     time: AuthoredModuleTimeMetadata | None = None,
+    *,
+    area_resrefs: tuple[str, ...] = (),
 ) -> bytes:
-    return _bytes_gff(build_authored_ifo_gff(module, entry_point, time))
+    return _bytes_gff(build_authored_ifo_gff(module, entry_point, time, area_resrefs=area_resrefs))
 
 
 def compile_authored_module_metadata(
@@ -208,6 +519,8 @@ def compile_authored_module_metadata(
     *,
     area: AuthoredAreaMetadata | None = None,
     time: AuthoredModuleTimeMetadata | None = None,
+    room_resrefs: tuple[str, ...] = (),
+    area_resrefs: tuple[str, ...] = (),
 ) -> CompiledAuthoredModuleMetadata:
     """Compile authored metadata into serialized ARE/IFO bytes."""
 
@@ -216,28 +529,41 @@ def compile_authored_module_metadata(
         raise ValueError("; ".join(validation.blocking_issues))
     area = area or AuthoredAreaMetadata()
     time = time or AuthoredModuleTimeMetadata()
+    module_root = module.normalised_root()
+    area_names = tuple(normalise_resref(value) for value in area_resrefs if normalise_resref(value))
+    if not area_names:
+        area_names = (normalise_resref(entry_point.area_resref),)
     return CompiledAuthoredModuleMetadata(
-        are_bytes=build_authored_are_bytes(module, area),
-        ifo_bytes=build_authored_ifo_bytes(module, entry_point, time),
+        are_bytes=build_authored_are_bytes(module, area, room_resrefs=room_resrefs),
+        ifo_bytes=build_authored_ifo_bytes(module, entry_point, time, area_resrefs=area_names),
         validation=validation,
         metadata={
             "source": "src.core.modules.authored_module_metadata",
-            "module_root": module.normalised_root(),
+            "module_root": module_root,
             "display_name": module.display_name,
             "tag": normalise_resref(module.tag or module.module_root),
+            "room_resrefs": list(_normalised_unique_room_resrefs(room_resrefs, module_root)),
+            "area_resrefs": list(area_names),
             "fog_near": float(area.fog_near),
             "fog_far": float(area.fog_far),
             "dawn_hour": int(time.dawn_hour),
             "dusk_hour": int(time.dusk_hour),
+            "area_scripts": authored_area_script_hooks(module, area),
+            "module_scripts": authored_module_script_hooks(module),
         },
     )
 
 
 __all__ = [
     "AuthoredAreaMetadata",
+    "AREA_SCRIPT_FIELDS",
     "AuthoredModuleMetadataValidation",
     "AuthoredModuleTimeMetadata",
+    "MODULE_SCRIPT_FIELDS",
     "CompiledAuthoredModuleMetadata",
+    "authored_area_script_hooks",
+    "authored_module_id_bytes",
+    "authored_module_script_hooks",
     "build_authored_are_bytes",
     "build_authored_are_gff",
     "build_authored_ifo_bytes",

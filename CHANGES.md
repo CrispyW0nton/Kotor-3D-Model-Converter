@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Tracks Authored Script Hooks
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / ARE-IFO script hooks
+Intersects: authored module metadata compiler, readiness toolchain, and Map Studio workflow panel.
+
+- Added a core script-hook contract for authored module and area events so KMAP metadata can carry `area_scripts` and `module_scripts` resrefs.
+- Validated script hook field names and 16-character KOTOR resrefs before serialization, with actionable errors for unsupported fields or unsafe script names.
+- Wrote authored area script hooks into ARE fields such as `OnEnter`/`OnExit` and module script hooks into IFO fields such as `Mod_OnModLoad`/`Mod_OnPlrRest`.
+- Added script-reference readiness metadata and a `Scripts` toolchain status so the Level Editor can show packaged versus external/Override `.ncs` dependencies before staging.
+- Added a dedicated `mapStudioWorkflowScriptsLabel` to the existing Map Studio workflow panel and mirrored metadata/readiness/panel updates into the ModuleMeshes package.
+- Verification: `python -m pytest tests/test_authored_module_metadata.py::test_t2600_compiles_authored_script_hooks_into_are_and_ifo tests/test_authored_module_metadata.py::test_t2600_metadata_validation_blocks_unknown_or_unsafe_script_hooks tests/test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope tests/test_authored_module_readiness.py::test_t2600_readiness_reports_authored_script_hooks tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_script_readiness`; `python -m py_compile` on active and mirrored metadata/readiness/workflow panel modules plus focused tests.
+
 ### [2026-06-19] Map Studio Surfaces Authored Transition Readiness
 
 Owner: LordVaderCW

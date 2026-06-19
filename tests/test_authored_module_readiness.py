@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -167,6 +168,8 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
         "Walkmesh",
         "Lighting",
         "Gameplay layout",
+        "Transitions",
+        "Scripts",
         "Runtime package",
         "In-game proof",
     }
@@ -178,6 +181,10 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert preview_steps["Lighting"].ready is True
     assert preview_steps["Lighting"].status == "Optional"
     assert preview_steps["Gameplay layout"].ready is True
+    assert preview_steps["Transitions"].ready is True
+    assert preview_steps["Transitions"].status == "Optional"
+    assert preview_steps["Scripts"].ready is True
+    assert preview_steps["Scripts"].status == "Optional"
     assert preview_steps["Runtime package"].ready is False
     assert "ARE/GIT/IFO/PTH/LYT/VIS" in preview_steps["Runtime package"].fix_hint
     assert export_steps["Runtime package"].ready is True
@@ -210,6 +217,41 @@ def test_t2700_readiness_reports_external_gameplay_template_references_without_b
     assert all(item["status"] == "external_or_base_game" for item in refs)
     assert any("base-game" in warning for warning in readiness.warnings)
     assert "template ref(s)" in {step.name: step for step in readiness.toolchain}["Gameplay layout"].value_label
+
+
+def test_t2600_readiness_reports_authored_script_hooks() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    project = _floor_plan_project()
+    project = replace(
+        project,
+        metadata=replace(
+            project.metadata,
+            metadata={
+                **dict(project.metadata.metadata),
+                "area_scripts": {"OnEnter": "gr_onenter"},
+                "module_scripts": {"Mod_OnModLoad": "gr_modload"},
+            },
+        ),
+    )
+    readiness = build_authored_module_readiness(project, packaged_resources=(*_runtime_keys(), ("gr_modload", "ncs")))
+    scripts = readiness.metadata["script_references"]
+    script_status = {step.name: step for step in readiness.toolchain}["Scripts"]
+
+    assert readiness.metadata["script_reference_count"] == 2
+    assert readiness.metadata["script_packaged_count"] == 1
+    assert readiness.metadata["script_external_count"] == 1
+    assert script_status.status == "Ready"
+    assert "2 script hook(s), 1 packaged, 1 external/Override" in script_status.value_label
+    assert ("module", "Mod_OnModLoad", "gr_modload", "packaged") in {
+        (item["scope"], item["field_name"], item["script_resref"], item["status"]) for item in scripts
+    }
+    assert ("area", "OnEnter", "gr_onenter", "external_or_override") in {
+        (item["scope"], item["field_name"], item["script_resref"], item["status"]) for item in scripts
+    }
+    assert any("script hook" in warning and "Override" in warning for warning in readiness.warnings)
 
 
 def test_t2700_packaged_gameplay_template_references_are_marked_as_packaged() -> None:

@@ -85,6 +85,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.transitions_label.setWordWrap(True)
         root.addWidget(self.transitions_label)
 
+        self.scripts_label = QtWidgets.QLabel("Scripts: Not checked")
+        self.scripts_label.setObjectName("mapStudioWorkflowScriptsLabel")
+        self.scripts_label.setWordWrap(True)
+        root.addWidget(self.scripts_label)
+
         self.validation_label = QtWidgets.QLabel("Validation: Not checked")
         self.validation_label.setObjectName("mapStudioWorkflowValidationLabel")
         self.validation_label.setWordWrap(True)
@@ -177,6 +182,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.walkmesh_label.setText("Walkmesh: Create authored rooms before generating walkable WOK faces.")
             self.layout_label.setText("Spawn/layout: Create authored geometry before placing the player start or gameplay objects.")
             self.transitions_label.setText("Transitions: Add doors, triggers, or waypoints when this map needs exits.")
+            self.scripts_label.setText("Scripts: Add module or area script hooks when this map needs scripted behavior.")
             self.validation_label.setText("Validation: Not checked")
             self.export_label.setText("Export/install: Not ready")
             self.proof_label.setText("Game proof: Required before game-ready")
@@ -200,6 +206,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.walkmesh_label.setText("Walkmesh: Waiting for readiness check.")
             self.layout_label.setText("Spawn/layout: Waiting for readiness check.")
             self.transitions_label.setText("Transitions: Waiting for readiness check.")
+            self.scripts_label.setText("Scripts: Waiting for readiness check.")
         else:
             self.authoring_label.setText("Authoring: No authored module yet. Use Builder to create terrain, rooms, or a dev-test map.")
             self.resources_label.setText("Runtime resources: create authored terrain or rooms before packaging ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX.")
@@ -208,6 +215,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.walkmesh_label.setText("Walkmesh: No authored room yet. Create geometry before checking walkability.")
             self.layout_label.setText("Spawn/layout: Create an authored module, then place the player start and gameplay objects.")
             self.transitions_label.setText("Transitions: Add doors, triggers, or waypoints when this map needs exits.")
+            self.scripts_label.setText("Scripts: Add module or area script hooks when this map needs scripted behavior.")
 
         if readiness is None:
             self._set_action_enabled(True, can_place=has_authored_module, can_proof=False)
@@ -274,6 +282,13 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             "Transitions",
             "Transitions",
             "Transition status unavailable.",
+        )
+        self._set_toolchain_label(
+            self.scripts_label,
+            readiness,
+            "Scripts",
+            "Scripts",
+            "Script hook status unavailable.",
         )
         if installed_path:
             self.export_label.setText(f"Export/install: Installed for warp test. {installed_path}")

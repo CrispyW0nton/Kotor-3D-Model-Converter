@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from .authored_module_metadata import authored_area_script_hooks, authored_module_script_hooks
 from .authored_module_objects import normalise_resource_resref
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_walkmesh_surfaces import walkmesh_surface_name
@@ -82,6 +83,19 @@ class AuthoredModuleTransitionReference:
     linked_to_module: str = ""
     status: str = "unlinked"
     complete: bool = False
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class AuthoredModuleScriptReference:
+    """One authored module or area script hook referenced by an ARE/IFO field."""
+
+    scope: str
+    field_name: str
+    script_resref: str
+    restype: str = "ncs"
+    status: str = "external_or_override"
+    packaged: bool = False
     message: str = ""
 
 
@@ -285,6 +299,51 @@ def _transition_references(project: AuthoredModuleProject) -> tuple[AuthoredModu
     return tuple(sorted(refs, key=lambda item: (item.kind, item.tag, item.linked_to_module, item.linked_to)))
 
 
+def _script_reference_entry(
+    *,
+    scope: str,
+    field_name: str,
+    script_resref: Any,
+    present: set[RuntimeResourceKey],
+) -> AuthoredModuleScriptReference | None:
+    script = normalise_resource_resref(script_resref)
+    if not script:
+        return None
+    key = (script, "ncs")
+    packaged = key in present
+    status = "packaged" if packaged else "external_or_override"
+    message = (
+        f"{scope} script hook {field_name} uses packaged script {script}.ncs."
+        if packaged
+        else f"{scope} script hook {field_name} expects {script}.ncs from the base game, Override, or another installed mod."
+    )
+    return AuthoredModuleScriptReference(
+        scope=scope,
+        field_name=field_name,
+        script_resref=script,
+        status=status,
+        packaged=packaged,
+        message=message,
+    )
+
+
+def _script_references(
+    project: AuthoredModuleProject,
+    *,
+    present: set[RuntimeResourceKey],
+) -> tuple[AuthoredModuleScriptReference, ...]:
+    refs: list[AuthoredModuleScriptReference] = []
+    for field_name, script_resref in authored_module_script_hooks(project.metadata).items():
+        ref = _script_reference_entry(scope="module", field_name=field_name, script_resref=script_resref, present=present)
+        if ref is not None:
+            refs.append(ref)
+    for field_name, script_resref in authored_area_script_hooks(project.metadata).items():
+        ref = _script_reference_entry(scope="area", field_name=field_name, script_resref=script_resref, present=present)
+        if ref is not None:
+            refs.append(ref)
+    return tuple(sorted(refs, key=lambda item: (item.scope, item.field_name, item.script_resref)))
+
+
 def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
@@ -418,6 +477,7 @@ def _toolchain_statuses(
     rooms: tuple[AuthoredRoomReadiness, ...],
     template_references: tuple[AuthoredGameplayTemplateReference, ...],
     transition_references: tuple[AuthoredModuleTransitionReference, ...],
+    script_references: tuple[AuthoredModuleScriptReference, ...],
     missing_runtime_resources: tuple[RuntimeResourceKey, ...],
     expected_runtime_resources: tuple[RuntimeResourceKey, ...],
     blocking_messages: tuple[str, ...],
@@ -462,6 +522,17 @@ def _toolchain_statuses(
         transition_status = "Optional"
         transition_value = "No authored transitions yet"
         transition_fix = "Add a door, trigger, or waypoint transition when this module needs exits."
+    script_ref_count = len(script_references)
+    packaged_scripts = sum(1 for ref in script_references if ref.packaged)
+    external_scripts = script_ref_count - packaged_scripts
+    if script_ref_count:
+        script_status = "Ready"
+        script_value = f"{script_ref_count} script hook(s), {packaged_scripts} packaged, {external_scripts} external/Override"
+        script_fix = "Package custom NCS scripts or confirm the referenced base-game/Override scripts are installed."
+    else:
+        script_status = "Optional"
+        script_value = "No authored module/area script hooks"
+        script_fix = "Add OnEnter, OnExit, heartbeat, or module event scripts when this map needs scripted behavior."
     return (
         AuthoredModuleToolchainStatus(
             "Geometry authoring",
@@ -500,6 +571,13 @@ def _toolchain_statuses(
             transition_status,
             transition_value,
             transition_fix,
+        ),
+        AuthoredModuleToolchainStatus(
+            "Scripts",
+            True,
+            script_status,
+            script_value,
+            script_fix,
         ),
         AuthoredModuleToolchainStatus(
             "Runtime package",
@@ -579,8 +657,10 @@ def build_authored_module_readiness(
     present_set = set(present)
     template_references = _gameplay_template_references(project, present=present_set)
     transition_references = _transition_references(project)
+    script_references = _script_references(project, present=present_set)
     external_template_count = sum(1 for ref in template_references if not ref.packaged)
     incomplete_transition_count = sum(1 for ref in transition_references if not ref.complete)
+    external_script_count = sum(1 for ref in script_references if not ref.packaged)
     missing = tuple(key for key in expected if key not in present_set)
     room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
     blocking = tuple(validation.blocking_issues) + room_blocking
@@ -595,7 +675,12 @@ def build_authored_module_readiness(
         transition_warnings = (
             f"{incomplete_transition_count} authored transition(s) name a module but are missing a destination tag/waypoint.",
         )
-    warnings = tuple(validation.warnings) + template_warnings + transition_warnings
+    script_warnings: tuple[str, ...] = ()
+    if external_script_count:
+        script_warnings = (
+            f"{external_script_count} authored script hook(s) rely on base-game, Override, or another installed mod .ncs instead of being packaged.",
+        )
+    warnings = tuple(validation.warnings) + template_warnings + transition_warnings + script_warnings
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
@@ -667,6 +752,7 @@ def build_authored_module_readiness(
         rooms=rooms,
         template_references=template_references,
         transition_references=transition_references,
+        script_references=script_references,
         missing_runtime_resources=missing,
         expected_runtime_resources=expected,
         blocking_messages=blocking,
@@ -731,6 +817,21 @@ def build_authored_module_readiness(
                 }
                 for ref in transition_references
             ],
+            "script_reference_count": len(script_references),
+            "script_packaged_count": sum(1 for ref in script_references if ref.packaged),
+            "script_external_count": external_script_count,
+            "script_references": [
+                {
+                    "scope": ref.scope,
+                    "field_name": ref.field_name,
+                    "script_resref": ref.script_resref,
+                    "restype": ref.restype,
+                    "status": ref.status,
+                    "packaged": ref.packaged,
+                    "message": ref.message,
+                }
+                for ref in script_references
+            ],
             "lighting_count": lighting_count,
             "room_lights": [
                 {
@@ -787,6 +888,7 @@ __all__ = [
     "AuthoredModuleTransitionReference",
     "AuthoredModuleInputStatus",
     "AuthoredModuleReadiness",
+    "AuthoredModuleScriptReference",
     "AuthoredModuleToolchainStatus",
     "AuthoredRoomReadiness",
     "RuntimeResourceKey",

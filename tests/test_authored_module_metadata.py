@@ -26,11 +26,13 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     from src.core.modules.authored_module_metadata import (
         AuthoredAreaMetadata,
         AuthoredModuleTimeMetadata,
+        authored_module_id_bytes,
         compile_authored_module_metadata,
     )
     from src.core.modules.authored_module_objects import ModuleEntryPoint
     from src.core.modules.authored_module_project import AuthoredModuleMetadata
     from src.core.modules.module_format import AREData, IFOData
+    from pykotor.resource.formats.gff import read_gff
 
     module = AuthoredModuleMetadata(
         module_root="grdev01",
@@ -50,6 +52,8 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     compiled = compile_authored_module_metadata(module, entry, area=area, time=time)
     are = AREData.from_bytes(compiled.are_bytes)
     ifo = IFOData.from_bytes(compiled.ifo_bytes)
+    raw_are = read_gff(compiled.are_bytes)
+    raw_ifo = read_gff(compiled.ifo_bytes)
 
     assert compiled.validation.ok is True
     assert compiled.metadata["source"] == "src.core.modules.authored_module_metadata"
@@ -62,16 +66,61 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     assert compiled.metadata["dusk_hour"] == 19
     assert are.name == "GhostRigger Dev Test"
     assert are.tag == "grdev01"
-    assert are.fog_near == 12.5
-    assert are.fog_far == 345.0
-    assert are.sun_fog == 1
+    assert are.fog_near == 100.0
+    assert are.fog_far == 200.0
+    assert raw_are.root.get_single("MoonFogNear") == 99.0
+    assert raw_are.root.get_single("MoonFogFar") == 100.0
+    assert raw_are.root.get_single("SunFogNear") == 99.0
+    assert raw_are.root.get_single("SunFogFar") == 100.0
+    assert are.sun_fog == 0
+    assert raw_are.root.get_uint8("SunFogOn") == 1
     assert ifo.mod_name == "GhostRigger Dev Test"
-    assert ifo.tag == "grdev01"
+    assert ifo.tag == "MODULE"
+    assert raw_ifo.root.get("Mod_Tag") == "MODULE"
     assert ifo.entry_area == "grdev01"
     assert ifo.entry_y == -3.0
     assert ifo.dawn_hour == 7
     assert ifo.dusk_hour == 19
     assert ifo._raw["Mod_MinPerHour"] == 3
+    assert authored_module_id_bytes("GRDEV01") == authored_module_id_bytes("grdev01")
+    assert raw_ifo.root.get("Mod_ID") == authored_module_id_bytes("grdev01")
+    assert len(raw_ifo.root.get("Mod_ID")) == 16
+
+
+def test_t2600_compiles_authored_script_hooks_into_are_and_ifo() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_metadata import (
+        AuthoredAreaMetadata,
+        compile_authored_module_metadata,
+        validate_authored_module_metadata,
+    )
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+    from pykotor.resource.formats.gff import read_gff
+
+    module = AuthoredModuleMetadata(
+        module_root="grdev01",
+        display_name="GhostRigger Dev Test",
+        metadata={
+            "area_scripts": {"OnEnter": "gr_onenter", "OnExit": "gr_onexit"},
+            "module_scripts": {"Mod_OnModLoad": "gr_modload", "Mod_OnPlrRest": "gr_rest"},
+        },
+    )
+    entry = ModuleEntryPoint(area_resref="grdev01")
+
+    validation = validate_authored_module_metadata(module, entry)
+    compiled = compile_authored_module_metadata(module, entry, area=AuthoredAreaMetadata())
+    raw_are = read_gff(compiled.are_bytes)
+    raw_ifo = read_gff(compiled.ifo_bytes)
+
+    assert validation.ok is True
+    assert compiled.metadata["area_scripts"] == {"OnEnter": "gr_onenter", "OnExit": "gr_onexit"}
+    assert compiled.metadata["module_scripts"] == {"Mod_OnModLoad": "gr_modload", "Mod_OnPlrRest": "gr_rest"}
+    assert str(raw_are.root.get("OnEnter")) == "gr_onenter"
+    assert str(raw_are.root.get("OnExit")) == "gr_onexit"
+    assert str(raw_ifo.root.get("Mod_OnModLoad")) == "gr_modload"
+    assert str(raw_ifo.root.get("Mod_OnPlrRest")) == "gr_rest"
 
 
 def test_t2607_blocks_invalid_authored_metadata_before_serialization() -> None:
@@ -126,3 +175,25 @@ def test_t2633_metadata_validation_blocks_silent_resref_truncation() -> None:
         raise AssertionError("unsafe metadata resrefs should block before GFF serialization")
     assert "grdev01_custom_module_name" in message
     assert "16 characters or fewer" in message
+
+
+def test_t2600_metadata_validation_blocks_unknown_or_unsafe_script_hooks() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_metadata import validate_authored_module_metadata
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+
+    module = AuthoredModuleMetadata(
+        module_root="grdev01",
+        display_name="GhostRigger Dev Test",
+        metadata={
+            "area_scripts": {"OnTeleportMaybe": "gr_enter"},
+            "module_scripts": {"Mod_OnModLoad": "this_script_name_is_too_long"},
+        },
+    )
+    validation = validate_authored_module_metadata(module, ModuleEntryPoint(area_resref="grdev01"))
+
+    assert validation.ok is False
+    assert any("OnTeleportMaybe" in issue and "Known fields" in issue for issue in validation.blocking_issues)
+    assert any("this_script_name_is_too_long" in issue and "16 characters or fewer" in issue for issue in validation.blocking_issues)
