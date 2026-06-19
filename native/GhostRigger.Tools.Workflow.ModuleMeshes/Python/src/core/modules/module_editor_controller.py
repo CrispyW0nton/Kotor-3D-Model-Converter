@@ -57,6 +57,7 @@ from .authored_module_placements import (
     parse_authored_gameplay_placement_id,
     remove_authored_gameplay_placement,
     rename_authored_gameplay_placement,
+    update_authored_gameplay_camera_properties,
     update_authored_gameplay_placement_transform,
     update_authored_gameplay_transition,
 )
@@ -914,6 +915,46 @@ class ModuleEditorController:
             f"Removed Map Studio {update.kind} placement {update.tag}; previous exports/proofs are now stale."
         )
         return update
+
+    def set_authored_gameplay_camera_properties(
+        self,
+        placement_id: str,
+        *,
+        camera_id: Any | None = None,
+        field_of_view: Any | None = None,
+        height: Any | None = None,
+        mic_range: Any | None = None,
+        pitch: Any | None = None,
+    ):
+        """Edit selected authored camera GIT CameraList fields from Properties."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_gameplay_camera_properties(
+            authored,
+            placement_id,
+            camera_id=camera_id,
+            field_of_view=field_of_view,
+            height=height,
+            mic_range=mic_range,
+            pitch=pitch,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Edited Map Studio camera {update.tag}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
 
     def set_authored_gameplay_transition(
         self,

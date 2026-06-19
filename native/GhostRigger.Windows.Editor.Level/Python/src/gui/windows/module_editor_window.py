@@ -395,6 +395,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
         self.properties.propertyChanged.connect(self._set_property)
         self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)
+        self.properties.cameraChanged.connect(self._set_authored_gameplay_camera_properties)
         self.properties.roomLightChanged.connect(self._set_authored_room_light_properties)
         self.export_panel.exportRequested.connect(self.export_fbx)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
@@ -1484,6 +1485,31 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Edit Authored Transition", str(exc))
             return
         self._refresh_all("Updated authored transition destination.")
+
+    def _set_authored_gameplay_camera_properties(
+        self,
+        item_id: str,
+        camera_id: int,
+        field_of_view: float,
+        height: float,
+        mic_range: float,
+        pitch: float,
+    ) -> None:
+        if not item_id.startswith("authored:camera:"):
+            return
+        try:
+            self.controller.set_authored_gameplay_camera_properties(
+                item_id,
+                camera_id=camera_id,
+                field_of_view=field_of_view,
+                height=height,
+                mic_range=mic_range,
+                pitch=pitch,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Edit Authored Camera", str(exc))
+            return
+        self._refresh_all("Updated authored camera properties.")
 
     def _set_authored_room_light_properties(self, item_id: str, light_type: str, color: object, radius: float, intensity: float) -> None:
         if not item_id.startswith("authored_light:"):

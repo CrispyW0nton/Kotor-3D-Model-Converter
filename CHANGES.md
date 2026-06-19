@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Edits Selected Camera Properties
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored camera properties
+Intersects: authored gameplay placement services, selected-item properties panel, Level Editor wiring, and ModuleMeshes mirror.
+
+- Added a core authored-camera property update service for KOTOR GIT CameraList fields: CameraID, field of view, height, mic range, and pitch.
+- Exposed selected camera controls in the Map Studio properties panel so camera markers can be tuned after selection instead of remaining generic placement rows.
+- Wired the Level Editor properties signal through the controller service and mirrored the core/panel/controller changes into the ModuleMeshes package.
+- Verification: `python -m pytest tests/test_authored_module_export.py::test_t2600_camera_properties_update_survives_kmap_payload_roundtrip -q --basetemp .pytest_tmp_map_studio_camera_core`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_properties_exposes_selected_camera_controls -q --basetemp .pytest_tmp_map_studio_camera_ui`; `python -m py_compile` on touched core, panel, window, and test files.
+
 ### [2026-06-19] Map Studio Edits Selected Room Light Properties
 
 Owner: LordVaderCW

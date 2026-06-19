@@ -201,6 +201,70 @@ def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     assert ("stm_shop", "utm", "store") in template_keys
 
 
+def test_t2600_camera_properties_update_survives_kmap_payload_roundtrip() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_module_placements import (
+        add_authored_gameplay_placement,
+        authored_gameplay_placement_rows,
+        update_authored_gameplay_camera_properties,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grcam01",
+        game="K1",
+    )
+    update = add_authored_gameplay_placement(
+        project,
+        kind="camera",
+        tag="2",
+        position=(1.0, 2.0, 3.0),
+    )
+
+    update = update_authored_gameplay_camera_properties(
+        update.project,
+        update.placement_id,
+        camera_id=42,
+        field_of_view=62.5,
+        height=1.25,
+        mic_range=18.0,
+        pitch=-12.0,
+    )
+
+    row = next(row for row in authored_gameplay_placement_rows(update.project) if row.kind == "camera")
+    assert row.kind == "camera"
+    assert row.camera_id == 42
+    assert row.field_of_view == 62.5
+    assert row.height == 1.25
+    assert row.mic_range == 18.0
+    assert row.pitch == -12.0
+
+    payload = authored_project_to_kmap_payload(update.project)
+    camera_payload = payload["placements"]["cameras"][0]
+    assert camera_payload == {
+        "camera_id": 42,
+        "position": [1.0, 2.0, 3.0],
+        "orientation": [0.0, 0.0, 0.0, 1.0],
+        "field_of_view": 62.5,
+        "height": 1.25,
+        "mic_range": 18.0,
+        "pitch": -12.0,
+    }
+
+    round_tripped = authored_project_from_kmap_payload(payload, fallback_name="grcam01", fallback_game="K1")
+    camera = round_tripped.placements.cameras[0]
+    assert camera.camera_id == 42
+    assert camera.field_of_view == 62.5
+    assert camera.height == 1.25
+    assert camera.mic_range == 18.0
+    assert camera.pitch == -12.0
+
 def test_t2686_export_forwards_game_root_to_authored_material_preflight(tmp_path: Path, monkeypatch) -> None:
     _install_native_payload_paths()
 

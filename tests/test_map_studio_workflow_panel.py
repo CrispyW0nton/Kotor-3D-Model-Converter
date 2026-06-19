@@ -524,6 +524,49 @@ def test_t2600_map_studio_properties_exposes_selected_room_light_controls() -> N
     assert "Updated authored room light properties." in window_source
 
 
+def test_t2600_map_studio_properties_exposes_selected_camera_controls() -> None:
+    properties_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_properties.py"
+    )
+    properties_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_properties.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    placement_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "authored_module_placements.py"
+    )
+
+    for source in (properties_source, properties_mirror_source):
+        assert "cameraChanged = QtCore.Signal(str, int, float, float, float, float)" in source
+        assert "mapStudioCameraPropertiesGroup" in source
+        assert "mapStudioCameraIdSpinBox" in source
+        assert "mapStudioCameraFieldOfViewSpinBox" in source
+        assert "mapStudioCameraHeightSpinBox" in source
+        assert "mapStudioCameraMicRangeSpinBox" in source
+        assert "mapStudioCameraPitchSpinBox" in source
+        assert "self.camera_group.setVisible(True)" in source
+        assert "Camera exports to the module GIT CameraList" in source
+        assert "def _camera_changed" in source
+
+    assert "self.properties.cameraChanged.connect(self._set_authored_gameplay_camera_properties)" in window_source
+    assert "def _set_authored_gameplay_camera_properties" in window_source
+    assert "self.controller.set_authored_gameplay_camera_properties" in window_source
+    assert "Updated authored camera properties." in window_source
+    assert "def set_authored_gameplay_camera_properties" in controller_source
+    assert "update_authored_gameplay_camera_properties" in controller_source
+    assert "last_gameplay_camera_properties" in placement_source
+
+
 def test_t2600_map_studio_viewport_skips_non_spatial_store_rows() -> None:
     viewport_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

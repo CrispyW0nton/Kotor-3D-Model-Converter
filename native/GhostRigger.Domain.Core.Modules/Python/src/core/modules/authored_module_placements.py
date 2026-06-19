@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import math
 from typing import Any
 
 from .authored_module_objects import (
@@ -53,6 +54,11 @@ class AuthoredGameplayPlacementRow:
     linked_to: str = ""
     linked_to_module: str = ""
     transition_destination: int = 0
+    camera_id: int | str = ""
+    field_of_view: float = 45.0
+    height: float = 0.0
+    mic_range: float = 0.0
+    pitch: float = 0.0
 
 
 SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS: tuple[str, ...] = (
@@ -250,6 +256,7 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
             else:
                 position = (0.0, 0.0, 0.0)
             transition_capable, linked_to, linked_to_module, transition_destination = _transition_fields_for_item(kind, item)
+            camera_id = getattr(item, "camera_id", "") if kind == "camera" else ""
             rows.append(
                 AuthoredGameplayPlacementRow(
                     placement_id=authored_gameplay_placement_id(kind, index),
@@ -264,6 +271,11 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     linked_to=linked_to,
                     linked_to_module=linked_to_module,
                     transition_destination=transition_destination,
+                    camera_id=camera_id,
+                    field_of_view=float(getattr(item, "field_of_view", 45.0) or 0.0) if kind == "camera" else 45.0,
+                    height=float(getattr(item, "height", 0.0) or 0.0) if kind == "camera" else 0.0,
+                    mic_range=float(getattr(item, "mic_range", 0.0) or 0.0) if kind == "camera" else 0.0,
+                    pitch=float(getattr(item, "pitch", 0.0) or 0.0) if kind == "camera" else 0.0,
                 )
             )
     return tuple(rows)
@@ -570,6 +582,94 @@ def update_authored_gameplay_transition(
     )
 
 
+def update_authored_gameplay_camera_properties(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+    *,
+    camera_id: Any | None = None,
+    field_of_view: Any | None = None,
+    height: Any | None = None,
+    mic_range: Any | None = None,
+    pitch: Any | None = None,
+) -> AuthoredGameplayPlacementUpdate:
+    """Set KOTOR GIT CameraList fields for a selected authored camera."""
+
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
+    if kind != "camera":
+        raise ValueError(f"Authored {kind} placements do not support camera properties.")
+
+    def _camera_id(value: Any) -> int:
+        try:
+            numeric = int(str(value).strip(), 10)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Camera ID must be a non-negative integer.") from exc
+        if numeric < 0:
+            raise ValueError("Camera ID must be a non-negative integer.")
+        return numeric
+
+    def _finite(value: Any, label: str, *, minimum: float | None = None) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{label} must be a finite number.") from exc
+        if not math.isfinite(numeric):
+            raise ValueError(f"{label} must be a finite number.")
+        if minimum is not None and numeric < minimum:
+            raise ValueError(f"{label} must be at least {minimum:g}.")
+        return numeric
+
+    updated_item = current
+    if camera_id is not None:
+        updated_item = replace(updated_item, camera_id=_camera_id(camera_id))
+    if field_of_view is not None:
+        updated_item = replace(updated_item, field_of_view=_finite(field_of_view, "Camera field of view", minimum=0.0))
+    if height is not None:
+        updated_item = replace(updated_item, height=_finite(height, "Camera height"))
+    if mic_range is not None:
+        updated_item = replace(updated_item, mic_range=_finite(mic_range, "Camera mic range", minimum=0.0))
+    if pitch is not None:
+        updated_item = replace(updated_item, pitch=_finite(pitch, "Camera pitch"))
+    items[index] = updated_item
+    metadata = {
+        "placement_id": str(placement_id),
+        "kind": kind,
+        "index": index,
+        "camera_id": str(updated_item.camera_id),
+        "field_of_view": float(updated_item.field_of_view),
+        "height": float(updated_item.height),
+        "mic_range": float(updated_item.mic_range),
+        "pitch": float(updated_item.pitch),
+    }
+    updated_placements = replace(
+        project.placements,
+        **{
+            field_name: tuple(items),
+            "metadata": {
+                **dict(project.placements.metadata),
+                "last_gameplay_camera_properties": metadata,
+            },
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Updated Map Studio camera placement: {placement_id}.",),
+        extra={
+            **dict(project.extra),
+            "last_gameplay_camera_properties": metadata,
+        },
+    )
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=_placement_template(updated_item),
+        tag=_placement_tag(updated_item, kind, index),
+        position=_vec3(getattr(updated_item, "position", (0.0, 0.0, 0.0))),
+        count=len(items),
+        placement_id=authored_gameplay_placement_id(kind, index),
+    )
+
+
 def duplicate_authored_gameplay_placement(
     project: AuthoredModuleProject,
     placement_id: Any,
@@ -677,6 +777,7 @@ __all__ = [
     "parse_authored_gameplay_placement_id",
     "remove_authored_gameplay_placement",
     "rename_authored_gameplay_placement",
+    "update_authored_gameplay_camera_properties",
     "update_authored_gameplay_placement_transform",
     "update_authored_gameplay_transition",
 ]

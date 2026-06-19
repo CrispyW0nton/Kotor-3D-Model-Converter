@@ -13,6 +13,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
     lockChanged = QtCore.Signal(str, bool)
     propertyChanged = QtCore.Signal(str, str, object)
     transitionChanged = QtCore.Signal(str, str, str, int)
+    cameraChanged = QtCore.Signal(str, int, float, float, float, float)
     roomLightChanged = QtCore.Signal(str, str, object, float, float)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
@@ -57,6 +58,28 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         transition_layout.addRow("Module", self.transition_module_edit)
         transition_layout.addRow("Destination", self.transition_destination_spin)
         root.addWidget(self.transition_group)
+        self.camera_group = QtWidgets.QGroupBox("Camera")
+        self.camera_group.setObjectName("mapStudioCameraPropertiesGroup")
+        camera_layout = QtWidgets.QFormLayout(self.camera_group)
+        self.camera_hint_label = QtWidgets.QLabel(
+            "Camera exports to the module GIT CameraList. Position is edited above; these fields control CameraID, FOV, listener range, and pitch."
+        )
+        self.camera_hint_label.setObjectName("mapStudioCameraPropertiesHintLabel")
+        self.camera_hint_label.setWordWrap(True)
+        self.camera_id_spin = QtWidgets.QSpinBox()
+        self.camera_id_spin.setObjectName("mapStudioCameraIdSpinBox")
+        self.camera_id_spin.setRange(0, 2147483647)
+        self.camera_fov_spin = self._light_spin("mapStudioCameraFieldOfViewSpinBox", 0.0, 179.0, 45.0)
+        self.camera_height_spin = self._light_spin("mapStudioCameraHeightSpinBox", -1000000.0, 1000000.0, 0.0)
+        self.camera_mic_range_spin = self._light_spin("mapStudioCameraMicRangeSpinBox", 0.0, 1000000.0, 0.0)
+        self.camera_pitch_spin = self._light_spin("mapStudioCameraPitchSpinBox", -360.0, 360.0, 0.0)
+        camera_layout.addRow(self.camera_hint_label)
+        camera_layout.addRow("Camera ID", self.camera_id_spin)
+        camera_layout.addRow("Field of View", self.camera_fov_spin)
+        camera_layout.addRow("Height", self.camera_height_spin)
+        camera_layout.addRow("Mic Range", self.camera_mic_range_spin)
+        camera_layout.addRow("Pitch", self.camera_pitch_spin)
+        root.addWidget(self.camera_group)
         self.room_light_group = QtWidgets.QGroupBox("Room Light")
         self.room_light_group.setObjectName("mapStudioRoomLightPropertiesGroup")
         light_layout = QtWidgets.QFormLayout(self.room_light_group)
@@ -88,6 +111,9 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self.transition_linked_to_edit.editingFinished.connect(self._transition_changed)
         self.transition_module_edit.editingFinished.connect(self._transition_changed)
         self.transition_destination_spin.valueChanged.connect(lambda _value: self._transition_changed())
+        self.camera_id_spin.valueChanged.connect(lambda _value: self._camera_changed())
+        for spin in (self.camera_fov_spin, self.camera_height_spin, self.camera_mic_range_spin, self.camera_pitch_spin):
+            spin.valueChanged.connect(lambda _value: self._camera_changed())
         self.room_light_type_combo.currentIndexChanged.connect(lambda _index: self._room_light_changed())
         for spin in (
             self.room_light_color_r_spin,
@@ -98,6 +124,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         ):
             spin.valueChanged.connect(lambda _value: self._room_light_changed())
         self.transition_group.setVisible(False)
+        self.camera_group.setVisible(False)
         self.room_light_group.setVisible(False)
 
     def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_room_lights=()) -> None:
@@ -123,20 +150,23 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         if item is None and authored is None and authored_light is None:
             self.title.setText("No Selection")
             self.transition_group.setVisible(False)
+            self.camera_group.setVisible(False)
             self.room_light_group.setVisible(False)
             return
         self.blockSignals(True)
         for widget in (self.name_edit, self.visible_box, self.locked_box, *self.position, *self.rotation, *self.scale):
             widget.setEnabled(True)
         self.transition_group.setVisible(False)
+        self.camera_group.setVisible(False)
         self.room_light_group.setVisible(False)
         if authored is not None:
-            kind = str(getattr(authored, "kind", "object") or "object").title()
+            kind_key = str(getattr(authored, "kind", "object") or "object").lower()
+            kind = kind_key.title()
             tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
             is_spatial = bool(getattr(authored, "is_spatial", True))
             self.title.setText(f"Authored {kind} Placement")
             self.name_edit.setText(tag)
-            self.name_edit.setEnabled(True)
+            self.name_edit.setEnabled(kind_key != "camera")
             scope = "spatial placement" if is_spatial else "module-level resource"
             self.source_label.setText(
                 f"{str(getattr(authored, 'template_resref', '') or '(no template)')} "
@@ -151,6 +181,9 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self._set_vector(self.scale, (1.0, 1.0, 1.0))
             for spin in (*self.position, *self.rotation):
                 spin.setEnabled(is_spatial)
+            if kind_key == "camera":
+                for spin in self.rotation:
+                    spin.setEnabled(False)
             for spin in self.scale:
                 spin.setEnabled(False)
             transition_capable = bool(getattr(authored, "transition_capable", False))
@@ -158,6 +191,9 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self.transition_linked_to_edit.setText(str(getattr(authored, "linked_to", "") or ""))
             self.transition_module_edit.setText(str(getattr(authored, "linked_to_module", "") or ""))
             self.transition_destination_spin.setValue(int(getattr(authored, "transition_destination", 0) or 0))
+            if kind_key == "camera":
+                self._set_camera_values(authored)
+                self.camera_group.setVisible(True)
             self.blockSignals(False)
             return
         if authored_light is not None:
@@ -195,6 +231,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self._set_vector(self.rotation, transform.rotation)
         self._set_vector(self.scale, transform.scale)
         self.transition_group.setVisible(False)
+        self.camera_group.setVisible(False)
         self.room_light_group.setVisible(False)
         self.blockSignals(False)
 
@@ -246,6 +283,29 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self.transition_linked_to_edit.text().strip(),
             self.transition_module_edit.text().strip(),
             int(self.transition_destination_spin.value()),
+        )
+
+    def _set_camera_values(self, authored: object) -> None:
+        try:
+            camera_id = int(str(getattr(authored, "camera_id", getattr(authored, "tag", 0)) or 0), 10)
+        except (TypeError, ValueError):
+            camera_id = 0
+        self.camera_id_spin.setValue(max(0, camera_id))
+        self.camera_fov_spin.setValue(float(getattr(authored, "field_of_view", 45.0) or 0.0))
+        self.camera_height_spin.setValue(float(getattr(authored, "height", 0.0) or 0.0))
+        self.camera_mic_range_spin.setValue(float(getattr(authored, "mic_range", 0.0) or 0.0))
+        self.camera_pitch_spin.setValue(float(getattr(authored, "pitch", 0.0) or 0.0))
+
+    def _camera_changed(self) -> None:
+        if self.signalsBlocked() or not self._item_id or not self.camera_group.isVisible():
+            return
+        self.cameraChanged.emit(
+            self._item_id,
+            int(self.camera_id_spin.value()),
+            float(self.camera_fov_spin.value()),
+            float(self.camera_height_spin.value()),
+            float(self.camera_mic_range_spin.value()),
+            float(self.camera_pitch_spin.value()),
         )
 
     def _set_room_light_values(self, authored_light: object) -> None:
