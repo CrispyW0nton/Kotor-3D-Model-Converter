@@ -17,6 +17,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
     newProjectRequested = QtCore.Signal()
     openProjectRequested = QtCore.Signal()
     saveProjectRequested = QtCore.Signal()
+    renameSelectedRequested = QtCore.Signal()
+    duplicateSelectedRequested = QtCore.Signal()
+    deleteSelectedRequested = QtCore.Signal()
+    focusSelectedRequested = QtCore.Signal()
     builderRequested = QtCore.Signal()
     starterRoomRequested = QtCore.Signal()
     doorwayBlockoutRequested = QtCore.Signal()
@@ -65,6 +69,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.active_context_label.setObjectName("mapStudioWorkflowActiveContextLabel")
         self.active_context_label.setWordWrap(True)
         root.addWidget(self.active_context_label)
+
+        self.selection_label = QtWidgets.QLabel("Selected: none")
+        self.selection_label.setObjectName("mapStudioWorkflowSelectionLabel")
+        self.selection_label.setWordWrap(True)
+        root.addWidget(self.selection_label)
 
         self.resources_label = QtWidgets.QLabel("Runtime resources: ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX")
         self.resources_label.setObjectName("mapStudioWorkflowResourcesLabel")
@@ -147,6 +156,28 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         project_actions.addWidget(self.open_kmap_button)
         project_actions.addWidget(self.save_kmap_button)
         root.addLayout(project_actions)
+
+        selection_actions = QtWidgets.QHBoxLayout()
+        selection_actions.setContentsMargins(0, 0, 0, 0)
+        selection_actions.setSpacing(4)
+        self.rename_selected_button = QtWidgets.QPushButton("Rename Selected")
+        self.rename_selected_button.setObjectName("mapStudioWorkflowRenameSelectedButton")
+        self.duplicate_selected_button = QtWidgets.QPushButton("Duplicate Selected")
+        self.duplicate_selected_button.setObjectName("mapStudioWorkflowDuplicateSelectedButton")
+        self.delete_selected_button = QtWidgets.QPushButton("Delete Selected")
+        self.delete_selected_button.setObjectName("mapStudioWorkflowDeleteSelectedButton")
+        self.focus_selected_button = QtWidgets.QPushButton("Focus Selected")
+        self.focus_selected_button.setObjectName("mapStudioWorkflowFocusSelectedButton")
+        self.rename_selected_button.clicked.connect(self.renameSelectedRequested.emit)
+        self.duplicate_selected_button.clicked.connect(self.duplicateSelectedRequested.emit)
+        self.delete_selected_button.clicked.connect(self.deleteSelectedRequested.emit)
+        self.focus_selected_button.clicked.connect(self.focusSelectedRequested.emit)
+        selection_actions.addWidget(self.rename_selected_button)
+        selection_actions.addWidget(self.duplicate_selected_button)
+        selection_actions.addWidget(self.delete_selected_button)
+        selection_actions.addWidget(self.focus_selected_button)
+        root.addLayout(selection_actions)
+        self.set_selection_context("")
 
         actions = QtWidgets.QGridLayout()
         actions.setContentsMargins(0, 4, 0, 0)
@@ -403,6 +434,20 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
 
         value = str(text or "").strip()
         self.active_context_label.setText(f"Active tool: {value}" if value else "Active tool: none selected")
+
+    def set_selection_context(self, text: str) -> None:
+        """Show and enable actions for the current Map Studio selection."""
+
+        value = str(text or "").strip()
+        has_selection = bool(value)
+        self.selection_label.setText(f"Selected: {value}" if has_selection else "Selected: none")
+        for button in (
+            self.rename_selected_button,
+            self.duplicate_selected_button,
+            self.delete_selected_button,
+            self.focus_selected_button,
+        ):
+            button.setEnabled(has_selection)
 
     @staticmethod
     def _capability_text(

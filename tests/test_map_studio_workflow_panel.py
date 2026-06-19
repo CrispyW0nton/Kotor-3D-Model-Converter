@@ -21,6 +21,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowCapabilityLabel" in panel_source
     assert "mapStudioWorkflowAuthoringLabel" in panel_source
     assert "mapStudioWorkflowActiveContextLabel" in panel_source
+    assert "mapStudioWorkflowSelectionLabel" in panel_source
     assert "mapStudioWorkflowResourcesLabel" in panel_source
     assert "mapStudioWorkflowMissingResourcesLabel" in panel_source
     assert "mapStudioWorkflowGeometryLabel" in panel_source
@@ -36,6 +37,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowNewKmapButton" in panel_source
     assert "mapStudioWorkflowOpenKmapButton" in panel_source
     assert "mapStudioWorkflowSaveKmapButton" in panel_source
+    assert "mapStudioWorkflowRenameSelectedButton" in panel_source
+    assert "mapStudioWorkflowDuplicateSelectedButton" in panel_source
+    assert "mapStudioWorkflowDeleteSelectedButton" in panel_source
+    assert "mapStudioWorkflowFocusSelectedButton" in panel_source
     assert "mapStudioWorkflowOpenBuilderButton" in panel_source
     assert "mapStudioWorkflowStarterRoomButton" in panel_source
     assert "mapStudioWorkflowDoorwayBlockoutButton" in panel_source
@@ -55,6 +60,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "newProjectRequested = QtCore.Signal()" in panel_source
     assert "openProjectRequested = QtCore.Signal()" in panel_source
     assert "saveProjectRequested = QtCore.Signal()" in panel_source
+    assert "renameSelectedRequested = QtCore.Signal()" in panel_source
+    assert "duplicateSelectedRequested = QtCore.Signal()" in panel_source
+    assert "deleteSelectedRequested = QtCore.Signal()" in panel_source
+    assert "focusSelectedRequested = QtCore.Signal()" in panel_source
     assert "builderRequested = QtCore.Signal()" in panel_source
     assert "starterRoomRequested = QtCore.Signal()" in panel_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in panel_source
@@ -74,6 +83,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "New KMAP" in panel_source
     assert "Open KMAP" in panel_source
     assert "Save KMAP" in panel_source
+    assert "Rename Selected" in panel_source
+    assert "Duplicate Selected" in panel_source
+    assert "Delete Selected" in panel_source
+    assert "Focus Selected" in panel_source
     assert "Create Starter Room" in panel_source
     assert "Create Doorway Blockout" in panel_source
     assert "Create Corridor" in panel_source
@@ -113,6 +126,8 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Use Builder to create terrain, rooms, or a dev-test map" in panel_source
     assert "def set_active_authoring_context" in panel_source
     assert "Active tool:" in panel_source
+    assert "def set_selection_context" in panel_source
+    assert "Selected: none" in panel_source
     assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX" in panel_source
 
 
@@ -134,6 +149,10 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.newProjectRequested.connect(self.new_kmap)" in window_source
     assert "self.workflow_panel.openProjectRequested.connect(self.open_kmap)" in window_source
     assert "self.workflow_panel.saveProjectRequested.connect(self.save_kmap)" in window_source
+    assert "self.workflow_panel.renameSelectedRequested.connect(self.rename_selected)" in window_source
+    assert "self.workflow_panel.duplicateSelectedRequested.connect(self.duplicate_selected)" in window_source
+    assert "self.workflow_panel.deleteSelectedRequested.connect(self.delete_selected)" in window_source
+    assert "self.workflow_panel.focusSelectedRequested.connect(self.viewport_panel.focus_selected)" in window_source
     assert "self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)" in window_source
     assert "self.validation_panel.set_issues(self.controller.validate())" in window_source
     assert "self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)" in window_source
@@ -152,6 +171,9 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.installRequested.connect(lambda: self.install_authored_module" in window_source
     assert "self.workflow_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)" in window_source
     assert "self.workflow_panel.proofRequested.connect(self.record_game_smoke_proof)" in window_source
+    assert "self.workflow_panel.set_selection_context(self._selected_item_label(item_id))" in window_source
+    assert "def _selected_item_label" in window_source
+    assert 'self.workflow_panel.set_selection_context("")' in window_source
     assert "def show_map_studio_builder" in window_source
     assert "Builder: room, terrain, placement, lighting, and script authoring" in window_source
     assert "def create_map_studio_starter_room" in window_source
@@ -293,9 +315,14 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowResourcesLabel" in mirror_source
     assert "mapStudioWorkflowCapabilityLabel" in mirror_source
     assert "mapStudioWorkflowActiveContextLabel" in mirror_source
+    assert "mapStudioWorkflowSelectionLabel" in mirror_source
     assert "mapStudioWorkflowNewKmapButton" in mirror_source
     assert "mapStudioWorkflowOpenKmapButton" in mirror_source
     assert "mapStudioWorkflowSaveKmapButton" in mirror_source
+    assert "mapStudioWorkflowRenameSelectedButton" in mirror_source
+    assert "mapStudioWorkflowDuplicateSelectedButton" in mirror_source
+    assert "mapStudioWorkflowDeleteSelectedButton" in mirror_source
+    assert "mapStudioWorkflowFocusSelectedButton" in mirror_source
     assert "mapStudioWorkflowMissingResourcesLabel" in mirror_source
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
@@ -321,6 +348,10 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "newProjectRequested = QtCore.Signal()" in mirror_source
     assert "openProjectRequested = QtCore.Signal()" in mirror_source
     assert "saveProjectRequested = QtCore.Signal()" in mirror_source
+    assert "renameSelectedRequested = QtCore.Signal()" in mirror_source
+    assert "duplicateSelectedRequested = QtCore.Signal()" in mirror_source
+    assert "deleteSelectedRequested = QtCore.Signal()" in mirror_source
+    assert "focusSelectedRequested = QtCore.Signal()" in mirror_source
     assert "builderRequested = QtCore.Signal()" in mirror_source
     assert "starterRoomRequested = QtCore.Signal()" in mirror_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in mirror_source
@@ -342,6 +373,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Gameplay layout" in mirror_source
     assert "Transitions:" in mirror_source
     assert "Scripts:" in mirror_source
+    assert "def set_selection_context" in mirror_source
     assert "MapStudioWorkflowPanel" in mirror_init
 
 

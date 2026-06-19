@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Surfaces Selected-Object Actions
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / selected resource editing
+Intersects: Level Editor workflow panel, selection routing, and ModuleMeshes mirror.
+
+- Added a selected-object status line to the Map Studio workflow spine so modders can see what object, room, module, placement, or room light is currently active.
+- Added visible Rename/Duplicate/Delete/Focus Selected workflow buttons and wired them to the existing Level Editor selection methods instead of moving edit policy into the panel.
+- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for selection actions and selection-context refresh.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_selection_workflow`; `python -m py_compile` on active and mirrored workflow panels, the Level Editor window, and focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Adds KMAP Workflow Project Controls
 
 Owner: LordVaderCW

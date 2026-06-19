@@ -369,6 +369,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.newProjectRequested.connect(self.new_kmap)
         self.workflow_panel.openProjectRequested.connect(self.open_kmap)
         self.workflow_panel.saveProjectRequested.connect(self.save_kmap)
+        self.workflow_panel.renameSelectedRequested.connect(self.rename_selected)
+        self.workflow_panel.duplicateSelectedRequested.connect(self.duplicate_selected)
+        self.workflow_panel.deleteSelectedRequested.connect(self.delete_selected)
+        self.workflow_panel.focusSelectedRequested.connect(self.viewport_panel.focus_selected)
         self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)
         self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)
         self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)
@@ -1173,7 +1177,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.outliner.select_id(item_id)
         self.viewport_panel.select_id(item_id)
         self.properties.set_selection(item_id)
+        self.workflow_panel.set_selection_context(self._selected_item_label(item_id))
         self.statusBar().showMessage(f"Selected {item_id}")
+
+    def _selected_item_label(self, item_id: str) -> str:
+        if not item_id:
+            return ""
+        authored = next((row for row in self.controller.authored_gameplay_placements() if getattr(row, "placement_id", "") == item_id), None)
+        if authored is not None:
+            kind = str(getattr(authored, "kind", "resource") or "resource")
+            tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
+            return f"{kind}: {tag}"
+        authored_light = next((row for row in self.controller.authored_room_lights() if getattr(row, "light_id", "") == item_id), None)
+        if authored_light is not None:
+            name = str(getattr(authored_light, "name", "") or item_id)
+            room = str(getattr(authored_light, "room_resref", "") or "")
+            return f"room light: {name}" + (f" ({room})" if room else "")
+        item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
+        if item is None:
+            return item_id
+        if hasattr(item, "module_name"):
+            return f"module: {getattr(item, 'module_name', item_id)}"
+        if hasattr(item, "room_id"):
+            return f"room: {getattr(item, 'name', item_id)}"
+        return f"blueprint: {getattr(item, 'name', item_id)}"
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         if self._confirm_discard_or_save():
@@ -1424,6 +1451,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.validation_panel.set_issues(self.controller.validate())
         if self.controller.model.selected_ids:
             self.select_item(self.controller.model.selected_ids[0])
+        else:
+            self.workflow_panel.set_selection_context("")
         if message:
             self._log(message)
 
