@@ -116,6 +116,9 @@ _SPECIES_SINGULAR = {
 
 
 def _display_name_from_library_row(row: dict, category: str, resref: str, metadata: dict[str, str]) -> str:
+    game_name = _game_metadata_display_name(row, resref)
+    if game_name:
+        return game_name
     encoded = _encoded_display_name(category, resref, metadata)
     if encoded:
         return encoded
@@ -135,6 +138,30 @@ def _display_name_from_library_row(row: dict, category: str, resref: str, metada
         if text and text.lower() != resref.lower():
             return _humanize_asset_name(text)
     return _humanize_asset_name(resref)
+
+
+def _game_metadata_display_name(row: dict, resref: str) -> str:
+    source = str(row.get("metadata_source") or "")
+    if not any(token in source for token in ("2da", "UTI", "UTP", "UTD")):
+        return ""
+    for key in ("item_display_name", "localized_name", "name_label", "template_name"):
+        text = str(row.get(key) or "").strip()
+        if not text or text.lower() == resref.lower():
+            continue
+        label = _humanize_asset_name(text)
+        outfit_variant = _outfit_display_variant(row)
+        if outfit_variant:
+            return _with_variant(label, outfit_variant)
+        return label
+    return ""
+
+
+def _outfit_display_variant(row: dict) -> str:
+    pieces = [
+        str(row.get("outfit_gender") or "").strip(),
+        str(row.get("outfit_size") or "").strip(),
+    ]
+    return " ".join(piece for piece in pieces if piece)
 
 
 def _encoded_display_name(category: str, resref: str, metadata: dict[str, str]) -> str:
@@ -437,8 +464,20 @@ def descriptor_from_library_row(row: dict) -> ContentAssetDescriptor:
         "key": item.get("door_key_name") or "",
         "linked to": item.get("door_linked_to") or "",
         "base item": item.get("item_baseitem") or "",
+        "bodyvar": item.get("item_bodyvar") or item.get("appearance_bodyvar") or "",
+        "item": item.get("item_display_name") or "",
         "model variation": item.get("item_model_variation") or "",
         "appearance": item.get("placeable_appearance") or "",
+        "appearance label": item.get("appearance_label") or "",
+        "appearance row": item.get("appearance_row") or "",
+        "appearance model": item.get("appearance_model_column") or "",
+        "outfit": " ".join(
+            part for part in (
+                str(item.get("outfit_gender") or "").strip(),
+                str(item.get("outfit_size") or "").strip(),
+            )
+            if part
+        ),
         "metadata source": item.get("metadata_source") or "",
         **taxonomy_metadata,
     }

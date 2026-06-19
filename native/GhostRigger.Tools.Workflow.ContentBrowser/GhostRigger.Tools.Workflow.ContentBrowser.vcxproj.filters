@@ -28,9 +28,6 @@
     <Filter Include="Python\src\gui">
       <UniqueIdentifier>{88b85d3e-d544-09bb-686d-7868a1c0a41d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Python\src\gui\panels">
-      <UniqueIdentifier>{3dbc31c5-b8d2-23b8-d488-e9122813cb02}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Python\src\gui\windows">
       <UniqueIdentifier>{68bc13c1-d5a4-5f60-6510-f280ed93bc92}</UniqueIdentifier>
     </Filter>
@@ -87,12 +84,6 @@
   <ItemGroup>
     <None Include="GhostRiggerPythonPayload.json" />
     <None Include="GeneratePythonPayload.py" />
-    <None Include="Python\src\gui\panels\qt_content_browser_panel.py">
-      <Filter>Python\src\gui\panels</Filter>
-    </None>
-    <None Include="Python\src\gui\panels\qt_library_panel.py">
-      <Filter>Python\src\gui\panels</Filter>
-    </None>
     <None Include="Python\src\gui\windows\application_core\shared\resource_loading.py">
       <Filter>Python\src\gui\windows\application_core\shared</Filter>
     </None>

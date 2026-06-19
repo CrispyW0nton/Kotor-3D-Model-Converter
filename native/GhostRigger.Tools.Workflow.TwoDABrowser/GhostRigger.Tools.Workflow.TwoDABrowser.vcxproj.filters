@@ -28,9 +28,6 @@
     <Filter Include="Python\src\core\resources">
       <UniqueIdentifier>{554c4495-b423-bfe5-a96d-db8155d0ef2b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Python\src\core\templates">
-      <UniqueIdentifier>{a31d1f27-03d2-df5e-310f-79a2c67e206b}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Python\src\gui">
       <UniqueIdentifier>{5c794289-1246-1fc9-475a-4f33d474005e}</UniqueIdentifier>
     </Filter>
@@ -104,12 +101,6 @@
     </None>
     <None Include="Python\src\gui\windows\application_core\shared\resource_panels.py">
       <Filter>Python\src\gui\windows\application_core\shared</Filter>
-    </None>
-    <None Include="Python\src\core\templates\twoda.py">
-      <Filter>Python\src\core\templates</Filter>
-    </None>
-    <None Include="Python\src\core\templates\__init__.py">
-      <Filter>Python\src\core\templates</Filter>
     </None>
     <None Include="Python\src\resources\__init__.py">
       <Filter>Python\src\resources</Filter>

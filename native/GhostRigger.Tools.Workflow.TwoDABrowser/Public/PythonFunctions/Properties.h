@@ -25,7 +25,6 @@ const NativeFunctionImplementation& gameresourcerecord_restype_line_120_1d46f82f
 const NativeFunctionImplementation& gameresourcerecord_layer_line_124_3bab406c_native();
 const NativeFunctionImplementation& gameresourcerecord_key_line_128_f409ca4e_native();
 const NativeFunctionImplementation& gameresourceresult_address_line_147_0e30bfb9_native();
-const NativeFunctionImplementation& twodarow_index_line_40_53831d48_native();
 const NativeFunctionImplementation& resourceentry_is_model_line_148_43c8a66b_native();
 const NativeFunctionImplementation& resourceentry_is_texture_line_158_fe34306f_native();
 const NativeFunctionImplementation& resourceentry_ext_line_176_0604481f_native();

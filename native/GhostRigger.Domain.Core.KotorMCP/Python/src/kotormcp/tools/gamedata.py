@@ -156,7 +156,7 @@ async def handle_lookup_2da(arguments: Dict[str, Any]) -> Dict[str, Any]:
         data = _load_2da_bytes(installation, inp.table_name)
         if data is None:
             return json_content({"error": f"2DA table '{inp.table_name}' not found."})
-        table = read_2da(BytesIO(data))
+        table = read_2da(data)
         row_index = getattr(inp, "row_index", None)
         column = getattr(inp, "column", None)
         value_search = getattr(inp, "value_search", None)

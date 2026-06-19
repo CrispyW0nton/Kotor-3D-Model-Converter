@@ -1361,12 +1361,10 @@
     },
     {
         "project": "GhostRigger.Tools.Workflow.ContentBrowser",
-        "python_file_count": 9,
+        "python_file_count": 7,
         "files": [
             "src\\core\\resources\\__init__.py",
             "src\\core\\resources\\game_resource_provider.py",
-            "src\\gui\\panels\\qt_content_browser_panel.py",
-            "src\\gui\\panels\\qt_library_panel.py",
             "src\\gui\\windows\\application_core\\shared\\resource_loading.py",
             "src\\gui\\windows\\application_core\\shared\\resource_panels.py",
             "src\\resources\\__init__.py",
@@ -1745,13 +1743,11 @@
     },
     {
         "project": "GhostRigger.Tools.Workflow.TwoDABrowser",
-        "python_file_count": 10,
+        "python_file_count": 8,
         "files": [
             "src\\core\\game\\game_library_ext.py",
             "src\\core\\resources\\__init__.py",
             "src\\core\\resources\\game_resource_provider.py",
-            "src\\core\\templates\\__init__.py",
-            "src\\core\\templates\\twoda.py",
             "src\\gui\\panels\\qt_resource_panel.py",
             "src\\gui\\windows\\application_core\\shared\\resource_panels.py",
             "src\\resources\\__init__.py",
@@ -1776,7 +1772,7 @@
     },
     {
         "project": "GhostRigger.Windows.Shell.Main",
-        "python_file_count": 35,
+        "python_file_count": 36,
         "files": [
             "src\\gui\\windows\\__init__.py",
             "src\\gui\\windows\\application_core\\__init__.py",
@@ -1784,6 +1780,7 @@
             "src\\gui\\windows\\application_core\\functions\\__init__.py",
             "src\\gui\\windows\\application_core\\functions\\app_runner.py",
             "src\\gui\\windows\\application_core\\functions\\geometry.py",
+            "src\\gui\\windows\\application_core\\functions\\native_prelaunch.py",
             "src\\gui\\windows\\application_core\\functions\\qt_helpers.py",
             "src\\gui\\windows\\application_core\\functions\\splash_theme.py",
             "src\\gui\\windows\\application_core\\functions\\startup_library.py",

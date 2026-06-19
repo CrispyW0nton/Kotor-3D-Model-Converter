@@ -418,22 +418,6 @@ const NativeFunctionImplementation& known_resource_type_ids_line_715_dd065008_na
     return implementation;
 }
 
-const NativeFunctionImplementation& split_2da_line_line_345_e1fcb025_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.TwoDABrowser",
-        "ghostrigger::tools::workflow::twodabrowser::core::templates::twoda",
-        "src/core/templates/twoda.py",
-        "_split_2da_line",
-        "module_functions",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.TwoDABrowser","namespace":"ghostrigger::tools::workflow::twodabrowser::core::templates::twoda","python_file":"src/core/templates/twoda.py","qualname":"_split_2da_line","name":"_split_2da_line","callable_type":"module_functions","line":345,"end_line":369,"signature":{"args":["line"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
 const NativeFunctionImplementation& detect_kotor_dirs_line_59_58c316ed_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.TwoDABrowser",
@@ -733,9 +717,7 @@ const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t
         manager_install_line_688_f11c7825_native(),
         resource_manager_type_id_line_696_88dd7962_native(),
         resource_manager_restype_line_706_feb4e7a7_native(),
-        known_resource_type_ids_line_715_dd065008_native(),
-        split_2da_line_line_345_e1fcb025_native(),
-        detect_kotor_dirs_line_59_58c316ed_native(),
+        known_resource_type_ids_line_715_dd065008_native(),        detect_kotor_dirs_line_59_58c316ed_native(),
         save_config_line_140_715b3b16_native(),
         load_config_line_159_231807ce_native(),
         list_all_candidates_line_172_cfdbd573_native(),

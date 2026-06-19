@@ -82,22 +82,6 @@ const NativeFunctionImplementation& gameresourceresult_address_line_147_0e30bfb9
     return implementation;
 }
 
-const NativeFunctionImplementation& twodarow_index_line_40_53831d48_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.TwoDABrowser",
-        "ghostrigger::tools::workflow::twodabrowser::core::templates::twoda",
-        "src/core/templates/twoda.py",
-        "TwoDARow.index",
-        "properties",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.TwoDABrowser","namespace":"ghostrigger::tools::workflow::twodabrowser::core::templates::twoda","python_file":"src/core/templates/twoda.py","qualname":"TwoDARow.index","name":"index","callable_type":"properties","line":40,"end_line":41,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
 const NativeFunctionImplementation& resourceentry_is_model_line_148_43c8a66b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.TwoDABrowser",
@@ -200,9 +184,7 @@ const NativeFunctionImplementation* properties_native_functions(std::size_t& cou
         gameresourcerecord_restype_line_120_1d46f82f_native(),
         gameresourcerecord_layer_line_124_3bab406c_native(),
         gameresourcerecord_key_line_128_f409ca4e_native(),
-        gameresourceresult_address_line_147_0e30bfb9_native(),
-        twodarow_index_line_40_53831d48_native(),
-        resourceentry_is_model_line_148_43c8a66b_native(),
+        gameresourceresult_address_line_147_0e30bfb9_native(),        resourceentry_is_model_line_148_43c8a66b_native(),
         resourceentry_is_texture_line_158_fe34306f_native(),
         resourceentry_ext_line_176_0604481f_native(),
         resourceentry_filename_line_183_c3d15313_native(),

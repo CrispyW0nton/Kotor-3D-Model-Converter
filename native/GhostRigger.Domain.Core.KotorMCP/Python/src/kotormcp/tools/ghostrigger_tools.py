@@ -17,7 +17,7 @@ from kotormcp.adapters import get_default_registry
 from kotormcp.ports import ResourceEntry
 
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(os.environ.get("GHOSTRIGGER_ROOT") or Path(__file__).resolve().parents[6])
 SETTINGS_PATH = ROOT / "settings.json"
 _game_library: Any = None
 

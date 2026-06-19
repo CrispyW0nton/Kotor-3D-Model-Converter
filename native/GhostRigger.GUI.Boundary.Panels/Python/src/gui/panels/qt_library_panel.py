@@ -78,34 +78,8 @@ MODEL_SUBCATEGORY_ORDER = {
         "Unknown Modules",
     ),
     "Player Characters": (
-        "Male Bodies - Class A",
-        "Male Bodies - Class B",
-        "Male Bodies - Class C",
-        "Male Bodies - Class D",
-        "Male Bodies - Class E",
-        "Male Bodies - Class F",
-        "Male Bodies - Class G",
-        "Male Bodies - Class H",
-        "Male Bodies - Class I",
-        "Male Bodies - Class J",
-        "Male Bodies - Class K",
-        "Male Bodies - Class L",
-        "Male Bodies - Class M",
-        "Male Bodies - Class N",
-        "Female Bodies - Class A",
-        "Female Bodies - Class B",
-        "Female Bodies - Class C",
-        "Female Bodies - Class D",
-        "Female Bodies - Class E",
-        "Female Bodies - Class F",
-        "Female Bodies - Class G",
-        "Female Bodies - Class H",
-        "Female Bodies - Class I",
-        "Female Bodies - Class J",
-        "Female Bodies - Class K",
-        "Female Bodies - Class L",
-        "Female Bodies - Class M",
-        "Female Bodies - Class N",
+        "Male Base Bodies",
+        "Female Base Bodies",
         "Male Heads - Class A",
         "Male Heads - Class B",
         "Male Heads - Class C",
@@ -134,6 +108,8 @@ MODEL_SUBCATEGORY_ORDER = {
         "Female Heads - Class L",
         "Female Heads - Class M",
         "Female Heads - Class N",
+        "Male Unmapped Bodies",
+        "Female Unmapped Bodies",
         "Male Player Models",
         "Female Player Models",
         "Unknown Player Models",
@@ -548,6 +524,11 @@ _LEVEL_ASSET_NAMES = {
 _RES_UTI = 2025
 _RES_UTD = 2042
 _RES_UTP = 2044
+_RES_2DA = 2017
+
+_APPEARANCE_BODY_COLUMNS = tuple(f"model{letter}" for letter in "abcdefghijklmn")
+_APPEARANCE_HEAD_COLUMNS = ("normalhead", "backuphead")
+_PLAYER_OUTFIT_SIZES = {"l": "Large", "m": "Medium", "s": "Small"}
 
 _BASEITEM_CATEGORIES = {
     **{baseitem: "Weapons" for baseitem in range(0, 35)},
@@ -938,6 +919,228 @@ def _category_from_item_metadata(metadata: dict[str, Any]) -> str:
     return ""
 
 
+def _clean_2da_cell(value: Any) -> str:
+    text = str(value or "").strip()
+    if text == "****":
+        return ""
+    return text
+
+
+def _twoda_cell(row: Any, *names: str) -> str:
+    for name in names:
+        try:
+            value = row.get(name, "")
+        except Exception:
+            try:
+                value = row.get_string(name)
+            except Exception:
+                try:
+                    value = row[name]
+                except Exception:
+                    value = ""
+        text = _clean_2da_cell(value)
+        if text:
+            return text
+    return ""
+
+
+def _row_index(row: Any, fallback: int = -1) -> int:
+    try:
+        return int(getattr(row, "label"))
+    except (AttributeError, TypeError, ValueError):
+        try:
+            return int(_twoda_cell(row, "label"))
+        except (AttributeError, TypeError, ValueError):
+            try:
+                return int(getattr(row, "index"))
+            except (AttributeError, TypeError, ValueError):
+                return fallback
+
+
+def _iter_twoda_rows(table: Any) -> list[Any]:
+    if table is None:
+        return []
+    try:
+        return list(table)
+    except Exception:
+        return []
+
+
+def _get_twoda(resource_manager: Any, name: str, game: str) -> Any:
+    raw = None
+    if hasattr(resource_manager, "_get_2da_raw"):
+        try:
+            raw = resource_manager._get_2da_raw(name, game)
+        except Exception:
+            raw = None
+    if not hasattr(resource_manager, "get"):
+        if raw is None and hasattr(resource_manager, "get_2da"):
+            try:
+                return resource_manager.get_2da(name, game)
+            except Exception:
+                return None
+    elif raw is None:
+        try:
+            raw = resource_manager.get(name, _RES_2DA, game)
+        except Exception:
+            raw = None
+    if not raw:
+        if hasattr(resource_manager, "get_2da"):
+            try:
+                return resource_manager.get_2da(name, game)
+            except Exception:
+                return None
+        return None
+    try:
+        from src.core.templates.twoda import TwoDA
+
+        return TwoDA.from_bytes(raw, name=name.lower())
+    except Exception:
+        return None
+
+
+def _tlk_string(resource_manager: Any, strref: Any, game: str) -> str:
+    try:
+        index = int(strref)
+    except (TypeError, ValueError):
+        return ""
+    if index < 0 or not hasattr(resource_manager, "get_tlk_string"):
+        return ""
+    try:
+        return _clean_2da_cell(resource_manager.get_tlk_string(index, game))
+    except Exception:
+        return ""
+
+
+def _metadata_source(*parts: str) -> str:
+    seen: list[str] = []
+    for part in parts:
+        for value in str(part or "").replace(",", ";").split(";"):
+            source = value.strip()
+            if source and source not in seen:
+                seen.append(source)
+    return "; ".join(seen)
+
+
+def _player_outfit_metadata_from_resref(resref: str) -> dict[str, str]:
+    r = (resref or "").lower()
+    match = re.fullmatch(r"p([fm])b([a-n])([a-z0-9]*)", r)
+    if not match:
+        return {}
+    gender_code, body_class_code, suffix = match.groups()
+    gender = "Male" if gender_code == "m" else "Female"
+    body_class = body_class_code.upper()
+    size = _PLAYER_OUTFIT_SIZES.get(suffix, "")
+    return {
+        "outfit_gender": gender,
+        "outfit_body_class": body_class,
+        "outfit_bodyvar": body_class,
+        "outfit_size": size,
+    }
+
+
+def _bodyvar_metadata_index(resource_manager: Any, game: str) -> dict[str, dict[str, str]]:
+    baseitems = _get_twoda(resource_manager, "baseitems", game)
+    index: dict[str, dict[str, str]] = {}
+    for fallback_index, row in enumerate(_iter_twoda_rows(baseitems)):
+        bodyvar = _twoda_cell(row, "bodyvar", "body_var", "bodyvariation").upper()
+        if not bodyvar:
+            continue
+        row_index = _row_index(row, fallback_index)
+        name_strref = _twoda_cell(row, "name", "namestrref", "strref")
+        label = _twoda_cell(row, "label", "itemclass", "defaultmodel", "defaulticon")
+        display = _tlk_string(resource_manager, name_strref, game) or label
+        metadata = {
+            "item_baseitem": str(row_index),
+            "item_bodyvar": bodyvar,
+            "item_label": label,
+            "item_name_strref": name_strref,
+            "item_display_name": display,
+            "metadata_source": "baseitems.2da",
+        }
+        subcategory = _BASEITEM_SUBCATEGORIES.get(row_index, "")
+        if subcategory:
+            metadata["subcategory"] = subcategory
+        category = _BASEITEM_CATEGORIES.get(row_index, "")
+        if category:
+            metadata["item_category"] = category
+        index.setdefault(bodyvar, {key: value for key, value in metadata.items() if value})
+    return index
+
+
+def _appearance_model_metadata_index(resource_manager: Any, game: str) -> dict[str, dict[str, str]]:
+    appearance = _get_twoda(resource_manager, "appearance", game)
+    bodyvars = _bodyvar_metadata_index(resource_manager, game)
+    index: dict[str, dict[str, str]] = {}
+    for fallback_index, row in enumerate(_iter_twoda_rows(appearance)):
+        row_index = _row_index(row, fallback_index)
+        label = _twoda_cell(row, "label")
+        modeltype = _twoda_cell(row, "modeltype")
+        row_name = _tlk_string(resource_manager, _twoda_cell(row, "string_ref", "name", "strref"), game)
+
+        for column in _APPEARANCE_BODY_COLUMNS:
+            model = _twoda_cell(row, column).lower()
+            if not model:
+                continue
+            bodyvar = column[-1:].upper()
+            metadata = {
+                "appearance_row": str(row_index),
+                "appearance_label": label,
+                "appearance_modeltype": modeltype,
+                "appearance_model_column": column,
+                "appearance_bodyvar": bodyvar,
+                "appearance_display_name": row_name,
+                "metadata_source": "appearance.2da",
+            }
+            metadata.update(_player_outfit_metadata_from_resref(model))
+            bodyvar_metadata = bodyvars.get(bodyvar, {})
+            if bodyvar_metadata:
+                metadata.update(bodyvar_metadata)
+                metadata["metadata_source"] = _metadata_source("appearance.2da", bodyvar_metadata.get("metadata_source", ""))
+            subcategory = infer_model_subcategory(model, _category_from_item_metadata(metadata) or infer_model_category(model), metadata)
+            if subcategory:
+                metadata["subcategory"] = subcategory
+            existing = index.get(model)
+            if existing is None or (metadata.get("item_display_name") and not existing.get("item_display_name")):
+                index[model] = {key: value for key, value in metadata.items() if value not in ("", None)}
+
+        for column in _APPEARANCE_HEAD_COLUMNS:
+            model = _twoda_cell(row, column).lower()
+            if not model:
+                continue
+            metadata = {
+                "appearance_row": str(row_index),
+                "appearance_label": label,
+                "appearance_modeltype": modeltype,
+                "appearance_model_column": column,
+                "appearance_display_name": row_name,
+                "metadata_source": "appearance.2da",
+            }
+            index.setdefault(model, {key: value for key, value in metadata.items() if value not in ("", None)})
+    return index
+
+
+def _fallback_player_outfit_metadata_from_resref(
+    resref: str,
+    bodyvars: dict[str, dict[str, str]],
+) -> dict[str, str]:
+    """Infer outfit metadata for shipped body models absent from appearance.2da."""
+    metadata = _player_outfit_metadata_from_resref(resref)
+    if not metadata:
+        return {}
+    bodyvar = str(metadata.get("outfit_bodyvar") or "").upper()
+    bodyvar_metadata = bodyvars.get(bodyvar, {})
+    if not bodyvar_metadata:
+        return {}
+    metadata.update(bodyvar_metadata)
+    metadata["metadata_source"] = bodyvar_metadata.get("metadata_source", "baseitems.2da")
+    category = _category_from_item_metadata(metadata) or infer_model_category(resref)
+    subcategory = infer_model_subcategory(resref, category, metadata)
+    if subcategory:
+        metadata["subcategory"] = subcategory
+    return {key: value for key, value in metadata.items() if value not in ("", None)}
+
+
 def _subcategory_from_door_metadata(metadata: dict[str, Any]) -> str:
     haystack = " ".join(
         str(metadata.get(key, ""))
@@ -987,7 +1190,11 @@ def _player_character_metadata(resref: str) -> dict[str, str]:
         if match:
             metadata["player_variant"] = f"Head {int(match.group(1)):02d}"
 
-    if part in {"Body", "Head"} and class_code:
+    if part == "Body" and class_code == "A":
+        metadata["subcategory"] = f"{gender} Base Bodies"
+    elif part == "Body" and class_code:
+        metadata["subcategory"] = f"{gender} Unmapped Bodies"
+    elif part == "Head" and class_code:
         metadata["subcategory"] = f"{gender} {label_part} - Class {class_code}"
     else:
         metadata["subcategory"] = f"{gender} Player Models"
@@ -1891,18 +2098,31 @@ def _template_metadata_index_for_game(resource_manager: Any, game: str) -> dict[
 
 
 def enrich_library_rows_with_resource_metadata(rows: list[dict], resource_manager: Any) -> list[dict]:
-    """Attach optional UTI/UTP metadata to library model rows from indexed game files."""
-    indices: dict[str, dict[str, dict[str, str]]] = {}
+    """Attach optional template and 2DA metadata to library model rows."""
+    template_indices: dict[str, dict[str, dict[str, str]]] = {}
+    appearance_indices: dict[str, dict[str, dict[str, str]]] = {}
+    bodyvar_indices: dict[str, dict[str, dict[str, str]]] = {}
     enriched: list[dict] = []
     for row in rows:
         item = dict(row)
         game = str(item.get("game", "")).upper()
         if game in {"K1", "K2"}:
-            if game not in indices:
-                indices[game] = _template_metadata_index_for_game(resource_manager, game)
-            metadata = indices[game].get(str(item.get("resref", "")).lower())
-            if metadata:
-                item.update({key: value for key, value in metadata.items() if value not in ("", None)})
+            if game not in template_indices:
+                template_indices[game] = _template_metadata_index_for_game(resource_manager, game)
+            if game not in appearance_indices:
+                appearance_indices[game] = _appearance_model_metadata_index(resource_manager, game)
+            if game not in bodyvar_indices:
+                bodyvar_indices[game] = _bodyvar_metadata_index(resource_manager, game)
+            resref = str(item.get("resref", "")).lower()
+            for metadata in (
+                template_indices[game].get(resref),
+                appearance_indices[game].get(resref),
+                _fallback_player_outfit_metadata_from_resref(resref, bodyvar_indices[game]),
+            ):
+                if metadata:
+                    existing_source = str(item.get("metadata_source", ""))
+                    item.update({key: value for key, value in metadata.items() if value not in ("", None)})
+                    item["metadata_source"] = _metadata_source(existing_source, metadata.get("metadata_source", ""))
         enriched.append(item)
     return enriched
 

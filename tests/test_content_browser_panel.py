@@ -379,7 +379,7 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
     assert by_name["n_darthmalak"].category == "NPCs"
     assert by_name["n_darthmalak"].metadata["subcategory"] == "Sith"
     assert by_name["pmbam"].category == "Player Characters"
-    assert by_name["pmbam"].metadata["subcategory"] == "Male Bodies - Class A"
+    assert by_name["pmbam"].metadata["subcategory"] == "Male Base Bodies"
     assert by_name["pmbam"].metadata["player_gender"] == "Male"
     assert by_name["pmbam"].metadata["player_part"] == "Body"
     assert by_name["pmbam"].metadata["player_class"] == "Class A"
@@ -498,9 +498,9 @@ def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> N
     ])
 
     by_name = {asset.name: asset for asset in panel.visible_assets()}
-    assert by_name["pmbam"].metadata["subcategory"] == "Male Bodies - Class A"
+    assert by_name["pmbam"].metadata["subcategory"] == "Male Base Bodies"
     assert by_name["pmbam"].metadata["player_variant"] == "Medium"
-    assert by_name["pfbal"].metadata["subcategory"] == "Female Bodies - Class A"
+    assert by_name["pfbal"].metadata["subcategory"] == "Female Base Bodies"
     assert by_name["pfbal"].metadata["player_variant"] == "Large"
     assert by_name["pmha01"].metadata["subcategory"] == "Male Heads - Class A"
     assert by_name["pmha01"].metadata["player_variant"] == "Head 01"
@@ -514,8 +514,8 @@ def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> N
     ][0]
     players = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Player Characters")
     assert [players.child(index).text(0) for index in range(players.childCount())] == [
-        "Male Bodies - Class A",
-        "Female Bodies - Class A",
+        "Male Base Bodies",
+        "Female Base Bodies",
         "Male Heads - Class A",
         "Female Heads - Class C",
     ]
@@ -524,7 +524,7 @@ def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> N
     assert [asset.name for asset in panel.visible_assets()] == ["pfhc02"]
 
     panel.tag_filter.setCurrentText("All Tags")
-    panel._select_navigation("subcategory", "Player Characters\0Male Bodies - Class A")
+    panel._select_navigation("subcategory", "Player Characters\0Male Base Bodies")
     assert [asset.name for asset in panel.visible_assets()] == ["pmbam"]
 
 
@@ -1109,16 +1109,18 @@ def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() 
                 ])
             if name == "baseitems":
                 return _FakeTwoDA([
-                    _FakeTwoDARow(38, label="combat_suit", bodyvar="D", name="1000"),
+                    _FakeTwoDARow(38, label="armor_class_4", bodyvar="C", name="1001"),
+                    _FakeTwoDARow(39, label="combat_suit", bodyvar="D", name="1000"),
                 ])
             return None
 
         def get_tlk_string(self, strref: int, game: str = "K1") -> str:
-            assert (strref, game) == (1000, "K1")
-            return "Combat Suit"
+            assert game == "K1"
+            return {1000: "Combat Suit", 1001: "Armor Class 4"}.get(strref, "")
 
     rows = enrich_library_rows(enrich_library_rows_with_resource_metadata([
         {"game": "K1", "resref": "pmbdm", "source": "swkotor"},
+        {"game": "K1", "resref": "pmbc", "source": "swkotor"},
         {"game": "K1", "resref": "pmhc", "source": "swkotor"},
     ], FakeResourceManager()))
     by_row = {row["resref"]: row for row in rows}
@@ -1129,6 +1131,9 @@ def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() 
     assert by_row["pmbdm"]["outfit_gender"] == "Male"
     assert by_row["pmbdm"]["outfit_size"] == "Medium"
     assert by_row["pmbdm"]["metadata_source"] == "appearance.2da; baseitems.2da"
+    assert by_row["pmbc"]["category"] == "Armor"
+    assert by_row["pmbc"]["subcategory"] == "Light Armor"
+    assert by_row["pmbc"]["metadata_source"] == "baseitems.2da"
     assert by_row["pmhc"]["category"] == "Player Characters"
     assert by_row["pmhc"]["metadata_source"] == "appearance.2da"
 
@@ -1140,6 +1145,8 @@ def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() 
     assert by_asset["pmbdm"].display_name == "Combat Suit Male Medium"
     assert by_asset["pmbdm"].metadata["item"] == "Combat Suit"
     assert by_asset["pmbdm"].metadata["bodyvar"] == "D"
+    assert by_asset["pmbc"].category == "Armor"
+    assert by_asset["pmbc"].metadata["bodyvar"] == "C"
 
 
 def test_content_browser_sorts_doors_by_level_metadata_and_prefixes() -> None:

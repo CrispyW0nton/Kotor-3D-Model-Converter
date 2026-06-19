@@ -169,7 +169,7 @@ def _decode_2da(
     **_kw,
 ) -> Any:
     from pykotor.resource.formats.twoda.twoda_auto import read_2da  # noqa: PLC0415
-    table = read_2da(BytesIO(data))
+    table = read_2da(data)
     headers = table.get_headers()
     rows = []
     for i in range(table.get_height()):

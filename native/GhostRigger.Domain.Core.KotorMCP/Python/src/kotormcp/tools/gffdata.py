@@ -151,7 +151,7 @@ async def handle_read_2da(arguments: Dict[str, Any]) -> Dict[str, Any]:
         entry = installation.get_resource(inp.resref, "2da")
         if entry is None:
             return json_content({"error": f"2DA '{inp.resref}' not found."})
-        table = read_2da(BytesIO(entry.data))
+        table = read_2da(entry.data)
         headers = table.get_headers()
         cols = [c for c in (inp.columns or headers) if c in headers] or headers
         row_start = inp.row_start or 0

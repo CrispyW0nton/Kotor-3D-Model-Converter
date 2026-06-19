@@ -46,7 +46,6 @@ const NativeFunctionImplementation& manager_install_line_688_f11c7825_native();
 const NativeFunctionImplementation& resource_manager_type_id_line_696_88dd7962_native();
 const NativeFunctionImplementation& resource_manager_restype_line_706_feb4e7a7_native();
 const NativeFunctionImplementation& known_resource_type_ids_line_715_dd065008_native();
-const NativeFunctionImplementation& split_2da_line_line_345_e1fcb025_native();
 const NativeFunctionImplementation& detect_kotor_dirs_line_59_58c316ed_native();
 const NativeFunctionImplementation& save_config_line_140_715b3b16_native();
 const NativeFunctionImplementation& load_config_line_159_231807ce_native();

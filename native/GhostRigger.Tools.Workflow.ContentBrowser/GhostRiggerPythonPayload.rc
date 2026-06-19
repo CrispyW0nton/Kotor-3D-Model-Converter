@@ -2,8 +2,6 @@
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
 PYTHON_PAYLOAD_CORE_RESOURCES_INIT RCDATA "Python/src/core/resources/__init__.py"
 PYTHON_PAYLOAD_CORE_RESOURCES_GAME_RESOURCE_PROVIDER RCDATA "Python/src/core/resources/game_resource_provider.py"
-PYTHON_PAYLOAD_GUI_PANELS_QT_CONTENT_BROWSER_PANEL RCDATA "Python/src/gui/panels/qt_content_browser_panel.py"
-PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL RCDATA "Python/src/gui/panels/qt_library_panel.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_LOADING RCDATA "Python/src/gui/windows/application_core/shared/resource_loading.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS RCDATA "Python/src/gui/windows/application_core/shared/resource_panels.py"
 PYTHON_PAYLOAD_RESOURCES_INIT RCDATA "Python/src/resources/__init__.py"

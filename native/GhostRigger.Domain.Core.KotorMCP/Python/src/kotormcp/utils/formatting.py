@@ -27,14 +27,17 @@ def json_content(payload: Any, max_chars: int = MAX_RESPONSE_CHARS) -> Dict[str,
     if len(text) <= max_chars:
         return {"type": "text", "text": text}
 
+    preview_limit = max(0, max_chars - 500)
     wrapper: Dict[str, Any] = {
         "truncated": True,
         "continuation_hint": CONTINUATION_HINT,
-        "truncated_preview": text[: max_chars - 200],
+        "truncated_preview": text[:preview_limit],
     }
     out = json.dumps(wrapper, ensure_ascii=False, indent=2)
-    if len(out) > max_chars:
-        out = out[: max_chars - 80] + "\n  ... (output truncated)"
+    while len(out) > max_chars and preview_limit > 0:
+        preview_limit = max(0, preview_limit - max(100, (len(out) - max_chars)))
+        wrapper["truncated_preview"] = text[:preview_limit]
+        out = json.dumps(wrapper, ensure_ascii=False, indent=2)
     return {"type": "text", "text": out}
 
 

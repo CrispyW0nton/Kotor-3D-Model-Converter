@@ -219,7 +219,7 @@ def _summarize_gff(data: bytes) -> Dict[str, Any]:
 def _summarize_2da(data: bytes) -> Dict[str, Any]:
     try:
         from pykotor.resource.formats.twoda.twoda_auto import read_2da  # noqa: PLC0415
-        table = read_2da(BytesIO(data))
+        table = read_2da(data)
         rows = []
         for idx in range(min(table.get_height(), 10)):
             rows.append({"row": idx, "values": {h: table.get_cell_safe(idx, h, "") for h in table.get_headers()}})

@@ -251,6 +251,8 @@ class ResourceManager:
     def __init__(self):
         self._k1: Optional[_GameInstall] = None
         self._k2: Optional[_GameInstall] = None
+        self._2da_cache: Dict[Tuple[str, str], object] = {}
+        self._tlk_cache: Dict[str, object] = {}
         self._lock = threading.Lock()  # protects lazy init only
 
     # ── Setup ────────────────────────────────────────────────────────────
@@ -339,6 +341,60 @@ class ResourceManager:
             if data is not None:
                 return data
         return None
+
+    def _get_2da_raw(self, name: str, game: str = 'K1') -> Optional[bytes]:
+        """Fetch raw 2DA bytes for app-facing metadata systems."""
+        return self.get(name, RES_2DA, game)
+
+    def get_2da(self, name: str, game: str = 'K1') -> Optional[object]:
+        """Return a parsed TwoDA table using the shared templates parser."""
+        key = (game.upper(), name.lower())
+        cached = self._2da_cache.get(key)
+        if cached is not None:
+            return cached
+        raw = self._get_2da_raw(name, game.upper())
+        if raw is None:
+            return None
+        try:
+            from src.core.templates.twoda import TwoDA
+
+            table = TwoDA.from_bytes(raw, name=name.lower())
+        except Exception as exc:
+            log.warning("ResourceManager.get_2da: parse failed for %s:%s: %s", game, name, exc)
+            return None
+        self._2da_cache[key] = table
+        return table
+
+    def get_tlk_string(self, strref: int, game: str = 'K1') -> str:
+        """Resolve a dialog.tlk string reference for the requested game."""
+        try:
+            index = int(strref)
+        except (TypeError, ValueError):
+            return ''
+        if index < 0:
+            return ''
+
+        game_key = game.upper()
+        tlk = self._tlk_cache.get(game_key)
+        if tlk is None:
+            inst = self._k1 if game_key == 'K1' else self._k2
+            if inst is None:
+                return ''
+            tlk_path = inst._find_file('dialog.tlk')
+            if not tlk_path:
+                return ''
+            try:
+                from src.core.game.game_library_ext import TLKReader
+
+                tlk = TLKReader(tlk_path)
+            except Exception as exc:
+                log.warning("ResourceManager.get_tlk_string: TLK load failed for %s: %s", game_key, exc)
+                return ''
+            self._tlk_cache[game_key] = tlk
+        try:
+            return str(tlk.get(index, ''))
+        except Exception:
+            return ''
 
     def get_txi(self, name: str, game: str = 'K1') -> str:
         """Return TXI string for texture name (empty string if absent)."""

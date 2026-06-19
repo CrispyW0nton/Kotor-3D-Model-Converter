@@ -20,7 +20,6 @@ struct NativeFunctionImplementation {
 };
 #endif // GHOSTRIGGER_TOOLS_TWODABROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
-const NativeFunctionImplementation& twoda_parse_binary_get_str_line_175_54443ef9_native();
 const NativeFunctionImplementation& keybifreader_load_resolve_path_ci_line_247_71476e69_native();
 const NativeFunctionImplementation& keybifreader_load_get_bif_entry_line_293_e13dddf4_native();
 const NativeFunctionImplementation& gamelibrary_scan_game_add_entry_line_866_8adb4fa7_native();

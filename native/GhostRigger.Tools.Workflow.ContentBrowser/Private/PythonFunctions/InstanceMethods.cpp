@@ -2,7 +2,7 @@
 
 namespace ghostrigger::tools::workflow::contentbrowser {
 
-const NativeFunctionImplementation& gameresourcequery_post_construct_line_76_8060f04c_native() {
+const NativeFunctionImplementation& gameresourcequery_post_init_line_76_989bfc27_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -17,8 +17,7 @@ const NativeFunctionImplementation& gameresourcequery_post_construct_line_76_806
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourcequery_to_address_line_84_27269e94_native() {
+const NativeFunctionImplementation& gameresourcequery_to_address_line_84_05be5717_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -33,8 +32,7 @@ const NativeFunctionImplementation& gameresourcequery_to_address_line_84_27269e9
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourcerecord_post_construct_line_107_9a620728_native() {
+const NativeFunctionImplementation& gameresourcerecord_post_init_line_107_f12ea9dc_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -49,8 +47,7 @@ const NativeFunctionImplementation& gameresourcerecord_post_construct_line_107_9
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourceprovider_list_resources_line_154_13eb721d_native() {
+const NativeFunctionImplementation& gameresourceprovider_list_resources_line_154_1006bb55_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -65,8 +62,7 @@ const NativeFunctionImplementation& gameresourceprovider_list_resources_line_154
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourceprovider_resolve_line_157_db6153cc_native() {
+const NativeFunctionImplementation& gameresourceprovider_resolve_line_157_86c793b8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -81,8 +77,7 @@ const NativeFunctionImplementation& gameresourceprovider_resolve_line_157_db6153
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourceprovider_read_bytes_line_160_7e0b3a1b_native() {
+const NativeFunctionImplementation& gameresourceprovider_read_bytes_line_160_94a8e085_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -97,8 +92,7 @@ const NativeFunctionImplementation& gameresourceprovider_read_bytes_line_160_7e0
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourceprovider_exists_line_163_eda4619b_native() {
+const NativeFunctionImplementation& gameresourceprovider_exists_line_163_2dcb49f7_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -113,8 +107,7 @@ const NativeFunctionImplementation& gameresourceprovider_exists_line_163_eda4619
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_construct_line_188_d08dcb62_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_init_line_188_9a2d7f9e_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -129,8 +122,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_construct_line_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_add_line_197_49d40e02_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_add_line_197_f9116d8b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -145,8 +137,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_add_line_197_49
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_list_resources_line_200_2ca86bab_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_list_resources_line_200_6b089949_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -161,8 +152,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_list_resources_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_list_module_resources_line_205_a022d9b4_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_list_module_resources_line_205_2fcbd617_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -177,8 +167,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_list_module_res
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_resolve_line_208_c2b6a07f_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_resolve_line_208_737c9047_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -193,8 +182,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_resolve_line_20
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_read_bytes_line_224_2e9321d1_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_read_bytes_line_224_0fa5e045_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -209,8 +197,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_read_bytes_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_read_resource_line_227_8e539aeb_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_read_resource_line_227_e0ae0801_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -225,8 +212,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_read_resource_l
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& inmemorygameresourceprovider_exists_line_238_28740a54_native() {
+const NativeFunctionImplementation& inmemorygameresourceprovider_exists_line_238_622111f4_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -241,8 +227,7 @@ const NativeFunctionImplementation& inmemorygameresourceprovider_exists_line_238
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& localfileresourceprovider_list_resources_line_249_577bbf95_native() {
+const NativeFunctionImplementation& localfileresourceprovider_list_resources_line_249_9baab00a_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -257,8 +242,7 @@ const NativeFunctionImplementation& localfileresourceprovider_list_resources_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& localfileresourceprovider_resolve_line_260_dfe7c954_native() {
+const NativeFunctionImplementation& localfileresourceprovider_resolve_line_260_f88da09d_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -273,8 +257,7 @@ const NativeFunctionImplementation& localfileresourceprovider_resolve_line_260_d
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& localfileresourceprovider_read_bytes_line_270_15ed95e3_native() {
+const NativeFunctionImplementation& localfileresourceprovider_read_bytes_line_270_df25166d_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -289,8 +272,7 @@ const NativeFunctionImplementation& localfileresourceprovider_read_bytes_line_27
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& localfileresourceprovider_exists_line_273_262362a1_native() {
+const NativeFunctionImplementation& localfileresourceprovider_exists_line_273_55461f4c_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -305,8 +287,7 @@ const NativeFunctionImplementation& localfileresourceprovider_exists_line_273_26
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& localfileresourceprovider_record_for_path_line_280_1e0a7666_native() {
+const NativeFunctionImplementation& localfileresourceprovider_record_for_path_line_280_6b8995c9_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -321,8 +302,7 @@ const NativeFunctionImplementation& localfileresourceprovider_record_for_path_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_construct_line_302_f4c139f6_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_init_line_302_e7f4ac6f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -337,8 +317,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_construct_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_list_resources_line_305_158702ab_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_list_resources_line_305_e67ff8d6_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -353,8 +332,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_list_resources
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_list_module_resources_line_311_b9fdbc05_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_list_module_resources_line_311_95d5ce7f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -369,8 +347,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_list_module_re
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_resolve_line_314_8dbf0540_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_resolve_line_314_c988e430_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -385,8 +362,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_resolve_line_3
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_read_bytes_line_334_31527e38_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_read_bytes_line_334_ddaa088e_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -401,8 +377,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_read_bytes_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_read_resource_line_337_b248788c_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_read_resource_line_337_c4e91c9b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -417,8 +392,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_read_resource_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& compositegameresourceprovider_exists_line_348_dd7a3867_native() {
+const NativeFunctionImplementation& compositegameresourceprovider_exists_line_348_084a2612_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -433,8 +407,7 @@ const NativeFunctionImplementation& compositegameresourceprovider_exists_line_34
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_construct_line_360_145e2601_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_init_line_360_d9f67228_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -449,8 +422,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_construc
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_list_resources_line_363_1abeed1b_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_list_resources_line_363_47cb60a6_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -465,8 +437,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_list_res
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_list_module_resources_line_374_3e04a171_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_list_module_resources_line_374_7ea1bcbe_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -481,8 +452,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_list_mod
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_resolve_line_377_10f73bb5_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_resolve_line_377_bb612e9b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -497,8 +467,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_resolve_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_read_bytes_line_413_bd99e881_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_read_bytes_line_413_d7d35ee3_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -513,8 +482,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_read_byt
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_read_resource_line_416_6be8f0b0_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_read_resource_line_416_7494a044_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -529,8 +497,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_read_res
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcemanagergameresourceprovider_exists_line_427_5ef4e963_native() {
+const NativeFunctionImplementation& resourcemanagergameresourceprovider_exists_line_427_5cfa1477_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -545,1112 +512,7 @@ const NativeFunctionImplementation& resourcemanagergameresourceprovider_exists_l
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& qtcontentassetitem_construct_line_502_39e9f93c_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentAssetItem.__init__",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentAssetItem.__init__","name":"__init__","callable_type":"instance_methods","line":502,"end_line":513,"signature":{"args":["self","asset"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_construct_line_534_f4e9bcfd_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.__init__",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.__init__","name":"__init__","callable_type":"instance_methods","line":534,"end_line":545,"signature":{"args":["self","parent"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_build_line_547_c47a1e47_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._build",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._build","name":"_build","callable_type":"instance_methods","line":547,"end_line":663,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_make_status_button_shrinkable_line_665_acbbd108_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._make_status_button_shrinkable",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._make_status_button_shrinkable","name":"_make_status_button_shrinkable","callable_type":"instance_methods","line":665,"end_line":667,"signature":{"args":["self","button"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_build_filters_line_669_0e15e5be_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._build_filters",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._build_filters","name":"_build_filters","callable_type":"instance_methods","line":669,"end_line":915,"signature":{"args":["self","layout"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_labeled_filter_line_917_5429bb26_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._labeled_filter",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._labeled_filter","name":"_labeled_filter","callable_type":"instance_methods","line":917,"end_line":927,"signature":{"args":["self","text","combo"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_make_combo_shrinkable_line_929_c7529a6e_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._make_combo_shrinkable",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._make_combo_shrinkable","name":"_make_combo_shrinkable","callable_type":"instance_methods","line":929,"end_line":933,"signature":{"args":["self","combo"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_build_action_buttons_line_935_fe36101b_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._build_action_buttons",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._build_action_buttons","name":"_build_action_buttons","callable_type":"instance_methods","line":935,"end_line":974,"signature":{"args":["self","layout"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_compact_action_button_line_976_7fa4bff9_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._compact_action_button",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._compact_action_button","name":"_compact_action_button","callable_type":"instance_methods","line":976,"end_line":983,"signature":{"args":["self","text"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_set_rows_line_985_d41a40af_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.set_rows",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.set_rows","name":"set_rows","callable_type":"instance_methods","line":985,"end_line":987,"signature":{"args":["self","rows"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_set_animation_entries_line_989_5d35bff0_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.set_animation_entries",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.set_animation_entries","name":"set_animation_entries","callable_type":"instance_methods","line":989,"end_line":990,"signature":{"args":["self","entries"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_set_scene_animation_entries_line_992_d35b69b5_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.set_scene_animation_entries",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.set_scene_animation_entries","name":"set_scene_animation_entries","callable_type":"instance_methods","line":992,"end_line":994,"signature":{"args":["self","entries"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_set_scanned_animation_entries_line_996_581a3f18_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.set_scanned_animation_entries",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.set_scanned_animation_entries","name":"set_scanned_animation_entries","callable_type":"instance_methods","line":996,"end_line":998,"signature":{"args":["self","entries"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_set_status_line_1000_86bd1d33_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.set_status",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.set_status","name":"set_status","callable_type":"instance_methods","line":1000,"end_line":1001,"signature":{"args":["self","text"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_selected_asset_line_1003_b36e1cd1_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.selected_asset",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.selected_asset","name":"selected_asset","callable_type":"instance_methods","line":1003,"end_line":1005,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_selected_row_line_1007_efdf07cb_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.selected_row",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.selected_row","name":"selected_row","callable_type":"instance_methods","line":1007,"end_line":1011,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_selected_entry_line_1013_267b19dd_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.selected_entry",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.selected_entry","name":"selected_entry","callable_type":"instance_methods","line":1013,"end_line":1017,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_visible_assets_line_1019_012cec98_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.visible_assets",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.visible_assets","name":"visible_assets","callable_type":"instance_methods","line":1019,"end_line":1025,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_visible_rows_line_1027_6660c87d_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.visible_rows",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.visible_rows","name":"visible_rows","callable_type":"instance_methods","line":1027,"end_line":1032,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_select_asset_type_line_1034_84ff36bc_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.select_asset_type",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.select_asset_type","name":"select_asset_type","callable_type":"instance_methods","line":1034,"end_line":1037,"signature":{"args":["self","asset_type"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_load_selected_line_1039_9b501c31_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.load_selected",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.load_selected","name":"load_selected","callable_type":"instance_methods","line":1039,"end_line":1042,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_extract_selected_line_1044_665e3c4f_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.extract_selected",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.extract_selected","name":"extract_selected","callable_type":"instance_methods","line":1044,"end_line":1047,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_open_selected_as_new_scene_line_1049_b24bae1e_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.open_selected_as_new_scene",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.open_selected_as_new_scene","name":"open_selected_as_new_scene","callable_type":"instance_methods","line":1049,"end_line":1052,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_add_selected_to_current_scene_line_1054_fce21df9_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.add_selected_to_current_scene",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.add_selected_to_current_scene","name":"add_selected_to_current_scene","callable_type":"instance_methods","line":1054,"end_line":1057,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_open_selected_in_new_level_editor_line_1059_424a5805_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.open_selected_in_new_level_editor",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.open_selected_in_new_level_editor","name":"open_selected_in_new_level_editor","callable_type":"instance_methods","line":1059,"end_line":1062,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_import_selected_to_level_line_1064_b1b19f23_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.import_selected_to_level",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.import_selected_to_level","name":"import_selected_to_level","callable_type":"instance_methods","line":1064,"end_line":1067,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_open_selected_in_character_builder_line_1069_26456eae_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.open_selected_in_character_builder",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.open_selected_in_character_builder","name":"open_selected_in_character_builder","callable_type":"instance_methods","line":1069,"end_line":1072,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_request_selected_asset_action_line_1074_b75ea7a1_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.request_selected_asset_action",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.request_selected_asset_action","name":"request_selected_asset_action","callable_type":"instance_methods","line":1074,"end_line":1077,"signature":{"args":["self","action"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_apply_ghost_theme_line_1079_e38aa1ae_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.apply_ghost_theme",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.apply_ghost_theme","name":"apply_ghost_theme","callable_type":"instance_methods","line":1079,"end_line":1080,"signature":{"args":["self","theme"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_apply_ghost_layout_line_1082_c0f2c024_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel.apply_ghost_layout",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel.apply_ghost_layout","name":"apply_ghost_layout","callable_type":"instance_methods","line":1082,"end_line":1093,"signature":{"args":["self","layout"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_on_splitter_moved_line_1095_e8f4950d_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._on_splitter_moved",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._on_splitter_moved","name":"_on_splitter_moved","callable_type":"instance_methods","line":1095,"end_line":1096,"signature":{"args":["self","_pos","_index"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_apply_constructial_splitter_sizes_line_1098_c5849d2d_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._apply_initial_splitter_sizes",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._apply_initial_splitter_sizes","name":"_apply_initial_splitter_sizes","callable_type":"instance_methods","line":1098,"end_line":1107,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_rebuild_assets_line_1109_6a17aaa5_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._rebuild_assets",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._rebuild_assets","name":"_rebuild_assets","callable_type":"instance_methods","line":1109,"end_line":1117,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_rebuild_sources_line_1119_7969137c_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._rebuild_sources",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._rebuild_sources","name":"_rebuild_sources","callable_type":"instance_methods","line":1119,"end_line":1128,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_rebuild_navigation_line_1130_1d16bed4_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._rebuild_navigation",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._rebuild_navigation","name":"_rebuild_navigation","callable_type":"instance_methods","line":1130,"end_line":1163,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_select_navigation_line_1165_f8612008_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._select_navigation",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._select_navigation","name":"_select_navigation","callable_type":"instance_methods","line":1165,"end_line":1170,"signature":{"args":["self","key","value"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_walk_nav_items_line_1172_a341b1ad_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._walk_nav_items",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._walk_nav_items","name":"_walk_nav_items","callable_type":"instance_methods","line":1172,"end_line":1175,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_walk_nav_branch_line_1177_194b0116_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._walk_nav_branch",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._walk_nav_branch","name":"_walk_nav_branch","callable_type":"instance_methods","line":1177,"end_line":1180,"signature":{"args":["self","item"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_category_sort_key_line_1182_ef1faf40_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._category_sort_key",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._category_sort_key","name":"_category_sort_key","callable_type":"instance_methods","line":1182,"end_line":1186,"signature":{"args":["self","category"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_subcategory_sort_key_line_1188_151a3e1a_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._subcategory_sort_key",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._subcategory_sort_key","name":"_subcategory_sort_key","callable_type":"instance_methods","line":1188,"end_line":1193,"signature":{"args":["self","category","subcategory"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_on_navigation_changed_line_1195_4f7c3bb0_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._on_navigation_changed",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._on_navigation_changed","name":"_on_navigation_changed","callable_type":"instance_methods","line":1195,"end_line":1205,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_apply_filter_line_1207_9f924912_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._apply_filter",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._apply_filter","name":"_apply_filter","callable_type":"instance_methods","line":1207,"end_line":1246,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_matches_tag_line_1248_3721d3d1_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._matches_tag",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._matches_tag","name":"_matches_tag","callable_type":"instance_methods","line":1248,"end_line":1365,"signature":{"args":["self","asset","tag"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_asset_icon_line_1367_3e39cb38_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._asset_icon",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._asset_icon","name":"_asset_icon","callable_type":"instance_methods","line":1367,"end_line":1386,"signature":{"args":["self","asset"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_update_details_line_1388_6edabb16_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._update_details",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._update_details","name":"_update_details","callable_type":"instance_methods","line":1388,"end_line":1408,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_set_action_state_line_1410_7944374d_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._set_action_state",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._set_action_state","name":"_set_action_state","callable_type":"instance_methods","line":1410,"end_line":1421,"signature":{"args":["self","asset"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_asset_supports_character_builder_line_1423_712ade59_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._asset_supports_character_builder",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._asset_supports_character_builder","name":"_asset_supports_character_builder","callable_type":"instance_methods","line":1423,"end_line":1424,"signature":{"args":["self","asset"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_activate_selected_line_1426_0728b63a_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._activate_selected",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._activate_selected","name":"_activate_selected","callable_type":"instance_methods","line":1426,"end_line":1435,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_context_action_line_1437_868717c5_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._context_action",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._context_action","name":"_context_action","callable_type":"instance_methods","line":1437,"end_line":1446,"signature":{"args":["self","menu","text","icon_name","action_id"],"positional_count":5,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_build_model_context_menu_line_1448_63c6c224_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._build_model_context_menu",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._build_model_context_menu","name":"_build_model_context_menu","callable_type":"instance_methods","line":1448,"end_line":1505,"signature":{"args":["self","asset"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_show_context_menu_line_1507_5ddbacae_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._show_context_menu",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._show_context_menu","name":"_show_context_menu","callable_type":"instance_methods","line":1507,"end_line":1550,"signature":{"args":["self","pos"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtcontentbrowserpanel_emit_retarget_line_1552_3ce3d5ed_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "QtContentBrowserPanel._emit_retarget",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"QtContentBrowserPanel._emit_retarget","name":"_emit_retarget","callable_type":"instance_methods","line":1552,"end_line":1559,"signature":{"args":["self","role"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtmodellistitem_construct_line_1967_e4aba5c1_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtModelListItem.__init__",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtModelListItem.__init__","name":"__init__","callable_type":"instance_methods","line":1967,"end_line":1972,"signature":{"args":["self","row"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_construct_line_2019_8e36544e_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.__init__",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.__init__","name":"__init__","callable_type":"instance_methods","line":2019,"end_line":2022,"signature":{"args":["self","parent"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_build_line_2024_c78dd037_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._build",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._build","name":"_build","callable_type":"instance_methods","line":2024,"end_line":2123,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_set_rows_line_2125_c99f4c75_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.set_rows",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.set_rows","name":"set_rows","callable_type":"instance_methods","line":2125,"end_line":2128,"signature":{"args":["self","rows"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_set_status_line_2130_024ec3b8_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.set_status",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.set_status","name":"set_status","callable_type":"instance_methods","line":2130,"end_line":2131,"signature":{"args":["self","text"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_selected_row_line_2133_8ad04859_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.selected_row",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.selected_row","name":"selected_row","callable_type":"instance_methods","line":2133,"end_line":2135,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_visible_rows_line_2137_fd9817f5_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.visible_rows",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.visible_rows","name":"visible_rows","callable_type":"instance_methods","line":2137,"end_line":2143,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_load_selected_line_2145_d17fc616_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.load_selected",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.load_selected","name":"load_selected","callable_type":"instance_methods","line":2145,"end_line":2148,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_extract_selected_line_2150_2fd5a45e_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.extract_selected",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.extract_selected","name":"extract_selected","callable_type":"instance_methods","line":2150,"end_line":2153,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_import_selected_to_level_line_2155_791e0089_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel.import_selected_to_level",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel.import_selected_to_level","name":"import_selected_to_level","callable_type":"instance_methods","line":2155,"end_line":2158,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_load_item_line_2160_5ab1841f_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._load_item",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._load_item","name":"_load_item","callable_type":"instance_methods","line":2160,"end_line":2163,"signature":{"args":["self","item"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_show_context_menu_line_2165_316b7e96_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._show_context_menu",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._show_context_menu","name":"_show_context_menu","callable_type":"instance_methods","line":2165,"end_line":2189,"signature":{"args":["self","pos"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_current_game_filter_line_2191_5f45c87d_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._current_game_filter",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._current_game_filter","name":"_current_game_filter","callable_type":"instance_methods","line":2191,"end_line":2193,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_current_category_line_2195_55f4b361_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._current_category",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._current_category","name":"_current_category","callable_type":"instance_methods","line":2195,"end_line":2199,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_apply_filter_line_2201_42b17a66_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._apply_filter",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._apply_filter","name":"_apply_filter","callable_type":"instance_methods","line":2201,"end_line":2241,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_rebuild_module_areas_line_2243_8faba83c_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._rebuild_module_areas",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._rebuild_module_areas","name":"_rebuild_module_areas","callable_type":"instance_methods","line":2243,"end_line":2251,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& qtlibrarypanel_update_selection_text_line_2253_34198455_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel",
-        "src/gui/panels/qt_library_panel.py",
-        "QtLibraryPanel._update_selection_text",
-        "instance_methods",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_library_panel","python_file":"src/gui/panels/qt_library_panel.py","qualname":"QtLibraryPanel._update_selection_text","name":"_update_selection_text","callable_type":"instance_methods","line":2253,"end_line":2264,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& resourceloadingmixin_populate_saved_dirs_line_42_2009f34b_native() {
+const NativeFunctionImplementation& resourceloadingmixin_populate_saved_dirs_line_42_28d2127b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1665,8 +527,7 @@ const NativeFunctionImplementation& resourceloadingmixin_populate_saved_dirs_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_scan_library_line_50_242b01c8_native() {
+const NativeFunctionImplementation& resourceloadingmixin_scan_library_line_50_98d2cc95_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1681,8 +542,7 @@ const NativeFunctionImplementation& resourceloadingmixin_scan_library_line_50_24
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_library_scanned_line_80_0a7b46b1_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_library_scanned_line_80_64a9e351_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1697,8 +557,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_library_scanned_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_set_library_scan_buttons_enabled_line_109_7d95201d_native() {
+const NativeFunctionImplementation& resourceloadingmixin_set_library_scan_buttons_enabled_line_109_c24901d5_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1713,8 +572,7 @@ const NativeFunctionImplementation& resourceloadingmixin_set_library_scan_button
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_rebuild_library_list_line_117_dbb106db_native() {
+const NativeFunctionImplementation& resourceloadingmixin_rebuild_library_list_line_117_486921eb_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1729,8 +587,7 @@ const NativeFunctionImplementation& resourceloadingmixin_rebuild_library_list_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_filter_library_line_127_e8eb8d55_native() {
+const NativeFunctionImplementation& resourceloadingmixin_filter_library_line_127_62a076af_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1745,8 +602,7 @@ const NativeFunctionImplementation& resourceloadingmixin_filter_library_line_127
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_load_library_item_line_135_951e28b6_native() {
+const NativeFunctionImplementation& resourceloadingmixin_load_library_item_line_135_7704d3b8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1761,8 +617,7 @@ const NativeFunctionImplementation& resourceloadingmixin_load_library_item_line_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_load_content_browser_primary_scene_model_line_140_2e1728af_native() {
+const NativeFunctionImplementation& resourceloadingmixin_load_content_browser_primary_scene_model_line_140_7a65fc78_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1777,8 +632,7 @@ const NativeFunctionImplementation& resourceloadingmixin_load_content_browser_pr
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_add_content_browser_model_to_current_scene_line_145_bfcf46d5_native() {
+const NativeFunctionImplementation& resourceloadingmixin_add_content_browser_model_to_current_scene_line_145_bd1cad03_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1793,8 +647,7 @@ const NativeFunctionImplementation& resourceloadingmixin_add_content_browser_mod
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_ipc_library_row_summary_line_151_a59b4b7e_native() {
+const NativeFunctionImplementation& resourceloadingmixin_ipc_library_row_summary_line_151_f10c56db_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1809,8 +662,7 @@ const NativeFunctionImplementation& resourceloadingmixin_ipc_library_row_summary
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_ipc_library_row_matches_line_181_6625b0ea_native() {
+const NativeFunctionImplementation& resourceloadingmixin_ipc_library_row_matches_line_181_93da2d5b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1825,8 +677,7 @@ const NativeFunctionImplementation& resourceloadingmixin_ipc_library_row_matches
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_ipc_find_library_row_line_218_8fdc42c0_native() {
+const NativeFunctionImplementation& resourceloadingmixin_ipc_find_library_row_line_218_7c403309_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1841,8 +692,7 @@ const NativeFunctionImplementation& resourceloadingmixin_ipc_find_library_row_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_ipc_library_search_line_232_9c4c4c1c_native() {
+const NativeFunctionImplementation& resourceloadingmixin_ipc_library_search_line_232_b504d44f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1857,8 +707,7 @@ const NativeFunctionImplementation& resourceloadingmixin_ipc_library_search_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_select_content_browser_library_row_line_248_21fa280b_native() {
+const NativeFunctionImplementation& resourceloadingmixin_select_content_browser_library_row_line_248_610d0f63_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1873,8 +722,7 @@ const NativeFunctionImplementation& resourceloadingmixin_select_content_browser_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_ipc_library_select_line_288_8f3697e1_native() {
+const NativeFunctionImplementation& resourceloadingmixin_ipc_library_select_line_288_0af4b7f0_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1889,8 +737,7 @@ const NativeFunctionImplementation& resourceloadingmixin_ipc_library_select_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_ipc_library_state_snapshot_line_303_74a8db2e_native() {
+const NativeFunctionImplementation& resourceloadingmixin_ipc_library_state_snapshot_line_303_1a8e486b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1905,8 +752,7 @@ const NativeFunctionImplementation& resourceloadingmixin_ipc_library_state_snaps
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_start_resource_load_line_326_b8f455a8_native() {
+const NativeFunctionImplementation& resourceloadingmixin_start_resource_load_line_326_97b0575e_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1921,8 +767,7 @@ const NativeFunctionImplementation& resourceloadingmixin_start_resource_load_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_load_resource_model_on_ui_thread_line_362_798619a4_native() {
+const NativeFunctionImplementation& resourceloadingmixin_load_resource_model_on_ui_thread_line_362_deb77684_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1937,8 +782,7 @@ const NativeFunctionImplementation& resourceloadingmixin_load_resource_model_on_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_open_model_line_380_94f35463_native() {
+const NativeFunctionImplementation& resourceloadingmixin_open_model_line_380_df5e8273_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1953,8 +797,7 @@ const NativeFunctionImplementation& resourceloadingmixin_open_model_line_380_94f
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_open_startup_inputs_line_390_5455bc5f_native() {
+const NativeFunctionImplementation& resourceloadingmixin_open_startup_inputs_line_390_47234626_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1969,8 +812,7 @@ const NativeFunctionImplementation& resourceloadingmixin_open_startup_inputs_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_load_bas_model_recipe_from_path_line_403_9a7f1a1d_native() {
+const NativeFunctionImplementation& resourceloadingmixin_load_bas_model_recipe_from_path_line_403_725e68cc_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -1985,8 +827,7 @@ const NativeFunctionImplementation& resourceloadingmixin_load_bas_model_recipe_f
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_start_model_load_line_498_712134db_native() {
+const NativeFunctionImplementation& resourceloadingmixin_start_model_load_line_498_0df5777a_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2001,8 +842,7 @@ const NativeFunctionImplementation& resourceloadingmixin_start_model_load_line_4
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_choose_model_import_action_line_548_9be3dd6f_native() {
+const NativeFunctionImplementation& resourceloadingmixin_choose_model_import_action_line_548_eb61619f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2017,8 +857,7 @@ const NativeFunctionImplementation& resourceloadingmixin_choose_model_import_act
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_resource_ref_from_loaded_model_line_586_98fbcebf_native() {
+const NativeFunctionImplementation& resourceloadingmixin_resource_ref_from_loaded_model_line_586_2246c358_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2033,8 +872,7 @@ const NativeFunctionImplementation& resourceloadingmixin_resource_ref_from_loade
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_module_room_placement_for_ref_line_602_f251ddb5_native() {
+const NativeFunctionImplementation& resourceloadingmixin_module_room_placement_for_ref_line_602_a91773b8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2049,8 +887,7 @@ const NativeFunctionImplementation& resourceloadingmixin_module_room_placement_f
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_module_group_anchor_for_line_617_b8f03f6f_native() {
+const NativeFunctionImplementation& resourceloadingmixin_module_group_anchor_for_line_617_bd195b2c_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2065,8 +902,7 @@ const NativeFunctionImplementation& resourceloadingmixin_module_group_anchor_for
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_placement_transform_for_new_model_line_646_107556e7_native() {
+const NativeFunctionImplementation& resourceloadingmixin_placement_transform_for_new_model_line_646_272cfd6b_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2081,8 +917,7 @@ const NativeFunctionImplementation& resourceloadingmixin_placement_transform_for
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_add_loaded_model_to_scene_line_679_ab83a1ce_native() {
+const NativeFunctionImplementation& resourceloadingmixin_add_loaded_model_to_scene_line_679_8366f15f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2097,8 +932,7 @@ const NativeFunctionImplementation& resourceloadingmixin_add_loaded_model_to_sce
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_apply_module_group_metadata_line_705_095e75fe_native() {
+const NativeFunctionImplementation& resourceloadingmixin_apply_module_group_metadata_line_705_4d86356e_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2113,8 +947,7 @@ const NativeFunctionImplementation& resourceloadingmixin_apply_module_group_meta
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_model_loaded_line_755_82aa079a_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_model_loaded_line_755_94fff88f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2129,8 +962,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_model_loaded_line_75
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_infer_game_from_model_line_912_3e2fbba2_native() {
+const NativeFunctionImplementation& resourceloadingmixin_infer_game_from_model_line_912_203689e9_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2145,8 +977,7 @@ const NativeFunctionImplementation& resourceloadingmixin_infer_game_from_model_l
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_configured_game_dirs_line_920_0cf6e4d3_native() {
+const NativeFunctionImplementation& resourceloadingmixin_configured_game_dirs_line_920_3e59f037_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2161,8 +992,7 @@ const NativeFunctionImplementation& resourceloadingmixin_configured_game_dirs_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_get_resource_manager_line_924_27186f53_native() {
+const NativeFunctionImplementation& resourceloadingmixin_get_resource_manager_line_924_f41180bc_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2177,8 +1007,7 @@ const NativeFunctionImplementation& resourceloadingmixin_get_resource_manager_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_configure_viewport_resources_line_959_ca92b83f_native() {
+const NativeFunctionImplementation& resourceloadingmixin_configure_viewport_resources_line_959_be59e082_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2193,8 +1022,7 @@ const NativeFunctionImplementation& resourceloadingmixin_configure_viewport_reso
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_try_coload_walkmesh_line_981_45d2e065_native() {
+const NativeFunctionImplementation& resourceloadingmixin_try_coload_walkmesh_line_981_fe88e817_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2209,8 +1037,7 @@ const NativeFunctionImplementation& resourceloadingmixin_try_coload_walkmesh_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_do_coload_walkmesh_line_990_f2b25517_native() {
+const NativeFunctionImplementation& resourceloadingmixin_do_coload_walkmesh_line_990_8dbc6902_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2225,8 +1052,7 @@ const NativeFunctionImplementation& resourceloadingmixin_do_coload_walkmesh_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_load_walkmesh_source_line_1033_98e1cd8e_native() {
+const NativeFunctionImplementation& resourceloadingmixin_load_walkmesh_source_line_1033_cc52c1c6_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2241,8 +1067,7 @@ const NativeFunctionImplementation& resourceloadingmixin_load_walkmesh_source_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_module_meshes_selected_from_panel_line_1074_339b5bac_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_module_meshes_selected_from_panel_line_1074_7f44d726_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2257,8 +1082,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_module_meshes_select
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_select_module_mesh_by_name_from_ipc_line_1084_b718266d_native() {
+const NativeFunctionImplementation& resourceloadingmixin_select_module_mesh_by_name_from_ipc_line_1084_be399906_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2273,8 +1097,7 @@ const NativeFunctionImplementation& resourceloadingmixin_select_module_mesh_by_n
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_refresh_mesh_visibility_render_state_line_1175_45dc6625_native() {
+const NativeFunctionImplementation& resourceloadingmixin_refresh_mesh_visibility_render_state_line_1175_9a7f0465_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2289,8 +1112,7 @@ const NativeFunctionImplementation& resourceloadingmixin_refresh_mesh_visibility
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_viewport_mesh_visibility_changed_line_1191_440f15f6_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_viewport_mesh_visibility_changed_line_1191_b7301ba8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2305,8 +1127,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_viewport_mesh_visibi
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_module_mesh_visibility_changed_line_1196_222c9fa9_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_module_mesh_visibility_changed_line_1196_33778f8a_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2321,8 +1142,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_module_mesh_visibili
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_sprite_material_selected_line_1200_3364eaca_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_sprite_material_selected_line_1200_61efdda0_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2337,8 +1157,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_sprite_material_sele
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_on_sprite_materials_changed_line_1209_677c8ae9_native() {
+const NativeFunctionImplementation& resourceloadingmixin_on_sprite_materials_changed_line_1209_ffe0c108_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2353,8 +1172,7 @@ const NativeFunctionImplementation& resourceloadingmixin_on_sprite_materials_cha
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceloadingmixin_sync_walkmesh_overlay_visibility_line_1258_6f0726a1_native() {
+const NativeFunctionImplementation& resourceloadingmixin_sync_walkmesh_overlay_visibility_line_1258_5d81893a_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_loading",
@@ -2369,8 +1187,7 @@ const NativeFunctionImplementation& resourceloadingmixin_sync_walkmesh_overlay_v
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_populate_resource_panel_line_20_d3fd6ef8_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_populate_resource_panel_line_20_e8fae111_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2385,8 +1202,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_populate_resource_panel_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_preview_resource_row_line_86_969a6707_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_preview_resource_row_line_86_26514cc0_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2401,8 +1217,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_preview_resource_row_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_activate_resource_row_line_115_19d3c199_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_activate_resource_row_line_115_42cdf557_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2417,8 +1232,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_activate_resource_row_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_rows_line_132_6daf13c2_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_rows_line_132_3b632297_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2433,8 +1247,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_rows_line_1
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_row_summary_line_140_258be026_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_row_summary_line_140_7fff9005_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2449,8 +1262,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_row_summary
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_row_matches_line_151_916c215c_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_row_matches_line_151_a1f7d5ad_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2465,8 +1277,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_row_matches
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_search_line_167_15362db6_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_search_line_167_b38117be_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2481,8 +1292,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_search_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_find_resource_row_line_183_799a62dd_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_find_resource_row_line_183_e01d31ae_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2497,8 +1307,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_find_resource_row_li
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_select_resource_browser_row_line_197_414ad5a4_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_select_resource_browser_row_line_197_65f3d263_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2513,8 +1322,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_select_resource_browser_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_select_line_235_74dbe0d8_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_select_line_235_a8fbdd3e_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2529,8 +1337,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_select_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_state_snapshot_line_260_ff63c0b0_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_state_snapshot_line_260_6164fad9_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2545,8 +1352,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_resource_state_snaps
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_open_blueprint_resource_from_ipc_line_279_10ba397d_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_open_blueprint_resource_from_ipc_line_279_39240728_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2561,8 +1367,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_open_blueprint_resource_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_refresh_twoda_panel_line_332_d51bc38d_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_refresh_twoda_panel_line_332_8115e189_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2577,8 +1382,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_refresh_twoda_panel_line
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_load_twoda_table_line_353_dd254037_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_load_twoda_table_line_353_66e442a9_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2593,8 +1397,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_load_twoda_table_line_35
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_about_modular_line_389_ee22efd3_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_about_modular_line_389_ebbf0869_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2609,8 +1412,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_about_modular_line_389_e
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_validate_current_character_line_399_ac3919ba_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_validate_current_character_line_399_61332748_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2625,8 +1427,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_validate_current_charact
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_ping_line_429_2a79b2c8_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_ping_line_429_48aad072_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2641,8 +1442,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_ping_line_429_2a79b2
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_notify_saved_line_441_214d8a92_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_notify_saved_line_441_2bbcbc56_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2657,8 +1457,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_notify_saved_line_44
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_ipc_refresh_gmodular_line_453_1efe7413_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_ipc_refresh_gmodular_line_453_75c47a4c_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2673,8 +1472,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_ipc_refresh_gmodular_lin
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_open_uv_viewer_line_461_2505ea2e_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_open_uv_viewer_line_461_a357c8d8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2689,8 +1487,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_open_uv_viewer_line_461_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_open_module_editor_window_line_467_69d53727_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_open_module_editor_window_line_467_41de9fd8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2705,8 +1502,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_open_module_editor_windo
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_send_library_row_to_module_editor_line_486_ceaadd69_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_send_library_row_to_module_editor_line_486_48ae41db_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2721,8 +1517,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_send_library_row_to_modu
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_send_library_row_to_new_module_editor_line_495_de91a7de_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_send_library_row_to_new_module_editor_line_495_a1dba464_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2737,8 +1532,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_send_library_row_to_new_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourcepanelsmixin_open_rig_window_line_508_bce208b7_native() {
+const NativeFunctionImplementation& resourcepanelsmixin_open_rig_window_line_508_a21d33d9_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::gui::windows::application_core::shared::resource_panels",
@@ -2753,8 +1547,7 @@ const NativeFunctionImplementation& resourcepanelsmixin_open_rig_window_line_508
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceentry_read_line_186_03bea365_native() {
+const NativeFunctionImplementation& resourceentry_read_line_186_9dd8f141_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2769,8 +1562,7 @@ const NativeFunctionImplementation& resourceentry_read_line_186_03bea365_native(
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& keybifreader_construct_line_205_cf570382_native() {
+const NativeFunctionImplementation& keybifreader_init_line_205_93b244d0_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2785,8 +1577,7 @@ const NativeFunctionImplementation& keybifreader_construct_line_205_cf570382_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& keybifreader_load_line_214_75fa6781_native() {
+const NativeFunctionImplementation& keybifreader_load_line_214_76cd0cb3_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2801,8 +1592,7 @@ const NativeFunctionImplementation& keybifreader_load_line_214_75fa6781_native()
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& keybifreader_get_line_391_63f58f54_native() {
+const NativeFunctionImplementation& keybifreader_get_line_391_9d5a5e82_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2817,8 +1607,7 @@ const NativeFunctionImplementation& keybifreader_get_line_391_63f58f54_native() 
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& keybifreader_list_type_line_419_6f3477e8_native() {
+const NativeFunctionImplementation& keybifreader_list_type_line_419_ad92b7b6_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2833,8 +1622,7 @@ const NativeFunctionImplementation& keybifreader_list_type_line_419_6f3477e8_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& keybifreader_list_all_types_line_441_fbf76cca_native() {
+const NativeFunctionImplementation& keybifreader_list_all_types_line_441_b8ccd053_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2849,8 +1637,7 @@ const NativeFunctionImplementation& keybifreader_list_all_types_line_441_fbf76cc
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& keybifreader_list_all_resources_line_445_55202d73_native() {
+const NativeFunctionImplementation& keybifreader_list_all_resources_line_445_15760e92_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2865,8 +1652,7 @@ const NativeFunctionImplementation& keybifreader_list_all_resources_line_445_552
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_construct_line_458_20e07f2c_native() {
+const NativeFunctionImplementation& erfreader_init_line_458_c7e7fb34_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2881,8 +1667,7 @@ const NativeFunctionImplementation& erfreader_construct_line_458_20e07f2c_native
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_load_line_463_787a1e59_native() {
+const NativeFunctionImplementation& erfreader_load_line_463_9b9ac0a2_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2897,8 +1682,7 @@ const NativeFunctionImplementation& erfreader_load_line_463_787a1e59_native() {
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_load_v1_from_tables_line_501_00997c81_native() {
+const NativeFunctionImplementation& erfreader_load_v1_from_tables_line_501_1eaf1749_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2913,8 +1697,7 @@ const NativeFunctionImplementation& erfreader_load_v1_from_tables_line_501_00997
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_load_v1_line_525_48cb5f73_native() {
+const NativeFunctionImplementation& erfreader_load_v1_line_525_08b06ccc_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2929,8 +1712,7 @@ const NativeFunctionImplementation& erfreader_load_v1_line_525_48cb5f73_native()
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_get_line_535_3e2e3feb_native() {
+const NativeFunctionImplementation& erfreader_get_line_535_bd38e03f_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2945,8 +1727,7 @@ const NativeFunctionImplementation& erfreader_get_line_535_3e2e3feb_native() {
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_list_type_line_538_73602c7a_native() {
+const NativeFunctionImplementation& erfreader_list_type_line_538_ac07e8ac_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2961,8 +1742,7 @@ const NativeFunctionImplementation& erfreader_list_type_line_538_73602c7a_native
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& erfreader_list_all_line_541_8c5287c8_native() {
+const NativeFunctionImplementation& erfreader_list_all_line_541_355f8ccb_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2977,8 +1757,7 @@ const NativeFunctionImplementation& erfreader_list_all_line_541_8c5287c8_native(
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_construct_line_674_79ae6ceb_native() {
+const NativeFunctionImplementation& gamelibrary_init_line_674_c9ef3640_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -2993,8 +1772,7 @@ const NativeFunctionImplementation& gamelibrary_construct_line_674_79ae6ceb_nati
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_set_k1_dir_line_690_bc728836_native() {
+const NativeFunctionImplementation& gamelibrary_set_k1_dir_line_690_64e1b435_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3009,8 +1787,7 @@ const NativeFunctionImplementation& gamelibrary_set_k1_dir_line_690_bc728836_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_set_k2_dir_line_697_f18ba4c4_native() {
+const NativeFunctionImplementation& gamelibrary_set_k2_dir_line_697_830b2b0c_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3025,8 +1802,7 @@ const NativeFunctionImplementation& gamelibrary_set_k2_dir_line_697_f18ba4c4_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_scan_line_704_943f553e_native() {
+const NativeFunctionImplementation& gamelibrary_scan_line_704_0b9fe9e4_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3041,8 +1817,7 @@ const NativeFunctionImplementation& gamelibrary_scan_line_704_943f553e_native() 
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_scan_game_line_861_11feb0eb_native() {
+const NativeFunctionImplementation& gamelibrary_scan_game_line_861_0926be18_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3057,8 +1832,7 @@ const NativeFunctionImplementation& gamelibrary_scan_game_line_861_11feb0eb_nati
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_read_mdl_metadata_line_1021_49fe64f9_native() {
+const NativeFunctionImplementation& gamelibrary_read_mdl_metadata_line_1021_4d9f7af0_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3073,8 +1847,7 @@ const NativeFunctionImplementation& gamelibrary_read_mdl_metadata_line_1021_49fe
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_get_2da_line_1036_e392fe83_native() {
+const NativeFunctionImplementation& gamelibrary_get_2da_line_1036_60ed5747_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3089,8 +1862,7 @@ const NativeFunctionImplementation& gamelibrary_get_2da_line_1036_e392fe83_nativ
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_get_2da_raw_line_1060_d6cd5828_native() {
+const NativeFunctionImplementation& gamelibrary_get_2da_raw_line_1060_bd7d9ce8_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3105,8 +1877,7 @@ const NativeFunctionImplementation& gamelibrary_get_2da_raw_line_1060_d6cd5828_n
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_list_2da_names_line_1083_66e75be4_native() {
+const NativeFunctionImplementation& gamelibrary_list_2da_names_line_1083_846d35af_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3121,8 +1892,7 @@ const NativeFunctionImplementation& gamelibrary_list_2da_names_line_1083_66e75be
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_list_resources_line_1093_d309a480_native() {
+const NativeFunctionImplementation& gamelibrary_list_resources_line_1093_8b71baf2_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3137,8 +1907,7 @@ const NativeFunctionImplementation& gamelibrary_list_resources_line_1093_d309a48
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_get_resource_data_line_1100_da175a53_native() {
+const NativeFunctionImplementation& gamelibrary_get_resource_data_line_1100_91fbfa96_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3153,8 +1922,7 @@ const NativeFunctionImplementation& gamelibrary_get_resource_data_line_1100_da17
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_search_line_1125_3a92a130_native() {
+const NativeFunctionImplementation& gamelibrary_search_line_1125_0bc1a015_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3169,8 +1937,7 @@ const NativeFunctionImplementation& gamelibrary_search_line_1125_3a92a130_native
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_list_models_by_class_line_1131_305675e6_native() {
+const NativeFunctionImplementation& gamelibrary_list_models_by_class_line_1131_c56104f2_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3185,8 +1952,7 @@ const NativeFunctionImplementation& gamelibrary_list_models_by_class_line_1131_3
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_list_textures_line_1147_14298a13_native() {
+const NativeFunctionImplementation& gamelibrary_list_textures_line_1147_5504c80c_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3201,8 +1967,7 @@ const NativeFunctionImplementation& gamelibrary_list_textures_line_1147_14298a13
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_get_tlk_string_line_1153_e6a818a7_native() {
+const NativeFunctionImplementation& gamelibrary_get_tlk_string_line_1153_0d3daaa1_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3217,8 +1982,7 @@ const NativeFunctionImplementation& gamelibrary_get_tlk_string_line_1153_e6a818a
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_get_texture_data_line_1180_0a58651f_native() {
+const NativeFunctionImplementation& gamelibrary_get_texture_data_line_1180_03737ac6_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3233,8 +1997,7 @@ const NativeFunctionImplementation& gamelibrary_get_texture_data_line_1180_0a586
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_get_model_data_line_1331_84a35054_native() {
+const NativeFunctionImplementation& gamelibrary_get_model_data_line_1331_31f6e0da_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3249,8 +2012,7 @@ const NativeFunctionImplementation& gamelibrary_get_model_data_line_1331_84a3505
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_extract_to_folder_line_1375_1f447f19_native() {
+const NativeFunctionImplementation& gamelibrary_extract_to_folder_line_1375_d5f0dd72_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3265,8 +2027,7 @@ const NativeFunctionImplementation& gamelibrary_extract_to_folder_line_1375_1f44
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_scan_texture_names_line_1407_2c8a495d_native() {
+const NativeFunctionImplementation& gamelibrary_scan_texture_names_line_1407_fb7e7049_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3281,8 +2042,7 @@ const NativeFunctionImplementation& gamelibrary_scan_texture_names_line_1407_2c8
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gamelibrary_detect_texture_ext_line_1441_cab77586_native() {
+const NativeFunctionImplementation& gamelibrary_detect_texture_ext_line_1441_6ee66cbe_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -3297,215 +2057,145 @@ const NativeFunctionImplementation& gamelibrary_detect_texture_ext_line_1441_cab
     };
     return implementation;
 }
-
 const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count) {
     static const NativeFunctionImplementation entries[] = {
-        gameresourcequery_post_construct_line_76_8060f04c_native(),
-        gameresourcequery_to_address_line_84_27269e94_native(),
-        gameresourcerecord_post_construct_line_107_9a620728_native(),
-        gameresourceprovider_list_resources_line_154_13eb721d_native(),
-        gameresourceprovider_resolve_line_157_db6153cc_native(),
-        gameresourceprovider_read_bytes_line_160_7e0b3a1b_native(),
-        gameresourceprovider_exists_line_163_eda4619b_native(),
-        inmemorygameresourceprovider_construct_line_188_d08dcb62_native(),
-        inmemorygameresourceprovider_add_line_197_49d40e02_native(),
-        inmemorygameresourceprovider_list_resources_line_200_2ca86bab_native(),
-        inmemorygameresourceprovider_list_module_resources_line_205_a022d9b4_native(),
-        inmemorygameresourceprovider_resolve_line_208_c2b6a07f_native(),
-        inmemorygameresourceprovider_read_bytes_line_224_2e9321d1_native(),
-        inmemorygameresourceprovider_read_resource_line_227_8e539aeb_native(),
-        inmemorygameresourceprovider_exists_line_238_28740a54_native(),
-        localfileresourceprovider_list_resources_line_249_577bbf95_native(),
-        localfileresourceprovider_resolve_line_260_dfe7c954_native(),
-        localfileresourceprovider_read_bytes_line_270_15ed95e3_native(),
-        localfileresourceprovider_exists_line_273_262362a1_native(),
-        localfileresourceprovider_record_for_path_line_280_1e0a7666_native(),
-        compositegameresourceprovider_construct_line_302_f4c139f6_native(),
-        compositegameresourceprovider_list_resources_line_305_158702ab_native(),
-        compositegameresourceprovider_list_module_resources_line_311_b9fdbc05_native(),
-        compositegameresourceprovider_resolve_line_314_8dbf0540_native(),
-        compositegameresourceprovider_read_bytes_line_334_31527e38_native(),
-        compositegameresourceprovider_read_resource_line_337_b248788c_native(),
-        compositegameresourceprovider_exists_line_348_dd7a3867_native(),
-        resourcemanagergameresourceprovider_construct_line_360_145e2601_native(),
-        resourcemanagergameresourceprovider_list_resources_line_363_1abeed1b_native(),
-        resourcemanagergameresourceprovider_list_module_resources_line_374_3e04a171_native(),
-        resourcemanagergameresourceprovider_resolve_line_377_10f73bb5_native(),
-        resourcemanagergameresourceprovider_read_bytes_line_413_bd99e881_native(),
-        resourcemanagergameresourceprovider_read_resource_line_416_6be8f0b0_native(),
-        resourcemanagergameresourceprovider_exists_line_427_5ef4e963_native(),
-        qtcontentassetitem_construct_line_502_39e9f93c_native(),
-        qtcontentbrowserpanel_construct_line_534_f4e9bcfd_native(),
-        qtcontentbrowserpanel_build_line_547_c47a1e47_native(),
-        qtcontentbrowserpanel_make_status_button_shrinkable_line_665_acbbd108_native(),
-        qtcontentbrowserpanel_build_filters_line_669_0e15e5be_native(),
-        qtcontentbrowserpanel_labeled_filter_line_917_5429bb26_native(),
-        qtcontentbrowserpanel_make_combo_shrinkable_line_929_c7529a6e_native(),
-        qtcontentbrowserpanel_build_action_buttons_line_935_fe36101b_native(),
-        qtcontentbrowserpanel_compact_action_button_line_976_7fa4bff9_native(),
-        qtcontentbrowserpanel_set_rows_line_985_d41a40af_native(),
-        qtcontentbrowserpanel_set_animation_entries_line_989_5d35bff0_native(),
-        qtcontentbrowserpanel_set_scene_animation_entries_line_992_d35b69b5_native(),
-        qtcontentbrowserpanel_set_scanned_animation_entries_line_996_581a3f18_native(),
-        qtcontentbrowserpanel_set_status_line_1000_86bd1d33_native(),
-        qtcontentbrowserpanel_selected_asset_line_1003_b36e1cd1_native(),
-        qtcontentbrowserpanel_selected_row_line_1007_efdf07cb_native(),
-        qtcontentbrowserpanel_selected_entry_line_1013_267b19dd_native(),
-        qtcontentbrowserpanel_visible_assets_line_1019_012cec98_native(),
-        qtcontentbrowserpanel_visible_rows_line_1027_6660c87d_native(),
-        qtcontentbrowserpanel_select_asset_type_line_1034_84ff36bc_native(),
-        qtcontentbrowserpanel_load_selected_line_1039_9b501c31_native(),
-        qtcontentbrowserpanel_extract_selected_line_1044_665e3c4f_native(),
-        qtcontentbrowserpanel_open_selected_as_new_scene_line_1049_b24bae1e_native(),
-        qtcontentbrowserpanel_add_selected_to_current_scene_line_1054_fce21df9_native(),
-        qtcontentbrowserpanel_open_selected_in_new_level_editor_line_1059_424a5805_native(),
-        qtcontentbrowserpanel_import_selected_to_level_line_1064_b1b19f23_native(),
-        qtcontentbrowserpanel_open_selected_in_character_builder_line_1069_26456eae_native(),
-        qtcontentbrowserpanel_request_selected_asset_action_line_1074_b75ea7a1_native(),
-        qtcontentbrowserpanel_apply_ghost_theme_line_1079_e38aa1ae_native(),
-        qtcontentbrowserpanel_apply_ghost_layout_line_1082_c0f2c024_native(),
-        qtcontentbrowserpanel_on_splitter_moved_line_1095_e8f4950d_native(),
-        qtcontentbrowserpanel_apply_constructial_splitter_sizes_line_1098_c5849d2d_native(),
-        qtcontentbrowserpanel_rebuild_assets_line_1109_6a17aaa5_native(),
-        qtcontentbrowserpanel_rebuild_sources_line_1119_7969137c_native(),
-        qtcontentbrowserpanel_rebuild_navigation_line_1130_1d16bed4_native(),
-        qtcontentbrowserpanel_select_navigation_line_1165_f8612008_native(),
-        qtcontentbrowserpanel_walk_nav_items_line_1172_a341b1ad_native(),
-        qtcontentbrowserpanel_walk_nav_branch_line_1177_194b0116_native(),
-        qtcontentbrowserpanel_category_sort_key_line_1182_ef1faf40_native(),
-        qtcontentbrowserpanel_subcategory_sort_key_line_1188_151a3e1a_native(),
-        qtcontentbrowserpanel_on_navigation_changed_line_1195_4f7c3bb0_native(),
-        qtcontentbrowserpanel_apply_filter_line_1207_9f924912_native(),
-        qtcontentbrowserpanel_matches_tag_line_1248_3721d3d1_native(),
-        qtcontentbrowserpanel_asset_icon_line_1367_3e39cb38_native(),
-        qtcontentbrowserpanel_update_details_line_1388_6edabb16_native(),
-        qtcontentbrowserpanel_set_action_state_line_1410_7944374d_native(),
-        qtcontentbrowserpanel_asset_supports_character_builder_line_1423_712ade59_native(),
-        qtcontentbrowserpanel_activate_selected_line_1426_0728b63a_native(),
-        qtcontentbrowserpanel_context_action_line_1437_868717c5_native(),
-        qtcontentbrowserpanel_build_model_context_menu_line_1448_63c6c224_native(),
-        qtcontentbrowserpanel_show_context_menu_line_1507_5ddbacae_native(),
-        qtcontentbrowserpanel_emit_retarget_line_1552_3ce3d5ed_native(),
-        qtmodellistitem_construct_line_1967_e4aba5c1_native(),
-        qtlibrarypanel_construct_line_2019_8e36544e_native(),
-        qtlibrarypanel_build_line_2024_c78dd037_native(),
-        qtlibrarypanel_set_rows_line_2125_c99f4c75_native(),
-        qtlibrarypanel_set_status_line_2130_024ec3b8_native(),
-        qtlibrarypanel_selected_row_line_2133_8ad04859_native(),
-        qtlibrarypanel_visible_rows_line_2137_fd9817f5_native(),
-        qtlibrarypanel_load_selected_line_2145_d17fc616_native(),
-        qtlibrarypanel_extract_selected_line_2150_2fd5a45e_native(),
-        qtlibrarypanel_import_selected_to_level_line_2155_791e0089_native(),
-        qtlibrarypanel_load_item_line_2160_5ab1841f_native(),
-        qtlibrarypanel_show_context_menu_line_2165_316b7e96_native(),
-        qtlibrarypanel_current_game_filter_line_2191_5f45c87d_native(),
-        qtlibrarypanel_current_category_line_2195_55f4b361_native(),
-        qtlibrarypanel_apply_filter_line_2201_42b17a66_native(),
-        qtlibrarypanel_rebuild_module_areas_line_2243_8faba83c_native(),
-        qtlibrarypanel_update_selection_text_line_2253_34198455_native(),
-        resourceloadingmixin_populate_saved_dirs_line_42_2009f34b_native(),
-        resourceloadingmixin_scan_library_line_50_242b01c8_native(),
-        resourceloadingmixin_on_library_scanned_line_80_0a7b46b1_native(),
-        resourceloadingmixin_set_library_scan_buttons_enabled_line_109_7d95201d_native(),
-        resourceloadingmixin_rebuild_library_list_line_117_dbb106db_native(),
-        resourceloadingmixin_filter_library_line_127_e8eb8d55_native(),
-        resourceloadingmixin_load_library_item_line_135_951e28b6_native(),
-        resourceloadingmixin_load_content_browser_primary_scene_model_line_140_2e1728af_native(),
-        resourceloadingmixin_add_content_browser_model_to_current_scene_line_145_bfcf46d5_native(),
-        resourceloadingmixin_ipc_library_row_summary_line_151_a59b4b7e_native(),
-        resourceloadingmixin_ipc_library_row_matches_line_181_6625b0ea_native(),
-        resourceloadingmixin_ipc_find_library_row_line_218_8fdc42c0_native(),
-        resourceloadingmixin_ipc_library_search_line_232_9c4c4c1c_native(),
-        resourceloadingmixin_select_content_browser_library_row_line_248_21fa280b_native(),
-        resourceloadingmixin_ipc_library_select_line_288_8f3697e1_native(),
-        resourceloadingmixin_ipc_library_state_snapshot_line_303_74a8db2e_native(),
-        resourceloadingmixin_start_resource_load_line_326_b8f455a8_native(),
-        resourceloadingmixin_load_resource_model_on_ui_thread_line_362_798619a4_native(),
-        resourceloadingmixin_open_model_line_380_94f35463_native(),
-        resourceloadingmixin_open_startup_inputs_line_390_5455bc5f_native(),
-        resourceloadingmixin_load_bas_model_recipe_from_path_line_403_9a7f1a1d_native(),
-        resourceloadingmixin_start_model_load_line_498_712134db_native(),
-        resourceloadingmixin_choose_model_import_action_line_548_9be3dd6f_native(),
-        resourceloadingmixin_resource_ref_from_loaded_model_line_586_98fbcebf_native(),
-        resourceloadingmixin_module_room_placement_for_ref_line_602_f251ddb5_native(),
-        resourceloadingmixin_module_group_anchor_for_line_617_b8f03f6f_native(),
-        resourceloadingmixin_placement_transform_for_new_model_line_646_107556e7_native(),
-        resourceloadingmixin_add_loaded_model_to_scene_line_679_ab83a1ce_native(),
-        resourceloadingmixin_apply_module_group_metadata_line_705_095e75fe_native(),
-        resourceloadingmixin_on_model_loaded_line_755_82aa079a_native(),
-        resourceloadingmixin_infer_game_from_model_line_912_3e2fbba2_native(),
-        resourceloadingmixin_configured_game_dirs_line_920_0cf6e4d3_native(),
-        resourceloadingmixin_get_resource_manager_line_924_27186f53_native(),
-        resourceloadingmixin_configure_viewport_resources_line_959_ca92b83f_native(),
-        resourceloadingmixin_try_coload_walkmesh_line_981_45d2e065_native(),
-        resourceloadingmixin_do_coload_walkmesh_line_990_f2b25517_native(),
-        resourceloadingmixin_load_walkmesh_source_line_1033_98e1cd8e_native(),
-        resourceloadingmixin_on_module_meshes_selected_from_panel_line_1074_339b5bac_native(),
-        resourceloadingmixin_select_module_mesh_by_name_from_ipc_line_1084_b718266d_native(),
-        resourceloadingmixin_refresh_mesh_visibility_render_state_line_1175_45dc6625_native(),
-        resourceloadingmixin_on_viewport_mesh_visibility_changed_line_1191_440f15f6_native(),
-        resourceloadingmixin_on_module_mesh_visibility_changed_line_1196_222c9fa9_native(),
-        resourceloadingmixin_on_sprite_material_selected_line_1200_3364eaca_native(),
-        resourceloadingmixin_on_sprite_materials_changed_line_1209_677c8ae9_native(),
-        resourceloadingmixin_sync_walkmesh_overlay_visibility_line_1258_6f0726a1_native(),
-        resourcepanelsmixin_populate_resource_panel_line_20_d3fd6ef8_native(),
-        resourcepanelsmixin_preview_resource_row_line_86_969a6707_native(),
-        resourcepanelsmixin_activate_resource_row_line_115_19d3c199_native(),
-        resourcepanelsmixin_ipc_resource_rows_line_132_6daf13c2_native(),
-        resourcepanelsmixin_ipc_resource_row_summary_line_140_258be026_native(),
-        resourcepanelsmixin_ipc_resource_row_matches_line_151_916c215c_native(),
-        resourcepanelsmixin_ipc_resource_search_line_167_15362db6_native(),
-        resourcepanelsmixin_ipc_find_resource_row_line_183_799a62dd_native(),
-        resourcepanelsmixin_select_resource_browser_row_line_197_414ad5a4_native(),
-        resourcepanelsmixin_ipc_resource_select_line_235_74dbe0d8_native(),
-        resourcepanelsmixin_ipc_resource_state_snapshot_line_260_ff63c0b0_native(),
-        resourcepanelsmixin_open_blueprint_resource_from_ipc_line_279_10ba397d_native(),
-        resourcepanelsmixin_refresh_twoda_panel_line_332_d51bc38d_native(),
-        resourcepanelsmixin_load_twoda_table_line_353_dd254037_native(),
-        resourcepanelsmixin_about_modular_line_389_ee22efd3_native(),
-        resourcepanelsmixin_validate_current_character_line_399_ac3919ba_native(),
-        resourcepanelsmixin_ipc_ping_line_429_2a79b2c8_native(),
-        resourcepanelsmixin_ipc_notify_saved_line_441_214d8a92_native(),
-        resourcepanelsmixin_ipc_refresh_gmodular_line_453_1efe7413_native(),
-        resourcepanelsmixin_open_uv_viewer_line_461_2505ea2e_native(),
-        resourcepanelsmixin_open_module_editor_window_line_467_69d53727_native(),
-        resourcepanelsmixin_send_library_row_to_module_editor_line_486_ceaadd69_native(),
-        resourcepanelsmixin_send_library_row_to_new_module_editor_line_495_de91a7de_native(),
-        resourcepanelsmixin_open_rig_window_line_508_bce208b7_native(),
-        resourceentry_read_line_186_03bea365_native(),
-        keybifreader_construct_line_205_cf570382_native(),
-        keybifreader_load_line_214_75fa6781_native(),
-        keybifreader_get_line_391_63f58f54_native(),
-        keybifreader_list_type_line_419_6f3477e8_native(),
-        keybifreader_list_all_types_line_441_fbf76cca_native(),
-        keybifreader_list_all_resources_line_445_55202d73_native(),
-        erfreader_construct_line_458_20e07f2c_native(),
-        erfreader_load_line_463_787a1e59_native(),
-        erfreader_load_v1_from_tables_line_501_00997c81_native(),
-        erfreader_load_v1_line_525_48cb5f73_native(),
-        erfreader_get_line_535_3e2e3feb_native(),
-        erfreader_list_type_line_538_73602c7a_native(),
-        erfreader_list_all_line_541_8c5287c8_native(),
-        gamelibrary_construct_line_674_79ae6ceb_native(),
-        gamelibrary_set_k1_dir_line_690_bc728836_native(),
-        gamelibrary_set_k2_dir_line_697_f18ba4c4_native(),
-        gamelibrary_scan_line_704_943f553e_native(),
-        gamelibrary_scan_game_line_861_11feb0eb_native(),
-        gamelibrary_read_mdl_metadata_line_1021_49fe64f9_native(),
-        gamelibrary_get_2da_line_1036_e392fe83_native(),
-        gamelibrary_get_2da_raw_line_1060_d6cd5828_native(),
-        gamelibrary_list_2da_names_line_1083_66e75be4_native(),
-        gamelibrary_list_resources_line_1093_d309a480_native(),
-        gamelibrary_get_resource_data_line_1100_da175a53_native(),
-        gamelibrary_search_line_1125_3a92a130_native(),
-        gamelibrary_list_models_by_class_line_1131_305675e6_native(),
-        gamelibrary_list_textures_line_1147_14298a13_native(),
-        gamelibrary_get_tlk_string_line_1153_e6a818a7_native(),
-        gamelibrary_get_texture_data_line_1180_0a58651f_native(),
-        gamelibrary_get_model_data_line_1331_84a35054_native(),
-        gamelibrary_extract_to_folder_line_1375_1f447f19_native(),
-        gamelibrary_scan_texture_names_line_1407_2c8a495d_native(),
-        gamelibrary_detect_texture_ext_line_1441_cab77586_native(),
+        gameresourcequery_post_init_line_76_989bfc27_native(),
+        gameresourcequery_to_address_line_84_05be5717_native(),
+        gameresourcerecord_post_init_line_107_f12ea9dc_native(),
+        gameresourceprovider_list_resources_line_154_1006bb55_native(),
+        gameresourceprovider_resolve_line_157_86c793b8_native(),
+        gameresourceprovider_read_bytes_line_160_94a8e085_native(),
+        gameresourceprovider_exists_line_163_2dcb49f7_native(),
+        inmemorygameresourceprovider_init_line_188_9a2d7f9e_native(),
+        inmemorygameresourceprovider_add_line_197_f9116d8b_native(),
+        inmemorygameresourceprovider_list_resources_line_200_6b089949_native(),
+        inmemorygameresourceprovider_list_module_resources_line_205_2fcbd617_native(),
+        inmemorygameresourceprovider_resolve_line_208_737c9047_native(),
+        inmemorygameresourceprovider_read_bytes_line_224_0fa5e045_native(),
+        inmemorygameresourceprovider_read_resource_line_227_e0ae0801_native(),
+        inmemorygameresourceprovider_exists_line_238_622111f4_native(),
+        localfileresourceprovider_list_resources_line_249_9baab00a_native(),
+        localfileresourceprovider_resolve_line_260_f88da09d_native(),
+        localfileresourceprovider_read_bytes_line_270_df25166d_native(),
+        localfileresourceprovider_exists_line_273_55461f4c_native(),
+        localfileresourceprovider_record_for_path_line_280_6b8995c9_native(),
+        compositegameresourceprovider_init_line_302_e7f4ac6f_native(),
+        compositegameresourceprovider_list_resources_line_305_e67ff8d6_native(),
+        compositegameresourceprovider_list_module_resources_line_311_95d5ce7f_native(),
+        compositegameresourceprovider_resolve_line_314_c988e430_native(),
+        compositegameresourceprovider_read_bytes_line_334_ddaa088e_native(),
+        compositegameresourceprovider_read_resource_line_337_c4e91c9b_native(),
+        compositegameresourceprovider_exists_line_348_084a2612_native(),
+        resourcemanagergameresourceprovider_init_line_360_d9f67228_native(),
+        resourcemanagergameresourceprovider_list_resources_line_363_47cb60a6_native(),
+        resourcemanagergameresourceprovider_list_module_resources_line_374_7ea1bcbe_native(),
+        resourcemanagergameresourceprovider_resolve_line_377_bb612e9b_native(),
+        resourcemanagergameresourceprovider_read_bytes_line_413_d7d35ee3_native(),
+        resourcemanagergameresourceprovider_read_resource_line_416_7494a044_native(),
+        resourcemanagergameresourceprovider_exists_line_427_5cfa1477_native(),
+        resourceloadingmixin_populate_saved_dirs_line_42_28d2127b_native(),
+        resourceloadingmixin_scan_library_line_50_98d2cc95_native(),
+        resourceloadingmixin_on_library_scanned_line_80_64a9e351_native(),
+        resourceloadingmixin_set_library_scan_buttons_enabled_line_109_c24901d5_native(),
+        resourceloadingmixin_rebuild_library_list_line_117_486921eb_native(),
+        resourceloadingmixin_filter_library_line_127_62a076af_native(),
+        resourceloadingmixin_load_library_item_line_135_7704d3b8_native(),
+        resourceloadingmixin_load_content_browser_primary_scene_model_line_140_7a65fc78_native(),
+        resourceloadingmixin_add_content_browser_model_to_current_scene_line_145_bd1cad03_native(),
+        resourceloadingmixin_ipc_library_row_summary_line_151_f10c56db_native(),
+        resourceloadingmixin_ipc_library_row_matches_line_181_93da2d5b_native(),
+        resourceloadingmixin_ipc_find_library_row_line_218_7c403309_native(),
+        resourceloadingmixin_ipc_library_search_line_232_b504d44f_native(),
+        resourceloadingmixin_select_content_browser_library_row_line_248_610d0f63_native(),
+        resourceloadingmixin_ipc_library_select_line_288_0af4b7f0_native(),
+        resourceloadingmixin_ipc_library_state_snapshot_line_303_1a8e486b_native(),
+        resourceloadingmixin_start_resource_load_line_326_97b0575e_native(),
+        resourceloadingmixin_load_resource_model_on_ui_thread_line_362_deb77684_native(),
+        resourceloadingmixin_open_model_line_380_df5e8273_native(),
+        resourceloadingmixin_open_startup_inputs_line_390_47234626_native(),
+        resourceloadingmixin_load_bas_model_recipe_from_path_line_403_725e68cc_native(),
+        resourceloadingmixin_start_model_load_line_498_0df5777a_native(),
+        resourceloadingmixin_choose_model_import_action_line_548_eb61619f_native(),
+        resourceloadingmixin_resource_ref_from_loaded_model_line_586_2246c358_native(),
+        resourceloadingmixin_module_room_placement_for_ref_line_602_a91773b8_native(),
+        resourceloadingmixin_module_group_anchor_for_line_617_bd195b2c_native(),
+        resourceloadingmixin_placement_transform_for_new_model_line_646_272cfd6b_native(),
+        resourceloadingmixin_add_loaded_model_to_scene_line_679_8366f15f_native(),
+        resourceloadingmixin_apply_module_group_metadata_line_705_4d86356e_native(),
+        resourceloadingmixin_on_model_loaded_line_755_94fff88f_native(),
+        resourceloadingmixin_infer_game_from_model_line_912_203689e9_native(),
+        resourceloadingmixin_configured_game_dirs_line_920_3e59f037_native(),
+        resourceloadingmixin_get_resource_manager_line_924_f41180bc_native(),
+        resourceloadingmixin_configure_viewport_resources_line_959_be59e082_native(),
+        resourceloadingmixin_try_coload_walkmesh_line_981_fe88e817_native(),
+        resourceloadingmixin_do_coload_walkmesh_line_990_8dbc6902_native(),
+        resourceloadingmixin_load_walkmesh_source_line_1033_cc52c1c6_native(),
+        resourceloadingmixin_on_module_meshes_selected_from_panel_line_1074_7f44d726_native(),
+        resourceloadingmixin_select_module_mesh_by_name_from_ipc_line_1084_be399906_native(),
+        resourceloadingmixin_refresh_mesh_visibility_render_state_line_1175_9a7f0465_native(),
+        resourceloadingmixin_on_viewport_mesh_visibility_changed_line_1191_b7301ba8_native(),
+        resourceloadingmixin_on_module_mesh_visibility_changed_line_1196_33778f8a_native(),
+        resourceloadingmixin_on_sprite_material_selected_line_1200_61efdda0_native(),
+        resourceloadingmixin_on_sprite_materials_changed_line_1209_ffe0c108_native(),
+        resourceloadingmixin_sync_walkmesh_overlay_visibility_line_1258_5d81893a_native(),
+        resourcepanelsmixin_populate_resource_panel_line_20_e8fae111_native(),
+        resourcepanelsmixin_preview_resource_row_line_86_26514cc0_native(),
+        resourcepanelsmixin_activate_resource_row_line_115_42cdf557_native(),
+        resourcepanelsmixin_ipc_resource_rows_line_132_3b632297_native(),
+        resourcepanelsmixin_ipc_resource_row_summary_line_140_7fff9005_native(),
+        resourcepanelsmixin_ipc_resource_row_matches_line_151_a1f7d5ad_native(),
+        resourcepanelsmixin_ipc_resource_search_line_167_b38117be_native(),
+        resourcepanelsmixin_ipc_find_resource_row_line_183_e01d31ae_native(),
+        resourcepanelsmixin_select_resource_browser_row_line_197_65f3d263_native(),
+        resourcepanelsmixin_ipc_resource_select_line_235_a8fbdd3e_native(),
+        resourcepanelsmixin_ipc_resource_state_snapshot_line_260_6164fad9_native(),
+        resourcepanelsmixin_open_blueprint_resource_from_ipc_line_279_39240728_native(),
+        resourcepanelsmixin_refresh_twoda_panel_line_332_8115e189_native(),
+        resourcepanelsmixin_load_twoda_table_line_353_66e442a9_native(),
+        resourcepanelsmixin_about_modular_line_389_ebbf0869_native(),
+        resourcepanelsmixin_validate_current_character_line_399_61332748_native(),
+        resourcepanelsmixin_ipc_ping_line_429_48aad072_native(),
+        resourcepanelsmixin_ipc_notify_saved_line_441_2bbcbc56_native(),
+        resourcepanelsmixin_ipc_refresh_gmodular_line_453_75c47a4c_native(),
+        resourcepanelsmixin_open_uv_viewer_line_461_a357c8d8_native(),
+        resourcepanelsmixin_open_module_editor_window_line_467_41de9fd8_native(),
+        resourcepanelsmixin_send_library_row_to_module_editor_line_486_48ae41db_native(),
+        resourcepanelsmixin_send_library_row_to_new_module_editor_line_495_a1dba464_native(),
+        resourcepanelsmixin_open_rig_window_line_508_a21d33d9_native(),
+        resourceentry_read_line_186_9dd8f141_native(),
+        keybifreader_init_line_205_93b244d0_native(),
+        keybifreader_load_line_214_76cd0cb3_native(),
+        keybifreader_get_line_391_9d5a5e82_native(),
+        keybifreader_list_type_line_419_ad92b7b6_native(),
+        keybifreader_list_all_types_line_441_b8ccd053_native(),
+        keybifreader_list_all_resources_line_445_15760e92_native(),
+        erfreader_init_line_458_c7e7fb34_native(),
+        erfreader_load_line_463_9b9ac0a2_native(),
+        erfreader_load_v1_from_tables_line_501_1eaf1749_native(),
+        erfreader_load_v1_line_525_08b06ccc_native(),
+        erfreader_get_line_535_bd38e03f_native(),
+        erfreader_list_type_line_538_ac07e8ac_native(),
+        erfreader_list_all_line_541_355f8ccb_native(),
+        gamelibrary_init_line_674_c9ef3640_native(),
+        gamelibrary_set_k1_dir_line_690_64e1b435_native(),
+        gamelibrary_set_k2_dir_line_697_830b2b0c_native(),
+        gamelibrary_scan_line_704_0b9fe9e4_native(),
+        gamelibrary_scan_game_line_861_0926be18_native(),
+        gamelibrary_read_mdl_metadata_line_1021_4d9f7af0_native(),
+        gamelibrary_get_2da_line_1036_60ed5747_native(),
+        gamelibrary_get_2da_raw_line_1060_bd7d9ce8_native(),
+        gamelibrary_list_2da_names_line_1083_846d35af_native(),
+        gamelibrary_list_resources_line_1093_8b71baf2_native(),
+        gamelibrary_get_resource_data_line_1100_91fbfa96_native(),
+        gamelibrary_search_line_1125_0bc1a015_native(),
+        gamelibrary_list_models_by_class_line_1131_c56104f2_native(),
+        gamelibrary_list_textures_line_1147_5504c80c_native(),
+        gamelibrary_get_tlk_string_line_1153_0d3daaa1_native(),
+        gamelibrary_get_texture_data_line_1180_03737ac6_native(),
+        gamelibrary_get_model_data_line_1331_31f6e0da_native(),
+        gamelibrary_extract_to_folder_line_1375_d5f0dd72_native(),
+        gamelibrary_scan_texture_names_line_1407_fb7e7049_native(),
+        gamelibrary_detect_texture_ext_line_1441_6ee66cbe_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;

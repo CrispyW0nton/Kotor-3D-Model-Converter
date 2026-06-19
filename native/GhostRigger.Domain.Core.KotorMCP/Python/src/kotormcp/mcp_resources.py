@@ -168,7 +168,7 @@ async def read_resource(uri: str) -> Dict[str, Any]:
             result = installation.resource(path or "appearance", ResourceType.TwoDA, order=order)
             if result is None:
                 return {"error": f"2DA not found: {path}"}
-            table = read_2da(BytesIO(result.data))
+            table = read_2da(result.data)
             headers = table.get_headers()
             rows = [{h: table.get_cell_safe(i, h, "") for h in headers}
                     for i in range(min(table.get_height(), 500))]

@@ -18,7 +18,13 @@ EXPORTS = ROOT / "exports"
 
 
 def configure_paths() -> None:
-    configured = [ROOT / "src", ROOT]
+    configured = []
+    try:
+        from scripts.mcp.start_kotormcp_stdio import _python_roots
+
+        configured.extend(_python_roots(ROOT))
+    except Exception:
+        configured.extend([ROOT / "src", ROOT])
     if MCP_CONFIG_PATH.exists():
         data = json.loads(MCP_CONFIG_PATH.read_text(encoding="utf-8"))
         env = data.get("mcpServers", {}).get("kotormcp", {}).get("env", {})
@@ -26,13 +32,15 @@ def configure_paths() -> None:
             if env.get(key):
                 os.environ.setdefault(key, env[key])
         configured.extend(Path(p) for p in str(env.get("PYTHONPATH", "")).split(";") if p)
-    for path in configured:
+    for path in reversed(configured):
         text = str(path)
         if path.exists() and text not in sys.path:
             sys.path.insert(0, text)
 
 
 def parse_mcp_json(result: Any) -> dict[str, Any]:
+    if isinstance(result, dict) and "text" in result:
+        return json.loads(str(result.get("text") or "{}"))
     content = getattr(result, "content", None) or []
     if not content:
         return {}

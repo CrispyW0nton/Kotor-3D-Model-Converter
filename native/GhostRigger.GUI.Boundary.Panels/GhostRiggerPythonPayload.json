@@ -141,7 +141,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CONTENT_BROWSER_PANEL",
             "source_path": "src/gui/panels/qt_content_browser_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_content_browser_panel.py",
-            "sha256": "4818cc2fbd8022744b1e00dab60b51fce5ba70c83650810e6998c2d5483a63af"
+            "sha256": "01e1c158378e0d23cdf31ac36c17a89a05f4a3f36c1d002afb4dbe1b76aa689a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_DIAGNOSTICS_PANEL",
@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL",
             "source_path": "src/gui/panels/qt_library_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_library_panel.py",
-            "sha256": "eb68783df7d653d48d9761b048c4909cba07c454cc3f8a0b7ce0f785f231d12c"
+            "sha256": "93f50561e9a996b3af84aa45036e50e9acf05e63b2fb6ab99bc1200d8437277c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIGHTING_PANEL",

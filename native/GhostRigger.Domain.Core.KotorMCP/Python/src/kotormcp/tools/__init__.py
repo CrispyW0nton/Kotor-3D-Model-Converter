@@ -61,12 +61,50 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from kotormcp.utils import json_content
 from kotormcp.tools import (
     installation, discovery, gamedata, ghostrigger,
     debug_skinning, debug_materials,
     modules, gffdata, decompile, resource, quest,
-    refs, walkmesh, archives, retargeting,
+    refs, walkmesh, archives, retargeting, ghostrigger_tools,
 )
+
+
+MODEL_PIPELINE_RESPONSE_CHARS = 250_000
+
+
+def _model_pipeline_tools() -> List[Dict[str, Any]]:
+    schema = {
+        "type": "object",
+        "properties": {
+            "game": {
+                "type": "string",
+                "description": "Game alias: k1, k2, swkotor, tsl, or kotor2",
+            },
+            "resref": {
+                "type": "string",
+                "description": "MDL resource reference without extension",
+            },
+        },
+        "required": ["game", "resref"],
+    }
+    return [
+        {
+            "name": "inspect_mdl",
+            "description": "Inspect the raw PyKotor model for a KOTOR MDL resource.",
+            "inputSchema": schema,
+        },
+        {
+            "name": "inspect_mdl_ghostrigger",
+            "description": "Inspect GhostRigger's imported model representation for a KOTOR MDL resource.",
+            "inputSchema": schema,
+        },
+        {
+            "name": "compare_model_pipelines",
+            "description": "Compare PyKotor ground truth against GhostRigger's imported model pipeline.",
+            "inputSchema": schema,
+        },
+    ]
 
 
 def get_all_tools() -> List[Dict[str, Any]]:
@@ -94,6 +132,7 @@ def get_all_tools() -> List[Dict[str, Any]]:
         + archives.get_tools()            # 2  archive listing + extraction
         + debug_materials.get_tools()     # 13 debug materials/textures/assembly
         + retargeting.get_tools()         # 4  retargeting introspection/mapping/export
+        + _model_pipeline_tools()         # 3  AGENTS.md backend validation aliases
     )
 
 
@@ -142,6 +181,21 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await ghostrigger.handle_validate_unity_import(arguments)
     if name == "ghostrigger_run_malak_unity_smoke":
         return await ghostrigger.handle_run_malak_unity_smoke(arguments)
+    if name == "inspect_mdl":
+        return json_content(
+            ghostrigger_tools.inspect_mdl(arguments["game"], arguments["resref"]),
+            max_chars=MODEL_PIPELINE_RESPONSE_CHARS,
+        )
+    if name == "inspect_mdl_ghostrigger":
+        return json_content(
+            ghostrigger_tools.inspect_mdl_ghostrigger(arguments["game"], arguments["resref"]),
+            max_chars=MODEL_PIPELINE_RESPONSE_CHARS,
+        )
+    if name == "compare_model_pipelines":
+        return json_content(
+            ghostrigger_tools.compare_model_pipelines(arguments["game"], arguments["resref"]),
+            max_chars=MODEL_PIPELINE_RESPONSE_CHARS,
+        )
 
     # ── Module tools ──────────────────────────────────────────────────────────
     if name == "kotor_list_modules":

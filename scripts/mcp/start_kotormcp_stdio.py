@@ -17,16 +17,37 @@ def _prepend_path(path: Path) -> None:
         sys.path.insert(0, text)
 
 
+def _python_roots(root: Path) -> list[Path]:
+    """Return import roots for GhostRigger's native-split Python packages."""
+    roots: list[Path] = []
+    for project_root in sorted((root / "native").glob("GhostRigger.*")):
+        python_root = project_root / "Python"
+        src_root = python_root / "src"
+        if (src_root / "__init__.py").exists():
+            continue
+        if src_root.exists():
+            roots.append(src_root)
+        if python_root.exists():
+            roots.append(python_root)
+    legacy_src = root / "src"
+    if legacy_src.exists():
+        roots.append(legacy_src)
+    roots.append(root)
+    return roots
+
+
 def main() -> None:
     root = Path(__file__).resolve().parents[2]
-    _prepend_path(root / "src")
-    _prepend_path(root)
+    wanted = _python_roots(root)
+    for path in reversed(wanted):
+        _prepend_path(path)
 
     current = os.environ.get("PYTHONPATH", "")
-    wanted = [str(root / "src"), str(root)]
+    wanted_text = [str(path) for path in wanted if path.exists()]
     os.environ["PYTHONPATH"] = os.pathsep.join(
-        item for item in wanted + ([current] if current else []) if item
+        item for item in wanted_text + ([current] if current else []) if item
     )
+    os.environ.setdefault("GHOSTRIGGER_ROOT", str(root))
 
     from kotormcp.server import main as server_main
 

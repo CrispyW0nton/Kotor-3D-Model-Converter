@@ -2,7 +2,7 @@
 
 namespace ghostrigger::tools::workflow::contentbrowser {
 
-const NativeFunctionImplementation& gameresourcerecord_resref_line_116_3d616c56_native() {
+const NativeFunctionImplementation& gameresourcerecord_resref_line_116_78f26074_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -17,8 +17,7 @@ const NativeFunctionImplementation& gameresourcerecord_resref_line_116_3d616c56_
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourcerecord_restype_line_120_1d46f82f_native() {
+const NativeFunctionImplementation& gameresourcerecord_restype_line_120_f9721240_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -33,8 +32,7 @@ const NativeFunctionImplementation& gameresourcerecord_restype_line_120_1d46f82f
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourcerecord_layer_line_124_3bab406c_native() {
+const NativeFunctionImplementation& gameresourcerecord_layer_line_124_0ae162e6_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -49,8 +47,7 @@ const NativeFunctionImplementation& gameresourcerecord_layer_line_124_3bab406c_n
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourcerecord_key_line_128_f409ca4e_native() {
+const NativeFunctionImplementation& gameresourcerecord_key_line_128_428e6e30_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -65,8 +62,7 @@ const NativeFunctionImplementation& gameresourcerecord_key_line_128_f409ca4e_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& gameresourceresult_address_line_147_0e30bfb9_native() {
+const NativeFunctionImplementation& gameresourceresult_address_line_147_2c9f2ffa_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::core::resources::game_resource_provider",
@@ -81,24 +77,7 @@ const NativeFunctionImplementation& gameresourceresult_address_line_147_0e30bfb9
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& contentassetdescriptor_searchable_text_line_403_b686721a_native() {
-    static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Tools.Workflow.ContentBrowser",
-        "ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel",
-        "src/gui/panels/qt_content_browser_panel.py",
-        "ContentAssetDescriptor.searchable_text",
-        "properties",
-        "native_contract_pending_semantic_port",
-        true,
-        false,
-        true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Tools.Workflow.ContentBrowser","namespace":"ghostrigger::tools::workflow::contentbrowser::gui::panels::qt_content_browser_panel","python_file":"src/gui/panels/qt_content_browser_panel.py","qualname":"ContentAssetDescriptor.searchable_text","name":"searchable_text","callable_type":"properties","line":403,"end_line":414,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
-    };
-    return implementation;
-}
-
-const NativeFunctionImplementation& resourceentry_is_model_line_148_43c8a66b_native() {
+const NativeFunctionImplementation& resourceentry_is_model_line_148_ac3a3c87_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -113,8 +92,7 @@ const NativeFunctionImplementation& resourceentry_is_model_line_148_43c8a66b_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceentry_is_texture_line_158_fe34306f_native() {
+const NativeFunctionImplementation& resourceentry_is_texture_line_158_81a9e006_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -129,8 +107,7 @@ const NativeFunctionImplementation& resourceentry_is_texture_line_158_fe34306f_n
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceentry_ext_line_176_0604481f_native() {
+const NativeFunctionImplementation& resourceentry_ext_line_176_f6cc4a92_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -145,8 +122,7 @@ const NativeFunctionImplementation& resourceentry_ext_line_176_0604481f_native()
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& resourceentry_filename_line_183_c3d15313_native() {
+const NativeFunctionImplementation& resourceentry_filename_line_183_3ce7f046_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -161,8 +137,7 @@ const NativeFunctionImplementation& resourceentry_filename_line_183_c3d15313_nat
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& modellibraryentry_display_label_line_564_bd018b8d_native() {
+const NativeFunctionImplementation& modellibraryentry_display_label_line_564_2f8cb0ec_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -177,8 +152,7 @@ const NativeFunctionImplementation& modellibraryentry_display_label_line_564_bd0
     };
     return implementation;
 }
-
-const NativeFunctionImplementation& modellibraryentry_display_label_rich_line_572_ec474d1b_native() {
+const NativeFunctionImplementation& modellibraryentry_display_label_rich_line_572_c2c9f684_native() {
     static const NativeFunctionImplementation implementation = {
         "GhostRigger.Tools.Workflow.ContentBrowser",
         "ghostrigger::tools::workflow::contentbrowser::resources::game_library",
@@ -193,21 +167,19 @@ const NativeFunctionImplementation& modellibraryentry_display_label_rich_line_57
     };
     return implementation;
 }
-
 const NativeFunctionImplementation* properties_native_functions(std::size_t& count) {
     static const NativeFunctionImplementation entries[] = {
-        gameresourcerecord_resref_line_116_3d616c56_native(),
-        gameresourcerecord_restype_line_120_1d46f82f_native(),
-        gameresourcerecord_layer_line_124_3bab406c_native(),
-        gameresourcerecord_key_line_128_f409ca4e_native(),
-        gameresourceresult_address_line_147_0e30bfb9_native(),
-        contentassetdescriptor_searchable_text_line_403_b686721a_native(),
-        resourceentry_is_model_line_148_43c8a66b_native(),
-        resourceentry_is_texture_line_158_fe34306f_native(),
-        resourceentry_ext_line_176_0604481f_native(),
-        resourceentry_filename_line_183_c3d15313_native(),
-        modellibraryentry_display_label_line_564_bd018b8d_native(),
-        modellibraryentry_display_label_rich_line_572_ec474d1b_native(),
+        gameresourcerecord_resref_line_116_78f26074_native(),
+        gameresourcerecord_restype_line_120_f9721240_native(),
+        gameresourcerecord_layer_line_124_0ae162e6_native(),
+        gameresourcerecord_key_line_128_428e6e30_native(),
+        gameresourceresult_address_line_147_2c9f2ffa_native(),
+        resourceentry_is_model_line_148_ac3a3c87_native(),
+        resourceentry_is_texture_line_158_81a9e006_native(),
+        resourceentry_ext_line_176_f6cc4a92_native(),
+        resourceentry_filename_line_183_3ce7f046_native(),
+        modellibraryentry_display_label_line_564_2f8cb0ec_native(),
+        modellibraryentry_display_label_rich_line_572_c2c9f684_native(),
     };
     count = sizeof(entries) / sizeof(entries[0]);
     return entries;

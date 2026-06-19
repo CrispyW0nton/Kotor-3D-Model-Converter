@@ -21,10 +21,6 @@ struct NativeFunctionImplementation {
 #endif // GHOSTRIGGER_TOOLS_TWODABROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
 
 const NativeFunctionImplementation& gffreader_from_bytes_line_256_55910253_native();
-const NativeFunctionImplementation& twoda_from_bytes_line_88_45af8178_native();
-const NativeFunctionImplementation& twoda_from_file_line_103_aca436e4_native();
-const NativeFunctionImplementation& twoda_parse_binary_line_114_bc648710_native();
-const NativeFunctionImplementation& twoda_parse_ascii_line_200_d1371498_native();
 
 const NativeFunctionImplementation* classmethods_native_functions(std::size_t& count);
 

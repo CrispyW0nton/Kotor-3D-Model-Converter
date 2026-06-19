@@ -11,6 +11,25 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] M7/T703 Player Outfit Taxonomy Sweep
+
+Owner: LordVaderCW
+Subsystem: Content Browser model taxonomy, shared 2DA access, and KotorMCP 2DA validation
+
+- Added app-facing `ResourceManager` helpers for cached `2da` table reads and TLK string lookup so startup Content Browser indexing can use the shared parser without bypassing the resource layer.
+- Removed the duplicate `src.core.templates.twoda` package from `GhostRigger.Tools.Workflow.TwoDABrowser`; `GhostRigger.Domain.Core.Templates` now owns the shared 2DA parser used by browser workflows.
+- Extended Content Browser player-body enrichment so equippable body models resolve through `appearance.2da` and `baseitems.2da` bodyvars, including fallback bodyvar classification for models absent from `appearance.2da`.
+- Replaced the old `Male/Female Bodies - Class B-N` character buckets with armor/outfit subcategories such as Clothing, Light Armor, Heavy Armor, Jedi Robes, and Environmental, while keeping class A player bodies as base bodies and preserving heads under head buckets.
+- Fixed KotorMCP 2DA resource reads to materialize lazy PyKotor resource data as bytes and pass bytes directly to PyKotor `read_2da`, restoring backend validation for `baseitems.2da` and related tables.
+- Regenerated native Python payload manifests and removed stale generated TwoDA Browser function bindings for the deleted duplicate parser files.
+
+Verification:
+- KotorMCP `kotor_lookup_2da` on K1 `baseitems` row 39 returned `label=Armor_Class_5`, `bodyvar=D`, and row 89 returned `label=Revan_Armor`, `bodyvar=J`.
+- Installed Content Browser scan over 6,071 model rows resolved `pmbdm` as `Armor / Light Armor` from `appearance.2da; baseitems.2da`, `pmbjm` as `Armor / Jedi Robes` from the same sources, `pmbh02` as `Armor / Heavy Armor` from `baseitems.2da`, and `pmbam`/`pfbam` as player base bodies.
+- `python -m py_compile` passed for the changed KotorMCP modules, `resource_manager.py`, `qt_library_panel.py`, and the targeted Content Browser/native payload tests.
+- `pytest tests/test_content_browser_panel.py::test_content_browser_sorts_player_characters_by_gender_part_and_class tests/test_content_browser_panel.py::test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits tests/test_content_browser_panel.py::test_content_browser_display_names_decode_character_model_resrefs -q -p no:cacheprovider` passed (`3 passed`).
+- `pytest tests/test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested tests/test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests/test_native_python_payloads.py::test_content_browser_panels_are_owned_by_gui_boundary_panels_only tests/test_native_python_payloads.py::test_twoda_parser_is_owned_by_domain_core_templates_only -q -p no:cacheprovider` passed (`5 passed`).
+
 ### [2026-06-19] Native MDL Project Git Ignore Exception
 
 Owner: LordVaderCW
@@ -22,21 +41,42 @@ Verification:
 - `git check-ignore -v -n native/GhostRigger.Domain.Core.MDL/GhostRigger.Domain.Core.MDL.vcxproj` reported the matching unignore exception after the change.
 - `git status --short native/GhostRigger.Domain.Core.MDL` now reports the project as addable untracked files instead of an ignored directory.
 
+### [2026-06-19] M7/T703 KotorMCP Validation Alias Repair
+
+Owner: LordVaderCW
+Subsystem: KotorMCP launcher, tool registry, and backend validation helpers
+
+- Updated the KotorMCP stdio launcher to discover split native Python package roots, skip concrete `src` package collisions, export `GHOSTRIGGER_ROOT`, and preserve access to the repository root.
+- Registered the AGENTS.md backend validation aliases `inspect_mdl`, `inspect_mdl_ghostrigger`, and `compare_model_pipelines` in the KotorMCP tool registry.
+- Pointed `ghostrigger_tools` at `GHOSTRIGGER_ROOT` for settings/game-path lookup instead of deriving the root from the package directory.
+- Made `scripts.qa_common` reuse the launcher path discovery and parse both SDK call results and plain `json_content` dictionaries.
+- Fixed KotorMCP truncation formatting so oversized JSON responses remain valid JSON, and raised the response budget for model-pipeline inspection tools.
+- Populated the local ignored `.cursor/mcp.json` for this workspace with the KotorMCP launcher and K1/K2 install paths.
+
+Verification:
+- `python -m py_compile scripts\qa_common.py scripts\mcp\start_kotormcp_stdio.py native\GhostRigger.Domain.Core.KotorMCP\Python\src\kotormcp\tools\__init__.py native\GhostRigger.Domain.Core.KotorMCP\Python\src\kotormcp\tools\ghostrigger_tools.py native\GhostRigger.Domain.Core.KotorMCP\Python\src\kotormcp\utils\formatting.py` passed.
+- KotorMCP registry check reported `inspect_mdl`, `inspect_mdl_ghostrigger`, and `compare_model_pipelines` present, with 94 total tools.
+- `scripts.qa_common.call_mcp_tool("inspect_mdl", {"game": "k1", "resref": "pmbam"})` returned full PyKotor ground truth (`node_count=61`, `mesh_node_count=44`, `skin_node_count=3`, `total_vertices=3776`) without truncation.
+- `scripts.qa_common.call_mcp_tool("compare_model_pipelines", {"game": "k1", "resref": "pmbam"})` returned parseable JSON and reported `match=True`.
+
 ### [2026-06-19] M7/T703 Content Browser 2DA Outfit Metadata
 
 Owner: LordVaderCW
 Subsystem: Shared 2DA parsing and Content Browser model categorization
 
 - Changed the shared `TwoDA` parser to use PyKotor as the first parser when available, while preserving GhostRigger's existing normalized row/cell API and row labels.
-- Routed Content Browser 2DA loading through the shared parser instead of importing PyKotor directly in the panel layer.
+- Routed Content Browser 2DA loading through the shared parser from the canonical `GhostRigger.GUI.Boundary.Panels` implementation instead of importing PyKotor directly in the panel layer.
 - Added `appearance.2da` and `baseitems.2da` enrichment for model rows so player body models such as `pmbdm` and `pmbjm` classify as equippable armor/outfits with bodyvar, baseitem, subcategory, and display metadata.
-- Updated Content Browser descriptors/display names to prefer real game metadata when available, and regenerated the Content Browser and Templates embedded Python payload manifests.
+- Removed the duplicate Content Browser panel implementations from `GhostRigger.Tools.Workflow.ContentBrowser`; the workflow project now keeps only resource/workflow support modules and no longer packages `qt_content_browser_panel.py` or `qt_library_panel.py`.
+- Updated Content Browser descriptors/display names to prefer real game metadata when available, and regenerated the GUI Boundary Panels, ContentBrowser workflow, Templates, and root embedded Python payload manifests.
 
 Verification:
 - GhostRigger MCP tools were not exposed in this thread, so installed-game validation used `ResourceManager` plus PyKotor against `h:\steam\steamapps\common\swkotor` and `h:\steam\steamapps\common\Knights of the Old Republic II`; `pmbdm` resolved to Armor / Light Armor from `appearance.2da; baseitems.2da`, and `pmbjm` resolved to Armor / Jedi Robes from the same sources.
-- `python -m py_compile native\GhostRigger.Tools.Workflow.ContentBrowser\Python\src\gui\panels\qt_library_panel.py native\GhostRigger.Tools.Workflow.ContentBrowser\Python\src\gui\panels\qt_content_browser_panel.py native\GhostRigger.Domain.Core.Templates\Python\src\core\templates\twoda.py tests\test_content_browser_panel.py` passed.
+- `python -m py_compile native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_library_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\qt_content_browser_panel.py native\GhostRigger.Domain.Core.Templates\Python\src\core\templates\twoda.py tests\test_content_browser_panel.py tests\test_native_python_payloads.py` passed.
 - `pytest tests/test_native_templates_contracts.py::test_twoda_format_and_cell_contracts_match_python_behavior -q -p no:cacheprovider` passed (`1 passed`).
 - `pytest tests/test_content_browser_panel.py::test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits tests/test_content_browser_panel.py::test_content_browser_display_names_decode_character_model_resrefs tests/test_content_browser_panel.py::test_content_browser_uses_item_template_metadata_for_subcategories -q -p no:cacheprovider` passed (`3 passed`).
+- `pytest tests/test_native_python_payloads.py::test_content_browser_panels_are_owned_by_gui_boundary_panels_only -q -p no:cacheprovider` passed (`1 passed`).
+- `MSBuild.exe GhostRigger.sln /t:GhostRigger_Tools_Workflow_ContentBrowser /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` compiled the regenerated ContentBrowser C++ sources, then stopped at link because the running GhostRigger app had `GhostRigger.Tools.Workflow.ContentBrowser.dll` locked.
 
 ## 2026-06-17
 

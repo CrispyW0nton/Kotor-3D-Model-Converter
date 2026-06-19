@@ -21,7 +21,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_ADAPTERS",
             "source_path": "src/kotormcp/adapters.py",
             "packaged_path": "Python/src/kotormcp/adapters.py",
-            "sha256": "d02b1ee059c9409267bb080404dc262dd7a2774490dc6a295a3f1546929389e9"
+            "sha256": "61c38a1cfc13564d74cd97c4c50379f02924604d5149b10dbaa42a6a00d4b5d2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_ADAPTERS_DECOMPILE",
@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_MCP_RESOURCES",
             "source_path": "src/kotormcp/mcp_resources.py",
             "packaged_path": "Python/src/kotormcp/mcp_resources.py",
-            "sha256": "795f7f908ba9a610421e65106579625798f57031ed689cc0698474fb294dab4c"
+            "sha256": "af310c635d48ed50ead8dc7060bf919cdb0393a03145920f215b2eea27f8d806"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_PORTS",
@@ -63,7 +63,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_INIT",
             "source_path": "src/kotormcp/tools/__init__.py",
             "packaged_path": "Python/src/kotormcp/tools/__init__.py",
-            "sha256": "aff21563793a55d150c073ab0d03799a0948ea5e8b6e5cabf51a55ec21d9ab63"
+            "sha256": "a0b378d493559d30d7efafbb2d237826b023c9f1d3a285280f4aeb9c7c295a45"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_ARCHIVES",
@@ -93,19 +93,19 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_DISCOVERY",
             "source_path": "src/kotormcp/tools/discovery.py",
             "packaged_path": "Python/src/kotormcp/tools/discovery.py",
-            "sha256": "e3e87225f09d3dd2b9cb386d94b2055d87857047ddcf15bed3a738bf6986c607"
+            "sha256": "6e40e3efd76ca6c43c4354efca35edb8681b116efa455cab5563efce9600d4a7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GAMEDATA",
             "source_path": "src/kotormcp/tools/gamedata.py",
             "packaged_path": "Python/src/kotormcp/tools/gamedata.py",
-            "sha256": "1f4234a47ccfef3ab2a0291bf58bffb5e25390194c470f4f8a2ada3fc7144987"
+            "sha256": "fdecea3449ab00f37d69d48debf7daebcae24667082699b2133f13d25e848fe9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GFFDATA",
             "source_path": "src/kotormcp/tools/gffdata.py",
             "packaged_path": "Python/src/kotormcp/tools/gffdata.py",
-            "sha256": "c6f82edae964ab5c867c3f126cce89870583947a8ccfb7ca4ab8df7c3a854728"
+            "sha256": "459e0f10878d8676408362e07dc195ddef66306217fc26c27f7a8efcec033e9b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GHOSTRIGGER",
@@ -117,7 +117,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GHOSTRIGGER_TOOLS",
             "source_path": "src/kotormcp/tools/ghostrigger_tools.py",
             "packaged_path": "Python/src/kotormcp/tools/ghostrigger_tools.py",
-            "sha256": "e9df4b609480ff10f9d54deeaefd4fbf07999bd73a6c47e27700edce6177dfe4"
+            "sha256": "df2a7e706f5bbfb26a887eeaa9daf64dc24caf35f398ca2f1b5c7eb91eac5ba9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_INSTALLATION",
@@ -147,7 +147,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_RESOURCE",
             "source_path": "src/kotormcp/tools/resource.py",
             "packaged_path": "Python/src/kotormcp/tools/resource.py",
-            "sha256": "0f91bbff508aaaf882896d51ddcaaef75f3ce9e51053b8c2c6d4bf957560f1e8"
+            "sha256": "3ede6a56acd082f9642042e69e298400afea0564a4a3db98e3bd446752840020"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_RETARGETING",
@@ -171,7 +171,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_UTILS_FORMATTING",
             "source_path": "src/kotormcp/utils/formatting.py",
             "packaged_path": "Python/src/kotormcp/utils/formatting.py",
-            "sha256": "a5b7b8f1172f86b9d9a1b4424ecb8867481f72c1b0b61cf568aa75ec40928768"
+            "sha256": "848c97c276e5b4e794b3953484bcdd9d26f1869444d1a26c0530a4e91beac611"
         }
     ]
 }

@@ -51,9 +51,65 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 93
-    assert len(payload_files) == 1275
+    assert len(payload_files) == 1272
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
+
+
+def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
+    """Content Browser workflow data must not duplicate the shared panel surface."""
+
+    boundary_project = ROOT / "native" / "GhostRigger.GUI.Boundary.Panels"
+    workflow_project = ROOT / "native" / "GhostRigger.Tools.Workflow.ContentBrowser"
+    panel_paths = (
+        "Python/src/gui/panels/qt_content_browser_panel.py",
+        "Python/src/gui/panels/qt_library_panel.py",
+    )
+
+    boundary_payload = json.loads((boundary_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    workflow_payload = json.loads((workflow_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    boundary_packaged = {str(row["packaged_path"]) for row in boundary_payload["files"]}
+    workflow_packaged = {str(row["packaged_path"]) for row in workflow_payload["files"]}
+    workflow_project_text = (workflow_project / "GhostRigger.Tools.Workflow.ContentBrowser.vcxproj").read_text(encoding="utf-8")
+
+    for path in panel_paths:
+        assert path in boundary_packaged
+        assert path not in workflow_packaged
+        assert not (workflow_project / path).exists()
+        assert path.replace("/", "\\") not in workflow_project_text
+
+
+def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
+    """Workflow TwoDA Browser must consume the shared parser, not package a fork."""
+
+    owner_project = ROOT / "native" / "GhostRigger.Domain.Core.Templates"
+    workflow_project = ROOT / "native" / "GhostRigger.Tools.Workflow.TwoDABrowser"
+    parser_paths = (
+        "Python/src/core/templates/__init__.py",
+        "Python/src/core/templates/twoda.py",
+    )
+
+    owner_payload = json.loads((owner_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    workflow_payload = json.loads((workflow_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    owner_packaged = {str(row["packaged_path"]) for row in owner_payload["files"]}
+    workflow_packaged = {str(row["packaged_path"]) for row in workflow_payload["files"]}
+    workflow_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [
+            workflow_project / "GhostRigger.Tools.Workflow.TwoDABrowser.vcxproj",
+            workflow_project / "GhostRigger.Tools.Workflow.TwoDABrowser.vcxproj.filters",
+            *sorted((workflow_project / "Private" / "PythonFunctions").glob("*.cpp")),
+            *sorted((workflow_project / "Public" / "PythonFunctions").glob("*.h")),
+        ]
+        if path.exists()
+    )
+
+    for path in parser_paths:
+        assert path in owner_packaged
+        assert path not in workflow_packaged
+        assert not (workflow_project / path).exists()
+        assert path not in workflow_sources
+        assert path.replace("/", "\\") not in workflow_sources
 
 
 def test_python_payload_copies_are_byte_identical_and_manifested() -> None:

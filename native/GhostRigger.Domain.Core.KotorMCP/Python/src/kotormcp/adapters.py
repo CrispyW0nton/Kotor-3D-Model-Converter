@@ -81,6 +81,21 @@ def _search_order(names: Optional[List[str]]) -> list:
     return result or [SearchLocation.OVERRIDE, SearchLocation.MODULES, SearchLocation.CHITIN]
 
 
+def _resource_data_bytes(resource: Any) -> bytes:
+    data = resource.data() if callable(getattr(resource, "data", None)) else getattr(resource, "data", b"")
+    if data is None:
+        return b""
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, bytearray):
+        return bytes(data)
+    if isinstance(data, memoryview):
+        return data.tobytes()
+    if hasattr(data, "read"):
+        return data.read()
+    return bytes(data)
+
+
 # ── InstallationAdapter ────────────────────────────────────────────────────────
 
 class InstallationAdapter(InstallationPort):
@@ -193,13 +208,14 @@ class InstallationAdapter(InstallationPort):
             result = self._inst.resource(resref, rt, order=sl_order)
             if result is None:
                 return None
+            data = _resource_data_bytes(result)
             return ResourceEntry(
                 resref=result.resname() if callable(result.resname) else result.resname,
                 restype=rt.name,
                 extension=rt.extension,
-                size=len(result.data),
+                size=len(data),
                 source="installation",
-                data=result.data,
+                data=data,
             )
         except Exception as exc:
             log.debug("get_resource error for %s.%s: %s", resref, restype, exc)
