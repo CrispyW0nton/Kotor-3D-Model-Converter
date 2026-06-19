@@ -17,6 +17,7 @@ PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_READINESS_PANEL RCDATA "Python/src/gui/p
 PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ROOMS_TAB RCDATA "Python/src/gui/panels/module_editor/rooms_tab.py"
 PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_VALIDATION_PANEL RCDATA "Python/src/gui/panels/module_editor/validation_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WALKMESH_TAB RCDATA "Python/src/gui/panels/module_editor/walkmesh_tab.py"
+PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WORKFLOW_PANEL RCDATA "Python/src/gui/panels/module_editor/workflow_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL RCDATA "Python/src/gui/panels/qt_animation_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL RCDATA "Python/src/gui/panels/qt_body_attachment_panel.py"
 PYTHON_PAYLOAD_GUI_PANELS_QT_BOTTOM_STRIP RCDATA "Python/src/gui/panels/qt_bottom_strip.py"
