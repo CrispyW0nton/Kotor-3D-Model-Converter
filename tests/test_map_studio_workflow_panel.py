@@ -20,6 +20,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowProjectLabel" in panel_source
     assert "mapStudioWorkflowCapabilityLabel" in panel_source
     assert "mapStudioWorkflowAuthoringLabel" in panel_source
+    assert "mapStudioWorkflowActiveContextLabel" in panel_source
     assert "mapStudioWorkflowResourcesLabel" in panel_source
     assert "mapStudioWorkflowMissingResourcesLabel" in panel_source
     assert "mapStudioWorkflowGeometryLabel" in panel_source
@@ -101,6 +102,8 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "script hooks" in panel_source
     assert "player start" in panel_source
     assert "Use Builder to create terrain, rooms, or a dev-test map" in panel_source
+    assert "def set_active_authoring_context" in panel_source
+    assert "Active tool:" in panel_source
     assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX" in panel_source
 
 
@@ -130,6 +133,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.placementToolsRequested.connect(self.show_map_studio_placement_tools)" in window_source
     assert "self.workflow_panel.scriptToolsRequested.connect(self.show_map_studio_script_tools)" in window_source
     assert "self.workflow_panel.testPlaceableRequested.connect(self.add_map_studio_test_placeable)" in window_source
+    assert "self.builder_tab.gameplayPlacementStatusChanged.connect(self.workflow_panel.set_active_authoring_context)" in window_source
     assert "self.workflow_panel.walkmeshToolsRequested.connect(self.show_map_studio_walkmesh_tools)" in window_source
     assert "self.workflow_panel.validateRequested.connect(self.validate_kmap)" in window_source
     assert "self.workflow_panel.stageRequested.connect(lambda: self.stage_authored_module" in window_source
@@ -137,6 +141,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)" in window_source
     assert "self.workflow_panel.proofRequested.connect(self.record_game_smoke_proof)" in window_source
     assert "def show_map_studio_builder" in window_source
+    assert "Builder: room, terrain, placement, lighting, and script authoring" in window_source
     assert "def create_map_studio_starter_room" in window_source
     assert "preset_id=\"rectangular_dev_room\"" in window_source
     assert "def create_map_studio_doorway_blockout" in window_source
@@ -147,13 +152,18 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "preset_id=\"terrain_heightfield\"" in window_source
     assert "def show_map_studio_terrain_tools" in window_source
     assert "terrainRoomComboBox" in window_source
+    assert "Terrain: sculpt heightfield samples" in window_source
     assert "def show_map_studio_lighting_tools" in window_source
     assert "roomLightNameLineEdit" in window_source
+    assert "Lighting: add authored room lights" in window_source
     assert "def show_map_studio_placement_tools" in window_source
     assert "gameplayPaletteSearchLineEdit" in window_source
+    assert "Placement: choose a KOTOR resource template" in window_source
     assert "def show_map_studio_script_tools" in window_source
     assert "scriptHookResrefLineEdit" in window_source
+    assert "Scripts: assign ARE/IFO script hook resrefs" in window_source
     assert "def show_map_studio_walkmesh_tools" in window_source
+    assert "Walkmesh: inspect and paint walkable/non-walkable faces" in window_source
     assert "self.workflow_tabs.setCurrentWidget(self.walkmesh_tab)" in window_source
     assert "def add_map_studio_test_placeable" in window_source
     assert '"plc_bench"' in window_source
@@ -177,6 +187,7 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
 
     for source in (builder_source, builder_mirror_source):
         assert "scriptHookRequested = QtCore.Signal(str, str, str)" in source
+        assert "gameplayPlacementStatusChanged = QtCore.Signal(str)" in source
         assert "Script Hooks" in source
         assert "mapStudioScriptHookScopeComboBox" in source
         assert "mapStudioScriptHookFieldComboBox" in source
@@ -189,6 +200,8 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
         assert "mapStudioGameplaySpatialHintLabel" in source
         assert "_update_gameplay_spatial_controls" in source
         assert "Stores/merchants are module-level resources" in source
+        assert "_emit_gameplay_placement_status" in source
+        assert "placing {kind}" in source
 
     assert "self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())" in window_source
     assert "self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())" in window_source
@@ -267,6 +280,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "class MapStudioWorkflowPanel" in mirror_source
     assert "mapStudioWorkflowResourcesLabel" in mirror_source
     assert "mapStudioWorkflowCapabilityLabel" in mirror_source
+    assert "mapStudioWorkflowActiveContextLabel" in mirror_source
     assert "mapStudioWorkflowMissingResourcesLabel" in mirror_source
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
@@ -275,6 +289,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowLightingToolsButton" in mirror_source
     assert "mapStudioWorkflowPlacementLabel" in mirror_source
     assert "mapStudioWorkflowScriptToolsButton" in mirror_source
+    assert "def set_active_authoring_context" in mirror_source
     assert "mapStudioWorkflowLayoutLabel" in mirror_source
     assert "mapStudioWorkflowTransitionsLabel" in mirror_source
     assert "mapStudioWorkflowScriptsLabel" in mirror_source

@@ -18,6 +18,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomPrimitiveStyleRequested = QtCore.Signal(str, str, str, str)
     roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
+    gameplayPlacementStatusChanged = QtCore.Signal(str)
     roomLightRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, str)
     scriptHookRequested = QtCore.Signal(str, str, str)
 
@@ -438,7 +439,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.addRoomLightButton.clicked.connect(self._emit_room_light)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._update_gameplay_spatial_controls)
+        self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._emit_gameplay_placement_status)
         self.gameplayPaletteSearchLineEdit.textChanged.connect(self._apply_gameplay_palette_filter)
+        self.gameplayTemplateLineEdit.textChanged.connect(self._emit_gameplay_placement_status)
+        self.gameplayTagLineEdit.textChanged.connect(self._emit_gameplay_placement_status)
         self.gameplayPaletteComboBox.currentIndexChanged.connect(self._update_gameplay_palette_hint)
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
         self.addGameplayPlacementButton.clicked.connect(self._emit_gameplay_placement)
@@ -1152,6 +1156,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.gameplaySpatialHintLabel.setText("Spatial resources are placed in the viewport and can be moved after creation.")
         else:
             self.gameplaySpatialHintLabel.setText("Stores/merchants are module-level resources. They appear in the outliner and export to the GIT StoreList, but they do not get viewport markers.")
+        self._emit_gameplay_placement_status()
 
     def _update_gameplay_palette_hint(self) -> None:
         entry = self._current_palette_entry()
@@ -1168,6 +1173,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.gameplayPaletteHintLabel.setText(warning)
         else:
             self.gameplayPaletteHintLabel.setText(f"Ready to place template {template} ({confidence}).")
+        self._emit_gameplay_placement_status()
 
     def _use_selected_gameplay_palette_entry(self) -> None:
         entry = self._current_palette_entry()
@@ -1196,6 +1202,16 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.gameplayPosZSpinBox.value()),
             float(self.gameplayBearingSpinBox.value()),
         )
+
+    def _emit_gameplay_placement_status(self) -> None:
+        if not hasattr(self, "gameplayPlacementKindComboBox"):
+            return
+        kind = str(self.gameplayPlacementKindComboBox.currentData() or "placeable").replace("_", " ")
+        template = self.gameplayTemplateLineEdit.text().strip() or "(template not selected)"
+        tag = self.gameplayTagLineEdit.text().strip()
+        scope = "viewport marker" if self._is_current_gameplay_kind_spatial() else "module-level resource"
+        suffix = f", tag {tag}" if tag else ""
+        self.gameplayPlacementStatusChanged.emit(f"placing {kind}: {template}{suffix} ({scope})")
 
     def set_script_hook_fields(self, choices) -> None:
         """Populate script hook field choices from the controller/core policy."""

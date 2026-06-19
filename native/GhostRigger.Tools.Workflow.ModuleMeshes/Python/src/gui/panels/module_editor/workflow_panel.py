@@ -58,6 +58,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.authoring_label.setWordWrap(True)
         root.addWidget(self.authoring_label)
 
+        self.active_context_label = QtWidgets.QLabel("Active tool: none selected")
+        self.active_context_label.setObjectName("mapStudioWorkflowActiveContextLabel")
+        self.active_context_label.setWordWrap(True)
+        root.addWidget(self.active_context_label)
+
         self.resources_label = QtWidgets.QLabel("Runtime resources: ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX")
         self.resources_label.setObjectName("mapStudioWorkflowResourcesLabel")
         self.resources_label.setWordWrap(True)
@@ -201,6 +206,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.project_label.setText("Project: No KMAP open")
             self.capability_label.setText("Capability: Draft. Create or open a KMAP before authoring.")
             self.authoring_label.setText("Authoring: Create or open a KMAP, then use Builder to add terrain or rooms.")
+            self.active_context_label.setText("Active tool: none selected")
             self.resources_label.setText("Runtime resources: ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX")
             self.missing_resources_label.setText("Required resources: open a KMAP before checking module files.")
             self.geometry_label.setText("Geometry: Create or open a KMAP before authoring rooms.")
@@ -367,6 +373,12 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.test_placeable_button.setEnabled(bool(enabled and can_place))
         self.launch_handoff_button.setEnabled(bool(enabled and can_launch))
         self.proof_button.setEnabled(bool(can_proof))
+
+    def set_active_authoring_context(self, text: str) -> None:
+        """Show what Map Studio workflow the modder is currently editing."""
+
+        value = str(text or "").strip()
+        self.active_context_label.setText(f"Active tool: {value}" if value else "Active tool: none selected")
 
     @staticmethod
     def _capability_text(

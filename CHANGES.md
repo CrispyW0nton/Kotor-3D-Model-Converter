@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Shows Active Authoring Context
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / placement context feedback
+Intersects: Level Editor workflow panel, Builder gameplay placement controls, and ModuleMeshes mirror.
+
+- Added an active authoring context line to the Map Studio workflow panel so modders can tell whether they are working on Builder, terrain, walkmesh, lighting, placement, or script hooks.
+- Added a Builder placement-status signal that reports the selected resource kind, template resref, optional tag, and whether the placement creates a viewport marker or module-level resource.
+- Wired the Level Editor to forward placement and workflow focus status into the workflow panel without moving placement/resource rules into UI code.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_active_context`; `python -m py_compile` on active and mirrored Builder/workflow panels, the Level Editor window, and focused tests.
+
 ### [2026-06-19] Map Studio Adds Workflow Shortcuts for Terrain, Lighting, and Scripts
 
 Owner: LordVaderCW

@@ -406,6 +406,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.builder_tab.roomLightRequested.connect(self.add_authored_room_light)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
+        self.builder_tab.gameplayPlacementStatusChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
@@ -541,12 +542,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         """Focus the Builder tab inside the existing Map Studio Level Editor."""
 
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
 
     def show_map_studio_walkmesh_tools(self) -> None:
         """Focus the existing Walkmesh tab inside the Map Studio Level Editor."""
 
         self.workflow_tabs.setCurrentWidget(self.walkmesh_tab)
+        self.workflow_panel.set_active_authoring_context("Walkmesh: inspect and paint walkable/non-walkable faces")
         self._log("Map Studio Walkmesh tools focused. Use these to inspect, load, or paint walkable faces.")
 
     def show_map_studio_terrain_tools(self) -> None:
@@ -556,6 +559,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         terrain = getattr(self.builder_tab, "terrainRoomComboBox", None)
         if terrain is not None:
             terrain.setFocus()
+        self.workflow_panel.set_active_authoring_context("Terrain: sculpt heightfield samples and slope/walkability")
         self._log("Map Studio terrain tools focused. Create a terrain patch, choose a heightfield room, then sculpt samples.")
 
     def show_map_studio_lighting_tools(self) -> None:
@@ -566,6 +570,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if name is not None:
             name.setFocus()
             name.selectAll()
+        self.workflow_panel.set_active_authoring_context("Lighting: add authored room lights before lightmap/export checks")
         self._log("Map Studio lighting tools focused. Add authored room lights before staging lightmap-ready test builds.")
 
     def show_map_studio_placement_tools(self) -> None:
@@ -576,6 +581,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if search is not None:
             search.setFocus()
             search.selectAll()
+        self.workflow_panel.set_active_authoring_context("Placement: choose a KOTOR resource template and place it in the module")
         self._log("Map Studio placement tools focused. Search the game-library palette or type a template resref.")
 
     def show_map_studio_script_tools(self) -> None:
@@ -586,6 +592,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if script is not None:
             script.setFocus()
             script.selectAll()
+        self.workflow_panel.set_active_authoring_context("Scripts: assign ARE/IFO script hook resrefs")
         self._log("Map Studio script-hook tools focused. Assign ARE/IFO script resrefs that resolve from the package, Override, or base game.")
 
     def add_map_studio_test_placeable(self) -> None:
