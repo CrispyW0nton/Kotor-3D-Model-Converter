@@ -10,6 +10,39 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-19
+### [2026-06-19] Map Studio Workflow Exposes Warp-Test Handoff
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / game-test handoff
+Intersects: existing Level Editor launch handoff and Map Studio readiness panel.
+
+- Added an `Open Warp Test Handoff` action to the existing Map Studio workflow panel so the Level Editor's main workflow spine now shows stage, install, launch/warp handoff, and proof recording together.
+- Wired the new panel signal to the existing `open_map_studio_launch_handoff()` method; no launch, packaging, proof, or module-policy logic moved into the UI.
+- Mirrored the workflow action in the ModuleMeshes payload copy and updated source-contract coverage for the panel, Level Editor wiring, and mirrored package.
+
+Verification:
+- `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_launch_handoff`
+- `python -m py_compile native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\__init__.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py`
+### [2026-06-19] Map Studio Level Editor Workflow Spine
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / readiness display
+Intersects: existing Module Editor icon and Level Editor window.
+
+- Reframed the existing Module Editor action as the Map Studio Level Editor entry point from the main shell without creating a separate Map Studio window.
+- Rebranded the existing Level Editor window and help text around KMAP terrain, rooms, walkmesh, placements, validation, staged export, install handoff, and game proof.
+- Added a presentation-only `MapStudioWorkflowPanel` to the existing Level Editor Export page so modders can see project state, authoring state, validation stage, export/install state, game-proof state, capability honesty, missing runtime resources, and next action in one place.
+- Added workflow actions for Builder focus, starter room, doorway blockout, corridor, terrain patch, placement tools, test placeable, walkmesh tools, validation, staging, install, and proof recording; the panel emits signals and the existing Level Editor routes them to existing methods.
+- Wired the panel to the existing `ModuleEditorController.authored_module_readiness()` contract; no module packaging, validation, terrain, WOK, MDL/MDX, or resource rules were moved into the UI.
+- Mirrored the panel and shell help wording into native workflow package copies so packaged payloads keep the same Map Studio workflow surface.
+- Added focused source-contract tests for the Module Editor icon/Level Editor identity and workflow panel readiness labels, game-proof honesty text, wiring, and mirrored package copy.
+
+Verification:
+- `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_status_panel`
+- `python -m py_compile native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Tools.Workflow.ContentBrowser\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Tools.Workflow.ResourceBrowser\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Tools.Workflow.TwoDABrowser\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.GUI.Boundary.Integration\Python\src\gui\integration\tool_integration_registry.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py`
+
 
 ### [2026-06-19] T1403 Multi-Character Sequence Runtime Isolation
 

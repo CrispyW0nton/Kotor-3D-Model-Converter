@@ -1,4 +1,4 @@
-"""Standalone GhostRigger Module/Level Editor window."""
+"""GhostRigger Map Studio Level Editor window."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from src.gui.panels.module_editor.readiness_panel import ModuleReadinessPanel
 from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
 from src.gui.panels.module_editor.walkmesh_tab import WalkmeshTab
+from src.gui.panels.module_editor.workflow_panel import MapStudioWorkflowPanel
 from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
@@ -131,7 +132,7 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
 
 
 class ModuleEditorWindow(QtWidgets.QMainWindow):
-    """Top-level KMAP/Module Editor window with its own menus and viewport."""
+    """Top-level KMAP Map Studio Level Editor window."""
 
     def __init__(
         self,
@@ -142,7 +143,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     ) -> None:
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
-        self.setWindowTitle("GhostRigger Module Editor")
+        self.setWindowTitle("GhostRigger Map Studio - Level Editor")
         self.controller = ModuleEditorController()
         self.theme_manager = theme_manager or getattr(parent, "theme_manager", None)
         self.layout_manager = layout_manager or getattr(parent, "layout_manager", None)
@@ -189,7 +190,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.generate_walls_action = QtGui.QAction("Generate Walls", self)
         self.paint_walkmesh_action = QtGui.QAction("Paint Walkmesh Faces", self)
         self.open_output_action = QtGui.QAction("Open Output Folder", self)
-        self.help_action = QtGui.QAction("Module Editor Help", self)
+        self.help_action = QtGui.QAction("Map Studio Help", self)
         self.kmap_help_action = QtGui.QAction("KMAP Format Help", self)
 
     def _build_menus(self) -> None:
@@ -240,6 +241,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         root.setSpacing(8)
         self.toolbar = ModuleEditorToolbar(self)
         root.addWidget(self.toolbar)
+        self.map_studio_scope_label = QtWidgets.QLabel(
+            "Map Studio Level Editor: KMAP terrain, rooms, walkmesh, placements, validation, staged export, install handoff, and game proof."
+        )
+        self.map_studio_scope_label.setObjectName("mapStudioLevelEditorScopeLabel")
+        self.map_studio_scope_label.setWordWrap(True)
+        root.addWidget(self.map_studio_scope_label)
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         root.addWidget(self.main_splitter, 1)
 
@@ -295,6 +302,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.properties = ModuleEditorPropertiesPanel(right)
+        self.workflow_panel = MapStudioWorkflowPanel(right)
         self.readiness_panel = ModuleReadinessPanel(right)
         self.export_panel = ModuleExportPanel(right)
         right_tabs = QtWidgets.QTabWidget()
@@ -302,6 +310,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         export_page = QtWidgets.QWidget(right_tabs)
         export_layout = QtWidgets.QVBoxLayout(export_page)
         export_layout.setContentsMargins(0, 0, 0, 0)
+        export_layout.addWidget(self.workflow_panel)
         export_layout.addWidget(self.readiness_panel)
         export_layout.addWidget(self.export_panel)
         right_tabs.addTab(export_page, "Export")
@@ -317,7 +326,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.bottom_tabs.setMinimumHeight(82)
         self.bottom_tabs.setMaximumHeight(165)
         root.addWidget(self.bottom_tabs)
-        self.statusBar().showMessage("Module Editor ready.")
+        self.statusBar().showMessage("Map Studio Level Editor ready.")
         self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setStretchFactor(2, 0)
@@ -341,7 +350,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.generate_walls_action.triggered.connect(lambda: self._handle_tab_action("Generate Walls"))
         self.paint_walkmesh_action.triggered.connect(lambda: self._handle_tab_action("Paint Face"))
         self.open_output_action.triggered.connect(self.open_output_folder)
-        self.help_action.triggered.connect(lambda: self._show_help("Module Editor"))
+        self.help_action.triggered.connect(lambda: self._show_help("Map Studio"))
         self.kmap_help_action.triggered.connect(lambda: self._show_help("KMAP Format"))
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
@@ -356,6 +365,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
+        self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)
+        self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)
+        self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)
+        self.workflow_panel.corridorRequested.connect(self.create_map_studio_corridor)
+        self.workflow_panel.starterTerrainRequested.connect(self.create_map_studio_starter_terrain)
+        self.workflow_panel.placementToolsRequested.connect(self.show_map_studio_placement_tools)
+        self.workflow_panel.testPlaceableRequested.connect(self.add_map_studio_test_placeable)
+        self.workflow_panel.walkmeshToolsRequested.connect(self.show_map_studio_walkmesh_tools)
+        self.workflow_panel.validateRequested.connect(self.validate_kmap)
+        self.workflow_panel.stageRequested.connect(lambda: self.stage_authored_module(self.export_panel.dry_run.isChecked()))
+        self.workflow_panel.installRequested.connect(lambda: self.install_authored_module(self.export_panel.dry_run.isChecked()))
+        self.workflow_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
+        self.workflow_panel.proofRequested.connect(self.record_game_smoke_proof)
         self.properties.transformChanged.connect(self._set_transform)
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
@@ -480,6 +502,86 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         errors = sum(1 for issue in issues if issue.severity.lower() == "error")
         self._log(f"Validation complete: {len(issues)} issue(s), {errors} error(s).")
         self.bottom_tabs.setCurrentWidget(self.validation_panel)
+
+    def show_map_studio_builder(self) -> None:
+        """Focus the Builder tab inside the existing Map Studio Level Editor."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        self._log("Map Studio Builder focused.")
+
+    def show_map_studio_walkmesh_tools(self) -> None:
+        """Focus the existing Walkmesh tab inside the Map Studio Level Editor."""
+
+        self.workflow_tabs.setCurrentWidget(self.walkmesh_tab)
+        self._log("Map Studio Walkmesh tools focused. Use these to inspect, load, or paint walkable faces.")
+
+    def show_map_studio_placement_tools(self) -> None:
+        """Focus Builder's authored gameplay placement controls."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        search = getattr(self.builder_tab, "gameplayPaletteSearchLineEdit", None)
+        if search is not None:
+            search.setFocus()
+            search.selectAll()
+        self._log("Map Studio placement tools focused. Search the game-library palette or type a template resref.")
+
+    def add_map_studio_test_placeable(self) -> None:
+        """Add a known-safe test placeable through the existing authored placement service."""
+
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        self.add_authored_gameplay_placement(
+            "placeable",
+            "plc_bench",
+            "map_studio_test_placeable",
+            1.75,
+            1.5,
+            0.0,
+            0.0,
+        )
+
+    def create_map_studio_starter_room(self) -> None:
+        """Create a small authored room through the existing Builder preset path."""
+
+        self._create_map_studio_starter_preset(
+            preset_id="rectangular_dev_room",
+            module_root="grdev01",
+            label="starter room",
+        )
+
+    def create_map_studio_doorway_blockout(self) -> None:
+        """Create a doorway-focused authored room through the Builder preset path."""
+
+        self._create_map_studio_starter_preset(
+            preset_id="doorway_blockout",
+            module_root="grdoor",
+            label="doorway blockout",
+        )
+
+    def create_map_studio_corridor(self) -> None:
+        """Create a corridor/hall authored room through the Builder preset path."""
+
+        self._create_map_studio_starter_preset(
+            preset_id="wide_hall",
+            module_root="grhall",
+            label="corridor",
+        )
+
+    def create_map_studio_starter_terrain(self) -> None:
+        """Create a terrain authored module through the existing Builder preset path."""
+
+        self._create_map_studio_starter_preset(
+            preset_id="terrain_heightfield",
+            module_root="grterrain",
+            label="terrain patch",
+        )
+
+    def _create_map_studio_starter_preset(self, *, preset_id: str, module_root: str, label: str) -> None:
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        module_root_edit = getattr(self.builder_tab, "moduleRootLineEdit", None)
+        if module_root_edit is not None:
+            module_root_edit.setText(module_root)
+        self._log(f"Creating Map Studio {label} from Builder preset {preset_id}.")
+        self.create_authored_room_preset(preset_id, module_root)
 
     def build_module_files(self) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select output folder", self._last_output_dir or "")
@@ -1167,7 +1269,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all()
 
     def _refresh_all(self, message: str = "") -> None:
-        self.setWindowTitle(f"GhostRigger Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        self.setWindowTitle(f"GhostRigger Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
         authored_placements = self.controller.authored_gameplay_placements()
         authored_room_lights = self.controller.authored_room_lights()
         authored_markers = self.controller.authored_gameplay_preview_markers()
@@ -1192,6 +1294,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             authored_terrain_walkability_overlay,
         )
         readiness_result = self.controller.authored_module_readiness()
+        self.workflow_panel.set_state(self.project, readiness_result.readiness)
         self.readiness_panel.set_readiness(readiness_result.readiness)
         if self.controller.model.selected_ids:
             self.select_item(self.controller.model.selected_ids[0])
@@ -1230,7 +1333,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         QtWidgets.QMessageBox.information(
             self,
             topic,
-            "The Module Editor works on GhostRigger KMAP projects. KMAP stores source references, transforms, editable room/module state, walkmesh metadata, blueprints, textures, validation data, and export manifests without embedding heavy mesh or texture blobs.",
+            "Map Studio is GhostRigger's Level Editor opened from the Module Editor icon. It works on KMAP projects and keeps terrain, rooms, walkmeshes, placements, validation, staged export, install handoff, and game-test proof in one workflow without embedding heavy mesh or texture blobs.",
         )
 
     def set_navigation_profile(self, profile: object) -> None:

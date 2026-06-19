@@ -268,7 +268,7 @@ class WindowChromeMixin:
         self.port_model_action.triggered.connect(self._port_current_model)
         self.generate_module_action = QtGui.QAction("Generate Module Files...", self)
         self.generate_module_action.triggered.connect(self._generate_module_files)
-        self.about_module_action = QtGui.QAction("About Module Editor", self)
+        self.about_module_action = QtGui.QAction("About Map Studio Level Editor", self)
         self.about_module_action.triggered.connect(self._about_modular)
         self.validate_character_action = QtGui.QAction("Validate Current Character...", self)
         self.validate_character_action.triggered.connect(self._validate_current_character)
