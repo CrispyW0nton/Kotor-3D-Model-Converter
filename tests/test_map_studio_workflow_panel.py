@@ -332,6 +332,36 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         assert "mapStudioWalkmeshShowWalkableButton" in source
 
 
+def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
+    rooms_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/rooms_tab.py"
+    )
+    rooms_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/rooms_tab.py"
+    )
+
+    for source in (rooms_source, rooms_mirror_source):
+        assert "mapStudioRoomsWorkflowLabel" in source
+        assert "mapStudioRoomsLayoutHintLabel" in source
+        assert "mapStudioRoomsAuthoringHintLabel" in source
+        assert "load or author room layout, arrange room positions" in source
+        assert "validate LYT/VIS links before packaging" in source
+        assert "LYT stores room models and transforms" in source
+        assert "VIS controls which rooms can see each other" in source
+        assert "Keep room resrefs stable for WOK, MDL/MDX, and placed resources" in source
+        assert "Use Builder for new geometry" in source
+        assert "mapStudioRoomsLoadLytButton" in source
+        assert "mapStudioRoomsAddRoomButton" in source
+        assert "mapStudioRoomsRemoveRoomButton" in source
+        assert "mapStudioRoomsDuplicateRoomButton" in source
+        assert "mapStudioRoomsSaveLayoutButton" in source
+        assert "mapStudioRoomsFocusSelectedButton" in source
+        assert "mapStudioRoomsAutoArrangeButton" in source
+        assert "mapStudioRoomsSnapToGridButton" in source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

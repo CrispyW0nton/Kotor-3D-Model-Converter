@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Explains Room Graph Workflow
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / Rooms layout guidance
+Intersects: Rooms tab LYT/VIS workflow controls and ModuleMeshes mirror.
+
+- Added Rooms tab guidance for the manual room-layout workflow: load or author room layout, arrange room positions, and validate LYT/VIS links before packaging.
+- Clarified that LYT stores room models/transforms while VIS controls room visibility, and that room resrefs must remain stable for WOK, MDL/MDX, and placed resources.
+- Added stable object names for Rooms tab actions so workflow tests and future UI automation can target room graph controls directly.
+- Mirrored the Rooms tab into the ModuleMeshes package and expanded source-contract coverage for the room workflow labels and buttons.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_rooms_workflow`; `python -m py_compile` on active and mirrored Rooms tabs plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Explains Builder Room and Terrain Workflow
 
 Owner: LordVaderCW
