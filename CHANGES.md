@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Projects Readiness Into Validation Rows
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / validation feedback
+Intersects: authored module readiness, Module Editor controller, Level Editor validation panel, and ModuleMeshes mirror.
+
+- Added a core readiness-to-validation projection so Map Studio blockers, missing runtime resources, external templates/scripts, incomplete transitions, and game-proof requirements become validation-table issues with suggested fixes.
+- Updated the active and mirrored Module Editor controllers so `Validate` returns both base KMAP issues and Map Studio authored-module readiness issues.
+- Refreshed the Level Editor validation panel during normal Map Studio state updates so modders can see actionable fixes without hunting across separate status labels.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py tests/test_authored_module_validation_projection.py -q --basetemp .pytest_tmp_map_studio_readiness_validation_ui`; `python -m py_compile` on active and mirrored projection/controller modules, the Level Editor window, and focused tests.
+
+
 ### [2026-06-19] Map Studio Manages Module-Level Stores
 
 Owner: LordVaderCW

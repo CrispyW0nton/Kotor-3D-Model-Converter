@@ -111,6 +111,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "readiness_result = self.controller.authored_module_readiness()" in window_source
     assert "self.workflow_panel.set_state(self.project, readiness_result.readiness)" in window_source
     assert "self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)" in window_source
+    assert "self.validation_panel.set_issues(self.controller.validate())" in window_source
     assert "self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)" in window_source
     assert "self.workflow_panel.doorwayBlockoutRequested.connect(self.create_map_studio_doorway_blockout)" in window_source
     assert "self.workflow_panel.corridorRequested.connect(self.create_map_studio_corridor)" in window_source
@@ -288,3 +289,33 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Transitions:" in mirror_source
     assert "Scripts:" in mirror_source
     assert "MapStudioWorkflowPanel" in mirror_init
+
+
+def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
+    source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "authored_module_validation_projection.py"
+    )
+    mirror = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "authored_module_validation_projection.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    controller_mirror = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+
+    for text in (source, mirror):
+        assert "authored_module_readiness_validation_issues" in text
+        assert "MAP_STUDIO_RUNTIME_RESOURCE_MISSING" in text
+        assert "MAP_STUDIO_GAME_PROOF_REQUIRED" in text
+        assert "Suggested" not in text
+
+    for text in (controller_source, controller_mirror):
+        assert "from .authored_module_validation_projection import authored_module_readiness_validation_issues" in text
+        assert "issues.extend(" in text
+        assert "bridge_warnings=readiness_result.warnings" in text

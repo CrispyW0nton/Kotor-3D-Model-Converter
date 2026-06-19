@@ -26,6 +26,7 @@ from .authored_module_kmap_bridge import (
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
 )
+from .authored_module_validation_projection import authored_module_readiness_validation_issues
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
 from .authored_gameplay_marker_geometry import (
     AuthoredGameplayMarkerGeometry,
@@ -179,7 +180,16 @@ class ModuleEditorController:
         return result
 
     def validate(self):
-        return self.validator.validate(self.project)
+        issues = list(self.validator.validate(self.project))
+        readiness_result = self.authored_module_readiness()
+        issues.extend(
+            authored_module_readiness_validation_issues(
+                readiness_result.readiness,
+                bridge_warnings=readiness_result.warnings,
+                bridge_blocking_messages=readiness_result.blocking_messages,
+            )
+        )
+        return issues
 
     def authored_module_readiness(self):
         """Return Map Studio authored-module readiness for the current KMAP."""

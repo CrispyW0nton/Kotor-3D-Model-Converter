@@ -1379,6 +1379,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         readiness_result = self.controller.authored_module_readiness()
         self.workflow_panel.set_state(self.project, readiness_result.readiness)
         self.readiness_panel.set_readiness(readiness_result.readiness)
+        self.validation_panel.set_issues(self.controller.validate())
         if self.controller.model.selected_ids:
             self.select_item(self.controller.model.selected_ids[0])
         if message:
