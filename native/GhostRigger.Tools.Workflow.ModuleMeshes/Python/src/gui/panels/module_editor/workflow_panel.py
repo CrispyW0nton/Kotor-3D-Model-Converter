@@ -14,6 +14,9 @@ from PySide6 import QtCore, QtWidgets
 class MapStudioWorkflowPanel(QtWidgets.QWidget):
     """Compact workflow spine for the Map Studio Level Editor."""
 
+    newProjectRequested = QtCore.Signal()
+    openProjectRequested = QtCore.Signal()
+    saveProjectRequested = QtCore.Signal()
     builderRequested = QtCore.Signal()
     starterRoomRequested = QtCore.Signal()
     doorwayBlockoutRequested = QtCore.Signal()
@@ -128,6 +131,23 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.next_action_label.setWordWrap(True)
         root.addWidget(self.next_action_label)
 
+        project_actions = QtWidgets.QHBoxLayout()
+        project_actions.setContentsMargins(0, 4, 0, 0)
+        project_actions.setSpacing(4)
+        self.new_kmap_button = QtWidgets.QPushButton("New KMAP")
+        self.new_kmap_button.setObjectName("mapStudioWorkflowNewKmapButton")
+        self.open_kmap_button = QtWidgets.QPushButton("Open KMAP")
+        self.open_kmap_button.setObjectName("mapStudioWorkflowOpenKmapButton")
+        self.save_kmap_button = QtWidgets.QPushButton("Save KMAP")
+        self.save_kmap_button.setObjectName("mapStudioWorkflowSaveKmapButton")
+        self.new_kmap_button.clicked.connect(self.newProjectRequested.emit)
+        self.open_kmap_button.clicked.connect(self.openProjectRequested.emit)
+        self.save_kmap_button.clicked.connect(self.saveProjectRequested.emit)
+        project_actions.addWidget(self.new_kmap_button)
+        project_actions.addWidget(self.open_kmap_button)
+        project_actions.addWidget(self.save_kmap_button)
+        root.addLayout(project_actions)
+
         actions = QtWidgets.QGridLayout()
         actions.setContentsMargins(0, 4, 0, 0)
         actions.setHorizontalSpacing(4)
@@ -200,6 +220,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
 
     def set_state(self, project: Any | None, readiness: Any | None) -> None:
         """Render workflow state without mutating the project."""
+
+        self.new_kmap_button.setEnabled(True)
+        self.open_kmap_button.setEnabled(True)
+        self.save_kmap_button.setEnabled(project is not None)
 
         if project is None:
             self._set_action_enabled(False, can_place=False, can_proof=False)

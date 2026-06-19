@@ -33,6 +33,9 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowValidationLabel" in panel_source
     assert "mapStudioWorkflowExportLabel" in panel_source
     assert "mapStudioWorkflowProofLabel" in panel_source
+    assert "mapStudioWorkflowNewKmapButton" in panel_source
+    assert "mapStudioWorkflowOpenKmapButton" in panel_source
+    assert "mapStudioWorkflowSaveKmapButton" in panel_source
     assert "mapStudioWorkflowOpenBuilderButton" in panel_source
     assert "mapStudioWorkflowStarterRoomButton" in panel_source
     assert "mapStudioWorkflowDoorwayBlockoutButton" in panel_source
@@ -49,6 +52,9 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowInstallButton" in panel_source
     assert "mapStudioWorkflowLaunchHandoffButton" in panel_source
     assert "mapStudioWorkflowProofButton" in panel_source
+    assert "newProjectRequested = QtCore.Signal()" in panel_source
+    assert "openProjectRequested = QtCore.Signal()" in panel_source
+    assert "saveProjectRequested = QtCore.Signal()" in panel_source
     assert "builderRequested = QtCore.Signal()" in panel_source
     assert "starterRoomRequested = QtCore.Signal()" in panel_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in panel_source
@@ -65,6 +71,9 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "installRequested = QtCore.Signal()" in panel_source
     assert "launchHandoffRequested = QtCore.Signal()" in panel_source
     assert "proofRequested = QtCore.Signal()" in panel_source
+    assert "New KMAP" in panel_source
+    assert "Open KMAP" in panel_source
+    assert "Save KMAP" in panel_source
     assert "Create Starter Room" in panel_source
     assert "Create Doorway Blockout" in panel_source
     assert "Create Corridor" in panel_source
@@ -122,6 +131,9 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "export_layout.addWidget(self.workflow_panel)" in window_source
     assert "readiness_result = self.controller.authored_module_readiness()" in window_source
     assert "self.workflow_panel.set_state(self.project, readiness_result.readiness)" in window_source
+    assert "self.workflow_panel.newProjectRequested.connect(self.new_kmap)" in window_source
+    assert "self.workflow_panel.openProjectRequested.connect(self.open_kmap)" in window_source
+    assert "self.workflow_panel.saveProjectRequested.connect(self.save_kmap)" in window_source
     assert "self.workflow_panel.builderRequested.connect(self.show_map_studio_builder)" in window_source
     assert "self.validation_panel.set_issues(self.controller.validate())" in window_source
     assert "self.workflow_panel.starterRoomRequested.connect(self.create_map_studio_starter_room)" in window_source
@@ -281,6 +293,9 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowResourcesLabel" in mirror_source
     assert "mapStudioWorkflowCapabilityLabel" in mirror_source
     assert "mapStudioWorkflowActiveContextLabel" in mirror_source
+    assert "mapStudioWorkflowNewKmapButton" in mirror_source
+    assert "mapStudioWorkflowOpenKmapButton" in mirror_source
+    assert "mapStudioWorkflowSaveKmapButton" in mirror_source
     assert "mapStudioWorkflowMissingResourcesLabel" in mirror_source
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
@@ -303,6 +318,9 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowWalkmeshToolsButton" in mirror_source
     assert "mapStudioWorkflowStageButton" in mirror_source
     assert "mapStudioWorkflowLaunchHandoffButton" in mirror_source
+    assert "newProjectRequested = QtCore.Signal()" in mirror_source
+    assert "openProjectRequested = QtCore.Signal()" in mirror_source
+    assert "saveProjectRequested = QtCore.Signal()" in mirror_source
     assert "builderRequested = QtCore.Signal()" in mirror_source
     assert "starterRoomRequested = QtCore.Signal()" in mirror_source
     assert "doorwayBlockoutRequested = QtCore.Signal()" in mirror_source
