@@ -335,6 +335,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.gameplayTagLineEdit = QtWidgets.QLineEdit("")
         self.gameplayTagLineEdit.setObjectName("mapStudioGameplayTagLineEdit")
         self.gameplayTagLineEdit.setPlaceholderText("optional in-module tag")
+        self.gameplaySpatialHintLabel = QtWidgets.QLabel("Spatial resources are placed in the viewport and can be moved after creation.")
+        self.gameplaySpatialHintLabel.setObjectName("mapStudioGameplaySpatialHintLabel")
+        self.gameplaySpatialHintLabel.setWordWrap(True)
         self.gameplayPosXSpinBox = QtWidgets.QDoubleSpinBox()
         self.gameplayPosXSpinBox.setObjectName("mapStudioGameplayPosXSpinBox")
         self.gameplayPosYSpinBox = QtWidgets.QDoubleSpinBox()
@@ -363,6 +366,7 @@ class BuilderTab(QtWidgets.QWidget):
         placement_layout.addRow(self.gameplayPaletteHintLabel)
         placement_layout.addRow("Template:", self.gameplayTemplateLineEdit)
         placement_layout.addRow("Tag:", self.gameplayTagLineEdit)
+        placement_layout.addRow(self.gameplaySpatialHintLabel)
         placement_layout.addRow("Pos X:", self.gameplayPosXSpinBox)
         placement_layout.addRow("Pos Y:", self.gameplayPosYSpinBox)
         placement_layout.addRow("Pos Z:", self.gameplayPosZSpinBox)
@@ -433,6 +437,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
         self.addRoomLightButton.clicked.connect(self._emit_room_light)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
+        self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._update_gameplay_spatial_controls)
         self.gameplayPaletteSearchLineEdit.textChanged.connect(self._apply_gameplay_palette_filter)
         self.gameplayPaletteComboBox.currentIndexChanged.connect(self._update_gameplay_palette_hint)
         self.useGameplayPaletteButton.clicked.connect(self._use_selected_gameplay_palette_entry)
@@ -451,6 +456,7 @@ class BuilderTab(QtWidgets.QWidget):
         self._update_primitive_style_controls()
         self._update_surface_hint()
         self._update_script_hook_field_choices()
+        self._update_gameplay_spatial_controls()
 
     @staticmethod
     def _make_transform_spin(
@@ -1125,6 +1131,27 @@ class BuilderTab(QtWidgets.QWidget):
             self.gameplayPaletteComboBox.addItem("No compatible game-library resources", None)
         self.gameplayPaletteComboBox.blockSignals(False)
         self._update_gameplay_palette_hint()
+        self._update_gameplay_spatial_controls()
+
+    def _is_current_gameplay_kind_spatial(self) -> bool:
+        kind = str(self.gameplayPlacementKindComboBox.currentData() or "").strip().lower()
+        return kind not in {"store", "merchant"}
+
+    def _update_gameplay_spatial_controls(self) -> None:
+        if not hasattr(self, "gameplaySpatialHintLabel"):
+            return
+        spatial = self._is_current_gameplay_kind_spatial()
+        for widget in (
+            self.gameplayPosXSpinBox,
+            self.gameplayPosYSpinBox,
+            self.gameplayPosZSpinBox,
+            self.gameplayBearingSpinBox,
+        ):
+            widget.setEnabled(spatial)
+        if spatial:
+            self.gameplaySpatialHintLabel.setText("Spatial resources are placed in the viewport and can be moved after creation.")
+        else:
+            self.gameplaySpatialHintLabel.setText("Stores/merchants are module-level resources. They appear in the outliner and export to the GIT StoreList, but they do not get viewport markers.")
 
     def _update_gameplay_palette_hint(self) -> None:
         entry = self._current_palette_entry()

@@ -98,12 +98,14 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         if authored is not None:
             kind = str(getattr(authored, "kind", "object") or "object").title()
             tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
+            is_spatial = bool(getattr(authored, "is_spatial", True))
             self.title.setText(f"Authored {kind} Placement")
             self.name_edit.setText(tag)
             self.name_edit.setEnabled(True)
+            scope = "spatial placement" if is_spatial else "module-level resource"
             self.source_label.setText(
                 f"{str(getattr(authored, 'template_resref', '') or '(no template)')} "
-                f"[{str(getattr(authored, 'kind', 'object') or 'object')}]"
+                f"[{str(getattr(authored, 'kind', 'object') or 'object')}; {scope}]"
             )
             self.visible_box.setChecked(True)
             self.locked_box.setChecked(False)
@@ -112,6 +114,8 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self._set_vector(self.position, getattr(authored, "position", (0.0, 0.0, 0.0)))
             self._set_vector(self.rotation, (0.0, 0.0, float(getattr(authored, "bearing", 0.0) or 0.0)))
             self._set_vector(self.scale, (1.0, 1.0, 1.0))
+            for spin in (*self.position, *self.rotation):
+                spin.setEnabled(is_spatial)
             for spin in self.scale:
                 spin.setEnabled(False)
             transition_capable = bool(getattr(authored, "transition_capable", False))

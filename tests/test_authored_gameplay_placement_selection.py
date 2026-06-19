@@ -32,6 +32,7 @@ def test_t2655_authored_placement_rows_have_stable_virtual_ids() -> None:
         authored_gameplay_placement_rows,
         parse_authored_gameplay_placement_id,
     )
+    from src.core.modules.authored_gameplay_preview import authored_gameplay_preview_markers
     from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
 
     project = create_authored_module_from_room_preset(
@@ -56,10 +57,15 @@ def test_t2655_authored_placement_rows_have_stable_virtual_ids() -> None:
 
     rows = authored_gameplay_placement_rows(project)
     row_ids = {row.placement_id for row in rows}
+    store_row = next(row for row in rows if row.placement_id == "authored:store:0")
+    markers = authored_gameplay_preview_markers(project)
+    marker_ids = {marker.placement_id for marker in markers}
 
     assert authored_gameplay_placement_id("creature", 0) in row_ids
     assert authored_gameplay_placement_id("placeable", 0) in row_ids
-    assert "authored:store:0" not in row_ids
+    assert authored_gameplay_placement_id("store", 0) in row_ids
+    assert store_row.is_spatial is False
+    assert "authored:store:0" not in marker_ids
     assert parse_authored_gameplay_placement_id("authored:creature:0") == ("creature", 0)
 
 
@@ -140,6 +146,46 @@ def test_t2600_authored_placement_rename_duplicate_and_remove_update_project() -
     assert len(creature_rows) == 1
     assert creature_rows[0].placement_id == "authored:creature:0"
     assert creature_rows[0].tag == "guard_renamed_copy"
+
+
+def test_t2600_non_spatial_store_can_be_renamed_duplicated_and_removed() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import (
+        add_authored_gameplay_placement,
+        authored_gameplay_placement_rows,
+        duplicate_authored_gameplay_placement,
+        remove_authored_gameplay_placement,
+        rename_authored_gameplay_placement,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grstore",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="merchant",
+        template_resref="stm_shop",
+        tag="store_a",
+    ).project
+
+    renamed = rename_authored_gameplay_placement(project, "authored:store:0", tag="store_renamed")
+    duplicated = duplicate_authored_gameplay_placement(renamed.project, "authored:store:0")
+    removed = remove_authored_gameplay_placement(duplicated.project, "authored:store:0")
+    rows = authored_gameplay_placement_rows(removed.project)
+    store_rows = [row for row in rows if row.kind == "store"]
+
+    assert renamed.project.placements.stores[0].tag == "store_renamed"
+    assert duplicated.placement_id == "authored:store:1"
+    assert duplicated.project.placements.stores[1].tag == "store_renamed_copy"
+    assert removed.count == 1
+    assert len(store_rows) == 1
+    assert store_rows[0].placement_id == "authored:store:0"
+    assert store_rows[0].tag == "store_renamed_copy"
+    assert store_rows[0].is_spatial is False
 
 
 def test_t2655_controller_transform_update_clears_stale_runtime_state() -> None:
@@ -297,6 +343,8 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     assert "Authored Gameplay" in outliner_source
     assert "authored_gameplay" in outliner_source
     assert "_authored_placements" in properties_source
+    assert "is_spatial" in properties_source
+    assert "module-level resource" in properties_source
     assert "transitionChanged = QtCore.Signal(str, str, str, int)" in properties_source
     assert "mapStudioTransitionPropertiesGroup" in properties_source
     assert "mapStudioTransitionLinkedToLineEdit" in properties_source
@@ -312,3 +360,4 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     assert "self.controller.set_authored_gameplay_transition" in window_source
     assert "rename_authored_gameplay_placement" in window_source
     assert 'item_id.startswith("authored:")' in window_source
+    assert 'if not bool(getattr(placement, "is_spatial", True))' in viewport_source

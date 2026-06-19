@@ -260,8 +260,11 @@ def test_t2653_builder_tab_exposes_gameplay_placement_controls() -> None:
 
     assert "mapStudioGameplayPlacementKindComboBox" in source
     assert "mapStudioGameplayTemplateLineEdit" in source
+    assert "mapStudioGameplaySpatialHintLabel" in source
     assert "mapStudioAddGameplayPlacementButton" in source
     assert "gameplayPlacementRequested" in source
+    assert "_update_gameplay_spatial_controls" in source
+    assert "Stores/merchants are module-level resources" in source
     assert "self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())" in window_source
     assert "self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)" in window_source
     assert "self.controller.add_authored_gameplay_placement" in window_source

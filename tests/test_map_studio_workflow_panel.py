@@ -167,6 +167,9 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
         assert "set_script_hook_fields" in source
         assert "set_script_hooks" in source
         assert "_emit_assign_script_hook" in source
+        assert "mapStudioGameplaySpatialHintLabel" in source
+        assert "_update_gameplay_spatial_controls" in source
+        assert "Stores/merchants are module-level resources" in source
 
     assert "self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())" in window_source
     assert "self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())" in window_source
@@ -197,10 +200,39 @@ def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
         assert "transition_capable" in source
         assert "self.transition_group.setVisible(transition_capable)" in source
         assert "def _transition_changed" in source
+        assert "is_spatial" in source
+        assert "module-level resource" in source
 
     assert "self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)" in window_source
     assert "def _set_authored_gameplay_transition" in window_source
     assert "self.controller.set_authored_gameplay_transition" in window_source
+
+
+def test_t2600_map_studio_viewport_skips_non_spatial_store_rows() -> None:
+    viewport_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_viewport_panel.py"
+    )
+    viewport_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_viewport_panel.py"
+    )
+    preview_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "authored_gameplay_preview.py"
+    )
+    preview_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "authored_gameplay_preview.py"
+    )
+
+    for source in (viewport_source, viewport_mirror_source):
+        assert 'if not bool(getattr(placement, "is_spatial", True))' in source
+        assert "continue" in source
+
+    for source in (preview_source, preview_mirror_source):
+        assert 'if not bool(getattr(row, "is_spatial", True))' in source
+        assert "return None" in source
 
 
 def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:

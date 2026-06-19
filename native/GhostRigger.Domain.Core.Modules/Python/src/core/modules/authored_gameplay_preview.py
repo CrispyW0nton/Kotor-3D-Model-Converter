@@ -66,6 +66,8 @@ def authored_gameplay_preview_marker_for_row(
 ) -> AuthoredGameplayPlacementPreviewMarker | None:
     """Return a marker for a selectable authored placement row."""
 
+    if not bool(getattr(row, "is_spatial", True)):
+        return None
     kind = str(row.kind or "").strip().lower()
     if kind not in _MARKER_STYLE:
         return None

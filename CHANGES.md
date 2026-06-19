@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Manages Module-Level Stores
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored store and merchant resources
+Intersects: authored gameplay placement rows, preview markers, Builder tab placement UX, properties panel, viewport panel, and ModuleMeshes payload mirror.
+
+- Promoted authored stores/merchants into selectable non-spatial Map Studio rows so modders can rename, duplicate, delete, and inspect store resources after adding them.
+- Marked store rows as module-level resources and kept them out of viewport markers and marker geometry instead of drawing fake floor placements.
+- Updated the Builder tab to disable X/Y/Z/Bearing controls for store/merchant resources and explain that they export to the GIT StoreList without viewport markers.
+- Updated the properties panel to label non-spatial authored resources clearly and disable transform fields for them.
+- Mirrored the row, preview, Builder tab, properties, and viewport updates into the ModuleMeshes payload copy.
+- Verification: `python -m pytest tests/test_authored_gameplay_placement_selection.py::test_t2655_authored_placement_rows_have_stable_virtual_ids tests/test_authored_gameplay_placement_selection.py::test_t2600_non_spatial_store_can_be_renamed_duplicated_and_removed tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces tests/test_authored_gameplay_placements.py::test_t2653_builder_tab_exposes_gameplay_placement_controls tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_builder_exposes_script_hook_controls tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_properties_exposes_transition_controls tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_viewport_skips_non_spatial_store_rows -q --basetemp .pytest_tmp_map_studio_store_resources`; `python -m pytest tests/test_authored_gameplay_placements.py tests/test_authored_gameplay_placement_selection.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_store_resources_full`; `python -m py_compile` on active and mirrored placement/preview/Builder/properties/viewport modules plus focused tests; `git diff --check` on touched files.
+
 ### [2026-06-19] Map Studio Edits Authored Transitions
 
 Owner: LordVaderCW

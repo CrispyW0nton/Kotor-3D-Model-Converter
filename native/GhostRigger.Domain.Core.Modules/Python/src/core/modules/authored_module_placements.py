@@ -48,6 +48,7 @@ class AuthoredGameplayPlacementRow:
     tag: str
     position: Vec3
     bearing: float = 0.0
+    is_spatial: bool = True
     transition_capable: bool = False
     linked_to: str = ""
     linked_to_module: str = ""
@@ -240,11 +241,13 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
     placement = project.placements
     for kind, field_name in _KIND_FIELDS.items():
         for index, item in enumerate(tuple(getattr(placement, field_name, ()) or ())):
-            if not hasattr(item, "position"):
-                continue
-            try:
-                position = _vec3(getattr(item, "position", (0.0, 0.0, 0.0)))
-            except ValueError:
+            is_spatial = hasattr(item, "position")
+            if is_spatial:
+                try:
+                    position = _vec3(getattr(item, "position", (0.0, 0.0, 0.0)))
+                except ValueError:
+                    position = (0.0, 0.0, 0.0)
+            else:
                 position = (0.0, 0.0, 0.0)
             transition_capable, linked_to, linked_to_module, transition_destination = _transition_fields_for_item(kind, item)
             rows.append(
@@ -256,6 +259,7 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     tag=_placement_tag(item, kind, index),
                     position=position,
                     bearing=float(getattr(item, "bearing", 0.0) or 0.0),
+                    is_spatial=is_spatial,
                     transition_capable=transition_capable,
                     linked_to=linked_to,
                     linked_to_module=linked_to_module,

@@ -113,6 +113,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             for blueprint in project.blueprints:
                 self._add_row("Blueprint", blueprint.name, blueprint.blueprint_id, blueprint.position, True)
             for placement in authored_gameplay_placements or ():
+                if not bool(getattr(placement, "is_spatial", True)):
+                    continue
                 label = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or getattr(placement, "placement_id", ""))
                 kind = f"Authored {str(getattr(placement, 'kind', 'object')).title()}"
                 placement_id = str(getattr(placement, "placement_id", ""))
