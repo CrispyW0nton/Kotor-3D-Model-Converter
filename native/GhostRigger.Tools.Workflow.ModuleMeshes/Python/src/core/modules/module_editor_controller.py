@@ -40,6 +40,7 @@ from .authored_module_lighting import (
     parse_authored_room_light_id,
     remove_authored_room_light,
     rename_authored_room_light,
+    update_authored_room_light_properties,
     update_authored_room_light_transform,
 )
 from .authored_module_scripts import (
@@ -970,6 +971,44 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio room light {update.light.name} to {update.light.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_light_properties(
+        self,
+        light_id: str,
+        *,
+        color: Any | None = None,
+        radius: float | None = None,
+        intensity: float | None = None,
+        light_type: Any | None = None,
+    ):
+        """Edit selected authored room-light settings from the properties panel."""
+
+        parse_authored_room_light_id(light_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_room_light_properties(
+            authored,
+            light_id,
+            color=color,
+            radius=radius,
+            intensity=intensity,
+            light_type=light_type,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Edited Map Studio room light {update.light.name}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

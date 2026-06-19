@@ -492,6 +492,38 @@ def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     assert "self.controller.set_authored_gameplay_transition" in window_source
 
 
+def test_t2600_map_studio_properties_exposes_selected_room_light_controls() -> None:
+    properties_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_properties.py"
+    )
+    properties_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_properties.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (properties_source, properties_mirror_source):
+        assert "roomLightChanged = QtCore.Signal(str, str, object, float, float)" in source
+        assert "mapStudioRoomLightPropertiesGroup" in source
+        assert "mapStudioRoomLightTypeComboBox" in source
+        assert "mapStudioRoomLightColorRSpinBox" in source
+        assert "mapStudioRoomLightColorGSpinBox" in source
+        assert "mapStudioRoomLightColorBSpinBox" in source
+        assert "mapStudioRoomLightRadiusSpinBox" in source
+        assert "mapStudioRoomLightIntensitySpinBox" in source
+        assert "self.room_light_group.setVisible(True)" in source
+        assert "def _room_light_changed" in source
+
+    assert "self.properties.roomLightChanged.connect(self._set_authored_room_light_properties)" in window_source
+    assert "def _set_authored_room_light_properties" in window_source
+    assert "self.controller.set_authored_room_light_properties" in window_source
+    assert "Updated authored room light properties." in window_source
+
+
 def test_t2600_map_studio_viewport_skips_non_spatial_store_rows() -> None:
     viewport_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

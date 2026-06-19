@@ -310,6 +310,39 @@ def update_authored_room_light_transform(
     return AuthoredRoomLightUpdate(project=updated, light=updated_light, count=len(lights), light_id=authored_room_light_id(updated_light.name))
 
 
+def update_authored_room_light_properties(
+    project: Any,
+    light_id: str,
+    *,
+    color: Any | None = None,
+    radius: float | None = None,
+    intensity: float | None = None,
+    light_type: Any | None = None,
+) -> AuthoredRoomLightUpdate:
+    """Edit the non-transform preview/export properties for one authored room light."""
+
+    _name, lights, index, light = _light_items_for_id(project, light_id)
+    updated_light = replace(
+        light,
+        color=_clamped_color(color) if color is not None else light.color,
+        radius=float(radius) if radius is not None else light.radius,
+        intensity=float(intensity) if intensity is not None else light.intensity,
+        light_type=_normalise_light_type(light_type) if light_type is not None else light.light_type,
+    )
+    lights[index] = updated_light
+    _validate_all_lights(project, tuple(lights))
+    updated = replace(
+        project,
+        lights=tuple(lights),
+        notes=tuple(project.notes) + (f"Edited Map Studio room light properties: {updated_light.name}.",),
+        extra={
+            **dict(project.extra),
+            "last_room_light": authored_room_light_payload(updated_light),
+        },
+    )
+    return AuthoredRoomLightUpdate(project=updated, light=updated_light, count=len(lights), light_id=authored_room_light_id(updated_light.name))
+
+
 def rename_authored_room_light(
     project: Any,
     light_id: str,
@@ -392,6 +425,7 @@ __all__ = [
     "parse_authored_room_light_id",
     "remove_authored_room_light",
     "rename_authored_room_light",
+    "update_authored_room_light_properties",
     "update_authored_room_light_transform",
     "validate_authored_room_lights",
 ]

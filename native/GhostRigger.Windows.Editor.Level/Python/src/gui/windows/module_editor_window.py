@@ -395,6 +395,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
         self.properties.propertyChanged.connect(self._set_property)
         self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)
+        self.properties.roomLightChanged.connect(self._set_authored_room_light_properties)
         self.export_panel.exportRequested.connect(self.export_fbx)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
         self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
@@ -1483,6 +1484,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Edit Authored Transition", str(exc))
             return
         self._refresh_all("Updated authored transition destination.")
+
+    def _set_authored_room_light_properties(self, item_id: str, light_type: str, color: object, radius: float, intensity: float) -> None:
+        if not item_id.startswith("authored_light:"):
+            return
+        try:
+            self.controller.set_authored_room_light_properties(
+                item_id,
+                light_type=light_type,
+                color=color,
+                radius=radius,
+                intensity=intensity,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Edit Authored Room Light", str(exc))
+            return
+        self._refresh_all("Updated authored room light properties.")
 
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")

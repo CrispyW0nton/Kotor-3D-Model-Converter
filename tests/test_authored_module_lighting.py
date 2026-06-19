@@ -116,6 +116,41 @@ def test_t2694_controller_lists_and_moves_authored_room_lights() -> None:
     assert result.readiness.metadata["room_lights"][0]["position"] == [1.5, -0.5, 2.75]
 
 
+def test_t2600_controller_edits_selected_room_light_properties() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grlight")
+    controller.add_authored_room_light(name="key_light", position=(0.0, 0.0, 2.25))
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["grlight.git"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    result = controller.set_authored_room_light_properties(
+        "authored_light:key_light",
+        light_type="spot",
+        color=(0.25, 0.5, 1.0),
+        radius=12.5,
+        intensity=1.75,
+    )
+    updated = controller.project.extra_sections["authored_module"]
+    row = controller.authored_room_lights()[0]
+
+    assert row.light_type == "spot"
+    assert row.color == (0.25, 0.5, 1.0)
+    assert row.radius == 12.5
+    assert row.intensity == 1.75
+    assert updated["runtime_resources"] == []
+    assert updated["game_tested"] is False
+    assert result.readiness is not None
+    assert result.readiness.metadata["room_lights"][0]["light_type"] == "spot"
+    assert result.readiness.metadata["room_lights"][0]["color"] == [0.25, 0.5, 1.0]
+
+
 def test_t2600_room_light_rename_duplicate_and_remove_update_project() -> None:
     _install_native_payload_paths()
 
@@ -125,6 +160,7 @@ def test_t2600_room_light_rename_duplicate_and_remove_update_project() -> None:
         duplicate_authored_room_light,
         remove_authored_room_light,
         rename_authored_room_light,
+        update_authored_room_light_properties,
     )
     from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
 
@@ -132,12 +168,24 @@ def test_t2600_room_light_rename_duplicate_and_remove_update_project() -> None:
     project = add_authored_room_light(project, name="key_light", position=(1.0, 2.0, 2.5)).project
 
     renamed = rename_authored_room_light(project, "authored_light:key_light", name="warm_key")
-    duplicated = duplicate_authored_room_light(renamed.project, "authored_light:warm_key")
+    edited = update_authored_room_light_properties(
+        renamed.project,
+        "authored_light:warm_key",
+        color=(0.85, 0.72, 0.35),
+        radius=9.5,
+        intensity=1.5,
+        light_type="spot",
+    )
+    duplicated = duplicate_authored_room_light(edited.project, "authored_light:warm_key")
     removed = remove_authored_room_light(duplicated.project, "authored_light:warm_key")
     rows = authored_room_light_rows(removed.project)
 
     assert renamed.light.name == "warm_key"
     assert renamed.light_id == "authored_light:warm_key"
+    assert edited.light.color == (0.85, 0.72, 0.35)
+    assert edited.light.radius == 9.5
+    assert edited.light.intensity == 1.5
+    assert edited.light.light_type == "spot"
     assert duplicated.light.name == "warm_key_copy"
     assert duplicated.light_id == "authored_light:warm_key_copy"
     assert duplicated.light.position == (1.5, 2.5, 2.5)

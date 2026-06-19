@@ -13,6 +13,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
     lockChanged = QtCore.Signal(str, bool)
     propertyChanged = QtCore.Signal(str, str, object)
     transitionChanged = QtCore.Signal(str, str, str, int)
+    roomLightChanged = QtCore.Signal(str, str, object, float, float)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -56,6 +57,28 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         transition_layout.addRow("Module", self.transition_module_edit)
         transition_layout.addRow("Destination", self.transition_destination_spin)
         root.addWidget(self.transition_group)
+        self.room_light_group = QtWidgets.QGroupBox("Room Light")
+        self.room_light_group.setObjectName("mapStudioRoomLightPropertiesGroup")
+        light_layout = QtWidgets.QFormLayout(self.room_light_group)
+        self.room_light_type_combo = QtWidgets.QComboBox()
+        self.room_light_type_combo.setObjectName("mapStudioRoomLightTypeComboBox")
+        self.room_light_type_combo.addItem("Point", "point")
+        self.room_light_type_combo.addItem("Spot", "spot")
+        self.room_light_type_combo.addItem("Ambient", "ambient")
+        self.room_light_color_r_spin = self._light_spin("mapStudioRoomLightColorRSpinBox", 0.0, 1.0, 1.0)
+        self.room_light_color_g_spin = self._light_spin("mapStudioRoomLightColorGSpinBox", 0.0, 1.0, 0.92)
+        self.room_light_color_b_spin = self._light_spin("mapStudioRoomLightColorBSpinBox", 0.0, 1.0, 0.78)
+        color_row = QtWidgets.QHBoxLayout()
+        color_row.addWidget(self.room_light_color_r_spin)
+        color_row.addWidget(self.room_light_color_g_spin)
+        color_row.addWidget(self.room_light_color_b_spin)
+        self.room_light_radius_spin = self._light_spin("mapStudioRoomLightRadiusSpinBox", 0.01, 1000.0, 8.0)
+        self.room_light_intensity_spin = self._light_spin("mapStudioRoomLightIntensitySpinBox", 0.0, 100.0, 1.0)
+        light_layout.addRow("Type", self.room_light_type_combo)
+        light_layout.addRow("Color RGB", color_row)
+        light_layout.addRow("Radius", self.room_light_radius_spin)
+        light_layout.addRow("Intensity", self.room_light_intensity_spin)
+        root.addWidget(self.room_light_group)
         root.addStretch(1)
         self.name_edit.editingFinished.connect(self._name_changed)
         self.visible_box.toggled.connect(lambda value: self.visibilityChanged.emit(self._item_id, value))
@@ -65,7 +88,17 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self.transition_linked_to_edit.editingFinished.connect(self._transition_changed)
         self.transition_module_edit.editingFinished.connect(self._transition_changed)
         self.transition_destination_spin.valueChanged.connect(lambda _value: self._transition_changed())
+        self.room_light_type_combo.currentIndexChanged.connect(lambda _index: self._room_light_changed())
+        for spin in (
+            self.room_light_color_r_spin,
+            self.room_light_color_g_spin,
+            self.room_light_color_b_spin,
+            self.room_light_radius_spin,
+            self.room_light_intensity_spin,
+        ):
+            spin.valueChanged.connect(lambda _value: self._room_light_changed())
         self.transition_group.setVisible(False)
+        self.room_light_group.setVisible(False)
 
     def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_room_lights=()) -> None:
         self._project = project
@@ -90,11 +123,13 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         if item is None and authored is None and authored_light is None:
             self.title.setText("No Selection")
             self.transition_group.setVisible(False)
+            self.room_light_group.setVisible(False)
             return
         self.blockSignals(True)
         for widget in (self.name_edit, self.visible_box, self.locked_box, *self.position, *self.rotation, *self.scale):
             widget.setEnabled(True)
         self.transition_group.setVisible(False)
+        self.room_light_group.setVisible(False)
         if authored is not None:
             kind = str(getattr(authored, "kind", "object") or "object").title()
             tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
@@ -143,6 +178,8 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self._set_vector(self.scale, (1.0, 1.0, 1.0))
             for spin in (*self.rotation, *self.scale):
                 spin.setEnabled(False)
+            self._set_room_light_values(authored_light)
+            self.room_light_group.setVisible(True)
             self.blockSignals(False)
             return
         kind = "Blueprint" if hasattr(item, "blueprint_id") else "Room" if hasattr(item, "room_id") else "Module"
@@ -158,6 +195,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self._set_vector(self.rotation, transform.rotation)
         self._set_vector(self.scale, transform.scale)
         self.transition_group.setVisible(False)
+        self.room_light_group.setVisible(False)
         self.blockSignals(False)
 
     def _vector_row(self, label: str) -> tuple[QtWidgets.QDoubleSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QDoubleSpinBox]:
@@ -170,6 +208,15 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             row.addWidget(box)
         self.form.addRow(label, row)
         return boxes
+
+    def _light_spin(self, object_name: str, minimum: float, maximum: float, value: float) -> QtWidgets.QDoubleSpinBox:
+        box = QtWidgets.QDoubleSpinBox()
+        box.setObjectName(object_name)
+        box.setRange(minimum, maximum)
+        box.setDecimals(3)
+        box.setSingleStep(0.1)
+        box.setValue(value)
+        return box
 
     @staticmethod
     def _set_vector(boxes, values) -> None:
@@ -199,4 +246,32 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self.transition_linked_to_edit.text().strip(),
             self.transition_module_edit.text().strip(),
             int(self.transition_destination_spin.value()),
+        )
+
+    def _set_room_light_values(self, authored_light: object) -> None:
+        light_type = str(getattr(authored_light, "light_type", "point") or "point").lower()
+        index = self.room_light_type_combo.findData(light_type)
+        if index < 0:
+            index = self.room_light_type_combo.findData("point")
+        self.room_light_type_combo.setCurrentIndex(index)
+        color = getattr(authored_light, "color", (1.0, 0.92, 0.78))
+        self.room_light_color_r_spin.setValue(float(color[0]))
+        self.room_light_color_g_spin.setValue(float(color[1]))
+        self.room_light_color_b_spin.setValue(float(color[2]))
+        self.room_light_radius_spin.setValue(float(getattr(authored_light, "radius", 8.0) or 8.0))
+        self.room_light_intensity_spin.setValue(float(getattr(authored_light, "intensity", 1.0) or 1.0))
+
+    def _room_light_changed(self) -> None:
+        if self.signalsBlocked() or not self._item_id or not self.room_light_group.isVisible():
+            return
+        self.roomLightChanged.emit(
+            self._item_id,
+            str(self.room_light_type_combo.currentData() or "point"),
+            (
+                float(self.room_light_color_r_spin.value()),
+                float(self.room_light_color_g_spin.value()),
+                float(self.room_light_color_b_spin.value()),
+            ),
+            float(self.room_light_radius_spin.value()),
+            float(self.room_light_intensity_spin.value()),
         )

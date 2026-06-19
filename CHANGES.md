@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Edits Selected Room Light Properties
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored lighting properties
+Intersects: authored room-light services, selected-item properties panel, Level Editor wiring, and ModuleMeshes mirror.
+
+- Added a core authored-room-light property update service for light type, RGB color, radius, and intensity while preserving existing validation and stale export/proof behavior.
+- Exposed selected room-light type/color/radius/intensity controls in the Map Studio properties panel so modders can tune a light after selecting it from the outliner or viewport.
+- Wired the Level Editor properties signal to the controller service and mirrored the core/panel changes into the ModuleMeshes package.
+- Verification: `python -m pytest tests/test_authored_module_lighting.py -q --basetemp .pytest_tmp_map_studio_light_properties`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_light_properties_ui`; `python -m py_compile` on touched core, panel, window, and test files.
+
 ### [2026-06-19] Map Studio Wires Outliner Camera and Light Authoring
 
 Owner: LordVaderCW
