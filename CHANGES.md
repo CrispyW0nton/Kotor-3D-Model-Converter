@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Adds Explicit New KMAP Setup
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / KMAP project creation
+Intersects: Level Editor project-start workflow and ModuleMeshes controller mirror.
+
+- Added a New Map Studio KMAP dialog for choosing the KOTOR module root/KMAP name, target game, and author instead of silently creating a generic project.
+- Moved project identity validation into the Map Studio controller so module roots are KOTOR resref-safe and target games are constrained to K1 or K2.
+- Mirrored the controller validation into the ModuleMeshes package and added focused regression coverage for project identity and UI wiring.
+- Verification: `python -m pytest tests/test_map_studio_project_creation.py -q --basetemp .pytest_tmp_map_studio_project_creation`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_new_project_dialog_exposes_module_identity -q --basetemp .pytest_tmp_map_studio_project_dialog`; `python -m py_compile` on touched controller, window, and test files.
+
 ### [2026-06-19] Map Studio Edits Selected Camera Properties
 
 Owner: LordVaderCW

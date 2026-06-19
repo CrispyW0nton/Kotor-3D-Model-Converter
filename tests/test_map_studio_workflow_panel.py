@@ -118,6 +118,45 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Walkmesh" in panel_source
     assert "Lighting/lightmaps:" in panel_source
     assert '"Lighting"' in panel_source
+
+
+def test_t2600_map_studio_new_project_dialog_exposes_module_identity() -> None:
+    panel_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/workflow_panel.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    mirror_controller_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+
+    assert "class _MapStudioNewProjectDialog" in window_source
+    assert "New Map Studio KMAP" in window_source
+    assert "mapStudioNewProjectHintLabel" in window_source
+    assert "mapStudioNewProjectModuleRootLineEdit" in window_source
+    assert "mapStudioNewProjectGameComboBox" in window_source
+    assert "mapStudioNewProjectAuthorLineEdit" in window_source
+    assert "Module root / KMAP name" in window_source
+    assert "Knights of the Old Republic (K1)" in window_source
+    assert "The Sith Lords (K2)" in window_source
+    assert "dialog = _MapStudioNewProjectDialog" in window_source
+    assert "project = self.controller.new_project(**dialog.values())" in window_source
+    assert "Created Map Studio KMAP {project.name} for {project.game}." in window_source
+
+    for source in (controller_source, mirror_controller_source):
+        assert "authored_resref_blocking_issue" in source
+        assert 'if game_key not in {"K1", "K2"}' in source
+        assert "Map Studio projects must target K1 or K2." in source
+        assert 'authored_resref_blocking_issue("Map Studio module root", name)' in source
+        assert "Created new Map Studio KMAP project" in source
     assert "lightmap" in panel_source
     assert "Resource placement:" in panel_source
     assert '"Resource placement"' in panel_source

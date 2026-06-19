@@ -131,6 +131,64 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
             self.evidence_edit.setText(path)
 
 
+class _MapStudioNewProjectDialog(QtWidgets.QDialog):
+    """Collect the KOTOR-facing identity for a new Map Studio KMAP."""
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        module_root: str = "grdev01",
+        game: str = "K1",
+        author: str = "",
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("New Map Studio KMAP")
+        self.setModal(True)
+        layout = QtWidgets.QVBoxLayout(self)
+
+        self.hint_label = QtWidgets.QLabel(
+            "Create a KMAP project with the KOTOR module root it will eventually export as. "
+            "Use a resref-safe name: 16 characters or fewer, letters, numbers, and underscores."
+        )
+        self.hint_label.setObjectName("mapStudioNewProjectHintLabel")
+        self.hint_label.setWordWrap(True)
+        layout.addWidget(self.hint_label)
+
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
+
+        self.module_root_edit = QtWidgets.QLineEdit(module_root or "grdev01")
+        self.module_root_edit.setObjectName("mapStudioNewProjectModuleRootLineEdit")
+        self.module_root_edit.setPlaceholderText("grdev01")
+        form.addRow("Module root / KMAP name", self.module_root_edit)
+
+        self.game_combo = QtWidgets.QComboBox()
+        self.game_combo.setObjectName("mapStudioNewProjectGameComboBox")
+        self.game_combo.addItem("Knights of the Old Republic (K1)", "K1")
+        self.game_combo.addItem("The Sith Lords (K2)", "K2")
+        index = self.game_combo.findData(str(game or "K1").upper())
+        self.game_combo.setCurrentIndex(index if index >= 0 else 0)
+        form.addRow("Target game", self.game_combo)
+
+        self.author_edit = QtWidgets.QLineEdit(author or "")
+        self.author_edit.setObjectName("mapStudioNewProjectAuthorLineEdit")
+        self.author_edit.setPlaceholderText("modder name or team")
+        form.addRow("Author", self.author_edit)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def values(self) -> dict[str, str]:
+        return {
+            "name": self.module_root_edit.text().strip(),
+            "game": str(self.game_combo.currentData() or "K1"),
+            "author": self.author_edit.text().strip(),
+        }
+
+
 class ModuleEditorWindow(QtWidgets.QMainWindow):
     """Top-level KMAP Map Studio Level Editor window."""
 
@@ -426,8 +484,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def new_kmap(self) -> None:
         if not self._confirm_discard_or_save():
             return
-        self.controller.new_project()
-        self._refresh_all("Created new KMAP project.")
+        dialog = _MapStudioNewProjectDialog(
+            self,
+            module_root=str(getattr(self.project, "name", "") or "grdev01"),
+            game=str(getattr(self.project, "game", "") or "K1"),
+            author=str(getattr(self.project, "author", "") or ""),
+        )
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return
+        try:
+            project = self.controller.new_project(**dialog.values())
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "New Map Studio KMAP", str(exc))
+            return
+        self._refresh_all(f"Created Map Studio KMAP {project.name} for {project.game}.")
 
     def open_kmap(self) -> None:
         if not self._confirm_discard_or_save():

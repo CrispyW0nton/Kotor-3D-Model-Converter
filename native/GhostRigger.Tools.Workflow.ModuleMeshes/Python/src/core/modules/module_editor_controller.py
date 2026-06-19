@@ -26,6 +26,7 @@ from .authored_module_kmap_bridge import (
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
 )
+from .authored_module_project import authored_resref_blocking_issue, normalise_resref
 from .authored_module_validation_projection import authored_module_readiness_validation_issues
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
 from .authored_gameplay_marker_geometry import (
@@ -110,9 +111,16 @@ class ModuleEditorController:
         return self.model.project
 
     def new_project(self, name: str = "new_level", game: str = "K1", author: str = "") -> KMapProject:
-        self.model.set_project(new_kmap_project(name=name, game=game, author=author))
+        game_key = str(game or "K1").strip().upper()
+        if game_key not in {"K1", "K2"}:
+            raise ValueError("Map Studio projects must target K1 or K2.")
+        issue = authored_resref_blocking_issue("Map Studio module root", name)
+        if issue:
+            raise ValueError(issue)
+        project_name = normalise_resref(name) or "new_level"
+        self.model.set_project(new_kmap_project(name=project_name, game=game_key, author=str(author or "").strip()))
         self.model.project.dirty = True
-        self.model.log("Created new KMAP project.")
+        self.model.log(f"Created new Map Studio KMAP project {project_name} for {game_key}.")
         return self.model.project
 
     def open_project(self, path: str | Path) -> KMapProject:
