@@ -56,10 +56,20 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.project_label.setWordWrap(True)
         root.addWidget(self.project_label)
 
+        self.target_game_label = QtWidgets.QLabel("Target game: not selected")
+        self.target_game_label.setObjectName("mapStudioWorkflowTargetGameLabel")
+        self.target_game_label.setWordWrap(True)
+        root.addWidget(self.target_game_label)
+
         self.capability_label = QtWidgets.QLabel("Capability: Draft")
         self.capability_label.setObjectName("mapStudioWorkflowCapabilityLabel")
         self.capability_label.setWordWrap(True)
         root.addWidget(self.capability_label)
+
+        self.test_state_label = QtWidgets.QLabel("Test state: Not staged")
+        self.test_state_label.setObjectName("mapStudioWorkflowTestStateLabel")
+        self.test_state_label.setWordWrap(True)
+        root.addWidget(self.test_state_label)
 
         self.authoring_label = QtWidgets.QLabel("Authoring: Start in Builder")
         self.authoring_label.setObjectName("mapStudioWorkflowAuthoringLabel")
@@ -264,7 +274,9 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         if project is None:
             self._set_action_enabled(False, can_place=False, can_proof=False)
             self.project_label.setText("Project: No KMAP open")
+            self.target_game_label.setText("Target game: not selected")
             self.capability_label.setText("Capability: Draft. Create or open a KMAP before authoring.")
+            self.test_state_label.setText("Test state: Not staged. Create or open a KMAP before export testing.")
             self.authoring_label.setText("Authoring: Create or open a KMAP, then use Builder to add terrain or rooms.")
             self.active_context_label.setText("Active tool: none selected")
             self.resources_label.setText("Runtime resources: ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX")
@@ -287,7 +299,9 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         game = str(getattr(project, "game", "") or "(game not selected)")
         dirty = " *" if bool(getattr(project, "dirty", False)) else ""
         self.project_label.setText(f"Project: {project_name}{dirty} ({game})")
+        self.target_game_label.setText(f"Target game: {game}")
         self.capability_label.setText("Capability: Draft. Validate authored content before staging.")
+        self.test_state_label.setText("Test state: Editing draft. Validate and stage before calling this game-ready.")
 
         extra_sections = dict(getattr(project, "extra_sections", {}) or {})
         has_authored_module = "authored_module" in extra_sections
@@ -331,6 +345,8 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         metadata = dict(getattr(readiness, "metadata", {}) or {})
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
+        readiness_game = str(getattr(readiness, "game", "") or game)
+        self.target_game_label.setText(f"Target game: {readiness_game}")
         self._set_action_enabled(
             True,
             can_place=has_authored_module,
@@ -340,6 +356,15 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
 
         self.capability_label.setText(
             self._capability_text(
+                stage=stage,
+                game_tested=game_tested,
+                ready_for_game_test=ready_for_game_test,
+                proof_manifest=proof_manifest,
+                installed_path=installed_path,
+            )
+        )
+        self.test_state_label.setText(
+            self._test_state_text(
                 stage=stage,
                 game_tested=game_tested,
                 ready_for_game_test=ready_for_game_test,
@@ -476,6 +501,28 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         if stage_label.lower() == "previewable":
             return "Capability: Previewable draft. Generate required resources before staging."
         return f"Capability: {stage_label}. Fix blocking issues before export."
+
+    @staticmethod
+    def _test_state_text(
+        *,
+        stage: str,
+        game_tested: bool,
+        ready_for_game_test: bool,
+        proof_manifest: str,
+        installed_path: str,
+    ) -> str:
+        if game_tested:
+            return "Test state: Game-tested. Live warp proof is recorded."
+        if installed_path:
+            return "Test state: Installed for testing. Warp in-game, then record proof."
+        if proof_manifest:
+            return "Test state: Staged for testing. Install/copy the module, then run the warp test."
+        if ready_for_game_test:
+            return "Test state: Export candidate. Stage/install before in-game proof."
+        stage_label = str(stage or "blocked").replace("_", " ").title()
+        if stage_label.lower() == "previewable":
+            return "Test state: Previewable only. Generate missing runtime resources before staging."
+        return f"Test state: {stage_label}. Resolve blockers before game testing."
 
     @staticmethod
     def _format_resource_key(resource: Any) -> str:

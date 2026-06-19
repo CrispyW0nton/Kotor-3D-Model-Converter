@@ -18,7 +18,9 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
 
     assert "class MapStudioWorkflowPanel" in panel_source
     assert "mapStudioWorkflowProjectLabel" in panel_source
+    assert "mapStudioWorkflowTargetGameLabel" in panel_source
     assert "mapStudioWorkflowCapabilityLabel" in panel_source
+    assert "mapStudioWorkflowTestStateLabel" in panel_source
     assert "mapStudioWorkflowAuthoringLabel" in panel_source
     assert "mapStudioWorkflowActiveContextLabel" in panel_source
     assert "mapStudioWorkflowSelectionLabel" in panel_source
@@ -101,6 +103,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Add Test Placeable" in panel_source
     assert "Open Walkmesh Tools" in panel_source
     assert "Open Warp Test Handoff" in panel_source
+    assert "Target game:" in panel_source
+    assert "Test state:" in panel_source
+    assert "Export candidate. Stage/install before in-game proof" in panel_source
+    assert "Game-tested. Live warp proof is recorded" in panel_source
     assert "Not game-ready until a live KOTOR warp test is recorded" in panel_source
     assert "Capability: Export candidate" in panel_source
     assert "Capability: Installed test build" in panel_source
@@ -131,6 +137,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Active tool:" in panel_source
     assert "def set_selection_context" in panel_source
     assert "Selected: none" in panel_source
+    assert "def _test_state_text" in panel_source
     assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX" in panel_source
 
 
@@ -320,7 +327,9 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
 
     assert "class MapStudioWorkflowPanel" in mirror_source
     assert "mapStudioWorkflowResourcesLabel" in mirror_source
+    assert "mapStudioWorkflowTargetGameLabel" in mirror_source
     assert "mapStudioWorkflowCapabilityLabel" in mirror_source
+    assert "mapStudioWorkflowTestStateLabel" in mirror_source
     assert "mapStudioWorkflowActiveContextLabel" in mirror_source
     assert "mapStudioWorkflowSelectionLabel" in mirror_source
     assert "mapStudioWorkflowNewKmapButton" in mirror_source
@@ -371,6 +380,9 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "walkmeshToolsRequested = QtCore.Signal()" in mirror_source
     assert "launchHandoffRequested = QtCore.Signal()" in mirror_source
     assert "Capability: Export candidate" in mirror_source
+    assert "Target game:" in mirror_source
+    assert "Test state:" in mirror_source
+    assert "def _test_state_text" in mirror_source
     assert "Required resources missing" in mirror_source
     assert "Geometry authoring" in mirror_source
     assert "Walkmesh" in mirror_source

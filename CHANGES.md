@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Clarifies Target Game and Test State
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / target-game and proof-state clarity
+Intersects: Level Editor workflow panel and ModuleMeshes mirror.
+
+- Added explicit Target game and Test state rows to the Map Studio workflow spine so modders can immediately see whether a KMAP targets K1/K2 and whether it is draft, previewable, export-candidate, staged, installed, or game-tested.
+- Derived the new labels from existing project/readiness metadata without moving export, proof, or game-test policy into the UI panel.
+- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for target-game and test-state visibility.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_target_game_state`; `python -m py_compile` on active and mirrored workflow panels plus focused tests; `git diff --check` on touched files.
+
+
 ### [2026-06-19] Map Studio Adds Geometry Workflow Shortcut
 
 Owner: LordVaderCW
