@@ -18,7 +18,7 @@ from .authored_module_objects import (
     AuthoredWaypointInstance,
     normalise_resource_resref,
 )
-from .authored_module_project import AuthoredModuleProject
+from .authored_module_project import AuthoredModuleProject, authored_resref_blocking_issue, normalise_resref
 
 
 Vec3 = tuple[float, float, float]
@@ -48,6 +48,10 @@ class AuthoredGameplayPlacementRow:
     tag: str
     position: Vec3
     bearing: float = 0.0
+    transition_capable: bool = False
+    linked_to: str = ""
+    linked_to_module: str = ""
+    transition_destination: int = 0
 
 
 SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS: tuple[str, ...] = (
@@ -207,6 +211,28 @@ def _placement_items_for_id(project: AuthoredModuleProject, placement_id: Any) -
     return kind, index, field_name, items, items[index]
 
 
+def _transition_fields_for_item(kind: str, item: Any) -> tuple[bool, str, str, int]:
+    if kind not in {"door", "trigger", "waypoint"}:
+        return False, "", "", 0
+    return (
+        True,
+        str(getattr(item, "linked_to", "") or ""),
+        normalise_resref(getattr(item, "linked_to_module", "")) if hasattr(item, "linked_to_module") else "",
+        int(getattr(item, "transition_destination", 0) or 0),
+    )
+
+
+def _transition_metadata(*, placement_id: Any, kind: str, index: int, linked_to: str, linked_to_module: str, destination: int) -> dict[str, Any]:
+    return {
+        "placement_id": str(placement_id),
+        "kind": kind,
+        "index": int(index),
+        "linked_to": str(linked_to or ""),
+        "linked_to_module": normalise_resref(linked_to_module),
+        "transition_destination": int(destination),
+    }
+
+
 def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[AuthoredGameplayPlacementRow, ...]:
     """Return selectable UI rows for authored GIT/IFO gameplay placements."""
 
@@ -220,6 +246,7 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                 position = _vec3(getattr(item, "position", (0.0, 0.0, 0.0)))
             except ValueError:
                 position = (0.0, 0.0, 0.0)
+            transition_capable, linked_to, linked_to_module, transition_destination = _transition_fields_for_item(kind, item)
             rows.append(
                 AuthoredGameplayPlacementRow(
                     placement_id=authored_gameplay_placement_id(kind, index),
@@ -229,6 +256,10 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     tag=_placement_tag(item, kind, index),
                     position=position,
                     bearing=float(getattr(item, "bearing", 0.0) or 0.0),
+                    transition_capable=transition_capable,
+                    linked_to=linked_to,
+                    linked_to_module=linked_to_module,
+                    transition_destination=transition_destination,
                 )
             )
     return tuple(rows)
@@ -464,6 +495,77 @@ def rename_authored_gameplay_placement(
     )
 
 
+def update_authored_gameplay_transition(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+    *,
+    linked_to: Any = "",
+    linked_to_module: Any = "",
+    transition_destination: Any = 0,
+) -> AuthoredGameplayPlacementUpdate:
+    """Set transition destination fields for an authored door, trigger, or waypoint."""
+
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
+    if kind not in {"door", "trigger", "waypoint"}:
+        raise ValueError(f"Authored {kind} placements do not support transition destination fields.")
+    destination_tag = str(linked_to or "").strip()[:64]
+    module = normalise_resref(linked_to_module)
+    if str(linked_to_module or "").strip():
+        issue = authored_resref_blocking_issue("Transition destination module", linked_to_module)
+        if issue:
+            raise ValueError(issue)
+    try:
+        destination = int(transition_destination or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Transition destination must be an integer.") from exc
+    if destination < 0:
+        raise ValueError("Transition destination cannot be negative.")
+
+    updated_item = replace(current, linked_to=destination_tag)
+    if hasattr(updated_item, "linked_to_module"):
+        updated_item = replace(updated_item, linked_to_module=module)
+    if hasattr(updated_item, "transition_destination"):
+        updated_item = replace(updated_item, transition_destination=destination)
+    items[index] = updated_item
+    metadata = _transition_metadata(
+        placement_id=placement_id,
+        kind=kind,
+        index=index,
+        linked_to=destination_tag,
+        linked_to_module=module,
+        destination=destination,
+    )
+    updated_placements = replace(
+        project.placements,
+        **{
+            field_name: tuple(items),
+            "metadata": {
+                **dict(project.placements.metadata),
+                "last_gameplay_transition": metadata,
+            },
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Updated Map Studio transition: {placement_id}.",),
+        extra={
+            **dict(project.extra),
+            "last_gameplay_transition": metadata,
+        },
+    )
+    position = _vec3(getattr(updated_item, "position", (0.0, 0.0, 0.0))) if hasattr(updated_item, "position") else (0.0, 0.0, 0.0)
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=_placement_template(updated_item),
+        tag=_placement_tag(updated_item, kind, index),
+        position=position,
+        count=len(items),
+        placement_id=authored_gameplay_placement_id(kind, index),
+    )
+
+
 def duplicate_authored_gameplay_placement(
     project: AuthoredModuleProject,
     placement_id: Any,
@@ -572,4 +674,5 @@ __all__ = [
     "remove_authored_gameplay_placement",
     "rename_authored_gameplay_placement",
     "update_authored_gameplay_placement_transform",
+    "update_authored_gameplay_transition",
 ]

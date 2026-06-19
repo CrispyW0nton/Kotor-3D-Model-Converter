@@ -210,6 +210,43 @@ def test_t2600_controller_placement_edit_actions_clear_export_and_proof_state() 
     assert controller.project.dirty is True
 
 
+def test_t2600_controller_transition_edit_clears_export_and_proof_state() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grctlink")
+    controller.add_authored_gameplay_placement(
+        kind="door",
+        template_resref="door_t01",
+        tag="exit_door",
+        position=(1.0, 0.0, 0.0),
+    )
+    payload = dict(controller.project.extra_sections["authored_module"])
+    payload["runtime_resources"] = ["grctlink.git"]
+    payload["game_tested"] = True
+    controller.project.extra_sections["authored_module"] = payload
+
+    result = controller.set_authored_gameplay_transition(
+        "authored:door:0",
+        linked_to="wp_next_start",
+        linked_to_module="grnext",
+        transition_destination=2,
+    )
+    updated = controller.project.extra_sections["authored_module"]
+
+    assert updated["runtime_resources"] == []
+    assert updated["game_tested"] is False
+    assert updated["placements"]["doors"][0]["linked_to"] == "wp_next_start"
+    assert updated["placements"]["doors"][0]["linked_to_module"] == "grnext"
+    assert updated["placements"]["doors"][0]["transition_destination"] == 2
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert controller.project.dirty is True
+
+
 def test_t2655_module_editor_projects_authored_placements_into_selection_surfaces() -> None:
     repo = Path(__file__).resolve().parents[1]
     viewport_source = (
@@ -260,9 +297,18 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     assert "Authored Gameplay" in outliner_source
     assert "authored_gameplay" in outliner_source
     assert "_authored_placements" in properties_source
+    assert "transitionChanged = QtCore.Signal(str, str, str, int)" in properties_source
+    assert "mapStudioTransitionPropertiesGroup" in properties_source
+    assert "mapStudioTransitionLinkedToLineEdit" in properties_source
+    assert "mapStudioTransitionLinkedModuleLineEdit" in properties_source
+    assert "mapStudioTransitionDestinationSpinBox" in properties_source
+    assert "def _transition_changed" in properties_source
     assert "Authored {kind} Placement" in properties_source
     assert "self.name_edit.setEnabled(True)" in properties_source
     assert "self.controller.authored_gameplay_placements()" in window_source
     assert "set_authored_gameplay_placement_transform" in window_source
+    assert "self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)" in window_source
+    assert "def _set_authored_gameplay_transition" in window_source
+    assert "self.controller.set_authored_gameplay_transition" in window_source
     assert "rename_authored_gameplay_placement" in window_source
     assert 'item_id.startswith("authored:")' in window_source

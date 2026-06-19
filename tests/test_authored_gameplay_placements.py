@@ -127,6 +127,65 @@ def test_t2600_readiness_reports_authored_transitions() -> None:
     assert any("missing a destination" in warning for warning in readiness.warnings)
 
 
+def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_to_kmap_payload
+    from src.core.modules.authored_module_placements import (
+        add_authored_gameplay_placement,
+        authored_gameplay_placement_rows,
+        update_authored_gameplay_transition,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="wide_hall",
+        module_root="grtran01",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="exit_door",
+        position=(2.0, 0.0, 0.0),
+    ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="bench",
+        position=(0.0, 0.0, 0.0),
+    ).project
+
+    updated = update_authored_gameplay_transition(
+        project,
+        "authored:door:0",
+        linked_to="wp_grtran02_start",
+        linked_to_module="grtran02",
+        transition_destination=1,
+    )
+    rows = authored_gameplay_placement_rows(updated.project)
+    door_row = next(row for row in rows if row.placement_id == "authored:door:0")
+    payload = authored_project_to_kmap_payload(updated.project)
+
+    assert updated.project.placements.doors[0].linked_to == "wp_grtran02_start"
+    assert updated.project.placements.doors[0].linked_to_module == "grtran02"
+    assert updated.project.placements.doors[0].transition_destination == 1
+    assert door_row.transition_capable is True
+    assert door_row.linked_to == "wp_grtran02_start"
+    assert door_row.linked_to_module == "grtran02"
+    assert door_row.transition_destination == 1
+    assert payload["placements"]["doors"][0]["linked_to"] == "wp_grtran02_start"
+    assert payload["placements"]["doors"][0]["linked_to_module"] == "grtran02"
+    assert payload["placements"]["doors"][0]["transition_destination"] == 1
+
+    with pytest.raises(ValueError, match="do not support transition"):
+        update_authored_gameplay_transition(updated.project, "authored:placeable:0", linked_to="wp_any")
+
+
 def test_t2653_controller_adds_placement_and_clears_runtime_state() -> None:
     _install_native_payload_paths()
 

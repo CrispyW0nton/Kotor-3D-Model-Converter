@@ -383,6 +383,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.visibilityChanged.connect(lambda item_id, value: self._set_visibility(item_id, value))
         self.properties.lockChanged.connect(lambda item_id, value: self._set_locked(item_id, value))
         self.properties.propertyChanged.connect(self._set_property)
+        self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)
         self.export_panel.exportRequested.connect(self.export_fbx)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
         self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
@@ -1333,6 +1334,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             setattr(item, key, value)
         self.project.mark_dirty()
         self._refresh_all()
+
+    def _set_authored_gameplay_transition(self, item_id: str, linked_to: str, linked_to_module: str, transition_destination: int) -> None:
+        if not item_id.startswith("authored:"):
+            return
+        try:
+            self.controller.set_authored_gameplay_transition(
+                item_id,
+                linked_to=linked_to,
+                linked_to_module=linked_to_module,
+                transition_destination=transition_destination,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Edit Authored Transition", str(exc))
+            return
+        self._refresh_all("Updated authored transition destination.")
 
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")

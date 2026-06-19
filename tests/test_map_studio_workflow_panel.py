@@ -174,6 +174,35 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     assert "def set_authored_script_hook" in window_source
 
 
+def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
+    properties_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_properties.py"
+    )
+    properties_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_properties.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (properties_source, properties_mirror_source):
+        assert "transitionChanged = QtCore.Signal(str, str, str, int)" in source
+        assert "mapStudioTransitionPropertiesGroup" in source
+        assert "mapStudioTransitionLinkedToLineEdit" in source
+        assert "mapStudioTransitionLinkedModuleLineEdit" in source
+        assert "mapStudioTransitionDestinationSpinBox" in source
+        assert "transition_capable" in source
+        assert "self.transition_group.setVisible(transition_capable)" in source
+        assert "def _transition_changed" in source
+
+    assert "self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)" in window_source
+    assert "def _set_authored_gameplay_transition" in window_source
+    assert "self.controller.set_authored_gameplay_transition" in window_source
+
+
 def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     mirror_source = _read(
         "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"

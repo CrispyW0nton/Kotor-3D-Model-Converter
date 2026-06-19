@@ -12,6 +12,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
     visibilityChanged = QtCore.Signal(str, bool)
     lockChanged = QtCore.Signal(str, bool)
     propertyChanged = QtCore.Signal(str, str, object)
+    transitionChanged = QtCore.Signal(str, str, str, int)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,12 +40,32 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self.position = self._vector_row("Position")
         self.rotation = self._vector_row("Rotation")
         self.scale = self._vector_row("Scale")
+        self.transition_group = QtWidgets.QGroupBox("Transition")
+        self.transition_group.setObjectName("mapStudioTransitionPropertiesGroup")
+        transition_layout = QtWidgets.QFormLayout(self.transition_group)
+        self.transition_linked_to_edit = QtWidgets.QLineEdit()
+        self.transition_linked_to_edit.setObjectName("mapStudioTransitionLinkedToLineEdit")
+        self.transition_linked_to_edit.setPlaceholderText("destination tag or waypoint")
+        self.transition_module_edit = QtWidgets.QLineEdit()
+        self.transition_module_edit.setObjectName("mapStudioTransitionLinkedModuleLineEdit")
+        self.transition_module_edit.setPlaceholderText("optional module resref")
+        self.transition_destination_spin = QtWidgets.QSpinBox()
+        self.transition_destination_spin.setObjectName("mapStudioTransitionDestinationSpinBox")
+        self.transition_destination_spin.setRange(0, 32767)
+        transition_layout.addRow("Linked To", self.transition_linked_to_edit)
+        transition_layout.addRow("Module", self.transition_module_edit)
+        transition_layout.addRow("Destination", self.transition_destination_spin)
+        root.addWidget(self.transition_group)
         root.addStretch(1)
         self.name_edit.editingFinished.connect(self._name_changed)
         self.visible_box.toggled.connect(lambda value: self.visibilityChanged.emit(self._item_id, value))
         self.locked_box.toggled.connect(lambda value: self.lockChanged.emit(self._item_id, value))
         for spin in (*self.position, *self.rotation, *self.scale):
             spin.valueChanged.connect(lambda _value: self._transform_changed())
+        self.transition_linked_to_edit.editingFinished.connect(self._transition_changed)
+        self.transition_module_edit.editingFinished.connect(self._transition_changed)
+        self.transition_destination_spin.valueChanged.connect(lambda _value: self._transition_changed())
+        self.transition_group.setVisible(False)
 
     def set_project(self, project: KMapProject, authored_gameplay_placements=(), authored_room_lights=()) -> None:
         self._project = project
@@ -68,10 +89,12 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self.setEnabled(item is not None or authored is not None or authored_light is not None)
         if item is None and authored is None and authored_light is None:
             self.title.setText("No Selection")
+            self.transition_group.setVisible(False)
             return
         self.blockSignals(True)
         for widget in (self.name_edit, self.visible_box, self.locked_box, *self.position, *self.rotation, *self.scale):
             widget.setEnabled(True)
+        self.transition_group.setVisible(False)
         if authored is not None:
             kind = str(getattr(authored, "kind", "object") or "object").title()
             tag = str(getattr(authored, "tag", "") or getattr(authored, "template_resref", "") or item_id)
@@ -91,6 +114,11 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self._set_vector(self.scale, (1.0, 1.0, 1.0))
             for spin in self.scale:
                 spin.setEnabled(False)
+            transition_capable = bool(getattr(authored, "transition_capable", False))
+            self.transition_group.setVisible(transition_capable)
+            self.transition_linked_to_edit.setText(str(getattr(authored, "linked_to", "") or ""))
+            self.transition_module_edit.setText(str(getattr(authored, "linked_to_module", "") or ""))
+            self.transition_destination_spin.setValue(int(getattr(authored, "transition_destination", 0) or 0))
             self.blockSignals(False)
             return
         if authored_light is not None:
@@ -125,6 +153,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self._set_vector(self.position, transform.position)
         self._set_vector(self.rotation, transform.rotation)
         self._set_vector(self.scale, transform.scale)
+        self.transition_group.setVisible(False)
         self.blockSignals(False)
 
     def _vector_row(self, label: str) -> tuple[QtWidgets.QDoubleSpinBox, QtWidgets.QDoubleSpinBox, QtWidgets.QDoubleSpinBox]:
@@ -157,3 +186,13 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
     def _name_changed(self) -> None:
         if self._item_id:
             self.propertyChanged.emit(self._item_id, "name", self.name_edit.text().strip())
+
+    def _transition_changed(self) -> None:
+        if self.signalsBlocked() or not self._item_id or not self.transition_group.isVisible():
+            return
+        self.transitionChanged.emit(
+            self._item_id,
+            self.transition_linked_to_edit.text().strip(),
+            self.transition_module_edit.text().strip(),
+            int(self.transition_destination_spin.value()),
+        )

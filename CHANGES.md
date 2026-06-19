@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Edits Authored Transitions
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / authored transition editing
+Intersects: authored gameplay placement service, Level Editor properties panel, transition readiness metadata, and ModuleMeshes payload mirror.
+
+- Added core transition editing for authored doors, triggers, and waypoints so Map Studio can set LinkedTo, LinkedToModule, and TransitionDestin without UI-owned resource policy.
+- Projected transition fields into authored placement rows and exposed them in the Level Editor properties panel only for transition-capable placements.
+- Routed transition edits through the controller to update KMAP payloads, refresh readiness, and clear stale runtime resources/game-test proof.
+- Mirrored the placement, controller, and properties updates into the ModuleMeshes payload copy.
+- Verification: `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_authored_transition_edit_updates_rows_and_payload tests/test_authored_gameplay_placement_selection.py::test_t2600_controller_transition_edit_clears_export_and_proof_state tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_properties_exposes_transition_controls -q --basetemp .pytest_tmp_map_studio_transition_edit`; `python -m pytest tests/test_authored_gameplay_placements.py tests/test_authored_gameplay_placement_selection.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_transition_files`; `python -m py_compile` on active and mirrored placement/controller/properties modules plus the Level Editor window and focused tests; `git diff --check` on touched files.
+
 ### [2026-06-19] Map Studio Edits Authored Script Hooks
 
 Owner: LordVaderCW
