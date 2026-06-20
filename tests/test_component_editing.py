@@ -36,6 +36,8 @@ def test_t2601_component_edit_audit_marks_snap_as_geometry_change_not_topology()
     assert audit.walkmesh_review_required is True
     assert audit.export_candidate_stale is True
     assert audit.game_proof_stale is True
+    assert audit.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert audit.next_action == "Review WOK/walkability, regenerate affected runtime resources, then verify in game."
     assert "snap_vertex_to_vertex on room vertex: 1 vertex change(s)." == audit.summary
     assert "Re-run WOK/walkability preview if this edit affects traversal or doorway seams." in audit.validation_messages
     assert "Review WOK surface intent before exporting the module." in audit.validation_messages
@@ -67,6 +69,8 @@ def test_t2601_component_edit_audit_marks_weld_as_topology_change() -> None:
     assert audit.walkmesh_review_required is True
     assert audit.export_candidate_stale is True
     assert audit.game_proof_stale is True
+    assert audit.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert audit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
     assert audit.metadata["removed_vertex_count"] == 1
     assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in audit.validation_messages
 
@@ -89,5 +93,7 @@ def test_t2601_component_edit_audit_keeps_noop_from_invalidating_export() -> Non
     assert audit.walkmesh_review_required is False
     assert audit.export_candidate_stale is False
     assert audit.game_proof_stale is False
+    assert audit.stale_outputs == ()
+    assert audit.next_action == "No export action required."
     assert audit.summary == "component_edit on room vertex: no geometry changes."
     assert audit.validation_messages == ("Select at least two vertices to weld.",)

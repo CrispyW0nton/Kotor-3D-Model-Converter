@@ -653,6 +653,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "Doorway/transition intent: Not checked" in source
         assert "def _set_component_edit_summary" in source
         assert "Component edits: Not checked" in source
+        assert "Stale outputs:" in source
+        assert "Next:" in source
         assert "Review WOK/MDL/MDX/PTH output before export" in source
         assert 'geometry_validation.get("opening_count"' in source
         assert 'metadata.get("doorway_transition"' in source
@@ -1218,6 +1220,8 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "mapStudioReadinessComponentEditLabel" in source
         assert "def _set_component_edit_summary" in source
         assert "Component edits:" in source
+        assert "Stale outputs:" in source
+        assert "Next:" in source
         assert "mapStudioReadinessRuntimeResourceTable" in source
         assert 'setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))' in source
         assert "def _set_runtime_resource_rows" in source

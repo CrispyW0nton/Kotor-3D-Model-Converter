@@ -297,7 +297,7 @@
       "resource_name": "PYTHON_PAYLOAD_0049",
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "52c3d55cf7c2435712e6b14fb9b8306bb832c3c4002d9ab4a1425e1b49c8124d"
+      "sha256": "9a2fa0fc08b017325388d2ccca06999d4a7a9ecdfdf6035d58cb1c4f6c476062"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0050",
@@ -315,7 +315,7 @@
       "resource_name": "PYTHON_PAYLOAD_0052",
       "source_path": "src/core/modules/authored_room_operations.py",
       "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-      "sha256": "d3fe38682d4ad9fe79f0e2d091f890a4850cb04165314dfc0fa94f9fa8e8a95c"
+      "sha256": "82138cef3dab1dd5b8884ce974e1737b2f4a308d05a3f5b8827fe39023946942"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0053",

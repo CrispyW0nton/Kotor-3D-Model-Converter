@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Component Edits Name Stale Runtime Outputs
+
+Owner: LordVaderCW
+Task: T2601 / T2605
+Subsystem: Map Studio / component editing / readiness UX
+Intersects: Domain Core Geometry component-edit audit, Domain Core Modules readiness metadata, ModuleMeshes mirror package, GUI Boundary Panels readiness panel.
+
+- Extended the headless component-edit audit with explicit stale KOTOR runtime outputs and a next-action string for walkmesh-sensitive edits.
+- Carried that contract through authored-room metadata and authored-module readiness so vertex snaps, welds, and topology edits explain which MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs need regeneration or game proof.
+- Updated the Map Studio readiness panel to show stale outputs and the next proof step directly in the component-edit summary.
+- Mirrored the authored-module core and readiness panel updates into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_component_editing.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_component_editing.py -q --basetemp .pytest_tmp_component_edit_outputs`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex tests/test_authored_room_operations.py::test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable -q --basetemp .pytest_tmp_authored_room_component_outputs`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_component_ui_outputs`.
+
 ### [2026-06-20] Map Studio Workflow Shows Explicit Edit Mode Context
 
 Owner: LordVaderCW

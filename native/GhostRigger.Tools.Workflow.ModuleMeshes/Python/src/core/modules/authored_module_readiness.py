@@ -135,6 +135,8 @@ class AuthoredComponentEditReadiness:
     walkmesh_review_required: bool = False
     export_candidate_stale: bool = False
     game_proof_stale: bool = False
+    stale_outputs: tuple[str, ...] = ()
+    next_action: str = ""
     validation_messages: tuple[str, ...] = ()
     fix_hint: str = ""
 
@@ -660,7 +662,21 @@ def _component_edit_readiness(project: AuthoredModuleProject) -> AuthoredCompone
     topology_changed = any(bool(audit.get("topology_changed")) for _room, audit in audits)
     export_stale = any(bool(audit.get("export_candidate_stale")) for _room, audit in audits)
     proof_stale = any(bool(audit.get("game_proof_stale")) for _room, audit in audits)
+    stale_outputs = tuple(
+        dict.fromkeys(
+            str(output)
+            for _room, audit in audits
+            for output in tuple(audit.get("stale_outputs") or ())
+            if str(output).strip()
+        )
+    )
+    next_action = str(latest.get("next_action") or "").strip()
     ready = not risky
+    fix_hint = (
+        "Inspect WOK surface intent, regenerate MDL/MDX/WOK/PTH resources, then record fresh game proof."
+        if not ready
+        else "No risky component edits are waiting for review."
+    )
     return AuthoredComponentEditReadiness(
         ready=ready,
         status="Ready" if ready else "Needs WOK/export review",
@@ -673,12 +689,10 @@ def _component_edit_readiness(project: AuthoredModuleProject) -> AuthoredCompone
         walkmesh_review_required=walkmesh_review,
         export_candidate_stale=export_stale,
         game_proof_stale=proof_stale,
+        stale_outputs=stale_outputs,
+        next_action=next_action or fix_hint,
         validation_messages=latest_messages,
-        fix_hint=(
-            "Inspect WOK surface intent, regenerate MDL/MDX/WOK/PTH resources, then record fresh game proof."
-            if not ready
-            else "No risky component edits are waiting for review."
-        ),
+        fix_hint=fix_hint,
     )
 
 
@@ -1470,6 +1484,8 @@ def build_authored_module_readiness(
                 "walkmesh_review_required": component_edit.walkmesh_review_required,
                 "export_candidate_stale": component_edit.export_candidate_stale,
                 "game_proof_stale": component_edit.game_proof_stale,
+                "stale_outputs": list(component_edit.stale_outputs),
+                "next_action": component_edit.next_action,
                 "validation_messages": list(component_edit.validation_messages),
                 "fix_hint": component_edit.fix_hint,
             },

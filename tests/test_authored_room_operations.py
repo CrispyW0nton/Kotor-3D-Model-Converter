@@ -507,6 +507,8 @@ def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None
     assert audit["topology_changed"] is False
     assert audit["walkmesh_review_required"] is True
     assert audit["game_proof_stale"] is True
+    assert audit["stale_outputs"] == ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"]
+    assert audit["next_action"] == "Review WOK/walkability, regenerate affected runtime resources, then verify in game."
     assert "Review WOK surface intent before exporting the module." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
@@ -515,6 +517,11 @@ def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None
     assert result.readiness.component_edit.latest_room_resref == "grsnapv_room01"
     assert result.readiness.component_edit.latest_operation == "snap_floor_plan_vertex"
     assert result.readiness.component_edit.walkmesh_review_required is True
+    assert result.readiness.component_edit.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert (
+        result.readiness.metadata["component_edit"]["next_action"]
+        == "Review WOK/walkability, regenerate affected runtime resources, then verify in game."
+    )
     assert result.readiness.metadata["component_edit"]["latest_operation"] == "snap_floor_plan_vertex"
     assert any(
         item.name == "Component edit audit" and item.ready is False
@@ -584,6 +591,8 @@ def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> 
     assert audit["topology_changed"] is True
     assert audit["walkmesh_review_required"] is True
     assert audit["metadata"]["removed_vertex_count"] == 1
+    assert audit["stale_outputs"] == ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"]
+    assert audit["next_action"] == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
     assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
@@ -592,6 +601,7 @@ def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> 
     assert result.readiness.component_edit.latest_operation == "weld_vertices"
     assert result.readiness.component_edit.topology_changed is True
     assert result.readiness.component_edit.risky_edit_count == 1
+    assert result.readiness.component_edit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
     assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in result.readiness.warnings
     assert not build.blocking_issues
 

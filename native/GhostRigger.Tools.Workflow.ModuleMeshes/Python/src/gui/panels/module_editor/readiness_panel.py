@@ -619,9 +619,19 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             for message in list(component_edit.get("validation_messages") or [])
             if str(message).strip()
         ]
+        stale_outputs = [
+            str(output)
+            for output in list(component_edit.get("stale_outputs") or [])
+            if str(output).strip()
+        ]
+        next_action = str(component_edit.get("next_action") or "").strip()
         details = latest_summary
         if latest_room:
             details = f"Room {latest_room}. {details}".strip()
+        if stale_outputs:
+            details = f"{details} Stale outputs: {', '.join(stale_outputs)}.".strip()
+        if next_action:
+            details = f"{details} Next: {next_action}".strip()
         if messages:
             details = f"{details} Fix: {messages[0]}".strip()
         elif risky_count:

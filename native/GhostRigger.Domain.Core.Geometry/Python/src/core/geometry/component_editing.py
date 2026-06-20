@@ -48,6 +48,8 @@ class ComponentEditAudit:
     walkmesh_review_required: bool
     export_candidate_stale: bool
     game_proof_stale: bool
+    stale_outputs: tuple[str, ...] = ()
+    next_action: str = ""
     validation_messages: tuple[str, ...] = ()
     summary: str = ""
     metadata: dict[str, object] = field(default_factory=dict)
@@ -278,6 +280,19 @@ def audit_component_edit_result(
         messages.append("Review WOK surface intent before exporting the module.")
     if skipped_faces:
         messages.append("Some faces could not be normal-audited; inspect normals before export.")
+    stale_outputs: tuple[str, ...] = ()
+    next_action = "No export action required."
+    if geometry_changed:
+        if affects_walkmesh:
+            stale_outputs = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+        else:
+            stale_outputs = ("MDL", "MDX", ".mod")
+        if topology_changed:
+            next_action = "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
+        elif walkmesh_review_required:
+            next_action = "Review WOK/walkability, regenerate affected runtime resources, then verify in game."
+        else:
+            next_action = "Regenerate affected runtime resources before export."
     change_bits: list[str] = []
     if result.changed_vertex_count:
         change_bits.append(f"{result.changed_vertex_count} vertex change(s)")
@@ -300,6 +315,8 @@ def audit_component_edit_result(
         walkmesh_review_required=walkmesh_review_required,
         export_candidate_stale=geometry_changed,
         game_proof_stale=geometry_changed,
+        stale_outputs=stale_outputs,
+        next_action=next_action,
         validation_messages=tuple(dict.fromkeys(messages)),
         summary=summary,
         metadata={

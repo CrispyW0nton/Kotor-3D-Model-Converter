@@ -355,6 +355,8 @@ def _component_edit_audit_payload(audit: ComponentEditAudit) -> dict[str, Any]:
         "walkmesh_review_required": audit.walkmesh_review_required,
         "export_candidate_stale": audit.export_candidate_stale,
         "game_proof_stale": audit.game_proof_stale,
+        "stale_outputs": list(audit.stale_outputs),
+        "next_action": audit.next_action,
         "summary": audit.summary,
         "validation_messages": list(audit.validation_messages),
         "metadata": dict(audit.metadata),
