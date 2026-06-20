@@ -546,12 +546,22 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "map_studio_export_object_boundaries" in source
         assert '"export_object_boundaries"' in source
         assert '"uv_handoff_object_count"' in source
+        assert "class AuthoredComponentEditReadiness" in source
+        assert "def _component_edit_readiness" in source
+        assert "component_edit: AuthoredComponentEditReadiness" in source
+        assert '"component_edit"' in source
+        assert '"Component edit audit"' in source
+        assert '"Needs WOK/export review"' in source
 
     for source in (readiness_panel_source, readiness_panel_mirror_source):
         assert "mapStudioReadinessExportObjectsLabel" in source
         assert "mapStudioReadinessExportObjectsTable" in source
         assert "def _set_export_object_rows" in source
         assert "DCC/UV handoff candidate" in source
+        assert "mapStudioReadinessComponentEditLabel" in source
+        assert "def _set_component_edit_summary" in source
+        assert "Component edits: Not checked" in source
+        assert "Review WOK/MDL/MDX/PTH output before export" in source
 
     for source in (preferences_source, preferences_mirror_source):
         assert "MAP_STUDIO_TOOL_BELT_SECTION" in source
@@ -987,6 +997,9 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "def _set_pathing_summary" in source
         assert "PTH path graph readiness" in source
         assert "anchors: {anchor_text}" in source
+        assert "mapStudioReadinessComponentEditLabel" in source
+        assert "def _set_component_edit_summary" in source
+        assert "Component edits:" in source
         assert "mapStudioReadinessRuntimeResourceTable" in source
         assert 'setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))' in source
         assert "def _set_runtime_resource_rows" in source

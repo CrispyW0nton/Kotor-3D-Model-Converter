@@ -372,6 +372,16 @@ def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None
     assert "Review WOK surface intent before exporting the module." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+    assert result.readiness.component_edit.ready is False
+    assert result.readiness.component_edit.status == "Needs WOK/export review"
+    assert result.readiness.component_edit.latest_room_resref == "grsnapv_room01"
+    assert result.readiness.component_edit.latest_operation == "snap_floor_plan_vertex"
+    assert result.readiness.component_edit.walkmesh_review_required is True
+    assert result.readiness.metadata["component_edit"]["latest_operation"] == "snap_floor_plan_vertex"
+    assert any(
+        item.name == "Component edit audit" and item.ready is False
+        for item in result.readiness.toolchain
+    )
     assert not build.blocking_issues
 
 
@@ -439,6 +449,12 @@ def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> 
     assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+    assert result.readiness.component_edit.ready is False
+    assert result.readiness.component_edit.latest_room_resref == "grweldv_room01"
+    assert result.readiness.component_edit.latest_operation == "weld_vertices"
+    assert result.readiness.component_edit.topology_changed is True
+    assert result.readiness.component_edit.risky_edit_count == 1
+    assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in result.readiness.warnings
     assert not build.blocking_issues
 
 

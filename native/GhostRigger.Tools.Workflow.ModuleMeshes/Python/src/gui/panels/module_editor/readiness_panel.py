@@ -60,6 +60,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.pathing_label.setWordWrap(True)
         root.addWidget(self.pathing_label)
 
+        self.component_edit_label = QtWidgets.QLabel("Component edits: Not checked")
+        self.component_edit_label.setObjectName("mapStudioReadinessComponentEditLabel")
+        self.component_edit_label.setWordWrap(True)
+        root.addWidget(self.component_edit_label)
+
         self.runtime_resource_table = QtWidgets.QTableWidget(0, 3)
         self.runtime_resource_table.setObjectName("mapStudioReadinessRuntimeResourceTable")
         self.runtime_resource_table.setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))
@@ -238,6 +243,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
             self.pathing_label.setText("Pathing: Not checked")
+            self.component_edit_label.setText("Component edits: Not checked")
             self._set_runtime_resource_rows((), (), ())
             self.proof_label.setText("Game proof: Not staged")
             self.proof_recorder_label.setText("Proof recorder: Not ready")
@@ -269,6 +275,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         missing = tuple(getattr(readiness, "missing_runtime_resources", ()) or ())
         blocking = tuple(getattr(readiness, "blocking_messages", ()) or ())
         warnings = tuple(getattr(readiness, "warnings", ()) or ())
+        metadata = dict(getattr(readiness, "metadata", {}) or {})
 
         self.header_label.setText(f"Module: {module_root} ({game})")
         self.stage_label.setText(f"Stage: {stage}")
@@ -290,8 +297,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
         self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
+        self._set_component_edit_summary(dict(metadata.get("component_edit", {}) or {}))
         self._set_runtime_resource_rows(expected, present, missing)
-        metadata = dict(getattr(readiness, "metadata", {}) or {})
         proof_status = str(metadata.get("proof_status") or "not_ready")
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
@@ -462,6 +469,33 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             f"Pathing: {status}. {resource}; {point_count} point(s), "
             f"{connection_count} connection(s); anchors: {anchor_text}"
         )
+
+    def _set_component_edit_summary(self, component_edit: dict[str, Any]) -> None:
+        """Show whether component edits need WOK/MDL/MDX/PTH review."""
+
+        if not component_edit:
+            self.component_edit_label.setText("Component edits: Not checked")
+            return
+        status = str(component_edit.get("status") or "Not checked")
+        latest_room = str(component_edit.get("latest_room_resref") or "").strip()
+        latest_summary = str(component_edit.get("latest_summary") or "").strip()
+        try:
+            risky_count = int(component_edit.get("risky_edit_count", 0) or 0)
+        except (TypeError, ValueError):
+            risky_count = 0
+        messages = [
+            str(message)
+            for message in list(component_edit.get("validation_messages") or [])
+            if str(message).strip()
+        ]
+        details = latest_summary
+        if latest_room:
+            details = f"Room {latest_room}. {details}".strip()
+        if messages:
+            details = f"{details} Fix: {messages[0]}".strip()
+        elif risky_count:
+            details = f"{details} Review WOK/MDL/MDX/PTH output before export.".strip()
+        self.component_edit_label.setText(f"Component edits: {status}. {details}".rstrip())
 
     @staticmethod
     def _normalise_resource_key(resource: Any) -> tuple[str, str]:

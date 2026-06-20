@@ -117,6 +117,25 @@ class AuthoredModulePathingReadiness:
 
 
 @dataclass(frozen=True)
+class AuthoredComponentEditReadiness:
+    """Latest component-edit risk summary for Map Studio readiness UI."""
+
+    ready: bool
+    status: str
+    latest_room_resref: str = ""
+    latest_operation: str = ""
+    latest_summary: str = ""
+    edit_count: int = 0
+    risky_edit_count: int = 0
+    topology_changed: bool = False
+    walkmesh_review_required: bool = False
+    export_candidate_stale: bool = False
+    game_proof_stale: bool = False
+    validation_messages: tuple[str, ...] = ()
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredModuleReadiness:
     """Capability-honest summary for a from-scratch Map Studio module."""
 
@@ -126,6 +145,9 @@ class AuthoredModuleReadiness:
     inputs: tuple[AuthoredModuleInputStatus, ...] = ()
     rooms: tuple[AuthoredRoomReadiness, ...] = ()
     toolchain: tuple[AuthoredModuleToolchainStatus, ...] = ()
+    component_edit: AuthoredComponentEditReadiness = field(
+        default_factory=lambda: AuthoredComponentEditReadiness(True, "No component edits")
+    )
     can_preview: bool = False
     can_export_candidate: bool = False
     ready_for_game_test: bool = False
@@ -511,6 +533,60 @@ def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingR
     )
 
 
+def _component_edit_readiness(project: AuthoredModuleProject) -> AuthoredComponentEditReadiness:
+    """Summarize latest floor-plan/component edit risk without touching export files."""
+
+    audits: list[tuple[str, dict[str, Any]]] = []
+    for room in tuple(project.rooms or ()):
+        room_resref = normalise_resref(room.room_resref)
+        audit = dict(room.metadata.get("last_component_edit_audit") or {})
+        primitive = getattr(room, "primitive", None)
+        if not audit and primitive is not None:
+            audit = dict(getattr(primitive, "metadata", {}).get("last_component_edit_audit") or {})
+        if audit:
+            audits.append((room_resref, audit))
+    if not audits:
+        return AuthoredComponentEditReadiness(
+            ready=True,
+            status="No component edits",
+            fix_hint="Use vertex, edge, face, or walkmesh tools when room geometry needs manual cleanup.",
+        )
+    latest_room, latest = audits[-1]
+    risky = [
+        audit
+        for _room, audit in audits
+        if bool(audit.get("walkmesh_review_required"))
+        or bool(audit.get("export_candidate_stale"))
+        or bool(audit.get("game_proof_stale"))
+        or bool(audit.get("topology_changed"))
+    ]
+    latest_messages = tuple(str(message) for message in list(latest.get("validation_messages") or ()) if str(message).strip())
+    walkmesh_review = any(bool(audit.get("walkmesh_review_required")) for _room, audit in audits)
+    topology_changed = any(bool(audit.get("topology_changed")) for _room, audit in audits)
+    export_stale = any(bool(audit.get("export_candidate_stale")) for _room, audit in audits)
+    proof_stale = any(bool(audit.get("game_proof_stale")) for _room, audit in audits)
+    ready = not risky
+    return AuthoredComponentEditReadiness(
+        ready=ready,
+        status="Ready" if ready else "Needs WOK/export review",
+        latest_room_resref=latest_room,
+        latest_operation=str(latest.get("operation") or ""),
+        latest_summary=str(latest.get("summary") or ""),
+        edit_count=len(audits),
+        risky_edit_count=len(risky),
+        topology_changed=topology_changed,
+        walkmesh_review_required=walkmesh_review,
+        export_candidate_stale=export_stale,
+        game_proof_stale=proof_stale,
+        validation_messages=latest_messages,
+        fix_hint=(
+            "Inspect WOK surface intent, regenerate MDL/MDX/WOK/PTH resources, then record fresh game proof."
+            if not ready
+            else "No risky component edits are waiting for review."
+        ),
+    )
+
+
 def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
@@ -664,6 +740,7 @@ def _toolchain_statuses(
     proof_status: str,
     game_tested: bool,
     proof_recording_script_path: str,
+    component_edit: AuthoredComponentEditReadiness,
 ) -> tuple[AuthoredModuleToolchainStatus, ...]:
     """Summarize the full Map Studio path from geometry intent to game proof."""
 
@@ -742,6 +819,14 @@ def _toolchain_statuses(
             "Ready" if walkable_faces > 0 and not room_blocking else "Needs walkable WOK faces",
             f"{walkable_faces} walkable face(s)",
             "Set a walkable floor/ramp/stair WOK surface and keep gameplay objects on walkable faces.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Component edit audit",
+            component_edit.ready,
+            component_edit.status,
+            component_edit.latest_summary
+            or f"{component_edit.edit_count} recorded component edit(s), {component_edit.risky_edit_count} needing review",
+            component_edit.fix_hint,
         ),
         AuthoredModuleToolchainStatus(
             "PTH pathing",
@@ -869,6 +954,7 @@ def build_authored_module_readiness(
     transition_references = _transition_references(project)
     script_references = _script_references(project, present=present_set)
     pathing = _pathing_readiness(project)
+    component_edit = _component_edit_readiness(project)
     export_object_boundaries = map_studio_export_object_boundaries(project)
     external_template_count = sum(1 for ref in template_references if not ref.packaged)
     incomplete_transition_count = sum(1 for ref in transition_references if not ref.complete)
@@ -892,7 +978,8 @@ def build_authored_module_readiness(
         script_warnings = (
             f"{external_script_count} authored script hook(s) rely on base-game, Override, or another installed mod .ncs instead of being packaged.",
         )
-    warnings = tuple(validation.warnings) + template_warnings + transition_warnings + script_warnings
+    component_warnings = component_edit.validation_messages if not component_edit.ready else ()
+    warnings = tuple(validation.warnings) + template_warnings + transition_warnings + script_warnings + component_warnings
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
@@ -972,6 +1059,7 @@ def build_authored_module_readiness(
         proof_status=proof_status,
         game_tested=proof_game_tested,
         proof_recording_script_path=proof_recording_script_path,
+        component_edit=component_edit,
     )
     return AuthoredModuleReadiness(
         module_root=project.module_root,
@@ -980,6 +1068,7 @@ def build_authored_module_readiness(
         inputs=_input_statuses(project),
         rooms=rooms,
         toolchain=toolchain,
+        component_edit=component_edit,
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
         ready_for_game_test=ready_for_game_test,
@@ -1009,6 +1098,21 @@ def build_authored_module_readiness(
                 "warnings": list(pathing.warnings),
                 "blocking_messages": list(pathing.blocking_messages),
                 "fix_hint": pathing.fix_hint,
+            },
+            "component_edit": {
+                "ready": component_edit.ready,
+                "status": component_edit.status,
+                "latest_room_resref": component_edit.latest_room_resref,
+                "latest_operation": component_edit.latest_operation,
+                "latest_summary": component_edit.latest_summary,
+                "edit_count": component_edit.edit_count,
+                "risky_edit_count": component_edit.risky_edit_count,
+                "topology_changed": component_edit.topology_changed,
+                "walkmesh_review_required": component_edit.walkmesh_review_required,
+                "export_candidate_stale": component_edit.export_candidate_stale,
+                "game_proof_stale": component_edit.game_proof_stale,
+                "validation_messages": list(component_edit.validation_messages),
+                "fix_hint": component_edit.fix_hint,
             },
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
@@ -1118,6 +1222,7 @@ def build_authored_module_readiness(
 
 __all__ = [
     "AuthoredGameplayTemplateReference",
+    "AuthoredComponentEditReadiness",
     "AuthoredModuleTransitionReference",
     "AuthoredModuleInputStatus",
     "AuthoredModulePathingReadiness",

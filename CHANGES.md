@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Surfaces Component Edit Readiness
+
+Owner: LordVaderCW
+Task: T2601 / T2602 / T2908
+Subsystem: Map Studio / readiness / component editing
+Intersects: Domain Core Modules readiness, ModuleMeshes mirror package, GUI Boundary Panels readiness panel.
+
+- Added `AuthoredComponentEditReadiness` to the headless authored-module readiness model so recent snap/weld/component edits are summarized before export or game proof.
+- Added a Map Studio readiness panel component-edit status line that tells modders when a vertex/topology edit needs WOK/MDL/MDX/PTH review before packaging.
+- Propagated component-edit metadata into readiness metadata, warnings, and toolchain rows, then mirrored the core/UI changes into the ModuleMeshes workflow package.
+- Refreshed native Python payload hashes for the touched Domain Core Modules, GUI Boundary Panels, and ModuleMeshes packaged files.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex tests/test_authored_room_operations.py::test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable -q --basetemp .pytest_tmp_component_readiness_room_ops`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_component_readiness_contract`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py`.
+
 ### [2026-06-20] Map Studio Adds Component Edit Audit Metadata
 
 Owner: LordVaderCW
