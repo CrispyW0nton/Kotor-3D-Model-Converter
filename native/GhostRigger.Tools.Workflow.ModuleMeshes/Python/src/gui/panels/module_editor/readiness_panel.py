@@ -716,7 +716,26 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
                 f"{int(item.get('primitive_count', 0) or 0)} primitive(s), "
                 f"{int(item.get('walkable_face_count', 0) or 0)} walkable WOK face(s)"
             )
-            handoff = "DCC/UV handoff candidate" if bool(item.get("uv_handoff_recommended", False)) else "Keep in Map Studio"
+            dcc_status = str(item.get("dcc_handoff_status") or "").strip()
+            dcc_reason = str(item.get("dcc_handoff_reason") or "").strip()
+            source_operation = str(item.get("source_operation") or "").strip()
+            owns_walkmesh = bool(item.get("owns_walkmesh", False))
+            if dcc_status == "ready_for_external_uv":
+                handoff = "Ready for DCC/UV handoff"
+            elif dcc_status == "needs_wok":
+                handoff = "Needs WOK before DCC handoff"
+            elif dcc_status == "blocked":
+                handoff = "Blocked"
+            else:
+                handoff = "Keep in Map Studio"
+            details = []
+            if source_operation:
+                details.append(f"source: {source_operation}")
+            details.append("owns WOK" if owns_walkmesh else "no WOK yet")
+            if dcc_reason:
+                details.append(dcc_reason)
+            if details:
+                handoff = f"{handoff}; " + "; ".join(details)
             if str(item.get("status") or "") == "blocked":
                 blockers = "; ".join(str(message) for message in item.get("blocking_messages", ()) or ())
                 handoff = f"Blocked: {blockers or 'fix export object'}"

@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Export Boundaries Explain DCC Handoff Readiness
+
+Owner: LordVaderCW
+Task: T2604 / T2908
+Subsystem: Map Studio / export-object readiness / Level Editor readiness panel
+Intersects: Domain Core Modules, GUI Boundary Panels, ModuleMeshes mirror package, and Map Studio combine/separate workflow tests.
+
+- Extended the headless Map Studio export-object boundary contract with DCC handoff status, KOTOR room MDL/MDX/WOK boundary policy, WOK ownership, source operation, and source room lineage.
+- Updated the readiness panel to show whether each boundary is ready for external UV/texturing, needs WOK first, is blocked, or should stay editable in Map Studio.
+- Added focused regression coverage for rectangular room combine and composition primitive separation so merge/separate outputs preserve explicit KOTOR export boundaries and source lineage.
+- Mirrored the core and panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_export_objects.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_export_objects.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2679_controller_unions_adjacent_floor_plan_rooms_and_remains_exportable tests/test_authored_room_operations.py::test_t2601_controller_separates_composition_primitive_into_exportable_room -q --basetemp .pytest_tmp_map_studio_export_boundary_dcc`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_export_boundary_contract`.
+
 ### [2026-06-20] Map Studio Triangulation Rejects Degenerate WOK Candidates
 
 Owner: LordVaderCW

@@ -40,6 +40,12 @@ class MapStudioExportObjectBoundary:
     walkable_face_count: int = 0
     material_textures: tuple[str, ...] = ()
     uv_handoff_recommended: bool = False
+    dcc_handoff_status: str = "keep_in_map_studio"
+    dcc_handoff_reason: str = ""
+    resource_boundary_policy: str = "one_room_mdl_mdx_wok"
+    owns_walkmesh: bool = False
+    source_operation: str = ""
+    source_room_resrefs: tuple[str, ...] = ()
     status: str = "export_candidate"
     notes: tuple[str, ...] = ()
     blocking_messages: tuple[str, ...] = ()
@@ -62,6 +68,12 @@ class MapStudioExportObjectBoundary:
             "walkable_face_count": self.walkable_face_count,
             "material_textures": list(self.material_textures),
             "uv_handoff_recommended": self.uv_handoff_recommended,
+            "dcc_handoff_status": self.dcc_handoff_status,
+            "dcc_handoff_reason": self.dcc_handoff_reason,
+            "resource_boundary_policy": self.resource_boundary_policy,
+            "owns_walkmesh": self.owns_walkmesh,
+            "source_operation": self.source_operation,
+            "source_room_resrefs": list(self.source_room_resrefs),
             "status": self.status,
             "notes": list(self.notes),
             "blocking_messages": list(self.blocking_messages),
@@ -130,6 +142,50 @@ def _object_notes(*, primitive: Any, metadata: dict[str, Any], resref: str) -> t
     return tuple(notes)
 
 
+def _source_operation(*, primitive: Any, metadata: dict[str, Any]) -> str:
+    """Return the operation that produced the current export boundary."""
+
+    for source in (metadata, getattr(primitive, "metadata", {}) or {}):
+        operation = str(dict(source).get("last_operation") or dict(source).get("operation") or "").strip()
+        if operation:
+            return operation
+    return "authored_room"
+
+
+def _source_room_resrefs(metadata: dict[str, Any], resref: str) -> tuple[str, ...]:
+    """Return source room lineage for merge/separate handoff reporting."""
+
+    merged = metadata.get("merged_room_resrefs")
+    if isinstance(merged, (list, tuple)):
+        values = tuple(normalise_resref(item) for item in merged if normalise_resref(item))
+        if values:
+            return values
+    separated_from = normalise_resref(metadata.get("separated_from_room"))
+    if separated_from:
+        return (separated_from,)
+    return (normalise_resref(resref),) if normalise_resref(resref) else ()
+
+
+def _dcc_handoff_state(
+    *,
+    uv_handoff_recommended: bool,
+    walkmesh_face_count: int,
+    blocking: tuple[str, ...],
+    kind: str,
+) -> tuple[str, str]:
+    """Classify whether this boundary is ready for outside UV/texturing work."""
+
+    if blocking:
+        return "blocked", "Fix export-object blockers before leaving GhostRigger."
+    if not uv_handoff_recommended:
+        return "keep_in_map_studio", "Keep this terrain or gameplay-derived object editable in Map Studio until geometry stabilizes."
+    if walkmesh_face_count <= 0:
+        return "needs_wok", "Generate or validate WOK faces before treating this as a KOTOR room handoff."
+    if kind == "separated_primitive_object":
+        return "ready_for_external_uv", "Separated object can be UV/textured externally, then returned as its own room MDL/MDX/WOK boundary."
+    return "ready_for_external_uv", "Room boundary can be UV/textured externally while preserving its MDL/MDX/WOK resref triplet."
+
+
 def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple[MapStudioExportObjectBoundary, ...]:
     """Return modder-facing export object boundaries for an authored module."""
 
@@ -162,6 +218,15 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
             material_textures = _composition_textures(primitive) or material_textures
         kind = _object_kind(primitive, metadata)
         uv_handoff = kind in {"composition_room", "separated_primitive_object", "floor_plan_room", "rectangular_room"}
+        owns_walkmesh = walkmesh_face_count > 0
+        source_operation = _source_operation(primitive=primitive, metadata=metadata)
+        source_room_resrefs = _source_room_resrefs(metadata, resref)
+        dcc_status, dcc_reason = _dcc_handoff_state(
+            uv_handoff_recommended=uv_handoff,
+            walkmesh_face_count=walkmesh_face_count,
+            blocking=tuple(blocking),
+            kind=kind,
+        )
         boundaries.append(
             MapStudioExportObjectBoundary(
                 object_id=f"room:{resref}",
@@ -178,6 +243,12 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 walkable_face_count=walkable_face_count,
                 material_textures=material_textures,
                 uv_handoff_recommended=uv_handoff,
+                dcc_handoff_status=dcc_status,
+                dcc_handoff_reason=dcc_reason,
+                resource_boundary_policy="one_room_mdl_mdx_wok",
+                owns_walkmesh=owns_walkmesh,
+                source_operation=source_operation,
+                source_room_resrefs=source_room_resrefs,
                 status="blocked" if blocking else "export_candidate",
                 notes=_object_notes(primitive=primitive, metadata=metadata, resref=resref),
                 blocking_messages=tuple(blocking),

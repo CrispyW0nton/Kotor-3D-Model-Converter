@@ -382,6 +382,14 @@ def test_t2679_controller_unions_adjacent_floor_plan_rooms_and_remains_exportabl
     assert tuple(authored.rooms[0].primitive.points) == ((-5.0, -5.0), (10.0, -5.0), (10.0, 5.0), (-5.0, 5.0))
     assert payload["runtime_resources"] == []
     assert payload["game_tested"] is False
+    export_objects = result.readiness.metadata["export_object_boundaries"] if result.readiness is not None else []
+    merged_boundary = next(item for item in export_objects if item["export_resref"] == "grunion_merged")
+    assert merged_boundary["source_operation"] == "rectangular_union"
+    assert merged_boundary["source_room_resrefs"] == ["grunion_room01", "grunion_room02"]
+    assert merged_boundary["resource_boundary_policy"] == "one_room_mdl_mdx_wok"
+    assert merged_boundary["owns_walkmesh"] is True
+    assert merged_boundary["dcc_handoff_status"] == "ready_for_external_uv"
+    assert "MDL/MDX/WOK resref triplet" in merged_boundary["dcc_handoff_reason"]
     assert not build.blocking_issues
     assert build.metadata["room_count"] == 1
     assert ("grunion_merged", "mdl") in build.resources
@@ -1847,8 +1855,20 @@ def test_t2601_controller_separates_composition_primitive_into_exportable_room()
     assert separated_room["visible_rooms"] == ["grsep_room01", "grsep_ramp"]
     assert any(row.room_resref == "grsep_ramp" and row.primitive_name == "grsep_room01_ramp" for row in primitive_rows)
     assert len(export_objects) == 2
-    assert any(boundary.export_resref == "grsep_ramp" and boundary.object_kind == "separated_primitive_object" for boundary in export_objects)
-    assert any(boundary["export_resref"] == "grsep_ramp" and boundary["uv_handoff_recommended"] for boundary in readiness_export_objects)
+    separated_boundary = next(boundary for boundary in export_objects if boundary.export_resref == "grsep_ramp")
+    readiness_boundary = next(boundary for boundary in readiness_export_objects if boundary["export_resref"] == "grsep_ramp")
+    assert separated_boundary.object_kind == "separated_primitive_object"
+    assert separated_boundary.source_operation == "separate_composition_primitive"
+    assert separated_boundary.source_room_resrefs == ("grsep_room01",)
+    assert separated_boundary.owns_walkmesh is True
+    assert separated_boundary.dcc_handoff_status == "ready_for_external_uv"
+    assert "Separated object can be UV/textured externally" in separated_boundary.dcc_handoff_reason
+    assert readiness_boundary["uv_handoff_recommended"] is True
+    assert readiness_boundary["resource_boundary_policy"] == "one_room_mdl_mdx_wok"
+    assert readiness_boundary["owns_walkmesh"] is True
+    assert readiness_boundary["dcc_handoff_status"] == "ready_for_external_uv"
+    assert readiness_boundary["source_operation"] == "separate_composition_primitive"
+    assert readiness_boundary["source_room_resrefs"] == ["grsep_room01"]
     assert ("grsep_room01", "mdl") in build.resources
     assert ("grsep_ramp", "mdl") in build.resources
     assert not build.blocking_issues

@@ -617,6 +617,14 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "def map_studio_export_object_boundaries" in source
         assert '"separated_primitive_object"' in source
         assert "uv_handoff_recommended" in source
+        assert "dcc_handoff_status" in source
+        assert "dcc_handoff_reason" in source
+        assert "resource_boundary_policy" in source
+        assert "owns_walkmesh" in source
+        assert "source_operation" in source
+        assert "source_room_resrefs" in source
+        assert '"ready_for_external_uv"' in source
+        assert '"one_room_mdl_mdx_wok"' in source
 
     for source in (readiness_source, readiness_mirror_source):
         assert "map_studio_export_object_boundaries" in source
@@ -646,7 +654,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioReadinessExportObjectsLabel" in source
         assert "mapStudioReadinessExportObjectsTable" in source
         assert "def _set_export_object_rows" in source
-        assert "DCC/UV handoff candidate" in source
+        assert "Ready for DCC/UV handoff" in source
+        assert "Needs WOK before DCC handoff" in source
+        assert "source_operation" in source
+        assert "owns WOK" in source
         assert "mapStudioReadinessComponentEditLabel" in source
         assert "mapStudioReadinessDoorwayTransitionLabel" in source
         assert "def _set_doorway_transition_summary" in source
