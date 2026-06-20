@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Surfaces PTH Pathing Export Blockers
+
+Owner: LordVaderCW
+Task: T2602 / T2605
+Subsystem: Map Studio / authored-module readiness / validation projection
+Intersects: Domain Core Modules readiness, ModuleMeshes mirror package, authored gameplay placement tests.
+
+- Separated geometry preview blockers from PTH pathing export blockers so Map Studio can still preview room geometry while blocking export-candidate status when the entry point or gameplay anchors are off generated walkable WOK.
+- Added dedicated `MAP_STUDIO_PTH_PATHING_BLOCKER` validation rows with actionable WOK/path-anchor fix hints instead of hiding PTH failures in generic readiness messages.
+- Mirrored the authored-module readiness and validation-projection updates into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m pytest tests/test_authored_gameplay_placements.py::test_t2602_pathing_blocker_blocks_export_candidate_and_validation_issue -q --basetemp .pytest_tmp_pth_pathing_blocker`; `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_readiness_reports_generated_pth_pathing -q --basetemp .pytest_tmp_pth_pathing_success`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_validation_projection.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_validation_projection.py tests/test_authored_gameplay_placements.py`; `git diff --check`.
+
 ### [2026-06-20] Knowledge Base Expands Book-Derived Modeling Skills
 
 Owner: LordVaderCW

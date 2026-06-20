@@ -162,6 +162,48 @@ def test_t2600_readiness_reports_generated_pth_pathing() -> None:
     assert "placeable:bench_anchor" in pathing_status.value_label
 
 
+def test_t2602_pathing_blocker_blocks_export_candidate_and_validation_issue() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_module_validation_projection import authored_module_readiness_validation_issues
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grpthrd",
+        game="K1",
+    )
+    project = replace(
+        project,
+        placements=replace(
+            project.placements,
+            entry_point=ModuleEntryPoint(area_resref="grpthrd", position=(100.0, 100.0, 0.0)),
+        ),
+    )
+
+    readiness = build_authored_module_readiness(project)
+    issues = authored_module_readiness_validation_issues(readiness)
+    pathing = readiness.metadata["pathing"]
+    pathing_status = next(item for item in readiness.toolchain if item.name == "PTH pathing")
+
+    assert readiness.can_preview is True
+    assert readiness.can_export_candidate is False
+    assert readiness.export_status == "Pathing blocked"
+    assert pathing["ready"] is False
+    assert pathing["blocking_messages"]
+    assert any("entry_point" in message for message in pathing["blocking_messages"])
+    assert pathing_status.ready is False
+    assert pathing_status.status == "Blocked"
+    assert any(issue.code == "MAP_STUDIO_PTH_PATHING_BLOCKER" for issue in issues)
+    pathing_issue = next(issue for issue in issues if issue.code == "MAP_STUDIO_PTH_PATHING_BLOCKER")
+    assert pathing_issue.severity == "Error"
+    assert "walkable WOK" in pathing_issue.suggested_fix
+
+
 def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
     _install_native_payload_paths()
 

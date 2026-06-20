@@ -1221,7 +1221,9 @@ def build_authored_module_readiness(
     external_script_count = sum(1 for ref in script_references if not ref.packaged)
     missing = tuple(key for key in expected if key not in present_set)
     room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
-    blocking = tuple(validation.blocking_issues) + room_blocking + geometry_validation.blocking_messages
+    preview_blocking = tuple(validation.blocking_issues) + room_blocking + geometry_validation.blocking_messages
+    pathing_blocking = tuple(pathing.blocking_messages or ())
+    blocking = preview_blocking + pathing_blocking
     template_warnings: tuple[str, ...] = ()
     if external_template_count:
         template_warnings = (
@@ -1242,14 +1244,15 @@ def build_authored_module_readiness(
     warnings = (
         tuple(validation.warnings)
         + geometry_validation.warnings
+        + tuple(pathing.warnings or ())
         + doorway_transition.warnings
         + template_warnings
         + transition_warnings
         + script_warnings
         + component_warnings
     )
-    can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
-    can_export_candidate = can_preview and not missing
+    can_preview = not preview_blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
+    can_export_candidate = can_preview and not missing and pathing.ready
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
     ready_for_game_test = can_export_candidate and not proof_game_tested
     proof_manifest_path = str(proof.get("proof_manifest_path") or "")
@@ -1307,8 +1310,12 @@ def build_authored_module_readiness(
     elif can_preview:
         stage = "previewable"
         preview_status = "Ready"
-        export_status = "Missing runtime resources"
-        next_action = "Generate or stage ARE/GIT/IFO/PTH/LYT/VIS, room WOK, and matching room MDL/MDX resources before export."
+        if not pathing.ready:
+            export_status = "Pathing blocked"
+            next_action = pathing.fix_hint or "Move the module entry point and gameplay anchors onto generated walkable WOK before export."
+        else:
+            export_status = "Missing runtime resources"
+            next_action = "Generate or stage ARE/GIT/IFO/PTH/LYT/VIS, room WOK, and matching room MDL/MDX resources before export."
     else:
         stage = "blocked"
         preview_status = "Not ready"

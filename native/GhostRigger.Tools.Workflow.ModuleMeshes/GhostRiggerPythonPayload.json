@@ -297,7 +297,7 @@
       "resource_name": "PYTHON_PAYLOAD_0049",
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "0b7e30581efd4ebce8471d87e02e5c2b8c1d611deec3bfeb65182944c031f1a3"
+      "sha256": "cdac447c14807d0d07d17cfd8c270b36710fa21cd8f0f4c9516932c5ea2a4118"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0050",
@@ -309,7 +309,7 @@
       "resource_name": "PYTHON_PAYLOAD_0051",
       "source_path": "src/core/modules/authored_module_validation_projection.py",
       "packaged_path": "Python/src/core/modules/authored_module_validation_projection.py",
-      "sha256": "e926348c7a915bab66a31b757b6aec276553bbbf50a75cf7f051b69b726a93df"
+      "sha256": "98f2ad73796314086214c32e155f41ee74ca699adef4107e999dbe92f67213c3"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0052",

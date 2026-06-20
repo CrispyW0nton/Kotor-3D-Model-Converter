@@ -78,6 +78,37 @@ def authored_module_readiness_validation_issues(
             )
         )
 
+    pathing = dict(metadata.get("pathing", {}) or {})
+    pathing_blocking_messages = tuple(
+        str(message) for message in tuple(pathing.get("blocking_messages") or ()) if str(message).strip()
+    )
+    pathing_warnings = tuple(str(message) for message in tuple(pathing.get("warnings") or ()) if str(message).strip())
+    pathing_blocking_tails = {_message_tail(message) for message in pathing_blocking_messages}
+    pathing_warning_tails = {_message_tail(message) for message in pathing_warnings}
+    pathing_fix = str(pathing.get("fix_hint") or "").strip() or (
+        "Move the module entry point, doors, triggers, waypoints, creatures, and placeables onto generated walkable WOK before export."
+    )
+    for index, message in enumerate(pathing_blocking_messages):
+        issues.append(
+            KMapValidationIssue(
+                "Error",
+                "MAP_STUDIO_PTH_PATHING_BLOCKER",
+                message,
+                f"authored_pth_pathing:blocker:{index}",
+                pathing_fix,
+            )
+        )
+    for index, message in enumerate(pathing_warnings):
+        issues.append(
+            KMapValidationIssue(
+                "Warning",
+                "MAP_STUDIO_PTH_PATHING_WARNING",
+                message,
+                f"authored_pth_pathing:warning:{index}",
+                pathing_fix,
+            )
+        )
+
     for item in tuple(getattr(readiness, "inputs", ()) or ()):
         if bool(getattr(item, "present", False)):
             continue
@@ -96,6 +127,8 @@ def authored_module_readiness_validation_issues(
 
     for index, message in enumerate(tuple(getattr(readiness, "blocking_messages", ()) or ())):
         if _message_tail(str(message)) in geometry_blocking_tails:
+            continue
+        if _message_tail(str(message)) in pathing_blocking_tails:
             continue
         issues.append(
             KMapValidationIssue(
@@ -193,6 +226,8 @@ def authored_module_readiness_validation_issues(
 
     for index, message in enumerate(tuple(getattr(readiness, "warnings", ()) or ())):
         if _message_tail(str(message)) in geometry_warning_tails:
+            continue
+        if _message_tail(str(message)) in pathing_warning_tails:
             continue
         issues.append(
             KMapValidationIssue(
