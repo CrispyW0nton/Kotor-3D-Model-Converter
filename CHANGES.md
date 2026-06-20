@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Records Selected-Vertex Floor-Plan Splits
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / authored room operations / KMAP component readiness
+Intersects: Domain Core Modules, ModuleMeshes mirror package, and authored-room operation tests.
+
+- Added a project-level `split_authored_floor_plan_face` operation that records selected-vertex floor-plan split loops and stores the component-edit audit in KMAP room metadata without pretending arbitrary cuts already create multiple playable room boundaries.
+- Exposed the operation through `ModuleEditorController` and let `knife_split` dispatch to it when selected point indices are provided, while preserving existing X/Y axis split behavior for the current UI controls.
+- Mirrored the controller and authored-room operation changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py tests/test_authored_room_operations.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_controller_records_selected_vertex_floor_plan_face_split tests/test_authored_room_operations.py::test_t2908_controller_fills_triangulates_and_cleans_floor_plan_faces -q --basetemp .pytest_tmp_map_studio_floor_plan_split_controller`.
+
 ### [2026-06-20] Map Studio Adds Conservative Face Split Cut
 
 Owner: LordVaderCW

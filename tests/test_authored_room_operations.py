@@ -686,6 +686,40 @@ def test_t2908_controller_fills_triangulates_and_cleans_floor_plan_faces() -> No
     assert not build_authored_module(authored).blocking_issues
 
 
+def test_t2601_controller_records_selected_vertex_floor_plan_face_split() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grknife")
+
+    result = controller.split_authored_floor_plan_face(
+        room_resref="grknife_room01",
+        point_indices=(0, 2),
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = authored.rooms[0].primitive
+    audit = authored.rooms[0].metadata["last_component_edit_audit"]
+
+    assert primitive.metadata["last_operation"] == "split_floor_plan_face"
+    assert primitive.metadata["split_face_indices"] == [0, 2]
+    assert primitive.metadata["split_faces"] == [[0, 1, 2], [2, 3, 0]]
+    assert authored.rooms[0].metadata["last_operation"] == "split_floor_plan_face"
+    assert audit["operation"] == "split_face_with_edge"
+    assert audit["topology_changed"] is True
+    assert audit["walkmesh_review_required"] is True
+    assert audit["stale_outputs"] == ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"]
+    assert result.readiness is not None
+    assert result.readiness.component_edit.ready is False
+    assert result.readiness.component_edit.latest_operation == "split_face_with_edge"
+    assert result.readiness.component_edit.topology_changed is True
+    assert not build_authored_module(authored).blocking_issues
+
+
 def test_t2908_controller_flattens_floor_plan_vertices_for_clean_wall_alignment() -> None:
     _install_native_payload_paths()
 

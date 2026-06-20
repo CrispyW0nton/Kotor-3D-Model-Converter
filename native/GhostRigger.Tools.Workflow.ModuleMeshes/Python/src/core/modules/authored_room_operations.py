@@ -22,6 +22,7 @@ from src.core.geometry.component_editing import (
     fill_face,
     flatten_vertices,
     mirror_vertices,
+    split_face_with_edge,
     snap_vertex_to_vertex,
     triangulate_faces,
     weld_vertices,
@@ -2400,6 +2401,54 @@ def cleanup_authored_floor_plan_normals(
     )
 
 
+def split_authored_floor_plan_face(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_indices: tuple[int, int] | list[int],
+) -> AuthoredModuleProject:
+    """Record a selected-vertex floor-plan face split for KOTOR room/WOK review.
+
+    A floor-plan room currently owns one footprint loop, so this records the
+    deterministic split loops and component-edit audit without silently
+    converting the room into multiple generated rooms. Export/readiness can then
+    warn accurately until a later room-boundary split consumes the recorded
+    loops.
+    """
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    selected = tuple(dict.fromkeys(int(index) for index in tuple(point_indices or ())))
+    if len(selected) != 2:
+        raise ValueError("Split floor-plan face requires exactly two point indices.")
+    result = split_face_with_edge(_floor_plan_component_mesh_with_face(primitive), 0, selected[0], selected[1])
+    audit = audit_component_edit_result(result, component_kind="floor_plan_face", affects_walkmesh=True)
+    split_faces = [list(face) for face in result.mesh.faces]
+    updated_primitive = replace(
+        primitive,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "split_floor_plan_face",
+            "split_face_indices": list(selected),
+            "split_faces": split_faces,
+            "source": "map_studio:floor_plan_face_split",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="split_floor_plan_face",
+        room_metadata={
+            "split_face_indices": list(selected),
+            "split_faces": split_faces,
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+
+
 def cleanup_authored_floor_plan_vertices(
     project: AuthoredModuleProject,
     *,
@@ -2482,6 +2531,14 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             project,
             room_resref=str(kwargs.get("room_resref", "")),
             positive_z=bool(kwargs.get("positive_z", True)),
+        )
+    if op in {"face_split", "split_face", "split_floor_plan_face"} or (
+        op == "knife_split" and tuple(kwargs.get("point_indices", ()) or ())
+    ):
+        return split_authored_floor_plan_face(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            point_indices=tuple(kwargs.get("point_indices", ()) or ()),
         )
     if op in {"mirror", "mirror_vertices", "mirror_floor_plan_vertices"}:
         return mirror_authored_floor_plan_vertices(
@@ -2661,6 +2718,7 @@ __all__ = [
     "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
+    "split_authored_floor_plan_face",
     "snap_authored_floor_plan_vertex_to_vertex",
     "triangulate_authored_floor_plan_face",
     "weld_authored_floor_plan_vertices",

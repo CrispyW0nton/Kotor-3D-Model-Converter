@@ -108,6 +108,7 @@ from .authored_room_operations import (
     set_authored_room_composition_primitive_dimensions,
     set_authored_room_composition_primitive_style,
     set_authored_room_composition_primitive_transform,
+    split_authored_floor_plan_face,
     snap_authored_floor_plan_vertex_to_vertex,
     triangulate_authored_floor_plan_face,
     weld_authored_floor_plan_vertices,
@@ -1141,6 +1142,38 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Triangulated Map Studio room {room_resref or '(first room)'} floor-plan face; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def split_authored_floor_plan_face(
+        self,
+        *,
+        room_resref: str,
+        point_indices: Any,
+    ):
+        """Record a selected-vertex face split through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        indices = tuple(int(index) for index in tuple(point_indices or ()))
+        updated = split_authored_floor_plan_face(
+            authored,
+            room_resref=room_resref,
+            point_indices=indices,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Split Map Studio room {room_resref or '(first room)'} floor-plan face between points {indices}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 
