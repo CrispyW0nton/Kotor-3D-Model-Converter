@@ -1090,6 +1090,7 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "placementFixRequested = QtCore.Signal()" in source
         assert "selectFixTargetRequested = QtCore.Signal(str)" in source
         assert "validateRequested = QtCore.Signal()" in source
+        assert "self.export_blocker_table.itemDoubleClicked.connect(self._emit_blocker_target)" in source
         assert 'setHorizontalHeaderLabels(("Blocker", "KOTOR export impact", "Next fix"))' in source
         assert "def set_readiness" in source
         assert "can_export_candidate" in source
@@ -1099,8 +1100,11 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "Blocks authored .mod package, stage, and install actions." in source
         assert "def _set_fix_action_state" in source
         assert "def _emit_fix_target" in source
+        assert "def _emit_blocker_target" in source
         assert "def _first_fix_target_id" in source
         assert "def _fix_hint_for_target" in source
+        assert "def _target_id_for_blocker" in source
+        assert "item.setData(QtCore.Qt.UserRole, target_id)" in source
         assert "Fix action: No blocker action needed" in source
         assert "mapStudioExportActionGuideLabel" in source
         assert "mapStudioExportActionGuideTable" in source

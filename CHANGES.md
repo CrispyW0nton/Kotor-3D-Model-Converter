@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Export Blocker Rows Jump to Fix Targets
+
+Owner: LordVaderCW
+Task: T2602 / T2605
+Subsystem: Map Studio / Export tab / blocker row navigation
+Intersects: GUI Boundary Panels export panel, ModuleMeshes mirror package.
+
+- Made Export tab blocker rows carry their selectable fix target IDs so modders can double-click a specific PTH/WOK blocker and jump to the relevant entry point or authored placement.
+- Kept the row activation on the panel signal boundary and reused the existing Level Editor blocker-selection handler from the previous slice.
+- Mirrored the Export panel update into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof -q --basetemp .pytest_tmp_export_blocker_row_targets`.
+
 ### [2026-06-20] Map Studio Export Fixes Select Blocking Path Anchors
 
 Owner: LordVaderCW

@@ -69,6 +69,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.export_blocker_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.export_blocker_table.setMinimumHeight(72)
         self.export_blocker_table.setMaximumHeight(150)
+        self.export_blocker_table.itemDoubleClicked.connect(self._emit_blocker_target)
         root.addWidget(self.export_blocker_table)
         self.fix_action_label = QtWidgets.QLabel(
             "Fix action: Resolve blockers in Builder, Walkmesh, Placement, then Validate before staging."
@@ -245,6 +246,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
                         blocker,
                         "Blocks authored .mod package, stage, and install actions.",
                         self._fix_hint_for_target(pathing_targets, fallback=fix_hint),
+                        self._target_id_for_blocker(pathing_targets, blocker),
                     )
                     for blocker in pathing_blockers
                 )
@@ -332,6 +334,11 @@ class ModuleExportPanel(QtWidgets.QWidget):
         if self._fix_target_id:
             self.selectFixTargetRequested.emit(self._fix_target_id)
 
+    def _emit_blocker_target(self, item: QtWidgets.QTableWidgetItem) -> None:
+        target_id = str(item.data(QtCore.Qt.UserRole) or "").strip()
+        if target_id:
+            self.selectFixTargetRequested.emit(target_id)
+
     @staticmethod
     def _first_fix_target_id(targets: tuple[dict[str, object], ...]) -> str:
         for target in targets:
@@ -351,10 +358,22 @@ class ModuleExportPanel(QtWidgets.QWidget):
                 return action
         return fallback
 
-    def _set_export_blocker_rows(self, rows: tuple[tuple[str, str, str], ...]) -> None:
+    @staticmethod
+    def _target_id_for_blocker(targets: tuple[dict[str, object], ...], blocker: str) -> str:
+        blocker_text = str(blocker or "")
+        for target in targets:
+            label = str(target.get("anchor_label") or "").strip()
+            target_id = str(target.get("target_id") or "").strip()
+            if label and target_id and label in blocker_text:
+                return target_id
+        return ""
+
+    def _set_export_blocker_rows(self, rows: tuple[tuple[str, ...], ...]) -> None:
         self.export_blocker_table.setRowCount(len(rows))
         for row, values in enumerate(rows):
-            for column, text in enumerate(values):
+            target_id = str(values[3] if len(values) > 3 else "")
+            for column, text in enumerate(values[:3]):
                 item = QtWidgets.QTableWidgetItem(str(text))
                 item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+                item.setData(QtCore.Qt.UserRole, target_id)
                 self.export_blocker_table.setItem(row, column, item)
