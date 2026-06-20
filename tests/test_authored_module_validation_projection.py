@@ -102,6 +102,69 @@ def test_t2600_export_candidate_requires_game_proof_in_validation_rows() -> None
     assert any("warp" in issue.suggested_fix for issue in issues)
 
 
+def test_t2911_floor_plan_geometry_readiness_projects_actionable_validation_rows() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_module_validation_projection import authored_module_readiness_validation_issues
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+
+    project = _floor_plan_project()
+    bad_room = replace(
+        project.rooms[0],
+        primitive=FloorPlanRoomPrimitive(
+            room_resref="grdev01_room01",
+            points=((-3.0, -2.0), (3.0, -2.0), (3.0, -2.0), (3.0, 2.0), (-3.0, 2.0)),
+        ),
+    )
+    readiness = build_authored_module_readiness(replace(project, rooms=(bad_room,)))
+    issues = authored_module_readiness_validation_issues(readiness)
+    floor_plan_issues = [issue for issue in issues if issue.code == "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_BLOCKER"]
+
+    assert readiness.geometry_validation.ready is False
+    assert len(floor_plan_issues) == 1
+    assert "duplicate points or zero-length edges" in floor_plan_issues[0].message
+    assert "Cleanup Footprint" in floor_plan_issues[0].suggested_fix
+    assert not any(
+        issue.code == "MAP_STUDIO_READINESS_BLOCKER"
+        and "duplicate points or zero-length edges" in issue.message
+        for issue in issues
+    )
+
+
+def test_t2911_floor_plan_geometry_warnings_project_specific_validation_rows() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_module_validation_projection import authored_module_readiness_validation_issues
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+
+    project = _floor_plan_project()
+    clockwise_room = replace(
+        project.rooms[0],
+        primitive=FloorPlanRoomPrimitive(
+            room_resref="grdev01_room01",
+            points=((-3.0, -2.0), (-3.0, 2.0), (3.0, 2.0), (3.0, -2.0)),
+        ),
+    )
+    readiness = build_authored_module_readiness(replace(project, rooms=(clockwise_room,)))
+    issues = authored_module_readiness_validation_issues(readiness)
+    warning_rows = [issue for issue in issues if issue.code == "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_WARNING"]
+
+    assert readiness.geometry_validation.ready is True
+    assert warning_rows
+    assert any("Cleanup Face Normals" in issue.message for issue in warning_rows)
+    assert not any(
+        issue.code == "MAP_STUDIO_READINESS_WARNING"
+        and "Cleanup Face Normals" in issue.message
+        for issue in issues
+    )
+
+
 def test_t2600_module_editor_controller_validate_includes_map_studio_readiness_issues() -> None:
     _install_native_payload_paths()
 

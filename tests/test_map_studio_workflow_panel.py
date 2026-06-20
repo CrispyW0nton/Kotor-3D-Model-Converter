@@ -1546,6 +1546,9 @@ def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
         assert "authored_module_readiness_validation_issues" in text
         assert "MAP_STUDIO_RUNTIME_RESOURCE_MISSING" in text
         assert "MAP_STUDIO_GAME_PROOF_REQUIRED" in text
+        assert "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_BLOCKER" in text
+        assert "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_WARNING" in text
+        assert "geometry_validation" in text
         assert "Suggested" not in text
 
     for text in (controller_source, controller_mirror):

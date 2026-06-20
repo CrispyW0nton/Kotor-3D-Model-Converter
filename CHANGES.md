@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Projects Floor-Plan Geometry Issues Into Validation Rows
+
+Owner: LordVaderCW
+Task: T2601 / T2911
+Subsystem: Map Studio / validation projection / Level Editor issue table
+Intersects: Domain Core Modules validation projection and ModuleMeshes mirror package.
+
+- Projected floor-plan geometry blockers and cleanup warnings into specific KMAP validation rows with `MAP_STUDIO_FLOOR_PLAN_GEOMETRY_BLOCKER` and `MAP_STUDIO_FLOOR_PLAN_GEOMETRY_WARNING` codes.
+- Added KOTOR Map Studio suggested fixes for invalid floor-plan footprints, cleanup normals, vertex weld/cleanup, and room-splitting work instead of falling back to generic readiness messages.
+- Suppressed duplicate generic readiness rows for the same floor-plan geometry issue, including compile-wrapped blocker messages.
+- Mirrored the projection adapter into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m pytest tests/test_authored_module_validation_projection.py::test_t2911_floor_plan_geometry_readiness_projects_actionable_validation_rows tests/test_authored_module_validation_projection.py::test_t2911_floor_plan_geometry_warnings_project_specific_validation_rows -q --basetemp .pytest_tmp_floor_plan_projection`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_validation_projection_is_mirrored -q --basetemp .pytest_tmp_floor_plan_projection_contract`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_validation_projection.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_validation_projection.py tests/test_authored_module_validation_projection.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-20] Map Studio Shows Floor-Plan Validation In Readiness Panel
 
 Owner: LordVaderCW

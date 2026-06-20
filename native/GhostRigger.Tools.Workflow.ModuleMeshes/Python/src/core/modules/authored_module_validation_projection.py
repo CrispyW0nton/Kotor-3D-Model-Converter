@@ -44,6 +44,40 @@ def authored_module_readiness_validation_issues(
     if readiness is None:
         return _dedupe(issues)
 
+    metadata = dict(getattr(readiness, "metadata", {}) or {})
+    geometry_validation = dict(metadata.get("geometry_validation", {}) or {})
+    geometry_blocking_messages = tuple(
+        str(message) for message in tuple(geometry_validation.get("blocking_messages") or ()) if str(message).strip()
+    )
+    geometry_warnings = tuple(
+        str(message) for message in tuple(geometry_validation.get("warnings") or ()) if str(message).strip()
+    )
+    geometry_blocking_tails = {_message_tail(message) for message in geometry_blocking_messages}
+    geometry_warning_tails = {_message_tail(message) for message in geometry_warnings}
+    geometry_fix = str(geometry_validation.get("fix_hint") or "").strip() or (
+        "Use Cleanup Footprint, Weld Vertices, Cleanup Face Normals, or split invalid floor-plan rooms before build/export."
+    )
+    for index, message in enumerate(geometry_blocking_messages):
+        issues.append(
+            KMapValidationIssue(
+                "Error",
+                "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_BLOCKER",
+                message,
+                f"authored_floor_plan_geometry:blocker:{index}",
+                geometry_fix,
+            )
+        )
+    for index, message in enumerate(geometry_warnings):
+        issues.append(
+            KMapValidationIssue(
+                "Warning",
+                "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_WARNING",
+                message,
+                f"authored_floor_plan_geometry:warning:{index}",
+                geometry_fix,
+            )
+        )
+
     for item in tuple(getattr(readiness, "inputs", ()) or ()):
         if bool(getattr(item, "present", False)):
             continue
@@ -61,6 +95,8 @@ def authored_module_readiness_validation_issues(
         )
 
     for index, message in enumerate(tuple(getattr(readiness, "blocking_messages", ()) or ())):
+        if _message_tail(str(message)) in geometry_blocking_tails:
+            continue
         issues.append(
             KMapValidationIssue(
                 "Error",
@@ -101,7 +137,6 @@ def authored_module_readiness_validation_issues(
             )
         )
 
-    metadata = dict(getattr(readiness, "metadata", {}) or {})
     for ref in tuple(metadata.get("transition_references") or ()):
         if bool(ref.get("complete", False)):
             continue
@@ -157,6 +192,8 @@ def authored_module_readiness_validation_issues(
         )
 
     for index, message in enumerate(tuple(getattr(readiness, "warnings", ()) or ())):
+        if _message_tail(str(message)) in geometry_warning_tails:
+            continue
         issues.append(
             KMapValidationIssue(
                 "Warning",
@@ -182,6 +219,15 @@ def _resource_label(resource: Any) -> tuple[str, str]:
 def _slug(value: str) -> str:
     text = str(value or "").strip().lower()
     return "".join(ch if ch.isalnum() else "_" for ch in text).strip("_") or "item"
+
+
+def _message_tail(message: str) -> str:
+    text = str(message or "").strip()
+    if "could not compile:" in text:
+        text = text.split("could not compile:", 1)[1].strip()
+    if text.lower().startswith("room ") and ": " in text:
+        text = text.split(": ", 1)[1].strip()
+    return text
 
 
 def _dedupe(issues: list[KMapValidationIssue]) -> list[KMapValidationIssue]:
