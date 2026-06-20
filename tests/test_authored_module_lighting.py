@@ -137,7 +137,7 @@ def test_t2693_builder_tab_exposes_room_light_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -158,7 +158,7 @@ def test_t2693_builder_tab_exposes_room_light_controls() -> None:
     readiness_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -183,7 +183,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     outliner_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -194,7 +194,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     properties_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -205,7 +205,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     viewport_panel_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

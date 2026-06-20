@@ -3799,7 +3799,7 @@ def test_content_browser_activation_adds_generic_model_rows_without_clear_prompt
     ).read_text(encoding="utf-8")
     panel_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/qt_content_browser_panel.py"
+        / "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/qt_content_browser_panel.py"
     ).read_text(encoding="utf-8")
 
     assert "self.asset_view.itemDoubleClicked.connect(lambda _item, _column: self._activate_selected())" in panel_source
@@ -3815,11 +3815,11 @@ def test_content_browser_activation_adds_generic_model_rows_without_clear_prompt
 def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
     construction_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/construction.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/construction.py"
     ).read_text(encoding="utf-8")
     overlay_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     ).read_text(encoding="utf-8")
     renderer_source = (
         ROOT
@@ -3848,11 +3848,11 @@ def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
 def test_viewport_hover_refreshes_after_transform_drags() -> None:
     picking_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/picking_hover.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/picking_hover.py"
     ).read_text(encoding="utf-8")
     drag_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
     ).read_text(encoding="utf-8")
 
     assert "def _refresh_viewport_hover_at" in picking_source
@@ -3868,15 +3868,15 @@ def test_viewport_hover_refreshes_after_transform_drags() -> None:
 def test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_root() -> None:
     event_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
     ).read_text(encoding="utf-8")
     selection_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py"
     ).read_text(encoding="utf-8")
     drag_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
     ).read_text(encoding="utf-8")
 
     assert "QtCore.QEvent.MouseButtonDblClick" in event_source
@@ -3891,7 +3891,7 @@ def test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_r
 def test_scene_root_transform_evicts_child_gpu_nodes() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/resource_cache.py"
+        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/resource_cache.py"
     ).read_text(encoding="utf-8")
 
     assert "scene_transform_only = bool(getattr(node, \"_gr_scene_gpu_transform\", False))" in source

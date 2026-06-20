@@ -63,7 +63,7 @@ def test_t2654_readiness_panel_exposes_authored_summary_label() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

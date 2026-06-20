@@ -13,7 +13,7 @@ def _read(path: str) -> str:
 
 def test_t2663_module_editor_panel_drags_authored_markers() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
@@ -33,7 +33,7 @@ def test_t2663_module_editor_panel_drags_authored_markers() -> None:
 
 def test_t2663_marker_drag_uses_camera_projected_floor_delta() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
@@ -52,7 +52,7 @@ def test_t2663_marker_drag_uses_camera_projected_floor_delta() -> None:
 
 def test_t2666_marker_and_room_point_drags_honor_map_studio_snap_grid() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"

@@ -118,11 +118,11 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Characters
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Skeleton", "native\GhostRigger.Core.Skeleton\GhostRigger.Core.Skeleton.vcxproj", "{86C4EAD7-356C-4046-8028-A518F19B4F45}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.MDL", "native\GhostRigger.Core.MDL\GhostRigger.Core.MDL.vcxproj", "{9B733388-ACF1-412C-BB32-A3D091C3000C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IO.MDL", "native\GhostRigger.Core.IO.MDL\GhostRigger.Core.IO.MDL.vcxproj", "{9B733388-ACF1-412C-BB32-A3D091C3000C}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Geometry", "native\GhostRigger.Core.Geometry\GhostRigger.Core.Geometry.vcxproj", "{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Gizmo", "native\GhostRigger.Core.Gizmo\GhostRigger.Core.Gizmo.vcxproj", "{6DF4CD22-59BB-43D1-BF9D-CF5CCA5BBBDF}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Helpers.Gizmo", "native\GhostRigger.Core.GUI.Helpers.Gizmo\GhostRigger.Core.GUI.Helpers.Gizmo.vcxproj", "{6DF4CD22-59BB-43D1-BF9D-CF5CCA5BBBDF}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Graphics", "native\GhostRigger.Core.Graphics\GhostRigger.Core.Graphics.vcxproj", "{1FF8D739-7E70-4964-8F90-16B39DEBA33F}"
 EndProject
@@ -140,7 +140,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Resources"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GameLibrary", "native\GhostRigger.Core.GameLibrary\GhostRigger.Core.GameLibrary.vcxproj", "{211E7042-9E73-4928-BBC3-2A30C85D19ED}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Export", "native\GhostRigger.Core.Export\GhostRigger.Core.Export.vcxproj", "{6BFD1F89-44D4-49FC-9363-817B0DBF5A72}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IO.Export", "native\GhostRigger.Core.IO.Export\GhostRigger.Core.IO.Export.vcxproj", "{6BFD1F89-44D4-49FC-9363-817B0DBF5A72}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Game", "native\GhostRigger.Core.Game\GhostRigger.Core.Game.vcxproj", "{D5D8164B-1BAB-432E-9282-4AC3D00C85AF}"
 EndProject
@@ -162,13 +162,13 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Math", "na
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Measurement", "native\GhostRigger.Core.Measurement\GhostRigger.Core.Measurement.vcxproj", "{0DED334F-4AF8-4CC6-B1C2-5008FBB0EBD9}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Formats", "native\GhostRigger.Core.Formats\GhostRigger.Core.Formats.vcxproj", "{1619B644-FA71-454D-9BDA-E459A4D1D28C}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IO.Formats", "native\GhostRigger.Core.IO.Formats\GhostRigger.Core.IO.Formats.vcxproj", "{1619B644-FA71-454D-9BDA-E459A4D1D28C}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IO", "native\GhostRigger.Core.IO\GhostRigger.Core.IO.vcxproj", "{F43E143D-6B16-4BB6-A061-651719BADAE7}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IO.FBX", "native\GhostRigger.Core.IO.FBX\GhostRigger.Core.IO.FBX.vcxproj", "{F43E143D-6B16-4BB6-A061-651719BADAE7}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IPC", "native\GhostRigger.Core.IPC\GhostRigger.Core.IPC.vcxproj", "{435BB99D-E527-4839-B216-B7D47D037B3D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Automation.IPC", "native\GhostRigger.Core.Automation.IPC\GhostRigger.Core.Automation.IPC.vcxproj", "{435BB99D-E527-4839-B216-B7D47D037B3D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Converters", "native\GhostRigger.Core.Converters\GhostRigger.Core.Converters.vcxproj", "{37391545-88CA-4BEF-9011-8CF7C62FEB5E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.IO.Conversion", "native\GhostRigger.Core.IO.Conversion\GhostRigger.Core.IO.Conversion.vcxproj", "{37391545-88CA-4BEF-9011-8CF7C62FEB5E}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Autorig", "native\GhostRigger.Core.Autorig\GhostRigger.Core.Autorig.vcxproj", "{21A1222A-FF06-47B3-8636-6404ED8619CE}"
 EndProject
@@ -180,7 +180,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.MeshTools"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Infrastructure", "native\GhostRigger.Core.Infrastructure\GhostRigger.Core.Infrastructure.vcxproj", "{BE68DB6C-A1E3-473F-8D9D-86C447AB5C00}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.KotorMCP", "native\GhostRigger.Core.KotorMCP\GhostRigger.Core.KotorMCP.vcxproj", "{F0D43CE9-D91A-4C47-A86B-65FEFF179721}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.Automation.MCP", "native\GhostRigger.Core.Automation.MCP\GhostRigger.Core.Automation.MCP.vcxproj", "{F0D43CE9-D91A-4C47-A86B-65FEFF179721}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Adapters.IO.Files", "native\GhostRigger.Adapters.IO.Files\GhostRigger.Adapters.IO.Files.vcxproj", "{D7838765-8E4B-4CEA-B721-9AD4F1F8CF7A}"
 EndProject
@@ -196,27 +196,27 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Adapters.Render
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Adapters.Scripting.Core", "native\GhostRigger.Adapters.Scripting.Core\GhostRigger.Adapters.Scripting.Core.vcxproj", "{3DBC4B61-0299-4F16-82D5-F4E74E2BCE8E}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Dialogs", "native\GhostRigger.Core.GUI.Dialogs\GhostRigger.Core.GUI.Dialogs.vcxproj", "{639623A8-B121-4D6D-8B54-0BF725AD5813}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Dialogs", "native\GhostRigger.Core.GUI.Display.Dialogs\GhostRigger.Core.GUI.Display.Dialogs.vcxproj", "{639623A8-B121-4D6D-8B54-0BF725AD5813}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Panels", "native\GhostRigger.Core.GUI.Panels\GhostRigger.Core.GUI.Panels.vcxproj", "{5BD65A60-FB6A-45C0-A2F7-1B57C80C4760}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Panels", "native\GhostRigger.Core.GUI.Display.Panels\GhostRigger.Core.GUI.Display.Panels.vcxproj", "{5BD65A60-FB6A-45C0-A2F7-1B57C80C4760}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Viewports", "native\GhostRigger.Core.GUI.Viewports\GhostRigger.Core.GUI.Viewports.vcxproj", "{8D852646-F044-4A7E-8C6F-8382894DBE3B}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Viewports", "native\GhostRigger.Core.GUI.Display.Viewports\GhostRigger.Core.GUI.Display.Viewports.vcxproj", "{8D852646-F044-4A7E-8C6F-8382894DBE3B}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Theme", "native\GhostRigger.Core.GUI.Theme\GhostRigger.Core.GUI.Theme.vcxproj", "{FE9E799F-FC92-45DF-8BD0-5947AE08EF56}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Theme", "native\GhostRigger.Core.GUI.Display.Theme\GhostRigger.Core.GUI.Display.Theme.vcxproj", "{FE9E799F-FC92-45DF-8BD0-5947AE08EF56}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Rendering", "native\GhostRigger.Core.GUI.Rendering\GhostRigger.Core.GUI.Rendering.vcxproj", "{8EDDCA16-3170-4DAE-B0C0-5F745CF722C9}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Rendering", "native\GhostRigger.Core.GUI.Display.Rendering\GhostRigger.Core.GUI.Display.Rendering.vcxproj", "{8EDDCA16-3170-4DAE-B0C0-5F745CF722C9}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Lighting", "native\GhostRigger.Core.GUI.Lighting\GhostRigger.Core.GUI.Lighting.vcxproj", "{848E66E7-DAD4-4ABE-A766-420D48C4CDB7}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Lighting", "native\GhostRigger.Core.GUI.Display.Lighting\GhostRigger.Core.GUI.Display.Lighting.vcxproj", "{848E66E7-DAD4-4ABE-A766-420D48C4CDB7}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Gizmo", "native\GhostRigger.Core.GUI.Gizmo\GhostRigger.Core.GUI.Gizmo.vcxproj", "{87B2D6AB-516D-4776-A850-2CA9AD7B74CD}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Helpers.GizmoDisplay", "native\GhostRigger.Core.GUI.Helpers.GizmoDisplay\GhostRigger.Core.GUI.Helpers.GizmoDisplay.vcxproj", "{87B2D6AB-516D-4776-A850-2CA9AD7B74CD}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Camera", "native\GhostRigger.Core.GUI.Camera\GhostRigger.Core.GUI.Camera.vcxproj", "{F7E038AA-CD16-455F-8B40-C68EB7A79023}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Camera", "native\GhostRigger.Core.GUI.Display.Camera\GhostRigger.Core.GUI.Display.Camera.vcxproj", "{F7E038AA-CD16-455F-8B40-C68EB7A79023}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Textures", "native\GhostRigger.Core.GUI.Textures\GhostRigger.Core.GUI.Textures.vcxproj", "{6E768306-B234-436A-95E5-977140F962AD}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Textures", "native\GhostRigger.Core.GUI.Display.Textures\GhostRigger.Core.GUI.Display.Textures.vcxproj", "{6E768306-B234-436A-95E5-977140F962AD}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.SequenceEditor", "native\GhostRigger.Core.GUI.SequenceEditor\GhostRigger.Core.GUI.SequenceEditor.vcxproj", "{3F7DDCCE-2A2B-4E78-8A18-FF53C8FFF8DE}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.SequenceEditor", "native\GhostRigger.Core.GUI.Display.SequenceEditor\GhostRigger.Core.GUI.Display.SequenceEditor.vcxproj", "{3F7DDCCE-2A2B-4E78-8A18-FF53C8FFF8DE}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Integration", "native\GhostRigger.Core.GUI.Integration\GhostRigger.Core.GUI.Integration.vcxproj", "{10B9B40B-22CD-43ED-9469-D1908FDF2C04}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "GhostRigger.Core.GUI.Display.Integration", "native\GhostRigger.Core.GUI.Display.Integration\GhostRigger.Core.GUI.Display.Integration.vcxproj", "{10B9B40B-22CD-43ED-9469-D1908FDF2C04}"
 EndProject
 
 

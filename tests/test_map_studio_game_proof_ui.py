@@ -100,7 +100,7 @@ def test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder() -> None
     panel_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

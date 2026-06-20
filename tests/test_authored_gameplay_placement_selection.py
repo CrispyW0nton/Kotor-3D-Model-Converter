@@ -139,7 +139,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     viewport_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -150,7 +150,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     outliner_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -161,7 +161,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     properties_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

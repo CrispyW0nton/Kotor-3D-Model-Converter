@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VIEWPORT_PAYLOAD = ROOT / "native" / "GhostRigger.Core.GUI.Viewports" / "Python"
+VIEWPORT_PAYLOAD = ROOT / "native" / "GhostRigger.Core.GUI.Display.Viewports" / "Python"
 
 
 def _read_viewport(relpath: str) -> str:

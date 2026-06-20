@@ -51,7 +51,7 @@ PAYLOAD_PATHS = (
     "native/GhostRigger.Core.Camera/Python",
     "native/GhostRigger.Core.Math/Python",
     "native/GhostRigger.Core.Lighting/Python",
-    "native/GhostRigger.Core.KotorMCP/Python/src",
+    "native/GhostRigger.Core.Automation.MCP/Python/src",
     ".",
 )
 KOTORMCP_REQUIRED_RESOURCE_TYPES = ("ARE", "GIT", "IFO", "LYT", "PTH", "VIS", "MDL", "WOK")

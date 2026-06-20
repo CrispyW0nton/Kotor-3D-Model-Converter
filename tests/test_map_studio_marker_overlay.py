@@ -13,16 +13,16 @@ def _read(path: str) -> str:
 
 def test_t2660_viewport_has_map_studio_marker_overlay_hooks() -> None:
     widget_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
     )
     scene_models_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
     )
     overlay_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     )
     pipeline_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
     )
 
     assert "self._map_studio_marker_geometry = None" in widget_source
@@ -39,7 +39,7 @@ def test_t2660_viewport_has_map_studio_marker_overlay_hooks() -> None:
 
 def test_t2660_module_editor_panel_sends_marker_geometry_to_viewport() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
@@ -56,10 +56,10 @@ def test_t2660_module_editor_panel_sends_marker_geometry_to_viewport() -> None:
 
 def test_t2662_marker_overlay_builds_screen_hit_zones() -> None:
     widget_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
     )
     overlay_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     )
 
     assert "self._map_studio_marker_hit_zones: list[dict[str, object]] = []" in widget_source
@@ -75,7 +75,7 @@ def test_t2662_marker_overlay_builds_screen_hit_zones() -> None:
 
 def test_t2662_module_editor_panel_selects_authored_marker_from_viewport_click() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"

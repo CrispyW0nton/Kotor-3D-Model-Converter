@@ -13,7 +13,7 @@ def _read(path: str) -> str:
 
 def test_t2661_viewport_table_edits_authored_placement_transforms() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"

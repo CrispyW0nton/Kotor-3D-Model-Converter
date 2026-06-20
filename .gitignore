@@ -37,10 +37,10 @@ game_data/
 *.bif
 *.key
 *.mdl
-!native/GhostRigger.Core.MDL/
-!native/GhostRigger.Core.MDL/**
-native/GhostRigger.Core.MDL/**/__pycache__/
-native/GhostRigger.Core.MDL/**/*.py[cod]
+!native/GhostRigger.Core.IO.MDL/
+!native/GhostRigger.Core.IO.MDL/**
+native/GhostRigger.Core.IO.MDL/**/__pycache__/
+native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 *.mdx
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -310,4 +310,4 @@ knowledge_base/test_artifacts/*.zip
 !/docs/knowledgebase/skills.md
 !/docs/knowledgebase/learned/
 !/docs/knowledgebase/learned/*.md
-/native/GhostRigger.Core.MDL/build
+/native/GhostRigger.Core.IO.MDL/build

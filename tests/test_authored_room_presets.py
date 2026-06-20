@@ -92,7 +92,7 @@ def test_t2650_builder_tab_exposes_room_preset_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

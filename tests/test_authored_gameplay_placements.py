@@ -134,7 +134,7 @@ def test_t2653_builder_tab_exposes_gameplay_placement_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

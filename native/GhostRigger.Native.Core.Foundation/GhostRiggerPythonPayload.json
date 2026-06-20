@@ -21,7 +21,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_NATIVE_CORE_PACKAGE_REGISTRY",
             "source_path": "src/adapters/native_core/package_registry.py",
             "packaged_path": "Python/src/adapters/native_core/package_registry.py",
-            "sha256": "14167862d21060e1ce6702b6460d88a8f24e7334272913658dd5de6471cc543e"
+            "sha256": "3d7121ecc633d4478f74c8705816774da57a9dbc3520ff8a644382d41edc07db"
         }
     ]
 }

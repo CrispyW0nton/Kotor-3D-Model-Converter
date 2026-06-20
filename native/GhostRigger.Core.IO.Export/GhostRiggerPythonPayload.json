@@ -1,0 +1,39 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.IO.Export",
+    "file_count": 5,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_INIT",
+            "source_path": "src/core/export/__init__.py",
+            "packaged_path": "Python/src/core/export/__init__.py",
+            "sha256": "31069c54bea069b2f708f8c3b26a63c892a2361ee150180edb2729b98c793f14"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_EXPORT_JOB",
+            "source_path": "src/core/export/export_job.py",
+            "packaged_path": "Python/src/core/export/export_job.py",
+            "sha256": "07bf698b871cb42b36a9e53a5b59a739bf83330f4bb04fe2788a318c8d41f8a8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_GLTF_IMPORTER",
+            "source_path": "src/core/export/gltf_importer.py",
+            "packaged_path": "Python/src/core/export/gltf_importer.py",
+            "sha256": "0d038b2d1d2b4c1799fcd7ed0c17f21f221f94a64c7a99bb861ab717db6523ad"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE",
+            "source_path": "src/core/export/unity_export_bridge.py",
+            "packaged_path": "Python/src/core/export/unity_export_bridge.py",
+            "sha256": "d1faac9d56e747631919144f6bb350dd9e70af6564e64a01abe2b4755506ff93"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_IMPORT_VALIDATOR",
+            "source_path": "src/core/export/unity_import_validator.py",
+            "packaged_path": "Python/src/core/export/unity_import_validator.py",
+            "sha256": "b0da59941d7ddee20fd8d07cccf6f53e9afa42126f239241c0c284ffc341c584"
+        }
+    ]
+}

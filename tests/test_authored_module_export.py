@@ -259,7 +259,7 @@ def test_t2643_export_panel_exposes_authored_module_action() -> None:
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     boundary_panel_source = Path(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
         "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
@@ -546,7 +546,7 @@ def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     boundary_panel_source = Path(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
         "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"

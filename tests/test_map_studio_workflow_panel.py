@@ -12,7 +12,7 @@ def _read(rel: str) -> str:
 
 def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
 
@@ -84,7 +84,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
         "module_editor_window.py"
     )
     init_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/"
         "module_editor/__init__.py"
     )
 

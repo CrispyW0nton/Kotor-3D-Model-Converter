@@ -13,16 +13,16 @@ def _read(rel: str) -> str:
 
 def test_t2664_viewport_exposes_room_outline_overlay_state_and_draw_path() -> None:
     viewport_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
     )
     scene_models_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
     )
     overlay_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     )
     pipeline_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
     )
 
     assert "_map_studio_room_outline_geometry = None" in viewport_source
@@ -48,7 +48,7 @@ def test_t2664_viewport_exposes_room_outline_overlay_state_and_draw_path() -> No
 
 def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     native_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
@@ -95,10 +95,10 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
 
 def test_t2678_viewport_primitive_selection_syncs_builder_tab_controls() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     builder_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/builder_tab.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/builder_tab.py"
     )
     native_builder_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py"

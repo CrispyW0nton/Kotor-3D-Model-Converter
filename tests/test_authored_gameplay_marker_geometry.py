@@ -103,7 +103,7 @@ def test_t2659_module_editor_passes_marker_geometry_to_viewport_panel() -> None:
     viewport_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

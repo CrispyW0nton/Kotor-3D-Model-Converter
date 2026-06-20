@@ -90,7 +90,7 @@ def test_t2656_module_editor_builder_exposes_searchable_gameplay_palette() -> No
     builder_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

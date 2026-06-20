@@ -47,7 +47,7 @@ def test_native_module_manifest_covers_python_package_boundaries() -> None:
     assert "GhostRigger.Core.Modules" in names
     assert "GhostRigger.Core.Level" in names
     assert "GhostRigger.Core.Scene" in names
-    assert "GhostRigger.Core.GUI.Viewports" in names
+    assert "GhostRigger.Core.GUI.Display.Viewports" in names
     assert len(sources) == len(entries)
     for source in sources:
         assert source.startswith("src/"), source

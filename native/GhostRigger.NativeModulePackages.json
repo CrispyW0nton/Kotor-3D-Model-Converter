@@ -56,7 +56,7 @@
         "symbol_prefix": "skeleton"
     },
     {
-        "name": "GhostRigger.Core.MDL",
+        "name": "GhostRigger.Core.IO.MDL",
         "source_package": "src/core/mdl",
         "owner_surface": "MDL model pipeline",
         "project_guid": "{9B733388-ACF1-412C-BB32-A3D091C3000C}",
@@ -70,7 +70,7 @@
         "symbol_prefix": "geometry"
     },
     {
-        "name": "GhostRigger.Core.Gizmo",
+        "name": "GhostRigger.Core.GUI.Helpers.Gizmo",
         "source_package": "src/core/gizmo",
         "owner_surface": "Transform gizmo services",
         "project_guid": "{6DF4CD22-59BB-43D1-BF9D-CF5CCA5BBBDF}",
@@ -133,7 +133,7 @@
         "symbol_prefix": "game_library"
     },
     {
-        "name": "GhostRigger.Core.Export",
+        "name": "GhostRigger.Core.IO.Export",
         "source_package": "src/core/export",
         "owner_surface": "Export pipeline core",
         "project_guid": "{6BFD1F89-44D4-49FC-9363-817B0DBF5A72}",
@@ -210,28 +210,28 @@
         "symbol_prefix": "measurement"
     },
     {
-        "name": "GhostRigger.Core.Formats",
+        "name": "GhostRigger.Core.IO.Formats",
         "source_package": "src/formats",
         "owner_surface": "File format services",
         "project_guid": "{1619B644-FA71-454D-9BDA-E459A4D1D28C}",
         "symbol_prefix": "formats"
     },
     {
-        "name": "GhostRigger.Core.IO",
+        "name": "GhostRigger.Core.IO.FBX",
         "source_package": "src/io",
         "owner_surface": "Import/export IO",
         "project_guid": "{F43E143D-6B16-4BB6-A061-651719BADAE7}",
         "symbol_prefix": "io"
     },
     {
-        "name": "GhostRigger.Core.IPC",
+        "name": "GhostRigger.Core.Automation.IPC",
         "source_package": "src/ipc",
         "owner_surface": "IPC services",
         "project_guid": "{435BB99D-E527-4839-B216-B7D47D037B3D}",
         "symbol_prefix": "ipc"
     },
     {
-        "name": "GhostRigger.Core.Converters",
+        "name": "GhostRigger.Core.IO.Conversion",
         "source_package": "src/converters",
         "owner_surface": "Asset converters",
         "project_guid": "{37391545-88CA-4BEF-9011-8CF7C62FEB5E}",
@@ -273,7 +273,7 @@
         "symbol_prefix": "infra"
     },
     {
-        "name": "GhostRigger.Core.KotorMCP",
+        "name": "GhostRigger.Core.Automation.MCP",
         "source_package": "src/kotormcp",
         "owner_surface": "MCP validation tools",
         "project_guid": "{F0D43CE9-D91A-4C47-A86B-65FEFF179721}",
@@ -329,77 +329,77 @@
         "symbol_prefix": "adapters_scripts"
     },
     {
-        "name": "GhostRigger.Core.GUI.Dialogs",
+        "name": "GhostRigger.Core.GUI.Display.Dialogs",
         "source_package": "src/gui/dialogs",
         "owner_surface": "GUI dialogs",
         "project_guid": "{639623A8-B121-4D6D-8B54-0BF725AD5813}",
         "symbol_prefix": "gui_dialogs"
     },
     {
-        "name": "GhostRigger.Core.GUI.Panels",
+        "name": "GhostRigger.Core.GUI.Display.Panels",
         "source_package": "src/gui/panels",
         "owner_surface": "GUI panels",
         "project_guid": "{5BD65A60-FB6A-45C0-A2F7-1B57C80C4760}",
         "symbol_prefix": "gui_panels"
     },
     {
-        "name": "GhostRigger.Core.GUI.Viewports",
+        "name": "GhostRigger.Core.GUI.Display.Viewports",
         "source_package": "src/gui/viewports",
         "owner_surface": "GUI viewport widgets",
         "project_guid": "{8D852646-F044-4A7E-8C6F-8382894DBE3B}",
         "symbol_prefix": "gui_viewports"
     },
     {
-        "name": "GhostRigger.Core.GUI.Theme",
+        "name": "GhostRigger.Core.GUI.Display.Theme",
         "source_package": "src/gui/libtheme",
         "owner_surface": "Theme and layout system",
         "project_guid": "{FE9E799F-FC92-45DF-8BD0-5947AE08EF56}",
         "symbol_prefix": "gui_theme"
     },
     {
-        "name": "GhostRigger.Core.GUI.Rendering",
+        "name": "GhostRigger.Core.GUI.Display.Rendering",
         "source_package": "src/gui/rendering",
         "owner_surface": "GUI rendering helpers",
         "project_guid": "{8EDDCA16-3170-4DAE-B0C0-5F745CF722C9}",
         "symbol_prefix": "gui_rendering"
     },
     {
-        "name": "GhostRigger.Core.GUI.Lighting",
+        "name": "GhostRigger.Core.GUI.Display.Lighting",
         "source_package": "src/gui/lighting",
         "owner_surface": "GUI lighting controls",
         "project_guid": "{848E66E7-DAD4-4ABE-A766-420D48C4CDB7}",
         "symbol_prefix": "gui_lighting"
     },
     {
-        "name": "GhostRigger.Core.GUI.Gizmo",
+        "name": "GhostRigger.Core.GUI.Helpers.GizmoDisplay",
         "source_package": "src/gui/gizmo",
         "owner_surface": "GUI gizmo helpers",
         "project_guid": "{87B2D6AB-516D-4776-A850-2CA9AD7B74CD}",
         "symbol_prefix": "gui_gizmo"
     },
     {
-        "name": "GhostRigger.Core.GUI.Camera",
+        "name": "GhostRigger.Core.GUI.Display.Camera",
         "source_package": "src/gui/camera",
         "owner_surface": "GUI camera helpers",
         "project_guid": "{F7E038AA-CD16-455F-8B40-C68EB7A79023}",
         "symbol_prefix": "gui_camera"
     },
     {
-        "name": "GhostRigger.Core.GUI.Textures",
+        "name": "GhostRigger.Core.GUI.Display.Textures",
         "source_package": "src/gui/textures",
         "owner_surface": "GUI texture helpers",
         "project_guid": "{6E768306-B234-436A-95E5-977140F962AD}",
         "symbol_prefix": "gui_textures"
     },
     {
-        "name": "GhostRigger.Core.GUI.SequenceEditor",
+        "name": "GhostRigger.Core.GUI.Display.SequenceEditor",
         "source_package": "src/gui/sequence_editor",
         "owner_surface": "GUI sequence editor",
         "project_guid": "{3F7DDCCE-2A2B-4E78-8A18-FF53C8FFF8DE}",
         "symbol_prefix": "gui_sequence_editor"
     },
     {
-        "name": "GhostRigger.Core.GUI.Integration",
+        "name": "GhostRigger.Core.GUI.Display.Integration",
         "source_package": "src/gui/integration",
         "owner_surface": "GUI integration services",
         "project_guid": "{10B9B40B-22CD-43ED-9469-D1908FDF2C04}",

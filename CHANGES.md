@@ -10,6 +10,20 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-20
+### [2026-06-20] Native Package Ownership Boundary Rename
+
+Owner: LordVaderCW
+Subsystem: Native C++ project layout / package registry / embedded Python payloads
+
+- Renamed native module package boundaries to match the IO, Automation, GUI Display, and GUI Helpers ownership rules without moving Python runtime behavior.
+- Promoted file and format packages under `GhostRigger.Core.IO.*`, automation surfaces under `GhostRigger.Core.Automation.*`, visible GUI packages under `GhostRigger.Core.GUI.Display.*`, and gizmo/helper boundaries under `GhostRigger.Core.GUI.Helpers.*`.
+- Updated the Visual Studio solution, native module and Python payload manifests, native package registry specs, dependency audit table, project namespace manifest, targeted tests, and the MDL Git ignore exception for the new package names.
+- Regenerated embedded Python payload manifests/resources and synced the renamed MDL payload copy back to the canonical `src/core/mdl/mdl_parser.py` source.
+
+Verification:
+- `python scripts\native_python_payload_generator.py --all`
+- `PYTHONPATH=native\GhostRigger.Native.Core.Foundation\Python;native\GhostRigger.Core.IO.FBX\Python;native\GhostRigger.Core.IO.Conversion\Python;native\GhostRigger.Core.GUI.Helpers.Gizmo\Python;native\GhostRigger.Core.Math\Python;native\GhostRigger.Core.Measurement\Python python -m pytest tests\test_native_module_package_sweep.py tests\test_native_project_templates.py tests\test_native_io_fbx_sdk_settings.py::test_io_declares_native_fbx_sdk_settings_files tests\test_native_converters_normal_map_math.py::test_converters_declares_native_normal_map_math_files tests\test_native_gizmo_mode.py::test_gizmo_project_declares_mode_files_and_exports -q` passed 72 tests with the existing `.pytest_cache` permission warning.
+
 ### [2026-06-20] Rewrite Agent Operating Manual
 
 Owner: LordVaderCW

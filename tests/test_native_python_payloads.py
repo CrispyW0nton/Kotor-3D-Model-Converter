@@ -59,7 +59,7 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
 def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
     """Content Browser workflow data must not duplicate the shared panel surface."""
 
-    boundary_project = ROOT / "native" / "GhostRigger.Core.GUI.Panels"
+    boundary_project = ROOT / "native" / "GhostRigger.Core.GUI.Display.Panels"
     workflow_project = ROOT / "native" / "GhostRigger.Core.Tools.ContentBrowser"
     panel_paths = (
         "Python/src/gui/panels/qt_content_browser_panel.py",

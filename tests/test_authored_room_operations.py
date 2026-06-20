@@ -684,7 +684,7 @@ def test_t2651_builder_tab_exposes_room_operation_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -715,7 +715,7 @@ def test_t2908_builder_tab_exposes_terrain_heightfield_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -769,7 +769,7 @@ def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -817,7 +817,7 @@ def test_t2671_builder_tab_exposes_composition_primitive_transform_controls() ->
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -851,7 +851,7 @@ def test_t2672_builder_tab_exposes_add_composition_primitive_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -884,7 +884,7 @@ def test_t2673_builder_tab_exposes_primitive_dimension_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -916,7 +916,7 @@ def test_t2674_builder_tab_exposes_remove_composition_primitive_controls() -> No
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
@@ -947,7 +947,7 @@ def test_t2676_builder_tab_exposes_primitive_style_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

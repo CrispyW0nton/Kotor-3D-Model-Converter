@@ -9,8 +9,8 @@ from src.converters import normal_map
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Converters"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Converters.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.IO.Conversion"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.Conversion.dll"
 DOUBLE_PTR = ctypes.POINTER(ctypes.c_double)
 
 
@@ -47,8 +47,8 @@ def _assert_tuple_close(actual: tuple[float, ...], expected: tuple[float, ...]) 
 
 
 def test_converters_declares_native_normal_map_math_files() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Core.Converters.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Core.Converters.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.IO.Conversion.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.IO.Conversion.vcxproj.filters").read_text(encoding="utf-8")
     header = (PROJECT_DIR / "Public" / "NormalMapMath.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "NormalMapMath.cpp").read_text(encoding="utf-8")
 

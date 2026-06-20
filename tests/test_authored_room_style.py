@@ -178,7 +178,7 @@ def test_t2652_builder_tab_exposes_room_style_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"

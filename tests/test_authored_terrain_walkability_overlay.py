@@ -99,19 +99,19 @@ def test_t2907_module_editor_controller_exposes_terrain_walkability_overlay() ->
 
 def test_t2907_map_studio_viewport_draws_terrain_walkability_overlay() -> None:
     viewport_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
     )
     scene_models_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
     )
     overlay_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     )
     pipeline_source = _read(
-        "native/GhostRigger.Core.GUI.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
+        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
     )
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"

@@ -99,7 +99,7 @@ def test_t2657_module_editor_uses_marker_contract_in_viewport_panel() -> None:
     viewport_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Panels"
+        / "GhostRigger.Core.GUI.Display.Panels"
         / "Python"
         / "src"
         / "gui"
