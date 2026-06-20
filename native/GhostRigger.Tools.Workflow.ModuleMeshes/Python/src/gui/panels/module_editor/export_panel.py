@@ -48,6 +48,22 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.dry_run_hint_label.setObjectName("mapStudioExportDryRunHintLabel")
         self.dry_run_hint_label.setWordWrap(True)
         root.addWidget(self.dry_run_hint_label)
+        self.action_guide_label = QtWidgets.QLabel(
+            "Export action guide: choose FBX only for external DCC handoff; choose authored-module actions when testing a KOTOR .mod."
+        )
+        self.action_guide_label.setObjectName("mapStudioExportActionGuideLabel")
+        self.action_guide_label.setWordWrap(True)
+        root.addWidget(self.action_guide_label)
+        self.action_guide_table = QtWidgets.QTableWidget(0, 4)
+        self.action_guide_table.setObjectName("mapStudioExportActionGuideTable")
+        self.action_guide_table.setHorizontalHeaderLabels(("Action", "Writes", "Use when", "Game proof"))
+        self.action_guide_table.verticalHeader().setVisible(False)
+        self.action_guide_table.horizontalHeader().setStretchLastSection(True)
+        self.action_guide_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.action_guide_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.action_guide_table.setMinimumHeight(132)
+        self._populate_action_guide()
+        root.addWidget(self.action_guide_table)
         self.export_button = QtWidgets.QPushButton("Export FBX")
         self.export_button.clicked.connect(lambda: self.exportRequested.emit(self.dry_run.isChecked()))
         root.addWidget(self.export_button)
@@ -72,3 +88,37 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.authored_install_button.clicked.connect(lambda: self.authoredModuleInstallRequested.emit(self.dry_run.isChecked()))
         root.addWidget(self.authored_install_button)
         root.addStretch(1)
+
+    def _populate_action_guide(self) -> None:
+        rows = (
+            (
+                "Export FBX",
+                "External FBX scene handoff",
+                "Use for DCC review; it is not a KOTOR-playable module package.",
+                "Not a game proof path.",
+            ),
+            (
+                "Export Authored KMAP Module",
+                "Staged KOTOR .mod package",
+                "Use after validation when you want a package candidate without installing it.",
+                "Still needs staged install and live warp proof.",
+            ),
+            (
+                "Stage Authored Module for Game Test",
+                ".mod, checklist, proof manifest",
+                "Use before copying into a KOTOR Modules folder.",
+                "Creates the proof handoff; does not prove game-ready.",
+            ),
+            (
+                "Install Authored Module for Game Test",
+                ".mod copied to selected Modules folder with backup",
+                "Use when you are ready to launch KOTOR and run the warp test.",
+                "Requires live warp test and recorded evidence.",
+            ),
+        )
+        self.action_guide_table.setRowCount(len(rows))
+        for row, values in enumerate(rows):
+            for column, text in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(text)
+                item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+                self.action_guide_table.setItem(row, column, item)

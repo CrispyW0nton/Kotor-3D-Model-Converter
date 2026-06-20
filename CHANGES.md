@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Clarifies Export Action Paths
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / export action clarity
+Intersects: Map Studio export panel and ModuleMeshes mirror.
+
+- Added an export action guide table to the Map Studio export panel so modders can distinguish FBX scene handoff, authored `.mod` export, game-test staging, and game-test install before clicking a write/install action.
+- Kept export/package policy in the existing controller and core services; the panel only explains the visible actions and their game-proof requirements.
+- Mirrored the export-panel update into the ModuleMeshes package and expanded source-contract coverage.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof -q --basetemp .pytest_tmp_map_studio_export_action_guide_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_export_action_guide_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py tests/test_map_studio_workflow_panel.py`.
+
+
 ### [2026-06-19] Map Studio Shows Gameplay Template Readiness Details
 
 Owner: LordVaderCW

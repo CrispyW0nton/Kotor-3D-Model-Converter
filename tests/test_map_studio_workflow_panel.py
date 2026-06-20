@@ -337,11 +337,20 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "mapStudioExportSafetyLabel" in source
         assert "mapStudioExportDryRunCheckBox" in source
         assert "mapStudioExportDryRunHintLabel" in source
+        assert "mapStudioExportActionGuideLabel" in source
+        assert "mapStudioExportActionGuideTable" in source
+        assert 'setHorizontalHeaderLabels(("Action", "Writes", "Use when", "Game proof"))' in source
         assert "authored KMAP module as a KOTOR .mod package" in source
         assert "install to a chosen Modules folder with backup" in source
         assert "not game-ready until a live warp test is recorded" in source
         assert "Preview the export/install action without writing final files" in source
         assert "Clear it only when you are ready to write staged files or install for testing" in source
+        assert "External FBX scene handoff" in source
+        assert "it is not a KOTOR-playable module package" in source
+        assert "Staged KOTOR .mod package" in source
+        assert ".mod, checklist, proof manifest" in source
+        assert ".mod copied to selected Modules folder with backup" in source
+        assert "Requires live warp test and recorded evidence." in source
 
 
 def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
