@@ -895,6 +895,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 self.map_studio_workspace_combo.blockSignals(previous)
         self._update_map_studio_workspace_guide()
 
+    def _set_map_studio_toolbar_edit_mode(self, label: str) -> None:
+        """Keep the toolbar edit-mode selector aligned with explicit workspace changes."""
+
+        combo = getattr(self.toolbar, "selection_mode", None)
+        if combo is None:
+            return
+        wanted = str(label or "").strip()
+        index = combo.findText(wanted)
+        if index < 0 or combo.currentIndex() == index:
+            return
+        previous = combo.blockSignals(True)
+        try:
+            combo.setCurrentIndex(index)
+        finally:
+            combo.blockSignals(previous)
+
     def _update_map_studio_workspace_guide(self) -> None:
         key = self._selected_map_studio_workspace_key()
         mode = self._map_studio_workspace_modes.get(key)
@@ -917,18 +933,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _open_selected_map_studio_workspace(self, *, log_focus: bool = True) -> None:
         key = self._selected_map_studio_workspace_key()
         if key == "geometry":
+            self._set_map_studio_toolbar_edit_mode("Object")
             self.show_map_studio_geometry_tools()
         elif key == "terrain":
+            self._set_map_studio_toolbar_edit_mode("Terrain")
             self.show_map_studio_terrain_tools()
         elif key == "walkmesh":
+            self._set_map_studio_toolbar_edit_mode("Walkmesh")
             self.show_map_studio_walkmesh_tools()
         elif key == "placements":
+            self._set_map_studio_toolbar_edit_mode("Placement")
             self.show_map_studio_placement_tools()
         elif key == "lighting":
+            self._set_map_studio_toolbar_edit_mode("Object")
             self.show_map_studio_lighting_tools()
         elif key == "scripts":
+            self._set_map_studio_toolbar_edit_mode("Object")
             self.show_map_studio_script_tools()
         elif key == "export":
+            self._set_map_studio_toolbar_edit_mode("Export")
             self.right_tabs.setCurrentWidget(self.map_studio_export_page)
             self.workflow_panel.set_active_authoring_context(
                 "Export + Game Proof: validate, stage/install, warp test, then record proof"
@@ -936,6 +959,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if log_focus:
                 self._log("Map Studio export and game-proof workspace focused.")
         else:
+            self._set_map_studio_toolbar_edit_mode("Object")
             self.left_tabs.setCurrentWidget(self.outliner)
             self.workflow_panel.set_active_authoring_context(
                 "Project: KMAP identity, target game, outliner, asset browser, and save/open state"

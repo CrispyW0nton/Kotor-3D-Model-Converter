@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Workspace Changes Sync Edit Mode
+
+Owner: LordVaderCW
+Task: T2600 / T2605
+Subsystem: Map Studio / Level Editor workspace and edit-mode navigation
+Intersects: Windows Editor Level shell and Map Studio workspace source contracts.
+
+- Added reverse synchronization from the Workspace selector back to the toolbar edit-mode selector for Terrain, Walkmesh, Placement, Export, and Object-style workspaces.
+- Kept workspace-to-mode sync signal-blocked so choosing a workspace updates the visible edit mode without re-triggering focus loops.
+- Refreshed the Windows Editor Level native Python payload hash.
+- Verification: `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_level_editor_exposes_map_studio_workspace_switcher -q --basetemp .pytest_tmp_workspace_toolbar_sync`.
+
 ### [2026-06-20] Map Studio Workspace Selector Stays In Sync
 
 Owner: LordVaderCW
