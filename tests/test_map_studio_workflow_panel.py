@@ -539,6 +539,13 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         assert "mapStudioWalkmeshStatusLabel" in source
         assert "mapStudioWalkmeshNextActionLabel" in source
         assert "mapStudioWalkmeshFaceTypeComboBox" in source
+        assert "mapStudioWalkmeshRoomComboBox" in source
+        assert "mapStudioWalkmeshSurfaceComboBox" in source
+        assert "mapStudioWalkmeshSurfaceAssignmentLabel" in source
+        assert "mapStudioWalkmeshApplySurfaceButton" in source
+        assert "roomSurfaceRequested" in source
+        assert "def set_room_surface_choices" in source
+        assert "def set_walkmesh_surfaces" in source
         assert "def set_walkmesh_status" in source
         assert "Walkmesh status unavailable" in source
         assert "create or load room geometry, generate WOK faces" in source
@@ -546,17 +553,25 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         assert "7 NON_WALK for walls/blockers" in source
         assert "18 DOOR for doorway portals" in source
         assert "23 WATER for water surfaces" in source
+        assert "Use DOOR only for doorway/transition surfaces." in source
         assert "player start, doors, triggers, waypoints, creatures, and placeables sit on walkable faces" in source
         assert "mapStudioWalkmeshGenerateButton" in source
         assert "mapStudioWalkmeshAssignFaceTypeButton" in source
         assert "mapStudioWalkmeshValidateButton" in source
         assert "mapStudioWalkmeshShowWalkableButton" in source
     assert "authored_walkmesh_status = self.controller.authored_walkmesh_status()" in window_source
+    assert "authored_walkmesh_room_surfaces = self.controller.authored_walkmesh_room_surface_choices()" in window_source
     assert "self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)" in window_source
+    assert "self.walkmesh_tab.set_room_surface_choices(authored_walkmesh_room_surfaces)" in window_source
+    assert "self.walkmesh_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())" in window_source
+    assert "self.walkmesh_tab.roomSurfaceRequested.connect(self.apply_authored_walkmesh_surface)" in window_source
+    assert "self.controller.set_authored_room_walkmesh_surface" in window_source
     for source in (controller_source, mirror_controller_source):
         assert "AuthoredWalkmeshStatus" in source
         assert "authored_walkmesh_status_for_project" in source
         assert "def authored_walkmesh_status(self)" in source
+        assert "authored_walkmesh_room_surface_choices" in source
+        assert "def set_authored_room_walkmesh_surface" in source
 
 
 def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:

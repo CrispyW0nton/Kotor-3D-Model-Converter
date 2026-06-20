@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Exposes Room WOK Surface Assignment
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor Walkmesh UI / room WOK surface assignment
+Intersects: Map Studio Walkmesh tab, Module domain walkmesh status, room style service, and ModuleMeshes mirror package.
+
+- Added a headless authored-room WOK surface choice model so the Walkmesh tab can show each generated room's current surface, primitive type, texture, and walkable state.
+- Added Walkmesh tab controls for selecting a room and assigning its generated floor WOK surface from the KOTOR surface palette, including visible warnings for non-walkable and door-transition surfaces.
+- Routed the UI through `ModuleEditorController.set_authored_room_walkmesh_surface`, preserving the existing texture when changing only the WOK surface.
+- Extended room-style updates to support composed room floors so modular room geometry can participate in the same WOK surface workflow.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2911_walkmesh_surface_assignment_preserves_room_texture tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_walkmesh_tab_explains_wok_workflow -q --basetemp .pytest_tmp_map_studio_walkmesh_surface`; `python -m pytest tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py tests/test_authored_module_readiness.py -q --basetemp .pytest_tmp_map_studio_walkmesh_surface_smoke`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_walkmesh_status.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_style.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_walkmesh_status.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_style.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/walkmesh_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/walkmesh_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-20] Map Studio Exposes Floor-Plan Extrusion Controls
 
 Owner: LordVaderCW

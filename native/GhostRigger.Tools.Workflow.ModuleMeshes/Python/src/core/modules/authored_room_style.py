@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
+from .authored_room_composition import AuthoredRoomComposition
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import AuthoredRoomMaterialPreflight, compile_authored_room_material_preflight
@@ -117,6 +118,32 @@ def _styled_terrain(
     )
 
 
+def _styled_composition(
+    primitive: AuthoredRoomComposition,
+    *,
+    texture: str,
+    surface_id: int,
+    surface_name: str,
+) -> AuthoredRoomComposition:
+    floor_material = replace(
+        primitive.floor.material,
+        texture=texture,
+        metadata={
+            **dict(primitive.floor.material.metadata),
+            **_style_metadata(texture, surface_id, surface_name),
+        },
+    )
+    floor = replace(primitive.floor, surface_id=surface_id, material=floor_material)
+    return replace(
+        primitive,
+        floor=floor,
+        metadata={
+            **dict(primitive.metadata),
+            "last_room_style_update": _style_metadata(texture, surface_id, surface_name),
+        },
+    )
+
+
 def _styled_room(
     room: AuthoredRoomSpec,
     *,
@@ -140,6 +167,13 @@ def _styled_room(
         )
     elif isinstance(primitive, TerrainHeightfieldPrimitive):
         updated_primitive = _styled_terrain(
+            primitive,
+            texture=texture,
+            surface_id=surface_id,
+            surface_name=surface_name,
+        )
+    elif isinstance(primitive, AuthoredRoomComposition):
+        updated_primitive = _styled_composition(
             primitive,
             texture=texture,
             surface_id=surface_id,

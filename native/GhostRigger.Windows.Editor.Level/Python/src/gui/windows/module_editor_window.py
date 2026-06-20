@@ -423,6 +423,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
         self.builder_tab.set_terrain_shape_presets(self.controller.available_authored_terrain_shape_presets())
         self.builder_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
+        self.walkmesh_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
         self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
         self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
         self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())
@@ -575,6 +576,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)
         self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
+        self.walkmesh_tab.roomSurfaceRequested.connect(self.apply_authored_walkmesh_surface)
         self.builder_tab.roomLightRequested.connect(self.add_authored_room_light)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.builder_tab.gameplayPlacementStatusChanged.connect(self.workflow_panel.set_active_authoring_context)
@@ -1382,6 +1384,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
 
+    def apply_authored_walkmesh_surface(self, room_resref: str, floor_surface: str) -> None:
+        try:
+            result = self.controller.set_authored_room_walkmesh_surface(room_resref=room_resref, floor_surface=floor_surface)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Room WOK Surface", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Applied WOK surface {floor_surface} to room {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
     def add_authored_room_light(
         self,
         room_resref: str,
@@ -1785,6 +1799,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
         authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
         authored_walkmesh_status = self.controller.authored_walkmesh_status()
+        authored_walkmesh_room_surfaces = self.controller.authored_walkmesh_room_surface_choices()
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         authored_terrain_rooms = self.controller.authored_terrain_room_choices()
@@ -1793,6 +1808,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
         self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())
         self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)
+        self.walkmesh_tab.set_room_surface_choices(authored_walkmesh_room_surfaces)
         self.properties.set_project(self.project, authored_placements, authored_room_lights)
         self.outliner.set_project(self.project, authored_placements, authored_room_lights)
         self.viewport_panel.set_project(

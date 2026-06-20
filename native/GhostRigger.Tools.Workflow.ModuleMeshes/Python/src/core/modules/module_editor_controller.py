@@ -88,6 +88,7 @@ from .authored_terrain_walkability_overlay import (
     authored_terrain_walkability_overlay_for_project,
 )
 from .authored_walkmesh_status import AuthoredWalkmeshStatus, authored_walkmesh_status_for_project
+from .authored_walkmesh_status import authored_walkmesh_room_surface_choices
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
 from .dev_module_smoke import DevModuleGameProofRequest, DevModuleInstallPrepRequest, DevModuleSmokeRequest, prepare_dev_test_module_install, record_dev_module_game_proof
 from .module_layout_service import ModuleLayoutService
@@ -471,6 +472,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_walkmesh_status_for_project(authored)
+
+    def authored_walkmesh_room_surface_choices(self):
+        """Return authored rooms whose WOK floor surface can be edited in Walkmesh tools."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_walkmesh_room_surface_choices(authored)
 
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""
@@ -859,6 +874,17 @@ class ModuleEditorController:
         for warning in update.warnings:
             self.model.log(f"Warning: {warning}")
         return self.authored_module_readiness()
+
+    def set_authored_room_walkmesh_surface(self, *, room_resref: str, floor_surface: Any = 4):
+        """Apply only the room WOK surface from Walkmesh tools, preserving texture intent."""
+
+        target = normalise_resref(room_resref)
+        texture = ""
+        for choice in self.authored_walkmesh_room_surface_choices():
+            if normalise_resref(getattr(choice, "room_resref", "")) == target:
+                texture = str(getattr(choice, "texture", "") or "")
+                break
+        return self.apply_authored_room_style(texture=texture, floor_surface=floor_surface, room_resref=room_resref)
 
     def add_authored_gameplay_placement(
         self,

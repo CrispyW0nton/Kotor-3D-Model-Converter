@@ -5,8 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .authored_module_project import AuthoredModuleProject
+from .authored_room_composition import AuthoredRoomComposition
+from .authored_room_floorplan import FloorPlanRoomPrimitive
+from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_terrain_builder import TerrainHeightfieldPrimitive
 from .authored_terrain_walkability_overlay import authored_terrain_walkability_overlay_for_project
+from .authored_walkmesh_surfaces import is_walkable_walkmesh_surface, resolve_walkmesh_surface_id, walkmesh_surface_name
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,60 @@ class AuthoredWalkmeshStatus:
     summary: str = "Walkmesh: no authored module loaded."
     next_action: str = "Create a starter room or terrain patch before inspecting walkmesh."
     warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class AuthoredWalkmeshRoomSurfaceChoice:
+    """UI-ready room surface row for the Map Studio Walkmesh tab."""
+
+    room_resref: str
+    label: str
+    primitive_type: str
+    texture: str
+    floor_surface_id: int
+    floor_surface_name: str
+    walkable: bool
+    room_index: int
+
+
+def _room_surface_payload(primitive: object) -> tuple[str, str, int] | None:
+    if isinstance(primitive, FloorPlanRoomPrimitive):
+        return ("floor-plan extrusion", str(primitive.material.texture or ""), resolve_walkmesh_surface_id(primitive.floor_surface_id))
+    if isinstance(primitive, RectangularRoomPrimitive):
+        return ("rectangular room", str(primitive.texture or ""), resolve_walkmesh_surface_id(primitive.floor_surface_id))
+    if isinstance(primitive, TerrainHeightfieldPrimitive):
+        return ("terrain heightfield", str(primitive.material.texture or ""), resolve_walkmesh_surface_id(primitive.floor_surface_id))
+    if isinstance(primitive, AuthoredRoomComposition):
+        return ("composed room", str(primitive.floor.material.texture or ""), resolve_walkmesh_surface_id(primitive.floor.surface_id))
+    return None
+
+
+def authored_walkmesh_room_surface_choices(project: AuthoredModuleProject) -> tuple[AuthoredWalkmeshRoomSurfaceChoice, ...]:
+    """Return authored rooms whose generated WOK floor surface can be edited."""
+
+    choices: list[AuthoredWalkmeshRoomSurfaceChoice] = []
+    for index, room in enumerate(tuple(project.rooms or ())):
+        payload = _room_surface_payload(room.primitive)
+        if payload is None:
+            continue
+        primitive_type, texture, surface_id = payload
+        name = walkmesh_surface_name(surface_id)
+        walkable = is_walkable_walkmesh_surface(surface_id)
+        resref = room.normalised_resref()
+        state = "walkable" if walkable else "not walkable"
+        choices.append(
+            AuthoredWalkmeshRoomSurfaceChoice(
+                room_resref=resref,
+                label=f"{resref} - {primitive_type} - {surface_id} {name} ({state})",
+                primitive_type=primitive_type,
+                texture=texture,
+                floor_surface_id=surface_id,
+                floor_surface_name=name,
+                walkable=walkable,
+                room_index=index,
+            )
+        )
+    return tuple(choices)
 
 
 def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> AuthoredWalkmeshStatus:
@@ -75,6 +133,8 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
 
 
 __all__ = [
+    "AuthoredWalkmeshRoomSurfaceChoice",
     "AuthoredWalkmeshStatus",
+    "authored_walkmesh_room_surface_choices",
     "authored_walkmesh_status_for_project",
 ]

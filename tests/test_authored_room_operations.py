@@ -77,6 +77,29 @@ def test_t2910_controller_updates_floor_plan_extrusion_settings() -> None:
     assert result.readiness.can_preview is True
 
 
+def test_t2911_walkmesh_surface_assignment_preserves_room_texture() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grwokui")
+    controller.apply_authored_room_style(texture="CM_CustomFloor", floor_surface="metal", room_resref="grwokui_room01")
+
+    result = controller.set_authored_room_walkmesh_surface(room_resref="grwokui_room01", floor_surface="non_walk")
+
+    payload = controller.project.extra_sections["authored_module"]
+    primitive = payload["rooms"][0]["primitive"]
+    choices = controller.authored_walkmesh_room_surface_choices()
+    assert primitive["material"]["texture"] == "CM_CustomFloor"
+    assert primitive["floor_surface_id"] == 7
+    assert choices[0].texture == "CM_CustomFloor"
+    assert choices[0].floor_surface_id == 7
+    assert choices[0].walkable is False
+    assert result.readiness is not None
+
+
 def test_t2651_rectangular_cut_splits_current_room_and_remains_exportable() -> None:
     _install_native_payload_paths()
 
