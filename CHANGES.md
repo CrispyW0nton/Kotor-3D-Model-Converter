@@ -9,6 +9,20 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-20
+### [2026-06-20] Restore Native MDL Project Tracking
+
+Owner: LordVaderCW
+Task: T2304
+Subsystem: Native C++ project layout / Git ignore rules
+
+- Updated the Git ignore exception for the renamed `native/GhostRigger.Core.MDL` project so the broad `*.mdl` game-data rule no longer hides the project folder.
+- Kept `native/GhostRigger.Core.MDL/build` ignored so local Visual Studio build artifacts stay out of source control.
+
+Verification:
+- `git check-ignore -v native\GhostRigger.Core.MDL native\GhostRigger.Core.MDL\GhostRigger.Core.MDL.vcxproj native\GhostRigger.Core.MDL\Python\src\core\mdl\mdl_parser.py`
+- `git status --ignored --short native\GhostRigger.Core.MDL`
+
 ## 2026-06-19
 ### [2026-06-19] Native Project Namespace and Duplicate Merge Cleanup
 

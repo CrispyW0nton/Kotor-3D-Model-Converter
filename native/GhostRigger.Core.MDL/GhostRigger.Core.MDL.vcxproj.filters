@@ -1,0 +1,94 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{b2ad00e0-3b25-4e23-a14e-9ff9e7593180}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{134e9924-0cb8-7db7-0e54-52f40871c381}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{978400c1-02d9-0a8c-9b77-54670ab9de41}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{671d6afd-e44c-da53-5597-d1502cbf08dc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{857e2772-9781-f1fd-7c15-bb24b78cbf00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{4922b9b2-a263-680d-38c3-5c36431addd4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{b304af74-c749-ed38-9fa2-021e3e8681b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\mdl">
+      <UniqueIdentifier>{390e90bf-166c-d819-ce7f-71c81c4d83b9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerMDL.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerMDL.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ClassMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
+    <None Include="Python\src\core\mdl\__init__.py">
+      <Filter>Python\src\core\mdl</Filter>
+    </None>
+    <None Include="Python\src\core\mdl\ghostrigger_mdl_reader.py">
+      <Filter>Python\src\core\mdl</Filter>
+    </None>
+    <None Include="Python\src\core\mdl\mdl_parser.py">
+      <Filter>Python\src\core\mdl</Filter>
+    </None>
+    <None Include="Python\src\core\mdl\mdl_porter.py">
+      <Filter>Python\src\core\mdl</Filter>
+    </None>
+    <None Include="Python\src\core\mdl\mdl_reader_wrapper.py">
+      <Filter>Python\src\core\mdl</Filter>
+    </None>
+    <None Include="Python\src\core\mdl\mdl_writer.py">
+      <Filter>Python\src\core\mdl</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>
