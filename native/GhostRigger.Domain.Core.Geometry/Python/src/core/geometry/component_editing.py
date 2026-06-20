@@ -273,6 +273,63 @@ def extrude_face(
     )
 
 
+def split_face_with_edge(
+    mesh: ComponentMesh,
+    face_index: int,
+    first_vertex: int,
+    second_vertex: int,
+) -> ComponentEditResult:
+    """Split one polygon face by adding a deterministic edge between vertices.
+
+    This is Map Studio's first conservative knife/cut primitive. It only cuts
+    within an existing face, requires both cut vertices to already belong to
+    that face, and rejects adjacent vertices because those already form an
+    edge. More freeform knife tools can build on this without putting topology
+    decisions in the UI layer.
+    """
+
+    index = int(face_index)
+    if index < 0 or index >= len(mesh.faces):
+        raise ValueError(f"Face split references missing face {face_index}.")
+    first, second = _validate_indices(len(mesh.vertices), (first_vertex, second_vertex))
+    if first == second:
+        raise ValueError("Face split requires two distinct vertices.")
+    face = tuple(mesh.faces[index])
+    if len(set(face)) < 4:
+        raise ValueError("Face split requires a polygon face with at least four unique vertices.")
+    try:
+        first_position = face.index(first)
+        second_position = face.index(second)
+    except ValueError as exc:
+        raise ValueError("Face split vertices must both belong to the selected face.") from exc
+    vertex_count = len(face)
+    if (
+        (abs(first_position - second_position) == 1)
+        or ({first_position, second_position} == {0, vertex_count - 1})
+    ):
+        raise ValueError("Face split requires non-adjacent vertices; selected vertices already share an edge.")
+    start, end = sorted((first_position, second_position))
+    first_loop = tuple(face[start : end + 1])
+    second_loop = tuple(face[end:] + face[: start + 1])
+    if len(set(first_loop)) < 3 or len(set(second_loop)) < 3:
+        raise ValueError("Face split would create a degenerate face.")
+
+    faces = list(mesh.faces)
+    faces.pop(index)
+    faces[index:index] = [first_loop, second_loop]
+    return ComponentEditResult(
+        mesh=ComponentMesh(vertices=mesh.vertices, faces=tuple(faces), metadata=dict(mesh.metadata)),
+        removed_face_count=1,
+        metadata={
+            "operation": "split_face_with_edge",
+            "face_index": index,
+            "split_vertices": (first, second),
+            "added_face_count": 2,
+            "new_face_vertex_counts": (len(first_loop), len(second_loop)),
+        },
+    )
+
+
 def cleanup_face_normals(
     mesh: ComponentMesh,
     *,
@@ -716,6 +773,7 @@ __all__ = [
     "fill_face",
     "flatten_vertices",
     "mirror_vertices",
+    "split_face_with_edge",
     "snap_vertex_to_vertex",
     "snap_vertices_to_grid",
     "triangulate_faces",

@@ -192,6 +192,37 @@ def test_t2601_component_edit_audit_marks_extrude_as_topology_change() -> None:
     assert audit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
 
 
+def test_t2601_component_edit_audit_marks_face_split_as_topology_change() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import audit_component_edit_result, component_mesh, split_face_with_edge
+
+    mesh = component_mesh(
+        vertices=[
+            (0.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+            (4.0, 4.0, 0.0),
+            (0.0, 4.0, 0.0),
+        ],
+        faces=[(0, 1, 2, 3)],
+    )
+
+    audit = audit_component_edit_result(
+        split_face_with_edge(mesh, 0, 0, 2),
+        component_kind="room face",
+        affects_walkmesh=True,
+    )
+
+    assert audit.geometry_changed is True
+    assert audit.topology_changed is True
+    assert audit.walkmesh_review_required is True
+    assert audit.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert audit.summary == "split_face_with_edge on room face: 2 added face(s), 1 removed face(s)."
+    assert audit.metadata["added_face_count"] == 2
+    assert audit.metadata["removed_face_count"] == 1
+    assert audit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
+
+
 def test_t2601_component_edit_audit_reports_degenerate_triangulation_cleanup() -> None:
     _install_native_geometry_path()
 

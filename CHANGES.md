@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Conservative Face Split Cut
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / component geometry kernel / KOTOR room and WOK topology
+Intersects: Domain Core Geometry component editing and Map Studio component-audit tests.
+
+- Added the headless `split_face_with_edge` component-edit operation so Map Studio can split one polygon face between two non-adjacent vertices without putting knife/cut topology policy in Qt widgets.
+- Exported the operation through the geometry package and refreshed the embedded Python payload hashes for the updated geometry files.
+- Extended component-edit audit coverage so face splits stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs and require regeneration plus in-game proof before a module is considered current.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/__init__.py tests/test_map_studio_component_editing.py tests/test_component_editing.py`; `python -m pytest tests/test_map_studio_component_editing.py::test_t2601_split_face_with_edge_creates_auditable_room_cut_loop tests/test_map_studio_component_editing.py::test_t2601_split_face_with_edge_rejects_noop_or_invalid_cuts tests/test_component_editing.py::test_t2601_component_edit_audit_marks_face_split_as_topology_change -q --basetemp .pytest_tmp_map_studio_face_split`; `python -m pytest tests/test_map_studio_component_editing.py tests/test_component_editing.py -q --basetemp .pytest_tmp_map_studio_component_editing_full`.
+
 ### [2026-06-20] Map Studio Keeps Staged Test Plans In KMAP Readiness State
 
 Owner: LordVaderCW
