@@ -1,4 +1,4 @@
-"""Library-backed asset browser for the standalone Module Editor."""
+"""Library-backed asset browser for the Map Studio Level Editor."""
 
 from __future__ import annotations
 
@@ -43,11 +43,24 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(5)
 
+        self.guide_label = QtWidgets.QLabel(
+            "Game Library assets: module and tile models import as room references; "
+            "creatures, placeables, doors, items, and templates import as reusable blueprints. "
+            "Use Builder placement tools when you need a live GIT placement with coordinates."
+        )
+        self.guide_label.setObjectName("mapStudioAssetBrowserGuideLabel")
+        self.guide_label.setWordWrap(True)
+        root.addWidget(self.guide_label)
+
         filter_row = QtWidgets.QHBoxLayout()
+        self.search_label = QtWidgets.QLabel("Search indexed KOTOR assets")
+        self.search_label.setObjectName("mapStudioAssetSearchLabel")
         self.search_edit = QtWidgets.QLineEdit()
-        self.search_edit.setPlaceholderText("Filter assets")
+        self.search_edit.setObjectName("mapStudioAssetSearchLineEdit")
+        self.search_edit.setPlaceholderText("resref, model name, source, or area")
         self.search_edit.textChanged.connect(self._apply_filter)
         self.category_combo = QtWidgets.QComboBox()
+        self.category_combo.setObjectName("mapStudioAssetCategoryComboBox")
         self.category_combo.addItems([
             "All",
             "Player Characters",
@@ -248,20 +261,24 @@ class ModuleEditorAssetBrowser(QtWidgets.QWidget):
             ],
         ])
         self.category_combo.currentTextChanged.connect(self._apply_filter)
+        filter_row.addWidget(self.search_label)
         filter_row.addWidget(self.search_edit, 1)
         filter_row.addWidget(self.category_combo)
         root.addLayout(filter_row)
 
         self.listbox = QtWidgets.QListWidget()
+        self.listbox.setObjectName("mapStudioAssetListWidget")
         self.listbox.itemDoubleClicked.connect(lambda _item: self.import_selected())
         self.listbox.itemSelectionChanged.connect(self._update_detail)
         root.addWidget(self.listbox, 1)
 
         self.detail_label = QtWidgets.QLabel("Scan the main Game Library, then import assets here.")
+        self.detail_label.setObjectName("mapStudioAssetDetailLabel")
         self.detail_label.setWordWrap(True)
         root.addWidget(self.detail_label)
 
         self.import_button = QtWidgets.QPushButton("Import Selected to Level")
+        self.import_button.setObjectName("mapStudioImportSelectedAssetButton")
         self.import_button.setProperty("accent", True)
         self.import_button.clicked.connect(self.import_selected)
         root.addWidget(self.import_button)

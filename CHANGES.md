@@ -9,6 +9,20 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-20
+
+### [2026-06-20] Map Studio Clarifies Game Library Asset Import Scope
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / game-library asset browser clarity
+Intersects: Map Studio asset browser and ModuleMeshes mirror.
+
+- Added a visible game-library import guide to the Map Studio asset browser so modders can tell which assets become room references, which become reusable blueprints, and when to use Builder placement tools for real GIT placements.
+- Added stable object names for the asset search, category filter, list, detail label, and import button so the Level Editor workflow can keep testing and wiring this surface deliberately.
+- Mirrored the asset-browser update into the ModuleMeshes package and expanded source-contract coverage.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_asset_browser_explains_library_import_scope -q --basetemp .pytest_tmp_map_studio_asset_browser_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_asset_browser_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_asset_browser.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_asset_browser.py tests/test_map_studio_workflow_panel.py`.
+
 ## 2026-06-19
 
 ### [2026-06-19] Map Studio Clarifies Export Action Paths

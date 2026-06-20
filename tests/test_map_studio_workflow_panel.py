@@ -353,6 +353,33 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "Requires live warp test and recorded evidence." in source
 
 
+def test_t2600_map_studio_asset_browser_explains_library_import_scope() -> None:
+    asset_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_asset_browser.py"
+    )
+    asset_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_asset_browser.py"
+    )
+
+    for source in (asset_source, asset_mirror_source):
+        assert "Library-backed asset browser for the Map Studio Level Editor" in source
+        assert "mapStudioAssetBrowserGuideLabel" in source
+        assert "Game Library assets: module and tile models import as room references" in source
+        assert "creatures, placeables, doors, items, and templates import as reusable blueprints" in source
+        assert "Use Builder placement tools when you need a live GIT placement with coordinates" in source
+        assert "mapStudioAssetSearchLabel" in source
+        assert "Search indexed KOTOR assets" in source
+        assert "mapStudioAssetSearchLineEdit" in source
+        assert "resref, model name, source, or area" in source
+        assert "mapStudioAssetCategoryComboBox" in source
+        assert "mapStudioAssetListWidget" in source
+        assert "mapStudioAssetDetailLabel" in source
+        assert "mapStudioImportSelectedAssetButton" in source
+        assert "Import Selected to Level" in source
+
+
 def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
     readiness_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
