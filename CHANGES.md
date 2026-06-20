@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Guides First Playable Smoke Test
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / first playable map smoke-test guidance
+Intersects: Map Studio workflow panel and ModuleMeshes mirror.
+
+- Added a visible first-playable-map smoke-test recipe to the Map Studio workflow panel so modders start with a one-room proof path before treating larger maps as production-ready.
+- Kept game-test policy in the existing readiness/export/proof services; the panel only explains the recommended UI path and evidence expectations.
+- Mirrored the workflow-panel update into the ModuleMeshes package and expanded source-contract coverage.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_guides_first_playable_smoke_test -q --basetemp .pytest_tmp_map_studio_smoke_recipe_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_smoke_recipe_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/workflow_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/workflow_panel.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-20] Map Studio Clarifies Game Library Asset Import Scope
 
 Owner: LordVaderCW

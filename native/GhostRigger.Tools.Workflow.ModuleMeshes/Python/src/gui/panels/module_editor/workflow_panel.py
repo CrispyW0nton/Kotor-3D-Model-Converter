@@ -71,6 +71,60 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.test_state_label.setWordWrap(True)
         root.addWidget(self.test_state_label)
 
+        self.smoke_test_label = QtWidgets.QLabel(
+            "First playable map smoke test: start with one small KMAP module, one starter room, "
+            "one test placeable, validation, staged install, warp test, and recorded proof. "
+            "Treat larger maps as experimental until this path passes in-game."
+        )
+        self.smoke_test_label.setObjectName("mapStudioWorkflowSmokeTestLabel")
+        self.smoke_test_label.setWordWrap(True)
+        root.addWidget(self.smoke_test_label)
+
+        self.smoke_test_recipe_table = QtWidgets.QTableWidget(0, 3)
+        self.smoke_test_recipe_table.setObjectName("mapStudioWorkflowSmokeTestRecipeTable")
+        self.smoke_test_recipe_table.setHorizontalHeaderLabels(("Step", "Action", "Proof"))
+        self.smoke_test_recipe_table.verticalHeader().setVisible(False)
+        self.smoke_test_recipe_table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.smoke_test_recipe_table.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.smoke_test_recipe_table.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self._set_smoke_test_recipe(
+            (
+                (
+                    "Project",
+                    "New KMAP",
+                    "K1/K2 target game and module root are selected.",
+                ),
+                (
+                    "Geometry",
+                    "Create Starter Room",
+                    "A simple room exists before resource placement.",
+                ),
+                (
+                    "Gameplay",
+                    "Add Test Placeable",
+                    "At least one authored placement is visible and selectable.",
+                ),
+                (
+                    "Validation",
+                    "Validate",
+                    "Blocking fixes are shown before export/install.",
+                ),
+                (
+                    "Install",
+                    "Stage or Install for Game Test",
+                    "A safe staged package and warp handoff are produced.",
+                ),
+                (
+                    "Game proof",
+                    "warp <module> and Record Proof",
+                    "Only then call it game-tested.",
+                ),
+            )
+        )
+        root.addWidget(self.smoke_test_recipe_table)
+
         self.authoring_label = QtWidgets.QLabel("Authoring: Start in Builder")
         self.authoring_label.setObjectName("mapStudioWorkflowAuthoringLabel")
         self.authoring_label.setWordWrap(True)
@@ -263,6 +317,17 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         actions.addWidget(self.launch_handoff_button, 7, 1)
         actions.addWidget(self.proof_button, 8, 0, 1, 2)
         root.addLayout(actions)
+
+    def _set_smoke_test_recipe(self, rows: tuple[tuple[str, str, str], ...]) -> None:
+        self.smoke_test_recipe_table.setRowCount(len(rows))
+        for row_index, values in enumerate(rows):
+            for column_index, value in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(value)
+                item.setFlags(QtCore.Qt.ItemFlag.ItemIsEnabled | QtCore.Qt.ItemFlag.ItemIsSelectable)
+                self.smoke_test_recipe_table.setItem(row_index, column_index, item)
+        header = self.smoke_test_recipe_table.horizontalHeader()
+        header.setStretchLastSection(True)
+        header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
 
     def set_state(self, project: Any | None, readiness: Any | None) -> None:
         """Render workflow state without mutating the project."""

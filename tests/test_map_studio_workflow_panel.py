@@ -845,6 +845,34 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "MapStudioWorkflowPanel" in mirror_init
 
 
+def test_t2600_map_studio_workflow_panel_guides_first_playable_smoke_test() -> None:
+    panel_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/workflow_panel.py"
+    )
+    mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/workflow_panel.py"
+    )
+
+    for source in (panel_source, mirror_source):
+        assert "mapStudioWorkflowSmokeTestLabel" in source
+        assert "mapStudioWorkflowSmokeTestRecipeTable" in source
+        assert 'setHorizontalHeaderLabels(("Step", "Action", "Proof"))' in source
+        assert "First playable map smoke test" in source
+        assert "one starter room" in source
+        assert "one test placeable" in source
+        assert "Treat larger maps as experimental until this path passes in-game." in source
+        assert "New KMAP" in source
+        assert "Create Starter Room" in source
+        assert "Add Test Placeable" in source
+        assert "Validate" in source
+        assert "Stage or Install for Game Test" in source
+        assert "warp <module> and Record Proof" in source
+        assert "Only then call it game-tested." in source
+        assert "A safe staged package and warp handoff are produced." in source
+
+
 def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
     source = _read(
         "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
