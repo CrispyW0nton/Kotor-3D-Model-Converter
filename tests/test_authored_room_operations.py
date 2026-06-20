@@ -798,6 +798,96 @@ def test_t2908_controller_cleans_floor_plan_vertices_and_remains_exportable() ->
     assert controller.project.dirty is True
 
 
+def test_t2911_floor_plan_geometry_readiness_blocks_invalid_footprints_until_cleanup() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(preset_id="rectangular_dev_room", module_root="grgeo", game="K1")
+    bad = FloorPlanRoomPrimitive(
+        room_resref="grgeo_room01",
+        points=((-5.0, -5.0), (5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)),
+    )
+    authored = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grgeo_room01",
+                primitive=bad,
+                composition=None,
+                visible_rooms=("grgeo_room01",),
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+
+    readiness = build_authored_module_readiness(authored)
+
+    assert readiness.can_preview is False
+    assert readiness.geometry_validation.ready is False
+    assert readiness.geometry_validation.blocking_issue_count >= 1
+    assert "duplicate points or zero-length edges" in " ".join(readiness.geometry_validation.blocking_messages)
+    assert readiness.metadata["geometry_validation"]["ready"] is False
+    assert any(status.name == "Floor-plan validation" and status.ready is False for status in readiness.toolchain)
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+
+    result = controller.cleanup_authored_floor_plan_vertices(room_resref="grgeo_room01", tolerance=0.001)
+    updated = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert result.readiness.geometry_validation.ready is True
+    assert result.readiness.geometry_validation.blocking_issue_count == 0
+    assert tuple(updated.rooms[0].primitive.points) == ((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0))
+
+
+def test_t2911_floor_plan_geometry_readiness_warns_for_clockwise_winding() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    base = create_authored_module_from_room_preset(preset_id="rectangular_dev_room", module_root="grwind", game="K1")
+    clockwise = FloorPlanRoomPrimitive(
+        room_resref="grwind_room01",
+        points=((-5.0, -5.0), (-5.0, 5.0), (5.0, 5.0), (5.0, -5.0)),
+    )
+    authored = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grwind_room01",
+                primitive=clockwise,
+                composition=None,
+                visible_rooms=("grwind_room01",),
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+
+    readiness = build_authored_module_readiness(authored)
+
+    assert readiness.can_preview is True
+    assert readiness.geometry_validation.ready is True
+    assert readiness.geometry_validation.warning_count >= 1
+    assert "Cleanup Face Normals" in " ".join(readiness.geometry_validation.warnings)
+    assert any(status.name == "Floor-plan validation" and status.status.startswith("Warnings") for status in readiness.toolchain)
+
+
 def test_t2908_controller_persists_map_studio_tool_belt_preferences_in_kmap(tmp_path) -> None:
     _install_native_payload_paths()
 

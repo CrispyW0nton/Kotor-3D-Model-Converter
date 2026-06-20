@@ -564,6 +564,11 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"component_edit"' in source
         assert '"Component edit audit"' in source
         assert '"Needs WOK/export review"' in source
+        assert "class AuthoredFloorPlanGeometryReadiness" in source
+        assert "def _floor_plan_geometry_readiness" in source
+        assert "geometry_validation: AuthoredFloorPlanGeometryReadiness" in source
+        assert '"geometry_validation"' in source
+        assert '"Floor-plan validation"' in source
 
     for source in (readiness_panel_source, readiness_panel_mirror_source):
         assert "mapStudioReadinessExportObjectsLabel" in source

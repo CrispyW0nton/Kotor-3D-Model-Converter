@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Floor-Plan Geometry Readiness
+
+Owner: LordVaderCW
+Task: T2601 / T2911
+Subsystem: Map Studio / geometry validation / authored-module readiness
+Intersects: Domain Core Modules readiness and ModuleMeshes mirror package.
+
+- Added `AuthoredFloorPlanGeometryReadiness` so authored floor-plan rooms now report footprint blockers and cleanup warnings before preview, build, or export.
+- Surfaced duplicate/zero-length edges, non-finite points, invalid floor-plan validation, clockwise winding, collinear points, and very short edges through readiness metadata, warnings, blocking messages, and a dedicated toolchain row.
+- Kept the validation headless in Domain Core Modules, mirrored it into the ModuleMeshes workflow package, and refreshed native Python payload hashes for both package manifests.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2911_floor_plan_geometry_readiness_blocks_invalid_footprints_until_cleanup tests/test_authored_room_operations.py::test_t2911_floor_plan_geometry_readiness_warns_for_clockwise_winding -q --basetemp .pytest_tmp_floor_plan_geometry_readiness`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_floor_plan_geometry_contract`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py`.
+
 ### [2026-06-20] Map Studio Wires Face Repair Tools
 
 Owner: LordVaderCW

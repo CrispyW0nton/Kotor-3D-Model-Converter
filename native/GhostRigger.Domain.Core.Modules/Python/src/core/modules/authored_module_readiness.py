@@ -8,6 +8,7 @@ the current capability stage.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -16,6 +17,7 @@ from .authored_module_metadata import authored_area_script_hooks, authored_modul
 from .authored_module_objects import normalise_resource_resref, validate_authored_gameplay_placement_against_walkmesh
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
+from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area, validate_floor_plan_room_primitive
 from .map_studio_export_objects import map_studio_export_object_boundaries
 from .authored_walkmesh_surfaces import walkmesh_surface_name
 
@@ -136,6 +138,21 @@ class AuthoredComponentEditReadiness:
 
 
 @dataclass(frozen=True)
+class AuthoredFloorPlanGeometryReadiness:
+    """Headless safety summary for authored floor-plan room footprints."""
+
+    ready: bool
+    status: str
+    floor_plan_room_count: int = 0
+    checked_room_count: int = 0
+    blocking_issue_count: int = 0
+    warning_count: int = 0
+    blocking_messages: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredModuleReadiness:
     """Capability-honest summary for a from-scratch Map Studio module."""
 
@@ -145,6 +162,9 @@ class AuthoredModuleReadiness:
     inputs: tuple[AuthoredModuleInputStatus, ...] = ()
     rooms: tuple[AuthoredRoomReadiness, ...] = ()
     toolchain: tuple[AuthoredModuleToolchainStatus, ...] = ()
+    geometry_validation: AuthoredFloorPlanGeometryReadiness = field(
+        default_factory=lambda: AuthoredFloorPlanGeometryReadiness(True, "No floor-plan rooms")
+    )
     component_edit: AuthoredComponentEditReadiness = field(
         default_factory=lambda: AuthoredComponentEditReadiness(True, "No component edits")
     )
@@ -587,6 +607,112 @@ def _component_edit_readiness(project: AuthoredModuleProject) -> AuthoredCompone
     )
 
 
+def _floor_plan_points(points: Any) -> tuple[tuple[float, float], ...]:
+    return tuple((float(point[0]), float(point[1])) for point in tuple(points or ()))
+
+
+def _floor_plan_edge_length(a: tuple[float, float], b: tuple[float, float]) -> float:
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def _floor_plan_collinear_point_count(points: tuple[tuple[float, float], ...]) -> int:
+    if len(points) < 3:
+        return 0
+    count = 0
+    for index, point in enumerate(points):
+        prev_point = points[index - 1]
+        next_point = points[(index + 1) % len(points)]
+        if _floor_plan_edge_length(prev_point, point) <= 1.0e-7:
+            continue
+        if _floor_plan_edge_length(point, next_point) <= 1.0e-7:
+            continue
+        abx = point[0] - prev_point[0]
+        aby = point[1] - prev_point[1]
+        bcx = next_point[0] - point[0]
+        bcy = next_point[1] - point[1]
+        if abs((abx * bcy) - (aby * bcx)) <= 1.0e-7:
+            count += 1
+    return count
+
+
+def _floor_plan_geometry_readiness(project: AuthoredModuleProject) -> AuthoredFloorPlanGeometryReadiness:
+    """Validate editable floor-plan intent before export/build systems run."""
+
+    floor_plan_rooms = tuple(
+        room for room in tuple(project.rooms or ()) if isinstance(getattr(room, "primitive", None), FloorPlanRoomPrimitive)
+    )
+    if not floor_plan_rooms:
+        return AuthoredFloorPlanGeometryReadiness(
+            ready=True,
+            status="No floor-plan rooms",
+            fix_hint="Draw or add a floor-plan room when this module needs editable room geometry.",
+        )
+
+    blocking: list[str] = []
+    warnings: list[str] = []
+    checked = 0
+    for room in floor_plan_rooms:
+        primitive = room.primitive
+        room_resref = normalise_resref(getattr(room, "room_resref", "") or getattr(primitive, "room_resref", ""))
+        label = room_resref or "(unnamed)"
+        try:
+            points = _floor_plan_points(primitive.points)
+        except Exception as exc:
+            blocking.append(f"Room {label} floor-plan points are not numeric: {exc}")
+            continue
+        checked += 1
+        if any(not (math.isfinite(point[0]) and math.isfinite(point[1])) for point in points):
+            blocking.append(f"Room {label} floor-plan points must be finite numbers.")
+            continue
+
+        validation = validate_floor_plan_room_primitive(primitive)
+        blocking.extend(f"Room {label}: {message}" for message in validation.blocking_issues)
+        warnings.extend(f"Room {label}: {message}" for message in validation.warnings)
+
+        if len(points) >= 3:
+            signed_area = polygon_signed_area(points)
+            if signed_area < -1.0e-7:
+                warnings.append(f"Room {label} floor-plan winding is clockwise. Use Cleanup Face Normals before export.")
+            collinear_count = _floor_plan_collinear_point_count(points)
+            if collinear_count:
+                warnings.append(
+                    f"Room {label} floor-plan has {collinear_count} collinear point(s). Use Cleanup Footprint to simplify it."
+                )
+            tiny_edge_count = sum(
+                1
+                for index, point in enumerate(points)
+                if _floor_plan_edge_length(point, points[(index + 1) % len(points)]) < 0.05
+            )
+            if tiny_edge_count:
+                warnings.append(
+                    f"Room {label} floor-plan has {tiny_edge_count} very short edge(s). Weld or cleanup vertices before packaging."
+                )
+
+    ready = not blocking
+    if not ready:
+        status = f"Blocked: {len(blocking)} issue(s)"
+        fix_hint = "Use Cleanup Footprint, Weld Vertices, or split invalid rooms before build/export."
+    elif warnings:
+        status = f"Warnings: {len(warnings)} issue(s)"
+        fix_hint = "Review footprint warnings, then run Preview/Validate before packaging."
+    else:
+        status = "Ready"
+        fix_hint = "Floor-plan room footprints are ready for room MDL/MDX/WOK generation."
+    return AuthoredFloorPlanGeometryReadiness(
+        ready=ready,
+        status=status,
+        floor_plan_room_count=len(floor_plan_rooms),
+        checked_room_count=checked,
+        blocking_issue_count=len(blocking),
+        warning_count=len(warnings),
+        blocking_messages=tuple(blocking),
+        warnings=tuple(warnings),
+        fix_hint=fix_hint,
+    )
+
+
 def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
@@ -740,6 +866,7 @@ def _toolchain_statuses(
     proof_status: str,
     game_tested: bool,
     proof_recording_script_path: str,
+    geometry_validation: AuthoredFloorPlanGeometryReadiness,
     component_edit: AuthoredComponentEditReadiness,
 ) -> tuple[AuthoredModuleToolchainStatus, ...]:
     """Summarize the full Map Studio path from geometry intent to game proof."""
@@ -819,6 +946,16 @@ def _toolchain_statuses(
             "Ready" if walkable_faces > 0 and not room_blocking else "Needs walkable WOK faces",
             f"{walkable_faces} walkable face(s)",
             "Set a walkable floor/ramp/stair WOK surface and keep gameplay objects on walkable faces.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "Floor-plan validation",
+            geometry_validation.ready,
+            geometry_validation.status,
+            (
+                f"{geometry_validation.checked_room_count}/{geometry_validation.floor_plan_room_count} floor-plan room(s) checked; "
+                f"{geometry_validation.blocking_issue_count} blocker(s), {geometry_validation.warning_count} warning(s)"
+            ),
+            geometry_validation.fix_hint,
         ),
         AuthoredModuleToolchainStatus(
             "Component edit audit",
@@ -955,13 +1092,14 @@ def build_authored_module_readiness(
     script_references = _script_references(project, present=present_set)
     pathing = _pathing_readiness(project)
     component_edit = _component_edit_readiness(project)
+    geometry_validation = _floor_plan_geometry_readiness(project)
     export_object_boundaries = map_studio_export_object_boundaries(project)
     external_template_count = sum(1 for ref in template_references if not ref.packaged)
     incomplete_transition_count = sum(1 for ref in transition_references if not ref.complete)
     external_script_count = sum(1 for ref in script_references if not ref.packaged)
     missing = tuple(key for key in expected if key not in present_set)
     room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
-    blocking = tuple(validation.blocking_issues) + room_blocking
+    blocking = tuple(validation.blocking_issues) + room_blocking + geometry_validation.blocking_messages
     template_warnings: tuple[str, ...] = ()
     if external_template_count:
         template_warnings = (
@@ -979,7 +1117,14 @@ def build_authored_module_readiness(
             f"{external_script_count} authored script hook(s) rely on base-game, Override, or another installed mod .ncs instead of being packaged.",
         )
     component_warnings = component_edit.validation_messages if not component_edit.ready else ()
-    warnings = tuple(validation.warnings) + template_warnings + transition_warnings + script_warnings + component_warnings
+    warnings = (
+        tuple(validation.warnings)
+        + geometry_validation.warnings
+        + template_warnings
+        + transition_warnings
+        + script_warnings
+        + component_warnings
+    )
     can_preview = not blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
     can_export_candidate = can_preview and not missing
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
@@ -1059,6 +1204,7 @@ def build_authored_module_readiness(
         proof_status=proof_status,
         game_tested=proof_game_tested,
         proof_recording_script_path=proof_recording_script_path,
+        geometry_validation=geometry_validation,
         component_edit=component_edit,
     )
     return AuthoredModuleReadiness(
@@ -1068,6 +1214,7 @@ def build_authored_module_readiness(
         inputs=_input_statuses(project),
         rooms=rooms,
         toolchain=toolchain,
+        geometry_validation=geometry_validation,
         component_edit=component_edit,
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
@@ -1098,6 +1245,17 @@ def build_authored_module_readiness(
                 "warnings": list(pathing.warnings),
                 "blocking_messages": list(pathing.blocking_messages),
                 "fix_hint": pathing.fix_hint,
+            },
+            "geometry_validation": {
+                "ready": geometry_validation.ready,
+                "status": geometry_validation.status,
+                "floor_plan_room_count": geometry_validation.floor_plan_room_count,
+                "checked_room_count": geometry_validation.checked_room_count,
+                "blocking_issue_count": geometry_validation.blocking_issue_count,
+                "warning_count": geometry_validation.warning_count,
+                "blocking_messages": list(geometry_validation.blocking_messages),
+                "warnings": list(geometry_validation.warnings),
+                "fix_hint": geometry_validation.fix_hint,
             },
             "component_edit": {
                 "ready": component_edit.ready,
@@ -1223,6 +1381,7 @@ def build_authored_module_readiness(
 __all__ = [
     "AuthoredGameplayTemplateReference",
     "AuthoredComponentEditReadiness",
+    "AuthoredFloorPlanGeometryReadiness",
     "AuthoredModuleTransitionReference",
     "AuthoredModuleInputStatus",
     "AuthoredModulePathingReadiness",
