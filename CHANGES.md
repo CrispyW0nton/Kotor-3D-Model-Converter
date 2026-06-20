@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Writes Modder Test Plans Into Export Proof Manifests
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / authored module export / in-game proof manifest
+Intersects: Domain Core Modules authored export pipeline and ModuleMeshes mirror package.
+
+- Added a structured `modder_test_plan` to authored Map Studio package manifests and staged proof manifests so export candidates explicitly record warp command, required resources, expected spawn/placeables/waypoints, walkability/pathing expectations, acceptance checks, evidence requirements, and current game-ready state.
+- Updated game-proof recording to promote the test plan only when live acceptance checks and screenshot/video evidence are complete, keeping incomplete attempts marked as unproven.
+- Mirrored the export pipeline change into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_export.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_export.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests/test_authored_module_export.py::test_t2644_records_authored_module_game_proof -q --basetemp .pytest_tmp_map_studio_modder_test_plan`; `python -m pytest tests/test_authored_module_proof_scripts.py::test_t2645_stages_authored_kmap_module_as_json tests/test_authored_module_proof_scripts.py::test_t2645_records_authored_module_game_proof_from_script -q --basetemp .pytest_tmp_map_studio_modder_test_plan_scripts`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Export Boundaries Explain DCC Handoff Readiness
 
 Owner: LordVaderCW

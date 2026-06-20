@@ -697,6 +697,10 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
             "blocking_issues": list(verification.blocking_issues) if verification is not None else [],
         },
         "t2601_smoke_contract": smoke_contract,
+        "modder_test_plan": _authored_modder_test_plan(
+            smoke_contract=smoke_contract,
+            module_path=package_result.module_path,
+        ),
         "required_runtime_resources": smoke_contract["required_resources"],
         "manual_game_test_required": [
             f"Copy/install {build.module_root}.mod into the KOTOR Modules folder.",
@@ -1002,6 +1006,59 @@ def _authored_acceptance_checks(*, include_test_placeable: bool = True) -> list[
         ]
     )
     return checks
+
+
+def _authored_modder_test_plan(
+    *,
+    smoke_contract: dict[str, Any],
+    module_path: str = "",
+    install_path: str = "",
+    proof_manifest_path: str = "",
+    evidence_path: str = "",
+    accepted: bool = False,
+    missing_checks: list[str] | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Build the durable game-proof checklist consumed by UI and scripts."""
+
+    acceptance_checks = list(smoke_contract.get("in_game_acceptance_checks") or _authored_acceptance_checks())
+    missing = list(missing_checks if missing_checks is not None else ([] if accepted else acceptance_checks))
+    capability_stage = "game_smoke_tested" if accepted else str(smoke_contract.get("capability_stage") or "export_candidate")
+    proof_state = "game_smoke_tested" if accepted else "requires_live_warp_proof"
+    return {
+        "task": "T2605",
+        "module_root": str(smoke_contract.get("module_root") or ""),
+        "capability_stage": capability_stage,
+        "game_ready": bool(accepted),
+        "proof_state": proof_state,
+        "warp_command": str(smoke_contract.get("warp_command") or ""),
+        "module_path": module_path,
+        "install": {
+            "installed_module_path": install_path,
+            "dry_run": bool(dry_run),
+            "proof_manifest_path": proof_manifest_path,
+        },
+        "required_resources": list(smoke_contract.get("required_resources") or ()),
+        "missing_required_resources": list(smoke_contract.get("missing_required_resources") or ()),
+        "expected_runtime_observations": dict(smoke_contract.get("expected_runtime_observations") or {}),
+        "expected_entry_point": dict(smoke_contract.get("expected_entry_point") or {}),
+        "expected_placeables": list(smoke_contract.get("expected_placeables") or ()),
+        "expected_waypoints": list(smoke_contract.get("expected_waypoints") or ()),
+        "walkability": dict(smoke_contract.get("walkability") or {}),
+        "pathing_anchor_labels": list(smoke_contract.get("pathing_anchor_labels") or ()),
+        "acceptance_checks": acceptance_checks,
+        "missing_acceptance_checks": missing,
+        "evidence": {
+            "required": not bool(accepted),
+            "path": evidence_path,
+            "accepted_kinds": ["screenshot", "video"],
+        },
+        "modder_next_step": (
+            "Keep the proof manifest and screenshot/video with the package."
+            if accepted
+            else "Install the staged .mod, warp into the module, verify every acceptance check, then record screenshot/video proof."
+        ),
+    }
 
 
 def _authored_game_executable_name(game: str) -> str:
@@ -1321,6 +1378,13 @@ def _write_authored_install_proof_files(
             "warp_command": f"warp {module_root}",
         },
         "acceptance_checks": list(smoke_contract.get("in_game_acceptance_checks") or ()),
+        "modder_test_plan": _authored_modder_test_plan(
+            smoke_contract=smoke_contract,
+            module_path=export_result.module_path,
+            install_path=install_path,
+            proof_manifest_path=str(proof_manifest_path),
+            dry_run=dry_run,
+        ),
         "t2601_smoke_contract": smoke_contract,
         "steps": steps,
         "warnings": warnings,
@@ -1537,6 +1601,21 @@ def _update_authored_pack_manifest_for_game_proof(
                 for needle in ("install/copy", "warp", "confirm the module", "confirm the player", "placeables", "waypoints", "walk across", "capture")
             )
         ]
+    plan = authored.get("modder_test_plan")
+    if isinstance(plan, dict):
+        plan["game_ready"] = bool(accepted)
+        plan["proof_state"] = "game_smoke_tested" if accepted else "requires_live_warp_proof"
+        plan["capability_stage"] = "game_smoke_tested" if accepted else str(plan.get("capability_stage") or "export_candidate")
+        plan["missing_acceptance_checks"] = list(proof_payload.get("missing_checks") or [])
+        evidence = plan.setdefault("evidence", {})
+        if isinstance(evidence, dict):
+            evidence["required"] = not bool(accepted)
+            evidence["path"] = str(proof_payload.get("evidence_path") or "")
+        plan["modder_next_step"] = (
+            "Keep the proof manifest and screenshot/video with the package."
+            if accepted
+            else "Resolve missing in-game proof checks, then record fresh screenshot/video evidence."
+        )
     authored["in_game_proof"] = proof_payload
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return warnings
@@ -1590,6 +1669,16 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
         contract["proof_required"] = not accepted
         if accepted:
             contract["capability_stage"] = "game_smoke_tested"
+        proof["modder_test_plan"] = _authored_modder_test_plan(
+            smoke_contract=contract,
+            module_path=str((proof.get("package") or {}).get("module_path") or ""),
+            install_path=str((proof.get("install") or {}).get("installed_module_path") or ""),
+            proof_manifest_path=str(proof_manifest_path),
+            evidence_path=request.evidence_path,
+            accepted=accepted,
+            missing_checks=missing,
+            dry_run=bool((proof.get("install") or {}).get("dry_run")),
+        )
     if accepted:
         proof["completed_at"] = tested_at
     proof_manifest_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")

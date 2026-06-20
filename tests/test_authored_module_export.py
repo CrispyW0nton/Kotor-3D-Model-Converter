@@ -96,6 +96,16 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert walkability_by_label["waypoint:start"]["ok"] is True
     assert {"entry_point", "placeable:grdev01_test_placeable", "waypoint:start"} <= set(contract["pathing_anchor_labels"])
     assert authored_manifest["smoke_expectations"]["expected_runtime_observations"]["test_placeable_tags"] == ["grdev01_test_placeable"]
+    test_plan = authored_manifest["modder_test_plan"]
+    assert test_plan["task"] == "T2605"
+    assert test_plan["capability_stage"] == "export_candidate"
+    assert test_plan["game_ready"] is False
+    assert test_plan["proof_state"] == "requires_live_warp_proof"
+    assert test_plan["warp_command"] == "warp grdev01"
+    assert test_plan["expected_entry_point"]["position"] == [0.0, -3.0, 0.0]
+    assert test_plan["expected_runtime_observations"]["test_placeable_tags"] == ["grdev01_test_placeable"]
+    assert "screenshot" in test_plan["evidence"]["accepted_kinds"]
+    assert test_plan["missing_acceptance_checks"] == contract["in_game_acceptance_checks"]
     template_dependencies = authored_manifest["gameplay_template_dependencies"]
     template_keys = {(row["template_resref"], row["restype"], row["kind"]) for row in template_dependencies}
     assert authored_manifest["gameplay_template_dependency_count"] == 2
@@ -422,6 +432,14 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert proof["package"]["verification"]["ok"] is True
     assert "capture_grdev01_smoke_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
     assert "--record-proof" in proof["launch_handoff"]["evidence_capture_command"]
+    test_plan = proof["modder_test_plan"]
+    assert test_plan["task"] == "T2605"
+    assert test_plan["game_ready"] is False
+    assert test_plan["proof_state"] == "requires_live_warp_proof"
+    assert test_plan["install"]["proof_manifest_path"] == result.proof_manifest_path
+    assert test_plan["install"]["dry_run"] is False
+    assert test_plan["acceptance_checks"] == proof["acceptance_checks"]
+    assert test_plan["missing_acceptance_checks"] == proof["acceptance_checks"]
     contract = proof["t2601_smoke_contract"]
     assert contract["task"] == "T2601"
     assert contract["all_required_resources_present"] is True
@@ -565,6 +583,11 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     assert proof["game_test"]["accepted"] is True
     assert proof["t2601_smoke_contract"]["game_tested"] is True
     assert proof["t2601_smoke_contract"]["proof_required"] is False
+    assert proof["modder_test_plan"]["game_ready"] is True
+    assert proof["modder_test_plan"]["proof_state"] == "game_smoke_tested"
+    assert proof["modder_test_plan"]["capability_stage"] == "game_smoke_tested"
+    assert proof["modder_test_plan"]["missing_acceptance_checks"] == []
+    assert proof["modder_test_plan"]["evidence"]["path"] == str(evidence)
 
     pack_manifest = json.loads(Path(result.pack_manifest_path).read_text(encoding="utf-8"))
     authored = pack_manifest["map_studio_authored_module"]
@@ -572,6 +595,9 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     assert authored["capability_stage"] == "game_smoke_tested"
     assert authored["in_game_proof"]["checks"]["player_can_walk_on_floor"] is True
     assert authored["t2601_smoke_contract"]["capability_stage"] == "game_smoke_tested"
+    assert authored["modder_test_plan"]["game_ready"] is True
+    assert authored["modder_test_plan"]["proof_state"] == "game_smoke_tested"
+    assert authored["modder_test_plan"]["evidence"]["path"] == str(evidence)
 
 
 def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: Path) -> None:
