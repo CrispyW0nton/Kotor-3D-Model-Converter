@@ -365,6 +365,29 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX readiness" in source
 
 
+def test_t2600_map_studio_readiness_panel_lists_gameplay_template_references() -> None:
+    readiness_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+    readiness_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+
+    for source in (readiness_source, readiness_mirror_source):
+        assert "mapStudioReadinessTemplateReferencesLabel" in source
+        assert "mapStudioReadinessTemplateReferenceTable" in source
+        assert 'setHorizontalHeaderLabels(("Kind", "Template", "Tag", "Status / fix"))' in source
+        assert "gameplay_template_references" in source
+        assert "gameplay_template_reference_count" in source
+        assert "gameplay_packaged_template_count" in source
+        assert "gameplay_external_template_count" in source
+        assert "def _set_template_reference_rows" in source
+        assert "Template must resolve from the base game, Override, or another installed mod." in source
+        assert "Place creatures, placeables, doors, triggers, waypoints, sounds, encounters, cameras, or stores" in source
+
+
 def test_t2600_map_studio_readiness_panel_lists_transition_and_script_references() -> None:
     readiness_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Shows Gameplay Template Readiness Details
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / gameplay template dependency visibility
+Intersects: Map Studio readiness panel, authored gameplay placement metadata, and ModuleMeshes mirror.
+
+- Added a visible gameplay template dependency table to the Map Studio readiness panel so modders can see which UTC/UTP/UTD/UTT/UTW/UTS/UTE/UTM resources are packaged versus expected from the base game, Override, or another mod.
+- Reused existing authored-module readiness metadata instead of moving resource dependency policy into Qt widgets.
+- Mirrored the panel update into the ModuleMeshes package and expanded source-contract coverage.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_gameplay_template_references -q --basetemp .pytest_tmp_map_studio_template_refs_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_template_refs_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_map_studio_workflow_panel.py`.
+
+
 ### [2026-06-19] Map Studio Shows Transition and Script Readiness Details
 
 Owner: LordVaderCW

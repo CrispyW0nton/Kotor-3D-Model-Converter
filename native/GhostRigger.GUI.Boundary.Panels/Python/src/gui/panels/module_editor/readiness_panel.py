@@ -143,6 +143,16 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.template_references_label.setObjectName("mapStudioReadinessTemplateReferencesLabel")
         self.template_references_label.setWordWrap(True)
         root.addWidget(self.template_references_label)
+        self.template_reference_table = QtWidgets.QTableWidget(0, 4)
+        self.template_reference_table.setObjectName("mapStudioReadinessTemplateReferenceTable")
+        self.template_reference_table.setHorizontalHeaderLabels(("Kind", "Template", "Tag", "Status / fix"))
+        self.template_reference_table.verticalHeader().setVisible(False)
+        self.template_reference_table.horizontalHeader().setStretchLastSection(True)
+        self.template_reference_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.template_reference_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.template_reference_table.setMinimumHeight(76)
+        self.template_reference_table.setMaximumHeight(150)
+        root.addWidget(self.template_reference_table)
 
         self.transition_references_label = QtWidgets.QLabel("Transitions: Not checked")
         self.transition_references_label.setObjectName("mapStudioReadinessTransitionReferencesLabel")
@@ -216,6 +226,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self._update_copy_buttons()
             self.authored_summary_label.setText("Authored content: Not checked")
             self.template_references_label.setText("Template references: Not checked")
+            self._set_template_reference_rows(())
             self.transition_references_label.setText("Transitions: Not checked")
             self._set_transition_reference_rows(())
             self.script_references_label.setText("ARE/IFO script hooks: Not checked")
@@ -335,6 +346,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             )
         else:
             self.template_references_label.setText("Template references: None")
+        self._set_template_reference_rows(template_refs)
 
         transition_refs = list(metadata.get("transition_references", ()) or ())
         transition_count = int(metadata.get("transition_count", len(transition_refs)) or 0)
@@ -442,6 +454,40 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         if isinstance(reference, dict):
             return reference.get(key, default)
         return getattr(reference, key, default)
+
+    def _set_template_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
+        """Show authored gameplay template dependency readiness."""
+
+        rows = list(references or ())
+        if not rows:
+            self.template_reference_table.setRowCount(1)
+            for column, text in enumerate((
+                "No template references",
+                "Not checked",
+                "",
+                "Place creatures, placeables, doors, triggers, waypoints, sounds, encounters, cameras, or stores to see resource dependencies.",
+            )):
+                self.template_reference_table.setItem(0, column, self._table_item(text))
+            return
+
+        self.template_reference_table.setRowCount(len(rows))
+        for row, reference in enumerate(rows):
+            kind = str(self._reference_value(reference, "kind", "resource") or "resource")
+            resref = str(self._reference_value(reference, "template_resref", "") or "(missing template)")
+            restype = str(self._reference_value(reference, "restype", "") or "").lstrip(".")
+            tag = str(self._reference_value(reference, "tag", "") or "(no tag)")
+            packaged = bool(self._reference_value(reference, "packaged", False))
+            status = str(self._reference_value(reference, "status", "") or ("packaged" if packaged else "external_or_base_game"))
+            message = str(self._reference_value(reference, "message", "") or "")
+            if not message:
+                message = (
+                    "Template will be packaged."
+                    if packaged
+                    else "Template must resolve from the base game, Override, or another installed mod."
+                )
+            template = f"{resref}.{restype}" if restype else resref
+            for column, text in enumerate((kind, template, tag, f"{status}: {message}")):
+                self.template_reference_table.setItem(row, column, self._table_item(text))
 
     def _set_transition_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
         """Show authored door, trigger, or waypoint transition link readiness."""
