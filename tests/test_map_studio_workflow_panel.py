@@ -399,6 +399,13 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioFloorPlanBridgeSecondRoomComboBox" in source
         assert "mapStudioFloorPlanBridgeSecondEdgeSpinBox" in source
         assert "mapStudioBridgeFloorPlanEdgesButton" in source
+        assert "floorPlanOpeningRequested = QtCore.Signal" in source
+        assert "Floor-Plan Wall Opening" in source
+        assert "mapStudioFloorPlanOpeningRoomComboBox" in source
+        assert "mapStudioFloorPlanOpeningEdgeSpinBox" in source
+        assert "mapStudioFloorPlanOpeningCenterSpinBox" in source
+        assert "mapStudioApplyFloorPlanOpeningButton" in source
+        assert "def _emit_floor_plan_opening" in source
         assert "Floor-Plan Vertex Tools" in source
         assert "floorPlanVertexSnapRequested = QtCore.Signal" in source
         assert "floorPlanVertexWeldRequested = QtCore.Signal" in source
@@ -489,6 +496,9 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"bridge"' in source
         assert '"cut"' in source
         assert '"knife_split"' in source
+        assert '"opening"' in source
+        assert '"wall_opening"' in source
+        assert '"Wall Opening"' in source
         assert '"fill"' in source
         assert '"fill_face"' in source
         assert '"vertex_snap"' in source
@@ -653,12 +663,15 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self._select_map_studio_modeling_tool(tool_key)" in window_source
     assert "self.add_authored_room_primitive(primitive_kind, \"\")" in window_source
     assert "floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)" in window_source
+    assert "floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)" in window_source
     assert "floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)" in window_source
     assert "floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)" in window_source
     assert "floorPlanFaceFillRequested.connect(self.fill_authored_floor_plan_face)" in window_source
     assert "floorPlanFaceTriangulateRequested.connect(self.triangulate_authored_floor_plan_face)" in window_source
     assert "floorPlanNormalsCleanupRequested.connect(self.cleanup_authored_floor_plan_normals)" in window_source
     assert "def bridge_authored_floor_plan_edges" in window_source
+    assert "def set_authored_floor_plan_wall_opening" in window_source
+    assert 'operation="wall_opening"' in window_source
     assert "def cleanup_authored_floor_plan_vertices" in window_source
     assert "def mirror_authored_floor_plan_vertices" in window_source
     assert "def fill_authored_floor_plan_face" in window_source
@@ -666,6 +679,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def cleanup_authored_floor_plan_normals" in window_source
     assert '"bridge"' in window_source
     assert '"cut"' in window_source
+    assert '"opening"' in window_source
     assert '"mirror"' in window_source
     assert '"combine"' in window_source
     assert '"separate"' in window_source

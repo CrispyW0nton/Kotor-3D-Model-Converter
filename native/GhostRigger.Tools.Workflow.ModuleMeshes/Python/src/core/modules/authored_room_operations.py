@@ -37,6 +37,7 @@ from .authored_room_floorplan import (
     FloorPlanRectangularCutOperation,
     FloorPlanRectangularUnionOperation,
     FloorPlanRoomPrimitive,
+    FloorPlanWallOpening,
     apply_floor_plan_axis_split,
     apply_floor_plan_bevel,
     apply_floor_plan_edge_extrude,
@@ -1741,6 +1742,69 @@ def apply_authored_floor_plan_axis_split(
     )
 
 
+def set_authored_floor_plan_wall_opening(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str = "",
+    name: str = "",
+    edge_index: int = 0,
+    center_fraction: float = 0.5,
+    width: float = 1.5,
+    height: float = 2.1,
+    bottom: float = 0.0,
+) -> AuthoredModuleProject:
+    """Add or replace one wall opening on a floor-plan room edge."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    edge = int(edge_index)
+    points = tuple(primitive.points or ())
+    if edge < 0 or edge >= len(points):
+        raise ValueError(f"Floor-plan wall opening edge {edge_index} does not exist in room {room.room_resref}.")
+    center = float(center_fraction)
+    opening_width = float(width)
+    opening_height = float(height)
+    opening_bottom = float(bottom)
+    if not all(math.isfinite(value) for value in (center, opening_width, opening_height, opening_bottom)):
+        raise ValueError("Floor-plan wall opening values must be finite.")
+    opening_name = str(name or "").strip() or f"opening_edge_{edge}"
+    opening = FloorPlanWallOpening(
+        name=opening_name,
+        edge_index=edge,
+        center_fraction=center,
+        width=opening_width,
+        height=opening_height,
+        bottom=opening_bottom,
+        metadata={
+            "source": "map_studio:wall_opening",
+            "operation": "set_wall_opening",
+        },
+    )
+    openings = tuple(item for item in tuple(primitive.openings or ()) if int(item.edge_index) != edge and str(item.name or "").strip() != opening_name)
+    updated_primitive = replace(
+        primitive,
+        openings=openings + (opening,),
+        include_walls=True,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "set_wall_opening",
+            "last_opening_name": opening_name,
+            "last_opening_edge_index": edge,
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="set_wall_opening",
+        room_metadata={
+            "last_opening_name": opening_name,
+            "last_opening_edge_index": edge,
+        },
+    )
+
+
 def apply_authored_floor_plan_rectangular_union(
     project: AuthoredModuleProject,
     *,
@@ -2305,6 +2369,17 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             room_resref=str(kwargs.get("room_resref", "")),
             room_resref_prefix=kwargs.get("room_resref_prefix"),
         )
+    if op in {"wall_opening", "doorway_opening", "opening", "set_wall_opening"}:
+        return set_authored_floor_plan_wall_opening(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            name=str(kwargs.get("name", kwargs.get("opening_name", ""))),
+            edge_index=int(kwargs.get("edge_index", 0)),
+            center_fraction=float(kwargs.get("center_fraction", 0.5)),
+            width=float(kwargs.get("width", 1.5)),
+            height=float(kwargs.get("height", 2.1)),
+            bottom=float(kwargs.get("bottom", 0.0)),
+        )
     raise ValueError(f"Unsupported authored floor-plan operation: {operation}.")
 
 
@@ -2421,6 +2496,7 @@ __all__ = [
     "move_authored_room_composition_primitive",
     "remove_authored_room_composition_primitive",
     "separate_authored_room_composition_primitive",
+    "set_authored_floor_plan_wall_opening",
     "set_authored_floor_plan_extrusion_settings",
     "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_style",

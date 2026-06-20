@@ -196,6 +196,45 @@ def test_t2601_axis_split_creates_two_exportable_floor_plan_rooms() -> None:
     assert all((room.normalised_resref(), "mdx") in build.resources for room in split.rooms)
 
 
+def test_t2601_wall_opening_authoring_compiles_doorway_panels() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
+    from src.core.modules.authored_room_operations import apply_authored_floor_plan_operation
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="gropen01",
+        game="K1",
+    )
+    opened = apply_authored_floor_plan_operation(
+        project,
+        "wall_opening",
+        name="south_door",
+        edge_index=0,
+        center_fraction=0.5,
+        width=1.5,
+        height=2.0,
+        bottom=0.0,
+    )
+    room = opened.rooms[0]
+    geometry = compile_floor_plan_room_geometry(room.primitive)
+    build = build_authored_module(opened)
+
+    assert room.metadata["last_opening_name"] == "south_door"
+    assert len(room.primitive.openings) == 1
+    assert geometry.metadata["opening_count"] == 1
+    assert any(mesh.metadata.get("opening_name") == "south_door" for mesh in geometry.helper_meshes)
+    assert any(mesh.metadata.get("wall_panel") == "opening_lintel" for mesh in geometry.helper_meshes)
+    assert not build.blocking_issues
+    assert ("gropen01", "lyt") in build.resources
+    assert (room.normalised_resref(), "wok") in build.resources
+    assert (room.normalised_resref(), "mdl") in build.resources
+    assert (room.normalised_resref(), "mdx") in build.resources
+
+
 def test_t2679_controller_unions_adjacent_floor_plan_rooms_and_remains_exportable() -> None:
     _install_native_payload_paths()
 

@@ -658,6 +658,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
         self.builder_tab.floorPlanExtrusionRequested.connect(self.apply_authored_floor_plan_extrusion)
+        self.builder_tab.floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)
         self.builder_tab.floorPlanVertexSnapRequested.connect(self.snap_authored_floor_plan_vertex)
         self.builder_tab.floorPlanVertexWeldRequested.connect(self.weld_authored_floor_plan_vertices)
         self.builder_tab.floorPlanVertexFlattenRequested.connect(self.flatten_authored_floor_plan_vertices)
@@ -1116,7 +1117,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.show_map_studio_placement_tools()
             self._select_map_studio_gameplay_kind(placement_kind)
             return
-        if key in {"create_room", "primitive", "extrude", "bridge", "cut", "fill", "vertex_snap", "weld", "flatten", "mirror", "cleanup", "triangulate", "normals", "bevel", "boolean", "combine", "separate"}:
+        if key in {"create_room", "primitive", "extrude", "bridge", "cut", "opening", "fill", "vertex_snap", "weld", "flatten", "mirror", "cleanup", "triangulate", "normals", "bevel", "boolean", "combine", "separate"}:
             self.show_map_studio_geometry_tools()
             if tool_key:
                 self._select_map_studio_modeling_tool(tool_key)
@@ -1143,6 +1144,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     operation_combo.setFocus()
             if key == "bridge":
                 tool = getattr(self.builder_tab, "floorPlanBridgeFirstRoomComboBox", None)
+                if tool is not None:
+                    tool.setFocus()
+            if key == "opening":
+                tool = getattr(self.builder_tab, "floorPlanOpeningRoomComboBox", None)
                 if tool is not None:
                     tool.setFocus()
             if key == "combine":
@@ -1674,6 +1679,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Updated floor-plan extrusion for {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def set_authored_floor_plan_wall_opening(
+        self,
+        room_resref: str,
+        name: str,
+        edge_index: int,
+        center_fraction: float,
+        width: float,
+        height: float,
+        bottom: float,
+    ) -> None:
+        try:
+            result = self.controller.apply_authored_room_operation(
+                operation="wall_opening",
+                room_resref=room_resref,
+                name=name,
+                edge_index=edge_index,
+                center_fraction=center_fraction,
+                width=width,
+                height=height,
+                bottom=bottom,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Floor-Plan Wall Opening", str(exc))
+            return
+        readiness = result.readiness
+        opening_label = name or f"edge {edge_index}"
+        message = f"Updated wall opening {opening_label} in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

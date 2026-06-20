@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Floor-Plan Wall Opening Tool
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / geometry kernel / Level Editor Builder tools
+Intersects: Domain Core Modules room operations and modeling-tool registry, GUI Boundary Panels Builder tab, Windows Editor Level shell, ModuleMeshes mirror package.
+
+- Added a headless floor-plan wall-opening operation that adds or replaces a doorway/window opening on one generated wall edge while preserving KOTOR-safe floor-plan validation and stale export/proof metadata.
+- Exposed Floor-Plan Wall Opening controls in the existing Level Editor Builder tab with room, edge, center, width, height, and bottom fields, then wired the Level Editor window to call the core operation.
+- Added Wall Opening / Opening to the Map Studio modeling tool registry and customizable tool belt so modders can reach the doorway/window workflow from the main Map Studio belt.
+- Mirrored the core/UI changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_wall_opening_authoring_compiles_doorway_panels -q --basetemp .pytest_tmp_wall_opening`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_wall_opening_ui`.
+
 ### [2026-06-20] Map Studio Adds Safe Floor-Plan Split Operation
 
 Owner: LordVaderCW

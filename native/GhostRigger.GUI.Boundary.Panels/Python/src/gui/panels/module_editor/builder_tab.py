@@ -10,6 +10,7 @@ class BuilderTab(QtWidgets.QWidget):
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)
     floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
+    floorPlanOpeningRequested = QtCore.Signal(str, str, int, float, float, float, float)
     floorPlanVertexSnapRequested = QtCore.Signal(str, int, int, str)
     floorPlanVertexWeldRequested = QtCore.Signal(str, object, int, str)
     floorPlanVertexFlattenRequested = QtCore.Signal(str, object, str, object)
@@ -188,6 +189,36 @@ class BuilderTab(QtWidgets.QWidget):
         extrusion_layout.addRow("WOK surface:", self.floorPlanSurfaceComboBox)
         extrusion_layout.addRow(self.applyFloorPlanExtrusionButton)
         layout.addWidget(extrusion_box)
+        opening_box = QtWidgets.QGroupBox("Floor-Plan Wall Opening")
+        opening_layout = QtWidgets.QFormLayout(opening_box)
+        self.floorPlanOpeningHintLabel = QtWidgets.QLabel(
+            "Cut a doorway/window-style opening in one generated wall edge. Use this for KOTOR door frames, transition seams, and clean portal blockouts."
+        )
+        self.floorPlanOpeningHintLabel.setObjectName("mapStudioFloorPlanOpeningHintLabel")
+        self.floorPlanOpeningHintLabel.setWordWrap(True)
+        self.floorPlanOpeningRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanOpeningRoomComboBox.setObjectName("mapStudioFloorPlanOpeningRoomComboBox")
+        self.floorPlanOpeningNameLineEdit = QtWidgets.QLineEdit("doorway_opening")
+        self.floorPlanOpeningNameLineEdit.setObjectName("mapStudioFloorPlanOpeningNameLineEdit")
+        self.floorPlanOpeningEdgeSpinBox = QtWidgets.QSpinBox()
+        self.floorPlanOpeningEdgeSpinBox.setObjectName("mapStudioFloorPlanOpeningEdgeSpinBox")
+        self.floorPlanOpeningEdgeSpinBox.setRange(0, 999)
+        self.floorPlanOpeningCenterSpinBox = self._make_transform_spin("mapStudioFloorPlanOpeningCenterSpinBox", 0.01, 0.99, "", value=0.5, step=0.05)
+        self.floorPlanOpeningWidthSpinBox = self._make_transform_spin("mapStudioFloorPlanOpeningWidthSpinBox", 0.05, 100.0, " m", value=1.5, step=0.1)
+        self.floorPlanOpeningHeightSpinBox = self._make_transform_spin("mapStudioFloorPlanOpeningHeightSpinBox", 0.05, 100.0, " m", value=2.1, step=0.1)
+        self.floorPlanOpeningBottomSpinBox = self._make_transform_spin("mapStudioFloorPlanOpeningBottomSpinBox", 0.0, 100.0, " m", value=0.0, step=0.1)
+        self.applyFloorPlanOpeningButton = QtWidgets.QPushButton("Apply Wall Opening")
+        self.applyFloorPlanOpeningButton.setObjectName("mapStudioApplyFloorPlanOpeningButton")
+        opening_layout.addRow(self.floorPlanOpeningHintLabel)
+        opening_layout.addRow("Room:", self.floorPlanOpeningRoomComboBox)
+        opening_layout.addRow("Name:", self.floorPlanOpeningNameLineEdit)
+        opening_layout.addRow("Edge:", self.floorPlanOpeningEdgeSpinBox)
+        opening_layout.addRow("Center:", self.floorPlanOpeningCenterSpinBox)
+        opening_layout.addRow("Width:", self.floorPlanOpeningWidthSpinBox)
+        opening_layout.addRow("Height:", self.floorPlanOpeningHeightSpinBox)
+        opening_layout.addRow("Bottom:", self.floorPlanOpeningBottomSpinBox)
+        opening_layout.addRow(self.applyFloorPlanOpeningButton)
+        layout.addWidget(opening_box)
         vertex_box = QtWidgets.QGroupBox("Floor-Plan Vertex Tools")
         vertex_layout = QtWidgets.QFormLayout(vertex_box)
         self.floorPlanVertexHintLabel = QtWidgets.QLabel(
@@ -690,6 +721,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.floorPlanIncludeWallsCheckBox.stateChanged.connect(lambda _value: self._update_floor_plan_extrusion_hint())
         self.floorPlanSurfaceComboBox.currentIndexChanged.connect(self._update_floor_plan_extrusion_hint)
         self.applyFloorPlanExtrusionButton.clicked.connect(self._emit_floor_plan_extrusion)
+        self.floorPlanOpeningRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_opening_controls)
+        self.applyFloorPlanOpeningButton.clicked.connect(self._emit_floor_plan_opening)
         self.floorPlanVertexRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
         self.floorPlanVertexTargetRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
         self.floorPlanSelectedPointsLineEdit.textChanged.connect(self._update_floor_plan_vertex_controls)
@@ -1221,6 +1254,7 @@ class BuilderTab(QtWidgets.QWidget):
         """Populate floor-plan room choices for Builder boolean operations."""
 
         extrusion_current = self._current_combo_resref(self.floorPlanExtrusionRoomComboBox)
+        opening_current = self._current_combo_resref(self.floorPlanOpeningRoomComboBox)
         first_current = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
         second_current = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
         bridge_first_current = self._current_combo_resref(self.floorPlanBridgeFirstRoomComboBox)
@@ -1230,6 +1264,7 @@ class BuilderTab(QtWidgets.QWidget):
         choices = tuple(rooms or ())
         for combo, current in (
             (self.floorPlanExtrusionRoomComboBox, extrusion_current),
+            (self.floorPlanOpeningRoomComboBox, opening_current),
             (self.floorPlanUnionFirstRoomComboBox, first_current),
             (self.floorPlanUnionSecondRoomComboBox, second_current),
             (self.floorPlanBridgeFirstRoomComboBox, bridge_first_current),
@@ -1266,6 +1301,7 @@ class BuilderTab(QtWidgets.QWidget):
         if self.floorPlanBridgeSecondRoomComboBox.count() > 1 and self.floorPlanBridgeSecondRoomComboBox.currentIndex() == self.floorPlanBridgeFirstRoomComboBox.currentIndex():
             self.floorPlanBridgeSecondRoomComboBox.setCurrentIndex(1)
         self._update_floor_plan_extrusion_controls()
+        self._update_floor_plan_opening_controls()
         self._update_floor_plan_vertex_controls()
         self._update_rectangular_union_controls()
         self._update_floor_plan_bridge_controls()
@@ -1332,6 +1368,54 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.floorPlanWallHeightSpinBox.value()),
             bool(self.floorPlanIncludeWallsCheckBox.isChecked()),
             surface_id,
+        )
+
+    def _current_floor_plan_opening_data(self) -> dict:
+        data = self.floorPlanOpeningRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_floor_plan_opening_controls(self) -> None:
+        data = self._current_floor_plan_opening_data()
+        point_count = int(data.get("point_count", 0) or 0)
+        enabled = bool(data and point_count >= 3)
+        for widget in (
+            self.floorPlanOpeningRoomComboBox,
+            self.floorPlanOpeningNameLineEdit,
+            self.floorPlanOpeningEdgeSpinBox,
+            self.floorPlanOpeningCenterSpinBox,
+            self.floorPlanOpeningWidthSpinBox,
+            self.floorPlanOpeningHeightSpinBox,
+            self.floorPlanOpeningBottomSpinBox,
+            self.applyFloorPlanOpeningButton,
+        ):
+            widget.setEnabled(enabled)
+        self.floorPlanOpeningEdgeSpinBox.setRange(0, max(point_count - 1, 0))
+        wall_height = max(float(data.get("wall_height", 3.0) or 3.0), 0.1)
+        self.floorPlanOpeningHeightSpinBox.setMaximum(max(wall_height - 0.05, 0.05))
+        self.floorPlanOpeningBottomSpinBox.setMaximum(max(wall_height - 0.05, 0.0))
+        if enabled:
+            self.floorPlanOpeningHintLabel.setText(
+                f"Editing {data.get('room_resref')}: choose one wall edge from 0..{point_count - 1}. "
+                "Existing openings on the same edge are replaced so the generated wall remains KOTOR-safe."
+            )
+        else:
+            self.floorPlanOpeningHintLabel.setText(
+                "Create a floor-plan room with generated walls before adding a doorway or window opening."
+            )
+
+    def _emit_floor_plan_opening(self) -> None:
+        data = self._current_floor_plan_opening_data()
+        room = str(data.get("room_resref") or "").strip()
+        if not room:
+            return
+        self.floorPlanOpeningRequested.emit(
+            room,
+            self.floorPlanOpeningNameLineEdit.text().strip(),
+            int(self.floorPlanOpeningEdgeSpinBox.value()),
+            float(self.floorPlanOpeningCenterSpinBox.value()),
+            float(self.floorPlanOpeningWidthSpinBox.value()),
+            float(self.floorPlanOpeningHeightSpinBox.value()),
+            float(self.floorPlanOpeningBottomSpinBox.value()),
         )
 
     def _current_floor_plan_vertex_room_data(self) -> dict:

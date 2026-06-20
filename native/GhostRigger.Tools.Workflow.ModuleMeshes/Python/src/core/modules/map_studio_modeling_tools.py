@@ -223,6 +223,15 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         implemented=True,
     ),
     MapStudioModelingTool(
+        "wall_opening",
+        "Wall Opening",
+        "Component Modeling",
+        ("edge", "face"),
+        "Author a KOTOR-safe doorway or window opening in a generated floor-plan wall.",
+        "Wall openings must stay inside one wall panel and leave enough side/lintel geometry for deterministic MDL/WOK export.",
+        implemented=True,
+    ),
+    MapStudioModelingTool(
         "fill_face",
         "Fill Face",
         "Component Modeling",
@@ -518,6 +527,15 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "knife_split",
         "Split a floor-plan room into separate exportable KOTOR room pieces, or use rectangular cuts for openings/detail.",
         "Split pieces remain separate exportable rooms and must still pass WOK/visibility validation.",
+        implemented=True,
+    ),
+    MapStudioToolBeltAction(
+        "opening",
+        "Opening",
+        "geometry",
+        "wall_opening",
+        "Add or replace a doorway/window opening on a generated floor-plan wall.",
+        "Openings must remain KOTOR-safe wall panels and be validated before staged module export.",
         implemented=True,
     ),
     MapStudioToolBeltAction(
@@ -896,6 +914,7 @@ _TOOL_BELT_PRESETS: tuple[MapStudioToolBeltPreset, ...] = (
             "extrude",
             "bridge",
             "cut",
+            "opening",
             "fill",
             "vertex_snap",
             "weld",
@@ -915,7 +934,7 @@ _TOOL_BELT_PRESETS: tuple[MapStudioToolBeltPreset, ...] = (
         "component",
         "Component Modeling",
         "Vertex/edge/face cleanup tools for refining authored module geometry.",
-        ("plane", "wall", "cube", "door_frame", "extrude", "bridge", "cut", "fill", "vertex_snap", "weld", "flatten", "mirror", "combine", "separate", "cleanup", "triangulate", "normals", "bevel", "boolean", "walkmesh", "validate"),
+        ("plane", "wall", "cube", "door_frame", "extrude", "bridge", "cut", "opening", "fill", "vertex_snap", "weld", "flatten", "mirror", "combine", "separate", "cleanup", "triangulate", "normals", "bevel", "boolean", "walkmesh", "validate"),
     ),
     MapStudioToolBeltPreset(
         "terrain",

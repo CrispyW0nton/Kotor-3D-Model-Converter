@@ -237,7 +237,7 @@
       "resource_name": "PYTHON_PAYLOAD_0039",
       "source_path": "src/core/modules/authored_room_operations.py",
       "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-      "sha256": "67b75761462fa287fc2e004a79c13944616670c3a5d8a4909dcadadb1d71b461"
+      "sha256": "9b5fc43490c90a6f38971f1f4fa1ef7141e4c987bb7be1e7162bf04960fbc1aa"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0040",
@@ -285,7 +285,7 @@
       "resource_name": "PYTHON_PAYLOAD_0047",
       "source_path": "src/core/modules/map_studio_modeling_tools.py",
       "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-      "sha256": "c4d659f606abc5397b7ec4e9d5a2b92d56e240f144e2e7f615372f4123f15693"
+      "sha256": "df3d08b68022d6e6aea43a38923e5d7776b75d1519c4317511bbbb7790b47b4b"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0048",
