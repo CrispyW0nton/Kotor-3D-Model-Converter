@@ -1129,6 +1129,12 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "def _emit_live_terrain_brush_frame" in source
 
     for source in (viewport_source, viewport_mirror_source):
+        assert "roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)" in source
+        assert "roomOutlinePointSnapped = QtCore.Signal(str, int, int, str)" in source
+        assert "QtCore.Qt.Key_V" in source
+        assert "set_room_outline_vertex_snap_candidates" in source
+        assert "pending_snap_candidate" in source
+        assert "Release while holding V to commit" in source
         assert "terrainBrushFrameRequested = QtCore.Signal(str, str, object)" in source
         assert "terrainBrushStrokeCommitted = QtCore.Signal(str, str)" in source
         assert "mapStudioViewportTerrainBrushCheckBox" in source
@@ -1140,6 +1146,8 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "def _finish_terrain_brush_drag" in source
 
     assert "terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)" in window_source
+    assert "roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)" in window_source
+    assert "roomOutlinePointSnapped.connect(self.snap_authored_floor_plan_vertex)" in window_source
     assert "terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)" in window_source
     assert "terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)" in window_source
     assert "def _sync_map_studio_terrain_brush_context" in window_source

@@ -14,6 +14,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     itemSelected = QtCore.Signal(str)
     transformEdited = QtCore.Signal(str, object)
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
+    roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)
+    roomOutlinePointSnapped = QtCore.Signal(str, int, int, str)
     roomPrimitiveSelected = QtCore.Signal(str, str)
     roomPrimitiveMoved = QtCore.Signal(str, str, object)
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
@@ -24,6 +26,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.setObjectName("ModuleEditorViewportPanel")
         self._current_theme = None
         root = QtWidgets.QVBoxLayout(self)
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
         root.setContentsMargins(6, 8, 6, 0)
         root.setSpacing(6)
         self.viewport_toolbar_frame = QtWidgets.QFrame(self)
@@ -40,7 +43,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.grid_box.setChecked(True)
         self.snap_box = QtWidgets.QCheckBox("Snap")
         self.snap_box.setObjectName("mapStudioViewportSnapCheckBox")
-        self.snap_box.setToolTip("Snap authored room and gameplay marker drags to the viewport grid.")
+        self.snap_box.setToolTip("Snap authored room and gameplay marker drags to the viewport grid. Hold V while dragging a room outline point to snap it to another vertex.")
         self.terrain_brush_box = QtWidgets.QCheckBox("Terrain Brush")
         self.terrain_brush_box.setObjectName("mapStudioViewportTerrainBrushCheckBox")
         self.terrain_brush_box.setToolTip("Paint the selected terrain heightfield brush directly in the viewport.")
@@ -58,6 +61,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.splitter.setChildrenCollapsible(False)
         self.viewport = QtViewportWidget(self)
+        self.viewport.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.viewport.setMinimumHeight(520)
         self._ensure_embedded_viewport_toolbar_gap()
         self._marker_pick_filter_ids: set[int] = set()
@@ -85,6 +89,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._terrain_walkability_overlay: object | None = None
         self._marker_drag: dict[str, object] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
+        self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
+        self._vertex_snap_modifier_active = False
         self._room_primitive_drag: dict[str, object] | None = None
         self._terrain_brush_drag: dict[str, object] | None = None
         self._terrain_brush_context: dict[str, object] = {
@@ -212,8 +218,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
         if self._is_marker_pick_event_source(watched):
             event_type = event.type()
+            if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
+                key = getattr(event, "key", lambda: None)()
+                if key == QtCore.Qt.Key_V:
+                    self._vertex_snap_modifier_active = event_type == QtCore.QEvent.KeyPress
+                    if self._room_outline_point_drag is not None:
+                        self._request_room_outline_snap_preview_for_drag()
+                    return False
             if event_type == QtCore.QEvent.MouseButtonPress:
                 if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
+                    focus = getattr(watched, "setFocus", None)
+                    if callable(focus):
+                        focus()
                     if self._terrain_brush_context_enabled():
                         terrain_sample = self._terrain_sample_at_event(event)
                         if terrain_sample is not None:
@@ -289,6 +305,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 continue
             try:
                 candidate.installEventFilter(self)
+                if hasattr(candidate, "setFocusPolicy"):
+                    candidate.setFocusPolicy(QtCore.Qt.StrongFocus)
             except Exception:
                 continue
             self._marker_pick_filter_ids.add(key)
@@ -678,6 +696,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "active": False,
             "pending_position": world_point,
         }
+        self._request_room_outline_snap_preview_for_drag()
         return True
 
     def _update_room_outline_point_drag(self, event: QtCore.QEvent) -> bool:
@@ -698,6 +717,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         pending = self._snap_map_studio_position(
             (float(start_position[0]) + world_dx, float(start_position[1]) + world_dy, float(start_position[2]))
         )
+        candidate = self._active_room_outline_snap_candidate()
+        if candidate is not None:
+            candidate_position = self._candidate_world_position(candidate)
+            if candidate_position is not None:
+                pending = candidate_position
+                self._room_outline_point_drag["pending_snap_candidate"] = candidate
+        else:
+            self._room_outline_point_drag.pop("pending_snap_candidate", None)
         self._room_outline_point_drag["active"] = True
         self._room_outline_point_drag["pending_position"] = pending
         return True
@@ -711,6 +738,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._room_outline_point_drag = None
         if not bool(drag.get("active", False)):
             return True
+        snap_candidate = drag.get("pending_snap_candidate") if bool(self._vertex_snap_modifier_active) else None
+        if snap_candidate is not None:
+            target_room = str(getattr(snap_candidate, "room_resref", "") or "")
+            target_point = int(getattr(snap_candidate, "point_index", -1) or -1)
+            if target_room and target_point >= 0:
+                self.roomOutlinePointSnapped.emit(
+                    str(drag.get("room_resref", "") or ""),
+                    int(drag.get("point_index", -1)),
+                    target_point,
+                    target_room,
+                )
+                return True
         position = tuple(float(v) for v in tuple(drag.get("pending_position", drag.get("start_position", (0.0, 0.0, 0.0))))[:3])
         if len(position) < 3:
             return True
@@ -720,6 +759,44 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             position,
         )
         return True
+
+    def _request_room_outline_snap_preview_for_drag(self) -> None:
+        if self._room_outline_point_drag is None:
+            return
+        room_resref = str(self._room_outline_point_drag.get("room_resref", "") or "")
+        point_index = int(self._room_outline_point_drag.get("point_index", -1))
+        if room_resref and point_index >= 0:
+            self.roomOutlinePointSnapPreviewRequested.emit(room_resref, point_index)
+
+    def set_room_outline_vertex_snap_candidates(self, room_resref: str, point_index: int, candidates) -> None:
+        """Cache controller-provided snap targets for the active outline drag."""
+
+        key = (str(room_resref or "").strip(), int(point_index))
+        items = tuple(candidates or ())
+        self._room_outline_vertex_snap_candidates[key] = items
+        if self._room_outline_point_drag is not None and self._active_room_outline_snap_candidate() is not None:
+            nearest = self._active_room_outline_snap_candidate()
+            target_room = str(getattr(nearest, "room_resref", "") or "")
+            target_point = int(getattr(nearest, "point_index", -1) or -1)
+            distance = float(getattr(nearest, "distance", 0.0) or 0.0)
+            self.marker_summary_label.setText(
+                f"Vertex snap target: {target_room} point {target_point} ({distance:.3f} m). Release while holding V to commit."
+            )
+
+    def _active_room_outline_snap_candidate(self):
+        if not bool(self._vertex_snap_modifier_active) or self._room_outline_point_drag is None:
+            return None
+        room_resref = str(self._room_outline_point_drag.get("room_resref", "") or "")
+        point_index = int(self._room_outline_point_drag.get("point_index", -1))
+        candidates = self._room_outline_vertex_snap_candidates.get((room_resref, point_index), ())
+        return candidates[0] if candidates else None
+
+    @staticmethod
+    def _candidate_world_position(candidate) -> tuple[float, float, float] | None:
+        position = tuple(getattr(candidate, "world_position", ()) or ())
+        if len(position) < 3:
+            return None
+        return (float(position[0]), float(position[1]), float(position[2]))
 
     def _begin_room_primitive_drag(self, hit: tuple[str, str, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
         start_screen = self._event_position(event)

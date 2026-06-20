@@ -652,6 +652,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.viewport_panel.transformEdited.connect(self._set_transform)
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
+        self.viewport_panel.roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)
+        self.viewport_panel.roomOutlinePointSnapped.connect(self.snap_authored_floor_plan_vertex)
         self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
@@ -2183,7 +2185,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         """Show nearest non-mutating floor-plan vertex snap candidates."""
 
         setter = getattr(self.builder_tab, "set_floor_plan_vertex_snap_candidates", None)
-        if not callable(setter):
+        viewport_setter = getattr(self.viewport_panel, "set_room_outline_vertex_snap_candidates", None)
+        if not callable(setter) and not callable(viewport_setter):
             return
         try:
             candidates = self.controller.authored_floor_plan_vertex_snap_candidates(
@@ -2193,7 +2196,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             )
         except Exception:
             return
-        setter(candidates)
+        if callable(setter):
+            setter(candidates)
+        if callable(viewport_setter):
+            viewport_setter(room_resref, int(point_index), candidates)
 
     def weld_authored_floor_plan_vertices(
         self,

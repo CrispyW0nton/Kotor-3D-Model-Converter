@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Wires Hold-V Vertex Snap Dragging
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor viewport gestures / vertex workflow
+Intersects: GUI Boundary Panels, Windows Editor Level, ModuleMeshes mirror package, and Domain Core Modules snap-candidate service.
+
+- Added Hold-V support while dragging authored room outline points in the Level Editor viewport, using the headless snap-candidate service for previews.
+- Committing a Hold-V release now routes through the existing `snap_authored_floor_plan_vertex` operation instead of silently moving a point to world coordinates, preserving KMAP/WOK/export-stale audit behavior.
+- Added viewport-level snap candidate caching and status text so modders can see the nearest vertex target before releasing the drag.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette tests/test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q --basetemp .pytest_tmp_map_studio_hold_v_snap`.
+
 ### [2026-06-20] Map Studio Shows Vertex Snap Preview Targets
 
 Owner: LordVaderCW
