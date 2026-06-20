@@ -886,6 +886,7 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
             "game_tested",
             "manual_proof_required",
             "game_test",
+            "modder_test_plan",
         )
         if key in payload_dict and payload_dict[key] not in ("", None)
     }

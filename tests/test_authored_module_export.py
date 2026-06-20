@@ -684,6 +684,12 @@ def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None
     payload = controller.project.extra_sections["authored_module"]
     assert payload["proof_manifest_path"] == result.proof_manifest_path
     assert "grdev01_room01.mdl" in payload["runtime_resources"]
+    assert payload["pack_manifest_path"] == result.export_result.manifest_path
+    assert payload["modder_test_plan"]["proof_state"] == "requires_live_warp_proof"
+    assert payload["modder_test_plan"]["warp_command"] == "warp grdev01"
+    readiness = controller.authored_module_readiness().readiness
+    assert readiness.metadata["modder_test_plan"]["warp_command"] == "warp grdev01"
+    assert readiness.metadata["modder_test_plan"]["missing_acceptance_checks"] == payload["modder_test_plan"]["missing_acceptance_checks"]
 
 
 def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup(tmp_path: Path) -> None:
@@ -727,6 +733,8 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert payload["proof_recording_script_path"] == result.proof_recording_script_path
     assert payload["backup_module_path"] == result.backup_module_path
     assert payload["proof_manifest_path"] == result.proof_manifest_path
+    assert payload["modder_test_plan"]["install"]["installed_module_path"] == str(installed)
+    assert payload["modder_test_plan"]["install"]["proof_manifest_path"] == result.proof_manifest_path
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
     assert proof["launch_handoff"]["expected_executable_path"].endswith("swkotor.exe")

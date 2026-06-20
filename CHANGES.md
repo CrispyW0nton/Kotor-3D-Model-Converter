@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Keeps Staged Test Plans In KMAP Readiness State
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / KMAP authored-module state / readiness panel
+Intersects: Domain Core Modules controller/readiness bridge, GUI Boundary Panels readiness display, and ModuleMeshes mirror package.
+
+- Stored authored-module `modder_test_plan` metadata back into the active KMAP payload after export, stage/install prep, and proof recording so Map Studio can keep showing the same proof plan without requiring manual manifest inspection.
+- Forwarded the stored test plan through authored-module readiness metadata and added a readiness-panel cue showing how many acceptance checks still need live KOTOR screenshot/video evidence.
+- Mirrored the controller, bridge, readiness, and panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_module_export.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_module_export.py::test_t2644_controller_stages_current_authored_module tests/test_authored_module_export.py::test_t2683_controller_installs_authored_module_to_modules_folder_with_backup -q --basetemp .pytest_tmp_map_studio_test_plan_state`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_test_plan_panel`.
+
 ### [2026-06-20] Map Studio Writes Modder Test Plans Into Export Proof Manifests
 
 Owner: LordVaderCW

@@ -339,6 +339,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         launch_helper = str(metadata.get("launch_helper_command") or "")
         elevated_launch_script = str(metadata.get("elevated_launch_script_path") or "")
         proof_recorder_script = str(metadata.get("proof_recording_script_path") or "")
+        modder_test_plan = dict(metadata.get("modder_test_plan") or {}) if isinstance(metadata.get("modder_test_plan"), dict) else {}
+        missing_plan_checks = list(modder_test_plan.get("missing_acceptance_checks") or ())
         expected_executable = str(metadata.get("expected_executable_path") or "")
         warp_command = str(metadata.get("warp_command") or f"warp {module_root}")
         self.warp_command_edit.setText(warp_command if module_root and module_root != "(unnamed)" else "")
@@ -357,7 +359,12 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         else:
             self.proof_label.setText("Game proof: Not ready")
         if proof_recorder_script:
-            self.proof_recorder_label.setText(f"Proof recorder: Ready after the KOTOR warp test. {proof_recorder_script}")
+            checklist = (
+                f" {len(missing_plan_checks)} acceptance check(s) still need live KOTOR evidence."
+                if missing_plan_checks
+                else ""
+            )
+            self.proof_recorder_label.setText(f"Proof recorder: Ready after the KOTOR warp test.{checklist} {proof_recorder_script}")
         elif proof_manifest:
             self.proof_recorder_label.setText("Proof recorder: Use Record Game Smoke Proof after capturing screenshot/video evidence.")
         else:

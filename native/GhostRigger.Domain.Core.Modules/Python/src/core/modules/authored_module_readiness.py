@@ -1345,6 +1345,7 @@ def build_authored_module_readiness(
     )
     elevated_launch_script_path = str(proof.get("elevated_launch_script_path") or "")
     proof_recording_script_path = str(proof.get("proof_recording_script_path") or "")
+    modder_test_plan = dict(proof.get("modder_test_plan") or {}) if isinstance(proof.get("modder_test_plan"), dict) else {}
     if proof_game_tested:
         proof_status = "game_smoke_tested"
         launch_status = "proof_recorded"
@@ -1569,6 +1570,7 @@ def build_authored_module_readiness(
             "launch_helper_command": launch_helper,
             "elevated_launch_script_path": elevated_launch_script_path,
             "proof_recording_script_path": proof_recording_script_path,
+            "modder_test_plan": modder_test_plan,
             "launch_status": launch_status,
             "warp_command": warp_command,
             "in_game_proof_evidence_path": evidence_path,

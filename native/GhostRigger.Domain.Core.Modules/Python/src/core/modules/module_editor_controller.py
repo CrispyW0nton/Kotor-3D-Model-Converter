@@ -129,6 +129,14 @@ from .module_porter_service import ModulePorterService
 from .module_walkmesh_service import ModuleWalkmeshService
 
 
+def _read_json_object(path: str | Path) -> dict[str, Any]:
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
 class ModuleEditorController:
     def __init__(self, model: ModuleEditorModel | None = None) -> None:
         self.model = model or ModuleEditorModel()
@@ -1991,6 +1999,13 @@ class ModuleEditorController:
             payload = dict(payload)
             payload["runtime_resources"] = runtime_resources
             payload["game_tested"] = False
+            payload["pack_manifest_path"] = result.manifest_path
+            manifest = _read_json_object(result.manifest_path)
+            authored_manifest = manifest.get("map_studio_authored_module")
+            if isinstance(authored_manifest, dict):
+                test_plan = authored_manifest.get("modder_test_plan")
+                if isinstance(test_plan, dict):
+                    payload["modder_test_plan"] = test_plan
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
         self.model.log(result.message)
@@ -2042,6 +2057,11 @@ class ModuleEditorController:
             payload["proof_recording_script_path"] = result.proof_recording_script_path
             payload["installed_module_path"] = result.installed_module_path
             payload["backup_module_path"] = result.backup_module_path
+            payload["pack_manifest_path"] = export_result.manifest_path
+            proof_manifest = _read_json_object(result.proof_manifest_path)
+            test_plan = proof_manifest.get("modder_test_plan")
+            if isinstance(test_plan, dict):
+                payload["modder_test_plan"] = test_plan
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
         self.model.log(result.message)
@@ -2095,7 +2115,7 @@ class ModuleEditorController:
                     payload["proof_manifest_path"] = str(getattr(result, "proof_manifest_path", "") or proof_path)
                     payload["pack_manifest_path"] = str(getattr(result, "pack_manifest_path", "") or "")
                     payload["in_game_proof_evidence_path"] = str(getattr(result, "evidence_path", "") or evidence_path)
-                    for key in ("manual_proof_required", "game_test"):
+                    for key in ("manual_proof_required", "game_test", "modder_test_plan"):
                         if key in recorded_proof:
                             payload[key] = recorded_proof[key]
                     self.project.extra_sections["authored_module"] = payload

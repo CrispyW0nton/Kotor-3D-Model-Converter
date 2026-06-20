@@ -1251,6 +1251,8 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "missing_runtime_resources" in source
         assert "Generate or stage this runtime file before export/install." in source
         assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX readiness" in source
+        assert "modder_test_plan" in source
+        assert "acceptance check(s) still need live KOTOR evidence" in source
 
 
 def test_t2600_map_studio_readiness_panel_lists_gameplay_template_references() -> None:
