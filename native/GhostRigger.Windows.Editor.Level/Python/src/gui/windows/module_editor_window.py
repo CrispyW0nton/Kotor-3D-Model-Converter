@@ -1368,10 +1368,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     tool.setFocus()
             if key == "combine":
                 tool = getattr(self.builder_tab, "floorPlanUnionFirstRoomComboBox", None)
+                self.workflow_panel.set_active_authoring_context(
+                    "Combine: merge compatible rectangular floor-plan rooms into one explicit "
+                    "export boundary. Select two rooms, set a result resref, then Apply Union."
+                )
+                self._log(
+                    "Map Studio Combine focused. Current implementation unions compatible "
+                    "rectangular floor-plan rooms; arbitrary mesh-object combine remains a later "
+                    "mesh-editing slice."
+                )
                 if tool is not None:
                     tool.setFocus()
             if key == "separate":
                 tool = getattr(self.builder_tab, "roomPrimitiveSeparateResultLineEdit", None)
+                self.workflow_panel.set_active_authoring_context(
+                    "Separate: split a selected authored composition primitive into its own "
+                    "exportable room/object boundary for UV and texturing handoff."
+                )
+                self._log(
+                    "Map Studio Separate focused. Choose a primitive, optionally set a result "
+                    "resref, then Separate to create a distinct export boundary."
+                )
                 if tool is not None:
                     tool.setFocus()
             if key in {"vertex_snap", "weld", "flatten", "mirror", "cleanup"}:

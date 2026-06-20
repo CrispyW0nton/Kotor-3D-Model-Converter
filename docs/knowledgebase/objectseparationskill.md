@@ -33,6 +33,11 @@ Marschner/Shirley and Hayes, and GhostRigger's KOTOR module export constraints.
   should see which KOTOR resources that object will produce or affect.
 - Combining rooms should produce a readable export-boundary summary before any
   package is staged.
+- In the current Map Studio implementation, Combine means compatible
+  rectangular floor-plan room union. Do not imply arbitrary mesh-object combine
+  until a later mesh-editing pass owns that topology operation.
+- Separate currently means splitting a named authored composition primitive into
+  its own exportable room/object boundary for UV and texturing handoff.
 - UV/texturing workflows should allow export to Blender/Maya without losing
   KMAP identity or KOTOR resource intent.
 - Object names shown to users should map to resrefs/export labels where

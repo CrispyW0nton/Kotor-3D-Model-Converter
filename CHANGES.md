@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Clarifies Tool-Belt Object Workflows
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor tool belt / object-boundary UX
+Intersects: Domain Core Modules, Windows Editor Level, ModuleMeshes mirror package, and Map Studio knowledgebase.
+
+- Clarified the Map Studio Combine tool as the currently supported rectangular floor-plan room union workflow instead of implying arbitrary mesh-object combine is already implemented.
+- Added focused Level Editor guidance/log output for Combine and Separate tool-belt actions so modders can see which controls to use and what export boundary each action affects.
+- Updated the object-separation knowledgebase note to keep future Map Studio work honest about resource ownership and current combine/separate scope.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_toolbelt_object_scope`.
+
 ### [2026-06-20] Knowledgebase Adds Tool Belt And Object Separation Skills
 
 Owner: LordVaderCW

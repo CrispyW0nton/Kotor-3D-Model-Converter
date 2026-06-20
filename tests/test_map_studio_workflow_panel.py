@@ -521,6 +521,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"sculpt_noise"' in source
         assert '"combine"' in source
         assert '"Combine"' in source
+        assert '"Combine compatible rectangular floor-plan rooms through the supported room-union workflow; broader primitive/object combine is a future mesh-editing pass."' in source
         assert '"separate"' in source
         assert '"Separate"' in source
         assert '"Split a selected authored primitive into its own exportable KMAP room/object boundary."' in source
@@ -800,8 +801,12 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert '"combine"' in window_source
     assert '"separate"' in window_source
     assert "floorPlanUnionFirstRoomComboBox" in window_source
+    assert "Map Studio Combine focused. Current implementation unions compatible" in window_source
+    assert "rectangular floor-plan rooms; arbitrary mesh-object combine remains a later" in window_source
     assert "roomPrimitiveSeparateRequested.connect(self.separate_authored_room_primitive)" in window_source
     assert "roomPrimitiveSeparateResultLineEdit" in window_source
+    assert "Map Studio Separate focused. Choose a primitive" in window_source
+    assert "distinct export boundary" in window_source
     assert "def separate_authored_room_primitive" in window_source
     assert '"cleanup"' in window_source
     assert "edge_index: int" in window_source

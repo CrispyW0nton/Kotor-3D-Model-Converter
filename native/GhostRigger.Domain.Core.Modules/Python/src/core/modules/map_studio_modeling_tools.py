@@ -334,8 +334,8 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         "Combine Objects",
         "Object Modeling",
         ("object",),
-        "Combine compatible authored rooms or primitives into a single exportable object boundary where the core room operations support it.",
-        "Combined output must keep stable KMAP ids, clean room/WOK resource boundaries, and explicit export-object names.",
+        "Combine compatible rectangular floor-plan rooms through the supported room-union workflow; broader primitive/object combine is a future mesh-editing pass.",
+        "Combined output must keep stable KMAP ids, clean room/WOK resource boundaries, explicit export-object names, and a readiness note for stale MDL/MDX/WOK/LYT/VIS/PTH outputs.",
         implemented=True,
     ),
     MapStudioModelingTool(
