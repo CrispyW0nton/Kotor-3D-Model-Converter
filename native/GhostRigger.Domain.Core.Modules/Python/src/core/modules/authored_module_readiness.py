@@ -145,6 +145,7 @@ class AuthoredFloorPlanGeometryReadiness:
     status: str
     floor_plan_room_count: int = 0
     checked_room_count: int = 0
+    opening_count: int = 0
     blocking_issue_count: int = 0
     warning_count: int = 0
     blocking_messages: tuple[str, ...] = ()
@@ -653,8 +654,10 @@ def _floor_plan_geometry_readiness(project: AuthoredModuleProject) -> AuthoredFl
     blocking: list[str] = []
     warnings: list[str] = []
     checked = 0
+    opening_count = 0
     for room in floor_plan_rooms:
         primitive = room.primitive
+        opening_count += len(tuple(getattr(primitive, "openings", ()) or ()))
         room_resref = normalise_resref(getattr(room, "room_resref", "") or getattr(primitive, "room_resref", ""))
         label = room_resref or "(unnamed)"
         try:
@@ -705,6 +708,7 @@ def _floor_plan_geometry_readiness(project: AuthoredModuleProject) -> AuthoredFl
         status=status,
         floor_plan_room_count=len(floor_plan_rooms),
         checked_room_count=checked,
+        opening_count=opening_count,
         blocking_issue_count=len(blocking),
         warning_count=len(warnings),
         blocking_messages=tuple(blocking),
@@ -1251,6 +1255,7 @@ def build_authored_module_readiness(
                 "status": geometry_validation.status,
                 "floor_plan_room_count": geometry_validation.floor_plan_room_count,
                 "checked_room_count": geometry_validation.checked_room_count,
+                "opening_count": geometry_validation.opening_count,
                 "blocking_issue_count": geometry_validation.blocking_issue_count,
                 "warning_count": geometry_validation.warning_count,
                 "blocking_messages": list(geometry_validation.blocking_messages),

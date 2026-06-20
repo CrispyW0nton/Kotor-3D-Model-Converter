@@ -580,6 +580,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "def _floor_plan_geometry_readiness" in source
         assert "geometry_validation: AuthoredFloorPlanGeometryReadiness" in source
         assert '"geometry_validation"' in source
+        assert "opening_count: int = 0" in source
+        assert '"opening_count": geometry_validation.opening_count' in source
         assert '"Floor-plan validation"' in source
 
     for source in (readiness_panel_source, readiness_panel_mirror_source):
@@ -591,6 +593,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "def _set_component_edit_summary" in source
         assert "Component edits: Not checked" in source
         assert "Review WOK/MDL/MDX/PTH output before export" in source
+        assert 'geometry_validation.get("opening_count"' in source
+        assert "opening(s)" in source
 
     for source in (preferences_source, preferences_mirror_source):
         assert "MAP_STUDIO_TOOL_BELT_SECTION" in source

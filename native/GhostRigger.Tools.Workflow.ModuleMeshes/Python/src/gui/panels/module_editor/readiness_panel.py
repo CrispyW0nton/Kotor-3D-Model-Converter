@@ -487,10 +487,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         try:
             checked = int(geometry_validation.get("checked_room_count", 0) or 0)
             total = int(geometry_validation.get("floor_plan_room_count", 0) or 0)
+            opening_count = int(geometry_validation.get("opening_count", 0) or 0)
             blockers = int(geometry_validation.get("blocking_issue_count", 0) or 0)
             warning_count = int(geometry_validation.get("warning_count", 0) or 0)
         except (TypeError, ValueError):
-            checked = total = blockers = warning_count = 0
+            checked = total = opening_count = blockers = warning_count = 0
         blocking_messages = [
             str(message)
             for message in list(geometry_validation.get("blocking_messages") or [])
@@ -505,7 +506,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             return
         self.floor_plan_geometry_label.setText(
             f"Floor-plan geometry: {status}. {checked}/{total} room(s) checked; "
-            f"{blockers} blocker(s), {warning_count} warning(s)."
+            f"{opening_count} opening(s); {blockers} blocker(s), {warning_count} warning(s)."
         )
 
     def _set_component_edit_summary(self, component_edit: dict[str, Any]) -> None:

@@ -200,6 +200,7 @@ def test_t2601_wall_opening_authoring_compiles_doorway_panels() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
     from src.core.modules.authored_room_floorplan import compile_floor_plan_room_geometry
     from src.core.modules.authored_room_operations import apply_authored_floor_plan_operation
     from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
@@ -222,9 +223,12 @@ def test_t2601_wall_opening_authoring_compiles_doorway_panels() -> None:
     room = opened.rooms[0]
     geometry = compile_floor_plan_room_geometry(room.primitive)
     build = build_authored_module(opened)
+    readiness = build_authored_module_readiness(opened)
 
     assert room.metadata["last_opening_name"] == "south_door"
     assert len(room.primitive.openings) == 1
+    assert readiness.geometry_validation.opening_count == 1
+    assert readiness.metadata["geometry_validation"]["opening_count"] == 1
     assert geometry.metadata["opening_count"] == 1
     assert any(mesh.metadata.get("opening_name") == "south_door" for mesh in geometry.helper_meshes)
     assert any(mesh.metadata.get("wall_panel") == "opening_lintel" for mesh in geometry.helper_meshes)

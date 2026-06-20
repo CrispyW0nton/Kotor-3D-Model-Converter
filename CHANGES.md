@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Shows Floor-Plan Opening Counts In Readiness
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / authored-module readiness / readiness panel
+Intersects: Domain Core Modules readiness, GUI Boundary Panels readiness panel, ModuleMeshes mirror package.
+
+- Added `opening_count` to the headless floor-plan geometry readiness payload so authored doorway/window openings are visible before build/export.
+- Updated the Map Studio readiness panel to include the opening count beside checked floor-plan rooms, blockers, and warnings.
+- Mirrored the readiness core/panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_wall_opening_authoring_compiles_doorway_panels -q --basetemp .pytest_tmp_opening_readiness`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_opening_readiness_ui`.
+
 ### [2026-06-20] Map Studio Adds Floor-Plan Wall Opening Tool
 
 Owner: LordVaderCW
