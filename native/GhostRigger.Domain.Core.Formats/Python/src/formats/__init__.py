@@ -4,6 +4,10 @@ GFF V3.2 reader/writer, archive reader (BIF/ERF/KEY/RIM), and related utilities.
 
 Matches the format spec from GHOSTWORKS_BLUEPRINT.md Section 4.
 """
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)
+
 from .gff_types import (
     GffFieldType, GffField, GffStruct, GffFile,
     LocString, ResRef,

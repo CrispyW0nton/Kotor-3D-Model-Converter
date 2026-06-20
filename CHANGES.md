@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Native Host Resolves Split Python Packages
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Native Python host startup / split-package source mode
+Intersects: Native host source-mode launcher and split native Python package roots.
+
+- Fixed source-mode native host startup so `main.py` resolves the real repository root instead of treating `native/GhostRigger.Native.Core.Host` as the project root when Visual Studio environment variables are absent.
+- Added all `native/GhostRigger*/Python` package roots to source-mode `sys.path` and made the split `src`, `src.gui`, `src.core`, `src.adapters`, `src.resources`, and related package initializers namespace-compatible.
+- Guarded the startup path with a regression test that imports the native host entrypoint, verifies the resolved repo root, and confirms split GUI/adapters packages are discoverable.
+- Verification: `python -m pytest tests/test_native_project_templates.py::test_native_host_python_entrypoint_is_not_root_main_wrapper tests/test_native_project_templates.py::test_native_host_marks_visual_studio_runtime_provenance tests/test_native_project_templates.py::test_native_host_source_mode_exposes_split_python_packages -q --basetemp .pytest_tmp_native_host_startup_contract`; Release `GhostRigger.exe --native-embed-init-debug`; visible Release `GhostRigger.exe` startup smoke stayed alive for 18 seconds and reached the Qt launcher/renderer scan in `build/vs/x64/Release/GhostRiggerPythonPayload/Logs/ghostrigger_2026-06-19_200028.log`.
+
 ### [2026-06-20] Map Studio Adds Workspace Switcher
 
 Owner: LordVaderCW

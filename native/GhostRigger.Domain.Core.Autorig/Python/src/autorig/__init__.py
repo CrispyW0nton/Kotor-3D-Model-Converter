@@ -1,5 +1,9 @@
 """src.autorig – Auto-rigging, AcuRig-style semi-auto, and GRig manual rigging."""
 
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)
+
 try:
     from .auto_rigger import (
         AutoRigger,

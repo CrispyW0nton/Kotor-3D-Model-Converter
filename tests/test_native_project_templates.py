@@ -2,6 +2,8 @@
 
 from pathlib import Path
 import re
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
 
 
@@ -753,6 +755,30 @@ def test_native_host_python_entrypoint_is_not_root_main_wrapper() -> None:
     assert "runpy.run_path" not in host_main
     assert "GhostRigger Native Host starting" in host_main
     assert "from src.gui.qt_lib.windows.qt_main_window import run as run_qt" in host_main
+
+
+def test_native_host_source_mode_exposes_split_python_packages() -> None:
+    code = f"""
+import importlib.util
+from pathlib import Path
+path = Path({str(ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.py")!r})
+spec = importlib.util.spec_from_file_location("gr_native_main_probe", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module._REPO_ROOT == Path({str(ROOT)!r})
+import src.gui.qt_lib
+assert importlib.util.find_spec("src.gui.windows.qt_blueprint_editor") is not None
+assert importlib.util.find_spec("src.adapters.rendering.moderngl_legacy_bridge") is not None
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_native_host_marks_visual_studio_runtime_provenance() -> None:

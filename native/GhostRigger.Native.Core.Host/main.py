@@ -22,7 +22,46 @@ import traceback
 
 sys.dont_write_bytecode = True
 _HOST_DIR = Path(__file__).resolve().parent
-_REPO_ROOT = Path(os.environ.get("GHOSTRIGGER_NATIVE_REPO_ROOT", "") or _HOST_DIR).resolve()
+
+
+def _looks_like_repo_root(path: Path) -> bool:
+    return (path / "GhostRigger.sln").exists() or (
+        (path / "pyproject.toml").exists() and (path / "native").is_dir()
+    )
+
+
+def _find_repo_root(start: Path) -> Path:
+    for candidate in [start, *start.parents]:
+        if _looks_like_repo_root(candidate):
+            return candidate.resolve()
+    return start.resolve()
+
+
+def _payload_has_python_sources(payload_root: Path) -> bool:
+    source_root = payload_root / "src"
+    if not source_root.is_dir():
+        return False
+    try:
+        next(source_root.rglob("*.py"))
+    except StopIteration:
+        return False
+    return True
+
+
+def _source_package_roots(repo_root: Path) -> list[Path]:
+    roots: list[Path] = []
+    if (repo_root / "src").is_dir():
+        roots.append(repo_root)
+    native_root = repo_root / "native"
+    if native_root.is_dir():
+        for project_dir in sorted(native_root.glob("GhostRigger*")):
+            python_root = project_dir / "Python"
+            if (python_root / "src").is_dir():
+                roots.append(python_root)
+    return roots
+
+
+_REPO_ROOT = Path(os.environ.get("GHOSTRIGGER_NATIVE_REPO_ROOT", "") or _find_repo_root(_HOST_DIR)).resolve()
 
 
 class _DllPythonPayloadImporter(importlib.abc.MetaPathFinder, importlib.abc.Loader):
@@ -207,7 +246,7 @@ def _install_native_python_payload_importer() -> Path | None:
 
 def _legacy_extracted_payload_root() -> Path | None:
     payload_root = Path(os.environ.get("GHOSTRIGGER_NATIVE_PAYLOAD_ROOT", "") or (_HOST_DIR / "GhostRiggerPythonPayload"))
-    if payload_root.is_dir():
+    if payload_root.is_dir() and _payload_has_python_sources(payload_root):
         return payload_root
     return None
 
@@ -221,6 +260,11 @@ if _NATIVE_PAYLOAD_ROOT is None:
 _DLL_PAYLOAD_ROOT = _install_native_python_payload_importer()
 if _DLL_PAYLOAD_ROOT is not None:
     _NATIVE_PAYLOAD_ROOT = _DLL_PAYLOAD_ROOT
+elif _NATIVE_PAYLOAD_ROOT is None:
+    for _source_root in reversed(_source_package_roots(_REPO_ROOT)):
+        _source_root_str = str(_source_root)
+        if _source_root_str not in sys.path:
+            sys.path.insert(0, _source_root_str)
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 

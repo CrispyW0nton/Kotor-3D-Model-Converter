@@ -31,3 +31,8 @@ def __getattr__(name: str) -> Any:
 
 def __dir__() -> list[str]:
     return sorted(set(globals()) | set(__all__))
+"""GhostRigger Qt lighting package."""
+
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)

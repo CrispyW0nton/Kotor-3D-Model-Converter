@@ -26,3 +26,8 @@ __all__ = [
     "ToolbarLayout",
     "ViewportLayout",
 ]
+"""GhostRigger theme and layout package."""
+
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)
