@@ -283,6 +283,13 @@ class _MapStudioToolBeltCustomizeDialog(QtWidgets.QDialog):
         self.hint_label.setObjectName("mapStudioToolBeltCustomizeHintLabel")
         self.hint_label.setWordWrap(True)
         root.addWidget(self.hint_label)
+        self.search_edit = QtWidgets.QLineEdit()
+        self.search_edit.setObjectName("mapStudioToolBeltCustomizeSearchLineEdit")
+        self.search_edit.setPlaceholderText("Filter tools by name, workspace, or KOTOR guardrail")
+        root.addWidget(self.search_edit)
+        self.summary_label = QtWidgets.QLabel("")
+        self.summary_label.setObjectName("mapStudioToolBeltCustomizeSummaryLabel")
+        root.addWidget(self.summary_label)
         self.action_list = QtWidgets.QListWidget()
         self.action_list.setObjectName("mapStudioToolBeltCustomizeListWidget")
         root.addWidget(self.action_list, 1)
@@ -292,21 +299,56 @@ class _MapStudioToolBeltCustomizeDialog(QtWidgets.QDialog):
             key = str(getattr(action, "key", "") or "")
             if not key:
                 continue
-            item = QtWidgets.QListWidgetItem(str(getattr(action, "label", key) or key))
+            label = str(getattr(action, "label", key) or key)
+            workspace = str(getattr(action, "workspace_key", "") or "builder").replace("_", " ")
+            state = "usable" if bool(getattr(action, "implemented", False)) else "planned"
+            item = QtWidgets.QListWidgetItem(f"{label}  [{workspace}; {state}]")
             item.setData(QtCore.Qt.UserRole, key)
+            description = str(getattr(action, "description", "") or "")
             tooltip = str(getattr(action, "description", "") or "")
             guardrail = str(getattr(action, "kotor_guardrail", "") or "")
             if guardrail:
                 tooltip = f"{tooltip}\nKOTOR: {guardrail}" if tooltip else f"KOTOR: {guardrail}"
+            item.setData(
+                QtCore.Qt.UserRole + 1,
+                " ".join((key, label, workspace, state, description, guardrail)).lower(),
+            )
             item.setToolTip(tooltip)
             item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
             item.setCheckState(QtCore.Qt.Checked if key in selected else QtCore.Qt.Unchecked)
             self.action_list.addItem(item)
+        self.action_list.itemChanged.connect(lambda _item: self._update_selection_summary())
+        self.search_edit.textChanged.connect(self._filter_actions)
+        self._update_selection_summary()
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
+
+    def _filter_actions(self, text: str) -> None:
+        needle = str(text or "").strip().lower()
+        for row in range(self.action_list.count()):
+            item = self.action_list.item(row)
+            if item is None:
+                continue
+            haystack = str(item.data(QtCore.Qt.UserRole + 1) or "").lower()
+            item.setHidden(bool(needle and needle not in haystack))
+        self._update_selection_summary()
+
+    def _update_selection_summary(self) -> None:
+        selected = 0
+        visible = 0
+        total = self.action_list.count()
+        for row in range(total):
+            item = self.action_list.item(row)
+            if item is None:
+                continue
+            if item.checkState() == QtCore.Qt.Checked:
+                selected += 1
+            if not item.isHidden():
+                visible += 1
+        self.summary_label.setText(f"{selected} selected; {visible} visible of {total} available Map Studio tools.")
 
     def selected_action_keys(self) -> tuple[str, ...]:
         keys: list[str] = []

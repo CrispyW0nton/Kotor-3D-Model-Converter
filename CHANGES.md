@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Tool Belt Customizer Is Searchable
+
+Owner: LordVaderCW
+Task: T2600 / T2605
+Subsystem: Map Studio / Level Editor custom tool belt UX
+Intersects: Windows Editor Level shell and Map Studio workflow panel source contracts.
+
+- Added a filter field to the Map Studio custom tool-belt dialog so modders can search by action name, workspace, capability state, description, or KOTOR guardrail.
+- Added a selected/visible/available summary and row labels that show each action's workspace and whether it is usable or planned.
+- Refreshed the Windows Editor Level native Python payload hash.
+- Verification: `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_tool_belt_filter`.
+
 ### [2026-06-20] Map Studio Edit Modes Focus The Right Workspaces
 
 Owner: LordVaderCW

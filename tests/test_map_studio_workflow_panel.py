@@ -687,7 +687,14 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self._select_map_studio_terrain_brush(terrain_brush)" in window_source
     assert "mapStudioToolBeltWidget" in window_source
     assert "mapStudioCustomizeToolBeltButton" in window_source
+    assert "mapStudioToolBeltCustomizeSearchLineEdit" in window_source
+    assert "mapStudioToolBeltCustomizeSummaryLabel" in window_source
     assert "mapStudioToolBeltCustomizeListWidget" in window_source
+    assert "def _filter_actions" in window_source
+    assert "def _update_selection_summary" in window_source
+    assert "workspace_key" in window_source
+    assert "usable" in window_source
+    assert "planned" in window_source
     assert "def _refresh_map_studio_tool_belt" in window_source
     assert "def _apply_map_studio_tool_belt_preferences_from_project" in window_source
     assert "def _persist_map_studio_tool_belt_preferences" in window_source
