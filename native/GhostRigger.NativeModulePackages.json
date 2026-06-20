@@ -1,13 +1,13 @@
 [
     {
-        "name": "GhostRigger.Core.Modules",
+        "name": "GhostRigger.Core.Scene.Modules",
         "source_package": "src/core/modules",
         "owner_surface": "Module Studio / KMAP module services",
         "project_guid": "{E569AAF1-0F5C-49F8-94DC-D74C1E66306F}",
         "symbol_prefix": "modules"
     },
     {
-        "name": "GhostRigger.Core.Level",
+        "name": "GhostRigger.Core.Scene.Level",
         "source_package": "src/core/level",
         "owner_surface": "Level Editor / KMAP project services",
         "project_guid": "{4C4C40E4-2B6D-48D2-850D-8C3036C93FF4}",
@@ -21,35 +21,35 @@
         "symbol_prefix": "scene"
     },
     {
-        "name": "GhostRigger.Core.Animation",
+        "name": "GhostRigger.Core.Workflow.Animation",
         "source_package": "src/core/animation",
         "owner_surface": "Animation runtime",
         "project_guid": "{625D213D-42A5-426F-8D2F-E67D1A934E48}",
         "symbol_prefix": "animation"
     },
     {
-        "name": "GhostRigger.Core.AnimationRetargeting",
+        "name": "GhostRigger.Core.Workflow.AnimationRetargeting",
         "source_package": "src/core/animation_retargeting",
         "owner_surface": "Animation retargeting compatibility",
         "project_guid": "{136EE6FE-AB01-4D4B-B605-921BA58F8792}",
         "symbol_prefix": "animation_retargeting"
     },
     {
-        "name": "GhostRigger.Core.Retargeting",
+        "name": "GhostRigger.Core.Workflow.Retargeting",
         "source_package": "src/core/retargeting",
         "owner_surface": "Retarget Workbench core",
         "project_guid": "{56CEDC57-FE1B-4953-B28E-592B0014B2F6}",
         "symbol_prefix": "retargeting"
     },
     {
-        "name": "GhostRigger.Core.Characters",
+        "name": "GhostRigger.Core.Workflow.Characters",
         "source_package": "src/core/characters",
         "owner_surface": "Character Studio core",
         "project_guid": "{B829569B-2B85-4D49-B3D5-6C2E3757335D}",
         "symbol_prefix": "characters"
     },
     {
-        "name": "GhostRigger.Core.Skeleton",
+        "name": "GhostRigger.Core.Scene.Skeleton",
         "source_package": "src/core/skeleton",
         "owner_surface": "Skeleton services",
         "project_guid": "{86C4EAD7-356C-4046-8028-A518F19B4F45}",
@@ -63,7 +63,7 @@
         "symbol_prefix": "mdl"
     },
     {
-        "name": "GhostRigger.Core.Geometry",
+        "name": "GhostRigger.Core.Math.Geometry",
         "source_package": "src/core/geometry",
         "owner_surface": "Geometry services",
         "project_guid": "{C5AD60EE-D301-4282-A5E4-9A1C68035FA2}",
@@ -77,21 +77,21 @@
         "symbol_prefix": "gizmo"
     },
     {
-        "name": "GhostRigger.Core.Graphics",
+        "name": "GhostRigger.Core.Rendering.Textures",
         "source_package": "src/core/graphics",
         "owner_surface": "Texture and graphics formats",
         "project_guid": "{1FF8D739-7E70-4964-8F90-16B39DEBA33F}",
         "symbol_prefix": "graphics"
     },
     {
-        "name": "GhostRigger.Core.Lighting",
+        "name": "GhostRigger.Core.Rendering.Lighting",
         "source_package": "src/core/lighting",
         "owner_surface": "Lighting and lightmap baking",
         "project_guid": "{68CA1DA1-2D82-4E3F-8AD7-C04DF2DEEEA5}",
         "symbol_prefix": "lighting"
     },
     {
-        "name": "GhostRigger.Core.Walkmesh",
+        "name": "GhostRigger.Core.Scene.Walkmesh",
         "source_package": "src/core/walkmesh",
         "owner_surface": "Walkmesh editing",
         "project_guid": "{D3C999FE-3243-4E05-A7D8-38A40EEDE0E5}",
@@ -112,7 +112,7 @@
         "symbol_prefix": "project"
     },
     {
-        "name": "GhostRigger.Core.Assets",
+        "name": "GhostRigger.Core.Resources.Assets",
         "source_package": "src/core/assets",
         "owner_surface": "Asset services",
         "project_guid": "{2C822B25-22C8-408C-B4B8-57569B1FC96D}",
@@ -126,7 +126,7 @@
         "symbol_prefix": "resources"
     },
     {
-        "name": "GhostRigger.Core.GameLibrary",
+        "name": "GhostRigger.Core.Resources.GameLibrary",
         "source_package": "src/resources",
         "owner_surface": "Game library discovery",
         "project_guid": "{211E7042-9E73-4928-BBC3-2A30C85D19ED}",
@@ -140,14 +140,14 @@
         "symbol_prefix": "export"
     },
     {
-        "name": "GhostRigger.Core.Game",
+        "name": "GhostRigger.Core.Resources.Game",
         "source_package": "src/core/game",
         "owner_surface": "Game-domain services",
         "project_guid": "{D5D8164B-1BAB-432E-9282-4AC3D00C85AF}",
         "symbol_prefix": "game"
     },
     {
-        "name": "GhostRigger.Core.Ports",
+        "name": "GhostRigger.Core.Rendering.Ports",
         "source_package": "src/core/ports",
         "owner_surface": "Core port contracts",
         "project_guid": "{1A26F4CD-7DDA-4DBB-95EF-1E25709AF454}",
@@ -161,21 +161,21 @@
         "symbol_prefix": "rendering"
     },
     {
-        "name": "GhostRigger.Core.Diagnostics",
+        "name": "GhostRigger.Runtime.Core.Diagnostics",
         "source_package": "src/core/diagnostics",
         "owner_surface": "Diagnostic services",
         "project_guid": "{14BB065B-6C9C-443E-BEE5-44355D8BEB7D}",
         "symbol_prefix": "diagnostics"
     },
     {
-        "name": "GhostRigger.Core.Special",
+        "name": "GhostRigger.Core.Tools.Special",
         "source_package": "src/core/special",
         "owner_surface": "Special-case model support",
         "project_guid": "{7ABD4167-8C1A-4695-8476-EE2F10BE3473}",
         "symbol_prefix": "special"
     },
     {
-        "name": "GhostRigger.Core.Templates",
+        "name": "GhostRigger.Core.Formats.TwoDA",
         "source_package": "src/core/templates",
         "owner_surface": "Template services",
         "project_guid": "{F4993727-D9E8-4C53-B581-2EFD4A73BBFB}",
@@ -189,7 +189,7 @@
         "symbol_prefix": "workflow"
     },
     {
-        "name": "GhostRigger.Core.Camera",
+        "name": "GhostRigger.Core.Math.Camera",
         "source_package": "src/core/camera",
         "owner_surface": "Camera services",
         "project_guid": "{84FF1CFE-B7FB-46A7-862F-FE24E47B6E64}",
@@ -203,14 +203,14 @@
         "symbol_prefix": "math"
     },
     {
-        "name": "GhostRigger.Core.Measurement",
+        "name": "GhostRigger.Core.Math.Measurement",
         "source_package": "src/measurement",
         "owner_surface": "Measurement and snapping",
         "project_guid": "{0DED334F-4AF8-4CC6-B1C2-5008FBB0EBD9}",
         "symbol_prefix": "measurement"
     },
     {
-        "name": "GhostRigger.Core.IO.Formats",
+        "name": "GhostRigger.Core.IO.Serialization.GFF",
         "source_package": "src/formats",
         "owner_surface": "File format services",
         "project_guid": "{1619B644-FA71-454D-9BDA-E459A4D1D28C}",
@@ -238,35 +238,35 @@
         "symbol_prefix": "converters"
     },
     {
-        "name": "GhostRigger.Core.Autorig",
+        "name": "GhostRigger.Core.Workflow.Autorig",
         "source_package": "src/autorig",
         "owner_surface": "Auto-rigging services",
         "project_guid": "{21A1222A-FF06-47B3-8636-6404ED8619CE}",
         "symbol_prefix": "autorig"
     },
     {
-        "name": "GhostRigger.Core.Unreal",
+        "name": "GhostRigger.Adapters.Unreal",
         "source_package": "src/unreal",
         "owner_surface": "Unreal integration",
         "project_guid": "{92C60DB8-2198-44CD-B710-7DE912ACA628}",
         "symbol_prefix": "unreal"
     },
     {
-        "name": "GhostRigger.Core.Workbench",
+        "name": "GhostRigger.Core.Tools.Workbench",
         "source_package": "src/workbench",
         "owner_surface": "Workbench helpers",
         "project_guid": "{1EC72CE0-68F1-4A4F-BFA6-61B11AFD0F18}",
         "symbol_prefix": "workbench"
     },
     {
-        "name": "GhostRigger.Core.MeshTools",
+        "name": "GhostRigger.Core.Tools.Mesh",
         "source_package": "src/mesh_tools",
         "owner_surface": "Mesh editing tools",
         "project_guid": "{C074716A-BE8F-49D5-8850-37A1BA860F26}",
         "symbol_prefix": "mesh_tools"
     },
     {
-        "name": "GhostRigger.Core.Infrastructure",
+        "name": "GhostRigger.Runtime.Core.Infrastructure",
         "source_package": "src/infra",
         "owner_surface": "Infrastructure services",
         "project_guid": "{BE68DB6C-A1E3-473F-8D9D-86C447AB5C00}",
@@ -280,14 +280,14 @@
         "symbol_prefix": "kotor_mcp"
     },
     {
-        "name": "GhostRigger.Adapters.IO.Files",
+        "name": "GhostRigger.Adapters.Files",
         "source_package": "src/adapters/files",
         "owner_surface": "File adapters",
         "project_guid": "{D7838765-8E4B-4CEA-B721-9AD4F1F8CF7A}",
         "symbol_prefix": "adapters_files"
     },
     {
-        "name": "GhostRigger.Adapters.Hardware.GPU",
+        "name": "GhostRigger.Adapters.GPU",
         "source_package": "src/adapters/gpu",
         "owner_surface": "GPU adapters",
         "project_guid": "{9EC7C9BE-D489-4A9E-89D2-035CAD872FCB}",
@@ -315,14 +315,14 @@
         "symbol_prefix": "adapters_qt_viewport"
     },
     {
-        "name": "GhostRigger.Adapters.Rendering.Core",
+        "name": "GhostRigger.Adapters.Rendering",
         "source_package": "src/adapters/rendering",
         "owner_surface": "Renderer adapter layer",
         "project_guid": "{30C24EF7-4E3B-4974-89DC-E917FFF34E84}",
         "symbol_prefix": "adapters_rendering"
     },
     {
-        "name": "GhostRigger.Adapters.Scripting.Core",
+        "name": "GhostRigger.Adapters.Scripting",
         "source_package": "src/adapters/scripts",
         "owner_surface": "Script adapters",
         "project_guid": "{3DBC4B61-0299-4F16-82D5-F4E74E2BCE8E}",
@@ -371,7 +371,7 @@
         "symbol_prefix": "gui_lighting"
     },
     {
-        "name": "GhostRigger.Core.GUI.Helpers.GizmoDisplay",
+        "name": "GhostRigger.Core.GUI.Display.Overlays.Gizmo",
         "source_package": "src/gui/gizmo",
         "owner_surface": "GUI gizmo helpers",
         "project_guid": "{87B2D6AB-516D-4776-A850-2CA9AD7B74CD}",

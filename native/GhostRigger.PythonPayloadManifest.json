@@ -1,6 +1,14 @@
 [
     {
-        "project": "GhostRigger.Adapters.Hardware.GPU",
+        "project": "GhostRigger.Adapters.Files",
+        "python_file_count": 2,
+        "files": [
+            "src\\adapters\\files\\__init__.py",
+            "src\\adapters\\files\\local_file_writer.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Adapters.GPU",
         "python_file_count": 6,
         "files": [
             "src\\adapters\\gpu\\__init__.py",
@@ -9,14 +17,6 @@
             "src\\adapters\\gpu\\moderngl_context.py",
             "src\\adapters\\gpu\\moderngl_runtime.py",
             "src\\adapters\\gpu\\viewport_probe.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Adapters.IO.Files",
-        "python_file_count": 2,
-        "files": [
-            "src\\adapters\\files\\__init__.py",
-            "src\\adapters\\files\\local_file_writer.py"
         ]
     },
     {
@@ -48,7 +48,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.Rendering.Core",
+        "project": "GhostRigger.Adapters.Rendering",
         "python_file_count": 28,
         "files": [
             "src\\adapters\\rendering\\__init__.py",
@@ -82,7 +82,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Adapters.Scripting.Core",
+        "project": "GhostRigger.Adapters.Scripting",
         "python_file_count": 2,
         "files": [
             "src\\adapters\\scripts\\__init__.py",
@@ -90,7 +90,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Core.Animation",
+        "project": "GhostRigger.Core.Workflow.Animation",
         "python_file_count": 45,
         "files": [
             "src\\core\\animation\\__init__.py",
@@ -141,7 +141,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Core.AnimationRetargeting",
+        "project": "GhostRigger.Core.Workflow.AnimationRetargeting",
         "python_file_count": 3,
         "files": [
             "src\\core\\animation_retargeting\\__init__.py",
@@ -150,7 +150,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Core.Assets",
+        "project": "GhostRigger.Core.Resources.Assets",
         "python_file_count": 4,
         "files": [
             "src\\core\\assets\\__init__.py",
@@ -160,184 +160,12 @@
         ]
     },
     {
-        "project": "GhostRigger.Core.Autorig",
-        "python_file_count": 6,
-        "files": [
-            "src\\autorig\\__init__.py",
-            "src\\autorig\\accurig.py",
-            "src\\autorig\\auto_rigger.py",
-            "src\\autorig\\cloth_rig.py",
-            "src\\autorig\\grig.py",
-            "src\\autorig\\retarget_engine.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Camera",
-        "python_file_count": 14,
-        "files": [
-            "src\\core\\camera\\__init__.py",
-            "src\\core\\camera\\arcball_camera.py",
-            "src\\core\\camera\\camera_controller.py",
-            "src\\core\\camera\\camera_manager.py",
-            "src\\core\\camera\\camera_model.py",
-            "src\\core\\camera\\camera_picker.py",
-            "src\\core\\camera\\camera_presets.py",
-            "src\\core\\camera\\camera_render_settings.py",
-            "src\\core\\camera\\camera_rig.py",
-            "src\\core\\camera\\camera_selection.py",
-            "src\\core\\camera\\camera_target.py",
-            "src\\core\\camera\\camera_viewport_adapter.py",
-            "src\\core\\camera\\render_manifest.py",
-            "src\\core\\camera\\render_output.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Characters",
-        "python_file_count": 13,
-        "files": [
-            "src\\core\\characters\\__init__.py",
-            "src\\core\\characters\\character_autofit_report.py",
-            "src\\core\\characters\\character_builder.py",
-            "src\\core\\characters\\character_export_preflight.py",
-            "src\\core\\characters\\character_export_transaction.py",
-            "src\\core\\characters\\character_override_package.py",
-            "src\\core\\characters\\character_rig_state.py",
-            "src\\core\\characters\\character_validation_report.py",
-            "src\\core\\characters\\creature_appearance.py",
-            "src\\core\\characters\\head_workflow.py",
-            "src\\core\\characters\\headless_body_workflow.py",
-            "src\\core\\characters\\kotor_constants.py",
-            "src\\core\\characters\\native_skeleton.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.IO.Conversion",
-        "python_file_count": 4,
-        "files": [
-            "src\\converters\\__init__.py",
-            "src\\converters\\blender_fbx_mesh_importer.py",
-            "src\\converters\\mesh_converter.py",
-            "src\\converters\\normal_map.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Diagnostics",
-        "python_file_count": 4,
-        "files": [
-            "src\\core\\diagnostics\\__init__.py",
-            "src\\core\\diagnostics\\diagnostics.py",
-            "src\\core\\diagnostics\\module_reference_safety.py",
-            "src\\core\\diagnostics\\validation_service.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.IO.Export",
-        "python_file_count": 5,
-        "files": [
-            "src\\core\\export\\__init__.py",
-            "src\\core\\export\\export_job.py",
-            "src\\core\\export\\gltf_importer.py",
-            "src\\core\\export\\unity_export_bridge.py",
-            "src\\core\\export\\unity_import_validator.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.IO.Formats",
-        "python_file_count": 4,
-        "files": [
-            "src\\formats\\__init__.py",
-            "src\\formats\\gff_reader.py",
-            "src\\formats\\gff_types.py",
-            "src\\formats\\gff_writer.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Game",
-        "python_file_count": 7,
-        "files": [
-            "src\\core\\game\\__init__.py",
-            "src\\core\\game\\game_library_ext.py",
-            "src\\core\\game\\import_normalisation.py",
-            "src\\core\\game\\kotor_install.py",
-            "src\\core\\game\\kotor_loader.py",
-            "src\\core\\game\\pykotor_bridge.py",
-            "src\\core\\game\\pykotor_mdl_io_fix.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.GameLibrary",
-        "python_file_count": 3,
-        "files": [
-            "src\\resources\\__init__.py",
-            "src\\resources\\game_detector.py",
-            "src\\resources\\game_library.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Geometry",
-        "python_file_count": 5,
-        "files": [
-            "src\\core\\geometry\\__init__.py",
-            "src\\core\\geometry\\lightsaber.py",
-            "src\\core\\geometry\\map_snap_tools.py",
-            "src\\core\\geometry\\model_data.py",
-            "src\\core\\geometry\\vertex_space.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.GUI.Helpers.Gizmo",
-        "python_file_count": 7,
-        "files": [
-            "src\\core\\gizmo\\__init__.py",
-            "src\\core\\gizmo\\gizmo_draw_data.py",
-            "src\\core\\gizmo\\gizmo_mode.py",
-            "src\\core\\gizmo\\gizmo_picker.py",
-            "src\\core\\gizmo\\gizmo_renderer.py",
-            "src\\core\\gizmo\\transform_controller.py",
-            "src\\core\\gizmo\\transform_gizmo.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Graphics",
-        "python_file_count": 5,
-        "files": [
-            "src\\core\\graphics\\__init__.py",
-            "src\\core\\graphics\\tex_atlas.py",
-            "src\\core\\graphics\\tpc.py",
-            "src\\core\\graphics\\tpc_render_utils.py",
-            "src\\core\\graphics\\txi.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.IO.FBX",
-        "python_file_count": 9,
-        "files": [
-            "src\\io\\__init__.py",
-            "src\\io\\fbx\\__init__.py",
-            "src\\io\\fbx\\fbx_diagnostics.py",
-            "src\\io\\fbx\\fbx_exporter.py",
-            "src\\io\\fbx\\fbx_importer.py",
-            "src\\io\\fbx\\fbx_scene_adapter.py",
-            "src\\io\\fbx\\fbx_sdk_loader.py",
-            "src\\io\\fbx\\fbx_sdk_paths.py",
-            "src\\io\\fbx\\fbx_sdk_setup.py"
-        ]
-    },
-    {
         "project": "GhostRigger.Core.Automation.IPC",
         "python_file_count": 3,
         "files": [
             "src\\ipc\\__init__.py",
             "src\\ipc\\client.py",
             "src\\ipc\\server.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Infrastructure",
-        "python_file_count": 2,
-        "files": [
-            "src\\infra\\__init__.py",
-            "src\\infra\\mcp_autostart.py"
         ]
     },
     {
@@ -375,404 +203,64 @@
         ]
     },
     {
-        "project": "GhostRigger.Core.Level",
-        "python_file_count": 11,
-        "files": [
-            "src\\core\\level\\__init__.py",
-            "src\\core\\level\\kmap_model.py",
-            "src\\core\\level\\kmap_project.py",
-            "src\\core\\level\\kmap_serializer.py",
-            "src\\core\\level\\kmap_validator.py",
-            "src\\core\\level\\level_export_bridge.py",
-            "src\\core\\level\\level_manifest.py",
-            "src\\core\\level\\level_module_instance.py",
-            "src\\core\\level\\level_room_instance.py",
-            "src\\core\\level\\level_scene.py",
-            "src\\core\\level\\level_texture_resolver.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Lighting",
-        "python_file_count": 35,
-        "files": [
-            "src\\core\\lighting\\__init__.py",
-            "src\\core\\lighting\\aurora_light_adapter.py",
-            "src\\core\\lighting\\light_export_bridge.py",
-            "src\\core\\lighting\\light_gizmo_renderer.py",
-            "src\\core\\lighting\\light_grouping.py",
-            "src\\core\\lighting\\light_manager.py",
-            "src\\core\\lighting\\light_model.py",
-            "src\\core\\lighting\\light_picker.py",
-            "src\\core\\lighting\\light_selection.py",
-            "src\\core\\lighting\\light_types.py",
-            "src\\core\\lighting\\lighting_rig_presets.py",
-            "src\\core\\lighting\\lightmap_bake_job.py",
-            "src\\core\\lighting\\lightmap_bake_settings.py",
-            "src\\core\\lighting\\lightmap_baker.py",
-            "src\\core\\lighting\\lightmap_compare.py",
-            "src\\core\\lighting\\lightmap_controller.py",
-            "src\\core\\lighting\\lightmap_denoiser.py",
-            "src\\core\\lighting\\lightmap_export_bridge.py",
-            "src\\core\\lighting\\lightmap_lighting_solver.py",
-            "src\\core\\lighting\\lightmap_manifest.py",
-            "src\\core\\lighting\\lightmap_output.py",
-            "src\\core\\lighting\\lightmap_padding.py",
-            "src\\core\\lighting\\lightmap_rasterizer.py",
-            "src\\core\\lighting\\lightmap_sampler.py",
-            "src\\core\\lighting\\lightmap_shadow_solver.py",
-            "src\\core\\lighting\\lightmap_uv_validator.py",
-            "src\\core\\lighting\\material_map_controller.py",
-            "src\\core\\lighting\\particle_emitter.py",
-            "src\\core\\lighting\\preview_cache.py",
-            "src\\core\\lighting\\raycast_backend.py",
-            "src\\core\\lighting\\render_data.py",
-            "src\\core\\lighting\\settings.py",
-            "src\\core\\lighting\\shader_complexity.py",
-            "src\\core\\lighting\\uv_atlas_generator.py",
-            "src\\core\\lighting\\uv_channel_info.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.IO.MDL",
+        "project": "GhostRigger.Core.Workflow.Autorig",
         "python_file_count": 6,
         "files": [
-            "src\\core\\mdl\\__init__.py",
-            "src\\core\\mdl\\ghostrigger_mdl_reader.py",
-            "src\\core\\mdl\\mdl_parser.py",
-            "src\\core\\mdl\\mdl_porter.py",
-            "src\\core\\mdl\\mdl_reader_wrapper.py",
-            "src\\core\\mdl\\mdl_writer.py"
+            "src\\autorig\\__init__.py",
+            "src\\autorig\\accurig.py",
+            "src\\autorig\\auto_rigger.py",
+            "src\\autorig\\cloth_rig.py",
+            "src\\autorig\\grig.py",
+            "src\\autorig\\retarget_engine.py"
         ]
     },
     {
-        "project": "GhostRigger.Core.Math",
-        "python_file_count": 6,
+        "project": "GhostRigger.Core.Math.Camera",
+        "python_file_count": 14,
         "files": [
-            "src\\math\\camera_math.py",
-            "src\\math\\frame_math.py",
-            "src\\math\\gpu_math.py",
-            "src\\math\\module_layout_math.py",
-            "src\\math\\transform_math.py",
-            "src\\math\\viewcube_math.py"
+            "src\\core\\camera\\__init__.py",
+            "src\\core\\camera\\arcball_camera.py",
+            "src\\core\\camera\\camera_controller.py",
+            "src\\core\\camera\\camera_manager.py",
+            "src\\core\\camera\\camera_model.py",
+            "src\\core\\camera\\camera_picker.py",
+            "src\\core\\camera\\camera_presets.py",
+            "src\\core\\camera\\camera_render_settings.py",
+            "src\\core\\camera\\camera_rig.py",
+            "src\\core\\camera\\camera_selection.py",
+            "src\\core\\camera\\camera_target.py",
+            "src\\core\\camera\\camera_viewport_adapter.py",
+            "src\\core\\camera\\render_manifest.py",
+            "src\\core\\camera\\render_output.py"
         ]
     },
     {
-        "project": "GhostRigger.Core.Measurement",
-        "python_file_count": 9,
+        "project": "GhostRigger.Core.Workflow.Characters",
+        "python_file_count": 13,
         "files": [
-            "src\\measurement\\__init__.py",
-            "src\\measurement\\angle_snap.py",
-            "src\\measurement\\dimension_calculator.py",
-            "src\\measurement\\grid_measurement.py",
-            "src\\measurement\\measurement_controller.py",
-            "src\\measurement\\measurement_formatter.py",
-            "src\\measurement\\percent_snap.py",
-            "src\\measurement\\unit_settings.py",
-            "src\\measurement\\unit_system.py"
+            "src\\core\\characters\\__init__.py",
+            "src\\core\\characters\\character_autofit_report.py",
+            "src\\core\\characters\\character_builder.py",
+            "src\\core\\characters\\character_export_preflight.py",
+            "src\\core\\characters\\character_export_transaction.py",
+            "src\\core\\characters\\character_override_package.py",
+            "src\\core\\characters\\character_rig_state.py",
+            "src\\core\\characters\\character_validation_report.py",
+            "src\\core\\characters\\creature_appearance.py",
+            "src\\core\\characters\\head_workflow.py",
+            "src\\core\\characters\\headless_body_workflow.py",
+            "src\\core\\characters\\kotor_constants.py",
+            "src\\core\\characters\\native_skeleton.py"
         ]
     },
     {
-        "project": "GhostRigger.Core.MeshTools",
-        "python_file_count": 16,
-        "files": [
-            "src\\mesh_tools\\__init__.py",
-            "src\\mesh_tools\\mesh_attach.py",
-            "src\\mesh_tools\\mesh_border.py",
-            "src\\mesh_tools\\mesh_bridge.py",
-            "src\\mesh_tools\\mesh_connect.py",
-            "src\\mesh_tools\\mesh_edit_types.py",
-            "src\\mesh_tools\\mesh_element.py",
-            "src\\mesh_tools\\mesh_history.py",
-            "src\\mesh_tools\\mesh_operations.py",
-            "src\\mesh_tools\\mesh_preservation.py",
-            "src\\mesh_tools\\mesh_selection_convert.py",
-            "src\\mesh_tools\\mesh_selection_modes.py",
-            "src\\mesh_tools\\mesh_selection_state.py",
-            "src\\mesh_tools\\mesh_topology.py",
-            "src\\mesh_tools\\mesh_validation.py",
-            "src\\mesh_tools\\mesh_weld.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Modules",
-        "python_file_count": 16,
-        "files": [
-            "src\\core\\modules\\__init__.py",
-            "src\\core\\modules\\area_wok_integration.py",
-            "src\\core\\modules\\custom_module_packager.py",
-            "src\\core\\modules\\module_blueprint_service.py",
-            "src\\core\\modules\\module_builder_service.py",
-            "src\\core\\modules\\module_categories.py",
-            "src\\core\\modules\\module_editor_controller.py",
-            "src\\core\\modules\\module_editor_model.py",
-            "src\\core\\modules\\module_format.py",
-            "src\\core\\modules\\module_hydration.py",
-            "src\\core\\modules\\module_layout_service.py",
-            "src\\core\\modules\\module_loader.py",
-            "src\\core\\modules\\module_object_inspector.py",
-            "src\\core\\modules\\module_porter_service.py",
-            "src\\core\\modules\\module_save_pipeline.py",
-            "src\\core\\modules\\module_walkmesh_service.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Ports",
-        "python_file_count": 6,
-        "files": [
-            "src\\core\\ports\\__init__.py",
-            "src\\core\\ports\\files.py",
-            "src\\core\\ports\\resources.py",
-            "src\\core\\ports\\scripts.py",
-            "src\\core\\ports\\textures.py",
-            "src\\core\\ports\\viewport_renderer.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Project",
+        "project": "GhostRigger.Runtime.Core.Diagnostics",
         "python_file_count": 4,
         "files": [
-            "src\\core\\project\\__init__.py",
-            "src\\core\\project\\ghostrigger_project.py",
-            "src\\core\\project\\project_validation.py",
-            "src\\core\\project\\resource_address.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Rendering",
-        "python_file_count": 39,
-        "files": [
-            "src\\core\\rendering\\__init__.py",
-            "src\\core\\rendering\\_native.py",
-            "src\\core\\rendering\\accel.py",
-            "src\\core\\rendering\\color_utils.py",
-            "src\\core\\rendering\\frame_core\\__init__.py",
-            "src\\core\\rendering\\frame_core\\colors.py",
-            "src\\core\\rendering\\frame_core\\dependencies.py",
-            "src\\core\\rendering\\frame_core\\diagnostics.py",
-            "src\\core\\rendering\\frame_core\\math_helpers.py",
-            "src\\core\\rendering\\frame_core\\mixin_imports.py",
-            "src\\core\\rendering\\frame_core\\rasterizer.py",
-            "src\\core\\rendering\\frame_core\\renderer.py",
-            "src\\core\\rendering\\frame_core\\renderer_geometry.py",
-            "src\\core\\rendering\\frame_core\\renderer_meshes.py",
-            "src\\core\\rendering\\frame_core\\renderer_overlays.py",
-            "src\\core\\rendering\\frame_core\\renderer_render_loop.py",
-            "src\\core\\rendering\\frame_core\\renderer_setup.py",
-            "src\\core\\rendering\\frame_core\\renderer_textures.py",
-            "src\\core\\rendering\\frame_core\\texture_cache.py",
-            "src\\core\\rendering\\gpu_debug_tables.py",
-            "src\\core\\rendering\\gpu_diagnostics_config.py",
-            "src\\core\\rendering\\gpu_diagnostics_records.py",
-            "src\\core\\rendering\\gpu_scene_helpers.py",
-            "src\\core\\rendering\\gpu_shaders.py",
-            "src\\core\\rendering\\gpu_vbo_layout.py",
-            "src\\core\\rendering\\hardware_info.py",
-            "src\\core\\rendering\\mesh_render_data.py",
-            "src\\core\\rendering\\picking.py",
-            "src\\core\\rendering\\renderer_backend.py",
-            "src\\core\\rendering\\renderer_capabilities.py",
-            "src\\core\\rendering\\renderer_interface.py",
-            "src\\core\\rendering\\renderer_performance.py",
-            "src\\core\\rendering\\renderer_profiler.py",
-            "src\\core\\rendering\\renderer_settings.py",
-            "src\\core\\rendering\\skeleton_render_data.py",
-            "src\\core\\rendering\\viewport_display.py",
-            "src\\core\\rendering\\viewport_navigation.py",
-            "src\\core\\rendering\\wgpu_shaders.py",
-            "src\\core\\rendering\\wgpu_shared.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Resources",
-        "python_file_count": 2,
-        "files": [
-            "src\\core\\resources\\__init__.py",
-            "src\\core\\resources\\game_resource_provider.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Retargeting",
-        "python_file_count": 46,
-        "files": [
-            "src\\core\\retargeting\\__init__.py",
-            "src\\core\\retargeting\\animation_injector.py",
-            "src\\core\\retargeting\\apose_compatibility.py",
-            "src\\core\\retargeting\\aurora_animation_writer.py",
-            "src\\core\\retargeting\\baker.py",
-            "src\\core\\retargeting\\blender_animation_injection.py",
-            "src\\core\\retargeting\\coordinate.py",
-            "src\\core\\retargeting\\coordinate_converter.py",
-            "src\\core\\retargeting\\coordinate_normalizer.py",
-            "src\\core\\retargeting\\fbx_backend.py",
-            "src\\core\\retargeting\\fbx_exporter.py",
-            "src\\core\\retargeting\\fbx_importer.py",
-            "src\\core\\retargeting\\kotor_source_animation.py",
-            "src\\core\\retargeting\\kotor_to_kotor_preview.py",
-            "src\\core\\retargeting\\kotor_to_unreal_preview.py",
-            "src\\core\\retargeting\\kotor_to_unreal_solver.py",
-            "src\\core\\retargeting\\mesh_loader.py",
-            "src\\core\\retargeting\\mesh_rebinder.py",
-            "src\\core\\retargeting\\mixamo_companion_mesh.py",
-            "src\\core\\retargeting\\mixamo_source_adapter.py",
-            "src\\core\\retargeting\\reference_pose.py",
-            "src\\core\\retargeting\\retarget_calibration.py",
-            "src\\core\\retargeting\\retarget_frame_audit.py",
-            "src\\core\\retargeting\\retarget_frames.py",
-            "src\\core\\retargeting\\retarget_mapping.py",
-            "src\\core\\retargeting\\retarget_modes.py",
-            "src\\core\\retargeting\\retarget_output_naming.py",
-            "src\\core\\retargeting\\retarget_preview.py",
-            "src\\core\\retargeting\\retarget_preview_export.py",
-            "src\\core\\retargeting\\retarget_profile.py",
-            "src\\core\\retargeting\\retarget_solve_audit.py",
-            "src\\core\\retargeting\\retarget_solver.py",
-            "src\\core\\retargeting\\retarget_workbench_readiness.py",
-            "src\\core\\retargeting\\reverse_renamer.py",
-            "src\\core\\retargeting\\root_motion.py",
-            "src\\core\\retargeting\\sampler.py",
-            "src\\core\\retargeting\\skeleton_aligner.py",
-            "src\\core\\retargeting\\skeleton_renamer.py",
-            "src\\core\\retargeting\\source_animation.py",
-            "src\\core\\retargeting\\source_skeleton_audit.py",
-            "src\\core\\retargeting\\target_skeleton_audit.py",
-            "src\\core\\retargeting\\test_utils.py",
-            "src\\core\\retargeting\\ue5_source_adapter.py",
-            "src\\core\\retargeting\\ue5_to_aurora_r3b_preview.py",
-            "src\\core\\retargeting\\ue_fbx_exporter.py",
-            "src\\core\\retargeting\\unreal_target_skeleton.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Scene",
-        "python_file_count": 16,
-        "files": [
-            "src\\core\\scene\\__init__.py",
-            "src\\core\\scene\\_native.py",
-            "src\\core\\scene\\axis_mode.py",
-            "src\\core\\scene\\kmax_scene.py",
-            "src\\core\\scene\\kmax_scene_manager.py",
-            "src\\core\\scene\\kmax_serializer.py",
-            "src\\core\\scene\\kmax_validator.py",
-            "src\\core\\scene\\lyt_room_graph.py",
-            "src\\core\\scene\\module_scene_import.py",
-            "src\\core\\scene\\node_identity.py",
-            "src\\core\\scene\\scene_manager.py",
-            "src\\core\\scene\\scene_manifest.py",
-            "src\\core\\scene\\scene_object.py",
-            "src\\core\\scene\\scene_object_instance.py",
-            "src\\core\\scene\\scene_resource_ref.py",
-            "src\\core\\scene\\vis_editor.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Tools.SequenceEditor",
-        "python_file_count": 27,
-        "files": [
-            "src\\sequence\\__init__.py",
-            "src\\sequence\\sequence_asset.py",
-            "src\\sequence\\sequence_binding.py",
-            "src\\sequence\\sequence_clipboard.py",
-            "src\\sequence\\sequence_evaluator.py",
-            "src\\sequence\\sequence_interpolation.py",
-            "src\\sequence\\sequence_keyframe.py",
-            "src\\sequence\\sequence_manager.py",
-            "src\\sequence\\sequence_model.py",
-            "src\\sequence\\sequence_playback.py",
-            "src\\sequence\\sequence_render.py",
-            "src\\sequence\\sequence_serialization.py",
-            "src\\sequence\\sequence_track.py",
-            "src\\sequence\\sequence_undo.py",
-            "src\\sequence\\tracks\\__init__.py",
-            "src\\sequence\\tracks\\audio_track.py",
-            "src\\sequence\\tracks\\camera_cut_track.py",
-            "src\\sequence\\tracks\\camera_property_track.py",
-            "src\\sequence\\tracks\\character_track.py",
-            "src\\sequence\\tracks\\event_track.py",
-            "src\\sequence\\tracks\\light_property_track.py",
-            "src\\sequence\\tracks\\material_track.py",
-            "src\\sequence\\tracks\\rig_track.py",
-            "src\\sequence\\tracks\\sub_sequence_track.py",
-            "src\\sequence\\tracks\\transform_property_track.py",
-            "src\\sequence\\tracks\\transform_track.py",
-            "src\\sequence\\tracks\\visibility_track.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Skeleton",
-        "python_file_count": 2,
-        "files": [
-            "src\\core\\skeleton\\__init__.py",
-            "src\\core\\skeleton\\skeleton_builder.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Special",
-        "python_file_count": 5,
-        "files": [
-            "src\\core\\special\\__init__.py",
-            "src\\core\\special\\hooks.py",
-            "src\\core\\special\\lip_reader.py",
-            "src\\core\\special\\render_constants.py",
-            "src\\core\\special\\unity_malak_smoke.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Templates",
-        "python_file_count": 4,
-        "files": [
-            "src\\core\\templates\\__init__.py",
-            "src\\core\\templates\\_native.py",
-            "src\\core\\templates\\template_builder.py",
-            "src\\core\\templates\\twoda.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Unreal",
-        "python_file_count": 3,
-        "files": [
-            "src\\unreal\\__init__.py",
-            "src\\unreal\\animation_retargeting.py",
-            "src\\unreal\\quinn.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Validation",
-        "python_file_count": 8,
-        "files": [
-            "src\\core\\validation\\__init__.py",
-            "src\\core\\validation\\_native.py",
-            "src\\core\\validation\\animation_block_validator.py",
-            "src\\core\\validation\\animation_roundtrip_validator.py",
-            "src\\core\\validation\\capture_specs.py",
-            "src\\core\\validation\\validation_adapters.py",
-            "src\\core\\validation\\validation_bus.py",
-            "src\\core\\validation\\viewport_validator.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Walkmesh",
-        "python_file_count": 3,
-        "files": [
-            "src\\core\\walkmesh\\__init__.py",
-            "src\\core\\walkmesh\\walkmesh_editor.py",
-            "src\\core\\walkmesh\\walkmesh_renderer.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Workbench",
-        "python_file_count": 2,
-        "files": [
-            "src\\workbench\\__init__.py",
-            "src\\workbench\\ue5_rig_export.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 3,
-        "files": [
-            "src\\core\\workflow\\__init__.py",
-            "src\\core\\workflow\\_workflow_base.py",
-            "src\\core\\workflow\\composite_workflow.py"
+            "src\\core\\diagnostics\\__init__.py",
+            "src\\core\\diagnostics\\diagnostics.py",
+            "src\\core\\diagnostics\\module_reference_safety.py",
+            "src\\core\\diagnostics\\validation_service.py"
         ]
     },
     {
@@ -815,20 +303,6 @@
             "src\\gui\\dialogs\\qt_settings_dialog.py",
             "src\\gui\\dialogs\\uv_geometry_preview_window.py",
             "src\\gui\\dialogs\\uv_preview_window.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Core.GUI.Helpers.GizmoDisplay",
-        "python_file_count": 8,
-        "files": [
-            "src\\gui\\gizmo\\__init__.py",
-            "src\\gui\\gizmo\\gizmo_draw_data.py",
-            "src\\gui\\gizmo\\gizmo_mode.py",
-            "src\\gui\\gizmo\\gizmo_picker.py",
-            "src\\gui\\gizmo\\gizmo_renderer.py",
-            "src\\gui\\gizmo\\transform_controller.py",
-            "src\\gui\\gizmo\\transform_gizmo.py",
-            "src\\gui\\gizmo\\transform_math.py"
         ]
     },
     {
@@ -891,7 +365,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display.Panels",
-        "python_file_count": 43,
+        "python_file_count": 45,
         "files": [
             "src\\gui\\panels\\__init__.py",
             "src\\gui\\panels\\adjust_pivot_panel.py",
@@ -906,9 +380,11 @@
             "src\\gui\\panels\\module_editor\\module_editor_toolbar.py",
             "src\\gui\\panels\\module_editor\\module_editor_viewport_panel.py",
             "src\\gui\\panels\\module_editor\\porter_tab.py",
+            "src\\gui\\panels\\module_editor\\readiness_panel.py",
             "src\\gui\\panels\\module_editor\\rooms_tab.py",
             "src\\gui\\panels\\module_editor\\validation_panel.py",
             "src\\gui\\panels\\module_editor\\walkmesh_tab.py",
+            "src\\gui\\panels\\module_editor\\workflow_panel.py",
             "src\\gui\\panels\\qt_animation_panel.py",
             "src\\gui\\panels\\qt_body_attachment_panel.py",
             "src\\gui\\panels\\qt_bottom_strip.py",
@@ -1102,33 +578,195 @@
         ]
     },
     {
-        "project": "GhostRigger.Native.Core.Diagnostics",
+        "project": "GhostRigger.Core.GUI.Helpers.Gizmo",
         "python_file_count": 7,
         "files": [
-            "src\\adapters\\rendering\\gpu_diagnostics_exports.py",
-            "src\\core\\diagnostics\\__init__.py",
-            "src\\core\\diagnostics\\diagnostics.py",
-            "src\\core\\diagnostics\\module_reference_safety.py",
-            "src\\core\\diagnostics\\validation_service.py",
-            "src\\core\\rendering\\gpu_diagnostics_config.py",
-            "src\\core\\rendering\\gpu_diagnostics_records.py"
+            "src\\core\\gizmo\\__init__.py",
+            "src\\core\\gizmo\\gizmo_draw_data.py",
+            "src\\core\\gizmo\\gizmo_mode.py",
+            "src\\core\\gizmo\\gizmo_picker.py",
+            "src\\core\\gizmo\\gizmo_renderer.py",
+            "src\\core\\gizmo\\transform_controller.py",
+            "src\\core\\gizmo\\transform_gizmo.py"
         ]
     },
     {
-        "project": "GhostRigger.Native.Core.Foundation",
-        "python_file_count": 3,
-        "files": [
-            "src\\adapters\\__init__.py",
-            "src\\adapters\\native_core\\__init__.py",
-            "src\\adapters\\native_core\\package_registry.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Native.Core.Math",
+        "project": "GhostRigger.Core.GUI.Display.Overlays.Gizmo",
         "python_file_count": 8,
         "files": [
-            "src\\core\\rendering\\frame_core\\math_helpers.py",
-            "src\\gui\\gizmo\\transform_math.py",
+            "src\\gui\\gizmo\\__init__.py",
+            "src\\gui\\gizmo\\gizmo_draw_data.py",
+            "src\\gui\\gizmo\\gizmo_mode.py",
+            "src\\gui\\gizmo\\gizmo_picker.py",
+            "src\\gui\\gizmo\\gizmo_renderer.py",
+            "src\\gui\\gizmo\\transform_controller.py",
+            "src\\gui\\gizmo\\transform_gizmo.py",
+            "src\\gui\\gizmo\\transform_math.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Resources.Game",
+        "python_file_count": 7,
+        "files": [
+            "src\\core\\game\\__init__.py",
+            "src\\core\\game\\game_library_ext.py",
+            "src\\core\\game\\import_normalisation.py",
+            "src\\core\\game\\kotor_install.py",
+            "src\\core\\game\\kotor_loader.py",
+            "src\\core\\game\\pykotor_bridge.py",
+            "src\\core\\game\\pykotor_mdl_io_fix.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Math.Geometry",
+        "python_file_count": 5,
+        "files": [
+            "src\\core\\geometry\\__init__.py",
+            "src\\core\\geometry\\lightsaber.py",
+            "src\\core\\geometry\\map_snap_tools.py",
+            "src\\core\\geometry\\model_data.py",
+            "src\\core\\geometry\\vertex_space.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Rendering.Textures",
+        "python_file_count": 5,
+        "files": [
+            "src\\core\\graphics\\__init__.py",
+            "src\\core\\graphics\\tex_atlas.py",
+            "src\\core\\graphics\\tpc.py",
+            "src\\core\\graphics\\tpc_render_utils.py",
+            "src\\core\\graphics\\txi.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.IO.Conversion",
+        "python_file_count": 4,
+        "files": [
+            "src\\converters\\__init__.py",
+            "src\\converters\\blender_fbx_mesh_importer.py",
+            "src\\converters\\mesh_converter.py",
+            "src\\converters\\normal_map.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.IO.Export",
+        "python_file_count": 5,
+        "files": [
+            "src\\core\\export\\__init__.py",
+            "src\\core\\export\\export_job.py",
+            "src\\core\\export\\gltf_importer.py",
+            "src\\core\\export\\unity_export_bridge.py",
+            "src\\core\\export\\unity_import_validator.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.IO.FBX",
+        "python_file_count": 9,
+        "files": [
+            "src\\io\\__init__.py",
+            "src\\io\\fbx\\__init__.py",
+            "src\\io\\fbx\\fbx_diagnostics.py",
+            "src\\io\\fbx\\fbx_exporter.py",
+            "src\\io\\fbx\\fbx_importer.py",
+            "src\\io\\fbx\\fbx_scene_adapter.py",
+            "src\\io\\fbx\\fbx_sdk_loader.py",
+            "src\\io\\fbx\\fbx_sdk_paths.py",
+            "src\\io\\fbx\\fbx_sdk_setup.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.IO.MDL",
+        "python_file_count": 6,
+        "files": [
+            "src\\core\\mdl\\__init__.py",
+            "src\\core\\mdl\\ghostrigger_mdl_reader.py",
+            "src\\core\\mdl\\mdl_parser.py",
+            "src\\core\\mdl\\mdl_porter.py",
+            "src\\core\\mdl\\mdl_reader_wrapper.py",
+            "src\\core\\mdl\\mdl_writer.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.IO.Serialization.GFF",
+        "python_file_count": 4,
+        "files": [
+            "src\\formats\\__init__.py",
+            "src\\formats\\gff_reader.py",
+            "src\\formats\\gff_types.py",
+            "src\\formats\\gff_writer.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Runtime.Core.Infrastructure",
+        "python_file_count": 2,
+        "files": [
+            "src\\infra\\__init__.py",
+            "src\\infra\\mcp_autostart.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Scene.Level",
+        "python_file_count": 11,
+        "files": [
+            "src\\core\\level\\__init__.py",
+            "src\\core\\level\\kmap_model.py",
+            "src\\core\\level\\kmap_project.py",
+            "src\\core\\level\\kmap_serializer.py",
+            "src\\core\\level\\kmap_validator.py",
+            "src\\core\\level\\level_export_bridge.py",
+            "src\\core\\level\\level_manifest.py",
+            "src\\core\\level\\level_module_instance.py",
+            "src\\core\\level\\level_room_instance.py",
+            "src\\core\\level\\level_scene.py",
+            "src\\core\\level\\level_texture_resolver.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Rendering.Lighting",
+        "python_file_count": 35,
+        "files": [
+            "src\\core\\lighting\\__init__.py",
+            "src\\core\\lighting\\aurora_light_adapter.py",
+            "src\\core\\lighting\\light_export_bridge.py",
+            "src\\core\\lighting\\light_gizmo_renderer.py",
+            "src\\core\\lighting\\light_grouping.py",
+            "src\\core\\lighting\\light_manager.py",
+            "src\\core\\lighting\\light_model.py",
+            "src\\core\\lighting\\light_picker.py",
+            "src\\core\\lighting\\light_selection.py",
+            "src\\core\\lighting\\light_types.py",
+            "src\\core\\lighting\\lighting_rig_presets.py",
+            "src\\core\\lighting\\lightmap_bake_job.py",
+            "src\\core\\lighting\\lightmap_bake_settings.py",
+            "src\\core\\lighting\\lightmap_baker.py",
+            "src\\core\\lighting\\lightmap_compare.py",
+            "src\\core\\lighting\\lightmap_controller.py",
+            "src\\core\\lighting\\lightmap_denoiser.py",
+            "src\\core\\lighting\\lightmap_export_bridge.py",
+            "src\\core\\lighting\\lightmap_lighting_solver.py",
+            "src\\core\\lighting\\lightmap_manifest.py",
+            "src\\core\\lighting\\lightmap_output.py",
+            "src\\core\\lighting\\lightmap_padding.py",
+            "src\\core\\lighting\\lightmap_rasterizer.py",
+            "src\\core\\lighting\\lightmap_sampler.py",
+            "src\\core\\lighting\\lightmap_shadow_solver.py",
+            "src\\core\\lighting\\lightmap_uv_validator.py",
+            "src\\core\\lighting\\material_map_controller.py",
+            "src\\core\\lighting\\particle_emitter.py",
+            "src\\core\\lighting\\preview_cache.py",
+            "src\\core\\lighting\\raycast_backend.py",
+            "src\\core\\lighting\\render_data.py",
+            "src\\core\\lighting\\settings.py",
+            "src\\core\\lighting\\shader_complexity.py",
+            "src\\core\\lighting\\uv_atlas_generator.py",
+            "src\\core\\lighting\\uv_channel_info.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Math",
+        "python_file_count": 6,
+        "files": [
             "src\\math\\camera_math.py",
             "src\\math\\frame_math.py",
             "src\\math\\gpu_math.py",
@@ -1138,7 +776,160 @@
         ]
     },
     {
-        "project": "GhostRigger.Graphics.Renderer.Backend.D3D12",
+        "project": "GhostRigger.Core.Math.Measurement",
+        "python_file_count": 9,
+        "files": [
+            "src\\measurement\\__init__.py",
+            "src\\measurement\\angle_snap.py",
+            "src\\measurement\\dimension_calculator.py",
+            "src\\measurement\\grid_measurement.py",
+            "src\\measurement\\measurement_controller.py",
+            "src\\measurement\\measurement_formatter.py",
+            "src\\measurement\\percent_snap.py",
+            "src\\measurement\\unit_settings.py",
+            "src\\measurement\\unit_system.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Tools.Mesh",
+        "python_file_count": 16,
+        "files": [
+            "src\\mesh_tools\\__init__.py",
+            "src\\mesh_tools\\mesh_attach.py",
+            "src\\mesh_tools\\mesh_border.py",
+            "src\\mesh_tools\\mesh_bridge.py",
+            "src\\mesh_tools\\mesh_connect.py",
+            "src\\mesh_tools\\mesh_edit_types.py",
+            "src\\mesh_tools\\mesh_element.py",
+            "src\\mesh_tools\\mesh_history.py",
+            "src\\mesh_tools\\mesh_operations.py",
+            "src\\mesh_tools\\mesh_preservation.py",
+            "src\\mesh_tools\\mesh_selection_convert.py",
+            "src\\mesh_tools\\mesh_selection_modes.py",
+            "src\\mesh_tools\\mesh_selection_state.py",
+            "src\\mesh_tools\\mesh_topology.py",
+            "src\\mesh_tools\\mesh_validation.py",
+            "src\\mesh_tools\\mesh_weld.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Scene.Modules",
+        "python_file_count": 43,
+        "files": [
+            "src\\core\\modules\\__init__.py",
+            "src\\core\\modules\\area_wok_integration.py",
+            "src\\core\\modules\\authored_gameplay_marker_geometry.py",
+            "src\\core\\modules\\authored_gameplay_palette.py",
+            "src\\core\\modules\\authored_gameplay_preview.py",
+            "src\\core\\modules\\authored_module_export.py",
+            "src\\core\\modules\\authored_module_kmap_bridge.py",
+            "src\\core\\modules\\authored_module_layout.py",
+            "src\\core\\modules\\authored_module_lighting.py",
+            "src\\core\\modules\\authored_module_metadata.py",
+            "src\\core\\modules\\authored_module_objects.py",
+            "src\\core\\modules\\authored_module_pathing.py",
+            "src\\core\\modules\\authored_module_placements.py",
+            "src\\core\\modules\\authored_module_project.py",
+            "src\\core\\modules\\authored_module_readiness.py",
+            "src\\core\\modules\\authored_room_composition.py",
+            "src\\core\\modules\\authored_room_floorplan.py",
+            "src\\core\\modules\\authored_room_geometry.py",
+            "src\\core\\modules\\authored_room_materials.py",
+            "src\\core\\modules\\authored_room_operations.py",
+            "src\\core\\modules\\authored_room_outline_geometry.py",
+            "src\\core\\modules\\authored_room_presets.py",
+            "src\\core\\modules\\authored_room_primitives.py",
+            "src\\core\\modules\\authored_room_style.py",
+            "src\\core\\modules\\authored_terrain_builder.py",
+            "src\\core\\modules\\authored_terrain_walkability_overlay.py",
+            "src\\core\\modules\\authored_walkmesh_boundaries.py",
+            "src\\core\\modules\\authored_walkmesh_surfaces.py",
+            "src\\core\\modules\\custom_module_packager.py",
+            "src\\core\\modules\\dev_module_smoke.py",
+            "src\\core\\modules\\module_blueprint_service.py",
+            "src\\core\\modules\\module_builder_service.py",
+            "src\\core\\modules\\module_categories.py",
+            "src\\core\\modules\\module_editor_controller.py",
+            "src\\core\\modules\\module_editor_model.py",
+            "src\\core\\modules\\module_format.py",
+            "src\\core\\modules\\module_hydration.py",
+            "src\\core\\modules\\module_layout_service.py",
+            "src\\core\\modules\\module_loader.py",
+            "src\\core\\modules\\module_object_inspector.py",
+            "src\\core\\modules\\module_porter_service.py",
+            "src\\core\\modules\\module_save_pipeline.py",
+            "src\\core\\modules\\module_walkmesh_service.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Rendering.Ports",
+        "python_file_count": 6,
+        "files": [
+            "src\\core\\ports\\__init__.py",
+            "src\\core\\ports\\files.py",
+            "src\\core\\ports\\resources.py",
+            "src\\core\\ports\\scripts.py",
+            "src\\core\\ports\\textures.py",
+            "src\\core\\ports\\viewport_renderer.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Project",
+        "python_file_count": 4,
+        "files": [
+            "src\\core\\project\\__init__.py",
+            "src\\core\\project\\ghostrigger_project.py",
+            "src\\core\\project\\project_validation.py",
+            "src\\core\\project\\resource_address.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Rendering",
+        "python_file_count": 39,
+        "files": [
+            "src\\core\\rendering\\__init__.py",
+            "src\\core\\rendering\\_native.py",
+            "src\\core\\rendering\\accel.py",
+            "src\\core\\rendering\\color_utils.py",
+            "src\\core\\rendering\\frame_core\\__init__.py",
+            "src\\core\\rendering\\frame_core\\colors.py",
+            "src\\core\\rendering\\frame_core\\dependencies.py",
+            "src\\core\\rendering\\frame_core\\diagnostics.py",
+            "src\\core\\rendering\\frame_core\\math_helpers.py",
+            "src\\core\\rendering\\frame_core\\mixin_imports.py",
+            "src\\core\\rendering\\frame_core\\rasterizer.py",
+            "src\\core\\rendering\\frame_core\\renderer.py",
+            "src\\core\\rendering\\frame_core\\renderer_geometry.py",
+            "src\\core\\rendering\\frame_core\\renderer_meshes.py",
+            "src\\core\\rendering\\frame_core\\renderer_overlays.py",
+            "src\\core\\rendering\\frame_core\\renderer_render_loop.py",
+            "src\\core\\rendering\\frame_core\\renderer_setup.py",
+            "src\\core\\rendering\\frame_core\\renderer_textures.py",
+            "src\\core\\rendering\\frame_core\\texture_cache.py",
+            "src\\core\\rendering\\gpu_debug_tables.py",
+            "src\\core\\rendering\\gpu_diagnostics_config.py",
+            "src\\core\\rendering\\gpu_diagnostics_records.py",
+            "src\\core\\rendering\\gpu_scene_helpers.py",
+            "src\\core\\rendering\\gpu_shaders.py",
+            "src\\core\\rendering\\gpu_vbo_layout.py",
+            "src\\core\\rendering\\hardware_info.py",
+            "src\\core\\rendering\\mesh_render_data.py",
+            "src\\core\\rendering\\picking.py",
+            "src\\core\\rendering\\renderer_backend.py",
+            "src\\core\\rendering\\renderer_capabilities.py",
+            "src\\core\\rendering\\renderer_interface.py",
+            "src\\core\\rendering\\renderer_performance.py",
+            "src\\core\\rendering\\renderer_profiler.py",
+            "src\\core\\rendering\\renderer_settings.py",
+            "src\\core\\rendering\\skeleton_render_data.py",
+            "src\\core\\rendering\\viewport_display.py",
+            "src\\core\\rendering\\viewport_navigation.py",
+            "src\\core\\rendering\\wgpu_shaders.py",
+            "src\\core\\rendering\\wgpu_shared.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Rendering.Backends.D3D12",
         "python_file_count": 10,
         "files": [
             "src\\adapters\\rendering\\direct3d_renderer.py",
@@ -1154,7 +945,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Graphics.Renderer.Backend.ModernGL",
+        "project": "GhostRigger.Core.Rendering.Backends.ModernGL",
         "python_file_count": 10,
         "files": [
             "src\\adapters\\gpu\\moderngl_context.py",
@@ -1170,7 +961,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Graphics.Renderer.Backend.Null",
+        "project": "GhostRigger.Core.Rendering.Backends.Null",
         "python_file_count": 4,
         "files": [
             "src\\adapters\\rendering\\null_renderer.py",
@@ -1180,7 +971,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Graphics.Renderer.Backend.PyGFX",
+        "project": "GhostRigger.Core.Rendering.Backends.PyGFX",
         "python_file_count": 20,
         "files": [
             "src\\adapters\\rendering\\pygfx_core\\__init__.py",
@@ -1206,7 +997,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Graphics.Renderer.Shared.Contracts",
+        "project": "GhostRigger.Core.Rendering.Contracts",
         "python_file_count": 8,
         "files": [
             "src\\adapters\\rendering\\mesh_render_data.py",
@@ -1220,67 +1011,123 @@
         ]
     },
     {
-        "project": "GhostRigger.Runtime.Core.Host",
+        "project": "GhostRigger.Core.Resources",
+        "python_file_count": 2,
+        "files": [
+            "src\\core\\resources\\__init__.py",
+            "src\\core\\resources\\game_resource_provider.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Resources.GameLibrary",
         "python_file_count": 3,
         "files": [
-            "src\\__init__.py",
-            "src\\core\\__init__.py",
-            "src\\core\\qt_core.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Runtime.Shared.Contracts",
-        "python_file_count": 12,
-        "files": [
-            "src\\adapters\\rendering\\native_core\\__init__.py",
-            "src\\adapters\\rendering\\native_core\\binding.py",
-            "src\\adapters\\rendering\\native_core\\renderer.py",
-            "src\\core\\ports\\__init__.py",
-            "src\\core\\ports\\files.py",
-            "src\\core\\ports\\resources.py",
-            "src\\core\\ports\\scripts.py",
-            "src\\core\\ports\\textures.py",
-            "src\\core\\ports\\viewport_renderer.py",
-            "src\\core\\rendering\\renderer_backend.py",
-            "src\\core\\rendering\\renderer_capabilities.py",
-            "src\\core\\rendering\\renderer_interface.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Runtime.Shared.Descriptors",
-        "python_file_count": 6,
-        "files": [
-            "src\\adapters\\rendering\\mesh_render_data.py",
-            "src\\core\\project\\resource_address.py",
-            "src\\core\\rendering\\mesh_render_data.py",
-            "src\\core\\rendering\\skeleton_render_data.py",
-            "src\\core\\scene\\scene_object.py",
-            "src\\core\\scene\\scene_object_instance.py"
-        ]
-    },
-    {
-        "project": "GhostRigger.Runtime.Shared.Resources",
-        "python_file_count": 9,
-        "files": [
-            "src\\core\\assets\\override_layer.py",
-            "src\\core\\assets\\resource_manager.py",
-            "src\\core\\ports\\resources.py",
-            "src\\core\\ports\\textures.py",
-            "src\\core\\resources\\__init__.py",
-            "src\\core\\resources\\game_resource_provider.py",
             "src\\resources\\__init__.py",
             "src\\resources\\game_detector.py",
             "src\\resources\\game_library.py"
         ]
     },
     {
-        "project": "GhostRigger.Core.Tools.BAS",
+        "project": "GhostRigger.Core.Workflow.Retargeting",
+        "python_file_count": 46,
+        "files": [
+            "src\\core\\retargeting\\__init__.py",
+            "src\\core\\retargeting\\animation_injector.py",
+            "src\\core\\retargeting\\apose_compatibility.py",
+            "src\\core\\retargeting\\aurora_animation_writer.py",
+            "src\\core\\retargeting\\baker.py",
+            "src\\core\\retargeting\\blender_animation_injection.py",
+            "src\\core\\retargeting\\coordinate.py",
+            "src\\core\\retargeting\\coordinate_converter.py",
+            "src\\core\\retargeting\\coordinate_normalizer.py",
+            "src\\core\\retargeting\\fbx_backend.py",
+            "src\\core\\retargeting\\fbx_exporter.py",
+            "src\\core\\retargeting\\fbx_importer.py",
+            "src\\core\\retargeting\\kotor_source_animation.py",
+            "src\\core\\retargeting\\kotor_to_kotor_preview.py",
+            "src\\core\\retargeting\\kotor_to_unreal_preview.py",
+            "src\\core\\retargeting\\kotor_to_unreal_solver.py",
+            "src\\core\\retargeting\\mesh_loader.py",
+            "src\\core\\retargeting\\mesh_rebinder.py",
+            "src\\core\\retargeting\\mixamo_companion_mesh.py",
+            "src\\core\\retargeting\\mixamo_source_adapter.py",
+            "src\\core\\retargeting\\reference_pose.py",
+            "src\\core\\retargeting\\retarget_calibration.py",
+            "src\\core\\retargeting\\retarget_frame_audit.py",
+            "src\\core\\retargeting\\retarget_frames.py",
+            "src\\core\\retargeting\\retarget_mapping.py",
+            "src\\core\\retargeting\\retarget_modes.py",
+            "src\\core\\retargeting\\retarget_output_naming.py",
+            "src\\core\\retargeting\\retarget_preview.py",
+            "src\\core\\retargeting\\retarget_preview_export.py",
+            "src\\core\\retargeting\\retarget_profile.py",
+            "src\\core\\retargeting\\retarget_solve_audit.py",
+            "src\\core\\retargeting\\retarget_solver.py",
+            "src\\core\\retargeting\\retarget_workbench_readiness.py",
+            "src\\core\\retargeting\\reverse_renamer.py",
+            "src\\core\\retargeting\\root_motion.py",
+            "src\\core\\retargeting\\sampler.py",
+            "src\\core\\retargeting\\skeleton_aligner.py",
+            "src\\core\\retargeting\\skeleton_renamer.py",
+            "src\\core\\retargeting\\source_animation.py",
+            "src\\core\\retargeting\\source_skeleton_audit.py",
+            "src\\core\\retargeting\\target_skeleton_audit.py",
+            "src\\core\\retargeting\\test_utils.py",
+            "src\\core\\retargeting\\ue5_source_adapter.py",
+            "src\\core\\retargeting\\ue5_to_aurora_r3b_preview.py",
+            "src\\core\\retargeting\\ue_fbx_exporter.py",
+            "src\\core\\retargeting\\unreal_target_skeleton.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Scene",
+        "python_file_count": 16,
+        "files": [
+            "src\\core\\scene\\__init__.py",
+            "src\\core\\scene\\_native.py",
+            "src\\core\\scene\\axis_mode.py",
+            "src\\core\\scene\\kmax_scene.py",
+            "src\\core\\scene\\kmax_scene_manager.py",
+            "src\\core\\scene\\kmax_serializer.py",
+            "src\\core\\scene\\kmax_validator.py",
+            "src\\core\\scene\\lyt_room_graph.py",
+            "src\\core\\scene\\module_scene_import.py",
+            "src\\core\\scene\\node_identity.py",
+            "src\\core\\scene\\scene_manager.py",
+            "src\\core\\scene\\scene_manifest.py",
+            "src\\core\\scene\\scene_object.py",
+            "src\\core\\scene\\scene_object_instance.py",
+            "src\\core\\scene\\scene_resource_ref.py",
+            "src\\core\\scene\\vis_editor.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Scene.Skeleton",
+        "python_file_count": 2,
+        "files": [
+            "src\\core\\skeleton\\__init__.py",
+            "src\\core\\skeleton\\skeleton_builder.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Tools.Special",
+        "python_file_count": 5,
+        "files": [
+            "src\\core\\special\\__init__.py",
+            "src\\core\\special\\hooks.py",
+            "src\\core\\special\\lip_reader.py",
+            "src\\core\\special\\render_constants.py",
+            "src\\core\\special\\unity_malak_smoke.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Formats.TwoDA",
         "python_file_count": 4,
         "files": [
-            "src\\systems\\bas\\attachment_alignment.py",
-            "src\\systems\\bas\\head_resolution.py",
-            "src\\systems\\bas\\model_recipe.py",
-            "src\\systems\\bas\\preview_composer.py"
+            "src\\core\\templates\\__init__.py",
+            "src\\core\\templates\\_native.py",
+            "src\\core\\templates\\template_builder.py",
+            "src\\core\\templates\\twoda.py"
         ]
     },
     {
@@ -1469,7 +1316,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools.ModuleMeshes",
-        "python_file_count": 43,
+        "python_file_count": 72,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -1484,7 +1331,34 @@
             "src\\core\\level\\level_texture_resolver.py",
             "src\\core\\modules\\__init__.py",
             "src\\core\\modules\\area_wok_integration.py",
+            "src\\core\\modules\\authored_gameplay_marker_geometry.py",
+            "src\\core\\modules\\authored_gameplay_palette.py",
+            "src\\core\\modules\\authored_gameplay_preview.py",
+            "src\\core\\modules\\authored_module_export.py",
+            "src\\core\\modules\\authored_module_kmap_bridge.py",
+            "src\\core\\modules\\authored_module_layout.py",
+            "src\\core\\modules\\authored_module_lighting.py",
+            "src\\core\\modules\\authored_module_metadata.py",
+            "src\\core\\modules\\authored_module_objects.py",
+            "src\\core\\modules\\authored_module_pathing.py",
+            "src\\core\\modules\\authored_module_placements.py",
+            "src\\core\\modules\\authored_module_project.py",
+            "src\\core\\modules\\authored_module_readiness.py",
+            "src\\core\\modules\\authored_room_composition.py",
+            "src\\core\\modules\\authored_room_floorplan.py",
+            "src\\core\\modules\\authored_room_geometry.py",
+            "src\\core\\modules\\authored_room_materials.py",
+            "src\\core\\modules\\authored_room_operations.py",
+            "src\\core\\modules\\authored_room_outline_geometry.py",
+            "src\\core\\modules\\authored_room_presets.py",
+            "src\\core\\modules\\authored_room_primitives.py",
+            "src\\core\\modules\\authored_room_style.py",
+            "src\\core\\modules\\authored_terrain_builder.py",
+            "src\\core\\modules\\authored_terrain_walkability_overlay.py",
+            "src\\core\\modules\\authored_walkmesh_boundaries.py",
+            "src\\core\\modules\\authored_walkmesh_surfaces.py",
             "src\\core\\modules\\custom_module_packager.py",
+            "src\\core\\modules\\dev_module_smoke.py",
             "src\\core\\modules\\module_blueprint_service.py",
             "src\\core\\modules\\module_builder_service.py",
             "src\\core\\modules\\module_categories.py",
@@ -1511,9 +1385,11 @@
             "src\\gui\\panels\\module_editor\\module_editor_toolbar.py",
             "src\\gui\\panels\\module_editor\\module_editor_viewport_panel.py",
             "src\\gui\\panels\\module_editor\\porter_tab.py",
+            "src\\gui\\panels\\module_editor\\readiness_panel.py",
             "src\\gui\\panels\\module_editor\\rooms_tab.py",
             "src\\gui\\panels\\module_editor\\validation_panel.py",
-            "src\\gui\\panels\\module_editor\\walkmesh_tab.py"
+            "src\\gui\\panels\\module_editor\\walkmesh_tab.py",
+            "src\\gui\\panels\\module_editor\\workflow_panel.py"
         ]
     },
     {
@@ -1688,7 +1564,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools.SequenceEditor",
-        "python_file_count": 29,
+        "python_file_count": 30,
         "files": [
             "src\\gui\\panels\\qt_animation_panel.py",
             "src\\gui\\windows\\application_core\\shared\\animation_workflow.py",
@@ -1703,6 +1579,7 @@
             "src\\sequence\\sequence_model.py",
             "src\\sequence\\sequence_playback.py",
             "src\\sequence\\sequence_render.py",
+            "src\\sequence\\sequence_runtime.py",
             "src\\sequence\\sequence_serialization.py",
             "src\\sequence\\sequence_track.py",
             "src\\sequence\\sequence_undo.py",
@@ -1756,7 +1633,152 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.Editor.Level",
+        "project": "GhostRigger.Adapters.Unreal",
+        "python_file_count": 3,
+        "files": [
+            "src\\unreal\\__init__.py",
+            "src\\unreal\\animation_retargeting.py",
+            "src\\unreal\\quinn.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Validation",
+        "python_file_count": 8,
+        "files": [
+            "src\\core\\validation\\__init__.py",
+            "src\\core\\validation\\_native.py",
+            "src\\core\\validation\\animation_block_validator.py",
+            "src\\core\\validation\\animation_roundtrip_validator.py",
+            "src\\core\\validation\\capture_specs.py",
+            "src\\core\\validation\\validation_adapters.py",
+            "src\\core\\validation\\validation_bus.py",
+            "src\\core\\validation\\viewport_validator.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Scene.Walkmesh",
+        "python_file_count": 3,
+        "files": [
+            "src\\core\\walkmesh\\__init__.py",
+            "src\\core\\walkmesh\\walkmesh_editor.py",
+            "src\\core\\walkmesh\\walkmesh_renderer.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Tools.Workbench",
+        "python_file_count": 2,
+        "files": [
+            "src\\workbench\\__init__.py",
+            "src\\workbench\\ue5_rig_export.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Workflow",
+        "python_file_count": 3,
+        "files": [
+            "src\\core\\workflow\\__init__.py",
+            "src\\core\\workflow\\_workflow_base.py",
+            "src\\core\\workflow\\composite_workflow.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Native.Core.Diagnostics",
+        "python_file_count": 7,
+        "files": [
+            "src\\adapters\\rendering\\gpu_diagnostics_exports.py",
+            "src\\core\\diagnostics\\__init__.py",
+            "src\\core\\diagnostics\\diagnostics.py",
+            "src\\core\\diagnostics\\module_reference_safety.py",
+            "src\\core\\diagnostics\\validation_service.py",
+            "src\\core\\rendering\\gpu_diagnostics_config.py",
+            "src\\core\\rendering\\gpu_diagnostics_records.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Native.Core.Foundation",
+        "python_file_count": 3,
+        "files": [
+            "src\\adapters\\__init__.py",
+            "src\\adapters\\native_core\\__init__.py",
+            "src\\adapters\\native_core\\package_registry.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Native.Core.Math",
+        "python_file_count": 8,
+        "files": [
+            "src\\core\\rendering\\frame_core\\math_helpers.py",
+            "src\\gui\\gizmo\\transform_math.py",
+            "src\\math\\camera_math.py",
+            "src\\math\\frame_math.py",
+            "src\\math\\gpu_math.py",
+            "src\\math\\module_layout_math.py",
+            "src\\math\\transform_math.py",
+            "src\\math\\viewcube_math.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Runtime.Core.Host",
+        "python_file_count": 9,
+        "files": [
+            "src\\__init__.py",
+            "src\\core\\__init__.py",
+            "src\\core\\mdl\\__init__.py",
+            "src\\core\\mdl\\ghostrigger_mdl_reader.py",
+            "src\\core\\mdl\\mdl_parser.py",
+            "src\\core\\mdl\\mdl_porter.py",
+            "src\\core\\mdl\\mdl_reader_wrapper.py",
+            "src\\core\\mdl\\mdl_writer.py",
+            "src\\core\\qt_core.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Runtime.Shared.Contracts",
+        "python_file_count": 12,
+        "files": [
+            "src\\adapters\\rendering\\native_core\\__init__.py",
+            "src\\adapters\\rendering\\native_core\\binding.py",
+            "src\\adapters\\rendering\\native_core\\renderer.py",
+            "src\\core\\ports\\__init__.py",
+            "src\\core\\ports\\files.py",
+            "src\\core\\ports\\resources.py",
+            "src\\core\\ports\\scripts.py",
+            "src\\core\\ports\\textures.py",
+            "src\\core\\ports\\viewport_renderer.py",
+            "src\\core\\rendering\\renderer_backend.py",
+            "src\\core\\rendering\\renderer_capabilities.py",
+            "src\\core\\rendering\\renderer_interface.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Runtime.Shared.Descriptors",
+        "python_file_count": 6,
+        "files": [
+            "src\\adapters\\rendering\\mesh_render_data.py",
+            "src\\core\\project\\resource_address.py",
+            "src\\core\\rendering\\mesh_render_data.py",
+            "src\\core\\rendering\\skeleton_render_data.py",
+            "src\\core\\scene\\scene_object.py",
+            "src\\core\\scene\\scene_object_instance.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Runtime.Shared.Resources",
+        "python_file_count": 9,
+        "files": [
+            "src\\core\\assets\\override_layer.py",
+            "src\\core\\assets\\resource_manager.py",
+            "src\\core\\ports\\resources.py",
+            "src\\core\\ports\\textures.py",
+            "src\\core\\resources\\__init__.py",
+            "src\\core\\resources\\game_resource_provider.py",
+            "src\\resources\\__init__.py",
+            "src\\resources\\game_detector.py",
+            "src\\resources\\game_library.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Tools.ModuleEditor",
         "python_file_count": 2,
         "files": [
             "src\\gui\\windows\\module_editor_window.py",
@@ -1764,14 +1786,14 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.Legacy.Rigging",
+        "project": "GhostRigger.Core.Tools.Rigging",
         "python_file_count": 1,
         "files": [
             "src\\gui\\windows\\qt_character_builder_window.py"
         ]
     },
     {
-        "project": "GhostRigger.Windows.Shell.Main",
+        "project": "GhostRigger.Core.GUI.Display.Shell.Main",
         "python_file_count": 36,
         "files": [
             "src\\gui\\windows\\__init__.py",
@@ -1813,7 +1835,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.Workbench.AnimationRetarget",
+        "project": "GhostRigger.Core.Tools.Retargeting.Workbench",
         "python_file_count": 4,
         "files": [
             "src\\gui\\windows\\qt_retarget_preview_controller.py",
@@ -1823,7 +1845,7 @@
         ]
     },
     {
-        "project": "GhostRigger.Windows.Workbench.UnrealAnimator",
+        "project": "GhostRigger.Core.Tools.UnrealAnimator",
         "python_file_count": 1,
         "files": [
             "src\\gui\\windows\\qt_unreal_animator.py"

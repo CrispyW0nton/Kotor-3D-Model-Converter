@@ -15,11 +15,11 @@ from src.core.diagnostics.module_reference_safety import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Diagnostics.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Core.Diagnostics" / "GhostRigger.Core.Diagnostics.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Core.Diagnostics" / "GhostRigger.Core.Diagnostics.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.Diagnostics" / "Public" / "DiagnosticsContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.Diagnostics" / "Private" / "DiagnosticsContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Runtime.Core.Diagnostics.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Runtime.Core.Diagnostics" / "GhostRigger.Runtime.Core.Diagnostics.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Runtime.Core.Diagnostics" / "GhostRigger.Runtime.Core.Diagnostics.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Runtime.Core.Diagnostics" / "Public" / "DiagnosticsContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Runtime.Core.Diagnostics" / "Private" / "DiagnosticsContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:

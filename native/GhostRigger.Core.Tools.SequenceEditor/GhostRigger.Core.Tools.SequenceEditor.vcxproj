@@ -61,7 +61,8 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\sequence\tracks\transform_track.py" />
     <None Include="Python\src\sequence\tracks\visibility_track.py" />
     <None Include="Python\src\gui\panels\qt_animation_panel.py" />
-    <None Include="Python\src\gui\windows\application_core\shared\animation_workflow.py" />
+    <None Include="Python\src\gui\windows\application_core\shared\animation_workflow.py" />    <None Include="Python\src\sequence\sequence_runtime.py" />
+
   </ItemGroup>
   <PropertyGroup Label="PythonPayloadBuild">
     <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'=='' and '$(GHOSTRIGGER_PYTHON)'!=''">$(GHOSTRIGGER_PYTHON)</GhostRiggerPythonPayloadPython>

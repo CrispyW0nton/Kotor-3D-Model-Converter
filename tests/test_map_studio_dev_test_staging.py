@@ -7,15 +7,15 @@ import sys
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Core.Modules/Python",
-        "native/GhostRigger.Core.Level/Python",
-        "native/GhostRigger.Core.Game/Python",
+        "native/GhostRigger.Core.Scene.Modules/Python",
+        "native/GhostRigger.Core.Scene.Level/Python",
+        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Walkmesh/Python",
-        "native/GhostRigger.Core.Geometry/Python",
-        "native/GhostRigger.Core.Camera/Python",
+        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Math.Geometry/Python",
+        "native/GhostRigger.Core.Math.Camera/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Lighting/Python",
+        "native/GhostRigger.Core.Rendering.Lighting/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -50,7 +50,7 @@ def test_t2641_export_panel_exposes_dev_test_stage_action() -> None:
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
     ).read_text(encoding="utf-8")
 
     assert "devTestModuleRequested" in panel_source
@@ -65,7 +65,7 @@ def test_t2642_builder_tab_exposes_authored_dev_room_action() -> None:
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
     ).read_text(encoding="utf-8")
 
     assert "Create grdev01 Dev Room" in builder_source

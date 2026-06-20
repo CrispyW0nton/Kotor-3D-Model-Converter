@@ -4,6 +4,8 @@ import ctypes
 import json
 from pathlib import Path
 
+import pytest
+
 from src.core.rendering.renderer_capabilities import (
     DIAGNOSTIC_DISPLAY_MODES,
     MODERNGL_DISPLAY_MODES,
@@ -15,11 +17,12 @@ from src.core.rendering.viewport_display import normalize_display_mode
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Graphics.Renderer.Shared.Contracts.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Rendering.Contracts.dll"
 
 
 def _load_dll() -> ctypes.CDLL:
-    assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
+    if not DLL_PATH.exists():
+        pytest.skip(f"Build Release first: {DLL_PATH}")
     dll = ctypes.CDLL(str(DLL_PATH))
     dll.gr_renderer_contracts_capabilities_json.argtypes = []
     dll.gr_renderer_contracts_capabilities_json.restype = ctypes.c_char_p

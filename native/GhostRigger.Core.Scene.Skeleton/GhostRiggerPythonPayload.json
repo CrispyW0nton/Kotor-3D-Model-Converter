@@ -1,0 +1,21 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.Scene.Skeleton",
+    "file_count": 2,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SKELETON_INIT",
+            "source_path": "src/core/skeleton/__init__.py",
+            "packaged_path": "Python/src/core/skeleton/__init__.py",
+            "sha256": "17da0c25a609de8c0ead85aa7858b5ed39b6f2dd2810fdcef65fcedc14254ecc"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SKELETON_SKELETON_BUILDER",
+            "source_path": "src/core/skeleton/skeleton_builder.py",
+            "packaged_path": "Python/src/core/skeleton/skeleton_builder.py",
+            "sha256": "f5c4d10af8e034a68cb7a7486dacaa09d1fec4642098897b215776617b0b8253"
+        }
+    ]
+}

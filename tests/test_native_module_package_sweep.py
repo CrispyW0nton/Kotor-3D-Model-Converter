@@ -44,8 +44,8 @@ def test_native_module_manifest_covers_python_package_boundaries() -> None:
     sources = {entry["source_package"] for entry in entries}
 
     assert len(entries) == 58
-    assert "GhostRigger.Core.Modules" in names
-    assert "GhostRigger.Core.Level" in names
+    assert "GhostRigger.Core.Scene.Modules" in names
+    assert "GhostRigger.Core.Scene.Level" in names
     assert "GhostRigger.Core.Scene" in names
     assert "GhostRigger.Core.GUI.Display.Viewports" in names
     assert len(sources) == len(entries)
@@ -98,7 +98,7 @@ def test_native_module_packages_are_exposed_through_registry_specs() -> None:
     specs = python_module_package_specs()
 
     assert tuple(spec.name for spec in specs) == manifest_names
-    assert specs[0].name == "GhostRigger.Core.Modules"
-    assert specs[0].dll_name == "GhostRigger.Core.Modules.dll"
+    assert specs[0].name == "GhostRigger.Core.Scene.Modules"
+    assert specs[0].dll_name == "GhostRigger.Core.Scene.Modules.dll"
     assert specs[0].version_export == "gr_modules_version"
     assert all(spec.capabilities_export.endswith("_capabilities_json") for spec in specs)

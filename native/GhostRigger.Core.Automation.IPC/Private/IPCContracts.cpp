@@ -180,7 +180,7 @@ const char* tool_command_routes_json() {
            R"("owner_package":"native/GhostRigger.Core.Automation.IPC",)"
            R"("native_route_contract_enabled":true,)"
            R"("routes":[)"
-           R"({"action":"mesh_tool_command","method":"POST","owner_package":"native/GhostRigger.Core.MeshTools","payload_keys":["command","mode","operation","options"],"synchronous_result":true},)"
+           R"({"action":"mesh_tool_command","method":"POST","owner_package":"native/GhostRigger.Core.Tools.Mesh","payload_keys":["command","mode","operation","options"],"synchronous_result":true},)"
            R"({"action":"pivot_command","method":"POST","owner_package":"native/GhostRigger.Core.Tools.PivotControls","payload_keys":["command","mode","action"],"synchronous_result":true})"
            R"(]})";
 }

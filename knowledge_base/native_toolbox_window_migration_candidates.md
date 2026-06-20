@@ -103,13 +103,13 @@ Verification gates:
 
 ## Candidate: Main Window Host Surface
 
-Current legacy native project: `GhostRigger.Windows.Shell.Main`
+Current legacy native project: `GhostRigger.Core.GUI.Display.Shell.Main`
 Canonical target owner: `GhostRigger.Core.GUI.Display.Widgets` for visible shell
 composition, `GhostRigger.Core.GUI.Display.Panels` for dock/panel display,
 `GhostRigger.Core.Automation.Commands` for command routing, or
 `GhostRigger.Adapters.NativeHost` for native host-service glue.
 Owner surface: Main window composition shell
-Owner package: `native/GhostRigger.Windows.Shell.Main`
+Owner package: `native/GhostRigger.Core.GUI.Display.Shell.Main`
 Bridge method: host module or C ABI bridge only after the Python/Qt main window
 has a narrow native service to call.
 
@@ -122,7 +122,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Windows.Shell.Main` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.GUI.Display.Shell.Main` in `Debug|x64`.
 - Python adapter test: targeted host-service discovery and fallback checks.
 - Backend truth check: not applicable unless the slice touches model/data
   pipelines.

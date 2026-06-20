@@ -1,0 +1,219 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.Rendering.Lighting",
+    "file_count": 35,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_INIT",
+            "source_path": "src/core/lighting/__init__.py",
+            "packaged_path": "Python/src/core/lighting/__init__.py",
+            "sha256": "e777abb427f4d2568d4a0d1423de2deab745ce2bf4ecc96290b3d6a33d783da0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_AURORA_LIGHT_ADAPTER",
+            "source_path": "src/core/lighting/aurora_light_adapter.py",
+            "packaged_path": "Python/src/core/lighting/aurora_light_adapter.py",
+            "sha256": "ea3047fded926eb2fda2d1d8e108ce8e081abb2f6c111d692c2ddeadf65a6627"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_EXPORT_BRIDGE",
+            "source_path": "src/core/lighting/light_export_bridge.py",
+            "packaged_path": "Python/src/core/lighting/light_export_bridge.py",
+            "sha256": "12928501edc99f895e2dbdd5c2e369e8bc989079d89b217d9c5301b8bc64bd3d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_GIZMO_RENDERER",
+            "source_path": "src/core/lighting/light_gizmo_renderer.py",
+            "packaged_path": "Python/src/core/lighting/light_gizmo_renderer.py",
+            "sha256": "599801053bc919e5d4039598d3d46f3c8cd0881679d89f8830e5f117e409b3ff"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_GROUPING",
+            "source_path": "src/core/lighting/light_grouping.py",
+            "packaged_path": "Python/src/core/lighting/light_grouping.py",
+            "sha256": "a93d861b30085d207bf9786242208c72b18df5f1af6902e8b701a1360284ffa1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_MANAGER",
+            "source_path": "src/core/lighting/light_manager.py",
+            "packaged_path": "Python/src/core/lighting/light_manager.py",
+            "sha256": "72bd0f837507425727004f03441467ed536d808cb41d56021eed1e19290a8536"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_MODEL",
+            "source_path": "src/core/lighting/light_model.py",
+            "packaged_path": "Python/src/core/lighting/light_model.py",
+            "sha256": "ea9dc4587e97ff324e50a352ce090ec8f9e844c0a0ad604a8811389363f79e0d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_PICKER",
+            "source_path": "src/core/lighting/light_picker.py",
+            "packaged_path": "Python/src/core/lighting/light_picker.py",
+            "sha256": "8e3319990cd82d796e7ba5a9c56e938a08912c0f0f5453e0f1d8d0a64f256bb5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_SELECTION",
+            "source_path": "src/core/lighting/light_selection.py",
+            "packaged_path": "Python/src/core/lighting/light_selection.py",
+            "sha256": "efebdcbdbe65325f7777ca00062f63ba7be7c35c940c32dc8840ae077d6bdc0a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_TYPES",
+            "source_path": "src/core/lighting/light_types.py",
+            "packaged_path": "Python/src/core/lighting/light_types.py",
+            "sha256": "68c70e0c9fedb8d691a038e2cb38cc49e97996d0d8232f3472c79cd6b620d4fd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTING_RIG_PRESETS",
+            "source_path": "src/core/lighting/lighting_rig_presets.py",
+            "packaged_path": "Python/src/core/lighting/lighting_rig_presets.py",
+            "sha256": "82c5920ef65d94f37d3e3e99c2146a60b589a76591194ab9d514308236a6ee4d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_BAKE_JOB",
+            "source_path": "src/core/lighting/lightmap_bake_job.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_bake_job.py",
+            "sha256": "1dcd21000197a0463f88cd2c8a920e88181f36e7c1bdd6394fb3395ccd1db049"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_BAKE_SETTINGS",
+            "source_path": "src/core/lighting/lightmap_bake_settings.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_bake_settings.py",
+            "sha256": "ab9a2ccc598831383b33282ad28f18f5c6decc31c04eb0f2c4478744622b6b7a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_BAKER",
+            "source_path": "src/core/lighting/lightmap_baker.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_baker.py",
+            "sha256": "8c66e54ceb2c5a6ef863c273eb68573e394e9e8293a88a2fd8b014c464d9006f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_COMPARE",
+            "source_path": "src/core/lighting/lightmap_compare.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_compare.py",
+            "sha256": "e9a64262de008a70dffeac5d9e9166d016dab2f8de092f728aa741307bf3e570"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_CONTROLLER",
+            "source_path": "src/core/lighting/lightmap_controller.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_controller.py",
+            "sha256": "5dfe1d1e40c75f9709657a78333eee2cbf3c713a0c761a2db0a60ac59cacca84"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_DENOISER",
+            "source_path": "src/core/lighting/lightmap_denoiser.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_denoiser.py",
+            "sha256": "b56176765caee9a9afd56ab8a6c50740e8a562c968fe20328bf576c92d06abfd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_EXPORT_BRIDGE",
+            "source_path": "src/core/lighting/lightmap_export_bridge.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_export_bridge.py",
+            "sha256": "d6c06a127210f8bc8ecdef9c7330eebf7391e411daada7c52b75c9072e8759d5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_LIGHTING_SOLVER",
+            "source_path": "src/core/lighting/lightmap_lighting_solver.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_lighting_solver.py",
+            "sha256": "9f68fda12b42cbc5d5b6059d238f9df7e25fc0d77dc60fccd32e94a16c83284b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_MANIFEST",
+            "source_path": "src/core/lighting/lightmap_manifest.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_manifest.py",
+            "sha256": "db489f7fb7d03ea10baa60ecd44112681ee49e90a371f58e3d6660ebb7871793"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_OUTPUT",
+            "source_path": "src/core/lighting/lightmap_output.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_output.py",
+            "sha256": "73c797b15859077f84eeefdaf869b3600ad71be22d86bdb03944dd0ba3c65c51"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_PADDING",
+            "source_path": "src/core/lighting/lightmap_padding.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_padding.py",
+            "sha256": "215d002216bd8701dbd45527b40afd0642a2046dabd174fc367bafd4a9aa4d94"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_RASTERIZER",
+            "source_path": "src/core/lighting/lightmap_rasterizer.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_rasterizer.py",
+            "sha256": "48fdf05d12e273bfe833a8297883bda27d49bce6cb13519a50b9c4e3392b8de6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_SAMPLER",
+            "source_path": "src/core/lighting/lightmap_sampler.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_sampler.py",
+            "sha256": "e2766f018a29b8e3b341e70c9926fc5c33ab83799c33bbdc8b6b1b6d5cd06fd0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_SHADOW_SOLVER",
+            "source_path": "src/core/lighting/lightmap_shadow_solver.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_shadow_solver.py",
+            "sha256": "8c30dae5201d6b0103255f44cd0c8293e391e36fc2eeba327db2a668717e33a3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHTMAP_UV_VALIDATOR",
+            "source_path": "src/core/lighting/lightmap_uv_validator.py",
+            "packaged_path": "Python/src/core/lighting/lightmap_uv_validator.py",
+            "sha256": "8ad5c9f7996fa15aa5b39191ca028a2035ee36b93b121d7c8e0e4a62f2f0eb18"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_MATERIAL_MAP_CONTROLLER",
+            "source_path": "src/core/lighting/material_map_controller.py",
+            "packaged_path": "Python/src/core/lighting/material_map_controller.py",
+            "sha256": "94e5d62355cd98bcb94ba4c8e6e75f530b3c97b19d055983a9e505d731f5d094"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_PARTICLE_EMITTER",
+            "source_path": "src/core/lighting/particle_emitter.py",
+            "packaged_path": "Python/src/core/lighting/particle_emitter.py",
+            "sha256": "6a9520d35a68db20dcc0b13655731ff8722c19ae5cb376b362a53fb456c093ae"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_PREVIEW_CACHE",
+            "source_path": "src/core/lighting/preview_cache.py",
+            "packaged_path": "Python/src/core/lighting/preview_cache.py",
+            "sha256": "0f2c919805dae6bbf2793bb686c97c5a41765fd1d9313466cfca67a897b805bf"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_RAYCAST_BACKEND",
+            "source_path": "src/core/lighting/raycast_backend.py",
+            "packaged_path": "Python/src/core/lighting/raycast_backend.py",
+            "sha256": "6d47b5d69f9e06f9d6a273512f60e8484d2c48fd45863b698ade41fda310c27b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_RENDER_DATA",
+            "source_path": "src/core/lighting/render_data.py",
+            "packaged_path": "Python/src/core/lighting/render_data.py",
+            "sha256": "93b011b71e0e5325d90f47802790bca708896f2f720c6054491e59c562864758"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_SETTINGS",
+            "source_path": "src/core/lighting/settings.py",
+            "packaged_path": "Python/src/core/lighting/settings.py",
+            "sha256": "664f356376ad1b7708becc8a27332e4e31ee2d050e75a332b72c8c15b5978398"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_SHADER_COMPLEXITY",
+            "source_path": "src/core/lighting/shader_complexity.py",
+            "packaged_path": "Python/src/core/lighting/shader_complexity.py",
+            "sha256": "13b4681b0fd36bf13dedb4ddd0e6c1d7e6ccd6af99c554be2222ade8c0b0e4c3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_UV_ATLAS_GENERATOR",
+            "source_path": "src/core/lighting/uv_atlas_generator.py",
+            "packaged_path": "Python/src/core/lighting/uv_atlas_generator.py",
+            "sha256": "096c180a8e1697afb8242727320464d5f19d11e33020f3b4a7e7bd8404dc7b11"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_UV_CHANNEL_INFO",
+            "source_path": "src/core/lighting/uv_channel_info.py",
+            "packaged_path": "Python/src/core/lighting/uv_channel_info.py",
+            "sha256": "bf772d6b6f2b2b7e2565bb97032f5e7f80bf76eb2d0834995d352ea790aad1c4"
+        }
+    ]
+}

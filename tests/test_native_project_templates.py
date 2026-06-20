@@ -109,8 +109,9 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     native_readme = (ROOT / "native" / "README.md").read_text(encoding="utf-8")
     assert "GhostRigger.Core.Rendering.Backends.D3D12" in native_readme
     assert "GhostRigger.Core.Rendering.Backends.Null" in native_readme
-    assert "GhostRigger.Graphics.Renderer.*" in native_readme
-    assert "legacy Phase 1 build" in native_readme
+    assert "GhostRigger.Core.Rendering.*" in native_readme
+    assert "current canonical native" in native_readme
+    assert "renderer contract/backend package names" in native_readme
     assert "Owner surface" in readme
     assert "Owner package" in readme
     assert "Bridge method" in readme
@@ -144,7 +145,7 @@ def test_native_namespace_manifest_covers_solution_projects() -> None:
         == "GhostRigger.Native.Core.Diagnostics"
     )
     assert manifest["GhostRigger.Native.NativeCore.Math"] == "GhostRigger.Native.Core.Math"
-    assert manifest["GhostRigger.Skeleton"] == "GhostRigger.Core.Skeleton"
+    assert manifest["GhostRigger.Skeleton"] == "GhostRigger.Core.Scene.Skeleton"
     assert manifest["GhostRigger.Sequence"] == "GhostRigger.Core.Tools.SequenceEditor"
     assert (
         manifest["GhostRigger.Tools.NodesSkeletonBrowser"]
@@ -185,7 +186,7 @@ def test_native_toolbox_window_migration_candidates_define_first_phase_one_surfa
     assert "GhostRigger.Core.Tools.Retargeting" in candidates
     assert "GhostRigger.Core.Tools.Export" in candidates
     assert "GhostRigger.Core.Tools.CharacterBuilder" in candidates
-    assert "GhostRigger.Windows.Shell.Main" in candidates
+    assert "GhostRigger.Core.GUI.Display.Shell.Main" in candidates
     assert "GhostRigger.Core.GUI.Display.*" in candidates
     assert "GhostRigger.Core.GUI.Helpers.*" in candidates
     assert "Canonical target owner" in candidates
@@ -357,19 +358,19 @@ def test_windows_main_window_project_scaffold_matches_phase_one_boundary() -> No
     project = (
         ROOT
         / "native"
-        / "GhostRigger.Windows.Shell.Main"
-        / "GhostRigger.Windows.Shell.Main.vcxproj"
+        / "GhostRigger.Core.GUI.Display.Shell.Main"
+        / "GhostRigger.Core.GUI.Display.Shell.Main.vcxproj"
     ).read_text(encoding="utf-8")
     readme = (
         ROOT
         / "native"
-        / "GhostRigger.Windows.Shell.Main"
+        / "GhostRigger.Core.GUI.Display.Shell.Main"
         / "README.md"
     ).read_text(encoding="utf-8")
 
-    assert "GhostRigger.Windows.Shell.Main" in solution
-    assert "GhostRigger.Windows.Shell.Main.DEBUG" not in solution
-    assert "<TargetName>GhostRigger.Windows.Shell.Main</TargetName>" in project
+    assert "GhostRigger.Core.GUI.Display.Shell.Main" in solution
+    assert "GhostRigger.Core.GUI.Display.Shell.Main.DEBUG" not in solution
+    assert "<TargetName>GhostRigger.Core.GUI.Display.Shell.Main</TargetName>" in project
     assert "GHOSTRIGGER_WINDOWS_MAIN_WINDOW_EXPORTS" in project
     assert "Owner surface: Main window composition shell" in readme
     assert "Bridge method: C ABI DLL" in readme
@@ -402,13 +403,13 @@ def test_windows_main_window_exports_diagnostic_c_abi_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Windows.Shell.Main"
+        / "GhostRigger.Core.GUI.Display.Shell.Main"
         / "GhostRiggerWindowsMainWindow.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Windows.Shell.Main"
+        / "GhostRigger.Core.GUI.Display.Shell.Main"
         / "GhostRiggerWindowsMainWindow.cpp"
     ).read_text(encoding="utf-8")
 
@@ -431,7 +432,7 @@ def test_extra_window_project_scaffolds_match_phase_one_boundaries() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
     cases = (
         (
-            "GhostRigger.Windows.Editor.Level",
+            "GhostRigger.Core.Tools.ModuleEditor",
             "GHOSTRIGGER_WINDOWS_LEVEL_EDITOR_EXPORTS",
             "GhostRiggerWindowsLevelEditor.h",
             "GhostRiggerWindowsLevelEditor.cpp",
@@ -441,7 +442,7 @@ def test_extra_window_project_scaffolds_match_phase_one_boundaries() -> None:
             "windows_level_editor_host_service_schema.v1",
         ),
         (
-            "GhostRigger.Windows.Workbench.AnimationRetarget",
+            "GhostRigger.Core.Tools.Retargeting.Workbench",
             "GHOSTRIGGER_WINDOWS_ANIMATION_RETARGET_WORKBENCH_EXPORTS",
             "GhostRiggerWindowsAnimationRetargetWorkbench.h",
             "GhostRiggerWindowsAnimationRetargetWorkbench.cpp",
@@ -451,7 +452,7 @@ def test_extra_window_project_scaffolds_match_phase_one_boundaries() -> None:
             "windows_animation_retarget_workbench_host_service_schema.v1",
         ),
         (
-            "GhostRigger.Windows.Legacy.Rigging",
+            "GhostRigger.Core.Tools.Rigging",
             "GHOSTRIGGER_WINDOWS_LEGACY_RIGGING_WINDOW_EXPORTS",
             "GhostRiggerWindowsLegacyRiggingWindow.h",
             "GhostRiggerWindowsLegacyRiggingWindow.cpp",
@@ -461,7 +462,7 @@ def test_extra_window_project_scaffolds_match_phase_one_boundaries() -> None:
             "windows_legacy_rigging_window_host_service_schema.v1",
         ),
         (
-            "GhostRigger.Windows.Workbench.UnrealAnimator",
+            "GhostRigger.Core.Tools.UnrealAnimator",
             "GHOSTRIGGER_WINDOWS_UNREAL_ANIMATOR_WINDOW_EXPORTS",
             "GhostRiggerWindowsUnrealAnimatorWindow.h",
             "GhostRiggerWindowsUnrealAnimatorWindow.cpp",
@@ -923,8 +924,8 @@ def test_renderer_contracts_project_uses_phase_one_naming_and_release_hygiene() 
     project_path = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Shared.Contracts"
-        / "GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj"
+        / "GhostRigger.Core.Rendering.Contracts"
+        / "GhostRigger.Core.Rendering.Contracts.vcxproj"
     )
     tree = ET.parse(project_path)
     ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
@@ -940,7 +941,7 @@ def test_renderer_contracts_project_uses_phase_one_naming_and_release_hygiene() 
         node.text or "" for node in tree.findall(".//msb:PostBuildEvent/msb:Command", ns)
     ]
 
-    assert target_names == ["GhostRigger.Graphics.Renderer.Shared.Contracts"]
+    assert target_names == ["GhostRigger.Core.Rendering.Contracts"]
     assert any("GhostRigger.Native.Core.Foundation.vcxproj" in ref for ref in project_refs)
     assert [node.text for node in release_debug_info] == ["false"]
     assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
@@ -951,8 +952,8 @@ def test_renderer_null_project_uses_phase_one_naming_and_release_hygiene() -> No
     project_path = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.Null"
-        / "GhostRigger.Graphics.Renderer.Backend.Null.vcxproj"
+        / "GhostRigger.Core.Rendering.Backends.Null"
+        / "GhostRigger.Core.Rendering.Backends.Null.vcxproj"
     )
     tree = ET.parse(project_path)
     ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
@@ -968,8 +969,8 @@ def test_renderer_null_project_uses_phase_one_naming_and_release_hygiene() -> No
         node.text or "" for node in tree.findall(".//msb:PostBuildEvent/msb:Command", ns)
     ]
 
-    assert target_names == ["GhostRigger.Graphics.Renderer.Backend.Null"]
-    assert any("GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj" in ref for ref in project_refs)
+    assert target_names == ["GhostRigger.Core.Rendering.Backends.Null"]
+    assert any("GhostRigger.Core.Rendering.Contracts.vcxproj" in ref for ref in project_refs)
     assert [node.text for node in release_debug_info] == ["false"]
     assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
     assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
@@ -979,8 +980,8 @@ def test_renderer_d3d12_project_uses_phase_one_naming_and_release_hygiene() -> N
     project_path = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12.vcxproj"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12.vcxproj"
     )
     tree = ET.parse(project_path)
     ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
@@ -999,8 +1000,8 @@ def test_renderer_d3d12_project_uses_phase_one_naming_and_release_hygiene() -> N
         node.text or "" for node in tree.findall(".//msb:Link/msb:AdditionalDependencies", ns)
     ]
 
-    assert target_names == ["GhostRigger.Graphics.Renderer.Backend.D3D12"]
-    assert any("GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj" in ref for ref in project_refs)
+    assert target_names == ["GhostRigger.Core.Rendering.Backends.D3D12"]
+    assert any("GhostRigger.Core.Rendering.Contracts.vcxproj" in ref for ref in project_refs)
     assert [node.text for node in release_debug_info] == ["false"]
     assert any("d3d12.lib" in dependencies for dependencies in link_dependencies)
     assert any("dxgi.lib" in dependencies for dependencies in link_dependencies)
@@ -1012,8 +1013,8 @@ def test_renderer_moderngl_project_uses_phase_one_naming_and_release_hygiene() -
     project_path = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.ModernGL"
-        / "GhostRigger.Graphics.Renderer.Backend.ModernGL.vcxproj"
+        / "GhostRigger.Core.Rendering.Backends.ModernGL"
+        / "GhostRigger.Core.Rendering.Backends.ModernGL.vcxproj"
     )
     tree = ET.parse(project_path)
     ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
@@ -1034,8 +1035,8 @@ def test_renderer_moderngl_project_uses_phase_one_naming_and_release_hygiene() -
         )
     ]
 
-    assert target_names == ["GhostRigger.Graphics.Renderer.Backend.ModernGL"]
-    assert any("GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj" in ref for ref in project_refs)
+    assert target_names == ["GhostRigger.Core.Rendering.Backends.ModernGL"]
+    assert any("GhostRigger.Core.Rendering.Contracts.vcxproj" in ref for ref in project_refs)
     assert [node.text for node in release_debug_info] == ["false"]
     assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
     assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
@@ -1045,8 +1046,8 @@ def test_renderer_pygfx_project_uses_phase_one_naming_and_release_hygiene() -> N
     project_path = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.PyGFX"
-        / "GhostRigger.Graphics.Renderer.Backend.PyGFX.vcxproj"
+        / "GhostRigger.Core.Rendering.Backends.PyGFX"
+        / "GhostRigger.Core.Rendering.Backends.PyGFX.vcxproj"
     )
     tree = ET.parse(project_path)
     ns = {"msb": "http://schemas.microsoft.com/developer/msbuild/2003"}
@@ -1067,8 +1068,8 @@ def test_renderer_pygfx_project_uses_phase_one_naming_and_release_hygiene() -> N
         )
     ]
 
-    assert target_names == ["GhostRigger.Graphics.Renderer.Backend.PyGFX"]
-    assert any("GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj" in ref for ref in project_refs)
+    assert target_names == ["GhostRigger.Core.Rendering.Backends.PyGFX"]
+    assert any("GhostRigger.Core.Rendering.Contracts.vcxproj" in ref for ref in project_refs)
     assert [node.text for node in release_debug_info] == ["false"]
     assert any("$(TargetDir)$(TargetName).pdb" in command for command in post_build_commands)
     assert any("$(TargetDir)$(TargetName).exp" in command for command in post_build_commands)
@@ -1078,13 +1079,13 @@ def test_renderer_moderngl_exports_diagnostic_bridge_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.ModernGL"
+        / "GhostRigger.Core.Rendering.Backends.ModernGL"
         / "GhostRiggerRendererModernGL.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.ModernGL"
+        / "GhostRigger.Core.Rendering.Backends.ModernGL"
         / "GhostRiggerRendererModernGL.cpp"
     ).read_text(encoding="utf-8")
     assert "gr_renderer_moderngl_version" in header
@@ -1104,13 +1105,13 @@ def test_renderer_pygfx_exports_diagnostic_bridge_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.PyGFX"
+        / "GhostRigger.Core.Rendering.Backends.PyGFX"
         / "GhostRiggerRendererPyGFX.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.PyGFX"
+        / "GhostRigger.Core.Rendering.Backends.PyGFX"
         / "GhostRiggerRendererPyGFX.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1129,13 +1130,13 @@ def test_renderer_d3d12_exports_descriptor_allocator_readiness_boundary() -> Non
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1150,7 +1151,7 @@ def test_renderer_d3d12_capabilities_report_complete_guarded_metadata_surface() 
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1181,13 +1182,13 @@ def test_renderer_d3d12_exports_command_list_readiness_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1204,13 +1205,13 @@ def test_renderer_d3d12_exports_surface_swap_chain_readiness_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1227,13 +1228,13 @@ def test_renderer_d3d12_exports_render_target_metadata_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1251,13 +1252,13 @@ def test_renderer_d3d12_exports_barrier_clear_pass_metadata_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1275,13 +1276,13 @@ def test_renderer_d3d12_exports_command_recording_dry_run_frame_boundary() -> No
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1298,13 +1299,13 @@ def test_renderer_d3d12_exports_guarded_command_recording_diagnostics_boundary()
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1322,13 +1323,13 @@ def test_renderer_d3d12_exports_no_draw_execution_fence_diagnostics_boundary() -
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1349,13 +1350,13 @@ def test_renderer_d3d12_exports_present_readiness_metadata_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1374,13 +1375,13 @@ def test_renderer_d3d12_exports_guarded_swap_chain_creation_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1402,13 +1403,13 @@ def test_renderer_d3d12_exports_guarded_back_buffer_rtv_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1430,13 +1431,13 @@ def test_renderer_d3d12_exports_guarded_barrier_clear_recording_boundary() -> No
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1459,13 +1460,13 @@ def test_renderer_d3d12_exports_guarded_clear_pass_execution_fence_boundary() ->
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1487,13 +1488,13 @@ def test_renderer_d3d12_exports_post_clear_present_readiness_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1513,13 +1514,13 @@ def test_renderer_d3d12_exports_guarded_present_call_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1539,13 +1540,13 @@ def test_renderer_d3d12_exports_post_present_frame_accounting_boundary() -> None
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1566,13 +1567,13 @@ def test_renderer_d3d12_exports_draw_list_readiness_metadata_boundary() -> None:
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1600,13 +1601,13 @@ def test_renderer_d3d12_exports_resource_binding_readiness_metadata_boundary() -
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1635,13 +1636,13 @@ def test_renderer_d3d12_exports_pipeline_state_readiness_metadata_boundary() -> 
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1672,13 +1673,13 @@ def test_renderer_d3d12_exports_guarded_shader_bytecode_metadata_boundary() -> N
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1711,13 +1712,13 @@ def test_renderer_d3d12_exports_shader_reflection_input_layout_metadata_boundary
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1749,13 +1750,13 @@ def test_renderer_d3d12_exports_guarded_root_signature_metadata_boundary() -> No
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1790,13 +1791,13 @@ def test_renderer_d3d12_exports_guarded_pipeline_state_object_metadata_boundary(
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1836,13 +1837,13 @@ def test_renderer_d3d12_exports_guarded_draw_command_recording_metadata_boundary
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1881,13 +1882,13 @@ def test_renderer_d3d12_exports_guarded_draw_submission_readiness_metadata_bound
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 
@@ -1919,13 +1920,13 @@ def test_renderer_d3d12_exports_guarded_post_draw_frame_accounting_readiness_met
     header = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.h"
     ).read_text(encoding="utf-8")
     implementation = (
         ROOT
         / "native"
-        / "GhostRigger.Graphics.Renderer.Backend.D3D12"
+        / "GhostRigger.Core.Rendering.Backends.D3D12"
         / "GhostRiggerRendererD3D12.cpp"
     ).read_text(encoding="utf-8")
 

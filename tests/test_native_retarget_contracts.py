@@ -10,8 +10,8 @@ from src.core.retargeting import retarget_modes, retarget_output_naming
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Retargeting"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Retargeting.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Workflow.Retargeting"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Workflow.Retargeting.dll"
 
 
 def _load_retargeting_dll() -> ctypes.CDLL:
@@ -48,8 +48,8 @@ def _call_string(function, value: str) -> str:
 
 
 def test_retargeting_project_declares_contract_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Core.Retargeting.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Core.Retargeting.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.Workflow.Retargeting.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.Workflow.Retargeting.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerRetargeting.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "RetargetContracts.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "RetargetContracts.cpp").read_text(encoding="utf-8")

@@ -17,14 +17,14 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD_PATHS = (
-    "native/GhostRigger.Core.Modules/Python",
-    "native/GhostRigger.Core.Game/Python",
+    "native/GhostRigger.Core.Scene.Modules/Python",
+    "native/GhostRigger.Core.Resources.Game/Python",
     "native/GhostRigger.Core.Scene/Python",
-    "native/GhostRigger.Core.Walkmesh/Python",
-    "native/GhostRigger.Core.Geometry/Python",
-    "native/GhostRigger.Core.Camera/Python",
+    "native/GhostRigger.Core.Scene.Walkmesh/Python",
+    "native/GhostRigger.Core.Math.Geometry/Python",
+    "native/GhostRigger.Core.Math.Camera/Python",
     "native/GhostRigger.Core.Math/Python",
-    "native/GhostRigger.Core.Lighting/Python",
+    "native/GhostRigger.Core.Rendering.Lighting/Python",
     ".",
 )
 VARIANT_ALIASES = {

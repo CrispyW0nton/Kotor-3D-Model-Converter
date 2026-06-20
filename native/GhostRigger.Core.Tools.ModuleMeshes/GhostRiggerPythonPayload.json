@@ -105,7 +105,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
             "source_path": "src/core/modules/authored_module_export.py",
             "packaged_path": "Python/src/core/modules/authored_module_export.py",
-            "sha256": "d0b0dae22ae168564b8d0d8769dceeaf270960e823b93ccd5f4a7edcc7f44556"
+            "sha256": "a3f66a356700cbd2d3d068866ee9f7b3ac70d527433d53889b6b0c29d91998b6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_KMAP_BRIDGE",
@@ -249,7 +249,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_DEV_MODULE_SMOKE",
             "source_path": "src/core/modules/dev_module_smoke.py",
             "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-            "sha256": "fac58b3203648d30972611a377912cfe31173dd9118ecc77adbab30f80f1583c"
+            "sha256": "76cf1f689f5c689a883bbe9af870408766191daf4c2a7635d2a75d7d69b4ed0a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_BLUEPRINT_SERVICE",

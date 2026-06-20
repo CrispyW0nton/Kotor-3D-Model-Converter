@@ -8,7 +8,7 @@ from src.adapters.scripts.unavailable_compiler import UnavailableScriptCompiler
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.Scripting.Core.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.Scripting.dll"
 
 
 def _load_dll() -> ctypes.CDLL:

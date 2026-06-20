@@ -62,8 +62,8 @@ application. Do not treat the repository as a flat Python app.
 - `native/templates/`: templates for new native DLL/debug-validation project
   scaffolding.
 
-The current root payload manifest covers 93 non-debug native DLL projects and
-1,272 embedded Python files. Treat the manifest and
+The current root payload manifest covers 91 non-debug native DLL projects and
+1,306 embedded Python files. Treat the manifest and
 `tests/test_native_python_payloads.py` as the source of truth if counts drift.
 
 ### Native Package Families
@@ -161,9 +161,9 @@ ABI, adapter, product, subsystem, dependency, or deployment boundary.
 - Keep ABI/package names stable unless a batch updates project files,
   references, payload manifests, tests, bridge lookups, and compatibility shims
   together.
-- Do not create new projects from legacy namespaces such as
-  `GhostRigger.Graphics.Renderer.*` or broad `GhostRigger.Windows.*`
-  boundaries. Use the canonical owners in
+- Do not create new projects from broad compatibility namespaces such as
+  `GhostRigger.Windows.*`. Renderer projects already use the canonical
+  `GhostRigger.Core.Rendering.*` owner; use the canonical owners in
   `knowledge_base/package_ownership_model.md` and keep old names only as
   compatibility state until a coordinated rename/merge updates all build
   surfaces.

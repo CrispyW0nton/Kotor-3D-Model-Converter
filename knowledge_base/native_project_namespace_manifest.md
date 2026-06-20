@@ -14,9 +14,8 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 - Authority status: this table records current and historical Visual Studio
   project names. It must not be used as the target model when it conflicts with
   `knowledge_base/package_ownership_model.md`.
-- Compatibility note: rows such as `GhostRigger.Graphics.Renderer.*`,
-  `GhostRigger.Windows.*`, `GhostRigger.Core.IO.Formats`,
-  `GhostRigger.Core.GameLibrary`, `GhostRigger.Core.Graphics`, and broad GUI
+- Compatibility note: rows such as `GhostRigger.Windows.*`,
+  `GhostRigger.Core.Rendering.Textures`, and broad GUI
   category packages describe current build state or old rename batches. Future
   package work must target the canonical owners: `GhostRigger.Core.Rendering.*`,
   `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`,
@@ -40,7 +39,7 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | OldProjectName | NewProjectName | Reason |
 | --- | --- | --- |
 | `GhostRigger.Native` | `GhostRigger.Native.Core.Host` | Native C++ executable host for the embedded Python/Qt application and Visual Studio Debug target. |
-| `GhostRigger.Skeleton` | `GhostRigger.Core.Skeleton` | Headless skeleton domain package owning skeleton builder/data contracts. |
+| `GhostRigger.Skeleton` | `GhostRigger.Core.Scene.Skeleton` | Headless skeleton domain package owning skeleton builder/data contracts. |
 | `GhostRigger.Sequence` | `GhostRigger.Core.Tools.SequenceEditor` | Merged into the canonical native SequenceEditor tool surface. |
 | `GhostRigger.Tools.NodesSkeletonBrowser` | `GhostRigger.Core.Tools.NodeSkeletonBrowser` | Actual solution spelling uses `NodesSkeletonBrowser`; canonical workflow name should use the requested singular `NodeSkeletonBrowser`. |
 
@@ -56,11 +55,11 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | `GhostRigger.Runtime.Shared.Contracts` | `GhostRigger.Runtime.Shared.Contracts` | Runtime | Shared | Contracts | `native\GhostRigger.Runtime.Shared.Contracts\GhostRigger.Runtime.Shared.Contracts.vcxproj` | already canonical |
 | `GhostRigger.Runtime.Shared.Descriptors` | `GhostRigger.Runtime.Shared.Descriptors` | Runtime | Shared | Descriptors | `native\GhostRigger.Runtime.Shared.Descriptors\GhostRigger.Runtime.Shared.Descriptors.vcxproj` | already canonical |
 | `GhostRigger.Runtime.Shared.Resources` | `GhostRigger.Runtime.Shared.Resources` | Runtime | Shared | Resources | `native\GhostRigger.Runtime.Shared.Resources\GhostRigger.Runtime.Shared.Resources.vcxproj` | already canonical |
-| `GhostRigger.Graphics.Renderer.Contracts` | `GhostRigger.Graphics.Renderer.Shared.Contracts` | Renderer | Shared | Contracts | `native\GhostRigger.Graphics.Renderer.Shared.Contracts\GhostRigger.Graphics.Renderer.Shared.Contracts.vcxproj` | renamed in Renderer batch |
-| `GhostRigger.Graphics.Renderer.D3D12` | `GhostRigger.Graphics.Renderer.Backend.D3D12` | Renderer | Backend | D3D12 | `native\GhostRigger.Graphics.Renderer.Backend.D3D12\GhostRigger.Graphics.Renderer.Backend.D3D12.vcxproj` | renamed in Renderer batch |
-| `GhostRigger.Graphics.Renderer.ModernGL` | `GhostRigger.Graphics.Renderer.Backend.ModernGL` | Renderer | Backend | ModernGL | `native\GhostRigger.Graphics.Renderer.Backend.ModernGL\GhostRigger.Graphics.Renderer.Backend.ModernGL.vcxproj` | renamed in Renderer batch |
-| `GhostRigger.Graphics.Renderer.Null` | `GhostRigger.Graphics.Renderer.Backend.Null` | Renderer | Backend | Null | `native\GhostRigger.Graphics.Renderer.Backend.Null\GhostRigger.Graphics.Renderer.Backend.Null.vcxproj` | renamed in Renderer batch |
-| `GhostRigger.Graphics.Renderer.PyGFX` | `GhostRigger.Graphics.Renderer.Backend.PyGFX` | Renderer | Backend | PyGFX | `native\GhostRigger.Graphics.Renderer.Backend.PyGFX\GhostRigger.Graphics.Renderer.Backend.PyGFX.vcxproj` | renamed in Renderer batch |
+| `GhostRigger.Core.Rendering.Contracts` | `GhostRigger.Core.Rendering.Contracts` | Renderer | Shared | Contracts | `native\GhostRigger.Core.Rendering.Contracts\GhostRigger.Core.Rendering.Contracts.vcxproj` | renamed in Renderer batch |
+| `GhostRigger.Core.Rendering.D3D12` | `GhostRigger.Core.Rendering.Backends.D3D12` | Renderer | Backend | D3D12 | `native\GhostRigger.Core.Rendering.Backends.D3D12\GhostRigger.Core.Rendering.Backends.D3D12.vcxproj` | renamed in Renderer batch |
+| `GhostRigger.Core.Rendering.ModernGL` | `GhostRigger.Core.Rendering.Backends.ModernGL` | Renderer | Backend | ModernGL | `native\GhostRigger.Core.Rendering.Backends.ModernGL\GhostRigger.Core.Rendering.Backends.ModernGL.vcxproj` | renamed in Renderer batch |
+| `GhostRigger.Core.Rendering.Null` | `GhostRigger.Core.Rendering.Backends.Null` | Renderer | Backend | Null | `native\GhostRigger.Core.Rendering.Backends.Null\GhostRigger.Core.Rendering.Backends.Null.vcxproj` | renamed in Renderer batch |
+| `GhostRigger.Core.Rendering.PyGFX` | `GhostRigger.Core.Rendering.Backends.PyGFX` | Renderer | Backend | PyGFX | `native\GhostRigger.Core.Rendering.Backends.PyGFX\GhostRigger.Core.Rendering.Backends.PyGFX.vcxproj` | renamed in Renderer batch |
 | `GhostRigger.Tools.BodyAttachmentSystem` | `GhostRigger.Core.Tools.BAS` | Tools | Workflow | BAS | `native\GhostRigger.Core.Tools.BAS\GhostRigger.Core.Tools.BAS.vcxproj` | renamed in BAS merge |
 | `GhostRigger.Tools.Camera` | `GhostRigger.Core.Tools.Camera` | Tools | Workflow | Camera | `native\GhostRigger.Core.Tools.Camera\GhostRigger.Core.Tools.Camera.vcxproj` | renamed in Tools Workflow batch |
 | `GhostRigger.Tools.CharacterBuilder` | `GhostRigger.Core.Tools.CharacterBuilder` | Tools | Workflow | CharacterBuilder | `native\GhostRigger.Core.Tools.CharacterBuilder\GhostRigger.Core.Tools.CharacterBuilder.vcxproj` | renamed in Tools Workflow batch |
@@ -77,55 +76,55 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | `GhostRigger.Tools.SequenceEditor` | `GhostRigger.Core.Tools.SequenceEditor` | Tools | Workflow | SequenceEditor | `native\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj` | renamed in Sequence merge |
 | `GhostRigger.Tools.SpriteMaterials` | `GhostRigger.Core.Tools.SpriteMaterials` | Tools | Workflow | SpriteMaterials | `native\GhostRigger.Core.Tools.SpriteMaterials\GhostRigger.Core.Tools.SpriteMaterials.vcxproj` | renamed in Tools Workflow batch |
 | `GhostRigger.Tools.TwoDABrowser` | `GhostRigger.Core.Tools.TwoDABrowser` | Tools | Workflow | TwoDABrowser | `native\GhostRigger.Core.Tools.TwoDABrowser\GhostRigger.Core.Tools.TwoDABrowser.vcxproj` | renamed in Tools Workflow batch |
-| `GhostRigger.Windows.AnimationRetargetWorkbench` | `GhostRigger.Windows.Workbench.AnimationRetarget` | Windows | Workbench | AnimationRetarget | `native\GhostRigger.Windows.Workbench.AnimationRetarget\GhostRigger.Windows.Workbench.AnimationRetarget.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.LegacyRiggingWindow` | `GhostRigger.Windows.Legacy.Rigging` | Windows | Legacy | Rigging | `native\GhostRigger.Windows.Legacy.Rigging\GhostRigger.Windows.Legacy.Rigging.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.LevelEditor` | `GhostRigger.Windows.Editor.Level` | Windows | Editor | Level | `native\GhostRigger.Windows.Editor.Level\GhostRigger.Windows.Editor.Level.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.MainWindow` | `GhostRigger.Windows.Shell.Main` | Windows | Shell | Main | `native\GhostRigger.Windows.Shell.Main\GhostRigger.Windows.Shell.Main.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.UnrealAnimatorWindow` | `GhostRigger.Windows.Workbench.UnrealAnimator` | Windows | Workbench | UnrealAnimator | `native\GhostRigger.Windows.Workbench.UnrealAnimator\GhostRigger.Windows.Workbench.UnrealAnimator.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Animation` | `GhostRigger.Core.Animation` | Domain | Core | Animation | `native\GhostRigger.Core.Animation\GhostRigger.Core.Animation.vcxproj` | renamed in Domain batch |
-| `GhostRigger.AnimationRetargeting` | `GhostRigger.Core.AnimationRetargeting` | Domain | Core | AnimationRetargeting | `native\GhostRigger.Core.AnimationRetargeting\GhostRigger.Core.AnimationRetargeting.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Assets` | `GhostRigger.Core.Assets` | Domain | Core | Assets | `native\GhostRigger.Core.Assets\GhostRigger.Core.Assets.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Autorig` | `GhostRigger.Core.Autorig` | Domain | Core | Autorig | `native\GhostRigger.Core.Autorig\GhostRigger.Core.Autorig.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Camera` | `GhostRigger.Core.Camera` | Domain | Core | Camera | `native\GhostRigger.Core.Camera\GhostRigger.Core.Camera.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Characters` | `GhostRigger.Core.Characters` | Domain | Core | Characters | `native\GhostRigger.Core.Characters\GhostRigger.Core.Characters.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Windows.AnimationRetargetWorkbench` | `GhostRigger.Core.Tools.Retargeting.Workbench` | Windows | Workbench | AnimationRetarget | `native\GhostRigger.Core.Tools.Retargeting.Workbench\GhostRigger.Core.Tools.Retargeting.Workbench.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Windows.LegacyRiggingWindow` | `GhostRigger.Core.Tools.Rigging` | Windows | Legacy | Rigging | `native\GhostRigger.Core.Tools.Rigging\GhostRigger.Core.Tools.Rigging.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Windows.LevelEditor` | `GhostRigger.Core.Tools.ModuleEditor` | Windows | Editor | Level | `native\GhostRigger.Core.Tools.ModuleEditor\GhostRigger.Core.Tools.ModuleEditor.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Windows.MainWindow` | `GhostRigger.Core.GUI.Display.Shell.Main` | Windows | Shell | Main | `native\GhostRigger.Core.GUI.Display.Shell.Main\GhostRigger.Core.GUI.Display.Shell.Main.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Windows.UnrealAnimatorWindow` | `GhostRigger.Core.Tools.UnrealAnimator` | Windows | Workbench | UnrealAnimator | `native\GhostRigger.Core.Tools.UnrealAnimator\GhostRigger.Core.Tools.UnrealAnimator.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Animation` | `GhostRigger.Core.Workflow.Animation` | Domain | Core | Animation | `native\GhostRigger.Core.Workflow.Animation\GhostRigger.Core.Workflow.Animation.vcxproj` | renamed in Domain batch |
+| `GhostRigger.AnimationRetargeting` | `GhostRigger.Core.Workflow.AnimationRetargeting` | Domain | Core | AnimationRetargeting | `native\GhostRigger.Core.Workflow.AnimationRetargeting\GhostRigger.Core.Workflow.AnimationRetargeting.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Assets` | `GhostRigger.Core.Resources.Assets` | Domain | Core | Assets | `native\GhostRigger.Core.Resources.Assets\GhostRigger.Core.Resources.Assets.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Autorig` | `GhostRigger.Core.Workflow.Autorig` | Domain | Core | Autorig | `native\GhostRigger.Core.Workflow.Autorig\GhostRigger.Core.Workflow.Autorig.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Camera` | `GhostRigger.Core.Math.Camera` | Domain | Core | Camera | `native\GhostRigger.Core.Math.Camera\GhostRigger.Core.Math.Camera.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Characters` | `GhostRigger.Core.Workflow.Characters` | Domain | Core | Characters | `native\GhostRigger.Core.Workflow.Characters\GhostRigger.Core.Workflow.Characters.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Converters` | `GhostRigger.Core.IO.Conversion` | Domain | Core | Converters | `native\GhostRigger.Core.IO.Conversion\GhostRigger.Core.IO.Conversion.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Diagnostics` | `GhostRigger.Core.Diagnostics` | Domain | Core | Diagnostics | `native\GhostRigger.Core.Diagnostics\GhostRigger.Core.Diagnostics.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Diagnostics` | `GhostRigger.Runtime.Core.Diagnostics` | Domain | Core | Diagnostics | `native\GhostRigger.Runtime.Core.Diagnostics\GhostRigger.Runtime.Core.Diagnostics.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Export` | `GhostRigger.Core.IO.Export` | Domain | Core | Export | `native\GhostRigger.Core.IO.Export\GhostRigger.Core.IO.Export.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Formats` | `GhostRigger.Core.IO.Formats` | Domain | Core | Formats | `native\GhostRigger.Core.IO.Formats\GhostRigger.Core.IO.Formats.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Game` | `GhostRigger.Core.Game` | Domain | Core | Game | `native\GhostRigger.Core.Game\GhostRigger.Core.Game.vcxproj` | renamed in Domain batch |
-| `GhostRigger.GameLibrary` | `GhostRigger.Core.GameLibrary` | Domain | Core | GameLibrary | `native\GhostRigger.Core.GameLibrary\GhostRigger.Core.GameLibrary.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Geometry` | `GhostRigger.Core.Geometry` | Domain | Core | Geometry | `native\GhostRigger.Core.Geometry\GhostRigger.Core.Geometry.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Formats` | `GhostRigger.Core.IO.Serialization.GFF` | Domain | Core | Formats | `native\GhostRigger.Core.IO.Serialization.GFF\GhostRigger.Core.IO.Serialization.GFF.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Game` | `GhostRigger.Core.Resources.Game` | Domain | Core | Game | `native\GhostRigger.Core.Resources.Game\GhostRigger.Core.Resources.Game.vcxproj` | renamed in Domain batch |
+| `GhostRigger.GameLibrary` | `GhostRigger.Core.Resources.GameLibrary` | Domain | Core | GameLibrary | `native\GhostRigger.Core.Resources.GameLibrary\GhostRigger.Core.Resources.GameLibrary.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Geometry` | `GhostRigger.Core.Math.Geometry` | Domain | Core | Geometry | `native\GhostRigger.Core.Math.Geometry\GhostRigger.Core.Math.Geometry.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Gizmo` | `GhostRigger.Core.GUI.Helpers.Gizmo` | Domain | Core | Gizmo | `native\GhostRigger.Core.GUI.Helpers.Gizmo\GhostRigger.Core.GUI.Helpers.Gizmo.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Graphics` | `GhostRigger.Core.Graphics` | Domain | Core | Graphics | `native\GhostRigger.Core.Graphics\GhostRigger.Core.Graphics.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Infra` | `GhostRigger.Core.Infrastructure` | Domain | Core | Infrastructure | `native\GhostRigger.Core.Infrastructure\GhostRigger.Core.Infrastructure.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Graphics` | `GhostRigger.Core.Rendering.Textures` | Domain | Core | Graphics | `native\GhostRigger.Core.Rendering.Textures\GhostRigger.Core.Rendering.Textures.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Infra` | `GhostRigger.Runtime.Core.Infrastructure` | Domain | Core | Infrastructure | `native\GhostRigger.Runtime.Core.Infrastructure\GhostRigger.Runtime.Core.Infrastructure.vcxproj` | renamed in Domain batch |
 | `GhostRigger.IO` | `GhostRigger.Core.IO.FBX` | Domain | Core | IO | `native\GhostRigger.Core.IO.FBX\GhostRigger.Core.IO.FBX.vcxproj` | renamed in Domain batch |
 | `GhostRigger.IPC` | `GhostRigger.Core.Automation.IPC` | Domain | Core | IPC | `native\GhostRigger.Core.Automation.IPC\GhostRigger.Core.Automation.IPC.vcxproj` | renamed in Domain batch |
 | `GhostRigger.KotorMCP` | `GhostRigger.Core.Automation.MCP` | Domain | Core | KotorMCP | `native\GhostRigger.Core.Automation.MCP\GhostRigger.Core.Automation.MCP.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Level` | `GhostRigger.Core.Level` | Domain | Core | Level | `native\GhostRigger.Core.Level\GhostRigger.Core.Level.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Lighting` | `GhostRigger.Core.Lighting` | Domain | Core | Lighting | `native\GhostRigger.Core.Lighting\GhostRigger.Core.Lighting.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Level` | `GhostRigger.Core.Scene.Level` | Domain | Core | Level | `native\GhostRigger.Core.Scene.Level\GhostRigger.Core.Scene.Level.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Lighting` | `GhostRigger.Core.Rendering.Lighting` | Domain | Core | Lighting | `native\GhostRigger.Core.Rendering.Lighting\GhostRigger.Core.Rendering.Lighting.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Math` | `GhostRigger.Core.Math` | Domain | Core | Math | `native\GhostRigger.Core.Math\GhostRigger.Core.Math.vcxproj` | renamed in Domain batch |
 | `GhostRigger.MDL` | `GhostRigger.Core.IO.MDL` | Domain | Core | MDL | `native\GhostRigger.Core.IO.MDL\GhostRigger.Core.IO.MDL.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Measurement` | `GhostRigger.Core.Measurement` | Domain | Core | Measurement | `native\GhostRigger.Core.Measurement\GhostRigger.Core.Measurement.vcxproj` | renamed in Domain batch |
-| `GhostRigger.MeshTools` | `GhostRigger.Core.MeshTools` | Domain | Core | MeshTools | `native\GhostRigger.Core.MeshTools\GhostRigger.Core.MeshTools.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Modules` | `GhostRigger.Core.Modules` | Domain | Core | Modules | `native\GhostRigger.Core.Modules\GhostRigger.Core.Modules.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Ports` | `GhostRigger.Core.Ports` | Domain | Core | Ports | `native\GhostRigger.Core.Ports\GhostRigger.Core.Ports.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Measurement` | `GhostRigger.Core.Math.Measurement` | Domain | Core | Measurement | `native\GhostRigger.Core.Math.Measurement\GhostRigger.Core.Math.Measurement.vcxproj` | renamed in Domain batch |
+| `GhostRigger.MeshTools` | `GhostRigger.Core.Tools.Mesh` | Domain | Core | MeshTools | `native\GhostRigger.Core.Tools.Mesh\GhostRigger.Core.Tools.Mesh.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Modules` | `GhostRigger.Core.Scene.Modules` | Domain | Core | Modules | `native\GhostRigger.Core.Scene.Modules\GhostRigger.Core.Scene.Modules.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Ports` | `GhostRigger.Core.Rendering.Ports` | Domain | Core | Ports | `native\GhostRigger.Core.Rendering.Ports\GhostRigger.Core.Rendering.Ports.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Project` | `GhostRigger.Core.Project` | Domain | Core | Project | `native\GhostRigger.Core.Project\GhostRigger.Core.Project.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Rendering` | `GhostRigger.Core.Rendering` | Domain | Core | Rendering | `native\GhostRigger.Core.Rendering\GhostRigger.Core.Rendering.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Resources` | `GhostRigger.Core.Resources` | Domain | Core | Resources | `native\GhostRigger.Core.Resources\GhostRigger.Core.Resources.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Retargeting` | `GhostRigger.Core.Retargeting` | Domain | Core | Retargeting | `native\GhostRigger.Core.Retargeting\GhostRigger.Core.Retargeting.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Retargeting` | `GhostRigger.Core.Workflow.Retargeting` | Domain | Core | Retargeting | `native\GhostRigger.Core.Workflow.Retargeting\GhostRigger.Core.Workflow.Retargeting.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Scene` | `GhostRigger.Core.Scene` | Domain | Core | Scene | `native\GhostRigger.Core.Scene\GhostRigger.Core.Scene.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Sequence` | `GhostRigger.Core.Tools.SequenceEditor` | Domain | Core | Sequence | `native\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj` | renamed in Sequence merge; retired from solution |
-| `GhostRigger.Skeleton` | `GhostRigger.Core.Skeleton` | Domain | Core | Skeleton | `native\GhostRigger.Core.Skeleton\GhostRigger.Core.Skeleton.vcxproj` | renamed in Domain batch; missing from requested map |
-| `GhostRigger.Special` | `GhostRigger.Core.Special` | Domain | Core | Special | `native\GhostRigger.Core.Special\GhostRigger.Core.Special.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Templates` | `GhostRigger.Core.Templates` | Domain | Core | Templates | `native\GhostRigger.Core.Templates\GhostRigger.Core.Templates.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Unreal` | `GhostRigger.Core.Unreal` | Domain | Core | Unreal | `native\GhostRigger.Core.Unreal\GhostRigger.Core.Unreal.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Skeleton` | `GhostRigger.Core.Scene.Skeleton` | Domain | Core | Skeleton | `native\GhostRigger.Core.Scene.Skeleton\GhostRigger.Core.Scene.Skeleton.vcxproj` | renamed in Domain batch; missing from requested map |
+| `GhostRigger.Special` | `GhostRigger.Core.Tools.Special` | Domain | Core | Special | `native\GhostRigger.Core.Tools.Special\GhostRigger.Core.Tools.Special.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Templates` | `GhostRigger.Core.Formats.TwoDA` | Domain | Core | Templates | `native\GhostRigger.Core.Formats.TwoDA\GhostRigger.Core.Formats.TwoDA.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Unreal` | `GhostRigger.Adapters.Unreal` | Domain | Core | Unreal | `native\GhostRigger.Adapters.Unreal\GhostRigger.Adapters.Unreal.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Validation` | `GhostRigger.Core.Validation` | Domain | Core | Validation | `native\GhostRigger.Core.Validation\GhostRigger.Core.Validation.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Walkmesh` | `GhostRigger.Core.Walkmesh` | Domain | Core | Walkmesh | `native\GhostRigger.Core.Walkmesh\GhostRigger.Core.Walkmesh.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Workbench` | `GhostRigger.Core.Workbench` | Domain | Core | Workbench | `native\GhostRigger.Core.Workbench\GhostRigger.Core.Workbench.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Walkmesh` | `GhostRigger.Core.Scene.Walkmesh` | Domain | Core | Walkmesh | `native\GhostRigger.Core.Scene.Walkmesh\GhostRigger.Core.Scene.Walkmesh.vcxproj` | renamed in Domain batch |
+| `GhostRigger.Workbench` | `GhostRigger.Core.Tools.Workbench` | Domain | Core | Workbench | `native\GhostRigger.Core.Tools.Workbench\GhostRigger.Core.Tools.Workbench.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Workflow` | `GhostRigger.Core.Workflow` | Domain | Core | Workflow | `native\GhostRigger.Core.Workflow\GhostRigger.Core.Workflow.vcxproj` | renamed in Domain batch |
 | `GhostRigger.GUI.Camera` | `GhostRigger.Core.GUI.Display.Camera` | GUI | Boundary | Camera | `native\GhostRigger.Core.GUI.Display.Camera\GhostRigger.Core.GUI.Display.Camera.vcxproj` | renamed in GUI Boundary batch |
 | `GhostRigger.GUI.Dialogs` | `GhostRigger.Core.GUI.Display.Dialogs` | GUI | Boundary | Dialogs | `native\GhostRigger.Core.GUI.Display.Dialogs\GhostRigger.Core.GUI.Display.Dialogs.vcxproj` | renamed in GUI Boundary batch |
-| `GhostRigger.GUI.Gizmo` | `GhostRigger.Core.GUI.Helpers.GizmoDisplay` | GUI | Boundary | Gizmo | `native\GhostRigger.Core.GUI.Helpers.GizmoDisplay\GhostRigger.Core.GUI.Helpers.GizmoDisplay.vcxproj` | renamed in GUI Boundary batch |
+| `GhostRigger.GUI.Gizmo` | `GhostRigger.Core.GUI.Display.Overlays.Gizmo` | GUI | Boundary | Gizmo | `native\GhostRigger.Core.GUI.Display.Overlays.Gizmo\GhostRigger.Core.GUI.Display.Overlays.Gizmo.vcxproj` | renamed in GUI Boundary batch |
 | `GhostRigger.GUI.Integration` | `GhostRigger.Core.GUI.Display.Integration` | GUI | Boundary | Integration | `native\GhostRigger.Core.GUI.Display.Integration\GhostRigger.Core.GUI.Display.Integration.vcxproj` | renamed in GUI Boundary batch |
 | `GhostRigger.GUI.Lighting` | `GhostRigger.Core.GUI.Display.Lighting` | GUI | Boundary | Lighting | `native\GhostRigger.Core.GUI.Display.Lighting\GhostRigger.Core.GUI.Display.Lighting.vcxproj` | renamed in GUI Boundary batch |
 | `GhostRigger.GUI.Panels` | `GhostRigger.Core.GUI.Display.Panels` | GUI | Boundary | Panels | `native\GhostRigger.Core.GUI.Display.Panels\GhostRigger.Core.GUI.Display.Panels.vcxproj` | renamed in GUI Boundary batch |
@@ -134,11 +133,11 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | `GhostRigger.GUI.Textures` | `GhostRigger.Core.GUI.Display.Textures` | GUI | Boundary | Textures | `native\GhostRigger.Core.GUI.Display.Textures\GhostRigger.Core.GUI.Display.Textures.vcxproj` | renamed in GUI Boundary batch |
 | `GhostRigger.GUI.Theme` | `GhostRigger.Core.GUI.Display.Theme` | GUI | Boundary | Theme | `native\GhostRigger.Core.GUI.Display.Theme\GhostRigger.Core.GUI.Display.Theme.vcxproj` | renamed in GUI Boundary batch |
 | `GhostRigger.GUI.Viewports` | `GhostRigger.Core.GUI.Display.Viewports` | GUI | Boundary | Viewports | `native\GhostRigger.Core.GUI.Display.Viewports\GhostRigger.Core.GUI.Display.Viewports.vcxproj` | renamed in GUI Boundary batch |
-| `GhostRigger.Adapters.Files` | `GhostRigger.Adapters.IO.Files` | Adapters | IO | Files | `native\GhostRigger.Adapters.IO.Files\GhostRigger.Adapters.IO.Files.vcxproj` | renamed in Adapters batch |
-| `GhostRigger.Adapters.GPU` | `GhostRigger.Adapters.Hardware.GPU` | Adapters | Hardware | GPU | `native\GhostRigger.Adapters.Hardware.GPU\GhostRigger.Adapters.Hardware.GPU.vcxproj` | renamed in Adapters batch |
+| `GhostRigger.Adapters.Files` | `GhostRigger.Adapters.Files` | Adapters | IO | Files | `native\GhostRigger.Adapters.Files\GhostRigger.Adapters.Files.vcxproj` | renamed in Adapters batch |
+| `GhostRigger.Adapters.GPU` | `GhostRigger.Adapters.GPU` | Adapters | Hardware | GPU | `native\GhostRigger.Adapters.GPU\GhostRigger.Adapters.GPU.vcxproj` | renamed in Adapters batch |
 | `GhostRigger.Adapters.QtAutorig` | `GhostRigger.Adapters.Qt.Autorig` | Adapters | Qt | Autorig | `native\GhostRigger.Adapters.Qt.Autorig\GhostRigger.Adapters.Qt.Autorig.vcxproj` | renamed in Adapters batch |
 | `GhostRigger.Adapters.QtIPC` | `GhostRigger.Adapters.Qt.IPC` | Adapters | Qt | IPC | `native\GhostRigger.Adapters.Qt.IPC\GhostRigger.Adapters.Qt.IPC.vcxproj` | renamed in Adapters batch |
 | `GhostRigger.Adapters.QtViewport` | `GhostRigger.Adapters.Qt.Viewport` | Adapters | Qt | Viewport | `native\GhostRigger.Adapters.Qt.Viewport\GhostRigger.Adapters.Qt.Viewport.vcxproj` | renamed in Adapters batch |
-| `GhostRigger.Adapters.Rendering` | `GhostRigger.Adapters.Rendering.Core` | Adapters | Rendering | Core | `native\GhostRigger.Adapters.Rendering.Core\GhostRigger.Adapters.Rendering.Core.vcxproj` | renamed in Adapters batch |
-| `GhostRigger.Adapters.Scripts` | `GhostRigger.Adapters.Scripting.Core` | Adapters | Scripting | Core | `native\GhostRigger.Adapters.Scripting.Core\GhostRigger.Adapters.Scripting.Core.vcxproj` | renamed in Adapters batch |
+| `GhostRigger.Adapters.Rendering` | `GhostRigger.Adapters.Rendering` | Adapters | Rendering | Core | `native\GhostRigger.Adapters.Rendering\GhostRigger.Adapters.Rendering.vcxproj` | renamed in Adapters batch |
+| `GhostRigger.Adapters.Scripts` | `GhostRigger.Adapters.Scripting` | Adapters | Scripting | Core | `native\GhostRigger.Adapters.Scripting\GhostRigger.Adapters.Scripting.vcxproj` | renamed in Adapters batch |
 | `GhostRigger.Systems.BAS` | `GhostRigger.Core.Tools.BAS` | Systems | Feature | BAS | `native\GhostRigger.Core.Tools.BAS\GhostRigger.Core.Tools.BAS.vcxproj` | renamed in BAS merge; retired from solution |

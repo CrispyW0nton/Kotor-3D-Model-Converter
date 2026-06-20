@@ -1,0 +1,69 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.Rendering.Backends.D3D12",
+    "file_count": 10,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_DIRECT3D_RENDERER",
+            "source_path": "src/adapters/rendering/direct3d_renderer.py",
+            "packaged_path": "Python/src/adapters/rendering/direct3d_renderer.py",
+            "sha256": "c857e91f9d04b2021009bac10bfa292550881ea3062869802a8175f7cad53770"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DEBUG_TABLES",
+            "source_path": "src/core/rendering/gpu_debug_tables.py",
+            "packaged_path": "Python/src/core/rendering/gpu_debug_tables.py",
+            "sha256": "010a37feb0a63f95ca886576692b8ff0ef9efdfa512432d65590daf1fa9151c0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DIAGNOSTICS_CONFIG",
+            "source_path": "src/core/rendering/gpu_diagnostics_config.py",
+            "packaged_path": "Python/src/core/rendering/gpu_diagnostics_config.py",
+            "sha256": "fc8a5a7e33e971a3da4363b95609d6efc8b26259fcfb844850e28a7b802b9408"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DIAGNOSTICS_RECORDS",
+            "source_path": "src/core/rendering/gpu_diagnostics_records.py",
+            "packaged_path": "Python/src/core/rendering/gpu_diagnostics_records.py",
+            "sha256": "5c2222453229f30dbadc87ca4776c4813c61dc16d7e0ba0de8857e9daec8ce43"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_SCENE_HELPERS",
+            "source_path": "src/core/rendering/gpu_scene_helpers.py",
+            "packaged_path": "Python/src/core/rendering/gpu_scene_helpers.py",
+            "sha256": "7924924e3f1f5462492337802f2f045d714f8f1061556e66c68fde0e4f71b19e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_SHADERS",
+            "source_path": "src/core/rendering/gpu_shaders.py",
+            "packaged_path": "Python/src/core/rendering/gpu_shaders.py",
+            "sha256": "7ddc031a9a0cc0d0641ba78f0dd212cfbb1e87f4ba64966e0b626bde11343210"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_VBO_LAYOUT",
+            "source_path": "src/core/rendering/gpu_vbo_layout.py",
+            "packaged_path": "Python/src/core/rendering/gpu_vbo_layout.py",
+            "sha256": "7c98f12f43618ebb4538e00cee32aa5cddecad357fdc16eab623e6a7b8f7e72d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_HARDWARE_INFO",
+            "source_path": "src/core/rendering/hardware_info.py",
+            "packaged_path": "Python/src/core/rendering/hardware_info.py",
+            "sha256": "16bd5be71a7a302087b0bf7a9297902b0274ae777cffdbaa31e3db0df5f5e6ac"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
+            "source_path": "src/core/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
+            "sha256": "51d58cceba30366fbd3ca710cead105d1ff91d3a4fa907d7536b57e9e91ec8b3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_DIRECT3D_RENDERER",
+            "source_path": "src/gui/rendering/direct3d_renderer.py",
+            "packaged_path": "Python/src/gui/rendering/direct3d_renderer.py",
+            "sha256": "4f3a47a9f0ffc89c8fee25c38fd971a003d21d80a92a87798fa0b86ac02ebe72"
+        }
+    ]
+}

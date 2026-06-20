@@ -12,11 +12,11 @@ from src.measurement.unit_system import UnitSystem, normalize_unit
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Measurement.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Core.Measurement" / "GhostRigger.Core.Measurement.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Core.Measurement" / "GhostRigger.Core.Measurement.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.Measurement" / "Public" / "MeasurementContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.Measurement" / "Private" / "MeasurementContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Math.Measurement.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Core.Math.Measurement" / "GhostRigger.Core.Math.Measurement.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.Math.Measurement" / "GhostRigger.Core.Math.Measurement.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.Math.Measurement" / "Public" / "MeasurementContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Math.Measurement" / "Private" / "MeasurementContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:

@@ -73,7 +73,9 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\gui\panels\qt_sprite_material_panel.py" />
     <None Include="Python\src\gui\panels\qt_texture_panel.py" />
     <None Include="Python\src\gui\panels\qt_ue5_rig_export_panel.py" />
-    <None Include="Python\src\gui\panels\qt_workflow_rail.py" />
+    <None Include="Python\src\gui\panels\qt_workflow_rail.py" />    <None Include="Python\src\gui\panels\module_editor\readiness_panel.py" />
+    <None Include="Python\src\gui\panels\module_editor\workflow_panel.py" />
+
   </ItemGroup>
   <PropertyGroup Label="PythonPayloadBuild">
     <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'=='' and '$(GHOSTRIGGER_PYTHON)'!=''">$(GHOSTRIGGER_PYTHON)</GhostRiggerPythonPayloadPython>

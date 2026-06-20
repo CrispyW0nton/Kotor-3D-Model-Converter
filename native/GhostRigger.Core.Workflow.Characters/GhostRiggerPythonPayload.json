@@ -1,0 +1,87 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.Workflow.Characters",
+    "file_count": 13,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_INIT",
+            "source_path": "src/core/characters/__init__.py",
+            "packaged_path": "Python/src/core/characters/__init__.py",
+            "sha256": "ff138053bab9fee263434ab4f7d8e4506323306c87c04c86bc5bf20929d6be5b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_AUTOFIT_REPORT",
+            "source_path": "src/core/characters/character_autofit_report.py",
+            "packaged_path": "Python/src/core/characters/character_autofit_report.py",
+            "sha256": "801dbe702f5b112963274cbfc5f15adf43e0f1123b9c2ce41a5416eb6135a4fa"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
+            "source_path": "src/core/characters/character_builder.py",
+            "packaged_path": "Python/src/core/characters/character_builder.py",
+            "sha256": "fd07c12790f25ad9e630a3482b74a74b73464dac62952d3e36ee141a657e49a9"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
+            "source_path": "src/core/characters/character_export_preflight.py",
+            "packaged_path": "Python/src/core/characters/character_export_preflight.py",
+            "sha256": "461fbd37528b5d0b57c40855ca5ef08c8b04be7bfbd049d2d77787077ffa050e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_TRANSACTION",
+            "source_path": "src/core/characters/character_export_transaction.py",
+            "packaged_path": "Python/src/core/characters/character_export_transaction.py",
+            "sha256": "c86448672d4d3836b65d724de8a9d3ed35181b1939d29fe5065da28602b1e62e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_OVERRIDE_PACKAGE",
+            "source_path": "src/core/characters/character_override_package.py",
+            "packaged_path": "Python/src/core/characters/character_override_package.py",
+            "sha256": "2dae3d04476f2fb52d8033fbb53484e421f5a21561d871ce1999a3da2de9cfdf"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_RIG_STATE",
+            "source_path": "src/core/characters/character_rig_state.py",
+            "packaged_path": "Python/src/core/characters/character_rig_state.py",
+            "sha256": "28188503c5381adac97c4048925f789c708c1f16a98ca12aaa9716b7f425aced"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_VALIDATION_REPORT",
+            "source_path": "src/core/characters/character_validation_report.py",
+            "packaged_path": "Python/src/core/characters/character_validation_report.py",
+            "sha256": "f89a207cc5f98e6dc659fd729eb6903d1a5ff4e8c25a20a6945aabd690939823"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_APPEARANCE",
+            "source_path": "src/core/characters/creature_appearance.py",
+            "packaged_path": "Python/src/core/characters/creature_appearance.py",
+            "sha256": "1635d97278a232d3a986ea1451dfb1133e0c95841e92d6cac8aabafb4557810c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",
+            "source_path": "src/core/characters/head_workflow.py",
+            "packaged_path": "Python/src/core/characters/head_workflow.py",
+            "sha256": "fb4d3a7bcad822cadcfaa790403b33fd472e099bed848d7bafc3e719ed278a5c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
+            "source_path": "src/core/characters/headless_body_workflow.py",
+            "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
+            "sha256": "5b6e45b7d052eb5ecc3d07d12604aa3275045121d665be404109c6c20a0e7fe5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",
+            "source_path": "src/core/characters/kotor_constants.py",
+            "packaged_path": "Python/src/core/characters/kotor_constants.py",
+            "sha256": "3cb71a09e164da0a08eb8366ad085083c5637c2ffac08f3ac0b3ee9fe5195484"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_NATIVE_SKELETON",
+            "source_path": "src/core/characters/native_skeleton.py",
+            "packaged_path": "Python/src/core/characters/native_skeleton.py",
+            "sha256": "fa7b792e13137273d319da8544f9a99b4836a6e690ba48a572f9c83224db9905"
+        }
+    ]
+}

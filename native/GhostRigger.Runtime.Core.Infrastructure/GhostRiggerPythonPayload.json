@@ -1,0 +1,21 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Runtime.Core.Infrastructure",
+    "file_count": 2,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_INFRA_INIT",
+            "source_path": "src/infra/__init__.py",
+            "packaged_path": "Python/src/infra/__init__.py",
+            "sha256": "e6282757e915257eecdeca75b6601c40ad962a8328a5c026827a34fabee009ab"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_INFRA_MCP_AUTOSTART",
+            "source_path": "src/infra/mcp_autostart.py",
+            "packaged_path": "Python/src/infra/mcp_autostart.py",
+            "sha256": "e3da53f25dd721f933e0bc61cd0550bc05f7f9259756738dff1306fcf5d4cf63"
+        }
+    ]
+}

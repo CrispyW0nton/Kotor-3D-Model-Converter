@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     payloads = (
-        "native/GhostRigger.Core.Modules/Python",
-        "native/GhostRigger.Core.Level/Python",
-        "native/GhostRigger.Core.Game/Python",
+        "native/GhostRigger.Core.Scene.Modules/Python",
+        "native/GhostRigger.Core.Scene.Level/Python",
+        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Walkmesh/Python",
-        "native/GhostRigger.Core.Geometry/Python",
-        "native/GhostRigger.Core.Camera/Python",
+        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Math.Geometry/Python",
+        "native/GhostRigger.Core.Math.Camera/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Lighting/Python",
+        "native/GhostRigger.Core.Rendering.Lighting/Python",
         ".",
     )
     for rel in payloads:
@@ -117,10 +117,10 @@ def test_t2907_map_studio_viewport_draws_terrain_walkability_overlay() -> None:
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Core.Modules/Python/src/core/modules/module_editor_controller.py"
+        "native/GhostRigger.Core.Scene.Modules/Python/src/core/modules/module_editor_controller.py"
     )
 
     assert "_map_studio_terrain_walkability_overlay = None" in viewport_source

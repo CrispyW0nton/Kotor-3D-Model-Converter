@@ -174,8 +174,9 @@ Canonical names include:
 - `GhostRigger.Core.Rendering.Backends.D3D12`
 - `GhostRigger.Core.Rendering.Backends.Null`
 
-The older `GhostRigger.Graphics.Renderer.*` native names are legacy build
-state. New planning and rename batches must target `GhostRigger.Core.Rendering.*`.
+`GhostRigger.Core.Rendering.Contracts` and
+`GhostRigger.Core.Rendering.Backends.*` are canonical native names when a real
+renderer-neutral contract or renderer backend runtime boundary exists.
 
 ### Validation
 

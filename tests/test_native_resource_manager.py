@@ -8,8 +8,8 @@ from src.core.assets import resource_manager
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Assets"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Assets.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Resources.Assets"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Resources.Assets.dll"
 
 
 def _load_assets_dll() -> ctypes.CDLL:
@@ -38,8 +38,8 @@ def _call_resource_key(dll: ctypes.CDLL, name: str, resource_type: int) -> str:
 
 
 def test_assets_project_declares_resource_manager_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Core.Assets.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Core.Assets.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.Resources.Assets.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.Resources.Assets.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerAssets.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "ResourceManager.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ResourceManager.cpp").read_text(encoding="utf-8")

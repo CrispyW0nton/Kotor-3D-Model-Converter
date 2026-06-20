@@ -89,7 +89,7 @@ class _FakeRendererD3D12Dll:
     gr_renderer_d3d12_version = _FakeNativeExport(b"0.1.0")
     gr_renderer_d3d12_capabilities_json = _FakeNativeExport(
         (
-            b'{"name":"GhostRigger.Graphics.Renderer.Backend.D3D12","version":"0.1.0",'
+            b'{"name":"GhostRigger.Core.Rendering.Backends.D3D12","version":"0.1.0",'
             b'"draw_submission_enabled":false,'
             b'"guarded_metadata_capabilities":['
             b'"descriptor_allocator_readiness",'
@@ -126,7 +126,7 @@ class _FakeRendererModernGLDll:
     gr_renderer_moderngl_version = _FakeNativeExport(b"0.1.0")
     gr_renderer_moderngl_capabilities_json = _FakeNativeExport(
         (
-            b'{"name":"GhostRigger.Graphics.Renderer.Backend.ModernGL","version":"0.1.0",'
+            b'{"name":"GhostRigger.Core.Rendering.Backends.ModernGL","version":"0.1.0",'
             b'"renderer_backend":true,"backend":"moderngl",'
             b'"contract_version":"0.1.0","python_adapter_required":true,'
             b'"native_device_owner":false,"draw_submission_enabled":false}'
@@ -138,7 +138,7 @@ class _FakeRendererPyGFXDll:
     gr_renderer_pygfx_version = _FakeNativeExport(b"0.1.0")
     gr_renderer_pygfx_capabilities_json = _FakeNativeExport(
         (
-            b'{"name":"GhostRigger.Graphics.Renderer.Backend.PyGFX","version":"0.1.0",'
+            b'{"name":"GhostRigger.Core.Rendering.Backends.PyGFX","version":"0.1.0",'
             b'"renderer_backend":true,"backend":"pygfx",'
             b'"contract_version":"0.1.0","python_adapter_required":true,'
             b'"native_device_owner":false,"draw_submission_enabled":false}'
@@ -186,7 +186,7 @@ class _FakeWindowsMainWindowDll:
     gr_windows_main_window_version = _FakeNativeExport(b"0.1.0")
     gr_windows_main_window_capabilities_json = _FakeNativeExport(
         (
-            b'{"name":"GhostRigger.Windows.Shell.Main","version":"0.1.0",'
+            b'{"name":"GhostRigger.Core.GUI.Display.Shell.Main","version":"0.1.0",'
             b'"window_package":true,"owner_surface":"Main window composition shell",'
             b'"bridge_method":"C ABI DLL","diagnostic_only":true,'
             b'"native_shell_enabled":false,"python_fallback_required":true}'
@@ -256,10 +256,10 @@ def test_runtime_shared_resources_status_uses_shared_registry_path(tmp_path: Pat
 def test_renderer_contracts_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_renderer_contracts_status([tmp_path])
 
-    assert status.name == "GhostRigger.Graphics.Renderer.Shared.Contracts"
+    assert status.name == "GhostRigger.Core.Rendering.Contracts"
     assert status.available is False
     assert (
-        "GhostRigger.Graphics.Renderer.Shared.Contracts.dll was not found." in status.reason
+        "GhostRigger.Core.Rendering.Contracts.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -267,10 +267,10 @@ def test_renderer_contracts_status_uses_shared_registry_path(tmp_path: Path) -> 
 def test_renderer_null_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_renderer_null_status([tmp_path])
 
-    assert status.name == "GhostRigger.Graphics.Renderer.Backend.Null"
+    assert status.name == "GhostRigger.Core.Rendering.Backends.Null"
     assert status.available is False
     assert (
-        "GhostRigger.Graphics.Renderer.Backend.Null.dll was not found." in status.reason
+        "GhostRigger.Core.Rendering.Backends.Null.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -278,10 +278,10 @@ def test_renderer_null_status_uses_shared_registry_path(tmp_path: Path) -> None:
 def test_renderer_d3d12_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_renderer_d3d12_status([tmp_path])
 
-    assert status.name == "GhostRigger.Graphics.Renderer.Backend.D3D12"
+    assert status.name == "GhostRigger.Core.Rendering.Backends.D3D12"
     assert status.available is False
     assert (
-        "GhostRigger.Graphics.Renderer.Backend.D3D12.dll was not found." in status.reason
+        "GhostRigger.Core.Rendering.Backends.D3D12.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -289,10 +289,10 @@ def test_renderer_d3d12_status_uses_shared_registry_path(tmp_path: Path) -> None
 def test_renderer_moderngl_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_renderer_moderngl_status([tmp_path])
 
-    assert status.name == "GhostRigger.Graphics.Renderer.Backend.ModernGL"
+    assert status.name == "GhostRigger.Core.Rendering.Backends.ModernGL"
     assert status.available is False
     assert (
-        "GhostRigger.Graphics.Renderer.Backend.ModernGL.dll was not found." in status.reason
+        "GhostRigger.Core.Rendering.Backends.ModernGL.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -300,10 +300,10 @@ def test_renderer_moderngl_status_uses_shared_registry_path(tmp_path: Path) -> N
 def test_renderer_pygfx_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_renderer_pygfx_status([tmp_path])
 
-    assert status.name == "GhostRigger.Graphics.Renderer.Backend.PyGFX"
+    assert status.name == "GhostRigger.Core.Rendering.Backends.PyGFX"
     assert status.available is False
     assert (
-        "GhostRigger.Graphics.Renderer.Backend.PyGFX.dll was not found." in status.reason
+        "GhostRigger.Core.Rendering.Backends.PyGFX.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
@@ -390,23 +390,23 @@ def test_final_phase_one_tool_statuses_use_shared_registry_path(tmp_path: Path) 
 def test_windows_main_window_status_uses_shared_registry_path(tmp_path: Path) -> None:
     status = query_windows_main_window_status([tmp_path])
 
-    assert status.name == "GhostRigger.Windows.Shell.Main"
+    assert status.name == "GhostRigger.Core.GUI.Display.Shell.Main"
     assert status.available is False
     assert (
-        "GhostRigger.Windows.Shell.Main.dll was not found." in status.reason
+        "GhostRigger.Core.GUI.Display.Shell.Main.dll was not found." in status.reason
         or "Windows native package" in status.reason
     )
 
 
 def test_extra_window_statuses_use_shared_registry_path(tmp_path: Path) -> None:
     cases = (
-        (query_windows_level_editor_status, "GhostRigger.Windows.Editor.Level"),
+        (query_windows_level_editor_status, "GhostRigger.Core.Tools.ModuleEditor"),
         (
             query_windows_animation_retarget_workbench_status,
-            "GhostRigger.Windows.Workbench.AnimationRetarget",
+            "GhostRigger.Core.Tools.Retargeting.Workbench",
         ),
-        (query_windows_legacy_rigging_window_status, "GhostRigger.Windows.Legacy.Rigging"),
-        (query_windows_unreal_animator_window_status, "GhostRigger.Windows.Workbench.UnrealAnimator"),
+        (query_windows_legacy_rigging_window_status, "GhostRigger.Core.Tools.Rigging"),
+        (query_windows_unreal_animator_window_status, "GhostRigger.Core.Tools.UnrealAnimator"),
     )
 
     for query_status, package_name in cases:
@@ -515,40 +515,40 @@ def test_runtime_shared_resources_package_spec_names_current_contract() -> None:
 
 
 def test_renderer_contracts_package_spec_names_current_contract() -> None:
-    assert RENDERER_CONTRACTS_PACKAGE.name == "GhostRigger.Graphics.Renderer.Shared.Contracts"
-    assert RENDERER_CONTRACTS_PACKAGE.dll_name == "GhostRigger.Graphics.Renderer.Shared.Contracts.dll"
+    assert RENDERER_CONTRACTS_PACKAGE.name == "GhostRigger.Core.Rendering.Contracts"
+    assert RENDERER_CONTRACTS_PACKAGE.dll_name == "GhostRigger.Core.Rendering.Contracts.dll"
     assert RENDERER_CONTRACTS_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_CONTRACTS"
     assert RENDERER_CONTRACTS_PACKAGE.version_export == "gr_renderer_contracts_version"
     assert RENDERER_CONTRACTS_PACKAGE.capabilities_export == "gr_renderer_contracts_capabilities_json"
 
 
 def test_renderer_null_package_spec_names_current_contract() -> None:
-    assert RENDERER_NULL_PACKAGE.name == "GhostRigger.Graphics.Renderer.Backend.Null"
-    assert RENDERER_NULL_PACKAGE.dll_name == "GhostRigger.Graphics.Renderer.Backend.Null.dll"
+    assert RENDERER_NULL_PACKAGE.name == "GhostRigger.Core.Rendering.Backends.Null"
+    assert RENDERER_NULL_PACKAGE.dll_name == "GhostRigger.Core.Rendering.Backends.Null.dll"
     assert RENDERER_NULL_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_NULL"
     assert RENDERER_NULL_PACKAGE.version_export == "gr_renderer_null_version"
     assert RENDERER_NULL_PACKAGE.capabilities_export == "gr_renderer_null_capabilities_json"
 
 
 def test_renderer_d3d12_package_spec_names_current_contract() -> None:
-    assert RENDERER_D3D12_PACKAGE.name == "GhostRigger.Graphics.Renderer.Backend.D3D12"
-    assert RENDERER_D3D12_PACKAGE.dll_name == "GhostRigger.Graphics.Renderer.Backend.D3D12.dll"
+    assert RENDERER_D3D12_PACKAGE.name == "GhostRigger.Core.Rendering.Backends.D3D12"
+    assert RENDERER_D3D12_PACKAGE.dll_name == "GhostRigger.Core.Rendering.Backends.D3D12.dll"
     assert RENDERER_D3D12_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_D3D12"
     assert RENDERER_D3D12_PACKAGE.version_export == "gr_renderer_d3d12_version"
     assert RENDERER_D3D12_PACKAGE.capabilities_export == "gr_renderer_d3d12_capabilities_json"
 
 
 def test_renderer_moderngl_package_spec_names_current_contract() -> None:
-    assert RENDERER_MODERNGL_PACKAGE.name == "GhostRigger.Graphics.Renderer.Backend.ModernGL"
-    assert RENDERER_MODERNGL_PACKAGE.dll_name == "GhostRigger.Graphics.Renderer.Backend.ModernGL.dll"
+    assert RENDERER_MODERNGL_PACKAGE.name == "GhostRigger.Core.Rendering.Backends.ModernGL"
+    assert RENDERER_MODERNGL_PACKAGE.dll_name == "GhostRigger.Core.Rendering.Backends.ModernGL.dll"
     assert RENDERER_MODERNGL_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_MODERNGL"
     assert RENDERER_MODERNGL_PACKAGE.version_export == "gr_renderer_moderngl_version"
     assert RENDERER_MODERNGL_PACKAGE.capabilities_export == "gr_renderer_moderngl_capabilities_json"
 
 
 def test_renderer_pygfx_package_spec_names_current_contract() -> None:
-    assert RENDERER_PYGFX_PACKAGE.name == "GhostRigger.Graphics.Renderer.Backend.PyGFX"
-    assert RENDERER_PYGFX_PACKAGE.dll_name == "GhostRigger.Graphics.Renderer.Backend.PyGFX.dll"
+    assert RENDERER_PYGFX_PACKAGE.name == "GhostRigger.Core.Rendering.Backends.PyGFX"
+    assert RENDERER_PYGFX_PACKAGE.dll_name == "GhostRigger.Core.Rendering.Backends.PyGFX.dll"
     assert RENDERER_PYGFX_PACKAGE.env_var == "GHOSTRIGGER_RENDERER_PYGFX"
     assert RENDERER_PYGFX_PACKAGE.version_export == "gr_renderer_pygfx_version"
     assert RENDERER_PYGFX_PACKAGE.capabilities_export == "gr_renderer_pygfx_capabilities_json"
@@ -709,8 +709,8 @@ def test_final_phase_one_tool_package_specs_name_current_contracts() -> None:
 
 
 def test_windows_main_window_package_spec_names_current_contract() -> None:
-    assert WINDOWS_MAIN_WINDOW_PACKAGE.name == "GhostRigger.Windows.Shell.Main"
-    assert WINDOWS_MAIN_WINDOW_PACKAGE.dll_name == "GhostRigger.Windows.Shell.Main.dll"
+    assert WINDOWS_MAIN_WINDOW_PACKAGE.name == "GhostRigger.Core.GUI.Display.Shell.Main"
+    assert WINDOWS_MAIN_WINDOW_PACKAGE.dll_name == "GhostRigger.Core.GUI.Display.Shell.Main.dll"
     assert WINDOWS_MAIN_WINDOW_PACKAGE.env_var == "GHOSTRIGGER_WINDOWS_MAIN_WINDOW"
     assert WINDOWS_MAIN_WINDOW_PACKAGE.version_export == "gr_windows_main_window_version"
     assert (
@@ -723,28 +723,28 @@ def test_extra_window_package_specs_name_current_contracts() -> None:
     cases = (
         (
             WINDOWS_LEVEL_EDITOR_PACKAGE,
-            "GhostRigger.Windows.Editor.Level",
+            "GhostRigger.Core.Tools.ModuleEditor",
             "GHOSTRIGGER_WINDOWS_LEVEL_EDITOR",
             "gr_windows_level_editor_version",
             "gr_windows_level_editor_capabilities_json",
         ),
         (
             WINDOWS_ANIMATION_RETARGET_WORKBENCH_PACKAGE,
-            "GhostRigger.Windows.Workbench.AnimationRetarget",
+            "GhostRigger.Core.Tools.Retargeting.Workbench",
             "GHOSTRIGGER_WINDOWS_ANIMATION_RETARGET_WORKBENCH",
             "gr_windows_animation_retarget_workbench_version",
             "gr_windows_animation_retarget_workbench_capabilities_json",
         ),
         (
             WINDOWS_LEGACY_RIGGING_WINDOW_PACKAGE,
-            "GhostRigger.Windows.Legacy.Rigging",
+            "GhostRigger.Core.Tools.Rigging",
             "GHOSTRIGGER_WINDOWS_LEGACY_RIGGING_WINDOW",
             "gr_windows_legacy_rigging_window_version",
             "gr_windows_legacy_rigging_window_capabilities_json",
         ),
         (
             WINDOWS_UNREAL_ANIMATOR_WINDOW_PACKAGE,
-            "GhostRigger.Windows.Workbench.UnrealAnimator",
+            "GhostRigger.Core.Tools.UnrealAnimator",
             "GHOSTRIGGER_WINDOWS_UNREAL_ANIMATOR_WINDOW",
             "gr_windows_unreal_animator_window_version",
             "gr_windows_unreal_animator_window_capabilities_json",
@@ -794,7 +794,7 @@ def test_renderer_d3d12_status_reports_guarded_metadata_capabilities(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    dll_path = tmp_path / "GhostRigger.Graphics.Renderer.Backend.D3D12.dll"
+    dll_path = tmp_path / "GhostRigger.Core.Rendering.Backends.D3D12.dll"
     dll_path.write_bytes(b"fake")
 
     monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
@@ -820,7 +820,7 @@ def test_renderer_moderngl_status_reports_diagnostic_capabilities(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    dll_path = tmp_path / "GhostRigger.Graphics.Renderer.Backend.ModernGL.dll"
+    dll_path = tmp_path / "GhostRigger.Core.Rendering.Backends.ModernGL.dll"
     dll_path.write_bytes(b"fake")
 
     monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
@@ -846,7 +846,7 @@ def test_renderer_pygfx_status_reports_diagnostic_capabilities(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    dll_path = tmp_path / "GhostRigger.Graphics.Renderer.Backend.PyGFX.dll"
+    dll_path = tmp_path / "GhostRigger.Core.Rendering.Backends.PyGFX.dll"
     dll_path.write_bytes(b"fake")
 
     monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")
@@ -947,7 +947,7 @@ def test_windows_main_window_status_reports_diagnostic_capabilities(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    dll_path = tmp_path / "GhostRigger.Windows.Shell.Main.dll"
+    dll_path = tmp_path / "GhostRigger.Core.GUI.Display.Shell.Main.dll"
     dll_path.write_bytes(b"fake")
 
     monkeypatch.setattr(package_registry.platform, "system", lambda: "Windows")

@@ -32,7 +32,7 @@ def test_t2661_viewport_table_edits_authored_placement_transforms() -> None:
 
 def test_t2661_module_editor_routes_viewport_table_edits_through_controller() -> None:
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
     )
 
     assert "self.viewport_panel.transformEdited.connect(self._set_transform)" in window_source

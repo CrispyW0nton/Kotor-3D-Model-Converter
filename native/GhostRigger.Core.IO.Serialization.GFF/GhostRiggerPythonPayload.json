@@ -1,0 +1,33 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.IO.Serialization.GFF",
+    "file_count": 4,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_FORMATS_INIT",
+            "source_path": "src/formats/__init__.py",
+            "packaged_path": "Python/src/formats/__init__.py",
+            "sha256": "ebd7909bc7b09818bf24aa3a1b0b92f20cb28d6ec9f7ed938627e8ba07f45992"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_READER",
+            "source_path": "src/formats/gff_reader.py",
+            "packaged_path": "Python/src/formats/gff_reader.py",
+            "sha256": "b82b37300020eb73cd56178a12eac14f63bd7a1c188e167cd6f3541f7ec592e5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_TYPES",
+            "source_path": "src/formats/gff_types.py",
+            "packaged_path": "Python/src/formats/gff_types.py",
+            "sha256": "c524f5e895b4eb83746a2691f062b4c1e9e43e48eb8d118ec3d81b2d0d2812da"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_WRITER",
+            "source_path": "src/formats/gff_writer.py",
+            "packaged_path": "Python/src/formats/gff_writer.py",
+            "sha256": "95fb5dfc7ed2586e13c8952717ffb726d08a10f3d298e050cc2ac8bca0e5f0cb"
+        }
+    ]
+}

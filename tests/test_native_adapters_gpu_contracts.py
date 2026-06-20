@@ -9,7 +9,7 @@ from src.adapters.gpu import moderngl_context
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.Hardware.GPU.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.GPU.dll"
 
 
 def _load_dll() -> ctypes.CDLL:

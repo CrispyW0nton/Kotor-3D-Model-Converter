@@ -1664,11 +1664,11 @@ def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
 def test_startup_renderer_and_hardware_scans_stream_through_splash() -> None:
     run_source = (
         _REPO_ROOT
-        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/app_runner.py"
+        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/functions/app_runner.py"
     ).read_text(encoding="utf-8")
     diagnostics_source = (
         _REPO_ROOT
-        / "native/GhostRigger.Windows.Shell.Main/Python/src/gui/windows/application_core/functions/startup_library.py"
+        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/functions/startup_library.py"
     ).read_text(encoding="utf-8")
 
     assert "Scanning renderers" not in run_source

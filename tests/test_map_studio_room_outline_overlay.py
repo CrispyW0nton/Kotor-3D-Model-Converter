@@ -54,10 +54,10 @@ def test_t2664_module_editor_passes_room_outline_geometry_to_viewport_panel() ->
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Core.Modules/Python/src/core/modules/module_editor_controller.py"
+        "native/GhostRigger.Core.Scene.Modules/Python/src/core/modules/module_editor_controller.py"
     )
 
     for source in (panel_source, native_panel_source):
@@ -104,7 +104,7 @@ def test_t2678_viewport_primitive_selection_syncs_builder_tab_controls() -> None
         "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
     )
 
     assert "roomPrimitiveSelected = QtCore.Signal(str, str)" in panel_source

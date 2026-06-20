@@ -34,9 +34,9 @@ contracts belong in `GhostRigger.Core.Rendering`, and concrete backend packages
 use `GhostRigger.Core.Rendering.Backends.{Backend}`, for example
 `GhostRigger.Core.Rendering.Backends.D3D12` or the diagnostic
 `GhostRigger.Core.Rendering.Backends.Null`. Existing
-`GhostRigger.Graphics.Renderer.*` projects are legacy build targets until a
-coordinated rename updates project files, manifests, registry entries, and
-tests together.
+`GhostRigger.Core.Rendering.Contracts` and
+`GhostRigger.Core.Rendering.Backends.*` projects are the current canonical
+renderer contract/backend package names.
 
 Shared logic that more than one tool, GUI package, renderer, or runtime package
 consumes belongs in the canonical Core, Systems, Runtime, Native Core, or

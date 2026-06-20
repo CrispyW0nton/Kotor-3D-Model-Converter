@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Core.Modules/Python",
-        "native/GhostRigger.Core.Level/Python",
-        "native/GhostRigger.Core.Game/Python",
+        "native/GhostRigger.Core.Scene.Modules/Python",
+        "native/GhostRigger.Core.Scene.Level/Python",
+        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Walkmesh/Python",
-        "native/GhostRigger.Core.Geometry/Python",
-        "native/GhostRigger.Core.Camera/Python",
+        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Math.Geometry/Python",
+        "native/GhostRigger.Core.Math.Camera/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Lighting/Python",
+        "native/GhostRigger.Core.Rendering.Lighting/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -101,7 +101,7 @@ def test_t2656_module_editor_builder_exposes_searchable_gameplay_palette() -> No
     controller_source = (
         repo
         / "native"
-        / "GhostRigger.Core.Modules"
+        / "GhostRigger.Core.Scene.Modules"
         / "Python"
         / "src"
         / "core"
@@ -111,7 +111,7 @@ def test_t2656_module_editor_builder_exposes_searchable_gameplay_palette() -> No
     window_source = (
         repo
         / "native"
-        / "GhostRigger.Windows.Editor.Level"
+        / "GhostRigger.Core.Tools.ModuleEditor"
         / "Python"
         / "src"
         / "gui"

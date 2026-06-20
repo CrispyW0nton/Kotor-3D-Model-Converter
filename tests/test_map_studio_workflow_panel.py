@@ -80,7 +80,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
 
 def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None:
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     init_source = _read(
