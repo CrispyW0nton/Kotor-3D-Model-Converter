@@ -144,6 +144,36 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.template_references_label.setWordWrap(True)
         root.addWidget(self.template_references_label)
 
+        self.transition_references_label = QtWidgets.QLabel("Transitions: Not checked")
+        self.transition_references_label.setObjectName("mapStudioReadinessTransitionReferencesLabel")
+        self.transition_references_label.setWordWrap(True)
+        root.addWidget(self.transition_references_label)
+        self.transition_reference_table = QtWidgets.QTableWidget(0, 4)
+        self.transition_reference_table.setObjectName("mapStudioReadinessTransitionReferenceTable")
+        self.transition_reference_table.setHorizontalHeaderLabels(("Kind", "Tag", "Destination", "Status / fix"))
+        self.transition_reference_table.verticalHeader().setVisible(False)
+        self.transition_reference_table.horizontalHeader().setStretchLastSection(True)
+        self.transition_reference_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.transition_reference_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.transition_reference_table.setMinimumHeight(76)
+        self.transition_reference_table.setMaximumHeight(150)
+        root.addWidget(self.transition_reference_table)
+
+        self.script_references_label = QtWidgets.QLabel("ARE/IFO script hooks: Not checked")
+        self.script_references_label.setObjectName("mapStudioReadinessScriptReferencesLabel")
+        self.script_references_label.setWordWrap(True)
+        root.addWidget(self.script_references_label)
+        self.script_reference_table = QtWidgets.QTableWidget(0, 4)
+        self.script_reference_table.setObjectName("mapStudioReadinessScriptReferenceTable")
+        self.script_reference_table.setHorizontalHeaderLabels(("Scope", "Field", "Script", "Status / fix"))
+        self.script_reference_table.verticalHeader().setVisible(False)
+        self.script_reference_table.horizontalHeader().setStretchLastSection(True)
+        self.script_reference_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.script_reference_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.script_reference_table.setMinimumHeight(76)
+        self.script_reference_table.setMaximumHeight(150)
+        root.addWidget(self.script_reference_table)
+
         self.blocking_label = QtWidgets.QLabel("")
         self.blocking_label.setObjectName("mapStudioReadinessBlockingLabel")
         self.blocking_label.setWordWrap(True)
@@ -186,6 +216,10 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self._update_copy_buttons()
             self.authored_summary_label.setText("Authored content: Not checked")
             self.template_references_label.setText("Template references: Not checked")
+            self.transition_references_label.setText("Transitions: Not checked")
+            self._set_transition_reference_rows(())
+            self.script_references_label.setText("ARE/IFO script hooks: Not checked")
+            self._set_script_reference_rows(())
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
             self.game_test_button.setEnabled(False)
@@ -302,6 +336,34 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         else:
             self.template_references_label.setText("Template references: None")
 
+        transition_refs = list(metadata.get("transition_references", ()) or ())
+        transition_count = int(metadata.get("transition_count", len(transition_refs)) or 0)
+        transition_complete_count = int(metadata.get("transition_complete_count", 0) or 0)
+        transition_incomplete_count = int(
+            metadata.get("transition_incomplete_count", max(0, transition_count - transition_complete_count)) or 0
+        )
+        if transition_refs:
+            self.transition_references_label.setText(
+                f"Transitions: {transition_complete_count}/{transition_count} linked; "
+                f"{transition_incomplete_count} need destination"
+            )
+        else:
+            self.transition_references_label.setText("Transitions: None")
+        self._set_transition_reference_rows(transition_refs)
+
+        script_refs = list(metadata.get("script_references", ()) or ())
+        script_count = int(metadata.get("script_reference_count", len(script_refs)) or 0)
+        script_packaged_count = int(metadata.get("script_packaged_count", 0) or 0)
+        script_external_count = int(metadata.get("script_external_count", max(0, script_count - script_packaged_count)) or 0)
+        if script_refs:
+            self.script_references_label.setText(
+                f"ARE/IFO script hooks: {script_count} referenced, {script_packaged_count} packaged, "
+                f"{script_external_count} external/Override"
+            )
+        else:
+            self.script_references_label.setText("ARE/IFO script hooks: None")
+        self._set_script_reference_rows(script_refs)
+
         if blocking:
             body = "Blocking: " + "; ".join(str(item) for item in blocking[:4])
             if len(blocking) > 4:
@@ -374,6 +436,74 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
                 fix = "Expected by the module contract; validate/export to confirm."
             for column, text in enumerate((self._format_resource_key(resource), status, fix)):
                 self.runtime_resource_table.setItem(row, column, self._table_item(text))
+
+    @staticmethod
+    def _reference_value(reference: Any, key: str, default: Any = "") -> Any:
+        if isinstance(reference, dict):
+            return reference.get(key, default)
+        return getattr(reference, key, default)
+
+    def _set_transition_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
+        """Show authored door, trigger, or waypoint transition link readiness."""
+
+        rows = list(references or ())
+        if not rows:
+            self.transition_reference_table.setRowCount(1)
+            for column, text in enumerate((
+                "No transition references",
+                "Not checked",
+                "",
+                "Add a door, trigger, or waypoint transition when this module needs area links.",
+            )):
+                self.transition_reference_table.setItem(0, column, self._table_item(text))
+            return
+
+        self.transition_reference_table.setRowCount(len(rows))
+        for row, reference in enumerate(rows):
+            kind = str(self._reference_value(reference, "kind", "transition") or "transition")
+            tag = str(self._reference_value(reference, "tag", "") or "(untagged)")
+            destination = str(
+                self._reference_value(reference, "linked_to_module", "")
+                or self._reference_value(reference, "linked_to", "")
+                or self._reference_value(reference, "template_resref", "")
+                or "(not linked)"
+            )
+            complete = bool(self._reference_value(reference, "complete", False))
+            status = str(self._reference_value(reference, "status", "") or ("linked" if complete else "unlinked"))
+            message = str(self._reference_value(reference, "message", "") or "")
+            if not message:
+                message = "Ready for export." if complete else "Choose a destination area/module before game proof."
+            for column, text in enumerate((kind, tag, destination, f"{status}: {message}")):
+                self.transition_reference_table.setItem(row, column, self._table_item(text))
+
+    def _set_script_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
+        """Show ARE/IFO script hook packaging readiness."""
+
+        rows = list(references or ())
+        if not rows:
+            self.script_reference_table.setRowCount(1)
+            for column, text in enumerate((
+                "No ARE/IFO script hooks",
+                "Not checked",
+                "",
+                "Assign ARE/IFO script hooks only when this module needs custom runtime behavior.",
+            )):
+                self.script_reference_table.setItem(0, column, self._table_item(text))
+            return
+
+        self.script_reference_table.setRowCount(len(rows))
+        for row, reference in enumerate(rows):
+            scope = str(self._reference_value(reference, "scope", "") or "module")
+            field_name = str(self._reference_value(reference, "field_name", "") or "(unknown field)")
+            script_resref = str(self._reference_value(reference, "script_resref", "") or "(missing script)")
+            restype = str(self._reference_value(reference, "restype", "ncs") or "ncs").lstrip(".")
+            packaged = bool(self._reference_value(reference, "packaged", False))
+            status = str(self._reference_value(reference, "status", "") or ("packaged" if packaged else "external_or_override"))
+            message = str(self._reference_value(reference, "message", "") or "")
+            if not message:
+                message = "Script will be packaged." if packaged else "Script must exist in the base game, Override, or another mod."
+            for column, text in enumerate((scope, field_name, f"{script_resref}.{restype}", f"{status}: {message}")):
+                self.script_reference_table.setItem(row, column, self._table_item(text))
 
     @staticmethod
     def _table_item(text: str) -> QtWidgets.QTableWidgetItem:

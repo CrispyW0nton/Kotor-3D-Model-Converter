@@ -365,6 +365,33 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX readiness" in source
 
 
+def test_t2600_map_studio_readiness_panel_lists_transition_and_script_references() -> None:
+    readiness_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+    readiness_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+
+    for source in (readiness_source, readiness_mirror_source):
+        assert "mapStudioReadinessTransitionReferencesLabel" in source
+        assert "mapStudioReadinessTransitionReferenceTable" in source
+        assert "mapStudioReadinessScriptReferencesLabel" in source
+        assert "mapStudioReadinessScriptReferenceTable" in source
+        assert 'setHorizontalHeaderLabels(("Kind", "Tag", "Destination", "Status / fix"))' in source
+        assert 'setHorizontalHeaderLabels(("Scope", "Field", "Script", "Status / fix"))' in source
+        assert "transition_references" in source
+        assert "script_references" in source
+        assert "transition_incomplete_count" in source
+        assert "script_external_count" in source
+        assert "def _set_transition_reference_rows" in source
+        assert "def _set_script_reference_rows" in source
+        assert "Add a door, trigger, or waypoint transition when this module needs area links." in source
+        assert "Assign ARE/IFO script hooks only when this module needs custom runtime behavior." in source
+
+
 def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
     walkmesh_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
