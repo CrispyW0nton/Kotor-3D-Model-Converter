@@ -1,4 +1,4 @@
-"""Top toolbar for the standalone Module Editor."""
+"""Top toolbar for the Map Studio Level Editor."""
 
 from __future__ import annotations
 
@@ -21,6 +21,16 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         ("build", "Build"),
         ("export_fbx", "Export FBX"),
     )
+    EDIT_MODES = (
+        ("Object", "Select, move, duplicate, and organize rooms, placements, lights, and module objects."),
+        ("Vertex", "Edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools."),
+        ("Edge", "Edit seams, door or corridor borders, bridge edges, bevels, and rectangular cuts."),
+        ("Face", "Edit room faces, material intent, WOK surface intent, triangulation, and cleanup."),
+        ("Walkmesh", "Inspect and paint walkable, non-walkable, door, water, and transition faces."),
+        ("Placement", "Place and transform KOTOR creatures, placeables, doors, triggers, cameras, and waypoints."),
+        ("Terrain", "Sculpt terrain heightfields, ramps, plateaus, erosion, smoothing, and walkability."),
+        ("Export", "Validate, stage, install, hand off, warp-test, and record game proof."),
+    )
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,11 +49,16 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
             row.addWidget(button)
         row.addSpacing(8)
         self.view_mode = QtWidgets.QComboBox()
+        self.view_mode.setObjectName("mapStudioToolbarViewModeComboBox")
         self.view_mode.addItems(["Perspective", "Top", "Front", "Side", "Wireframe", "Textured", "Lit", "Lightmap Preview", "Walkmesh Preview"])
         self.view_mode.currentTextChanged.connect(self.viewModeChanged.emit)
         row.addWidget(self.view_mode)
         self.selection_mode = QtWidgets.QComboBox()
-        self.selection_mode.addItems(["Object", "Room", "Module", "Walkmesh Face", "Blueprint"])
+        self.selection_mode.setObjectName("mapStudioToolbarEditModeComboBox")
+        for label, tooltip in self.EDIT_MODES:
+            self.selection_mode.addItem(label)
+            index = self.selection_mode.count() - 1
+            self.selection_mode.setItemData(index, tooltip, QtCore.Qt.ItemDataRole.ToolTipRole)
         self.selection_mode.currentTextChanged.connect(self.selectionModeChanged.emit)
         row.addWidget(self.selection_mode)
         row.addStretch(1)

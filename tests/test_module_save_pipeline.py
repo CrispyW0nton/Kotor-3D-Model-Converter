@@ -128,6 +128,28 @@ def _read_erf(path: pathlib.Path):
     return sig, resources
 
 
+def test_t2601_mod_archive_uses_stock_empty_locstring_offset() -> None:
+    archive = sp.build_erf_v1_archive(
+        [
+            sp.ModuleArchiveEntry(
+                resref="module",
+                restype="ifo",
+                data=b"IFO",
+                archive_role="base",
+                source="test",
+            )
+        ],
+        archive_type="MOD",
+    )
+
+    assert archive[:8] == b"MOD V1.0"
+    assert struct.unpack_from("<I", archive, 12)[0] == 0
+    assert struct.unpack_from("<I", archive, 20)[0] == 160
+    assert struct.unpack_from("<I", archive, 24)[0] == 160
+    assert struct.unpack_from("<I", archive, 32)[0] == sp.KOTOR_SAFE_ERF_BUILD_YEAR
+    assert struct.unpack_from("<I", archive, 36)[0] == sp.KOTOR_SAFE_ERF_BUILD_DAY
+
+
 def test_t1504_k1_save_writes_split_rims_manifest_and_backup(tmp_path):
     hydrated = _hydrated()
     old_rim = tmp_path / "tar_m02aa.rim"

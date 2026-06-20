@@ -78,6 +78,10 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\modules\authored_terrain_walkability_overlay.py" />
     <None Include="Python\src\core\modules\authored_walkmesh_boundaries.py" />
     <None Include="Python\src\core\modules\authored_walkmesh_status.py" />
+    <None Include="Python\src\core\modules\map_studio_export_objects.py" />
+    <None Include="Python\src\core\modules\map_studio_modeling_tools.py" />
+    <None Include="Python\src\core\modules\map_studio_terrain_sculpt_session.py" />
+    <None Include="Python\src\core\modules\map_studio_tool_belt_preferences.py" />
   </ItemGroup>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" /><ImportGroup Label="ExtensionTargets" />
 </Project>

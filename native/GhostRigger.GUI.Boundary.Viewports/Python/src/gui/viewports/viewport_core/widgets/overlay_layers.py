@@ -353,6 +353,44 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio terrain walkability overlay failed: %s", exc)
 
+    def _draw_map_studio_terrain_brush_cursor(self, draw, w: int, h: int) -> None:
+        cursor = getattr(self, "_map_studio_terrain_brush_cursor", None)
+        if not isinstance(cursor, dict):
+            return
+        center = self._map_studio_project_point(cursor.get("world_position", ()), w, h)
+        edge = self._map_studio_project_point(cursor.get("world_radius_position", ()), w, h)
+        if center is None or edge is None:
+            return
+        try:
+            cx, cy = float(center[0]), float(center[1])
+            ex, ey = float(edge[0]), float(edge[1])
+            radius = max(7.0, min(260.0, ((ex - cx) ** 2 + (ey - cy) ** 2) ** 0.5))
+            color = self._map_studio_marker_rgba(cursor.get("color", "#00ff7a"), 235)
+            bounds = (cx - radius, cy - radius, cx + radius, cy + radius)
+            draw.ellipse(bounds, outline=(0, 0, 0, 190), width=4)
+            draw.ellipse(bounds, outline=color, width=2)
+            draw.line([(cx - radius, cy), (cx + radius, cy)], fill=(color[0], color[1], color[2], 175), width=1)
+            draw.line([(cx, cy - radius), (cx, cy + radius)], fill=(color[0], color[1], color[2], 175), width=1)
+            sample = cursor.get("sample", ())
+            brush = str(cursor.get("brush", "") or "brush")
+            room = str(cursor.get("room_resref", "") or "")
+            label = f"{brush} {room} r{int(cursor.get('radius_samples', 0) or 0)}"
+            if isinstance(sample, (tuple, list)) and len(sample) >= 2:
+                label = f"{label} [{int(sample[0])},{int(sample[1])}]"
+            text_pos = (cx + radius + 8.0, cy - 10.0)
+            try:
+                text_box = draw.textbbox(text_pos, label)
+                draw.rectangle(
+                    (text_box[0] - 4, text_box[1] - 2, text_box[2] + 4, text_box[3] + 2),
+                    fill=(0, 0, 0, 155),
+                    outline=(color[0], color[1], color[2], 165),
+                )
+            except Exception:
+                pass
+            draw.text(text_pos, label, fill=(color[0], color[1], color[2], 245))
+        except Exception as exc:
+            log.debug("Map Studio terrain brush cursor overlay failed: %s", exc)
+
     def _draw_map_studio_room_primitive_handles(self, draw, primitive_handles: tuple[object, ...], w: int, h: int) -> None:
         for handle in primitive_handles:
             footprint = tuple(getattr(handle, "footprint", ()) or ())

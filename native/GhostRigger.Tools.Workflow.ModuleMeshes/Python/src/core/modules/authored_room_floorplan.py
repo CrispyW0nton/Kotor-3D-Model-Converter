@@ -66,6 +66,16 @@ class FloorPlanBevelOperation:
 
 
 @dataclass(frozen=True)
+class FloorPlanEdgeExtrudeOperation:
+    """Outward pull operation for one convex floor-plan edge."""
+
+    edge_index: int
+    distance: float
+    room_resref: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FloorPlanRectangularCutOperation:
     """Boolean difference cut for an axis-aligned rectangular floor plan."""
 
@@ -394,6 +404,75 @@ def apply_floor_plan_bevel(primitive: FloorPlanRoomPrimitive, operation: FloorPl
         **dict(primitive.metadata),
         "operation": "bevel",
         "bevel_distance": float(operation.distance),
+        **dict(operation.metadata),
+    }
+    return FloorPlanRoomPrimitive(
+        room_resref=_normalise_resref(operation.room_resref) or primitive.room_resref,
+        points=points,
+        z=primitive.z,
+        wall_height=primitive.wall_height,
+        floor_surface_id=primitive.floor_surface_id,
+        material=primitive.material,
+        include_walls=primitive.include_walls,
+        openings=(),
+        metadata=metadata,
+    )
+
+
+def extrude_floor_plan_edge_points(points: tuple[Vec2, ...], edge_index: int, distance: float) -> tuple[Vec2, ...]:
+    """Pull one footprint edge outward while preserving a convex outline."""
+
+    source = _normalise_points(points)
+    if len(source) < 3:
+        raise ValueError("Floor-plan edge extrusion requires at least three footprint points.")
+    distance_value = float(distance)
+    if distance_value <= 0.0:
+        raise ValueError("Floor-plan edge extrusion distance must be positive.")
+    if _has_duplicate_or_zero_edges(source):
+        raise ValueError("Floor-plan edge extrusion cannot use duplicate points or zero-length edges.")
+    if not _is_convex(source):
+        raise ValueError("Floor-plan edge extrusion currently supports convex footprints only.")
+    edge = int(edge_index)
+    if edge < 0 or edge >= len(source):
+        raise ValueError(f"Floor-plan edge extrusion references missing edge {edge_index}.")
+    start = source[edge]
+    end = source[(edge + 1) % len(source)]
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = (dx * dx + dy * dy) ** 0.5
+    if length <= 1.0e-9:
+        raise ValueError("Floor-plan edge extrusion cannot use a zero-length edge.")
+    sign = 1.0 if polygon_signed_area(source) > 0.0 else -1.0
+    outward = (sign * dy / length, -sign * dx / length)
+    extruded_start = (start[0] + outward[0] * distance_value, start[1] + outward[1] * distance_value)
+    extruded_end = (end[0] + outward[0] * distance_value, end[1] + outward[1] * distance_value)
+    result: list[Vec2] = []
+    for index, point in enumerate(source):
+        result.append(point)
+        if index == edge:
+            result.extend((extruded_start, extruded_end))
+    updated = tuple(result)
+    if abs(polygon_signed_area(updated)) <= 1.0e-7:
+        raise ValueError("Floor-plan edge extrusion collapses the footprint.")
+    if _has_duplicate_or_zero_edges(updated):
+        raise ValueError("Floor-plan edge extrusion produced duplicate points or zero-length edges.")
+    if not _is_convex(updated):
+        raise ValueError("Floor-plan edge extrusion produced a non-convex footprint; split it into multiple rooms.")
+    return updated
+
+
+def apply_floor_plan_edge_extrude(
+    primitive: FloorPlanRoomPrimitive,
+    operation: FloorPlanEdgeExtrudeOperation,
+) -> FloorPlanRoomPrimitive:
+    """Return a new floor-plan primitive with one wall edge pulled outward."""
+
+    points = extrude_floor_plan_edge_points(primitive.points, operation.edge_index, operation.distance)
+    metadata = {
+        **dict(primitive.metadata),
+        "operation": "edge_extrude",
+        "edge_index": int(operation.edge_index),
+        "edge_extrude_distance": float(operation.distance),
         **dict(operation.metadata),
     }
     return FloorPlanRoomPrimitive(
@@ -744,6 +823,7 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
 
 __all__ = [
     "FloorPlanBevelOperation",
+    "FloorPlanEdgeExtrudeOperation",
     "FloorPlanInsetOperation",
     "FloorPlanRectangularCutOperation",
     "FloorPlanRectangularUnionOperation",
@@ -751,6 +831,7 @@ __all__ = [
     "FloorPlanRoomValidation",
     "FloorPlanWallOpening",
     "apply_floor_plan_bevel",
+    "apply_floor_plan_edge_extrude",
     "apply_floor_plan_inset",
     "apply_floor_plan_rectangular_cut",
     "apply_floor_plan_rectangular_union",
@@ -759,6 +840,7 @@ __all__ = [
     "build_floor_plan_wall_meshes",
     "build_floor_plan_wok",
     "compile_floor_plan_room_geometry",
+    "extrude_floor_plan_edge_points",
     "inset_floor_plan_points",
     "polygon_signed_area",
     "validate_floor_plan_room_primitive",

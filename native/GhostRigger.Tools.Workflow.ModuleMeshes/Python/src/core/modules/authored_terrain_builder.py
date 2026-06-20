@@ -64,6 +64,67 @@ class TerrainShapePreset:
     default_height: float = 0.5
 
 
+@dataclass(frozen=True)
+class TerrainBrushStrokePoint:
+    """One heightfield sample touched by a terrain sculpt stroke."""
+
+    row_index: int
+    column_index: int
+    strength: float = 1.0
+
+
+@dataclass(frozen=True)
+class TerrainBrushDirtyRegion:
+    """Minimal sample-space bounds changed by a terrain brush stroke."""
+
+    min_row: int
+    max_row: int
+    min_column: int
+    max_column: int
+    changed_sample_count: int
+
+    def to_metadata(self) -> dict[str, int]:
+        """Return a JSON/KMAP-friendly dirty-region payload."""
+
+        return {
+            "min_row": int(self.min_row),
+            "max_row": int(self.max_row),
+            "min_column": int(self.min_column),
+            "max_column": int(self.max_column),
+            "changed_sample_count": int(self.changed_sample_count),
+        }
+
+
+@dataclass(frozen=True)
+class TerrainBrushPerformanceAudit:
+    """Deterministic interaction-budget estimate for one terrain brush stroke."""
+
+    sample_point_count: int
+    affected_sample_count: int
+    dirty_region: TerrainBrushDirtyRegion
+    estimated_apply_ms: float
+    budget_ms: float = 8.0
+    within_budget: bool = True
+    input_event_policy: str = "Coalesce pointer samples and apply one terrain brush batch per viewport frame."
+    rebuild_policy: str = "Update dirty terrain samples only; defer full MDL/WOK rebuild until stroke commit, validation, or export."
+    warnings: tuple[str, ...] = ()
+
+    def to_metadata(self) -> dict[str, Any]:
+        """Return a JSON/KMAP-friendly terrain brush budget payload."""
+
+        return {
+            "sample_point_count": int(self.sample_point_count),
+            "affected_sample_count": int(self.affected_sample_count),
+            "dirty_region": self.dirty_region.to_metadata(),
+            "estimated_apply_ms": float(self.estimated_apply_ms),
+            "budget_ms": float(self.budget_ms),
+            "within_budget": bool(self.within_budget),
+            "input_event_policy": self.input_event_policy,
+            "rebuild_policy": self.rebuild_policy,
+            "warnings": list(self.warnings),
+        }
+
+
 _TERRAIN_SHAPE_PRESETS: tuple[TerrainShapePreset, ...] = (
     TerrainShapePreset(
         preset_id="flat",
@@ -339,6 +400,297 @@ def offset_terrain_heightfield_samples(
     )
 
 
+def _normalise_stroke_points(points: tuple[TerrainBrushStrokePoint | tuple[int, int] | tuple[int, int, float], ...] | list[Any]) -> tuple[TerrainBrushStrokePoint, ...]:
+    normalised: list[TerrainBrushStrokePoint] = []
+    for item in tuple(points or ()):
+        if isinstance(item, TerrainBrushStrokePoint):
+            normalised.append(item)
+            continue
+        if isinstance(item, (tuple, list)) and len(item) >= 2:
+            strength = float(item[2]) if len(item) >= 3 else 1.0
+            normalised.append(TerrainBrushStrokePoint(int(item[0]), int(item[1]), strength))
+    if not normalised:
+        raise ValueError("Terrain brush stroke requires at least one sample point.")
+    return tuple(normalised)
+
+
+def _brush_cells(
+    *,
+    validation: TerrainHeightfieldValidation,
+    row: int,
+    column: int,
+    radius: int,
+    point_strength: float = 1.0,
+) -> tuple[tuple[int, int, float], ...]:
+    brush_radius = max(0, int(radius))
+    cells: list[tuple[int, int, float]] = []
+    for row_cursor in range(max(0, row - brush_radius), min(validation.row_count, row + brush_radius + 1)):
+        for column_cursor in range(max(0, column - brush_radius), min(validation.column_count, column + brush_radius + 1)):
+            distance = math.sqrt(float(row_cursor - row) ** 2 + float(column_cursor - column) ** 2)
+            if distance > brush_radius:
+                continue
+            falloff = 1.0 if brush_radius <= 0 else max(0.0, 1.0 - (distance / float(brush_radius + 1)))
+            cells.append((row_cursor, column_cursor, falloff * max(0.0, min(1.0, float(point_strength)))))
+    return tuple(cells)
+
+
+def _dirty_region(cells: set[tuple[int, int]]) -> TerrainBrushDirtyRegion:
+    if not cells:
+        return TerrainBrushDirtyRegion(0, 0, 0, 0, 0)
+    rows = [row for row, _column in cells]
+    columns = [column for _row, column in cells]
+    return TerrainBrushDirtyRegion(
+        min_row=min(rows),
+        max_row=max(rows),
+        min_column=min(columns),
+        max_column=max(columns),
+        changed_sample_count=len(cells),
+    )
+
+
+def _deterministic_noise(row: int, column: int, seed: int) -> float:
+    value = math.sin(((int(row) + 1) * 12.9898) + ((int(column) + 1) * 78.233) + (int(seed) * 37.719)) * 43758.5453
+    fractional = value - math.floor(value)
+    return (fractional * 2.0) - 1.0
+
+
+def audit_terrain_brush_stroke_interaction(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    points: tuple[TerrainBrushStrokePoint | tuple[int, int] | tuple[int, int, float], ...] | list[Any],
+    radius: int = 0,
+    brush: str = "raise",
+    iterations: int = 1,
+    budget_ms: float = 8.0,
+) -> TerrainBrushPerformanceAudit:
+    """Estimate whether a terrain brush stroke can stay inside the live interaction budget."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    stroke_points = _normalise_stroke_points(points)
+    brush_radius = max(0, int(radius))
+    affected_cells: set[tuple[int, int]] = set()
+    for point in stroke_points:
+        row, column = _sample_indices(primitive, point.row_index, point.column_index)
+        for row_cursor, column_cursor, weight in _brush_cells(
+            validation=validation,
+            row=row,
+            column=column,
+            radius=brush_radius,
+            point_strength=point.strength,
+        ):
+            if weight > 0.0:
+                affected_cells.add((row_cursor, column_cursor))
+
+    op = str(brush or "").strip().lower()
+    iteration_multiplier = max(1, int(iterations)) if op in {"smooth", "erode"} else 1
+    if op in {"terrace", "noise", "plateau", "pinch", "ramp"}:
+        iteration_multiplier = max(1, iteration_multiplier)
+    operation_count = max(1, len(affected_cells) * iteration_multiplier)
+    estimated_apply_ms = round((operation_count * 0.01) + (len(stroke_points) * 0.02), 3)
+    warnings: list[str] = []
+    within_budget = estimated_apply_ms <= float(budget_ms)
+    if not within_budget:
+        warnings.append(
+            "Terrain brush stroke exceeds the live sculpt budget; coalesce input samples or commit a smaller dirty region."
+        )
+    if len(stroke_points) > 32:
+        warnings.append("Terrain brush stroke contains many pointer samples; UI should coalesce high-frequency input per frame.")
+    return TerrainBrushPerformanceAudit(
+        sample_point_count=len(stroke_points),
+        affected_sample_count=len(affected_cells),
+        dirty_region=_dirty_region(affected_cells),
+        estimated_apply_ms=estimated_apply_ms,
+        budget_ms=float(budget_ms),
+        within_budget=within_budget,
+        warnings=tuple(warnings),
+    )
+
+
+def apply_terrain_brush_stroke(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    brush: str,
+    points: tuple[TerrainBrushStrokePoint | tuple[int, int] | tuple[int, int, float], ...] | list[Any],
+    delta: float = 0.1,
+    radius: int = 0,
+    height: float = 0.0,
+    iterations: int = 1,
+    strength: float = 0.5,
+    preserve_boundary: bool = True,
+) -> TerrainHeightfieldPrimitive:
+    """Apply a local, batch terrain brush stroke and record dirty sample bounds."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    stroke_points = _normalise_stroke_points(points)
+    op = str(brush or "").strip().lower()
+    if op not in {"raise", "lower", "offset", "flatten", "smooth", "terrace", "noise", "plateau", "pinch", "ramp", "erode"}:
+        raise ValueError(f"Unsupported terrain brush stroke '{brush}'.")
+    rows = [list(item) for item in _height_rows(primitive)]
+    dirty_cells: set[tuple[int, int]] = set()
+    brush_radius = max(0, int(radius))
+    blend = max(0.0, min(1.0, float(strength)))
+
+    if op in {"raise", "lower", "offset", "flatten", "terrace", "noise", "plateau", "pinch", "ramp"}:
+        signed_delta = float(delta)
+        if op == "raise":
+            signed_delta = abs(signed_delta)
+        elif op == "lower":
+            signed_delta = -abs(signed_delta)
+        terrace_step = abs(float(height)) if abs(float(height)) > 1e-6 else max(0.05, abs(float(delta)))
+        ramp_start: tuple[int, int] | None = None
+        ramp_end: tuple[int, int] | None = None
+        ramp_start_height = 0.0
+        ramp_end_height = 0.0
+        if op == "ramp":
+            start_point = stroke_points[0]
+            end_point = stroke_points[-1]
+            ramp_start = _sample_indices(primitive, start_point.row_index, start_point.column_index)
+            ramp_end = _sample_indices(primitive, end_point.row_index, end_point.column_index)
+            ramp_start_height = float(rows[ramp_start[0]][ramp_start[1]])
+            ramp_end_height = float(height) if abs(float(height)) > 1e-6 else ramp_start_height + signed_delta
+        for point in stroke_points:
+            row, column = _sample_indices(primitive, point.row_index, point.column_index)
+            center_height = float(rows[row][column])
+            noise_seed = (row * 131) + (column * 17) + len(stroke_points)
+            for row_cursor, column_cursor, weight in _brush_cells(
+                validation=validation,
+                row=row,
+                column=column,
+                radius=brush_radius,
+                point_strength=point.strength,
+            ):
+                if op == "flatten":
+                    local_blend = max(0.0, min(1.0, blend * weight))
+                    rows[row_cursor][column_cursor] = float(rows[row_cursor][column_cursor]) * (1.0 - local_blend) + float(height) * local_blend
+                elif op == "terrace":
+                    local_blend = max(0.0, min(1.0, blend * weight))
+                    current = float(rows[row_cursor][column_cursor])
+                    target = round(current / terrace_step) * terrace_step
+                    rows[row_cursor][column_cursor] = current * (1.0 - local_blend) + target * local_blend
+                elif op == "noise":
+                    noise = _deterministic_noise(row_cursor, column_cursor, noise_seed)
+                    rows[row_cursor][column_cursor] = float(rows[row_cursor][column_cursor]) + (abs(signed_delta) * noise * blend * weight)
+                elif op == "plateau":
+                    local_blend = max(0.0, min(1.0, blend * weight))
+                    current = float(rows[row_cursor][column_cursor])
+                    rows[row_cursor][column_cursor] = current * (1.0 - local_blend) + center_height * local_blend
+                elif op == "pinch":
+                    local_blend = max(0.0, min(1.0, blend * weight))
+                    current = float(rows[row_cursor][column_cursor])
+                    rows[row_cursor][column_cursor] = current + ((center_height - current) * local_blend)
+                elif op == "ramp":
+                    current = float(rows[row_cursor][column_cursor])
+                    target = current
+                    if ramp_start is not None and ramp_end is not None:
+                        start_row, start_column = ramp_start
+                        end_row, end_column = ramp_end
+                        path_row = float(end_row - start_row)
+                        path_column = float(end_column - start_column)
+                        path_length_sq = (path_row * path_row) + (path_column * path_column)
+                        if path_length_sq > 1e-6:
+                            sample_row = float(row_cursor - start_row)
+                            sample_column = float(column_cursor - start_column)
+                            path_t = ((sample_row * path_row) + (sample_column * path_column)) / path_length_sq
+                            path_t = max(0.0, min(1.0, path_t))
+                            target = ramp_start_height + ((ramp_end_height - ramp_start_height) * path_t)
+                        else:
+                            target = ramp_end_height
+                    local_blend = max(0.0, min(1.0, blend * weight))
+                    rows[row_cursor][column_cursor] = current * (1.0 - local_blend) + target * local_blend
+                else:
+                    rows[row_cursor][column_cursor] = float(rows[row_cursor][column_cursor]) + (signed_delta * weight)
+                dirty_cells.add((row_cursor, column_cursor))
+    elif op in {"smooth", "erode"}:
+        affected: set[tuple[int, int]] = set()
+        for point in stroke_points:
+            row, column = _sample_indices(primitive, point.row_index, point.column_index)
+            for row_cursor, column_cursor, weight in _brush_cells(
+                validation=validation,
+                row=row,
+                column=column,
+                radius=brush_radius,
+                point_strength=point.strength,
+            ):
+                if weight > 0.0:
+                    affected.add((row_cursor, column_cursor))
+        for _iteration in range(max(1, int(iterations))):
+            source = [list(item) for item in rows]
+            for row_cursor, column_cursor in affected:
+                boundary = row_cursor in {0, validation.row_count - 1} or column_cursor in {0, validation.column_count - 1}
+                if preserve_boundary and boundary:
+                    continue
+                neighbours: list[float] = []
+                offsets = (
+                    ((-1, 0), (1, 0), (0, -1), (0, 1))
+                    if op == "smooth"
+                    else ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+                )
+                for row_delta, column_delta in offsets:
+                    row_neighbour = row_cursor + row_delta
+                    column_neighbour = column_cursor + column_delta
+                    if 0 <= row_neighbour < validation.row_count and 0 <= column_neighbour < validation.column_count:
+                        neighbours.append(float(source[row_neighbour][column_neighbour]))
+                if not neighbours:
+                    continue
+                average = sum(neighbours) / len(neighbours)
+                current = float(source[row_cursor][column_cursor])
+                if op == "erode":
+                    talus = abs(float(height)) if abs(float(height)) > 1e-6 else max(0.02, abs(float(delta)) * 0.5)
+                    difference = current - average
+                    if abs(difference) < talus:
+                        continue
+                    erode_blend = max(0.0, min(1.0, blend * 0.65))
+                    rows[row_cursor][column_cursor] = current - (difference * erode_blend)
+                else:
+                    rows[row_cursor][column_cursor] = current * (1.0 - blend) + average * blend
+                dirty_cells.add((row_cursor, column_cursor))
+
+    dirty = _dirty_region(dirty_cells)
+    updated_preview = replace(primitive, heights=tuple(tuple(item) for item in rows))
+    slope_report = analyse_terrain_slopes(updated_preview)
+    slope_warnings = list(slope_report.warnings)
+    if op == "noise" and slope_report.non_walk_triangle_count:
+        slope_warnings.append(
+            "Noise brush created or retained non-walkable terrain triangles; review WOK surface output before game proof."
+        )
+    performance = audit_terrain_brush_stroke_interaction(
+        primitive,
+        points=stroke_points,
+        radius=brush_radius,
+        brush=op,
+        iterations=iterations,
+    )
+    return _replace_height_rows(
+        primitive,
+        tuple(tuple(item) for item in rows),
+        operation="terrain_brush_stroke",
+        metadata={
+            "last_brush": op,
+            "last_brush_radius": brush_radius,
+            "last_brush_delta": float(delta),
+            "last_brush_height": float(height),
+            "last_brush_strength": blend,
+            "last_brush_slope_report": {
+                "max_slope_degrees": float(slope_report.max_slope_degrees),
+                "walkable_triangle_count": int(slope_report.walkable_triangle_count),
+                "non_walk_triangle_count": int(slope_report.non_walk_triangle_count),
+                "warnings": slope_warnings,
+            },
+            "last_stroke_point_count": len(stroke_points),
+            "last_dirty_region": dirty.to_metadata(),
+            "last_changed_sample_count": dirty.changed_sample_count,
+            "last_brush_performance": performance.to_metadata(),
+            "defer_full_rebuild_until_stroke_end": True,
+            "dirty_region_only": True,
+            "source": "map_studio:terrain_brush_stroke",
+        },
+    )
+
+
 def flatten_terrain_heightfield(primitive: TerrainHeightfieldPrimitive, *, height: float = 0.0) -> TerrainHeightfieldPrimitive:
     """Return terrain with every height sample set to one level."""
 
@@ -602,9 +954,14 @@ def compile_terrain_room_geometry(primitive: TerrainHeightfieldPrimitive) -> Aut
 __all__ = [
     "TerrainHeightfieldPrimitive",
     "TerrainHeightfieldValidation",
+    "TerrainBrushDirtyRegion",
+    "TerrainBrushPerformanceAudit",
+    "TerrainBrushStrokePoint",
     "TerrainShapePreset",
     "TerrainSlopeReport",
     "analyse_terrain_slopes",
+    "audit_terrain_brush_stroke_interaction",
+    "apply_terrain_brush_stroke",
     "apply_terrain_shape_preset",
     "available_terrain_shape_presets",
     "build_terrain_mesh",

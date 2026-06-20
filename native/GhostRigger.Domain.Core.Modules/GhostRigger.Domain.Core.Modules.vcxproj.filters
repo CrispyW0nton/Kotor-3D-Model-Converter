@@ -212,6 +212,18 @@
     <None Include="Python\src\core\modules\authored_walkmesh_status.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
+    <None Include="Python\src\core\modules\map_studio_export_objects.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\map_studio_modeling_tools.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\map_studio_terrain_sculpt_session.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\map_studio_tool_belt_preferences.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />

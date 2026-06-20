@@ -253,14 +253,12 @@ def _legacy_extracted_payload_root() -> Path | None:
 
 _NATIVE_PAYLOAD_ROOT: Path | None = None
 _ENV_PAYLOAD_ROOT = os.environ.get("GHOSTRIGGER_NATIVE_PAYLOAD_ROOT", "").strip()
-if _ENV_PAYLOAD_ROOT:
-    _NATIVE_PAYLOAD_ROOT = Path(_ENV_PAYLOAD_ROOT)
-if _NATIVE_PAYLOAD_ROOT is None:
-    _NATIVE_PAYLOAD_ROOT = _legacy_extracted_payload_root()
 _DLL_PAYLOAD_ROOT = _install_native_python_payload_importer()
 if _DLL_PAYLOAD_ROOT is not None:
     _NATIVE_PAYLOAD_ROOT = _DLL_PAYLOAD_ROOT
-elif _NATIVE_PAYLOAD_ROOT is None:
+else:
+    _NATIVE_PAYLOAD_ROOT = _legacy_extracted_payload_root()
+if _NATIVE_PAYLOAD_ROOT is None:
     for _source_root in reversed(_source_package_roots(_REPO_ROOT)):
         _source_root_str = str(_source_root)
         if _source_root_str not in sys.path:

@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -776,6 +777,41 @@ assert importlib.util.find_spec("src.adapters.rendering.moderngl_legacy_bridge")
         text=True,
         capture_output=True,
         check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_native_host_ignores_asset_only_payload_without_dll_modules(tmp_path: Path) -> None:
+    stale_payload = tmp_path / "GhostRiggerPythonPayload"
+    (stale_payload / "src" / "gui" / "icons").mkdir(parents=True)
+    (stale_payload / "src" / "gui" / "icons" / "viewport_wire.svg").write_text("<svg />", encoding="utf-8")
+
+    empty_build_dir = tmp_path / "build"
+    empty_build_dir.mkdir()
+
+    code = f"""
+import importlib.util
+from pathlib import Path
+path = Path({str(ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.py")!r})
+spec = importlib.util.spec_from_file_location("gr_native_main_stale_payload_probe", path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module._REPO_ROOT == Path({str(ROOT)!r})
+assert module._APP_ROOT == Path({str(ROOT)!r})
+assert module._NATIVE_PAYLOAD_ROOT is None
+import src.gui.qt_lib
+"""
+    env = dict(os.environ)
+    env["GHOSTRIGGER_NATIVE_PAYLOAD_ROOT"] = str(stale_payload)
+    env["GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR"] = str(empty_build_dir)
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
     )
 
     assert result.returncode == 0, result.stderr

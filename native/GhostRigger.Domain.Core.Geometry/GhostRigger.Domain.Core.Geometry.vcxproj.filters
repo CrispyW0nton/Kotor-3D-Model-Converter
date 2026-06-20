@@ -89,6 +89,9 @@
     <None Include="Python\src\core\geometry\vertex_space.py">
       <Filter>Python\src\core\geometry</Filter>
     </None>
+    <None Include="Python\src\core\geometry\component_editing.py">
+      <Filter>Python\src\core\geometry</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />

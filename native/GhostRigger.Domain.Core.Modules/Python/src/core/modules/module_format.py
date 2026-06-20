@@ -148,9 +148,18 @@ class LYTLayout:
 
     def to_text(self) -> str:
         lines = []
+        dependency = "layout.max"
+        if self.rooms:
+            first_room = self.rooms[0].model
+            dependency = f"{first_room.split('_', 1)[0]}.max"
+        lines.append("#MAXLAYOUT ASCII")
+        lines.append(f"filedependancy {dependency}")
+        lines.append("beginlayout")
         lines.append(f"roomcount {len(self.rooms)}")
         for r in self.rooms:
             lines.append(f"  {r.model}  {r.x:.6f}  {r.y:.6f}  {r.z:.6f}")
+        lines.append("trackcount 0")
+        lines.append("obstaclecount 0")
         if self.doorhooks:
             lines.append(f"doorhookcount {len(self.doorhooks)}")
             for d in self.doorhooks:
@@ -187,8 +196,9 @@ class VISData:
             if not line or line.startswith('#'):
                 continue
             tokens = line.split()
-            # A room header line contains exactly one token that isn't indented
-            if not raw_line[0].isspace() and len(tokens) == 1:
+            # Stock VIS room headers are "room count"; older GhostRigger files
+            # used just "room".  Support both, but always write the stock form.
+            if not raw_line[0].isspace() and tokens:
                 current_room = tokens[0].lower()
                 vis.visibility.setdefault(current_room, [])
             elif current_room and tokens:
@@ -202,7 +212,7 @@ class VISData:
     def to_text(self) -> str:
         lines = []
         for room, visible in sorted(self.visibility.items()):
-            lines.append(room)
+            lines.append(f"{room} {len(visible)}")
             for v in visible:
                 lines.append(f"  {v}")
         return "\n".join(lines) + "\n"
@@ -855,61 +865,46 @@ class WOKData:
         """
         Serialise the WOKData back to a valid Aurora BWM binary blob.
 
-        Header layout (136 bytes):
-          0x00  sig     "BWM " (4)
-          0x04  ver     "V1.0" (4)
-          0x08  wok_type  uint32  (1 = room walkmesh)
-          0x0C  reserved  bytes [52]   (zeros)
-          0x38  vert_count  uint32
-          0x3C  vert_offset uint32
-          0x40  face_count  uint32
-          0x44  face_offset uint32   (vert_idx array, 3 × uint16 per face)
-          0x48  mat_offset  uint32   (material-ID array, 1 × uint32 per face)
-          0x4C  adj_offset  uint32   (adjacency array,   3 × int32 per face)
-          0x50  [remaining header zeros up to 0x88]
-        Data sections immediately follow the 136-byte header in the order:
-          verts  → faces  → materials  → adjacencies
+        Area WOKs need more than vertices/faces/materials: the engine expects
+        normals, plane coefficients, AABB nodes, adjacency, perimeter edges, and
+        perimeter loop records.  Use PyKotor's BWM writer as the canonical
+        serializer instead of maintaining a partial duplicate here.
         """
-        nv = len(self.verts)
-        nf = len(self.faces)
+        import io
 
-        vert_section_size = nv * 12          # 3 floats × 4 bytes
-        face_section_size = nf * 6           # 3 uint16 × 2 bytes
-        mat_section_size  = nf * 4           # 1 uint32 × 4 bytes
-        adj_section_size  = nf * 12          # 3 int32  × 4 bytes
+        from pykotor.resource.formats.bwm import write_bwm
+        from pykotor.resource.formats.bwm.bwm_data import BWM, BWMFace, BWMType
+        from utility.common.geometry import SurfaceMaterial, Vector3
 
-        header_size = 136
-        vert_off = header_size
-        face_off = vert_off + vert_section_size
-        mat_off  = face_off + face_section_size
-        adj_off  = mat_off  + mat_section_size
+        class _NonClosingBytesIO(io.BytesIO):
+            def close(self):  # type: ignore[override]
+                self.flush()
 
-        buf = bytearray(adj_off + adj_section_size)
+        bwm = BWM()
+        bwm.walkmesh_type = BWMType.AreaModel
+        vertices = [Vector3(x, y, z) for x, y, z in self.verts]
+        for face in self.faces:
+            try:
+                v1, v2, v3 = vertices[face.v1], vertices[face.v2], vertices[face.v3]
+            except IndexError as exc:
+                raise ValueError(
+                    f"WOK face references missing vertex: "
+                    f"{face.v1}, {face.v2}, {face.v3}"
+                ) from exc
+            bwm_face = BWMFace(v1, v2, v3)
+            try:
+                bwm_face.material = SurfaceMaterial(int(face.surface))
+            except ValueError:
+                bwm_face.material = SurfaceMaterial.UNDEFINED
+            # WOKFace.adj* stores geometric adjacency in GhostRigger's light
+            # editor model.  BWMFace.trans* is a door/area transition index, not
+            # adjacency, so leave it empty and let PyKotor derive adjacency and
+            # perimeter records from the geometry.
+            bwm.faces.append(bwm_face)
 
-        # Signature + version
-        buf[0:4]  = b'BWM '
-        buf[4:8]  = b'V1.0'
-        # wok_type = 1 (room walkmesh)
-        struct.pack_into('<I', buf, 8, 1)
-        # Counts and offsets
-        struct.pack_into('<I', buf, 56, nv)
-        struct.pack_into('<I', buf, 60, vert_off)
-        struct.pack_into('<I', buf, 64, nf)
-        struct.pack_into('<I', buf, 68, face_off)
-        struct.pack_into('<I', buf, 72, mat_off)
-        struct.pack_into('<I', buf, 76, adj_off)
-
-        # Vertices
-        for i, (x, y, z) in enumerate(self.verts):
-            struct.pack_into('<fff', buf, vert_off + i * 12, x, y, z)
-
-        # Faces (vertex indices), materials, adjacencies
-        for i, face in enumerate(self.faces):
-            struct.pack_into('<HHH', buf, face_off + i * 6, face.v1, face.v2, face.v3)
-            struct.pack_into('<I',   buf, mat_off  + i * 4, face.surface)
-            struct.pack_into('<iii', buf, adj_off  + i * 12, face.adj1, face.adj2, face.adj3)
-
-        return bytes(buf)
+        output = _NonClosingBytesIO()
+        write_bwm(bwm, output)
+        return output.getvalue()
 
     def write_binary(self, path: str):
         """Write the WOKData to a binary .wok file at *path*."""

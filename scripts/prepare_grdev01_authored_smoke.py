@@ -93,6 +93,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Back up and replace an existing module in the target Modules folder.",
     )
     parser.add_argument(
+        "--without-test-placeable",
+        action="store_true",
+        help="Diagnostic build: omit the optional plc_bench placeable from the authored GIT.",
+    )
+    parser.add_argument(
+        "--without-start-waypoint",
+        action="store_true",
+        help="Diagnostic build: omit the optional start waypoint from the authored GIT; the IFO entry point is still written.",
+    )
+    parser.add_argument(
+        "--without-doorway-marker",
+        action="store_true",
+        help="Diagnostic build: omit the optional doorway marker helper mesh from the generated room MDL.",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Package and write proof files without copying into Modules.",
@@ -155,6 +170,19 @@ def _proof_launch_handoff_value(proof_manifest_path: str, key: str) -> str:
     return str(handoff.get(key) or "")
 
 
+def _proof_acceptance_checks(proof_manifest_path: str) -> list[str]:
+    if not proof_manifest_path:
+        return []
+    try:
+        proof = json.loads(Path(proof_manifest_path).read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    checks = proof.get("acceptance_checks")
+    if not isinstance(checks, list):
+        return []
+    return [str(check) for check in checks if str(check)]
+
+
 def _summary(
     *,
     result: Any,
@@ -165,20 +193,32 @@ def _summary(
 ) -> dict[str, Any]:
     export_result = result.export_result
     proof_manifest = result.proof_manifest_path
+    acceptance_checks = _proof_acceptance_checks(proof_manifest)
+    includes_placeable_check = "test_placeable_visible" in acceptance_checks
     next_actions = []
     if result.installed_module_path:
         next_actions.append(f"Launch {game} and run `warp {module_root}`.")
     else:
         next_actions.append(f"Copy `{export_result.module_path if export_result else module_root + '.mod'}` into a KOTOR `Modules` folder.")
         next_actions.append(f"Launch {game} and run `warp {module_root}`.")
-    next_actions.append("Confirm the module loads, the player is on the floor, the test placeable appears, and walking works.")
+    if includes_placeable_check:
+        next_actions.append("Confirm the module loads, the player is on the floor, the test placeable appears, and walking works.")
+    else:
+        next_actions.append("Confirm the module loads, the player is on the generated floor, and walking works.")
     proof_recorder = str(getattr(result, "proof_recording_script_path", "") or "")
     if proof_recorder:
         next_actions.append(f"After capturing evidence, run `{proof_recorder}` and paste the screenshot/video path.")
+    proof_flags = {
+        "module_loads_in_game": "--module-loads-in-game",
+        "player_spawns_on_floor": "--player-spawns-on-floor",
+        "test_placeable_visible": "--test-placeable-visible",
+        "player_can_walk_on_floor": "--player-can-walk-on-floor",
+    }
+    selected_flags = " ".join(proof_flags[check] for check in acceptance_checks if check in proof_flags)
     next_actions.append(
         "Record proof with "
         f"`python scripts/record_authored_module_game_proof.py --proof-manifest \"{proof_manifest}\" --evidence <screenshot-or-video> "
-        "--module-loads-in-game --player-spawns-on-floor --test-placeable-visible --player-can-walk-on-floor`."
+        f"{selected_flags}`."
     )
     return {
         "ok": bool(result.ok),
@@ -278,7 +318,13 @@ def main(argv: list[str] | None = None) -> int:
 
     output_dir.mkdir(parents=True, exist_ok=True)
     project = new_kmap_project(name=module_root, game=game, author=str(args.author or ""))
-    payload = create_dev_test_authored_module_payload(module_root=module_root, game=game)
+    payload = create_dev_test_authored_module_payload(
+        module_root=module_root,
+        game=game,
+        include_test_placeable=not bool(args.without_test_placeable),
+        include_start_waypoint=not bool(args.without_start_waypoint),
+        include_doorway_marker=not bool(args.without_doorway_marker),
+    )
     project.extra_sections["authored_module"] = payload
     KMapSerializer.save(project, kmap_path)
     authored = authored_project_from_kmap_payload(payload, fallback_name=module_root, fallback_game=game)

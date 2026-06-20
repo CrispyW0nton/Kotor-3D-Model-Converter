@@ -106,6 +106,35 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert all(row["status"] == "external_or_base_game" for row in template_dependencies)
 
 
+def test_t2643_exports_diagnostic_kmap_authored_module_without_optional_placed_content(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+
+    payload = create_dev_test_authored_module_payload(
+        module_root="grdev01",
+        game="K1",
+        include_test_placeable=False,
+        include_start_waypoint=False,
+    )
+    authored = authored_project_from_kmap_payload(payload, fallback_name="grdev01", fallback_game="K1")
+
+    result = export_authored_module_project(AuthoredModuleExportRequest(project=authored, output_dir=str(tmp_path)))
+
+    assert result.ok is True
+    assert result.metadata["gameplay_counts"]["placeables"] == 0
+    assert result.metadata["gameplay_counts"]["waypoints"] == 0
+    contract = result.metadata["smoke_expectations"]
+    assert contract["expected_placeables"] == []
+    assert contract["expected_waypoints"] == []
+    assert contract["pathing_anchor_labels"] == ["entry_point"]
+    assert result.metadata["gameplay_template_dependency_count"] == 0
+
+
 def test_t2643_controller_exports_current_kmap_authored_module(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -265,6 +294,7 @@ def test_t2600_camera_properties_update_survives_kmap_payload_roundtrip() -> Non
     assert camera.mic_range == 18.0
     assert camera.pitch == -12.0
 
+
 def test_t2686_export_forwards_game_root_to_authored_material_preflight(tmp_path: Path, monkeypatch) -> None:
     _install_native_payload_paths()
 
@@ -345,6 +375,18 @@ def _dev_authored_project():
     return authored_project_from_kmap_payload(payload, fallback_name="grdev01", fallback_game="K1")
 
 
+def _room_only_dev_authored_project():
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, create_dev_test_authored_module_payload
+
+    payload = create_dev_test_authored_module_payload(
+        module_root="grdev01",
+        game="K1",
+        include_test_placeable=False,
+        include_start_waypoint=False,
+    )
+    return authored_project_from_kmap_payload(payload, fallback_name="grdev01", fallback_game="K1")
+
+
 def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -396,6 +438,33 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert summary[-1] == "Capability: export candidate; in-game screenshot/video proof is still required."
 
 
+def test_t2644_room_only_authored_install_omits_placeable_proof_requirement(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install
+
+    result = prepare_authored_module_install(
+        AuthoredModuleInstallPrepRequest(project=_room_only_dev_authored_project(), output_dir=str(tmp_path))
+    )
+
+    assert result.ok is True
+    checklist = Path(result.checklist_path).read_text(encoding="utf-8")
+    proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+
+    assert "authored test placeable appears" not in checklist
+    assert "--test-placeable-visible" not in proof_recorder
+    assert "--test-placeable-visible" not in proof["launch_handoff"]["evidence_capture_command"]
+    assert proof["acceptance_checks"] == [
+        "module_loads_in_game",
+        "player_spawns_on_floor",
+        "player_can_walk_on_floor",
+        "screenshot_or_video_captured",
+    ]
+    assert proof["t2601_smoke_contract"]["expected_placeables"] == []
+    assert proof["t2601_smoke_contract"]["in_game_acceptance_checks"] == proof["acceptance_checks"]
+
+
 def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -425,6 +494,41 @@ def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["install"]["installed_module_path"] == str(installed)
     assert proof["install"]["backup_module_path"] == str(backup)
+
+
+def test_t2644_prepare_authored_module_install_refreshes_stale_currentgame_cache(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install
+
+    game_root = tmp_path / "KOTOR"
+    modules_dir = game_root / "Modules"
+    cache_dir = game_root / "currentgame"
+    modules_dir.mkdir(parents=True)
+    cache_dir.mkdir()
+    stale_cache = cache_dir / "grdev01.mod"
+    stale_cache.write_bytes(b"old cached runtime module")
+
+    result = prepare_authored_module_install(
+        AuthoredModuleInstallPrepRequest(
+            project=_dev_authored_project(),
+            output_dir=str(tmp_path / "out"),
+            game_modules_dir=str(modules_dir),
+        )
+    )
+
+    installed = modules_dir / "grdev01.mod"
+    stale_backup = cache_dir / "grdev01.mod.bak"
+    assert result.ok is True
+    assert result.code == "installed"
+    assert result.installed_module_path == str(installed)
+    assert installed.exists()
+    assert stale_cache.read_bytes() == installed.read_bytes()
+    assert stale_backup.read_bytes() == b"old cached runtime module"
+    assert any("currentgame cache" in warning for warning in result.warnings)
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["install"]["installed"] is True
+    assert any("currentgame cache" in warning for warning in proof["warnings"])
 
 
 def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:

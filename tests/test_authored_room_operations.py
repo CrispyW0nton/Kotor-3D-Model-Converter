@@ -77,6 +77,34 @@ def test_t2910_controller_updates_floor_plan_extrusion_settings() -> None:
     assert result.readiness.can_preview is True
 
 
+def test_t2604_controller_updates_module_entry_point_for_ifo_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grentry")
+
+    result = controller.set_authored_module_entry_point(
+        area_resref="grentry",
+        position=(1.25, -2.5, 0.125),
+        facing=180.0,
+    )
+
+    entry = controller.authored_module_entry_point()
+    payload = controller.project.extra_sections["authored_module"]
+    assert entry is not None
+    assert entry.area_resref == "grentry"
+    assert entry.position == (1.25, -2.5, 0.125)
+    assert entry.facing == 180.0
+    assert payload["placements"]["entry_point"]["area_resref"] == "grentry"
+    assert payload["placements"]["entry_point"]["position"] == [1.25, -2.5, 0.125]
+    assert payload["placements"]["entry_point"]["facing"] == 180.0
+    assert payload["game_tested"] is False
+    assert result.readiness is not None
+
+
 def test_t2911_walkmesh_surface_assignment_preserves_room_texture() -> None:
     _install_native_payload_paths()
 
@@ -258,9 +286,449 @@ def test_t2665_controller_moves_authored_room_outline_point() -> None:
     assert primitive["points"][1] == [6.5, -4.0]
     assert primitive["metadata"]["last_vertex_edit"] == 1
     assert payload["rooms"][0]["metadata"]["last_operation"] == "move_floor_plan_point"
+
+
+def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grsnapv",
+        game="K1",
+    )
+    material = PrimitiveMaterial(texture="default", metadata={"source": "test"})
+    first_primitive = FloorPlanRoomPrimitive(
+        room_resref="grsnapv_room01",
+        points=((-5.0, -5.0), (4.0, -5.0), (4.0, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=material,
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    second_primitive = FloorPlanRoomPrimitive(
+        room_resref="grsnapv_room02",
+        points=((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=material,
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    visible = ("grsnapv_room01", "grsnapv_room02")
+    project = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grsnapv_room01",
+                primitive=first_primitive,
+                composition=None,
+                visible_rooms=visible,
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+            AuthoredRoomSpec(
+                room_resref="grsnapv_room02",
+                primitive=second_primitive,
+                composition=None,
+                position=(10.0, 0.0, 0.0),
+                visible_rooms=visible,
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    result = controller.snap_authored_floor_plan_vertex(
+        room_resref="grsnapv_room01",
+        point_index=1,
+        target_point_index=0,
+        target_room_resref="grsnapv_room02",
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    build = build_authored_module(authored)
+
+    assert tuple(authored.rooms[0].primitive.points)[1] == (5.0, -5.0)
+    assert authored.rooms[0].metadata["last_operation"] == "snap_floor_plan_vertex"
+    assert authored.rooms[0].metadata["snap_target_room"] == "grsnapv_room02"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+
+
+def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grweldv",
+        game="K1",
+    )
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grweldv_room01",
+        points=((-5.0, -5.0), (0.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=PrimitiveMaterial(texture="default", metadata={"source": "test"}),
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    project = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grweldv_room01",
+                primitive=primitive,
+                composition=None,
+                visible_rooms=("grweldv_room01",),
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    result = controller.weld_authored_floor_plan_vertices(
+        room_resref="grweldv_room01",
+        point_indices=(1, 2),
+        target_point_index=2,
+        position_policy="target",
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    build = build_authored_module(authored)
+
+    assert tuple(authored.rooms[0].primitive.points) == ((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0))
+    assert authored.rooms[0].metadata["last_operation"] == "weld_floor_plan_vertices"
+    assert authored.rooms[0].metadata["welded_vertices"] == [1, 2]
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+
+
+def test_t2908_controller_flattens_floor_plan_vertices_for_clean_wall_alignment() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grflatv",
+        game="K1",
+    )
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grflatv_room01",
+        points=((-5.0, -5.0), (4.8, -5.0), (5.2, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=PrimitiveMaterial(texture="default", metadata={"source": "test"}),
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    project = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grflatv_room01",
+                primitive=primitive,
+                composition=None,
+                visible_rooms=("grflatv_room01",),
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    result = controller.flatten_authored_floor_plan_vertices(
+        room_resref="grflatv_room01",
+        point_indices=(1, 2),
+        axis="x",
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    build = build_authored_module(authored)
+    points = tuple(authored.rooms[0].primitive.points)
+
+    assert points[1] == (5.0, -5.0)
+    assert points[2] == (5.0, 5.0)
+    assert authored.rooms[0].metadata["last_operation"] == "flatten_floor_plan_vertices"
+    assert authored.rooms[0].metadata["flatten_axis"] == "x"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+
+
+def test_t2908_controller_mirrors_floor_plan_footprint_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grmirror",
+        game="K1",
+    )
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grmirror_room01",
+        points=((-6.0, -4.0), (2.0, -4.0), (4.0, 4.0), (-6.0, 4.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=PrimitiveMaterial(texture="default", metadata={"source": "test"}),
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    project = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grmirror_room01",
+                primitive=primitive,
+                composition=None,
+                visible_rooms=("grmirror_room01",),
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    result = controller.mirror_authored_floor_plan_vertices(room_resref="grmirror_room01", axis="x")
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    build = build_authored_module(authored)
+    points = tuple(authored.rooms[0].primitive.points)
+
+    assert points == ((3.0, 4.0), (-7.0, 4.0), (-5.0, -4.0), (3.0, -4.0))
+    assert polygon_signed_area(points) > 0.0
+    assert authored.rooms[0].metadata["last_operation"] == "mirror_floor_plan_vertices"
+    assert authored.rooms[0].metadata["mirror_axis"] == "x"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+    assert ("grmirror_room01", "mdl") in build.resources
+    assert ("grmirror_room01", "wok") in build.resources
+
+
+def test_t2908_controller_extrudes_floor_plan_edge_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grexedge")
+
+    result = controller.apply_authored_room_operation(
+        operation="edge_extrude",
+        edge_index=0,
+        distance=2.0,
+        room_resref="grexedge_room01",
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = authored.rooms[0].primitive
+    build = build_authored_module(authored)
+
+    assert tuple(primitive.points) == ((-5.0, -5.0), (-5.0, -7.0), (5.0, -7.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0))
+    assert primitive.metadata["operation"] == "edge_extrude"
+    assert primitive.metadata["edge_index"] == 0
+    assert primitive.metadata["edge_extrude_distance"] == 2.0
+    assert authored.rooms[0].metadata["last_operation"] == "edge_extrude"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+    assert ("grexedge_room01", "mdl") in build.resources
+    assert ("grexedge_room01", "wok") in build.resources
     assert controller.project.dirty is True
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+
+
+def test_t2908_controller_bridges_floor_plan_room_edges_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(preset_id="rectangular_dev_room", module_root="grbridge", game="K1")
+    rectangle = ((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0))
+    first_primitive = FloorPlanRoomPrimitive(room_resref="grbridge_a", points=rectangle)
+    second_primitive = FloorPlanRoomPrimitive(room_resref="grbridge_b", points=rectangle)
+    first_room = replace(
+        base.rooms[0],
+        room_resref="grbridge_a",
+        primitive=first_primitive,
+        composition=None,
+        position=(0.0, 0.0, 0.0),
+        visible_rooms=("grbridge_a", "grbridge_b"),
+        metadata={"primitive": "floor_plan_extrusion"},
+    )
+    second_room = replace(
+        base.rooms[0],
+        room_resref="grbridge_b",
+        primitive=second_primitive,
+        composition=None,
+        position=(14.0, 0.0, 0.0),
+        visible_rooms=("grbridge_a", "grbridge_b"),
+        metadata={"primitive": "floor_plan_extrusion"},
+    )
+    authored = replace(base, rooms=(first_room, second_room))
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+
+    result = controller.bridge_authored_floor_plan_edges(
+        first_room_resref="grbridge_a",
+        first_edge_index=1,
+        second_room_resref="grbridge_b",
+        second_edge_index=3,
+        result_room_resref="grbridge_link",
+    )
+    updated = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    bridge_room = next(room for room in updated.rooms if room.room_resref == "grbridge_link")
+    bridge = bridge_room.primitive
+    build = build_authored_module(updated)
+
+    assert tuple(bridge.points) == ((5.0, -5.0), (5.0, 5.0), (9.0, 5.0), (9.0, -5.0))
+    assert bridge.metadata["operation"] == "bridge_edges"
+    assert bridge.metadata["first_room_resref"] == "grbridge_a"
+    assert bridge.metadata["second_room_resref"] == "grbridge_b"
+    assert bridge_room.metadata["last_operation"] == "bridge_edges"
+    assert tuple(bridge_room.visible_rooms) == ("grbridge_a", "grbridge_b", "grbridge_link")
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+    assert ("grbridge_a", "mdl") in build.resources
+    assert ("grbridge_b", "mdl") in build.resources
+    assert ("grbridge_link", "mdl") in build.resources
+    assert ("grbridge_link", "wok") in build.resources
+    assert controller.project.dirty is True
+
+
+def test_t2908_controller_cleans_floor_plan_vertices_and_remains_exportable() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(preset_id="rectangular_dev_room", module_root="grclean", game="K1")
+    messy = FloorPlanRoomPrimitive(
+        room_resref="grclean_room01",
+        points=((-5.0, -5.0), (0.0, -5.0), (5.0, -5.0), (5.0, 5.0), (5.0, 5.0), (-5.0, 5.0), (-5.0, -5.0)),
+    )
+    room = replace(
+        base.rooms[0],
+        room_resref="grclean_room01",
+        primitive=messy,
+        composition=None,
+        visible_rooms=("grclean_room01",),
+        metadata={"primitive": "floor_plan_extrusion"},
+    )
+    authored = replace(base, rooms=(room,))
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+
+    result = controller.cleanup_authored_floor_plan_vertices(room_resref="grclean_room01", tolerance=0.001)
+    updated = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = updated.rooms[0].primitive
+    build = build_authored_module(updated)
+
+    assert tuple(primitive.points) == ((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0))
+    assert primitive.metadata["last_operation"] == "cleanup_floor_plan_vertices"
+    assert primitive.metadata["cleanup_removed_point_count"] == 3
+    assert updated.rooms[0].metadata["cleanup_removed_point_count"] == 3
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+    assert ("grclean_room01", "mdl") in build.resources
+    assert ("grclean_room01", "wok") in build.resources
+    assert controller.project.dirty is True
+
+
+def test_t2908_controller_persists_map_studio_tool_belt_preferences_in_kmap(tmp_path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.level import KMapSerializer
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="beltprefs", game="K1")
+    default_preferences = controller.map_studio_tool_belt_preferences()
+    assert default_preferences.preset_key == "blockout"
+    assert default_preferences.custom_action_keys == ()
+
+    saved_preferences = controller.set_map_studio_tool_belt_preferences(
+        preset_key="custom",
+        custom_action_keys=("terrain", "bridge", "bridge", "missing", "validate"),
+    )
+    assert saved_preferences.preset_key == "custom"
+    assert saved_preferences.custom_action_keys == ("terrain", "bridge", "validate")
+    assert controller.project.extra_sections["map_studio_tool_belt"] == {
+        "preset_key": "custom",
+        "custom_action_keys": ["terrain", "bridge", "validate"],
+    }
+
+    path = tmp_path / "beltprefs.kmap"
+    controller.save_project(path)
+    reopened = ModuleEditorController()
+    reopened.open_project(path)
+    reopened_preferences = reopened.map_studio_tool_belt_preferences()
+    raw = KMapSerializer.to_dict(reopened.project)
+
+    assert reopened_preferences.preset_key == "custom"
+    assert reopened_preferences.custom_action_keys == ("terrain", "bridge", "validate")
+    assert raw["map_studio_tool_belt"]["custom_action_keys"] == ["terrain", "bridge", "validate"]
 
 
 def test_t2668_controller_creates_elevation_composition_room_preset() -> None:
@@ -369,6 +837,276 @@ def test_t2908_controller_smooths_and_flattens_terrain_heightfield() -> None:
     assert result.readiness.can_preview is True
     assert all(value == 0.1 for row in heights for value in row)
     assert authored.rooms[0].primitive.metadata["last_operation"] == "flatten"
+
+
+def test_t2603_controller_applies_local_terrain_brush_stroke_with_dirty_region() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grbrush")
+    before = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    before_heights = before.rooms[0].primitive.heights
+
+    result = controller.apply_authored_terrain_operation(
+        operation="brush_stroke:raise",
+        room_resref="grbrush_room01",
+        row_index=2,
+        column_index=2,
+        delta=0.5,
+        radius=1,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    terrain = authored.rooms[0].primitive
+    build = build_authored_module(authored)
+    dirty = terrain.metadata["last_dirty_region"]
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert terrain.metadata["last_operation"] == "terrain_brush_stroke"
+    assert terrain.metadata["last_brush"] == "raise"
+    assert terrain.metadata["dirty_region_only"] is True
+    assert terrain.metadata["defer_full_rebuild_until_stroke_end"] is True
+    assert dirty == {
+        "min_row": 1,
+        "max_row": 3,
+        "min_column": 1,
+        "max_column": 3,
+        "changed_sample_count": 5,
+    }
+    brush_performance = terrain.metadata["last_brush_performance"]
+    assert brush_performance["within_budget"] is True
+    assert brush_performance["budget_ms"] == 8.0
+    assert brush_performance["affected_sample_count"] == 5
+    assert brush_performance["dirty_region"] == dirty
+    assert "defer full MDL/WOK rebuild" in brush_performance["rebuild_policy"]
+    assert terrain.heights[2][2] == before_heights[2][2] + 0.5
+    assert terrain.heights[0][0] == before_heights[0][0]
+    assert payload["rooms"][0]["metadata"]["last_operation"] == "terrain_brush_stroke"
+    assert not build.blocking_issues
+
+
+def test_t2603_controller_applies_terrace_and_noise_terrain_brushes() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grnatural")
+    controller.apply_authored_terrain_operation(
+        operation="shape_preset:ramp",
+        room_resref="grnatural_room01",
+        height=0.9,
+    )
+
+    controller.apply_authored_terrain_operation(
+        operation="brush_stroke:terrace",
+        room_resref="grnatural_room01",
+        row_index=2,
+        column_index=2,
+        height=0.25,
+        radius=2,
+        strength=1.0,
+    )
+    terraced = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    terraced_terrain = terraced.rooms[0].primitive
+    terraced_heights = terraced_terrain.heights
+
+    assert terraced_terrain.metadata["last_operation"] == "terrain_brush_stroke"
+    assert terraced_terrain.metadata["last_brush"] == "terrace"
+    assert terraced_terrain.metadata["dirty_region_only"] is True
+    assert "last_brush_slope_report" in terraced_terrain.metadata
+
+    controller.apply_authored_terrain_operation(
+        operation="brush_stroke:noise",
+        room_resref="grnatural_room01",
+        row_index=2,
+        column_index=2,
+        delta=0.05,
+        radius=2,
+        strength=0.75,
+    )
+    noised = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    noised_terrain = noised.rooms[0].primitive
+    slope_report = noised_terrain.metadata["last_brush_slope_report"]
+
+    assert noised_terrain.metadata["last_brush"] == "noise"
+    assert noised_terrain.metadata["last_operation"] == "terrain_brush_stroke"
+    assert noised_terrain.metadata["last_dirty_region"]["changed_sample_count"] >= 5
+    assert noised_terrain.heights != terraced_heights
+    assert slope_report["walkable_triangle_count"] + slope_report["non_walk_triangle_count"] > 0
+    assert isinstance(slope_report["warnings"], list)
+
+
+def test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grsculpt")
+    controller.apply_authored_terrain_operation(
+        operation="shape_preset:ramp",
+        room_resref="grsculpt_room01",
+        height=0.8,
+    )
+
+    controller.apply_authored_terrain_operation(
+        operation="brush_stroke:plateau",
+        room_resref="grsculpt_room01",
+        row_index=2,
+        column_index=2,
+        radius=1,
+        strength=1.0,
+    )
+    plateau = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    plateau_terrain = plateau.rooms[0].primitive
+    assert plateau_terrain.metadata["last_brush"] == "plateau"
+    assert plateau_terrain.metadata["dirty_region_only"] is True
+
+    controller.apply_authored_terrain_operation(
+        operation="brush_stroke:ramp",
+        room_resref="grsculpt_room01",
+        points=((0, 0, 1.0), (4, 4, 1.0)),
+        delta=0.6,
+        height=1.25,
+        radius=1,
+        strength=1.0,
+    )
+    ramped = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    ramped_terrain = ramped.rooms[0].primitive
+    assert ramped_terrain.metadata["last_brush"] == "ramp"
+    assert ramped_terrain.heights[-1][-1] > plateau_terrain.heights[0][0]
+
+    controller.apply_authored_terrain_operation(
+        operation="set_height",
+        room_resref="grsculpt_room01",
+        row_index=2,
+        column_index=2,
+        height=2.0,
+    )
+    before_pinch = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"]).rooms[0].primitive
+    controller.apply_authored_terrain_operation(
+        operation="brush_stroke:pinch",
+        room_resref="grsculpt_room01",
+        row_index=2,
+        column_index=2,
+        radius=1,
+        strength=0.75,
+    )
+    pinched = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    pinched_terrain = pinched.rooms[0].primitive
+    assert pinched_terrain.metadata["last_brush"] == "pinch"
+    assert pinched_terrain.heights[1][2] > before_pinch.heights[1][2]
+
+    before_erode_center = pinched_terrain.heights[2][2]
+    controller.apply_authored_terrain_operation(
+        operation="brush_stroke:erode",
+        room_resref="grsculpt_room01",
+        row_index=2,
+        column_index=2,
+        delta=0.05,
+        radius=1,
+        strength=1.0,
+    )
+    eroded = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    eroded_terrain = eroded.rooms[0].primitive
+    assert eroded_terrain.metadata["last_brush"] == "erode"
+    assert eroded_terrain.heights[2][2] < before_erode_center
+    assert eroded_terrain.metadata["last_brush_performance"]["within_budget"] is True
+
+
+def test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without_full_rebuild() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grlive")
+    before = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    before_heights = before.rooms[0].primitive.heights
+
+    frame = controller.prepare_map_studio_terrain_sculpt_frame(
+        room_resref="grlive_room01",
+        brush="raise",
+        points=((1, 1), (1, 1, 0.8), (2, 2), (3, 3), (4, 4)),
+        delta=0.25,
+        radius=1,
+        max_points_per_frame=3,
+        budget_ms=8.0,
+    )
+
+    assert frame.raw_sample_count == 5
+    assert frame.applied_sample_count == 3
+    assert frame.coalesced_sample_count == 2
+    assert frame.should_apply_live is True
+    assert frame.defer_full_rebuild is True
+    assert frame.performance.within_budget is True
+    assert frame.operation == "brush_stroke:raise"
+    assert len(frame.operation_kwargs["points"]) == 3
+    assert "Coalesced 5 raw pointer sample" in " ".join(frame.warnings)
+
+    result = controller.apply_map_studio_terrain_sculpt_frame(
+        room_resref="grlive_room01",
+        brush="raise",
+        points=((1, 1), (1, 1, 0.8), (2, 2), (3, 3), (4, 4)),
+        delta=0.25,
+        radius=1,
+        max_points_per_frame=3,
+        budget_ms=8.0,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    terrain = authored.rooms[0].primitive
+
+    assert result.applied is True
+    assert result.full_rebuild_deferred is True
+    assert "full MDL/WOK rebuild deferred" in result.message
+    assert controller.project.dirty is True
+    assert terrain.metadata["last_operation"] == "terrain_brush_stroke"
+    assert terrain.metadata["dirty_region_only"] is True
+    assert terrain.metadata["defer_full_rebuild_until_stroke_end"] is True
+    assert terrain.metadata["last_brush_performance"]["within_budget"] is True
+    assert any(
+        terrain.heights[row_index][column_index] > before_heights[row_index][column_index]
+        for row_index in range(len(terrain.heights))
+        for column_index in range(len(terrain.heights[row_index]))
+    )
+    assert payload["rooms"][0]["metadata"]["last_operation"] == "terrain_brush_stroke"
+
+
+def test_t2603_terrain_brush_audit_flags_over_budget_strokes_for_coalescing() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive, audit_terrain_brush_stroke_interaction
+
+    heights = tuple(tuple(0.0 for _column in range(64)) for _row in range(64))
+    terrain = TerrainHeightfieldPrimitive(room_resref="grperf", heights=heights, width=64.0, depth=64.0)
+    audit = audit_terrain_brush_stroke_interaction(
+        terrain,
+        brush="smooth",
+        radius=12,
+        iterations=4,
+        points=((32, 32), (33, 33), (34, 34)),
+        budget_ms=1.0,
+    )
+
+    assert audit.within_budget is False
+    assert audit.affected_sample_count > 100
+    assert audit.dirty_region.min_row < 32
+    assert audit.dirty_region.max_row > 34
+    assert "coalesce input samples" in " ".join(audit.warnings)
 
 
 def test_t2907_controller_applies_terrain_shape_preset_and_repairs_ground_markers() -> None:
@@ -565,6 +1303,80 @@ def test_t2672_controller_adds_composition_primitive_for_builder_tab() -> None:
     assert ("gradd_room01", "mdl") in build.resources
 
 
+def test_t2908_controller_adds_plane_composition_primitive_and_generates_wok() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grplane")
+
+    result = controller.add_authored_room_primitive(
+        primitive_kind="plane",
+        primitive_name="grplane_room01_platform",
+        translation=(2.0, 0.0, 0.25),
+        floor_surface=4,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    primitive_payload = payload["rooms"][0]["primitive"]
+    plane_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grplane_room01_platform")
+    plane_row = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "grplane_room01_platform")
+    wok = build.module.room_geometry["grplane_room01"].wok
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert plane_payload["type"] == "plane"
+    assert plane_payload["width"] == 3.0
+    assert plane_payload["depth"] == 3.0
+    assert plane_payload["surface_id"] == 4
+    assert plane_payload["transform"]["translation"] == [2.0, 0.0, 0.25]
+    assert plane_row.primitive_type == "plane"
+    assert plane_row.supports_walkmesh_surface is True
+    assert {dimension.key for dimension in plane_row.dimensions} == {"width", "depth"}
+    assert len(wok.faces) >= 4
+    assert build.module.room_geometry["grplane_room01"].metadata["walkmesh_primitive_count"] >= 3
+    assert not build.blocking_issues
+
+
+def test_t2908_controller_adds_door_frame_shelf_alias_as_arch_primitive() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grdoor")
+
+    result = controller.add_authored_room_primitive(
+        primitive_kind="door_frame",
+        primitive_name="grdoor_room01_frame",
+        translation=(0.0, 4.0, 0.0),
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    primitive_payload = payload["rooms"][0]["primitive"]
+    frame_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grdoor_room01_frame")
+    frame_row = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "grdoor_room01_frame")
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert frame_payload["type"] == "arch"
+    assert frame_payload["transform"]["translation"] == [0.0, 4.0, 0.0]
+    assert frame_row.primitive_type == "arch"
+    assert frame_row.supports_walkmesh_surface is False
+    assert {dimension.key for dimension in frame_row.dimensions} == {"width", "height", "frame_thickness", "depth", "segments"}
+    assert not build.blocking_issues
+    assert ("grdoor_room01", "mdl") in build.resources
+
+
 def test_t2673_controller_edits_composition_primitive_dimensions() -> None:
     _install_native_payload_paths()
 
@@ -645,6 +1457,51 @@ def test_t2674_controller_removes_composition_primitive_for_builder_tab() -> Non
     assert result.readiness.can_preview is True
     assert all(item["name"] != "grrem_room01_ramp" for item in primitive_payload["primitives"])
     assert wok.walkable_face_count() == 4
+    assert not build.blocking_issues
+
+
+def test_t2601_controller_separates_composition_primitive_into_exportable_room() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grsep")
+
+    result = controller.separate_authored_room_primitive(
+        room_resref="grsep_room01",
+        primitive_name="grsep_room01_ramp",
+        result_room_resref="grsep_ramp",
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    build = build_authored_module(authored)
+    source_room = next(room for room in payload["rooms"] if room["room_resref"] == "grsep_room01")
+    separated_room = next(room for room in payload["rooms"] if room["room_resref"] == "grsep_ramp")
+    source_primitives = source_room["primitive"]["primitives"]
+    separated_primitives = separated_room["primitive"]["primitives"]
+    primitive_rows = controller.authored_room_primitive_transforms()
+    export_objects = controller.map_studio_export_object_boundaries()
+    readiness = result.readiness
+    readiness_export_objects = readiness.metadata["export_object_boundaries"] if readiness is not None else []
+
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert len(payload["rooms"]) == 2
+    assert all(item["name"] != "grsep_room01_ramp" for item in source_primitives)
+    assert [item["name"] for item in separated_primitives] == ["grsep_room01_ramp"]
+    assert separated_room["primitive"]["metadata"]["separated_from_room"] == "grsep_room01"
+    assert separated_room["visible_rooms"] == ["grsep_room01", "grsep_ramp"]
+    assert any(row.room_resref == "grsep_ramp" and row.primitive_name == "grsep_room01_ramp" for row in primitive_rows)
+    assert len(export_objects) == 2
+    assert any(boundary.export_resref == "grsep_ramp" and boundary.object_kind == "separated_primitive_object" for boundary in export_objects)
+    assert any(boundary["export_resref"] == "grsep_ramp" and boundary["uv_handoff_recommended"] for boundary in readiness_export_objects)
+    assert ("grsep_room01", "mdl") in build.resources
+    assert ("grsep_ramp", "mdl") in build.resources
     assert not build.blocking_issues
 
 
@@ -1041,10 +1898,16 @@ def test_t2674_builder_tab_exposes_remove_composition_primitive_controls() -> No
     ).read_text(encoding="utf-8")
 
     assert "roomPrimitiveRemoveRequested" in source
+    assert "roomPrimitiveSeparateRequested" in source
     assert "mapStudioRemoveCompositionPrimitiveButton" in source
+    assert "mapStudioSeparateCompositionPrimitiveButton" in source
+    assert "mapStudioSeparatePrimitiveResultRoomLineEdit" in source
     assert "def _emit_remove_composition_primitive" in source
+    assert "def _emit_separate_composition_primitive" in source
     assert "self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)" in window_source
+    assert "self.builder_tab.roomPrimitiveSeparateRequested.connect(self.separate_authored_room_primitive)" in window_source
     assert "self.controller.remove_authored_room_primitive" in window_source
+    assert "self.controller.separate_authored_room_primitive" in window_source
 
 
 def test_t2676_builder_tab_exposes_primitive_style_controls() -> None:

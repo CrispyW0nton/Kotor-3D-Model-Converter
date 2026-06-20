@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import struct
 from pathlib import Path
 
 
@@ -42,6 +43,37 @@ def _load_capture_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _ok_quality(output_path: Path) -> dict[str, object]:
+    return {
+        "checked": True,
+        "ok": True,
+        "code": "evidence_quality_ok",
+        "message": "Screenshot evidence contains visible image content.",
+        "width": 10,
+        "height": 10,
+        "sampled_pixels": 100,
+        "visible_pixel_ratio": 1.0,
+        "dark_pixel_ratio": 0.0,
+        "blocking_issues": [],
+    }
+
+
+def _write_bmp(path: Path, *, rgb: tuple[int, int, int]) -> None:
+    width = 4
+    height = 4
+    row_size = ((width * 24 + 31) // 32) * 4
+    image_size = row_size * height
+    pixel_offset = 54
+    padding = b"\x00" * (row_size - width * 3)
+    r, g, b = rgb
+    with path.open("wb") as handle:
+        handle.write(struct.pack("<2sIHHI", b"BM", pixel_offset + image_size, 0, 0, pixel_offset))
+        handle.write(struct.pack("<IiiHHIIiiII", 40, width, height, 1, 24, 0, image_size, 0, 0, 0, 0))
+        for _row in range(height):
+            handle.write(bytes((b, g, r)) * width)
+            handle.write(padding)
 
 
 def _status(proof_manifest: str) -> dict[str, object]:
@@ -85,6 +117,7 @@ def test_t2601_capture_grdev01_evidence_can_record_complete_authored_proof(tmp_p
         return {"ok": True, "message": "fake capture", "width": 10, "height": 10, "blocking_issues": []}
 
     monkeypatch.setattr(module, "_capture_screen_bmp", fake_capture)
+    monkeypatch.setattr(module, "_bmp_evidence_quality", _ok_quality)
     monkeypatch.setattr(
         module,
         "_kotor_process_summary",
@@ -142,6 +175,7 @@ def test_t2601_capture_grdev01_evidence_blocks_proof_recording_without_kotor_pro
         return {"ok": True, "message": "fake capture", "width": 10, "height": 10, "blocking_issues": []}
 
     monkeypatch.setattr(module, "_capture_screen_bmp", fake_capture)
+    monkeypatch.setattr(module, "_bmp_evidence_quality", _ok_quality)
     monkeypatch.setattr(
         module,
         "_kotor_process_summary",
@@ -221,6 +255,7 @@ def test_t2601_capture_grdev01_evidence_can_capture_kotor_window_only(
         }
 
     monkeypatch.setattr(module, "_capture_kotor_window_bmp", fake_window_capture)
+    monkeypatch.setattr(module, "_bmp_evidence_quality", _ok_quality)
 
     code = module.main(["--proof-manifest", proof_manifest, "--output", str(evidence), "--kotor-window-only", "--json"])
 
@@ -232,3 +267,27 @@ def test_t2601_capture_grdev01_evidence_can_capture_kotor_window_only(
     assert payload["kotor_process"]["running"] is True
     assert payload["record"] is None
     assert evidence.is_file()
+
+
+def test_t2601_capture_grdev01_evidence_rejects_mostly_blank_bmp(tmp_path: Path) -> None:
+    module = _load_capture_module()
+    evidence = tmp_path / "blank.bmp"
+    _write_bmp(evidence, rgb=(0, 0, 0))
+
+    quality = module._bmp_evidence_quality(evidence)
+
+    assert quality["ok"] is False
+    assert quality["code"] == "evidence_mostly_blank"
+    assert quality["blocking_issues"]
+
+
+def test_t2601_capture_grdev01_evidence_accepts_visible_bmp(tmp_path: Path) -> None:
+    module = _load_capture_module()
+    evidence = tmp_path / "visible.bmp"
+    _write_bmp(evidence, rgb=(80, 80, 80))
+
+    quality = module._bmp_evidence_quality(evidence)
+
+    assert quality["ok"] is True
+    assert quality["code"] == "evidence_quality_ok"
+    assert quality["blocking_issues"] == []

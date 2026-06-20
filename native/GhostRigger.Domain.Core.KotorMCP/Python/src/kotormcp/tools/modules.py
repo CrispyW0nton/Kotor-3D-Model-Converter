@@ -7,7 +7,6 @@ adapted to use the GhostRigger InstallationPort contract.
 
 from __future__ import annotations
 
-from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 from kotormcp.schemas import DescribeModuleInput, ListModulesInput, ModuleResourcesInput
@@ -178,7 +177,7 @@ async def handle_module_resources(arguments: Dict[str, Any]) -> Dict[str, Any]:
 def _summarize_gff_bytes(data: bytes) -> Dict[str, Any]:
     try:
         from pykotor.resource.formats.gff.gff_auto import read_gff  # noqa: PLC0415
-        gff = read_gff(BytesIO(data))
+        gff = read_gff(data)
         root = gff.root
         fields = []
         for label, field_type, value in root:

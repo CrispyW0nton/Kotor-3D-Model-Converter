@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_0026",
             "source_path": "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py",
-            "sha256": "88b1189d7e92df4943b00c622583663dee95067378d22a446c1427f19528d267"
+            "sha256": "08a6f4c2e80fb0c5cc0c33d60946a7557af9aa6b61f3ea57f2aa3b4ea6fcf43d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0027",
@@ -171,7 +171,7 @@
             "resource_name": "PYTHON_PAYLOAD_0028",
             "source_path": "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
-            "sha256": "983bd50632ad0aaab6320ea0585e318a400ef0187f867640ab172f18b3bcafb6"
+            "sha256": "4788d44802ece72f7031df141d919b07aec95fc456502be9b58d22c5d243fc4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0029",
@@ -183,7 +183,7 @@
             "resource_name": "PYTHON_PAYLOAD_0030",
             "source_path": "src/gui/viewports/viewport_core/widgets/scene_models.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/scene_models.py",
-            "sha256": "5f87fd7e9443741783f5e49723ab617054e765220147dd3878ff71337697bee5"
+            "sha256": "f2ac8492b43da00c5a3ddc6dee3bcf94c4833961383c7762a5aa9d490b257d23"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0031",
@@ -219,7 +219,7 @@
             "resource_name": "PYTHON_PAYLOAD_0036",
             "source_path": "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py",
-            "sha256": "fee462743662f9fb46fa1ea6b2668f6eabd736721031eadf69cb7e3a2c7e63f6"
+            "sha256": "10b991550856ac6f966a9a117f27138bfac07ea7643274c8361ac25a034d2f73"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0037",

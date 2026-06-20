@@ -124,13 +124,27 @@ def test_t2907_map_studio_viewport_draws_terrain_walkability_overlay() -> None:
     )
 
     assert "_map_studio_terrain_walkability_overlay = None" in viewport_source
+    assert "_map_studio_terrain_brush_cursor = None" in viewport_source
     assert "def set_map_studio_terrain_walkability_overlay" in scene_models_source
     assert "def clear_map_studio_terrain_walkability_overlay" in scene_models_source
+    assert "def set_map_studio_terrain_brush_cursor" in scene_models_source
+    assert "def clear_map_studio_terrain_brush_cursor" in scene_models_source
     assert "def _draw_map_studio_terrain_walkability" in overlay_source
+    assert "def _draw_map_studio_terrain_brush_cursor" in overlay_source
     assert "terrain walkability" in panel_source
     assert "terrain walkability" in mirrored_panel_source
+    assert "mapStudioViewportTerrainBrushCheckBox" in panel_source
+    assert "def _set_terrain_brush_cursor" in panel_source
+    assert "mapStudioViewportTerrainBrushCheckBox" in mirrored_panel_source
+    assert "def _set_terrain_brush_cursor" in mirrored_panel_source
     assert "authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()" in window_source
     assert "def authored_terrain_walkability_overlay(self)" in controller_source
     assert pipeline_source.index("self._draw_map_studio_terrain_walkability") < pipeline_source.index(
+        "self._draw_map_studio_room_outlines"
+    )
+    assert pipeline_source.index("self._draw_map_studio_terrain_walkability") < pipeline_source.index(
+        "self._draw_map_studio_terrain_brush_cursor"
+    )
+    assert pipeline_source.index("self._draw_map_studio_terrain_brush_cursor") < pipeline_source.index(
         "self._draw_map_studio_room_outlines"
     )

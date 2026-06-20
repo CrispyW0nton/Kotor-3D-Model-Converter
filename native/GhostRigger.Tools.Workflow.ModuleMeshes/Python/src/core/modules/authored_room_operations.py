@@ -12,25 +12,32 @@ import math
 from dataclasses import dataclass, replace
 from typing import Any
 
-from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
+from src.core.geometry.component_editing import component_mesh, flatten_vertices, mirror_vertices, snap_vertex_to_vertex, weld_vertices
+
+from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, authored_resref_blocking_issue, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import (
     FloorPlanBevelOperation,
+    FloorPlanEdgeExtrudeOperation,
     FloorPlanInsetOperation,
     FloorPlanRectangularCutOperation,
     FloorPlanRectangularUnionOperation,
     FloorPlanRoomPrimitive,
     apply_floor_plan_bevel,
+    apply_floor_plan_edge_extrude,
     apply_floor_plan_inset,
     apply_floor_plan_rectangular_cut,
     apply_floor_plan_rectangular_union,
+    polygon_signed_area,
+    validate_floor_plan_room_primitive,
 )
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import compile_authored_room_material_preflight
 from .authored_terrain_builder import (
     TerrainHeightfieldPrimitive,
     analyse_terrain_slopes,
+    apply_terrain_brush_stroke,
     apply_terrain_shape_preset,
     flatten_terrain_heightfield,
     offset_terrain_heightfield_samples,
@@ -43,6 +50,7 @@ from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
     CylinderPrimitive,
+    FloorPrimitive,
     RampPrimitive,
     StairsPrimitive,
     WallPrimitive,
@@ -126,12 +134,13 @@ class AuthoredTerrainRoomChoice:
 
 
 _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
+    AuthoredCompositionPrimitiveKind("plane", "Plane", "A flat walkable floor/platform patch that contributes WOK faces.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("wall", "Wall", "A rectangular wall/blockout slab."),
     AuthoredCompositionPrimitiveKind("cube", "Cube", "A simple box primitive for room dressing or massing."),
     AuthoredCompositionPrimitiveKind("ramp", "Ramp", "A sloped walkable ramp that contributes WOK faces.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("stairs", "Stairs", "A visual staircase with a walkable ramp-style WOK proxy.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("cylinder", "Cylinder", "A round column or pedestal primitive."),
-    AuthoredCompositionPrimitiveKind("arch", "Arch", "A doorway arch frame for blockout and portal tests."),
+    AuthoredCompositionPrimitiveKind("arch", "Door Frame", "A doorway arch/frame primitive for blockout, transition, and portal tests."),
 )
 
 
@@ -290,6 +299,119 @@ def _replace_rooms(
     )
 
 
+def _room_offset(room: AuthoredRoomSpec) -> tuple[float, float, float]:
+    offset = tuple(room.position or (0.0, 0.0, 0.0))
+    if len(offset) < 3:
+        return (0.0, 0.0, 0.0)
+    return (float(offset[0]), float(offset[1]), float(offset[2]))
+
+
+def _floor_plan_component_mesh(primitive: FloorPlanRoomPrimitive):
+    return component_mesh(
+        ((float(x), float(y), float(primitive.z)) for x, y in tuple(primitive.points or ())),
+        metadata={"room_resref": normalise_resref(primitive.room_resref), "source": "floor_plan"},
+    )
+
+
+def _floor_plan_points_from_component_vertices(vertices: tuple[tuple[float, float, float], ...]) -> tuple[tuple[float, float], ...]:
+    return tuple((float(vertex[0]), float(vertex[1])) for vertex in vertices)
+
+
+def _points_close(a: tuple[float, float], b: tuple[float, float], tolerance: float) -> bool:
+    dx = float(a[0]) - float(b[0])
+    dy = float(a[1]) - float(b[1])
+    return (dx * dx + dy * dy) <= (float(tolerance) * float(tolerance))
+
+
+def _is_collinear_point(
+    previous: tuple[float, float],
+    current: tuple[float, float],
+    next_point: tuple[float, float],
+    tolerance: float,
+) -> bool:
+    abx = float(current[0]) - float(previous[0])
+    aby = float(current[1]) - float(previous[1])
+    bcx = float(next_point[0]) - float(current[0])
+    bcy = float(next_point[1]) - float(current[1])
+    cross = abs((abx * bcy) - (aby * bcx))
+    scale = max((abx * abx + aby * aby) ** 0.5, (bcx * bcx + bcy * bcy) ** 0.5, 1.0)
+    return cross <= float(tolerance) * scale
+
+
+def _clean_floor_plan_points(
+    points: tuple[tuple[float, float], ...],
+    *,
+    tolerance: float,
+) -> tuple[tuple[float, float], ...]:
+    cleaned: list[tuple[float, float]] = []
+    for point in tuple(points or ()):
+        normalized = (float(point[0]), float(point[1]))
+        if cleaned and _points_close(cleaned[-1], normalized, tolerance):
+            continue
+        cleaned.append(normalized)
+    if len(cleaned) > 1 and _points_close(cleaned[0], cleaned[-1], tolerance):
+        cleaned.pop()
+    changed = True
+    while changed and len(cleaned) >= 3:
+        changed = False
+        next_points: list[tuple[float, float]] = []
+        count = len(cleaned)
+        for index, point in enumerate(cleaned):
+            previous = cleaned[index - 1]
+            next_point = cleaned[(index + 1) % count]
+            if _is_collinear_point(previous, point, next_point, tolerance):
+                changed = True
+                continue
+            next_points.append(point)
+        cleaned = next_points
+    return tuple(cleaned)
+
+
+def _preserve_floor_plan_winding(
+    original_points: tuple[tuple[float, float], ...],
+    updated_points: tuple[tuple[float, float], ...],
+) -> tuple[tuple[float, float], ...]:
+    if len(original_points) < 3 or len(updated_points) < 3:
+        return updated_points
+    original_area = polygon_signed_area(original_points)
+    updated_area = polygon_signed_area(updated_points)
+    if original_area and updated_area and ((original_area > 0.0) != (updated_area > 0.0)):
+        return tuple(reversed(updated_points))
+    return updated_points
+
+
+def _validated_floor_plan_primitive(primitive: FloorPlanRoomPrimitive, *, operation: str) -> FloorPlanRoomPrimitive:
+    report = validate_floor_plan_room_primitive(primitive)
+    if report.blocking_issues:
+        joined = " ".join(str(issue) for issue in report.blocking_issues)
+        raise ValueError(f"Map Studio {operation} would create invalid floor-plan geometry. {joined}")
+    return primitive
+
+
+def _replace_floor_plan_room(
+    project: AuthoredModuleProject,
+    room_index: int,
+    primitive: FloorPlanRoomPrimitive,
+    *,
+    operation: str,
+    room_metadata: dict[str, Any] | None = None,
+) -> AuthoredModuleProject:
+    room = project.rooms[room_index]
+    updated_room = replace(
+        room,
+        primitive=_validated_floor_plan_primitive(primitive, operation=operation),
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "floor_plan_extrusion",
+            "last_operation": operation,
+            **dict(room_metadata or {}),
+        },
+    )
+    rooms = tuple(project.rooms[:room_index] + (updated_room,) + project.rooms[room_index + 1 :])
+    return _replace_rooms(project, rooms, operation=operation)
+
+
 def _composition_for_room(room: AuthoredRoomSpec) -> AuthoredRoomComposition:
     if isinstance(room.primitive, AuthoredRoomComposition):
         return room.primitive
@@ -310,6 +432,8 @@ def _primitive_transform(primitive: Any) -> PrimitiveTransform:
 
 def _primitive_type(primitive: Any) -> str:
     base = primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
+    if isinstance(base, FloorPrimitive):
+        return "plane"
     name = type(base).__name__
     return name[:-9].lower() if name.endswith("Primitive") else name.lower()
 
@@ -343,6 +467,11 @@ def _dimension(
 
 def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveDimension, ...]:
     base = _base_primitive(primitive)
+    if isinstance(base, FloorPrimitive):
+        return (
+            _dimension("width", "Width", base.width),
+            _dimension("depth", "Depth", base.depth),
+        )
     if isinstance(base, WallPrimitive):
         return (
             _dimension("width", "Width", base.width),
@@ -391,7 +520,7 @@ def _primitive_material_value(primitive: Any) -> PrimitiveMaterial:
 
 def _primitive_surface_id(primitive: Any) -> int | None:
     base = _base_primitive(primitive)
-    if isinstance(base, (RampPrimitive, StairsPrimitive)):
+    if isinstance(base, (FloorPrimitive, RampPrimitive, StairsPrimitive)):
         return resolve_walkmesh_surface_id(base.surface_id)
     return None
 
@@ -405,8 +534,12 @@ def _primitive_kind(value: Any) -> str:
     aliases = {
         "box": "cube",
         "column": "cylinder",
+        "floor": "plane",
+        "platform": "plane",
         "stair": "stairs",
         "step": "stairs",
+        "door_frame": "arch",
+        "doorway": "arch",
         "door_arch": "arch",
     }
     kind = aliases.get(kind, kind)
@@ -429,6 +562,29 @@ def _unique_primitive_name(composition: AuthoredRoomComposition, kind: str, requ
     return candidate
 
 
+def _safe_room_resref_seed(value: Any, fallback: str) -> str:
+    text = str(value or "").strip() or str(fallback or "").strip()
+    safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in text)
+    safe = safe.strip("_") or "room"
+    return normalise_resref(safe)
+
+
+def _unique_room_resref(project: AuthoredModuleProject, requested: str, fallback: str) -> str:
+    used = {normalise_resref(room.room_resref) for room in tuple(project.rooms or ())}
+    base = _safe_room_resref_seed(requested, fallback)
+    issue = authored_resref_blocking_issue("Separated room", base)
+    if issue:
+        raise ValueError(issue)
+    if base not in used:
+        return base
+    for index in range(2, 1000):
+        suffix = f"_{index}"
+        candidate = normalise_resref(f"{base[: max(1, 16 - len(suffix))]}{suffix}")
+        if candidate not in used:
+            return candidate
+    raise ValueError(f"Could not create a unique room resref from '{requested or fallback}'.")
+
+
 def _primitive_material(composition: AuthoredRoomComposition, texture: str = "") -> PrimitiveMaterial:
     material = composition.floor.material
     if texture:
@@ -442,6 +598,8 @@ def _primitive_material(composition: AuthoredRoomComposition, texture: str = "")
 
 
 def _default_primitive_for_kind(kind: str, name: str, material: PrimitiveMaterial, floor_surface: Any) -> Any:
+    if kind == "plane":
+        return FloorPrimitive(name=name, width=3.0, depth=3.0, z=0.0, surface_id=floor_surface, material=material)
     if kind == "wall":
         return WallPrimitive(name=name, width=4.0, height=3.0, thickness=0.15, center=(0.0, 0.0, 1.5), material=material)
     if kind == "cube":
@@ -491,6 +649,14 @@ def _reject_unknown_dimensions(values: dict[str, Any], allowed: set[str], primit
 
 def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
     values = _dimension_values(dimensions)
+    if isinstance(base, FloorPrimitive):
+        allowed = {"width", "depth"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            width=_dimension_float(values, "width", base.width),
+            depth=_dimension_float(values, "depth", base.depth),
+        )
     if isinstance(base, WallPrimitive):
         allowed = {"width", "height", "thickness"}
         _reject_unknown_dimensions(values, allowed, base.name)
@@ -570,7 +736,7 @@ def _updated_base_primitive_style(base: Any, *, texture: Any = "", surface_id: A
         raise ValueError(material_preflight.blocking_issues[0])
     current_material = getattr(base, "material", PrimitiveMaterial())
     next_surface_id = None
-    if isinstance(base, (RampPrimitive, StairsPrimitive)):
+    if isinstance(base, (FloorPrimitive, RampPrimitive, StairsPrimitive)):
         next_surface_id = resolve_walkmesh_surface_id(base.surface_id if surface_id in (None, "") else surface_id)
     elif surface_id not in (None, ""):
         raise ValueError(f"Primitive {getattr(base, 'name', '(unnamed)')} does not contribute walkmesh faces, so it cannot have a WOK surface.")
@@ -582,7 +748,7 @@ def _updated_base_primitive_style(base: Any, *, texture: Any = "", surface_id: A
             **_style_metadata(material_preflight.texture, next_surface_id),
         },
     )
-    if isinstance(base, (RampPrimitive, StairsPrimitive)):
+    if isinstance(base, (FloorPrimitive, RampPrimitive, StairsPrimitive)):
         return replace(base, material=material, surface_id=next_surface_id)
     return replace(base, material=material)
 
@@ -843,6 +1009,97 @@ def remove_authored_room_composition_primitive(
     )
 
 
+def separate_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    result_room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Move one composition primitive into a new exportable authored room boundary."""
+
+    source_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    source_room = rooms[source_index]
+    source_composition = _composition_for_room(source_room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Separating a composition primitive requires a primitive name.")
+    primitives = list(tuple(source_composition.primitives or ()))
+    selected: Any | None = None
+    remaining: list[Any] = []
+    for primitive in primitives:
+        if _primitive_name(primitive) == target and selected is None:
+            selected = primitive
+            continue
+        remaining.append(primitive)
+    if selected is None:
+        raise ValueError(f"Room {source_room.room_resref} has no primitive named '{primitive_name}'.")
+    new_room_resref = _unique_room_resref(project, result_room_resref, target)
+    new_floor = replace(
+        source_composition.floor,
+        name=f"{new_room_resref}_mesh",
+        material=source_composition.floor.material,
+    )
+    separated_composition = AuthoredRoomComposition(
+        room_resref=new_room_resref,
+        floor=new_floor,
+        primitives=(selected,),
+        helper_meshes=(),
+        metadata={
+            **dict(source_composition.metadata),
+            "last_operation": "separate_composition_primitive",
+            "separated_from_room": normalise_resref(source_room.room_resref),
+            "separated_primitive": target,
+            "source": "src.core.modules.authored_room_operations",
+        },
+    )
+    updated_source_composition = replace(
+        source_composition,
+        primitives=tuple(remaining),
+        metadata={
+            **dict(source_composition.metadata),
+            "last_operation": "separate_composition_primitive",
+            "last_separated_primitive": target,
+            "last_separated_room": new_room_resref,
+        },
+    )
+    rooms[source_index] = replace(
+        source_room,
+        primitive=updated_source_composition if isinstance(source_room.primitive, AuthoredRoomComposition) else source_room.primitive,
+        composition=updated_source_composition if source_room.composition is not None else source_room.composition,
+        metadata={
+            **dict(source_room.metadata),
+            "last_operation": "separate_composition_primitive",
+            "last_separated_primitive": target,
+            "last_separated_room": new_room_resref,
+        },
+    )
+    new_room = AuthoredRoomSpec(
+        room_resref=new_room_resref,
+        primitive=separated_composition,
+        composition=None,
+        position=tuple(source_room.position or (0.0, 0.0, 0.0)),
+        visible_rooms=(),
+        metadata={
+            "primitive": "authored_room_composition",
+            "source": "src.core.modules.authored_room_operations",
+            "last_operation": "separate_composition_primitive",
+            "separated_from_room": normalise_resref(source_room.room_resref),
+            "separated_primitive": target,
+        },
+    )
+    rooms.append(new_room)
+    room_tuple = tuple(rooms)
+    visible = _all_room_names(room_tuple)
+    room_tuple = tuple(replace(room, visible_rooms=visible) for room in room_tuple)
+    return _replace_rooms(
+        project,
+        room_tuple,
+        operation=f"separate_composition_primitive:{target}:{new_room_resref}",
+    )
+
+
 def _vec3_or_existing(value: Any, existing: tuple[float, float, float]) -> tuple[float, float, float]:
     if value is None:
         return existing
@@ -1039,6 +1296,184 @@ def apply_authored_floor_plan_bevel(
     updated = replace(room, primitive=primitive, composition=None, metadata={**dict(room.metadata), "last_operation": "bevel"})
     rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
     return _replace_rooms(project, rooms, operation="bevel")
+
+
+def apply_authored_floor_plan_edge_extrude(
+    project: AuthoredModuleProject,
+    *,
+    edge_index: int,
+    distance: float,
+    room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Pull one authored floor-plan edge outward and return updated project intent."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    primitive = apply_floor_plan_edge_extrude(
+        _floor_plan_for_room(room),
+        FloorPlanEdgeExtrudeOperation(
+            edge_index=int(edge_index),
+            distance=float(distance),
+            room_resref=room.room_resref,
+            metadata={"source": "map_studio:project_operation"},
+        ),
+    )
+    updated = replace(
+        room,
+        primitive=primitive,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "last_operation": "edge_extrude",
+            "edge_index": int(edge_index),
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="edge_extrude")
+
+
+def _world_floor_plan_edge(
+    room: AuthoredRoomSpec,
+    primitive: FloorPlanRoomPrimitive,
+    edge_index: int,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    points = tuple(primitive.points or ())
+    if len(points) < 3:
+        raise ValueError(f"Room {room.room_resref} needs at least three floor-plan points before bridging.")
+    edge = int(edge_index)
+    if edge < 0 or edge >= len(points):
+        raise ValueError(f"Room {room.room_resref} has no floor-plan edge {edge_index}.")
+    offset = _room_offset(room)
+    start = points[edge]
+    end = points[(edge + 1) % len(points)]
+    return (
+        (float(start[0]) + offset[0], float(start[1]) + offset[1]),
+        (float(end[0]) + offset[0], float(end[1]) + offset[1]),
+    )
+
+
+def _require_bridge_compatible_floor_plans(
+    first_room: AuthoredRoomSpec,
+    first: FloorPlanRoomPrimitive,
+    second_room: AuthoredRoomSpec,
+    second: FloorPlanRoomPrimitive,
+) -> float:
+    first_position = _room_offset(first_room)
+    second_position = _room_offset(second_room)
+    first_world_z = first_position[2] + float(first.z)
+    second_world_z = second_position[2] + float(second.z)
+    if abs(first_world_z - second_world_z) > 1.0e-7:
+        raise ValueError("Floor-plan bridge requires matching world floor elevations.")
+    if abs(float(first.wall_height) - float(second.wall_height)) > 1.0e-7:
+        raise ValueError("Floor-plan bridge requires matching wall heights.")
+    if resolve_walkmesh_surface_id(first.floor_surface_id) != resolve_walkmesh_surface_id(second.floor_surface_id):
+        raise ValueError("Floor-plan bridge requires matching WOK floor surface types.")
+    if first.material != second.material:
+        raise ValueError("Floor-plan bridge requires matching room materials.")
+    if bool(first.include_walls) != bool(second.include_walls):
+        raise ValueError("Floor-plan bridge requires matching wall generation settings.")
+    return first_world_z
+
+
+def _unique_bridge_resref(project: AuthoredModuleProject, first_room_resref: str, second_room_resref: str, requested: str = "") -> str:
+    existing = {normalise_resref(room.room_resref) for room in tuple(project.rooms or ())}
+    base = normalise_resref(requested)
+    if not base:
+        first = normalise_resref(first_room_resref) or "rooma"
+        second = normalise_resref(second_room_resref) or "roomb"
+        base = normalise_resref(f"{first[:6]}_{second[:6]}_br") or "bridge_room"
+    if base not in existing:
+        return base
+    stem = base[:16]
+    for index in range(1, 100):
+        suffix = f"_{index}"
+        candidate = f"{stem[: max(1, 16 - len(suffix))]}{suffix}"[:16]
+        if candidate not in existing:
+            return candidate
+    raise ValueError(f"Could not create a unique bridge room resref from '{base}'.")
+
+
+def _bridge_floor_plan_points(
+    first_edge: tuple[tuple[float, float], tuple[float, float]],
+    second_edge: tuple[tuple[float, float], tuple[float, float]],
+) -> tuple[tuple[float, float], ...]:
+    a0, a1 = first_edge
+    b0, b1 = second_edge
+    candidates = (
+        (a0, a1, b1, b0),
+        (a0, a1, b0, b1),
+    )
+    blocking_messages: list[str] = []
+    for points in candidates:
+        candidate = FloorPlanRoomPrimitive(room_resref="bridge_preview", points=tuple(points))
+        validation = validate_floor_plan_room_primitive(candidate)
+        if validation.ok and abs(float(validation.area)) > 1.0e-7:
+            return tuple((float(x), float(y)) for x, y in points)
+        blocking_messages.extend(str(item) for item in validation.blocking_issues)
+    detail = f" {' '.join(blocking_messages)}" if blocking_messages else ""
+    raise ValueError(f"Bridge edges do not form one valid convex connector room.{detail}")
+
+
+def bridge_authored_floor_plan_edges(
+    project: AuthoredModuleProject,
+    *,
+    first_room_resref: str,
+    first_edge_index: int,
+    second_room_resref: str,
+    second_edge_index: int,
+    result_room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Create an exportable connector room between two compatible floor-plan edges."""
+
+    first_index = _target_room_index(project, first_room_resref)
+    second_index = _target_room_index(project, second_room_resref)
+    if first_index == second_index:
+        raise ValueError("Floor-plan bridge requires two different rooms.")
+    first_room = project.rooms[first_index]
+    second_room = project.rooms[second_index]
+    first_primitive = _floor_plan_for_room(first_room)
+    second_primitive = _floor_plan_for_room(second_room)
+    world_z = _require_bridge_compatible_floor_plans(first_room, first_primitive, second_room, second_primitive)
+    first_edge = _world_floor_plan_edge(first_room, first_primitive, int(first_edge_index))
+    second_edge = _world_floor_plan_edge(second_room, second_primitive, int(second_edge_index))
+    points = _bridge_floor_plan_points(first_edge, second_edge)
+    target_resref = _unique_bridge_resref(project, first_room.room_resref, second_room.room_resref, result_room_resref)
+    primitive = FloorPlanRoomPrimitive(
+        room_resref=target_resref,
+        points=points,
+        z=world_z,
+        wall_height=first_primitive.wall_height,
+        floor_surface_id=first_primitive.floor_surface_id,
+        material=first_primitive.material,
+        include_walls=first_primitive.include_walls,
+        openings=(),
+        metadata={
+            **dict(first_primitive.metadata),
+            "operation": "bridge_edges",
+            "source": "map_studio:floor_plan_bridge",
+            "first_room_resref": normalise_resref(first_room.room_resref),
+            "first_edge_index": int(first_edge_index),
+            "second_room_resref": normalise_resref(second_room.room_resref),
+            "second_edge_index": int(second_edge_index),
+        },
+    )
+    connector_room = AuthoredRoomSpec(
+        room_resref=target_resref,
+        primitive=primitive,
+        composition=None,
+        position=(0.0, 0.0, 0.0),
+        visible_rooms=(),
+        metadata={
+            "primitive": "floor_plan_extrusion",
+            "last_operation": "bridge_edges",
+            "bridge_first_room": normalise_resref(first_room.room_resref),
+            "bridge_second_room": normalise_resref(second_room.room_resref),
+        },
+    )
+    rooms = tuple(project.rooms or ()) + (connector_room,)
+    visible = _all_room_names(rooms)
+    rooms = tuple(replace(room, visible_rooms=visible) for room in rooms)
+    return _replace_rooms(project, rooms, operation="bridge_edges")
 
 
 def set_authored_floor_plan_extrusion_settings(
@@ -1324,6 +1759,257 @@ def move_authored_floor_plan_point(
     return _replace_rooms(project, rooms, operation="move_floor_plan_point")
 
 
+def snap_authored_floor_plan_vertex_to_vertex(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_index: int,
+    target_point_index: int,
+    target_room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Snap one authored floor-plan vertex exactly onto another vertex.
+
+    The target may live in the same room or another authored room.  Cross-room
+    snapping is stored in the source room's local coordinates so the KMAP room
+    transform remains the source of truth.
+    """
+
+    source_room_index = _target_room_index(project, room_resref)
+    source_room = project.rooms[source_room_index]
+    source_primitive = _floor_plan_for_room(source_room)
+    source_points = tuple(source_primitive.points or ())
+    source_vertex_index = int(point_index)
+    if source_vertex_index < 0 or source_vertex_index >= len(source_points):
+        raise ValueError(f"Room {source_room.room_resref} has no outline point {point_index}.")
+
+    target_room_index = _target_room_index(project, target_room_resref or room_resref)
+    target_room = project.rooms[target_room_index]
+    target_primitive = _floor_plan_for_room(target_room)
+    target_points = tuple(target_primitive.points or ())
+    target_vertex_index = int(target_point_index)
+    if target_vertex_index < 0 or target_vertex_index >= len(target_points):
+        raise ValueError(f"Room {target_room.room_resref} has no outline point {target_point_index}.")
+
+    if source_room_index == target_room_index:
+        result = snap_vertex_to_vertex(_floor_plan_component_mesh(source_primitive), source_vertex_index, target_vertex_index)
+        updated_points = _floor_plan_points_from_component_vertices(result.mesh.vertices)
+    else:
+        source_offset = _room_offset(source_room)
+        target_offset = _room_offset(target_room)
+        target_x, target_y = target_points[target_vertex_index]
+        target_world = (float(target_x) + target_offset[0], float(target_y) + target_offset[1])
+        updated_points_list = list(source_points)
+        updated_points_list[source_vertex_index] = (target_world[0] - source_offset[0], target_world[1] - source_offset[1])
+        updated_points = tuple((float(x), float(y)) for x, y in updated_points_list)
+
+    updated_primitive = replace(
+        source_primitive,
+        points=updated_points,
+        metadata={
+            **dict(source_primitive.metadata),
+            "last_operation": "snap_floor_plan_vertex",
+            "last_vertex_edit": source_vertex_index,
+            "snap_target_room": normalise_resref(target_room.room_resref),
+            "snap_target_index": target_vertex_index,
+            "source": "map_studio:floor_plan_vertex_snap",
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        source_room_index,
+        updated_primitive,
+        operation="snap_floor_plan_vertex",
+        room_metadata={
+            "last_vertex_edit": source_vertex_index,
+            "snap_target_room": normalise_resref(target_room.room_resref),
+            "snap_target_index": target_vertex_index,
+        },
+    )
+
+
+def weld_authored_floor_plan_vertices(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_indices: tuple[int, ...] | list[int],
+    target_point_index: int | None = None,
+    position_policy: str = "target",
+) -> AuthoredModuleProject:
+    """Weld selected floor-plan vertices into one KOTOR-safe footprint point."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    selected = tuple(dict.fromkeys(int(index) for index in point_indices))
+    if len(selected) < 2:
+        raise ValueError("Weld floor-plan vertices requires at least two point indices.")
+    result = weld_vertices(
+        _floor_plan_component_mesh(primitive),
+        selected,
+        target_index=target_point_index,
+        position_policy=str(position_policy or "target").strip().lower() or "target",
+    )
+    updated_points = _floor_plan_points_from_component_vertices(result.mesh.vertices)
+    if len(updated_points) < 3:
+        raise ValueError("Weld floor-plan vertices would leave fewer than three footprint points.")
+    updated_primitive = replace(
+        primitive,
+        points=updated_points,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "weld_floor_plan_vertices",
+            "welded_vertices": list(selected),
+            "weld_policy": str(position_policy or "target").strip().lower() or "target",
+            "source": "map_studio:floor_plan_vertex_weld",
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="weld_floor_plan_vertices",
+        room_metadata={"welded_vertices": list(selected)},
+    )
+
+
+def flatten_authored_floor_plan_vertices(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_indices: tuple[int, ...] | list[int],
+    axis: str = "x",
+    value: float | None = None,
+) -> AuthoredModuleProject:
+    """Flatten selected floor-plan vertices along the local X or Y axis."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    selected = tuple(dict.fromkeys(int(index) for index in point_indices))
+    if len(selected) < 1:
+        raise ValueError("Flatten floor-plan vertices requires at least one point index.")
+    axis_key = str(axis or "x").strip().lower()
+    if axis_key not in {"x", "y"}:
+        raise ValueError("Floor-plan vertex flattening supports local X or Y only; use extrusion controls for floor Z.")
+    result = flatten_vertices(
+        _floor_plan_component_mesh(primitive),
+        selected,
+        axis=axis_key,
+        value=value,
+    )
+    updated_primitive = replace(
+        primitive,
+        points=_floor_plan_points_from_component_vertices(result.mesh.vertices),
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "flatten_floor_plan_vertices",
+            "flattened_vertices": list(selected),
+            "flatten_axis": axis_key,
+            "flatten_value": result.metadata.get("value"),
+            "source": "map_studio:floor_plan_vertex_flatten",
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="flatten_floor_plan_vertices",
+        room_metadata={"flattened_vertices": list(selected), "flatten_axis": axis_key},
+    )
+
+
+def mirror_authored_floor_plan_vertices(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    axis: str = "x",
+) -> AuthoredModuleProject:
+    """Mirror an entire floor-plan footprint around its local centerline."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    source_points = tuple((float(x), float(y)) for x, y in tuple(primitive.points or ()))
+    if len(source_points) < 3:
+        raise ValueError("Mirror floor-plan footprint requires at least three points.")
+    axis_key = str(axis or "x").strip().lower()
+    if axis_key not in {"x", "y"}:
+        raise ValueError("Floor-plan mirroring supports local X or Y only.")
+    result = mirror_vertices(
+        _floor_plan_component_mesh(primitive),
+        range(len(source_points)),
+        axis=axis_key,
+    )
+    mirrored_points = _floor_plan_points_from_component_vertices(result.mesh.vertices)
+    mirrored_points = _preserve_floor_plan_winding(source_points, mirrored_points)
+    updated_primitive = replace(
+        primitive,
+        points=mirrored_points,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "mirror_floor_plan_vertices",
+            "mirror_axis": axis_key,
+            "mirror_center": result.metadata.get("center"),
+            "source": "map_studio:floor_plan_vertex_mirror",
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="mirror_floor_plan_vertices",
+        room_metadata={
+            "mirror_axis": axis_key,
+            "mirror_center": result.metadata.get("center"),
+        },
+    )
+
+
+def cleanup_authored_floor_plan_vertices(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    tolerance: float = 0.001,
+) -> AuthoredModuleProject:
+    """Remove redundant floor-plan points before MDL/WOK export.
+
+    This is footprint cleanup, not generic mesh cleanup: it removes duplicate,
+    sequential, closing, and collinear points that would create tiny room
+    edges, sliver walls, or fragile WOK triangles.
+    """
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    clean_tolerance = max(float(tolerance), 0.000001)
+    old_points = tuple((float(x), float(y)) for x, y in tuple(primitive.points or ()))
+    updated_points = _clean_floor_plan_points(old_points, tolerance=clean_tolerance)
+    if len(updated_points) < 3:
+        raise ValueError("Cleanup floor-plan vertices would leave fewer than three footprint points.")
+    removed_count = max(len(old_points) - len(updated_points), 0)
+    updated_primitive = replace(
+        primitive,
+        points=updated_points,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "cleanup_floor_plan_vertices",
+            "cleanup_removed_point_count": removed_count,
+            "cleanup_tolerance": clean_tolerance,
+            "source": "map_studio:floor_plan_vertex_cleanup",
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="cleanup_floor_plan_vertices",
+        room_metadata={
+            "cleanup_removed_point_count": removed_count,
+            "cleanup_tolerance": clean_tolerance,
+        },
+    )
+
+
 def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operation: str, **kwargs: Any) -> AuthoredModuleProject:
     """Dispatch a named Map Studio room operation."""
 
@@ -1332,6 +2018,25 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
         return apply_authored_floor_plan_inset(project, distance=float(kwargs.get("distance", 0.25)), room_resref=str(kwargs.get("room_resref", "")))
     if op == "bevel":
         return apply_authored_floor_plan_bevel(project, distance=float(kwargs.get("distance", 0.25)), room_resref=str(kwargs.get("room_resref", "")))
+    if op in {"edge_extrude", "extrude"}:
+        return apply_authored_floor_plan_edge_extrude(
+            project,
+            edge_index=int(kwargs.get("edge_index", 0)),
+            distance=float(kwargs.get("distance", 0.25)),
+            room_resref=str(kwargs.get("room_resref", "")),
+        )
+    if op in {"cleanup", "cleanup_vertices", "cleanup_floor_plan_vertices"}:
+        return cleanup_authored_floor_plan_vertices(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            tolerance=float(kwargs.get("tolerance", 0.001)),
+        )
+    if op in {"mirror", "mirror_vertices", "mirror_floor_plan_vertices"}:
+        return mirror_authored_floor_plan_vertices(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            axis=str(kwargs.get("axis", "x")),
+        )
     if op in {"rectangular_cut", "cut"}:
         return apply_authored_floor_plan_rectangular_cut(
             project,
@@ -1348,9 +2053,13 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
 
     op = str(operation or "").strip().lower()
     shape_preset_id = str(kwargs.get("preset_id", "") or "").strip().lower()
+    brush_name = str(kwargs.get("brush", "") or "").strip().lower()
     if op.startswith("shape_preset:"):
         shape_preset_id = op.split(":", 1)[1].strip().lower()
         op = "shape_preset"
+    if op.startswith("brush_stroke:"):
+        brush_name = op.split(":", 1)[1].strip().lower()
+        op = "brush_stroke"
     index = _target_room_index(project, str(kwargs.get("room_resref", "")))
     room = project.rooms[index]
     primitive = _terrain_for_room(room)
@@ -1379,6 +2088,18 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
     elif op == "smooth":
         updated_primitive = smooth_terrain_heightfield(
             primitive,
+            iterations=int(kwargs.get("iterations", 1)),
+            strength=float(kwargs.get("strength", 0.5)),
+            preserve_boundary=bool(kwargs.get("preserve_boundary", True)),
+        )
+    elif op in {"brush_stroke", "terrain_brush_stroke"}:
+        updated_primitive = apply_terrain_brush_stroke(
+            primitive,
+            brush=brush_name or "raise",
+            points=kwargs.get("points") or ((int(kwargs.get("row_index", 0)), int(kwargs.get("column_index", 0)), 1.0),),
+            delta=float(kwargs.get("delta", 0.1)),
+            radius=int(kwargs.get("radius", 0)),
+            height=float(kwargs.get("height", 0.0)),
             iterations=int(kwargs.get("iterations", 1)),
             strength=float(kwargs.get("strength", 0.5)),
             preserve_boundary=bool(kwargs.get("preserve_boundary", True)),
@@ -1421,6 +2142,7 @@ __all__ = [
     "apply_authored_terrain_operation",
     "apply_authored_floor_plan_rectangular_union",
     "apply_authored_floor_plan_bevel",
+    "apply_authored_floor_plan_edge_extrude",
     "apply_authored_floor_plan_inset",
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
@@ -1428,11 +2150,18 @@ __all__ = [
     "authored_floor_plan_room_choices",
     "authored_terrain_room_choices",
     "authored_room_composition_primitives",
+    "bridge_authored_floor_plan_edges",
+    "cleanup_authored_floor_plan_vertices",
+    "flatten_authored_floor_plan_vertices",
+    "mirror_authored_floor_plan_vertices",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",
     "remove_authored_room_composition_primitive",
+    "separate_authored_room_composition_primitive",
     "set_authored_floor_plan_extrusion_settings",
     "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
+    "snap_authored_floor_plan_vertex_to_vertex",
+    "weld_authored_floor_plan_vertices",
 ]

@@ -13,8 +13,10 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .authored_module_metadata import authored_area_script_hooks, authored_module_script_hooks
-from .authored_module_objects import normalise_resource_resref
+from .authored_module_objects import normalise_resource_resref, validate_authored_gameplay_placement_against_walkmesh
+from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
+from .map_studio_export_objects import map_studio_export_object_boundaries
 from .authored_walkmesh_surfaces import walkmesh_surface_name
 
 
@@ -97,6 +99,21 @@ class AuthoredModuleScriptReference:
     status: str = "external_or_override"
     packaged: bool = False
     message: str = ""
+
+
+@dataclass(frozen=True)
+class AuthoredModulePathingReadiness:
+    """Modder-facing summary of the generated module PTH/path graph."""
+
+    ready: bool
+    status: str
+    pth_resource: str = ""
+    point_count: int = 0
+    connection_count: int = 0
+    anchor_labels: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    blocking_messages: tuple[str, ...] = ()
+    fix_hint: str = ""
 
 
 @dataclass(frozen=True)
@@ -382,6 +399,118 @@ def _script_references(
     return tuple(sorted(refs, key=lambda item: (item.scope, item.field_name, item.script_resref)))
 
 
+def _path_anchors_from_walkability(project: AuthoredModuleProject, walkability: Any) -> tuple[AuthoredPathAnchor, ...]:
+    ok_labels = {str(getattr(check, "label", "")): bool(getattr(check, "ok", False)) for check in list(getattr(walkability, "checks", ()) or ())}
+    placements = project.placements
+    anchors: list[AuthoredPathAnchor] = []
+    if ok_labels.get("entry_point", False):
+        anchors.append(AuthoredPathAnchor("entry_point", placements.entry_point.position, metadata={"kind": "entry_point"}))
+
+    def append_spatial_anchor(kind: str, index: int, item: Any) -> None:
+        if not hasattr(item, "position"):
+            return
+        template = str(getattr(item, "template_resref", "") or "")
+        tag = str(getattr(item, "tag", "") or "")
+        label = f"{kind}:{tag or template or f'{kind}_{index + 1}'}"
+        if ok_labels.get(label, False):
+            anchors.append(
+                AuthoredPathAnchor(
+                    label,
+                    tuple(getattr(item, "position")),
+                    metadata={
+                        "kind": kind,
+                        "index": index,
+                        "template_resref": template,
+                        "tag": tag,
+                    },
+                )
+            )
+
+    for index, creature in enumerate(tuple(placements.creatures or ())):
+        append_spatial_anchor("creature", index, creature)
+    for index, door in enumerate(tuple(placements.doors or ())):
+        append_spatial_anchor("door", index, door)
+    for index, trigger in enumerate(tuple(placements.triggers or ())):
+        append_spatial_anchor("trigger", index, trigger)
+    for index, encounter in enumerate(tuple(placements.encounters or ())):
+        append_spatial_anchor("encounter", index, encounter)
+    for index, placeable in enumerate(tuple(placements.placeables or ())):
+        append_spatial_anchor("placeable", index, placeable)
+    for index, waypoint in enumerate(tuple(placements.waypoints or ())):
+        append_spatial_anchor("waypoint", index, waypoint)
+    return tuple(anchors)
+
+
+def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingReadiness:
+    root = normalise_resref(project.module_root)
+    if not root:
+        return AuthoredModulePathingReadiness(
+            ready=False,
+            status="Needs module resref",
+            fix_hint="Choose a module resref before Map Studio can name the generated PTH resource.",
+        )
+    if not project.rooms:
+        return AuthoredModulePathingReadiness(
+            ready=False,
+            status="Needs room WOK",
+            pth_resource=f"{root}.pth",
+            fix_hint="Create at least one room so Map Studio can compile walkmesh-backed pathing.",
+        )
+
+    room_woks: dict[str, Any] = {}
+    blocking: list[str] = []
+    for room in project.rooms:
+        room_resref = room.normalised_resref()
+        try:
+            room_woks[room_resref] = compile_authored_room_spec(room).wok
+        except Exception as exc:
+            blocking.append(f"Room {room_resref or '(unnamed)'} could not compile for pathing: {exc}")
+    if not room_woks:
+        return AuthoredModulePathingReadiness(
+            ready=False,
+            status="Needs room WOK",
+            pth_resource=f"{root}.pth",
+            blocking_messages=tuple(blocking),
+            fix_hint="Fix room geometry before Map Studio can compile PTH pathing.",
+        )
+
+    entry_room = normalise_resref(project.placements.entry_point.area_resref)
+    selected_room = entry_room if entry_room in room_woks else next(iter(sorted(room_woks)))
+    entry_wok = room_woks[selected_room]
+    walkability = validate_authored_gameplay_placement_against_walkmesh(project.placements, entry_wok)
+    blocking.extend(str(issue) for issue in tuple(getattr(walkability, "blocking_issues", ()) or ()))
+    if blocking:
+        return AuthoredModulePathingReadiness(
+            ready=False,
+            status="Blocked",
+            pth_resource=f"{root}.pth",
+            blocking_messages=tuple(blocking),
+            fix_hint="Move entry points and gameplay anchors onto walkable WOK faces before export.",
+        )
+
+    try:
+        compiled = compile_authored_pathing_for_module(entry_wok, anchors=_path_anchors_from_walkability(project, walkability))
+    except Exception as exc:
+        return AuthoredModulePathingReadiness(
+            ready=False,
+            status="Blocked",
+            pth_resource=f"{root}.pth",
+            blocking_messages=(f"Authored PTH pathing could not compile: {exc}",),
+            fix_hint="Fix path points, walkmesh islands, or gameplay anchors before export.",
+        )
+    metadata = dict(getattr(compiled, "metadata", {}) or {})
+    return AuthoredModulePathingReadiness(
+        ready=True,
+        status="Ready",
+        pth_resource=f"{root}.pth",
+        point_count=int(metadata.get("point_count", 0) or 0),
+        connection_count=int(metadata.get("connection_count", 0) or 0),
+        anchor_labels=tuple(str(label) for label in list(metadata.get("anchor_labels", []) or ())),
+        warnings=tuple(getattr(getattr(compiled, "validation", None), "warnings", ()) or ()),
+        fix_hint="Validate in game by walking between authored anchors after export.",
+    )
+
+
 def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
@@ -525,6 +654,7 @@ def _toolchain_statuses(
     project: AuthoredModuleProject,
     *,
     rooms: tuple[AuthoredRoomReadiness, ...],
+    pathing: AuthoredModulePathingReadiness,
     template_references: tuple[AuthoredGameplayTemplateReference, ...],
     transition_references: tuple[AuthoredModuleTransitionReference, ...],
     script_references: tuple[AuthoredModuleScriptReference, ...],
@@ -612,6 +742,16 @@ def _toolchain_statuses(
             "Ready" if walkable_faces > 0 and not room_blocking else "Needs walkable WOK faces",
             f"{walkable_faces} walkable face(s)",
             "Set a walkable floor/ramp/stair WOK surface and keep gameplay objects on walkable faces.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "PTH pathing",
+            pathing.ready,
+            pathing.status,
+            (
+                f"{pathing.pth_resource or '(no PTH)'}; {pathing.point_count} point(s), "
+                f"{pathing.connection_count} connection(s); anchors: {', '.join(pathing.anchor_labels) or 'walkmesh center only'}"
+            ),
+            pathing.fix_hint or "Fix walkability/path anchors before export.",
         ),
         AuthoredModuleToolchainStatus(
             "Lighting",
@@ -728,6 +868,8 @@ def build_authored_module_readiness(
     template_references = _gameplay_template_references(project, present=present_set)
     transition_references = _transition_references(project)
     script_references = _script_references(project, present=present_set)
+    pathing = _pathing_readiness(project)
+    export_object_boundaries = map_studio_export_object_boundaries(project)
     external_template_count = sum(1 for ref in template_references if not ref.packaged)
     incomplete_transition_count = sum(1 for ref in transition_references if not ref.complete)
     external_script_count = sum(1 for ref in script_references if not ref.packaged)
@@ -820,6 +962,7 @@ def build_authored_module_readiness(
     toolchain = _toolchain_statuses(
         project,
         rooms=rooms,
+        pathing=pathing,
         template_references=template_references,
         transition_references=transition_references,
         script_references=script_references,
@@ -852,7 +995,21 @@ def build_authored_module_readiness(
         metadata={
             "source": "src.core.modules.authored_module_readiness",
             "room_count": len(rooms),
+            "export_object_count": len(export_object_boundaries),
+            "export_object_boundaries": [boundary.to_metadata() for boundary in export_object_boundaries],
+            "uv_handoff_object_count": sum(1 for boundary in export_object_boundaries if boundary.uv_handoff_recommended),
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
+            "pathing": {
+                "ready": pathing.ready,
+                "status": pathing.status,
+                "pth_resource": pathing.pth_resource,
+                "point_count": pathing.point_count,
+                "connection_count": pathing.connection_count,
+                "anchor_labels": list(pathing.anchor_labels),
+                "warnings": list(pathing.warnings),
+                "blocking_messages": list(pathing.blocking_messages),
+                "fix_hint": pathing.fix_hint,
+            },
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
             "resource_placement_summary": _resource_placement_summary(gameplay_counts),
@@ -963,6 +1120,7 @@ __all__ = [
     "AuthoredGameplayTemplateReference",
     "AuthoredModuleTransitionReference",
     "AuthoredModuleInputStatus",
+    "AuthoredModulePathingReadiness",
     "AuthoredModuleReadiness",
     "AuthoredModuleScriptReference",
     "AuthoredModuleToolchainStatus",

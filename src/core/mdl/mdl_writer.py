@@ -592,7 +592,7 @@ class MDLBinaryWriter:
         buf.seek(end)
 
         # ── 4f. Animation offset array ───────────────────────────────────────
-        anim_arr_rel = buf.tell() - _BASE
+        anim_arr_rel = root_off if not model.animations else buf.tell() - _BASE
         end = buf.tell()
         buf.seek(self._anim_arr_off_patch)
         buf.write(_wu32(anim_arr_rel))
@@ -1088,9 +1088,34 @@ class MDLBinaryWriter:
         else:
             mesh_unknown0 = mesh_unknown0[:24]
 
-        bb_min  = getattr(node, 'mesh_bb_min', None) or (0.0, 0.0, 0.0)
-        bb_max  = getattr(node, 'mesh_bb_max', None) or (0.0, 0.0, 0.0)
+        vertices = list(getattr(node, 'vertices', ()) or ())
+        bb_min  = getattr(node, 'mesh_bb_min', None) or getattr(node, 'bb_min', None) or (0.0, 0.0, 0.0)
+        bb_max  = getattr(node, 'mesh_bb_max', None) or getattr(node, 'bb_max', None) or (0.0, 0.0, 0.0)
         avg_pt  = getattr(node, 'mesh_average_point', None) or (0.0, 0.0, 0.0)
+        mesh_radius = getattr(node, 'mesh_radius', None)
+        if mesh_radius is None:
+            mesh_radius = getattr(node, 'radius', 0.0)
+        if vertices and (bb_min == (0.0, 0.0, 0.0) and bb_max == (0.0, 0.0, 0.0)):
+            xs = [v[0] for v in vertices]
+            ys = [v[1] for v in vertices]
+            zs = [v[2] for v in vertices]
+            bb_min = (min(xs), min(ys), min(zs))
+            bb_max = (max(xs), max(ys), max(zs))
+        if vertices and not mesh_radius:
+            cx = (bb_min[0] + bb_max[0]) * 0.5
+            cy = (bb_min[1] + bb_max[1]) * 0.5
+            cz = (bb_min[2] + bb_max[2]) * 0.5
+            mesh_radius = max(
+                math.sqrt((v[0] - cx) ** 2 + (v[1] - cy) ** 2 + (v[2] - cz) ** 2)
+                for v in vertices
+            )
+        if vertices and avg_pt == (0.0, 0.0, 0.0):
+            inv_count = 1.0 / float(len(vertices))
+            avg_pt = (
+                sum(v[0] for v in vertices) * inv_count,
+                sum(v[1] for v in vertices) * inv_count,
+                sum(v[2] for v in vertices) * inv_count,
+            )
         diffuse = node.diffuse or (1.0, 1.0, 1.0)
         ambient = node.ambient or (0.0, 0.0, 0.0)
         tex_cnt = max(1, getattr(node, 'tex_count', 1))
@@ -1143,7 +1168,7 @@ class MDLBinaryWriter:
         # +20 bounding box + radius + avg_pos
         buf.write(struct.pack('<fff', *bb_min))
         buf.write(struct.pack('<fff', *bb_max))
-        buf.write(_wf32(getattr(node, 'mesh_radius', 0.0)))
+        buf.write(_wf32(mesh_radius))
         buf.write(struct.pack('<fff', *avg_pt))
 
         # +60 diffuse + ambient + transparency_hint

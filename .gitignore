@@ -64,6 +64,10 @@ game_data/
 !/tests/test_gizmo_kmax_transform.py
 !/tests/test_character_mode.py
 !/tests/test_joint_dot_overlay.py
+!/tests/test_grdev01_runtime_diagnostic_matrix_script.py
+!/tests/test_install_grdev01_runtime_variant_script.py
+!/tests/test_prepare_grdev01_exact_stock_module_rename_script.py
+!/tests/test_record_grdev01_runtime_diagnostic_outcome_script.py
 !/tests/test_headless_body_workflow.py
 !/tests/test_head_workflow.py
 !/tests/test_head_inspector.py
@@ -95,6 +99,8 @@ game_data/
 !/tests/test_character_autofit_report.py
 !/tests/test_character_builder_bendak_local_fixture.py
 !/tests/test_character_builder_override_package.py
+!/tests/test_map_studio_level_editor_identity.py
+!/tests/test_map_studio_workflow_panel.py
 !/tests/test_game_resource_provider.py
 !/tests/test_qt_resource_browser_model.py
 !/tests/test_sampler.py
@@ -131,6 +137,10 @@ d*_validation*/
 proof_*/
 *_report.txt
 *_diagnostic*.py
+!scripts/grdev01_runtime_diagnostic_matrix.py
+!scripts/record_grdev01_runtime_diagnostic_outcome.py
+!tests/test_grdev01_runtime_diagnostic_matrix_script.py
+!tests/test_record_grdev01_runtime_diagnostic_outcome_script.py
 !src/adapters/rendering/gpu_diagnostics_exports.py
 !src/io/fbx/fbx_diagnostics.py
 !src/core/rendering/gpu_diagnostics_config.py
@@ -293,4 +303,6 @@ knowledge_base/test_artifacts/*.zip
 !/tests/
 !/tests/test_native_core_package_registry.py
 !/tests/test_native_project_templates.py
+!/tests/test_compare_grdev01_stock_metadata_script.py
+!/tests/test_prepare_grdev01_renamed_stock_area_clone_script.py
 /knowledge_base/books

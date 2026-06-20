@@ -558,6 +558,7 @@ class ViewportRenderingPipelineMixin:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
             self._draw_camera_helpers(draw, w, h)
             self._draw_map_studio_terrain_walkability(draw, w, h)
+            self._draw_map_studio_terrain_brush_cursor(draw, w, h)
             self._draw_map_studio_room_outlines(draw, w, h)
             self._draw_map_studio_placement_markers(draw, w, h)
             self._draw_wgpu_helper_markers(draw, w, h)

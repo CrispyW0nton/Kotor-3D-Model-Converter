@@ -28,6 +28,10 @@ DEFAULT_PROOF_MANIFEST = (
     / "grdev01_authored_module_game_manifest.json"
 )
 KOTOR_PROCESS_NAMES = ("swkotor", "swkotor2")
+MIN_PROOF_NON_DARK_RATIO = 0.10
+MAX_PROOF_DARK_RATIO = 0.90
+PROOF_DARK_LUMA_THRESHOLD = 8.0
+PROOF_VISIBLE_LUMA_THRESHOLD = 12.0
 PAYLOAD_PATHS = (
     "native/GhostRigger.Domain.Core.Modules/Python",
     "native/GhostRigger.Domain.Core.Game/Python",
@@ -338,6 +342,88 @@ def _capture_kotor_window_bmp(output_path: Path, kotor_process: dict[str, Any]) 
     }
 
 
+def _bmp_evidence_quality(output_path: Path) -> dict[str, Any]:
+    if not output_path.is_file():
+        return {
+            "checked": True,
+            "ok": False,
+            "code": "evidence_missing",
+            "message": f"Evidence file does not exist: {output_path}",
+            "blocking_issues": [f"Evidence file does not exist: {output_path}"],
+        }
+    try:
+        data = output_path.read_bytes()
+        if len(data) < 54 or data[:2] != b"BM":
+            raise ValueError("Evidence is not a BMP file.")
+        pixel_offset = struct.unpack_from("<I", data, 10)[0]
+        dib_size = struct.unpack_from("<I", data, 14)[0]
+        if dib_size < 40:
+            raise ValueError("Unsupported BMP DIB header.")
+        width = struct.unpack_from("<i", data, 18)[0]
+        height = struct.unpack_from("<i", data, 22)[0]
+        planes = struct.unpack_from("<H", data, 26)[0]
+        bits_per_pixel = struct.unpack_from("<H", data, 28)[0]
+        compression = struct.unpack_from("<I", data, 30)[0]
+        if width <= 0 or height == 0 or planes != 1 or bits_per_pixel != 24 or compression != 0:
+            raise ValueError("Only uncompressed 24-bit BMP evidence can be quality-checked.")
+        abs_height = abs(height)
+        row_size = ((width * bits_per_pixel + 31) // 32) * 4
+        if pixel_offset + row_size * abs_height > len(data):
+            raise ValueError("BMP pixel data is truncated.")
+        sample_target = 50_000
+        sample_step = max(1, (width * abs_height) // sample_target)
+        sampled = 0
+        visible = 0
+        dark = 0
+        pixel_index = 0
+        for row in range(abs_height):
+            row_start = pixel_offset + row * row_size
+            for col in range(width):
+                if pixel_index % sample_step == 0:
+                    b, g, r = data[row_start + col * 3 : row_start + col * 3 + 3]
+                    luminance = (float(r) + float(g) + float(b)) / 3.0
+                    sampled += 1
+                    if luminance > PROOF_VISIBLE_LUMA_THRESHOLD:
+                        visible += 1
+                    if luminance < PROOF_DARK_LUMA_THRESHOLD:
+                        dark += 1
+                pixel_index += 1
+        if sampled <= 0:
+            raise ValueError("No pixels were sampled from the evidence image.")
+    except Exception as exc:
+        return {
+            "checked": True,
+            "ok": False,
+            "code": "evidence_quality_unreadable",
+            "message": f"Could not inspect screenshot evidence quality: {exc}",
+            "blocking_issues": [f"Could not inspect screenshot evidence quality: {exc}"],
+        }
+
+    non_dark_ratio = visible / sampled
+    dark_ratio = dark / sampled
+    blank = dark_ratio >= MAX_PROOF_DARK_RATIO and non_dark_ratio < MIN_PROOF_NON_DARK_RATIO
+    blocking = []
+    if blank:
+        blocking.append(
+            (
+                "Screenshot evidence is mostly black/blank. Load a save, run `warp grdev01`, "
+                "and capture the visible generated floor/placeable before recording proof."
+            )
+        )
+    return {
+        "checked": True,
+        "ok": not blank,
+        "code": "evidence_quality_ok" if not blank else "evidence_mostly_blank",
+        "message": "Screenshot evidence contains visible image content." if not blank else "Screenshot evidence appears mostly black/blank.",
+        "width": width,
+        "height": abs_height,
+        "sampled_pixels": sampled,
+        "visible_pixel_ratio": non_dark_ratio,
+        "dark_pixel_ratio": dark_ratio,
+        "blocking_issues": blocking,
+    }
+
+
 def _kotor_process_summary(*, skip_check: bool = False) -> dict[str, Any]:
     if skip_check:
         return {
@@ -503,12 +589,15 @@ def _summary(
     capture: dict[str, Any],
     record: dict[str, Any] | None,
     kotor_process: dict[str, Any] | None = None,
+    evidence_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     process_blocking = list((kotor_process or {}).get("blocking_issues", []))
+    quality_blocking = list((evidence_quality or {}).get("blocking_issues", []))
     record_blocking = [] if record is None else list(record.get("blocking_issues", []))
-    if process_blocking:
-        record_blocking = [issue for issue in record_blocking if issue not in process_blocking]
-    ok = bool(capture.get("ok")) and not process_blocking and (record is None or bool(record.get("ok")))
+    if process_blocking or quality_blocking:
+        known_blocking = set(process_blocking + quality_blocking)
+        record_blocking = [issue for issue in record_blocking if issue not in known_blocking]
+    ok = bool(capture.get("ok")) and not process_blocking and not quality_blocking and (record is None or bool(record.get("ok")))
     next_action = (
         "Review the screenshot, verify the smoke-test checklist in-game, then rerun with "
         "`--record-proof --module-loads-in-game --player-spawns-on-floor --test-placeable-visible "
@@ -516,6 +605,8 @@ def _summary(
     )
     if process_blocking:
         next_action = "Launch KOTOR, run `warp grdev01`, verify the smoke-test checklist, then rerun evidence capture."
+    if quality_blocking:
+        next_action = "Load a save, run `warp grdev01`, confirm the generated floor/placeable/walkability, then capture visible evidence again."
     if record is not None and record.get("ok"):
         next_action = "Proof manifest updated; run the status checker to confirm the package is game-tested."
     return {
@@ -526,11 +617,13 @@ def _summary(
         "evidence_path": str(output_path),
         "capture": capture,
         "kotor_process": kotor_process,
+        "evidence_quality": evidence_quality,
         "record": record,
         "next_action": next_action,
         "blocking_issues": (
             list(capture.get("blocking_issues", []))
             + process_blocking
+            + quality_blocking
             + record_blocking
         ),
     }
@@ -552,6 +645,9 @@ def _print_human_summary(summary: dict[str, Any]) -> None:
     process = summary.get("kotor_process")
     if isinstance(process, dict) and process.get("checked"):
         print("KOTOR process: " + ("running" if process.get("running") else "not detected"))
+    quality = summary.get("evidence_quality")
+    if isinstance(quality, dict) and quality.get("checked"):
+        print(f"Evidence quality: {quality.get('code')}")
     if summary["next_action"]:
         print(f"Next action: {summary['next_action']}")
     if summary["blocking_issues"]:
@@ -572,20 +668,30 @@ def main(argv: list[str] | None = None) -> int:
         capture = _capture_kotor_window_bmp(output_path, kotor_process)
     else:
         capture = _capture_screen_bmp(output_path)
+    evidence_quality = _bmp_evidence_quality(output_path) if capture.get("ok") and (args.record_proof or args.kotor_window_only) else None
     if capture.get("ok") and args.record_proof:
         if kotor_process is None:
             kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check))
-        if kotor_process.get("blocking_issues"):
+        if kotor_process.get("blocking_issues") or (evidence_quality is not None and evidence_quality.get("blocking_issues")):
+            blocking_issues = list(kotor_process.get("blocking_issues", []))
+            if evidence_quality is not None:
+                blocking_issues.extend(evidence_quality.get("blocking_issues", []))
+            code = "evidence_mostly_blank" if evidence_quality is not None and evidence_quality.get("blocking_issues") else "kotor_process_not_running"
+            message = (
+                "Proof recording requires visible in-game screenshot evidence."
+                if code == "evidence_mostly_blank"
+                else "Proof recording requires KOTOR to be running so the screenshot can be tied to an active game smoke test."
+            )
             record = {
                 "ok": False,
-                "code": "kotor_process_not_running",
-                "message": "Proof recording requires KOTOR to be running so the screenshot can be tied to an active game smoke test.",
+                "code": code,
+                "message": message,
                 "proof_manifest_path": str(proof_manifest),
                 "pack_manifest_path": "",
                 "evidence_path": str(output_path),
                 "missing_checks": [],
                 "warnings": list(kotor_process.get("warnings", [])),
-                "blocking_issues": list(kotor_process.get("blocking_issues", [])),
+                "blocking_issues": blocking_issues,
             }
         else:
             record = _record_proof(
@@ -604,6 +710,7 @@ def main(argv: list[str] | None = None) -> int:
         capture=capture,
         record=record,
         kotor_process=kotor_process,
+        evidence_quality=evidence_quality,
     )
     if args.json:
         print(json.dumps(summary, indent=2))

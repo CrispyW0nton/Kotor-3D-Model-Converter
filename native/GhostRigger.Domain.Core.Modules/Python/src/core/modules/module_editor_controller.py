@@ -29,6 +29,26 @@ from .authored_module_kmap_bridge import (
 from .authored_module_project import authored_resref_blocking_issue, normalise_resref
 from .authored_module_validation_projection import authored_module_readiness_validation_issues
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
+from .map_studio_modeling_tools import (
+    available_map_studio_component_modes,
+    available_map_studio_modeling_tools,
+    available_map_studio_snap_modes,
+    available_map_studio_terrain_brushes,
+    available_map_studio_tool_belt_actions,
+    available_map_studio_tool_belt_presets,
+    map_studio_modeling_tool_summary,
+    map_studio_tool_belt_actions_for_preset,
+    map_studio_viewport_performance_policy,
+)
+from .map_studio_export_objects import map_studio_export_object_boundaries
+from .map_studio_terrain_sculpt_session import (
+    MapStudioTerrainSculptApplyResult,
+    prepare_terrain_sculpt_frame_for_project,
+)
+from .map_studio_tool_belt_preferences import (
+    MAP_STUDIO_TOOL_BELT_SECTION,
+    normalise_map_studio_tool_belt_preferences,
+)
 from .authored_gameplay_marker_geometry import (
     AuthoredGameplayMarkerGeometry,
     authored_gameplay_marker_geometry_for_project,
@@ -58,6 +78,7 @@ from .authored_module_placements import (
     parse_authored_gameplay_placement_id,
     remove_authored_gameplay_placement,
     rename_authored_gameplay_placement,
+    update_authored_module_entry_point,
     update_authored_gameplay_camera_properties,
     update_authored_gameplay_placement_transform,
     update_authored_gameplay_transition,
@@ -71,13 +92,20 @@ from .authored_room_operations import (
     authored_floor_plan_room_choices,
     authored_terrain_room_choices,
     authored_room_composition_primitives,
+    bridge_authored_floor_plan_edges,
+    cleanup_authored_floor_plan_vertices,
+    flatten_authored_floor_plan_vertices,
+    mirror_authored_floor_plan_vertices,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
     remove_authored_room_composition_primitive,
+    separate_authored_room_composition_primitive,
     set_authored_floor_plan_extrusion_settings,
     set_authored_room_composition_primitive_dimensions,
     set_authored_room_composition_primitive_style,
     set_authored_room_composition_primitive_transform,
+    snap_authored_floor_plan_vertex_to_vertex,
+    weld_authored_floor_plan_vertices,
 )
 from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
@@ -222,8 +250,8 @@ class ModuleEditorController:
             MapStudioWorkspaceMode(
                 key="geometry",
                 label="Room Geometry",
-                summary="Build floors, walls, corridors, doorway blockouts, primitive rooms, bevels, cuts, and boolean unions.",
-                next_action="Create a starter room or select a room primitive to shape the authored layout.",
+                summary="Build floors, walls, corridors, doorway blockouts, primitives, and component-mode edits: Object, Vertex, Edge, Face, and Walkmesh.",
+                next_action="Choose a modeling mode/tool, then create primitives, snap vertices, bevel/inset, cut, bridge, boolean, or shape the authored layout.",
             ),
             MapStudioWorkspaceMode(
                 key="terrain",
@@ -300,6 +328,92 @@ class ModuleEditorController:
 
         return SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS
 
+    def available_map_studio_component_modes(self):
+        """Return visible object/component edit modes for Map Studio modeling."""
+
+        return available_map_studio_component_modes()
+
+    def available_map_studio_modeling_tools(self):
+        """Return visible Maya-like, KOTOR-aware modeling tools."""
+
+        return available_map_studio_modeling_tools()
+
+    def available_map_studio_snap_modes(self):
+        """Return visible snap modes for Map Studio modeling tools."""
+
+        return available_map_studio_snap_modes()
+
+    def available_map_studio_terrain_brushes(self):
+        """Return visible terrain sculpt brushes for Map Studio."""
+
+        return available_map_studio_terrain_brushes()
+
+    def map_studio_viewport_performance_policy(self):
+        """Return the interaction budget for smooth Map Studio viewport edits."""
+
+        return map_studio_viewport_performance_policy()
+
+    def available_map_studio_tool_belt_actions(self):
+        """Return actions that can be shown in the Map Studio tool belt."""
+
+        return available_map_studio_tool_belt_actions()
+
+    def available_map_studio_tool_belt_presets(self):
+        """Return built-in tool-belt presets for common map-building tasks."""
+
+        return available_map_studio_tool_belt_presets()
+
+    def map_studio_tool_belt_actions_for_preset(
+        self,
+        preset_key: str = "blockout",
+        *,
+        custom_action_keys: tuple[str, ...] | list[str] = (),
+    ):
+        """Resolve a preset or custom session action list into visible belt buttons."""
+
+        return map_studio_tool_belt_actions_for_preset(
+            preset_key,
+            custom_action_keys=custom_action_keys,
+        )
+
+    def map_studio_tool_belt_preferences(self):
+        """Return KMAP-persisted Map Studio tool-belt preferences."""
+
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get(MAP_STUDIO_TOOL_BELT_SECTION) or {})
+        return normalise_map_studio_tool_belt_preferences(payload)
+
+    def set_map_studio_tool_belt_preferences(
+        self,
+        *,
+        preset_key: str = "blockout",
+        custom_action_keys: tuple[str, ...] | list[str] = (),
+    ):
+        """Persist Map Studio tool-belt preferences into the current KMAP."""
+
+        preferences = normalise_map_studio_tool_belt_preferences(
+            preset_key=preset_key,
+            custom_action_keys=custom_action_keys,
+        )
+        self.project.extra_sections[MAP_STUDIO_TOOL_BELT_SECTION] = preferences.to_kmap_section()
+        self.project.dirty = True
+        self.model.log(f"Updated Map Studio tool belt preference: {preferences.preset_key}.")
+        return preferences
+
+    def map_studio_modeling_tool_summary(
+        self,
+        *,
+        mode_key: str = "object",
+        tool_key: str = "",
+        snap_key: str = "grid",
+    ) -> str:
+        """Return UI-ready active modeling context text."""
+
+        return map_studio_modeling_tool_summary(
+            mode_key=mode_key,
+            tool_key=tool_key,
+            snap_key=snap_key,
+        )
+
     def authored_gameplay_palette_entries(self, rows, *, query: str = "", kind: str = ""):
         """Return game-library-backed resources that can seed gameplay placements."""
 
@@ -323,6 +437,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_gameplay_placement_rows(authored)
+
+    def authored_module_entry_point(self):
+        """Return the authored IFO player start for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return None
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored.placements.entry_point
 
     def authored_room_lights(self):
         """Return selectable authored room lights for the current KMAP."""
@@ -412,6 +540,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_room_composition_primitives(authored)
+
+    def map_studio_export_object_boundaries(self):
+        """Return exportable authored room/object boundaries for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return map_studio_export_object_boundaries(authored)
 
     def authored_floor_plan_room_choices(self):
         """Return floor-plan rooms that can participate in Builder boolean operations."""
@@ -544,6 +686,107 @@ class ModuleEditorController:
         self.model.log(f"Applied Map Studio terrain operation {operation}.")
         return self.authored_module_readiness()
 
+    def prepare_map_studio_terrain_sculpt_frame(
+        self,
+        *,
+        room_resref: str,
+        brush: str,
+        points: tuple[Any, ...] | list[Any],
+        delta: float = 0.1,
+        radius: int = 0,
+        height: float = 0.0,
+        iterations: int = 1,
+        strength: float = 0.5,
+        preserve_boundary: bool = True,
+        max_points_per_frame: int = 8,
+        budget_ms: float = 8.0,
+    ):
+        """Prepare a live terrain sculpt frame without mutating the KMAP project."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return prepare_terrain_sculpt_frame_for_project(
+            authored,
+            room_resref=room_resref,
+            brush=brush,
+            points=points,
+            delta=delta,
+            radius=radius,
+            height=height,
+            iterations=iterations,
+            strength=strength,
+            preserve_boundary=preserve_boundary,
+            max_points_per_frame=max_points_per_frame,
+            budget_ms=budget_ms,
+        )
+
+    def apply_map_studio_terrain_sculpt_frame(
+        self,
+        *,
+        room_resref: str,
+        brush: str,
+        points: tuple[Any, ...] | list[Any],
+        delta: float = 0.1,
+        radius: int = 0,
+        height: float = 0.0,
+        iterations: int = 1,
+        strength: float = 0.5,
+        preserve_boundary: bool = True,
+        max_points_per_frame: int = 8,
+        budget_ms: float = 8.0,
+        force: bool = False,
+    ) -> MapStudioTerrainSculptApplyResult:
+        """Apply a coalesced live terrain sculpt frame while deferring full rebuild/validation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        frame = prepare_terrain_sculpt_frame_for_project(
+            authored,
+            room_resref=room_resref,
+            brush=brush,
+            points=points,
+            delta=delta,
+            radius=radius,
+            height=height,
+            iterations=iterations,
+            strength=strength,
+            preserve_boundary=preserve_boundary,
+            max_points_per_frame=max_points_per_frame,
+            budget_ms=budget_ms,
+        )
+        if not frame.should_apply_live and not force:
+            message = (
+                f"Skipped live terrain sculpt frame for {frame.room_resref}: estimated "
+                f"{frame.performance.estimated_apply_ms:.3f} ms exceeds {frame.performance.budget_ms:.3f} ms budget."
+            )
+            self.model.log(message)
+            return MapStudioTerrainSculptApplyResult(applied=False, frame=frame, message=message)
+        updated = apply_authored_terrain_operation(authored, frame.operation, **frame.operation_kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        message = (
+            f"Applied live terrain sculpt frame to {frame.room_resref}: "
+            f"{frame.applied_sample_count} point(s), dirty region only; full MDL/WOK rebuild deferred."
+        )
+        self.model.log(message)
+        return MapStudioTerrainSculptApplyResult(applied=True, frame=frame, message=message)
+
     def merge_authored_floor_plan_rooms(
         self,
         *,
@@ -574,6 +817,44 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Merged Map Studio floor-plan rooms {first_room_resref} and {second_room_resref}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def bridge_authored_floor_plan_edges(
+        self,
+        *,
+        first_room_resref: str,
+        first_edge_index: int,
+        second_room_resref: str,
+        second_edge_index: int,
+        result_room_resref: str = "",
+    ):
+        """Create a connector room between two compatible floor-plan room edges."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = bridge_authored_floor_plan_edges(
+            authored,
+            first_room_resref=first_room_resref,
+            first_edge_index=int(first_edge_index),
+            second_room_resref=second_room_resref,
+            second_edge_index=int(second_edge_index),
+            result_room_resref=result_room_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Bridged Map Studio floor-plan edge {first_edge_index} in {first_room_resref} "
+            f"to edge {second_edge_index} in {second_room_resref}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 
@@ -638,6 +919,175 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio room {room_resref or '(first room)'} outline point {int(point_index)}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def snap_authored_floor_plan_vertex(
+        self,
+        *,
+        room_resref: str,
+        point_index: int,
+        target_point_index: int,
+        target_room_resref: str = "",
+    ):
+        """Snap one authored floor-plan vertex to another through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = snap_authored_floor_plan_vertex_to_vertex(
+            authored,
+            room_resref=room_resref,
+            point_index=int(point_index),
+            target_point_index=int(target_point_index),
+            target_room_resref=target_room_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Snapped Map Studio room {room_resref or '(first room)'} point {int(point_index)} to point {int(target_point_index)}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def weld_authored_floor_plan_vertices(
+        self,
+        *,
+        room_resref: str,
+        point_indices: Any,
+        target_point_index: int | None = None,
+        position_policy: str = "target",
+    ):
+        """Weld authored floor-plan vertices through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        indices = tuple(int(index) for index in tuple(point_indices or ()))
+        updated = weld_authored_floor_plan_vertices(
+            authored,
+            room_resref=room_resref,
+            point_indices=indices,
+            target_point_index=target_point_index,
+            position_policy=position_policy,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Welded Map Studio room {room_resref or '(first room)'} floor-plan vertices {indices}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def flatten_authored_floor_plan_vertices(
+        self,
+        *,
+        room_resref: str,
+        point_indices: Any,
+        axis: str = "x",
+        value: float | None = None,
+    ):
+        """Flatten authored floor-plan vertices through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        indices = tuple(int(index) for index in tuple(point_indices or ()))
+        updated = flatten_authored_floor_plan_vertices(
+            authored,
+            room_resref=room_resref,
+            point_indices=indices,
+            axis=axis,
+            value=value,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Flattened Map Studio room {room_resref or '(first room)'} floor-plan vertices {indices} on {axis}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def cleanup_authored_floor_plan_vertices(
+        self,
+        *,
+        room_resref: str,
+        tolerance: float = 0.001,
+    ):
+        """Cleanup redundant authored floor-plan vertices through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = cleanup_authored_floor_plan_vertices(
+            authored,
+            room_resref=room_resref,
+            tolerance=float(tolerance),
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Cleaned Map Studio room {room_resref or '(first room)'} floor-plan vertices; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def mirror_authored_floor_plan_vertices(
+        self,
+        *,
+        room_resref: str,
+        axis: str = "x",
+    ):
+        """Mirror an authored floor-plan footprint through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = mirror_authored_floor_plan_vertices(
+            authored,
+            room_resref=room_resref,
+            axis=axis,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Mirrored Map Studio room {room_resref or '(first room)'} floor-plan across local {axis}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 
@@ -846,6 +1296,40 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def separate_authored_room_primitive(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        result_room_resref: str = "",
+    ):
+        """Separate one authored composition primitive into a new room/object boundary."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = separate_authored_room_composition_primitive(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            result_room_resref=result_room_resref,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        separated_room = str(updated.extra.get("last_room_operation", "")).rsplit(":", 1)[-1]
+        self.model.log(
+            f"Separated Map Studio room primitive {primitive_name} into {separated_room}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
     def apply_authored_room_style(self, *, texture: str = "", floor_surface: Any = 4, room_resref: str = ""):
         """Apply room texture and WOK surface intent to the current authored KMAP module."""
 
@@ -920,6 +1404,39 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Added Map Studio {update.kind} placement {update.tag} at {update.position}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_module_entry_point(
+        self,
+        *,
+        area_resref: str = "",
+        position: Any = (0.0, 0.0, 0.0),
+        facing: float = 0.0,
+    ):
+        """Edit the module IFO entry point/player start for the authored KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        update = update_authored_module_entry_point(
+            authored,
+            area_resref=area_resref,
+            position=position,
+            facing=facing,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Updated Map Studio module entry point {update.area_resref} at {update.position}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

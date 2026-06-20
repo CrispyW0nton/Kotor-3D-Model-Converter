@@ -36,7 +36,7 @@ from .authored_room_primitives import (
 from .module_format import WOKData, WOKFace
 
 
-BaseRoomPrimitive = Union[WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive, ArchPrimitive]
+BaseRoomPrimitive = Union[FloorPrimitive, WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive, ArchPrimitive]
 
 
 @dataclass(frozen=True)
@@ -175,6 +175,8 @@ def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
     if isinstance(primitive, PlacedRoomPrimitive):
         mesh = _primitive_to_mesh(primitive.primitive)
         return transform_primitive_mesh(mesh, primitive.transform, name=_primitive_name(primitive))
+    if isinstance(primitive, FloorPrimitive):
+        return build_floor_mesh(primitive)
     if isinstance(primitive, WallPrimitive):
         return build_wall_mesh(primitive)
     if isinstance(primitive, CubePrimitive):
@@ -218,6 +220,8 @@ def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
     for primitive in composition.primitives:
         base = _base_primitive(primitive)
         primitive_wok: WOKData | None = None
+        if isinstance(base, FloorPrimitive):
+            primitive_wok = build_floor_wok(base)
         if isinstance(base, RampPrimitive):
             primitive_wok = build_ramp_wok(base)
         if isinstance(base, StairsPrimitive):
@@ -256,6 +260,13 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
             blocking.append(f"Placed primitive {_primitive_name(primitive) or '(unnamed)'} must have positive transform scale.")
         base = _base_primitive(primitive)
         base_name = _primitive_name(primitive) or str(getattr(base, "name", "") or "(unnamed)")
+        if isinstance(base, FloorPrimitive):
+            if float(base.width) <= 0.0 or float(base.depth) <= 0.0:
+                blocking.append(f"Plane primitive {base_name} must have positive width and depth.")
+            try:
+                require_walkable_walkmesh_surface(base.surface_id, context=f"{base_name} plane")
+            except ValueError as exc:
+                blocking.append(str(exc))
         if isinstance(base, RampPrimitive):
             if float(base.width) <= 0.0 or float(base.length) <= 0.0 or float(base.height) <= 0.0:
                 blocking.append(f"Ramp primitive {base_name} must have positive width, length, and height.")
@@ -320,7 +331,7 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
             "walkmesh_primitive_count": sum(
                 1
                 for primitive in composition.primitives
-                if isinstance(_base_primitive(primitive), (RampPrimitive, StairsPrimitive))
+                if isinstance(_base_primitive(primitive), (FloorPrimitive, RampPrimitive, StairsPrimitive))
             ),
             "transformed_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, PlacedRoomPrimitive)),
             "warnings": list(validation.warnings),

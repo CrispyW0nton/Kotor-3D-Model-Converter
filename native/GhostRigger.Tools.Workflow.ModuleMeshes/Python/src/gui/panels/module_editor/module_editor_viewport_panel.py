@@ -16,6 +16,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
     roomPrimitiveSelected = QtCore.Signal(str, str)
     roomPrimitiveMoved = QtCore.Signal(str, str, object)
+    terrainBrushFrameRequested = QtCore.Signal(str, str, object)
+    terrainBrushStrokeCommitted = QtCore.Signal(str, str)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,9 +41,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.snap_box = QtWidgets.QCheckBox("Snap")
         self.snap_box.setObjectName("mapStudioViewportSnapCheckBox")
         self.snap_box.setToolTip("Snap authored room and gameplay marker drags to the viewport grid.")
+        self.terrain_brush_box = QtWidgets.QCheckBox("Terrain Brush")
+        self.terrain_brush_box.setObjectName("mapStudioViewportTerrainBrushCheckBox")
+        self.terrain_brush_box.setToolTip("Paint the selected terrain heightfield brush directly in the viewport.")
         self.viewport_toolbar.addWidget(self.focus_button)
         self.viewport_toolbar.addWidget(self.grid_box)
         self.viewport_toolbar.addWidget(self.snap_box)
+        self.viewport_toolbar.addWidget(self.terrain_brush_box)
         self.viewport_toolbar.addStretch(1)
         toolbar_frame_layout.addLayout(self.viewport_toolbar)
         self.marker_summary_label = QtWidgets.QLabel("Gameplay markers: none")
@@ -80,7 +86,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._marker_drag: dict[str, object] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_primitive_drag: dict[str, object] | None = None
+        self._terrain_brush_drag: dict[str, object] | None = None
+        self._terrain_brush_context: dict[str, object] = {
+            "enabled": False,
+            "room_resref": "",
+            "brush": "",
+            "row_count": 0,
+            "column_count": 0,
+            "radius": 0,
+        }
         self._table_updating = False
+        self.terrain_brush_box.toggled.connect(self._toggle_terrain_brush_interaction)
 
     def set_project(
         self,
@@ -195,6 +211,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             event_type = event.type()
             if event_type == QtCore.QEvent.MouseButtonPress:
                 if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
+                    if self._terrain_brush_context_enabled():
+                        terrain_sample = self._terrain_sample_at_event(event)
+                        if terrain_sample is not None:
+                            self._begin_terrain_brush_drag(terrain_sample, event)
+                            return True
                     placement_id = self._marker_at_event(event)
                     if placement_id:
                         self.select_id(placement_id)
@@ -227,12 +248,22 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     return self._finish_room_primitive_drag(event)
                 self._update_room_primitive_drag(event)
                 return True
+            if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_terrain_brush_drag(event)
+                self._update_terrain_brush_drag(event)
+                return True
+            if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_context_enabled():
+                self._terrain_sample_at_event(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._marker_drag is not None:
                 return self._finish_marker_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._room_outline_point_drag is not None:
                 return self._finish_room_outline_point_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._room_primitive_drag is not None:
                 return self._finish_room_primitive_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_drag is not None:
+                return self._finish_terrain_brush_drag(event)
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
             QtCore.QEvent.Resize,
@@ -311,6 +342,265 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if not room_resref or not primitive_name or len(world_center) < 3:
             return None
         return (room_resref, primitive_name, world_center)
+
+    def set_terrain_brush_interaction(
+        self,
+        *,
+        enabled: bool | None = None,
+        room_resref: str = "",
+        brush: str = "",
+        row_count: int = 0,
+        column_count: int = 0,
+        radius: int = 0,
+    ) -> None:
+        """Update the viewport terrain brush context from the Builder controls."""
+
+        current_enabled = bool(self._terrain_brush_context.get("enabled", False))
+        if enabled is None:
+            enabled = current_enabled
+        self._terrain_brush_context = {
+            "enabled": bool(enabled),
+            "room_resref": str(room_resref or "").strip(),
+            "brush": str(brush or "").strip(),
+            "row_count": max(0, int(row_count)),
+            "column_count": max(0, int(column_count)),
+            "radius": max(0, int(radius)),
+        }
+        blocked = self.terrain_brush_box.blockSignals(True)
+        self.terrain_brush_box.setChecked(bool(enabled))
+        self.terrain_brush_box.blockSignals(blocked)
+        if not self._terrain_brush_context_enabled():
+            self._clear_terrain_brush_cursor()
+
+    def set_terrain_walkability_overlay(self, authored_terrain_walkability_overlay=None) -> None:
+        """Refresh only the terrain overlay during live sculpting."""
+
+        self._terrain_walkability_overlay = authored_terrain_walkability_overlay
+        self._sync_terrain_walkability_overlay(authored_terrain_walkability_overlay)
+
+    def _toggle_terrain_brush_interaction(self, enabled: bool) -> None:
+        self._terrain_brush_context["enabled"] = bool(enabled)
+        if not enabled and self._terrain_brush_drag is not None:
+            self._finish_terrain_brush_drag(None)
+        if not enabled:
+            self._clear_terrain_brush_cursor()
+
+    def _terrain_brush_context_enabled(self) -> bool:
+        context = self._terrain_brush_context
+        return (
+            bool(context.get("enabled", False))
+            and bool(str(context.get("room_resref", "") or "").strip())
+            and bool(str(context.get("brush", "") or "").strip())
+            and int(context.get("row_count", 0) or 0) > 1
+            and int(context.get("column_count", 0) or 0) > 1
+        )
+
+    def _terrain_sample_at_event(self, event: QtCore.QEvent) -> tuple[int, int, float] | None:
+        screen = self._event_position(event)
+        if screen is None:
+            return None
+        world = self._terrain_world_at_screen(screen[0], screen[1])
+        if world is None:
+            self._clear_terrain_brush_cursor()
+            return None
+        sample = self._terrain_world_to_sample(world)
+        if sample is None:
+            self._clear_terrain_brush_cursor()
+            return None
+        self._set_terrain_brush_cursor(world, sample)
+        return sample
+
+    def _terrain_world_at_screen(self, screen_x: float, screen_y: float) -> tuple[float, float, float] | None:
+        overlay = self._terrain_walkability_overlay
+        if overlay is None:
+            return None
+        project = getattr(getattr(self.viewport, "_renderer", None), "_proj", None)
+        if not callable(project):
+            return None
+        wanted = str(self._terrain_brush_context.get("room_resref", "") or "").strip().lower()
+        w, h = self._viewport_canvas_size()
+        nearest: tuple[float, tuple[float, float, float]] | None = None
+        for triangle in tuple(getattr(overlay, "triangles", ()) or ()):
+            room_resref = str(getattr(triangle, "room_resref", "") or "").strip().lower()
+            if wanted and room_resref != wanted:
+                continue
+            points = tuple(getattr(triangle, "points", ()) or ())
+            if len(points) < 3:
+                continue
+            projected: list[tuple[float, float]] = []
+            world_points: list[tuple[float, float, float]] = []
+            for point in points[:3]:
+                try:
+                    wx, wy, wz = (float(point[0]), float(point[1]), float(point[2]))
+                    sx, sy = project(wx, wy, wz, w, h)[:2]
+                except Exception:
+                    projected = []
+                    break
+                projected.append((float(sx), float(sy)))
+                world_points.append((wx, wy, wz))
+            if len(projected) < 3 or len(world_points) < 3:
+                continue
+            bary = self._screen_triangle_barycentric((screen_x, screen_y), projected)
+            if bary is not None and min(bary) >= -0.025:
+                return (
+                    world_points[0][0] * bary[0] + world_points[1][0] * bary[1] + world_points[2][0] * bary[2],
+                    world_points[0][1] * bary[0] + world_points[1][1] * bary[1] + world_points[2][1] * bary[2],
+                    world_points[0][2] * bary[0] + world_points[1][2] * bary[1] + world_points[2][2] * bary[2],
+                )
+            center_x = sum(point[0] for point in projected) / 3.0
+            center_y = sum(point[1] for point in projected) / 3.0
+            distance_sq = (float(screen_x) - center_x) ** 2 + (float(screen_y) - center_y) ** 2
+            center_world = (
+                sum(point[0] for point in world_points) / 3.0,
+                sum(point[1] for point in world_points) / 3.0,
+                sum(point[2] for point in world_points) / 3.0,
+            )
+            if nearest is None or distance_sq < nearest[0]:
+                nearest = (distance_sq, center_world)
+        if nearest is not None and nearest[0] <= 900.0:
+            return nearest[1]
+        return None
+
+    def _screen_triangle_barycentric(
+        self,
+        point: tuple[float, float],
+        triangle: list[tuple[float, float]],
+    ) -> tuple[float, float, float] | None:
+        (px, py) = point
+        (ax, ay), (bx, by), (cx, cy) = triangle[:3]
+        denominator = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy))
+        if abs(denominator) <= 1.0e-6:
+            return None
+        u = (((by - cy) * (px - cx)) + ((cx - bx) * (py - cy))) / denominator
+        v = (((cy - ay) * (px - cx)) + ((ax - cx) * (py - cy))) / denominator
+        w = 1.0 - u - v
+        return (float(u), float(v), float(w))
+
+    def _terrain_world_to_sample(self, world: tuple[float, float, float]) -> tuple[int, int, float] | None:
+        bounds = self._terrain_room_world_bounds()
+        if bounds is None:
+            return None
+        min_x, max_x, min_y, max_y = bounds
+        context = self._terrain_brush_context
+        row_count = int(context.get("row_count", 0) or 0)
+        column_count = int(context.get("column_count", 0) or 0)
+        if row_count <= 1 or column_count <= 1:
+            return None
+        width = max(1.0e-6, max_x - min_x)
+        depth = max(1.0e-6, max_y - min_y)
+        column = round(((float(world[0]) - min_x) / width) * float(column_count - 1))
+        row = round(((float(world[1]) - min_y) / depth) * float(row_count - 1))
+        return (
+            max(0, min(row_count - 1, int(row))),
+            max(0, min(column_count - 1, int(column))),
+            1.0,
+        )
+
+    def _terrain_world_brush_radius(self) -> float:
+        bounds = self._terrain_room_world_bounds()
+        if bounds is None:
+            return 1.0
+        min_x, max_x, min_y, max_y = bounds
+        context = self._terrain_brush_context
+        row_count = max(2, int(context.get("row_count", 0) or 0))
+        column_count = max(2, int(context.get("column_count", 0) or 0))
+        radius_samples = max(0, int(context.get("radius", 0) or 0))
+        cell_width = abs(float(max_x) - float(min_x)) / float(max(1, column_count - 1))
+        cell_depth = abs(float(max_y) - float(min_y)) / float(max(1, row_count - 1))
+        return max(cell_width, cell_depth, 0.25) * float(radius_samples + 0.65)
+
+    def _set_terrain_brush_cursor(self, world: tuple[float, float, float], sample: tuple[int, int, float]) -> None:
+        setter = getattr(self.viewport, "set_map_studio_terrain_brush_cursor", None)
+        if not callable(setter):
+            return
+        radius = self._terrain_world_brush_radius()
+        room_resref = str(self._terrain_brush_context.get("room_resref", "") or "")
+        brush = str(self._terrain_brush_context.get("brush", "") or "")
+        setter(
+            {
+                "room_resref": room_resref,
+                "brush": brush,
+                "sample": (int(sample[0]), int(sample[1])),
+                "world_position": (float(world[0]), float(world[1]), float(world[2]) + 0.035),
+                "world_radius_position": (float(world[0]) + radius, float(world[1]), float(world[2]) + 0.035),
+                "radius_samples": max(0, int(self._terrain_brush_context.get("radius", 0) or 0)),
+                "color": "#00ff7a" if brush not in {"lower"} else "#55a7ff",
+            }
+        )
+
+    def _clear_terrain_brush_cursor(self) -> None:
+        clearer = getattr(self.viewport, "clear_map_studio_terrain_brush_cursor", None)
+        if callable(clearer):
+            clearer()
+
+    def _terrain_room_world_bounds(self) -> tuple[float, float, float, float] | None:
+        overlay = self._terrain_walkability_overlay
+        if overlay is None:
+            return None
+        wanted = str(self._terrain_brush_context.get("room_resref", "") or "").strip().lower()
+        xs: list[float] = []
+        ys: list[float] = []
+        for triangle in tuple(getattr(overlay, "triangles", ()) or ()):
+            room_resref = str(getattr(triangle, "room_resref", "") or "").strip().lower()
+            if wanted and room_resref != wanted:
+                continue
+            for point in tuple(getattr(triangle, "points", ()) or ()):
+                if len(point) < 2:
+                    continue
+                xs.append(float(point[0]))
+                ys.append(float(point[1]))
+        if not xs or not ys:
+            return None
+        return (min(xs), max(xs), min(ys), max(ys))
+
+    def _begin_terrain_brush_drag(self, sample: tuple[int, int, float], event: QtCore.QEvent) -> bool:
+        room_resref = str(self._terrain_brush_context.get("room_resref", "") or "").strip()
+        brush = str(self._terrain_brush_context.get("brush", "") or "").strip()
+        if not room_resref or not brush:
+            return False
+        self._terrain_brush_drag = {
+            "room_resref": room_resref,
+            "brush": brush,
+            "points": [sample],
+            "last_sample": sample[:2],
+            "active": True,
+        }
+        self.terrainBrushFrameRequested.emit(brush, room_resref, (sample,))
+        return True
+
+    def _update_terrain_brush_drag(self, event: QtCore.QEvent) -> bool:
+        if self._terrain_brush_drag is None:
+            return False
+        sample = self._terrain_sample_at_event(event)
+        if sample is None:
+            return True
+        key = sample[:2]
+        points = list(self._terrain_brush_drag.get("points", []) or [])
+        if key != self._terrain_brush_drag.get("last_sample"):
+            points.append(sample)
+        elif points:
+            points[-1] = sample
+        points = points[-32:]
+        self._terrain_brush_drag["points"] = points
+        self._terrain_brush_drag["last_sample"] = key
+        brush = str(self._terrain_brush_drag.get("brush", "") or "")
+        room_resref = str(self._terrain_brush_drag.get("room_resref", "") or "")
+        self.terrainBrushFrameRequested.emit(brush, room_resref, tuple(points))
+        return True
+
+    def _finish_terrain_brush_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._terrain_brush_drag is None:
+            return False
+        if event is not None:
+            self._update_terrain_brush_drag(event)
+        drag = self._terrain_brush_drag
+        self._terrain_brush_drag = None
+        if bool(drag.get("active", False)):
+            self.terrainBrushStrokeCommitted.emit(
+                str(drag.get("brush", "") or ""),
+                str(drag.get("room_resref", "") or ""),
+            )
+        return True
 
     def _event_position(self, event: QtCore.QEvent) -> tuple[float, float] | None:
         pos_fn = getattr(event, "position", None)

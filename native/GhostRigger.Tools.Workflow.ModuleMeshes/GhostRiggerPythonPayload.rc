@@ -1,4 +1,5 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src.
+#include "GhostRiggerPythonPayloadResource.h"
+
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
 PYTHON_PAYLOAD_0001 RCDATA "Python/src/gui/panels/module_editor/__init__.py"
 PYTHON_PAYLOAD_0002 RCDATA "Python/src/gui/panels/module_editor/blueprints_tab.py"
@@ -73,3 +74,7 @@ PYTHON_PAYLOAD_0070 RCDATA "Python/src/core/level/level_texture_resolver.py"
 PYTHON_PAYLOAD_0071 RCDATA "Python/src/core/walkmesh/__init__.py"
 PYTHON_PAYLOAD_0072 RCDATA "Python/src/core/walkmesh/walkmesh_editor.py"
 PYTHON_PAYLOAD_0073 RCDATA "Python/src/core/walkmesh/walkmesh_renderer.py"
+PYTHON_PAYLOAD_0074 RCDATA "Python/src/core/modules/map_studio_modeling_tools.py"
+PYTHON_PAYLOAD_0075 RCDATA "Python/src/core/modules/map_studio_tool_belt_preferences.py"
+PYTHON_PAYLOAD_0076 RCDATA "Python/src/core/modules/map_studio_export_objects.py"
+PYTHON_PAYLOAD_0077 RCDATA "Python/src/core/modules/map_studio_terrain_sculpt_session.py"

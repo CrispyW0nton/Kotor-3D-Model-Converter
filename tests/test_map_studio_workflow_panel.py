@@ -116,6 +116,13 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "generate or stage these module files before export/install" in panel_source
     assert "Geometry authoring" in panel_source
     assert "Walkmesh" in panel_source
+    assert (
+        'self.walkmesh_label,\n'
+        '            readiness,\n'
+        '            "Walkmesh",\n'
+        '            "Walkmesh",\n'
+        '            "Walkmesh status unavailable.",'
+    ) in panel_source
     assert "Lighting/lightmaps:" in panel_source
     assert '"Lighting"' in panel_source
 
@@ -317,6 +324,325 @@ def test_t2600_level_editor_exposes_map_studio_workspace_switcher() -> None:
     assert "Export + Game Proof: validate, stage/install, warp test, then record proof" in window_source
 
 
+def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt() -> None:
+    builder_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    builder_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    controller_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    tools_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "map_studio_modeling_tools.py"
+    )
+    tools_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "map_studio_modeling_tools.py"
+    )
+    preferences_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "map_studio_tool_belt_preferences.py"
+    )
+    preferences_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "map_studio_tool_belt_preferences.py"
+    )
+    export_objects_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "map_studio_export_objects.py"
+    )
+    export_objects_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "map_studio_export_objects.py"
+    )
+    readiness_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "authored_module_readiness.py"
+    )
+    readiness_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "authored_module_readiness.py"
+    )
+    readiness_panel_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+    readiness_panel_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+
+    for source in (builder_source, builder_mirror_source):
+        assert 'roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)' in source
+        assert '"Extrude edge", "edge_extrude"' in source
+        assert "mapStudioRoomOperationEdgeIndexSpinBox" in source
+        assert "floorPlanBridgeRequested = QtCore.Signal" in source
+        assert "Bridge Floor-Plan Edges" in source
+        assert "mapStudioFloorPlanBridgeFirstRoomComboBox" in source
+        assert "mapStudioFloorPlanBridgeFirstEdgeSpinBox" in source
+        assert "mapStudioFloorPlanBridgeSecondRoomComboBox" in source
+        assert "mapStudioFloorPlanBridgeSecondEdgeSpinBox" in source
+        assert "mapStudioBridgeFloorPlanEdgesButton" in source
+        assert "Floor-Plan Vertex Tools" in source
+        assert "floorPlanVertexSnapRequested = QtCore.Signal" in source
+        assert "floorPlanVertexWeldRequested = QtCore.Signal" in source
+        assert "floorPlanVertexFlattenRequested = QtCore.Signal" in source
+        assert "mapStudioFloorPlanVertexRoomComboBox" in source
+        assert "mapStudioFloorPlanVertexTargetRoomComboBox" in source
+        assert "mapStudioFloorPlanSelectedPointsLineEdit" in source
+        assert "mapStudioSnapFloorPlanVertexButton" in source
+        assert "mapStudioWeldFloorPlanVerticesButton" in source
+        assert "mapStudioFlattenFloorPlanVerticesButton" in source
+        assert "mapStudioFloorPlanMirrorAxisComboBox" in source
+        assert "mapStudioMirrorFloorPlanVerticesButton" in source
+        assert "mapStudioFloorPlanCleanupToleranceSpinBox" in source
+        assert "mapStudioCleanupFloorPlanVerticesButton" in source
+        assert "floorPlanVertexCleanupRequested = QtCore.Signal" in source
+        assert "floorPlanVertexMirrorRequested = QtCore.Signal" in source
+        assert "planes, walls, ramps, stairs, arches, cubes, and cylinders" in source
+        assert "moduleEntryPointRequested = QtCore.Signal(str, float, float, float, float)" in source
+        assert "Module Entry Point" in source
+        assert "mapStudioEntryPointAreaLineEdit" in source
+        assert "mapStudioEntryPointPosXSpinBox" in source
+        assert "mapStudioEntryPointFacingSpinBox" in source
+        assert "mapStudioApplyEntryPointButton" in source
+        assert "def set_module_entry_point" in source
+        assert "def _emit_module_entry_point" in source
+        assert "mapStudioTerrainBrushComboBox" in source
+        assert "mapStudioTerrainBrushStatusLabel" in source
+        assert "mapStudioApplyTerrainBrushButton" in source
+        assert "def set_terrain_brushes" in source
+        assert "def _emit_selected_terrain_brush" in source
+
+    for source in (tools_source, tools_mirror_source):
+        assert "class MapStudioToolBeltAction" in source
+        assert "class MapStudioToolBeltPreset" in source
+        assert "class MapStudioTerrainBrush" in source
+        assert "class MapStudioViewportPerformancePolicy" in source
+        assert "available_map_studio_terrain_brushes" in source
+        assert "map_studio_viewport_performance_policy" in source
+        assert "target_frame_ms=8.33" in source
+        assert "terrain_brush_budget_ms=4.0" in source
+        assert "drop stale stroke frames" in source
+        assert "available_map_studio_tool_belt_actions" in source
+        assert "available_map_studio_tool_belt_presets" in source
+        assert "map_studio_tool_belt_actions_for_preset" in source
+        assert '"blockout"' in source
+        assert '"component"' in source
+        assert '"terrain"' in source
+        assert '"gameplay"' in source
+        assert '"custom"' in source
+        assert '"corridor"' in source
+        assert '"Corridor"' in source
+        assert '"terrain_patch"' in source
+        assert '"Terrain Patch"' in source
+        assert '"sculpt_raise"' in source
+        assert '"sculpt_lower"' in source
+        assert '"sculpt_smooth"' in source
+        assert '"sculpt_flatten"' in source
+        assert '"sculpt_plateau"' in source
+        assert '"sculpt_ramp"' in source
+        assert '"sculpt_terrace"' in source
+        assert '"sculpt_pinch"' in source
+        assert '"sculpt_erode"' in source
+        assert '"sculpt_noise"' in source
+        assert '"combine"' in source
+        assert '"Combine"' in source
+        assert '"separate"' in source
+        assert '"Separate"' in source
+        assert '"Split a selected authored primitive into its own exportable KMAP room/object boundary."' in source
+        assert '"plane"' in source
+        assert '"Plane"' in source
+        assert '"cube"' in source
+        assert '"wall"' in source
+        assert '"ramp"' in source
+        assert '"stairs"' in source
+        assert '"cylinder"' in source
+        assert '"door_frame"' in source
+        assert '"Door Frame"' in source
+        assert '"extrude"' in source
+        assert '"bridge"' in source
+        assert '"cut"' in source
+        assert '"knife_split"' in source
+        assert '"fill"' in source
+        assert '"fill_face"' in source
+        assert '"vertex_snap"' in source
+        assert '"weld"' in source
+        assert '"flatten"' in source
+        assert '"mirror"' in source
+        assert '"mirror_footprint"' in source
+        assert '"cleanup"' in source
+        assert '"cleanup_footprint"' in source
+        assert '"triangulate"' in source
+        assert '"normals"' in source
+        assert '"cleanup_normals"' in source
+        assert '"entry_point"' in source
+        assert '"Entry Point"' in source
+        assert '"placeable"' in source
+        assert '"Placeable"' in source
+        assert '"creature"' in source
+        assert '"Creature"' in source
+        assert '"door"' in source
+        assert '"Door"' in source
+        assert '"waypoint"' in source
+        assert '"Waypoint"' in source
+        assert '"trigger"' in source
+        assert '"Trigger"' in source
+        assert '"encounter"' in source
+        assert '"Encounter"' in source
+        assert '"sound"' in source
+        assert '"Sound"' in source
+        assert '"camera"' in source
+        assert '"Camera"' in source
+        assert '"store"' in source
+        assert '"Store"' in source
+
+    for source in (controller_source, controller_mirror_source):
+        assert "available_map_studio_tool_belt_actions" in source
+        assert "available_map_studio_tool_belt_presets" in source
+        assert "available_map_studio_terrain_brushes" in source
+        assert "map_studio_viewport_performance_policy" in source
+        assert "map_studio_tool_belt_actions_for_preset" in source
+        assert "map_studio_tool_belt_preferences" in source
+        assert "set_map_studio_tool_belt_preferences" in source
+        assert "MAP_STUDIO_TOOL_BELT_SECTION" in source
+        assert "def available_map_studio_tool_belt_actions" in source
+        assert "def available_map_studio_tool_belt_presets" in source
+        assert "def available_map_studio_terrain_brushes" in source
+        assert "def map_studio_viewport_performance_policy" in source
+        assert "def map_studio_tool_belt_actions_for_preset" in source
+        assert "bridge_authored_floor_plan_edges" in source
+        assert "cleanup_authored_floor_plan_vertices" in source
+        assert "mirror_authored_floor_plan_vertices" in source
+        assert "authored_module_entry_point" in source
+        assert "set_authored_module_entry_point" in source
+        assert "update_authored_module_entry_point" in source
+        assert "separate_authored_room_composition_primitive" in source
+        assert "def separate_authored_room_primitive" in source
+        assert "map_studio_export_object_boundaries" in source
+        assert "def map_studio_export_object_boundaries" in source
+
+    for source in (export_objects_source, export_objects_mirror_source):
+        assert "class MapStudioExportObjectBoundary" in source
+        assert "def map_studio_export_object_boundaries" in source
+        assert '"separated_primitive_object"' in source
+        assert "uv_handoff_recommended" in source
+
+    for source in (readiness_source, readiness_mirror_source):
+        assert "map_studio_export_object_boundaries" in source
+        assert '"export_object_boundaries"' in source
+        assert '"uv_handoff_object_count"' in source
+
+    for source in (readiness_panel_source, readiness_panel_mirror_source):
+        assert "mapStudioReadinessExportObjectsLabel" in source
+        assert "mapStudioReadinessExportObjectsTable" in source
+        assert "def _set_export_object_rows" in source
+        assert "DCC/UV handoff candidate" in source
+
+    for source in (preferences_source, preferences_mirror_source):
+        assert "MAP_STUDIO_TOOL_BELT_SECTION" in source
+        assert "MapStudioToolBeltPreferences" in source
+        assert "normalise_map_studio_tool_belt_preferences" in source
+        assert "to_kmap_section" in source
+
+    assert "class _MapStudioToolBeltCustomizeDialog" in window_source
+    assert "mapStudioToolBeltLabel" in window_source
+    assert "mapStudioToolBeltPresetComboBox" in window_source
+    assert "self.builder_tab.moduleEntryPointRequested.connect(self.set_authored_module_entry_point)" in window_source
+    assert "self.builder_tab.set_module_entry_point(self.controller.authored_module_entry_point())" in window_source
+    assert "self.builder_tab.set_terrain_brushes(self.controller.available_map_studio_terrain_brushes())" in window_source
+    assert "def _focus_map_studio_entry_point_controls" in window_source
+    assert "def set_authored_module_entry_point" in window_source
+    assert 'if key == "entry_point":' in window_source
+    assert "def _map_studio_belt_placement_kind" in window_source
+    assert "def _map_studio_belt_terrain_brush" in window_source
+    assert "def _select_map_studio_gameplay_kind" in window_source
+    assert "def _select_map_studio_terrain_brush" in window_source
+    assert '"placeable": "placeable"' in window_source
+    assert '"creature": "creature"' in window_source
+    assert '"door": "door"' in window_source
+    assert '"waypoint": "waypoint"' in window_source
+    assert '"trigger": "trigger"' in window_source
+    assert '"encounter": "encounter"' in window_source
+    assert '"sound": "sound"' in window_source
+    assert '"camera": "camera"' in window_source
+    assert '"store": "store"' in window_source
+    assert "self.show_map_studio_placement_tools()" in window_source
+    assert "self._select_map_studio_gameplay_kind(placement_kind)" in window_source
+    assert '"sculpt_raise": "raise"' in window_source
+    assert '"sculpt_lower": "lower"' in window_source
+    assert '"sculpt_smooth": "smooth"' in window_source
+    assert '"sculpt_flatten": "flatten"' in window_source
+    assert '"sculpt_plateau": "plateau"' in window_source
+    assert '"sculpt_ramp": "ramp"' in window_source
+    assert '"sculpt_terrace": "terrace"' in window_source
+    assert '"sculpt_pinch": "pinch"' in window_source
+    assert '"sculpt_erode": "erode"' in window_source
+    assert '"sculpt_noise": "noise"' in window_source
+    assert "self.controller.map_studio_viewport_performance_policy()" in window_source
+    assert "self._select_map_studio_terrain_brush(terrain_brush)" in window_source
+    assert "mapStudioToolBeltWidget" in window_source
+    assert "mapStudioCustomizeToolBeltButton" in window_source
+    assert "mapStudioToolBeltCustomizeListWidget" in window_source
+    assert "def _refresh_map_studio_tool_belt" in window_source
+    assert "def _apply_map_studio_tool_belt_preferences_from_project" in window_source
+    assert "def _persist_map_studio_tool_belt_preferences" in window_source
+    assert "def _handle_map_studio_tool_belt_preset_changed" in window_source
+    assert "def _customize_map_studio_tool_belt" in window_source
+    assert "def _handle_map_studio_tool_belt_action" in window_source
+    assert "self.controller.set_map_studio_tool_belt_preferences" in window_source
+    assert "self.controller.map_studio_tool_belt_preferences" in window_source
+    assert "Map Studio custom tool belt saved in this KMAP." in window_source
+    assert 'operation_combo.findData("edge_extrude")' in window_source
+    assert 'operation_combo.findData("rectangular_cut")' in window_source
+    assert "def _map_studio_belt_primitive_kind" in window_source
+    assert "def _select_map_studio_modeling_tool" in window_source
+    assert '"door_frame": "door_frame"' in window_source
+    assert 'if key == "corridor":' in window_source
+    assert "self.create_map_studio_corridor()" in window_source
+    assert 'if key == "terrain_patch":' in window_source
+    assert "self.create_map_studio_starter_terrain()" in window_source
+    assert '"fill"' in window_source
+    assert '"triangulate"' in window_source
+    assert '"normals"' in window_source
+    assert "self._select_map_studio_modeling_tool(tool_key)" in window_source
+    assert "self.add_authored_room_primitive(primitive_kind, \"\")" in window_source
+    assert "floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)" in window_source
+    assert "floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)" in window_source
+    assert "floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)" in window_source
+    assert "def bridge_authored_floor_plan_edges" in window_source
+    assert "def cleanup_authored_floor_plan_vertices" in window_source
+    assert "def mirror_authored_floor_plan_vertices" in window_source
+    assert '"bridge"' in window_source
+    assert '"cut"' in window_source
+    assert '"mirror"' in window_source
+    assert '"combine"' in window_source
+    assert '"separate"' in window_source
+    assert "floorPlanUnionFirstRoomComboBox" in window_source
+    assert "roomPrimitiveSeparateRequested.connect(self.separate_authored_room_primitive)" in window_source
+    assert "roomPrimitiveSeparateResultLineEdit" in window_source
+    assert "def separate_authored_room_primitive" in window_source
+    assert '"cleanup"' in window_source
+    assert "edge_index: int" in window_source
+    assert "self.controller.map_studio_tool_belt_actions_for_preset" in window_source
+    assert "self.map_studio_tool_belt_preset_combo.currentIndexChanged.connect" in window_source
+    assert "self.map_studio_customize_tool_belt_button.clicked.connect" in window_source
+
+
 def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     builder_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
@@ -340,7 +666,7 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
         assert "mapStudioRoomOperationHintLabel" in source
         assert "rectangular cut creates openings or blockout detail before WOK validation" in source
         assert "mapStudioTerrainWorkflowLabel" in source
-        assert "apply a shape preset, then raise/lower/smooth/flatten samples" in source
+        assert "sculpt with raise/lower/smooth/flatten/plateau/ramp/terrace/pinch/erode/noise brushes" in source
         assert "Validate WOK slopes and walkability before export" in source
         assert "scriptHookRequested = QtCore.Signal(str, str, str)" in source
         assert "gameplayPlacementStatusChanged = QtCore.Signal(str)" in source
@@ -379,6 +705,213 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     assert "self.builder_tab.set_script_hooks(self.controller.authored_script_hooks())" in window_source
     assert "self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)" in window_source
     assert "def set_authored_script_hook" in window_source
+
+
+def test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette() -> None:
+    builder_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    builder_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    controller_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    policy_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "map_studio_modeling_tools.py"
+    )
+    policy_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "map_studio_modeling_tools.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (policy_source, policy_mirror_source):
+        assert "class MapStudioComponentMode" in source
+        assert "class MapStudioModelingTool" in source
+        assert "class MapStudioSnapMode" in source
+        assert '"vertex"' in source
+        assert '"edge"' in source
+        assert '"face"' in source
+        assert '"walkmesh"' in source
+        assert "Weld Vertices" in source
+        assert "Bridge" in source
+        assert "Extrude" in source
+        assert "Fill Face" in source
+        assert "Boolean" in source
+        assert "Triangulate" in source
+        assert "Cleanup Normals" in source
+        assert "Terrain Sculpt" in source
+        assert "Paint WOK Surface" in source
+        assert "Hold V" in source
+        assert "KOTOR guardrail" not in source
+
+    for source in (controller_source, controller_mirror_source):
+        assert "available_map_studio_component_modes" in source
+        assert "available_map_studio_modeling_tools" in source
+        assert "available_map_studio_snap_modes" in source
+        assert "map_studio_modeling_tool_summary" in source
+        assert "Object, Vertex, Edge, Face, and Walkmesh" in source
+        assert "snap vertices" in source
+
+    for source in (builder_source, builder_mirror_source):
+        assert "Modeling Mode + Snap" in source
+        assert "mapStudioModelingModeGuideLabel" in source
+        assert "mapStudioComponentModeComboBox" in source
+        assert "mapStudioModelingToolComboBox" in source
+        assert "mapStudioSnapModeComboBox" in source
+        assert "mapStudioModelingToolHintLabel" in source
+        assert "mapStudioModelingStatusLabel" in source
+        assert "modelingContextChanged = QtCore.Signal(str)" in source
+        assert "set_modeling_component_modes" in source
+        assert "set_modeling_tools" in source
+        assert "set_modeling_snap_modes" in source
+        assert "KOTOR guardrail:" in source
+        assert "planned; validation-first" in source
+        assert "Hold V" in source
+
+    assert "self.builder_tab.set_modeling_component_modes(self.controller.available_map_studio_component_modes())" in window_source
+    assert "self.builder_tab.set_modeling_tools(self.controller.available_map_studio_modeling_tools())" in window_source
+    assert "self.builder_tab.set_modeling_snap_modes(self.controller.available_map_studio_snap_modes())" in window_source
+    assert "self.builder_tab.modelingContextChanged.connect(self.workflow_panel.set_active_authoring_context)" in window_source
+
+
+def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
+    toolbar_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_toolbar.py"
+    )
+    toolbar_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_toolbar.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (toolbar_source, toolbar_mirror_source):
+        assert "EDIT_MODES" in source
+        assert "mapStudioToolbarEditModeComboBox" in source
+        assert "mapStudioToolbarViewModeComboBox" in source
+        for mode in ("Object", "Vertex", "Edge", "Face", "Walkmesh", "Placement", "Terrain", "Export"):
+            assert f'"{mode}"' in source
+        assert "snap, weld, flatten, mirror, and cleanup" in source
+        assert "stage, install, hand off, warp-test, and record game proof" in source
+        assert "self.selection_mode.currentTextChanged.connect(self.selectionModeChanged.emit)" in source
+
+    assert "self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)" in window_source
+    assert "def _handle_map_studio_edit_mode_changed" in window_source
+    assert 'context = f"{label} mode:' in window_source
+    assert '"Vertex": "edit room and walkmesh vertices' in window_source
+    assert '"Terrain": "sculpt terrain heightfields' in window_source
+    assert "self.workflow_panel.set_active_authoring_context(context)" in window_source
+    assert 'self._log(f"Map Studio edit mode changed: {context}")' in window_source
+
+
+def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
+    builder_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    builder_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    controller_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    sculpt_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "map_studio_terrain_sculpt_session.py"
+    )
+    sculpt_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "map_studio_terrain_sculpt_session.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+    viewport_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/module_editor_viewport_panel.py"
+    )
+    viewport_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/module_editor_viewport_panel.py"
+    )
+
+    for source in (sculpt_source, sculpt_mirror_source):
+        assert "class MapStudioTerrainSculptFrame" in source
+        assert "class MapStudioTerrainSculptApplyResult" in source
+        assert "coalesce_terrain_sculpt_points" in source
+        assert "prepare_terrain_sculpt_frame_for_project" in source
+        assert "raw_sample_count" in source
+        assert "defer_full_rebuild" in source
+
+    for source in (controller_source, controller_mirror_source):
+        assert "prepare_map_studio_terrain_sculpt_frame" in source
+        assert "apply_map_studio_terrain_sculpt_frame" in source
+        assert "MapStudioTerrainSculptApplyResult" in source
+        assert "full MDL/WOK rebuild deferred" in source
+        assert "return self.authored_module_readiness()" not in source[
+            source.index("def apply_map_studio_terrain_sculpt_frame") : source.index("def merge_authored_floor_plan_rooms")
+        ]
+
+    for source in (builder_source, builder_mirror_source):
+        assert "terrainLiveBrushFrameRequested = QtCore.Signal" in source
+        assert "mapStudioCheckLiveTerrainBrushFrameButton" in source
+        assert "Check Live Brush Frame" in source
+        assert "def current_terrain_brush_context" in source
+        assert "def _emit_live_terrain_brush_frame" in source
+
+    for source in (viewport_source, viewport_mirror_source):
+        assert "terrainBrushFrameRequested = QtCore.Signal(str, str, object)" in source
+        assert "terrainBrushStrokeCommitted = QtCore.Signal(str, str)" in source
+        assert "mapStudioViewportTerrainBrushCheckBox" in source
+        assert "def set_terrain_brush_interaction" in source
+        assert "def _terrain_sample_at_event" in source
+        assert "def _terrain_world_at_screen" in source
+        assert "def _begin_terrain_brush_drag" in source
+        assert "def _update_terrain_brush_drag" in source
+        assert "def _finish_terrain_brush_drag" in source
+
+    assert "terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)" in window_source
+    assert "terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)" in window_source
+    assert "terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)" in window_source
+    assert "def _sync_map_studio_terrain_brush_context" in window_source
+    assert "def apply_map_studio_viewport_terrain_brush_frame" in window_source
+    live_apply_source = window_source[
+        window_source.index("def apply_map_studio_viewport_terrain_brush_frame") :
+        window_source.index("def commit_map_studio_viewport_terrain_brush_stroke")
+    ]
+    assert "apply_map_studio_terrain_sculpt_frame" in live_apply_source
+    assert "authored_terrain_walkability_overlay" in live_apply_source
+    assert "_refresh_all" not in live_apply_source
+    commit_source = window_source[
+        window_source.index("def commit_map_studio_viewport_terrain_brush_stroke") :
+        window_source.index("def merge_authored_floor_plan_rooms")
+    ]
+    assert "_refresh_all(message)" in commit_source
+    assert "def preview_map_studio_terrain_sculpt_frame" in window_source
+    assert "full MDL/WOK rebuild deferred" in window_source
 
 
 def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof() -> None:
@@ -450,6 +983,10 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
     )
 
     for source in (readiness_source, readiness_mirror_source):
+        assert "mapStudioReadinessPathingLabel" in source
+        assert "def _set_pathing_summary" in source
+        assert "PTH path graph readiness" in source
+        assert "anchors: {anchor_text}" in source
         assert "mapStudioReadinessRuntimeResourceTable" in source
         assert 'setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))' in source
         assert "def _set_runtime_resource_rows" in source

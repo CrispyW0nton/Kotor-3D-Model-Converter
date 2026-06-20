@@ -621,6 +621,17 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_terrain_walkability_overlay(None)
 
+    def set_map_studio_terrain_brush_cursor(self, cursor: object | None) -> None:
+        """Display the live Map Studio terrain sculpt brush cursor."""
+
+        self._map_studio_terrain_brush_cursor = cursor if isinstance(cursor, dict) else None
+        self._request_render(fast=True, reason="map studio terrain brush cursor changed", overlay=True)
+
+    def clear_map_studio_terrain_brush_cursor(self) -> None:
+        """Remove the live Map Studio terrain sculpt brush cursor."""
+
+        self.set_map_studio_terrain_brush_cursor(None)
+
     def _fit_external_skeleton_overlay(self, skeleton) -> None:
         """Fit a KOTOR template skeleton preview to the active source mesh."""
         if self.model is None or skeleton is None:

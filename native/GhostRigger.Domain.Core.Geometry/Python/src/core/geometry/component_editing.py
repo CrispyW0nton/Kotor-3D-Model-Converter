@@ -1,0 +1,421 @@
+"""Headless component-editing primitives for Map Studio geometry.
+
+These helpers are intentionally small and format-agnostic.  They operate on a
+plain vertex/face mesh so Map Studio can share the same core behavior between
+room geometry, terrain patches, and future walkmesh component editing without
+putting modeling policy in Qt widgets.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import Iterable, Sequence
+
+
+Vector3 = tuple[float, float, float]
+Face = tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ComponentMesh:
+    """Minimal editable mesh representation for Map Studio component tools."""
+
+    vertices: tuple[Vector3, ...]
+    faces: tuple[Face, ...] = ()
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ComponentEditResult:
+    """Result returned by one component-edit operation."""
+
+    mesh: ComponentMesh
+    changed_vertex_count: int = 0
+    removed_face_count: int = 0
+    warnings: tuple[str, ...] = ()
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+def _finite_vertex(value: Sequence[float]) -> Vector3:
+    if len(value) < 3:
+        raise ValueError("Vertex must contain at least three coordinates.")
+    vertex = (float(value[0]), float(value[1]), float(value[2]))
+    if not all(math.isfinite(coord) for coord in vertex):
+        raise ValueError(f"Vertex contains non-finite coordinates: {value!r}")
+    return vertex
+
+
+def component_mesh(
+    vertices: Iterable[Sequence[float]],
+    faces: Iterable[Sequence[int]] = (),
+    *,
+    metadata: dict[str, object] | None = None,
+) -> ComponentMesh:
+    """Build a validated component mesh from generic vertex/face data."""
+
+    verts = tuple(_finite_vertex(vertex) for vertex in vertices)
+    face_rows: list[Face] = []
+    for face in faces or ():
+        row = tuple(int(index) for index in face)
+        if len(row) < 3:
+            raise ValueError(f"Face must contain at least three vertices: {face!r}")
+        for index in row:
+            if index < 0 or index >= len(verts):
+                raise ValueError(f"Face index {index} is outside vertex range 0..{len(verts) - 1}.")
+        face_rows.append(row)
+    return ComponentMesh(vertices=verts, faces=tuple(face_rows), metadata=dict(metadata or {}))
+
+
+def _validate_indices(vertex_count: int, indices: Iterable[int]) -> tuple[int, ...]:
+    result = tuple(int(index) for index in indices)
+    for index in result:
+        if index < 0 or index >= vertex_count:
+            raise ValueError(f"Vertex index {index} is outside vertex range 0..{vertex_count - 1}.")
+    return result
+
+
+def _replace_vertices(mesh: ComponentMesh, replacements: dict[int, Vector3]) -> ComponentMesh:
+    vertices = tuple(replacements.get(index, vertex) for index, vertex in enumerate(mesh.vertices))
+    return ComponentMesh(vertices=vertices, faces=mesh.faces, metadata=dict(mesh.metadata))
+
+
+def _sub(a: Vector3, b: Vector3) -> Vector3:
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _cross(a: Vector3, b: Vector3) -> Vector3:
+    return (
+        (a[1] * b[2]) - (a[2] * b[1]),
+        (a[2] * b[0]) - (a[0] * b[2]),
+        (a[0] * b[1]) - (a[1] * b[0]),
+    )
+
+
+def _dot(a: Vector3, b: Vector3) -> float:
+    return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2])
+
+
+def _face_normal(mesh: ComponentMesh, face: Face) -> Vector3:
+    unique: list[int] = []
+    for index in face:
+        if index not in unique:
+            unique.append(index)
+        if len(unique) >= 3:
+            break
+    if len(unique) < 3:
+        return (0.0, 0.0, 0.0)
+    a, b, c = (mesh.vertices[index] for index in unique[:3])
+    return _cross(_sub(b, a), _sub(c, a))
+
+
+def fill_face(mesh: ComponentMesh, indices: Iterable[int]) -> ComponentEditResult:
+    """Create one face from an ordered vertex loop.
+
+    Map Studio uses this for a KOTOR-safe "fill" command: close a room detail,
+    terrain hole, or future walkmesh face from explicit selected vertices
+    instead of allowing arbitrary hidden triangulation in the UI layer.
+    """
+
+    face = tuple(dict.fromkeys(_validate_indices(len(mesh.vertices), indices)))
+    if len(face) < 3:
+        raise ValueError("Fill face requires at least three unique vertices.")
+    existing_sets = {frozenset(row) for row in mesh.faces}
+    if frozenset(face) in existing_sets:
+        return ComponentEditResult(mesh=mesh, warnings=("A face already uses the selected vertex set.",))
+    filled = ComponentMesh(vertices=mesh.vertices, faces=tuple(mesh.faces + (face,)), metadata=dict(mesh.metadata))
+    return ComponentEditResult(
+        mesh=filled,
+        metadata={"operation": "fill_face", "face_vertex_count": len(face), "added_face_count": 1},
+    )
+
+
+def cleanup_face_normals(
+    mesh: ComponentMesh,
+    *,
+    reference_axis: str = "z",
+    positive: bool = True,
+) -> ComponentEditResult:
+    """Orient face winding consistently against a reference axis.
+
+    This is intentionally conservative: it does not recalculate vertex normals
+    or smooth groups. It only flips face index order when the face normal points
+    opposite the requested axis, which is enough for Map Studio's first-pass
+    room/WOK cleanup before deterministic export.
+    """
+
+    axis_key = str(reference_axis or "z").lower()
+    axis_vector = {
+        "x": (1.0, 0.0, 0.0),
+        "y": (0.0, 1.0, 0.0),
+        "z": (0.0, 0.0, 1.0),
+    }.get(axis_key)
+    if axis_vector is None:
+        raise ValueError("reference_axis must be one of 'x', 'y', or 'z'.")
+    sign = 1.0 if positive else -1.0
+    updated: list[Face] = []
+    flipped = 0
+    skipped = 0
+    for face in mesh.faces:
+        facing = _dot(_face_normal(mesh, face), axis_vector)
+        if abs(facing) <= 1.0e-9:
+            skipped += 1
+            updated.append(face)
+            continue
+        if (facing * sign) < 0.0:
+            updated.append(tuple(reversed(face)))
+            flipped += 1
+        else:
+            updated.append(face)
+    warnings: list[str] = []
+    if skipped:
+        warnings.append(f"Skipped {skipped} zero-area or axis-parallel face(s) during normal cleanup.")
+    return ComponentEditResult(
+        mesh=ComponentMesh(vertices=mesh.vertices, faces=tuple(updated), metadata=dict(mesh.metadata)),
+        warnings=tuple(warnings),
+        metadata={
+            "operation": "cleanup_face_normals",
+            "reference_axis": axis_key,
+            "positive": bool(positive),
+            "flipped_face_count": flipped,
+            "skipped_face_count": skipped,
+        },
+    )
+
+
+def snap_vertex_to_vertex(mesh: ComponentMesh, source_index: int, target_index: int) -> ComponentEditResult:
+    """Move one vertex exactly onto another vertex.
+
+    This is the headless equivalent of a Maya-style point snap and is suitable
+    for Map Studio's future hold-V vertex snap gesture.
+    """
+
+    source, target = _validate_indices(len(mesh.vertices), (source_index, target_index))
+    if source == target:
+        return ComponentEditResult(mesh=mesh, warnings=("Source and target vertex are the same.",))
+    snapped = _replace_vertices(mesh, {source: mesh.vertices[target]})
+    return ComponentEditResult(
+        mesh=snapped,
+        changed_vertex_count=1,
+        metadata={"operation": "snap_vertex_to_vertex", "source_index": source, "target_index": target},
+    )
+
+
+def snap_vertices_to_grid(
+    mesh: ComponentMesh,
+    indices: Iterable[int],
+    *,
+    grid_size: float,
+    axes: tuple[str, ...] = ("x", "y", "z"),
+) -> ComponentEditResult:
+    """Snap selected vertices to the Map Studio grid on the requested axes."""
+
+    if grid_size <= 0:
+        raise ValueError("grid_size must be greater than zero.")
+    selected = set(_validate_indices(len(mesh.vertices), indices))
+    axes_set = {axis.lower() for axis in axes}
+    axis_index = {"x": 0, "y": 1, "z": 2}
+    active_axes = tuple(axis_index[axis] for axis in axes_set if axis in axis_index)
+    replacements: dict[int, Vector3] = {}
+    for index in selected:
+        coords = list(mesh.vertices[index])
+        for axis in active_axes:
+            coords[axis] = round(coords[axis] / grid_size) * grid_size
+        replacements[index] = (float(coords[0]), float(coords[1]), float(coords[2]))
+    return ComponentEditResult(
+        mesh=_replace_vertices(mesh, replacements),
+        changed_vertex_count=len(replacements),
+        metadata={"operation": "snap_vertices_to_grid", "grid_size": float(grid_size), "axes": tuple(sorted(axes_set))},
+    )
+
+
+def flatten_vertices(
+    mesh: ComponentMesh,
+    indices: Iterable[int],
+    *,
+    axis: str = "z",
+    value: float | None = None,
+) -> ComponentEditResult:
+    """Flatten selected vertices along one axis.
+
+    If ``value`` is omitted, Map Studio flattens to the selected vertices'
+    average coordinate on that axis.
+    """
+
+    selected = _validate_indices(len(mesh.vertices), indices)
+    if not selected:
+        return ComponentEditResult(mesh=mesh, warnings=("No vertices selected for flatten.",))
+    axis_key = axis.lower()
+    axis_index = {"x": 0, "y": 1, "z": 2}.get(axis_key)
+    if axis_index is None:
+        raise ValueError("axis must be one of 'x', 'y', or 'z'.")
+    flatten_value = float(value) if value is not None else sum(mesh.vertices[index][axis_index] for index in selected) / len(selected)
+    replacements: dict[int, Vector3] = {}
+    for index in selected:
+        coords = list(mesh.vertices[index])
+        coords[axis_index] = flatten_value
+        replacements[index] = (float(coords[0]), float(coords[1]), float(coords[2]))
+    return ComponentEditResult(
+        mesh=_replace_vertices(mesh, replacements),
+        changed_vertex_count=len(replacements),
+        metadata={"operation": "flatten_vertices", "axis": axis_key, "value": flatten_value},
+    )
+
+
+def mirror_vertices(
+    mesh: ComponentMesh,
+    indices: Iterable[int] = (),
+    *,
+    axis: str = "x",
+    center: float | None = None,
+) -> ComponentEditResult:
+    """Mirror selected vertices across a coordinate centerline.
+
+    ``axis`` names the coordinate being mirrored. For example, ``axis="x"``
+    mirrors left/right X positions around the selected vertices' average X
+    coordinate when ``center`` is omitted.
+    """
+
+    selected = tuple(dict.fromkeys(_validate_indices(len(mesh.vertices), indices or range(len(mesh.vertices)))))
+    if not selected:
+        return ComponentEditResult(mesh=mesh, warnings=("No vertices selected for mirror.",))
+    axis_key = axis.lower()
+    axis_index = {"x": 0, "y": 1, "z": 2}.get(axis_key)
+    if axis_index is None:
+        raise ValueError("axis must be one of 'x', 'y', or 'z'.")
+    mirror_center = float(center) if center is not None else sum(mesh.vertices[index][axis_index] for index in selected) / len(selected)
+    replacements: dict[int, Vector3] = {}
+    for index in selected:
+        coords = list(mesh.vertices[index])
+        coords[axis_index] = (2.0 * mirror_center) - coords[axis_index]
+        replacements[index] = (float(coords[0]), float(coords[1]), float(coords[2]))
+    return ComponentEditResult(
+        mesh=_replace_vertices(mesh, replacements),
+        changed_vertex_count=len(replacements),
+        metadata={"operation": "mirror_vertices", "axis": axis_key, "center": mirror_center},
+    )
+
+
+def cleanup_degenerate_faces(mesh: ComponentMesh) -> ComponentEditResult:
+    """Remove faces that collapse to fewer than three unique vertices."""
+
+    cleaned: list[Face] = []
+    removed = 0
+    for face in mesh.faces:
+        if len(set(face)) < 3:
+            removed += 1
+            continue
+        cleaned.append(face)
+    if removed <= 0:
+        return ComponentEditResult(mesh=mesh, metadata={"operation": "cleanup_degenerate_faces"})
+    return ComponentEditResult(
+        mesh=ComponentMesh(vertices=mesh.vertices, faces=tuple(cleaned), metadata=dict(mesh.metadata)),
+        removed_face_count=removed,
+        warnings=(f"Removed {removed} degenerate face(s).",),
+        metadata={"operation": "cleanup_degenerate_faces"},
+    )
+
+
+def triangulate_faces(mesh: ComponentMesh) -> ComponentEditResult:
+    """Fan-triangulate n-gon faces while leaving triangles unchanged."""
+
+    triangles: list[Face] = []
+    changed = 0
+    for face in mesh.faces:
+        if len(face) == 3:
+            triangles.append(face)
+            continue
+        changed += 1
+        first = face[0]
+        for offset in range(1, len(face) - 1):
+            triangles.append((first, face[offset], face[offset + 1]))
+    return ComponentEditResult(
+        mesh=ComponentMesh(vertices=mesh.vertices, faces=tuple(triangles), metadata=dict(mesh.metadata)),
+        metadata={"operation": "triangulate_faces", "triangulated_face_count": changed},
+    )
+
+
+def weld_vertices(
+    mesh: ComponentMesh,
+    indices: Iterable[int],
+    *,
+    target_index: int | None = None,
+    position_policy: str = "target",
+    cleanup_faces: bool = True,
+) -> ComponentEditResult:
+    """Merge selected vertices into a single target vertex.
+
+    ``position_policy`` may be ``target`` to keep the target vertex position or
+    ``center`` to place the merged vertex at the average selected position.
+    The returned mesh compacts removed vertices and remaps faces.
+    """
+
+    selected = tuple(dict.fromkeys(_validate_indices(len(mesh.vertices), indices)))
+    if len(selected) < 2:
+        return ComponentEditResult(mesh=mesh, warnings=("Select at least two vertices to weld.",))
+    target = int(target_index if target_index is not None else selected[0])
+    _validate_indices(len(mesh.vertices), (target,))
+    if target not in selected:
+        selected = (target, *selected)
+    selected_set = set(selected)
+    if position_policy == "center":
+        merged_position = tuple(
+            sum(mesh.vertices[index][axis] for index in selected_set) / len(selected_set)
+            for axis in range(3)
+        )
+    elif position_policy == "target":
+        merged_position = mesh.vertices[target]
+    else:
+        raise ValueError("position_policy must be 'target' or 'center'.")
+
+    old_to_new: dict[int, int] = {}
+    new_vertices: list[Vector3] = []
+    for old_index, vertex in enumerate(mesh.vertices):
+        if old_index in selected_set and old_index != target:
+            continue
+        old_to_new[old_index] = len(new_vertices)
+        new_vertices.append(merged_position if old_index == target else vertex)
+    for old_index in selected_set:
+        old_to_new[old_index] = old_to_new[target]
+
+    new_faces: list[Face] = []
+    removed = 0
+    for face in mesh.faces:
+        remapped = tuple(old_to_new[index] for index in face)
+        if cleanup_faces and len(set(remapped)) < 3:
+            removed += 1
+            continue
+        new_faces.append(remapped)
+    warnings: list[str] = []
+    if removed:
+        warnings.append(f"Removed {removed} degenerate face(s) after weld.")
+    return ComponentEditResult(
+        mesh=ComponentMesh(vertices=tuple(new_vertices), faces=tuple(new_faces), metadata=dict(mesh.metadata)),
+        changed_vertex_count=len(selected_set),
+        removed_face_count=removed,
+        warnings=tuple(warnings),
+        metadata={
+            "operation": "weld_vertices",
+            "target_index": target,
+            "position_policy": position_policy,
+            "removed_vertex_count": len(selected_set) - 1,
+        },
+    )
+
+
+__all__ = [
+    "ComponentEditResult",
+    "ComponentMesh",
+    "Face",
+    "Vector3",
+    "cleanup_degenerate_faces",
+    "cleanup_face_normals",
+    "component_mesh",
+    "fill_face",
+    "flatten_vertices",
+    "mirror_vertices",
+    "snap_vertex_to_vertex",
+    "snap_vertices_to_grid",
+    "triangulate_faces",
+    "weld_vertices",
+]

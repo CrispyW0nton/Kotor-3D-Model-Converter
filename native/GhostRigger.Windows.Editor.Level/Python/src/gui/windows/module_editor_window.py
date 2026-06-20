@@ -262,6 +262,63 @@ class _MapStudioNewProjectDialog(QtWidgets.QDialog):
         }
 
 
+class _MapStudioToolBeltCustomizeDialog(QtWidgets.QDialog):
+    """Choose which Map Studio actions appear in the session tool belt."""
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        actions: tuple[Any, ...] = (),
+        selected_keys: tuple[str, ...] = (),
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Customize Map Studio Tool Belt")
+        self.setModal(True)
+        root = QtWidgets.QVBoxLayout(self)
+        self.hint_label = QtWidgets.QLabel(
+            "Choose the modeling, terrain, gameplay, and validation actions you want in the active tool belt. "
+            "This custom belt is kept for the current Map Studio session."
+        )
+        self.hint_label.setObjectName("mapStudioToolBeltCustomizeHintLabel")
+        self.hint_label.setWordWrap(True)
+        root.addWidget(self.hint_label)
+        self.action_list = QtWidgets.QListWidget()
+        self.action_list.setObjectName("mapStudioToolBeltCustomizeListWidget")
+        root.addWidget(self.action_list, 1)
+
+        selected = {str(key) for key in selected_keys}
+        for action in actions:
+            key = str(getattr(action, "key", "") or "")
+            if not key:
+                continue
+            item = QtWidgets.QListWidgetItem(str(getattr(action, "label", key) or key))
+            item.setData(QtCore.Qt.UserRole, key)
+            tooltip = str(getattr(action, "description", "") or "")
+            guardrail = str(getattr(action, "kotor_guardrail", "") or "")
+            if guardrail:
+                tooltip = f"{tooltip}\nKOTOR: {guardrail}" if tooltip else f"KOTOR: {guardrail}"
+            item.setToolTip(tooltip)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.Checked if key in selected else QtCore.Qt.Unchecked)
+            self.action_list.addItem(item)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+    def selected_action_keys(self) -> tuple[str, ...]:
+        keys: list[str] = []
+        for row in range(self.action_list.count()):
+            item = self.action_list.item(row)
+            if item is not None and item.checkState() == QtCore.Qt.Checked:
+                key = str(item.data(QtCore.Qt.UserRole) or "")
+                if key:
+                    keys.append(key)
+        return tuple(keys)
+
+
 class ModuleEditorWindow(QtWidgets.QMainWindow):
     """Top-level KMAP Map Studio Level Editor window."""
 
@@ -281,6 +338,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._last_output_dir = ""
         self._library_rows: list[dict[str, Any]] = []
         self._map_studio_workspace_modes: dict[str, Any] = {}
+        self._map_studio_custom_belt_keys: tuple[str, ...] = ()
+        self._syncing_map_studio_tool_belt_preferences = False
         self.resource_manager: Any = None
         self._build_actions()
         self._build_menus()
@@ -402,6 +461,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         workspace_row.addWidget(self.map_studio_workspace_guide_label, 1)
         workspace_row.addWidget(self.map_studio_open_workspace_button)
         root.addLayout(workspace_row)
+        belt_row = QtWidgets.QHBoxLayout()
+        belt_row.setContentsMargins(0, 0, 0, 0)
+        belt_row.setSpacing(6)
+        self.map_studio_tool_belt_label = QtWidgets.QLabel("Tool Belt")
+        self.map_studio_tool_belt_label.setObjectName("mapStudioToolBeltLabel")
+        self.map_studio_tool_belt_preset_combo = QtWidgets.QComboBox()
+        self.map_studio_tool_belt_preset_combo.setObjectName("mapStudioToolBeltPresetComboBox")
+        for preset in self.controller.available_map_studio_tool_belt_presets():
+            self.map_studio_tool_belt_preset_combo.addItem(str(getattr(preset, "label", "") or preset.key), str(preset.key))
+        self.map_studio_tool_belt_widget = QtWidgets.QWidget()
+        self.map_studio_tool_belt_widget.setObjectName("mapStudioToolBeltWidget")
+        self.map_studio_tool_belt_layout = QtWidgets.QHBoxLayout(self.map_studio_tool_belt_widget)
+        self.map_studio_tool_belt_layout.setContentsMargins(0, 0, 0, 0)
+        self.map_studio_tool_belt_layout.setSpacing(4)
+        self.map_studio_customize_tool_belt_button = QtWidgets.QPushButton("Customize Belt...")
+        self.map_studio_customize_tool_belt_button.setObjectName("mapStudioCustomizeToolBeltButton")
+        belt_row.addWidget(self.map_studio_tool_belt_label)
+        belt_row.addWidget(self.map_studio_tool_belt_preset_combo)
+        belt_row.addWidget(self.map_studio_tool_belt_widget, 1)
+        belt_row.addWidget(self.map_studio_customize_tool_belt_button)
+        root.addLayout(belt_row)
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         root.addWidget(self.main_splitter, 1)
 
@@ -427,6 +507,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
         self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
         self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())
+        self.builder_tab.set_modeling_component_modes(self.controller.available_map_studio_component_modes())
+        self.builder_tab.set_modeling_tools(self.controller.available_map_studio_modeling_tools())
+        self.builder_tab.set_modeling_snap_modes(self.controller.available_map_studio_snap_modes())
+        self.builder_tab.set_terrain_brushes(self.controller.available_map_studio_terrain_brushes())
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -491,6 +575,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.setStretchFactor(2, 0)
         self.main_splitter.setSizes([285, 1220, 320])
         self._update_map_studio_workspace_guide()
+        self._refresh_map_studio_tool_belt()
 
     def _connect(self) -> None:
         self.new_action.triggered.connect(self.new_kmap)
@@ -514,8 +599,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.kmap_help_action.triggered.connect(lambda: self._show_help("KMAP Format"))
         self.map_studio_workspace_combo.currentIndexChanged.connect(self._handle_map_studio_workspace_changed)
         self.map_studio_open_workspace_button.clicked.connect(lambda: self._open_selected_map_studio_workspace())
+        self.map_studio_tool_belt_preset_combo.currentIndexChanged.connect(self._handle_map_studio_tool_belt_preset_changed)
+        self.map_studio_customize_tool_belt_button.clicked.connect(self._customize_map_studio_tool_belt)
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
+        self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)
         self.asset_browser.importRequested.connect(self.import_library_asset)
         self.outliner.itemSelected.connect(self.select_item)
         self.outliner.actionRequested.connect(self._outliner_action)
@@ -524,6 +612,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
         self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
+        self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
+        self.viewport_panel.terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
@@ -568,18 +658,35 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
         self.builder_tab.floorPlanExtrusionRequested.connect(self.apply_authored_floor_plan_extrusion)
+        self.builder_tab.floorPlanVertexSnapRequested.connect(self.snap_authored_floor_plan_vertex)
+        self.builder_tab.floorPlanVertexWeldRequested.connect(self.weld_authored_floor_plan_vertices)
+        self.builder_tab.floorPlanVertexFlattenRequested.connect(self.flatten_authored_floor_plan_vertices)
+        self.builder_tab.floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)
+        self.builder_tab.floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)
         self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
+        self.builder_tab.terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)
+        for combo_name in ("terrainRoomComboBox", "terrainBrushComboBox"):
+            combo = getattr(self.builder_tab, combo_name, None)
+            if combo is not None:
+                combo.currentIndexChanged.connect(lambda _index=0: self._sync_map_studio_terrain_brush_context())
+        terrain_radius = getattr(self.builder_tab, "terrainRadiusSpinBox", None)
+        if terrain_radius is not None:
+            terrain_radius.valueChanged.connect(lambda _value=0: self._sync_map_studio_terrain_brush_context())
         self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)
+        self.builder_tab.floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
         self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)
         self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)
         self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)
+        self.builder_tab.roomPrimitiveSeparateRequested.connect(self.separate_authored_room_primitive)
         self.builder_tab.roomStyleRequested.connect(self.apply_authored_room_style)
         self.walkmesh_tab.roomSurfaceRequested.connect(self.apply_authored_walkmesh_surface)
         self.builder_tab.roomLightRequested.connect(self.add_authored_room_light)
+        self.builder_tab.moduleEntryPointRequested.connect(self.set_authored_module_entry_point)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.builder_tab.gameplayPlacementStatusChanged.connect(self.workflow_panel.set_active_authoring_context)
+        self.builder_tab.modelingContextChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
@@ -774,12 +881,313 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if log_focus:
                 self._log("Map Studio project workspace focused.")
 
+    def _selected_map_studio_tool_belt_preset_key(self) -> str:
+        return str(self.map_studio_tool_belt_preset_combo.currentData() or "blockout").strip() or "blockout"
+
+    def _apply_map_studio_tool_belt_preferences_from_project(self) -> None:
+        preferences = self.controller.map_studio_tool_belt_preferences()
+        preset_key = str(getattr(preferences, "preset_key", "blockout") or "blockout")
+        custom_keys = tuple(str(item) for item in getattr(preferences, "custom_action_keys", ()) or ())
+        self._syncing_map_studio_tool_belt_preferences = True
+        try:
+            self._map_studio_custom_belt_keys = custom_keys
+            index = self.map_studio_tool_belt_preset_combo.findData(preset_key)
+            if index < 0:
+                index = self.map_studio_tool_belt_preset_combo.findData("blockout")
+            if index >= 0 and self.map_studio_tool_belt_preset_combo.currentIndex() != index:
+                self.map_studio_tool_belt_preset_combo.setCurrentIndex(index)
+        finally:
+            self._syncing_map_studio_tool_belt_preferences = False
+
+    def _persist_map_studio_tool_belt_preferences(self) -> None:
+        if self._syncing_map_studio_tool_belt_preferences:
+            return
+        self.controller.set_map_studio_tool_belt_preferences(
+            preset_key=self._selected_map_studio_tool_belt_preset_key(),
+            custom_action_keys=self._map_studio_custom_belt_keys,
+        )
+
+    def _handle_map_studio_tool_belt_preset_changed(self, _index: int) -> None:
+        self._persist_map_studio_tool_belt_preferences()
+        self._refresh_map_studio_tool_belt()
+
+    def _clear_map_studio_tool_belt_layout(self) -> None:
+        while self.map_studio_tool_belt_layout.count():
+            item = self.map_studio_tool_belt_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _refresh_map_studio_tool_belt(self) -> None:
+        self._clear_map_studio_tool_belt_layout()
+        preset_key = self._selected_map_studio_tool_belt_preset_key()
+        actions = self.controller.map_studio_tool_belt_actions_for_preset(
+            preset_key,
+            custom_action_keys=self._map_studio_custom_belt_keys,
+        )
+        if not actions and preset_key == "custom":
+            placeholder = QtWidgets.QLabel("Customize the belt to choose visible tools.")
+            placeholder.setObjectName("mapStudioToolBeltEmptyCustomLabel")
+            self.map_studio_tool_belt_layout.addWidget(placeholder)
+            self.map_studio_tool_belt_layout.addStretch(1)
+            return
+        for action in actions:
+            key = str(getattr(action, "key", "") or "")
+            if not key:
+                continue
+            button = QtWidgets.QToolButton()
+            button.setObjectName(f"mapStudioToolBeltButton_{key}")
+            button.setText(str(getattr(action, "label", key) or key))
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+            button.setEnabled(bool(getattr(action, "implemented", False)))
+            tooltip = str(getattr(action, "description", "") or "")
+            hotkey = str(getattr(action, "hotkey", "") or "")
+            guardrail = str(getattr(action, "kotor_guardrail", "") or "")
+            if hotkey:
+                tooltip = f"{tooltip}\nHotkey: {hotkey}" if tooltip else f"Hotkey: {hotkey}"
+            if guardrail:
+                tooltip = f"{tooltip}\nKOTOR: {guardrail}" if tooltip else f"KOTOR: {guardrail}"
+            button.setToolTip(tooltip)
+            button.clicked.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
+            self.map_studio_tool_belt_layout.addWidget(button)
+        self.map_studio_tool_belt_layout.addStretch(1)
+
+    def _customize_map_studio_tool_belt(self) -> None:
+        all_actions = self.controller.available_map_studio_tool_belt_actions()
+        selected_keys = self._map_studio_custom_belt_keys
+        if not selected_keys:
+            selected_keys = tuple(
+                str(getattr(action, "key", "") or "") for action in all_actions if bool(getattr(action, "implemented", False))
+            )
+        dialog = _MapStudioToolBeltCustomizeDialog(
+            self,
+            actions=all_actions,
+            selected_keys=selected_keys,
+        )
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return
+        self._map_studio_custom_belt_keys = dialog.selected_action_keys()
+        custom_index = self.map_studio_tool_belt_preset_combo.findData("custom")
+        if custom_index >= 0:
+            self._syncing_map_studio_tool_belt_preferences = True
+            try:
+                self.map_studio_tool_belt_preset_combo.setCurrentIndex(custom_index)
+            finally:
+                self._syncing_map_studio_tool_belt_preferences = False
+        self._persist_map_studio_tool_belt_preferences()
+        self._refresh_map_studio_tool_belt()
+        self._log("Map Studio custom tool belt saved in this KMAP.")
+
+    def _map_studio_belt_primitive_kind(self, action_key: str) -> str:
+        """Map direct shelf buttons to authored composition primitive kinds."""
+
+        return {
+            "plane": "plane",
+            "cube": "cube",
+            "wall": "wall",
+            "ramp": "ramp",
+            "stairs": "stairs",
+            "cylinder": "cylinder",
+            "door_frame": "door_frame",
+        }.get(str(action_key or "").strip(), "")
+
+    def _map_studio_belt_placement_kind(self, action_key: str) -> str:
+        """Map direct shelf buttons to authored KOTOR placement kinds."""
+
+        return {
+            "placeable": "placeable",
+            "creature": "creature",
+            "door": "door",
+            "waypoint": "waypoint",
+            "trigger": "trigger",
+            "encounter": "encounter",
+            "sound": "sound",
+            "camera": "camera",
+            "store": "store",
+        }.get(str(action_key or "").strip(), "")
+
+    def _map_studio_belt_terrain_brush(self, action_key: str) -> str:
+        """Map direct shelf buttons to terrain sculpt brush keys."""
+
+        return {
+            "sculpt_raise": "raise",
+            "sculpt_lower": "lower",
+            "sculpt_smooth": "smooth",
+            "sculpt_flatten": "flatten",
+            "sculpt_plateau": "plateau",
+            "sculpt_ramp": "ramp",
+            "sculpt_terrace": "terrace",
+            "sculpt_pinch": "pinch",
+            "sculpt_erode": "erode",
+            "sculpt_noise": "noise",
+        }.get(str(action_key or "").strip(), "")
+
+    def _focus_map_studio_entry_point_controls(self) -> None:
+        """Focus Builder controls for the authored IFO player start."""
+
+        self.show_map_studio_placement_tools()
+        area = getattr(self.builder_tab, "entryPointAreaLineEdit", None)
+        if area is not None:
+            area.setFocus()
+            area.selectAll()
+        self.workflow_panel.set_active_authoring_context(
+            "Entry point: edit the module IFO player start and keep it on walkable WOK"
+        )
+        self._log("Map Studio entry point controls focused. Set the area resref, XYZ, and facing before validation/game proof.")
+
+    def _select_map_studio_modeling_tool(self, tool_key: str) -> None:
+        """Focus the Builder modeling tool matching a belt action."""
+
+        combo = getattr(self.builder_tab, "modelingToolComboBox", None)
+        if combo is None:
+            return
+        wanted = str(tool_key or "").strip()
+        for index in range(combo.count()):
+            data = combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("key") or "") == wanted:
+                combo.setCurrentIndex(index)
+                combo.setFocus()
+                return
+
+    def _select_map_studio_gameplay_kind(self, placement_kind: str) -> None:
+        """Focus the Builder placement controls for one KOTOR resource kind."""
+
+        combo = getattr(self.builder_tab, "gameplayPlacementKindComboBox", None)
+        if combo is None:
+            return
+        wanted = str(placement_kind or "").strip().lower()
+        for index in range(combo.count()):
+            if str(combo.itemData(index) or "").strip().lower() == wanted:
+                combo.setCurrentIndex(index)
+                break
+        search = getattr(self.builder_tab, "gameplayPaletteSearchLineEdit", None)
+        if search is not None:
+            search.setFocus()
+            search.selectAll()
+        else:
+            combo.setFocus()
+
+    def _select_map_studio_terrain_brush(self, brush_key: str) -> None:
+        """Focus the Builder terrain sculpt brush matching a belt action."""
+
+        combo = getattr(self.builder_tab, "terrainBrushComboBox", None)
+        if combo is None:
+            return
+        wanted = str(brush_key or "").strip()
+        for index in range(combo.count()):
+            data = combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("key") or "") == wanted:
+                combo.setCurrentIndex(index)
+                combo.setFocus()
+                return
+
+    def _handle_map_studio_tool_belt_action(self, action: Any) -> None:
+        key = str(getattr(action, "key", "") or "")
+        workspace_key = str(getattr(action, "workspace_key", "") or "")
+        tool_key = str(getattr(action, "tool_key", "") or "")
+        if key == "validate":
+            self.validate_kmap()
+            return
+        if key == "corridor":
+            self.create_map_studio_corridor()
+            return
+        if key == "terrain_patch":
+            self.create_map_studio_starter_terrain()
+            return
+        if key == "entry_point":
+            self._focus_map_studio_entry_point_controls()
+            return
+        terrain_brush = self._map_studio_belt_terrain_brush(key)
+        if terrain_brush:
+            self.show_map_studio_terrain_tools()
+            self._select_map_studio_terrain_brush(terrain_brush)
+            self._sync_map_studio_terrain_brush_context(force_enabled=True)
+            return
+        primitive_kind = self._map_studio_belt_primitive_kind(key)
+        if primitive_kind:
+            self.show_map_studio_geometry_tools()
+            self.add_authored_room_primitive(primitive_kind, "")
+            return
+        placement_kind = self._map_studio_belt_placement_kind(key)
+        if placement_kind:
+            self.show_map_studio_placement_tools()
+            self._select_map_studio_gameplay_kind(placement_kind)
+            return
+        if key in {"create_room", "primitive", "extrude", "bridge", "cut", "fill", "vertex_snap", "weld", "flatten", "mirror", "cleanup", "triangulate", "normals", "bevel", "boolean", "combine", "separate"}:
+            self.show_map_studio_geometry_tools()
+            if tool_key:
+                self._select_map_studio_modeling_tool(tool_key)
+            if key == "extrude":
+                operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
+                if operation_combo is not None:
+                    index = operation_combo.findData("edge_extrude")
+                    if index >= 0:
+                        operation_combo.setCurrentIndex(index)
+                    operation_combo.setFocus()
+            if key == "cut":
+                operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
+                if operation_combo is not None:
+                    index = operation_combo.findData("rectangular_cut")
+                    if index >= 0:
+                        operation_combo.setCurrentIndex(index)
+                    operation_combo.setFocus()
+            if key == "bridge":
+                tool = getattr(self.builder_tab, "floorPlanBridgeFirstRoomComboBox", None)
+                if tool is not None:
+                    tool.setFocus()
+            if key == "combine":
+                tool = getattr(self.builder_tab, "floorPlanUnionFirstRoomComboBox", None)
+                if tool is not None:
+                    tool.setFocus()
+            if key == "separate":
+                tool = getattr(self.builder_tab, "roomPrimitiveSeparateResultLineEdit", None)
+                if tool is not None:
+                    tool.setFocus()
+            if key in {"vertex_snap", "weld", "flatten", "mirror", "cleanup"}:
+                tool = getattr(self.builder_tab, "floorPlanVertexRoomComboBox", None)
+                if tool is not None:
+                    tool.setFocus()
+            return
+        if workspace_key == "terrain":
+            self.show_map_studio_terrain_tools()
+        elif workspace_key == "walkmesh":
+            self.show_map_studio_walkmesh_tools()
+        elif workspace_key == "placements":
+            self.show_map_studio_placement_tools()
+        elif workspace_key == "lighting":
+            self.show_map_studio_lighting_tools()
+        elif workspace_key == "scripts":
+            self.show_map_studio_script_tools()
+        elif workspace_key == "export":
+            self.right_tabs.setCurrentWidget(self.map_studio_export_page)
+        else:
+            self.show_map_studio_builder()
+
     def show_map_studio_builder(self) -> None:
         """Focus the Builder tab inside the existing Map Studio Level Editor."""
 
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
+
+    def _handle_map_studio_edit_mode_changed(self, mode: str) -> None:
+        """Reflect the toolbar edit mode in the Map Studio workflow/readiness panel."""
+
+        label = str(mode or "Object").strip() or "Object"
+        descriptions = {
+            "Object": "select, move, duplicate, and organize rooms, placements, lights, and module objects",
+            "Vertex": "edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools",
+            "Edge": "edit seams, door or corridor borders, bridge edges, bevels, and rectangular cuts",
+            "Face": "edit room faces, material intent, WOK surface intent, triangulation, and cleanup",
+            "Walkmesh": "inspect and paint walkable, non-walkable, door, water, and transition faces",
+            "Placement": "place and transform KOTOR creatures, placeables, doors, triggers, cameras, and waypoints",
+            "Terrain": "sculpt terrain heightfields, ramps, plateaus, erosion, smoothing, and walkability",
+            "Export": "validate, stage, install, hand off, warp-test, and record game proof",
+        }
+        context = f"{label} mode: {descriptions.get(label, 'author the active Map Studio selection')}"
+        self.workflow_panel.set_active_authoring_context(context)
+        self.statusBar().showMessage(f"Map Studio {context}", 5000)
+        self._log(f"Map Studio edit mode changed: {context}")
 
     def show_map_studio_geometry_tools(self) -> None:
         """Focus Builder's primitive, operation, and modular room controls."""
@@ -808,6 +1216,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if terrain is not None:
             terrain.setFocus()
         self.workflow_panel.set_active_authoring_context("Terrain: sculpt heightfield samples and slope/walkability")
+        self._sync_map_studio_terrain_brush_context()
         self._log("Map Studio terrain tools focused. Create a terrain patch, choose a heightfield room, then sculpt samples.")
 
     def show_map_studio_lighting_tools(self) -> None:
@@ -900,6 +1309,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.set_active_authoring_context(
             "Lighting: authored room light added. Tune color, radius, and position before export/lightmap checks."
         )
+
+    def set_authored_module_entry_point(
+        self,
+        area_resref: str,
+        x: float,
+        y: float,
+        z: float,
+        facing: float,
+    ) -> None:
+        """Update the authored module IFO player start from Builder controls."""
+
+        try:
+            self.controller.set_authored_module_entry_point(
+                area_resref=area_resref,
+                position=(x, y, z),
+                facing=facing,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Set Module Entry Point", str(exc))
+            return
+        self._refresh_all("Updated Map Studio module entry point/player start.")
 
     def create_map_studio_starter_room(self) -> None:
         """Create a small authored room through the existing Builder preset path."""
@@ -1177,6 +1607,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self,
         operation: str,
         distance: float,
+        edge_index: int,
         cut_center_x: float,
         cut_center_y: float,
         cut_width: float,
@@ -1188,6 +1619,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     operation=operation,
                     center=(cut_center_x, cut_center_y),
                     size=(cut_width, cut_depth),
+                )
+            elif operation == "edge_extrude":
+                result = self.controller.apply_authored_room_operation(
+                    operation=operation,
+                    distance=distance,
+                    edge_index=edge_index,
                 )
             else:
                 result = self.controller.apply_authored_room_operation(operation=operation, distance=distance)
@@ -1225,6 +1662,146 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
 
+    def bridge_authored_floor_plan_edges(
+        self,
+        first_room_resref: str,
+        first_edge_index: int,
+        second_room_resref: str,
+        second_edge_index: int,
+        result_room_resref: str,
+    ) -> None:
+        try:
+            result = self.controller.bridge_authored_floor_plan_edges(
+                first_room_resref=first_room_resref,
+                first_edge_index=first_edge_index,
+                second_room_resref=second_room_resref,
+                second_edge_index=second_edge_index,
+                result_room_resref=result_room_resref,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Bridge Floor-Plan Edges", str(exc))
+            return
+        readiness = result.readiness
+        message = (
+            f"Bridged floor-plan edge {first_edge_index} in {first_room_resref} "
+            f"to edge {second_edge_index} in {second_room_resref}; previous exports/proofs are now stale."
+        )
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def snap_authored_floor_plan_vertex(
+        self,
+        room_resref: str,
+        point_index: int,
+        target_point_index: int,
+        target_room_resref: str,
+    ) -> None:
+        try:
+            result = self.controller.snap_authored_floor_plan_vertex(
+                room_resref=room_resref,
+                point_index=point_index,
+                target_point_index=target_point_index,
+                target_room_resref=target_room_resref,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Snap Floor-Plan Vertex", str(exc))
+            return
+        readiness = result.readiness
+        target_label = target_room_resref or room_resref
+        message = (
+            f"Snapped floor-plan point {point_index} in {room_resref} to point {target_point_index} in {target_label}; "
+            "previous exports/proofs are now stale."
+        )
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def weld_authored_floor_plan_vertices(
+        self,
+        room_resref: str,
+        point_indices: object,
+        target_point_index: int,
+        position_policy: str,
+    ) -> None:
+        try:
+            result = self.controller.weld_authored_floor_plan_vertices(
+                room_resref=room_resref,
+                point_indices=tuple(point_indices or ()),
+                target_point_index=target_point_index,
+                position_policy=position_policy,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Weld Floor-Plan Vertices", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Welded floor-plan vertices in {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def flatten_authored_floor_plan_vertices(
+        self,
+        room_resref: str,
+        point_indices: object,
+        axis: str,
+        value: object,
+    ) -> None:
+        try:
+            flatten_value = None if value is None else float(value)
+            result = self.controller.flatten_authored_floor_plan_vertices(
+                room_resref=room_resref,
+                point_indices=tuple(point_indices or ()),
+                axis=axis,
+                value=flatten_value,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Flatten Floor-Plan Vertices", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Flattened floor-plan vertices in {room_resref} on {axis}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def cleanup_authored_floor_plan_vertices(
+        self,
+        room_resref: str,
+        tolerance: float,
+    ) -> None:
+        try:
+            result = self.controller.cleanup_authored_floor_plan_vertices(
+                room_resref=room_resref,
+                tolerance=float(tolerance),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Cleanup Floor-Plan Vertices", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Cleaned redundant floor-plan vertices in {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def mirror_authored_floor_plan_vertices(
+        self,
+        room_resref: str,
+        axis: str,
+    ) -> None:
+        try:
+            result = self.controller.mirror_authored_floor_plan_vertices(
+                room_resref=room_resref,
+                axis=axis,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Mirror Floor-Plan Footprint", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Mirrored floor-plan footprint in {room_resref} across local {axis}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
     def apply_authored_terrain_operation(
         self,
         operation: str,
@@ -1257,6 +1834,119 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
+
+    def preview_map_studio_terrain_sculpt_frame(
+        self,
+        brush: str,
+        room_resref: str,
+        row_index: int,
+        column_index: int,
+        height: float,
+        delta: float,
+        radius: int,
+        iterations: int,
+        strength: float,
+    ) -> None:
+        try:
+            performance_policy = self.controller.map_studio_viewport_performance_policy()
+            frame = self.controller.prepare_map_studio_terrain_sculpt_frame(
+                room_resref=room_resref,
+                brush=brush,
+                points=((int(row_index), int(column_index), 1.0),),
+                delta=delta,
+                radius=radius,
+                height=height,
+                iterations=iterations,
+                strength=strength,
+                budget_ms=float(getattr(performance_policy, "terrain_brush_budget_ms", 4.0) or 4.0),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Check Live Terrain Brush Frame", str(exc))
+            return
+        status = (
+            f"Live terrain frame: {frame.performance.estimated_apply_ms:.3f} ms / "
+            f"{frame.performance.budget_ms:.3f} ms, {frame.performance.affected_sample_count} sample(s), "
+            f"{'ready' if frame.should_apply_live else 'too heavy'}; full MDL/WOK rebuild deferred."
+        )
+        if getattr(frame, "warnings", ()):
+            status = f"{status} {frame.warnings[0]}"
+        label = getattr(self.builder_tab, "terrainBrushStatusLabel", None)
+        if label is not None:
+            label.setText(status)
+        self._log(status)
+
+    def _sync_map_studio_terrain_brush_context(self, *, force_enabled: bool | None = None) -> None:
+        """Keep the viewport terrain brush state aligned with Builder controls."""
+
+        context_getter = getattr(self.builder_tab, "current_terrain_brush_context", None)
+        context = context_getter() if callable(context_getter) else {}
+        if not isinstance(context, dict):
+            context = {}
+        enabled = force_enabled
+        if not bool(context.get("enabled", False)):
+            enabled = False
+        setter = getattr(self.viewport_panel, "set_terrain_brush_interaction", None)
+        if callable(setter):
+            setter(
+                enabled=enabled,
+                room_resref=str(context.get("room_resref") or ""),
+                brush=str(context.get("brush") or ""),
+                row_count=int(context.get("row_count", 0) or 0),
+                column_count=int(context.get("column_count", 0) or 0),
+                radius=int(context.get("radius", 0) or 0),
+            )
+
+    def apply_map_studio_viewport_terrain_brush_frame(self, brush: str, room_resref: str, points: object) -> None:
+        """Apply one live viewport terrain sculpt frame without a full Map Studio rebuild."""
+
+        context_getter = getattr(self.builder_tab, "current_terrain_brush_context", None)
+        context = context_getter() if callable(context_getter) else {}
+        if not isinstance(context, dict):
+            context = {}
+        try:
+            performance_policy = self.controller.map_studio_viewport_performance_policy()
+            result = self.controller.apply_map_studio_terrain_sculpt_frame(
+                room_resref=room_resref,
+                brush=brush,
+                points=tuple(points or ()),
+                delta=float(context.get("delta", 0.1) or 0.1),
+                radius=int(context.get("radius", 0) or 0),
+                height=float(context.get("height", 0.0) or 0.0),
+                iterations=int(context.get("iterations", 1) or 1),
+                strength=float(context.get("strength", 0.5) or 0.5),
+                budget_ms=float(getattr(performance_policy, "terrain_brush_budget_ms", 4.0) or 4.0),
+            )
+        except Exception as exc:
+            status = f"Live terrain brush failed: {exc}"
+            label = getattr(self.builder_tab, "terrainBrushStatusLabel", None)
+            if label is not None:
+                label.setText(status)
+            self._log(status)
+            return
+        if result.applied:
+            overlay = self.controller.authored_terrain_walkability_overlay()
+            overlay_setter = getattr(self.viewport_panel, "set_terrain_walkability_overlay", None)
+            if callable(overlay_setter):
+                overlay_setter(overlay)
+        frame = result.frame
+        status = (
+            f"Live terrain brush: {frame.performance.estimated_apply_ms:.3f} ms, "
+            f"{frame.performance.affected_sample_count} dirty sample(s); full rebuild deferred."
+        )
+        if not result.applied:
+            status = result.message
+        label = getattr(self.builder_tab, "terrainBrushStatusLabel", None)
+        if label is not None:
+            label.setText(status)
+
+    def commit_map_studio_viewport_terrain_brush_stroke(self, brush: str, room_resref: str) -> None:
+        """Refresh Map Studio once after a live terrain brush stroke is released."""
+
+        message = (
+            f"Committed terrain brush {brush} on {room_resref}; refreshed terrain walkability, readiness, and export state."
+        )
+        self._refresh_all(message)
+        self._sync_map_studio_terrain_brush_context()
 
     def merge_authored_floor_plan_rooms(self, first_room_resref: str, second_room_resref: str, result_room_resref: str) -> None:
         try:
@@ -1368,6 +2058,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Removed room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def separate_authored_room_primitive(self, room_resref: str, primitive_name: str, result_room_resref: str) -> None:
+        try:
+            result = self.controller.separate_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                result_room_resref=result_room_resref,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Separate Room Primitive", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Separated room primitive {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
@@ -1792,6 +2498,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        self._apply_map_studio_tool_belt_preferences_from_project()
+        self._refresh_map_studio_tool_belt()
         authored_placements = self.controller.authored_gameplay_placements()
         authored_room_lights = self.controller.authored_room_lights()
         authored_markers = self.controller.authored_gameplay_preview_markers()
@@ -1803,6 +2511,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         authored_terrain_rooms = self.controller.authored_terrain_room_choices()
+        self.builder_tab.set_module_entry_point(self.controller.authored_module_entry_point())
         self.builder_tab.set_room_primitives(authored_room_primitives)
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
         self.builder_tab.set_terrain_room_choices(authored_terrain_rooms)
@@ -1820,6 +2529,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             authored_room_outline_geometry,
             authored_terrain_walkability_overlay,
         )
+        self._sync_map_studio_terrain_brush_context()
         readiness_result = self.controller.authored_module_readiness()
         self.workflow_panel.set_state(self.project, readiness_result.readiness)
         self.readiness_panel.set_readiness(readiness_result.readiness)

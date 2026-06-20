@@ -253,6 +253,7 @@ class QtViewportWidget(
         self._map_studio_room_outline_geometry = None
         self._map_studio_marker_geometry = None
         self._map_studio_terrain_walkability_overlay = None
+        self._map_studio_terrain_brush_cursor = None
         self._map_studio_marker_hit_zones: list[dict[str, object]] = []
         self._map_studio_room_outline_hit_zones: list[dict[str, object]] = []
         self._map_studio_room_primitive_hit_zones: list[dict[str, object]] = []

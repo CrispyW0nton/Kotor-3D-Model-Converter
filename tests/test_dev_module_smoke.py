@@ -27,10 +27,13 @@ def _install_native_payload_paths() -> None:
 def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     _install_native_payload_paths()
 
+    from src.core.modules.authored_module_metadata import authored_module_id_bytes
     from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, build_dev_test_module
     from src.core.modules.authored_room_composition import compile_authored_room_composition, create_rectangular_room_composition
     from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
     from src.core.modules.module_format import AREData, GITData, IFOData
+    from pykotor.resource.formats.bwm import read_bwm
+    from pykotor.resource.formats.gff import read_gff
 
     authored = build_dev_test_module(DevModuleSmokeRequest())
     keys = {(summary.resref, summary.restype) for summary in authored.resource_summaries}
@@ -39,6 +42,13 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     are = AREData.from_bytes(authored.resources[("grdev01", "are")].data)
     git = GITData.from_bytes(authored.resources[("grdev01", "git")].data)
     ifo = IFOData.from_bytes(authored.resources[("module", "ifo")].data)
+    raw_are = read_gff(authored.resources[("grdev01", "are")].data)
+    raw_git = read_gff(authored.resources[("grdev01", "git")].data)
+    raw_ifo = read_gff(authored.resources[("module", "ifo")].data)
+    raw_wok = read_bwm(authored.resources[("grdev01_room01", "wok")].data)
+    raw_mdl = authored.resources[("grdev01_room01", "mdl")].data
+    lyt_text = authored.resources[("grdev01", "lyt")].data.decode("ascii")
+    vis_text = authored.resources[("grdev01", "vis")].data.decode("ascii")
 
     assert authored.module_root == "grdev01"
     assert authored.project is not None
@@ -76,6 +86,15 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert authored.module.room_geometry.wok.walkable_face_count() == primitive_geometry.wok.walkable_face_count()
     assert authored.module.room_geometry.wok.non_walk_face_count() == 8
     assert authored.module.room_geometry.metadata["walkmesh_boundary_wall_faces"] == 8
+    assert lyt_text.startswith("#MAXLAYOUT ASCII\n")
+    assert "filedependancy grdev01.max\n" in lyt_text
+    assert "beginlayout\n" in lyt_text
+    assert "roomcount 1\n" in lyt_text
+    assert "trackcount 0\n" in lyt_text
+    assert "obstaclecount 0\n" in lyt_text
+    assert "doorhookcount 0\n" in lyt_text
+    assert lyt_text.rstrip().endswith("donelayout")
+    assert vis_text == "grdev01_room01 1\n  grdev01_room01\n"
     assert authored.module.placements is not None
     assert authored.module.placements.entry_point.area_resref == "grdev01"
     assert authored.module.placements.placeables[0].template_resref == "plc_bench"
@@ -102,9 +121,61 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert ifo.entry_area == "grdev01"
     assert ifo.entry_y == -3.0
     assert ifo.mod_name == "GhostRigger Dev Test"
-    assert ifo.tag == "grdev01"
+    assert ifo.tag == "MODULE"
     assert ifo.dawn_hour == 6
     assert ifo.dusk_hour == 18
+    assert raw_ifo.root.get("Mod_Area_list").at(0).struct_id == 6
+    assert str(raw_ifo.root.get("Mod_Area_list").at(0).get("Area_Name")) == "grdev01"
+    assert raw_ifo.root.get("Mod_ID") == authored_module_id_bytes("grdev01")
+    assert len(raw_ifo.root.get("Mod_ID")) == 16
+    assert len(raw_ifo.root.get("Mod_Description")) == 0
+    assert raw_are.root.get("Rooms").at(0).get("RoomName") == "grdev01_room01"
+    assert raw_are.root.get_uint32("Version") == 193
+    assert raw_are.root.get_uint32("Flags") == 7
+    assert raw_are.root.get_int32("CameraStyle") == 1
+    assert raw_are.root.get_single("Grass_Prob_LL") == 0.25
+    assert raw_are.root.get_single("MoonFogNear") == 99.0
+    assert raw_are.root.get_single("SunFogNear") == 99.0
+    assert raw_are.root.get_uint8("ShadowOpacity") == 50
+    assert raw_are.root.get_uint8("Unescapable") == 1
+    assert not raw_are.root.exists("DisableTransit")
+    assert not raw_are.root.exists("Natural")
+    assert not raw_are.root.exists("FogColor")
+    assert not raw_are.root.exists("SunFog")
+    assert raw_git.root.get("AreaProperties").struct_id == 100
+    assert raw_git.root.get("AreaProperties").get("MusicDelay") == 30000
+    assert len(raw_git.root.get("List")) == 0
+    raw_placeable = raw_git.root.get("Placeable List").at(0)
+    raw_waypoint = raw_git.root.get("WaypointList").at(0)
+    assert raw_placeable.struct_id == 9
+    assert raw_waypoint.struct_id == 5
+    assert raw_waypoint.exists("XOrientation")
+    assert raw_waypoint.exists("YOrientation")
+    assert not raw_waypoint.exists("Bearing")
+    assert len(raw_wok.faces) == 10
+    assert sum(1 for face in raw_wok.faces if face.material.walkable()) == 2
+    room_root_offset = struct.unpack_from("<I", raw_mdl, 12 + 40)[0]
+    room_anim_array_offset = struct.unpack_from("<I", raw_mdl, 12 + 88)[0]
+    assert raw_mdl[12 + 83] == 1
+    assert room_anim_array_offset == room_root_offset
+    mesh_headers: list[tuple[tuple[float, float, float], tuple[float, float, float], float]] = []
+    texture_offset = 0
+    while True:
+        texture_offset = raw_mdl.find(b"cm_baremetal", texture_offset)
+        if texture_offset < 0:
+            break
+        mesh_header_offset = texture_offset - 88
+        mesh_headers.append(
+            (
+                struct.unpack_from("<fff", raw_mdl, mesh_header_offset + 20),
+                struct.unpack_from("<fff", raw_mdl, mesh_header_offset + 32),
+                struct.unpack_from("<f", raw_mdl, mesh_header_offset + 44)[0],
+            )
+        )
+        texture_offset += 1
+    assert len(mesh_headers) >= 2
+    assert all(bb_min != (0.0, 0.0, 0.0) or bb_max != (0.0, 0.0, 0.0) for bb_min, bb_max, _radius in mesh_headers)
+    assert all(radius > 0.0 for _bb_min, _bb_max, radius in mesh_headers)
     assert authored.blocking_issues == []
     checks = {check.label: check for check in authored.walkability_checks}
     assert checks["player_start"].ok is True
@@ -162,6 +233,33 @@ def test_t2601_blocks_export_when_gameplay_anchor_is_off_walkmesh(tmp_path: Path
     assert not (tmp_path / "install" / "Modules" / "grdev01.mod").exists()
 
 
+def test_t2601_can_build_runtime_isolation_module_without_optional_placed_content() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, build_dev_test_module
+    from src.core.modules.module_format import GITData
+
+    authored = build_dev_test_module(
+        DevModuleSmokeRequest(
+            include_test_placeable=False,
+            include_start_waypoint=False,
+        )
+    )
+
+    git = GITData.from_bytes(authored.resources[("grdev01", "git")].data)
+
+    assert authored.module.placements is not None
+    assert authored.module.placements.entry_point.area_resref == "grdev01"
+    assert authored.module.placements.placeables == ()
+    assert authored.module.placements.waypoints == ()
+    assert len(git.placeables) == 0
+    assert len(git.waypoints) == 0
+    checks = {check.label: check for check in authored.walkability_checks}
+    assert set(checks) == {"player_start"}
+    assert checks["player_start"].ok is True
+    assert authored.pathing_provenance["anchor_labels"] == ["player_start"]
+
+
 def test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -191,14 +289,37 @@ def test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata(tmp_path:
     assert "grdev01_room01.mdl/.mdx" in smoke["package_verification"]["model_pairs"]
 
 
+def test_t2601_can_stage_generated_room_without_doorway_marker(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, export_dev_test_module
+
+    result = export_dev_test_module(DevModuleSmokeRequest(output_dir=str(tmp_path), include_doorway_marker=False))
+
+    assert result.ok is True
+    manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+    smoke = manifest["map_studio_smoke_test"]
+    assert smoke["contains"]["simple_doorway_marker"] is False
+    assert "grdev01_room01_door_marker" not in smoke["authored_geometry"]["helper_meshes"]
+    assert smoke["authored_placements"]["counts"]["placeables"] == 1
+    checks = {check["label"]: check for check in smoke["pre_game_checks"]["walkability_checks"]}
+    assert checks["player_start"]["ok"] is True
+    assert checks["test_placeable"]["ok"] is True
+
+
 def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
+    from src.core.modules.authored_module_metadata import authored_module_id_bytes
     from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, export_dev_test_module, verify_dev_test_module_package
     from src.core.modules.module_save_pipeline import RESTYPE_IDS
+    from pykotor.resource.type import ResourceType
 
     result = export_dev_test_module(DevModuleSmokeRequest(output_dir=str(tmp_path)))
 
+    assert RESTYPE_IDS["mdx"] == ResourceType.MDX.type_id
+    assert RESTYPE_IDS["thg"] == ResourceType.THG.type_id
+    assert RESTYPE_IDS["mdx"] != RESTYPE_IDS["thg"]
     assert result.ok is True
     assert result.code == "export_candidate"
     assert result.blocking_issues == []
@@ -332,11 +453,13 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     }
     restype_by_id[RESTYPE_IDS["vis"]] = "vis"
     archive_keys = set()
+    archive_type_ids = set()
     for index in range(resource_count):
         entry_offset = keylist_offset + index * 24
         resref = archive[entry_offset : entry_offset + 16].split(b"\x00", 1)[0].decode("ascii")
         _resource_id, restype_id, _unused = struct.unpack_from("<IHH", archive, entry_offset + 16)
         archive_keys.add((resref, restype_by_id[restype_id]))
+        archive_type_ids.add((resref, restype_id))
     assert ("grdev01", "are") in archive_keys
     assert ("grdev01", "git") in archive_keys
     assert ("module", "ifo") in archive_keys
@@ -346,9 +469,12 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert ("grdev01_room01", "wok") in archive_keys
     assert ("grdev01_room01", "mdl") in archive_keys
     assert ("grdev01_room01", "mdx") in archive_keys
+    assert ("grdev01_room01", ResourceType.MDX.type_id) in archive_type_ids
+    assert ("grdev01_room01", ResourceType.THG.type_id) not in archive_type_ids
 
     verification = verify_dev_test_module_package(result.module_path)
     assert verification.ok is True
+    assert verification.module_id_hex == authored_module_id_bytes("grdev01").hex()
     assert {f"{resource.resref}.{resource.restype}" for resource in verification.resources} >= {
         "grdev01.are",
         "grdev01.git",
@@ -360,6 +486,60 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
         "grdev01_room01.mdl",
         "grdev01_room01.mdx",
     }
+
+
+def test_t2601_package_verification_blocks_foreign_module_id(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from pykotor.resource.formats.gff import bytes_gff, read_gff
+    from src.core.modules.custom_module_packager import CustomModulePackRequest, package_custom_module
+    from src.core.modules.dev_module_smoke import DevModuleSmokeRequest, build_dev_test_module, verify_dev_test_module_package
+
+    authored = build_dev_test_module(DevModuleSmokeRequest())
+    foreign_module_id = bytes.fromhex("00112233445566778899aabbccddeeff")
+    resources = []
+    for resource in authored.packaged_resources:
+        data = bytes(resource.data)
+        if resource.key == ("module", "ifo"):
+            gff = read_gff(data)
+            gff.root.set_binary("Mod_ID", foreign_module_id)
+            data = bytes_gff(gff)
+        resources.append(
+            type(resource)(
+                resref=resource.resref,
+                restype=resource.restype,
+                data=data,
+                source_path=resource.source_path,
+                source=resource.source,
+                required=resource.required,
+            )
+        )
+
+    package = package_custom_module(
+        authored,
+        CustomModulePackRequest(
+            module_root=authored.module_root,
+            game=authored.game,
+            output_dir=str(tmp_path),
+            archive_mode="mod",
+            create_backups=True,
+            write_loose_resources=False,
+            include_reference_check=False,
+            include_wok_check=False,
+            strict=True,
+        ),
+        resources=resources,
+    )
+
+    verification = verify_dev_test_module_package(package.module_path)
+
+    assert package.ok is True
+    assert verification.ok is False
+    assert verification.module_id_hex == foreign_module_id.hex()
+    assert any(
+        "Mod_ID does not match GhostRigger's authored module identity" in issue
+        for issue in verification.blocking_issues
+    )
 
 
 def test_t2601_install_prep_writes_manual_game_test_checklist(tmp_path: Path) -> None:
@@ -399,6 +579,41 @@ def test_t2601_install_prep_writes_manual_game_test_checklist(tmp_path: Path) ->
         "module_loads_in_game",
         "player_spawns_on_floor",
         "test_placeable_visible",
+        "player_can_walk_on_floor",
+        "screenshot_or_video_captured",
+    ]
+
+
+def test_t2601_room_only_install_prep_omits_placeable_proof_requirement(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import (
+        DevModuleInstallPrepRequest,
+        DevModuleSmokeRequest,
+        prepare_dev_test_module_install,
+    )
+
+    result = prepare_dev_test_module_install(
+        DevModuleInstallPrepRequest(
+            output_dir=str(tmp_path),
+            smoke_request=DevModuleSmokeRequest(
+                include_test_placeable=False,
+                include_start_waypoint=False,
+            ),
+        )
+    )
+
+    assert result.ok is True
+    checklist = Path(result.checklist_path).read_text(encoding="utf-8")
+    proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+
+    assert "test placeable appears" not in checklist
+    assert "--test-placeable-visible" not in proof_recorder
+    assert "--test-placeable-visible" not in proof["launch_handoff"]["evidence_capture_command"]
+    assert proof["acceptance_checks"] == [
+        "module_loads_in_game",
+        "player_spawns_on_floor",
         "player_can_walk_on_floor",
         "screenshot_or_video_captured",
     ]
@@ -495,6 +710,34 @@ def test_t2635_install_prep_overwrite_backs_up_existing_module(tmp_path: Path) -
     assert proof["install"]["backup_module_path"] == str(backup)
     checklist = Path(result.checklist_path).read_text(encoding="utf-8")
     assert str(backup) in checklist
+
+
+def test_t2601_install_prep_blocks_stale_currentgame_module_cache(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.dev_module_smoke import DevModuleInstallPrepRequest, prepare_dev_test_module_install
+
+    game_root = tmp_path / "KOTOR"
+    modules_dir = game_root / "Modules"
+    cache_dir = game_root / "currentgame"
+    modules_dir.mkdir(parents=True)
+    cache_dir.mkdir()
+    stale_cache = cache_dir / "grdev01.mod"
+    stale_cache.write_bytes(b"stale currentgame module cache")
+
+    result = prepare_dev_test_module_install(
+        DevModuleInstallPrepRequest(output_dir=str(tmp_path / "out"), game_modules_dir=str(modules_dir))
+    )
+
+    installed = modules_dir / "grdev01.mod"
+    assert result.ok is False
+    assert result.code == "install_preflight_failed"
+    assert result.installed_module_path == ""
+    assert not installed.exists()
+    assert any("currentgame cache contains a stale grdev01.mod" in issue for issue in result.blocking_issues)
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["install"]["installed"] is False
+    assert any("currentgame cache contains a stale grdev01.mod" in issue for issue in proof["blocking_issues"])
 
 
 def test_t2601_install_prep_can_auto_detect_modules_dir_from_settings(tmp_path: Path) -> None:

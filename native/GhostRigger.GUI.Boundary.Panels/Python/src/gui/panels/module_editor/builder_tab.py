@@ -8,20 +8,30 @@ from PySide6 import QtCore, QtWidgets
 class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     primitivePresetRequested = QtCore.Signal(str, str)
-    roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
+    roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)
     floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
+    floorPlanVertexSnapRequested = QtCore.Signal(str, int, int, str)
+    floorPlanVertexWeldRequested = QtCore.Signal(str, object, int, str)
+    floorPlanVertexFlattenRequested = QtCore.Signal(str, object, str, object)
+    floorPlanVertexCleanupRequested = QtCore.Signal(str, float)
+    floorPlanVertexMirrorRequested = QtCore.Signal(str, str)
     terrainOperationRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
+    terrainLiveBrushFrameRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
     roomRectangularUnionRequested = QtCore.Signal(str, str, str)
+    floorPlanBridgeRequested = QtCore.Signal(str, int, str, int, str)
     roomStyleRequested = QtCore.Signal(str, str)
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
     roomPrimitiveDimensionsRequested = QtCore.Signal(str, str, object)
     roomPrimitiveStyleRequested = QtCore.Signal(str, str, str, str)
     roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
+    roomPrimitiveSeparateRequested = QtCore.Signal(str, str, str)
+    moduleEntryPointRequested = QtCore.Signal(str, float, float, float, float)
     gameplayPlacementRequested = QtCore.Signal(str, str, str, float, float, float, float)
     gameplayPlacementStatusChanged = QtCore.Signal(str)
     roomLightRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, str)
     scriptHookRequested = QtCore.Signal(str, str, str)
+    modelingContextChanged = QtCore.Signal(str)
 
     ACTIONS = (
         "Create grdev01 Dev Room",
@@ -43,6 +53,36 @@ class BuilderTab(QtWidgets.QWidget):
         self.builderGuideLabel.setObjectName("mapStudioBuilderGuideLabel")
         self.builderGuideLabel.setWordWrap(True)
         layout.addWidget(self.builderGuideLabel)
+        modeling_box = QtWidgets.QGroupBox("Modeling Mode + Snap")
+        modeling_layout = QtWidgets.QFormLayout(modeling_box)
+        self.modelingModeGuideLabel = QtWidgets.QLabel(
+            "Manual modeling workspace: switch between Object, Vertex, Edge, Face, and Walkmesh editing. "
+            "Use these controls to choose the tool intent before editing primitives, terrain, or WOK surfaces; "
+            "Hold V for vertex snapping when that snap mode is active."
+        )
+        self.modelingModeGuideLabel.setObjectName("mapStudioModelingModeGuideLabel")
+        self.modelingModeGuideLabel.setWordWrap(True)
+        self.componentModeComboBox = QtWidgets.QComboBox()
+        self.componentModeComboBox.setObjectName("mapStudioComponentModeComboBox")
+        self.modelingToolComboBox = QtWidgets.QComboBox()
+        self.modelingToolComboBox.setObjectName("mapStudioModelingToolComboBox")
+        self.snapModeComboBox = QtWidgets.QComboBox()
+        self.snapModeComboBox.setObjectName("mapStudioSnapModeComboBox")
+        self.modelingToolHintLabel = QtWidgets.QLabel(
+            "Choose a component mode and a KOTOR-aware modeling tool. Planned tools stay visible so the roadmap is honest."
+        )
+        self.modelingToolHintLabel.setObjectName("mapStudioModelingToolHintLabel")
+        self.modelingToolHintLabel.setWordWrap(True)
+        self.modelingStatusLabel = QtWidgets.QLabel("Modeling: Object mode / Grid snap")
+        self.modelingStatusLabel.setObjectName("mapStudioModelingStatusLabel")
+        self.modelingStatusLabel.setWordWrap(True)
+        modeling_layout.addRow(self.modelingModeGuideLabel)
+        modeling_layout.addRow("Component:", self.componentModeComboBox)
+        modeling_layout.addRow("Tool:", self.modelingToolComboBox)
+        modeling_layout.addRow("Snap:", self.snapModeComboBox)
+        modeling_layout.addRow(self.modelingToolHintLabel)
+        modeling_layout.addRow(self.modelingStatusLabel)
+        layout.addWidget(modeling_box)
         primitive_box = QtWidgets.QGroupBox("Authored Room Primitive")
         primitive_layout = QtWidgets.QFormLayout(primitive_box)
         self.roomGeometryWorkflowLabel = QtWidgets.QLabel(
@@ -77,6 +117,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomOperationComboBox.setObjectName("mapStudioRoomOperationComboBox")
         self.roomOperationComboBox.addItem("Bevel corners", "bevel")
         self.roomOperationComboBox.addItem("Inset footprint", "inset")
+        self.roomOperationComboBox.addItem("Extrude edge", "edge_extrude")
         self.roomOperationComboBox.addItem("Rectangular cut", "rectangular_cut")
         self.operationDistanceSpinBox = QtWidgets.QDoubleSpinBox()
         self.operationDistanceSpinBox.setObjectName("mapStudioRoomOperationDistanceSpinBox")
@@ -84,6 +125,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.operationDistanceSpinBox.setSingleStep(0.05)
         self.operationDistanceSpinBox.setValue(0.25)
         self.operationDistanceSpinBox.setSuffix(" m")
+        self.operationEdgeIndexSpinBox = QtWidgets.QSpinBox()
+        self.operationEdgeIndexSpinBox.setObjectName("mapStudioRoomOperationEdgeIndexSpinBox")
+        self.operationEdgeIndexSpinBox.setRange(0, 999)
         self.cutCenterXSpinBox = QtWidgets.QDoubleSpinBox()
         self.cutCenterXSpinBox.setObjectName("mapStudioRoomCutCenterXSpinBox")
         self.cutCenterYSpinBox = QtWidgets.QDoubleSpinBox()
@@ -106,6 +150,7 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow(self.roomOperationHintLabel)
         operation_layout.addRow("Operation:", self.roomOperationComboBox)
         operation_layout.addRow("Distance:", self.operationDistanceSpinBox)
+        operation_layout.addRow("Edge:", self.operationEdgeIndexSpinBox)
         operation_layout.addRow("Cut X:", self.cutCenterXSpinBox)
         operation_layout.addRow("Cut Y:", self.cutCenterYSpinBox)
         operation_layout.addRow("Cut Width:", self.cutWidthSpinBox)
@@ -138,15 +183,84 @@ class BuilderTab(QtWidgets.QWidget):
         extrusion_layout.addRow("WOK surface:", self.floorPlanSurfaceComboBox)
         extrusion_layout.addRow(self.applyFloorPlanExtrusionButton)
         layout.addWidget(extrusion_box)
+        vertex_box = QtWidgets.QGroupBox("Floor-Plan Vertex Tools")
+        vertex_layout = QtWidgets.QFormLayout(vertex_box)
+        self.floorPlanVertexHintLabel = QtWidgets.QLabel(
+            "Component edits for authored floor-plan rooms. Snap one point to another, weld selected points, or flatten points to align walls and doorway seams before WOK validation."
+        )
+        self.floorPlanVertexHintLabel.setObjectName("mapStudioFloorPlanVertexHintLabel")
+        self.floorPlanVertexHintLabel.setWordWrap(True)
+        self.floorPlanVertexRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanVertexRoomComboBox.setObjectName("mapStudioFloorPlanVertexRoomComboBox")
+        self.floorPlanVertexTargetRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanVertexTargetRoomComboBox.setObjectName("mapStudioFloorPlanVertexTargetRoomComboBox")
+        self.floorPlanSourcePointSpinBox = QtWidgets.QSpinBox()
+        self.floorPlanSourcePointSpinBox.setObjectName("mapStudioFloorPlanSourcePointSpinBox")
+        self.floorPlanSourcePointSpinBox.setRange(0, 0)
+        self.floorPlanTargetPointSpinBox = QtWidgets.QSpinBox()
+        self.floorPlanTargetPointSpinBox.setObjectName("mapStudioFloorPlanTargetPointSpinBox")
+        self.floorPlanTargetPointSpinBox.setRange(0, 0)
+        self.floorPlanSelectedPointsLineEdit = QtWidgets.QLineEdit("0,1")
+        self.floorPlanSelectedPointsLineEdit.setObjectName("mapStudioFloorPlanSelectedPointsLineEdit")
+        self.floorPlanSelectedPointsLineEdit.setPlaceholderText("point indices, e.g. 0,1,2")
+        self.floorPlanWeldPolicyComboBox = QtWidgets.QComboBox()
+        self.floorPlanWeldPolicyComboBox.setObjectName("mapStudioFloorPlanWeldPolicyComboBox")
+        self.floorPlanWeldPolicyComboBox.addItem("Target point", "target")
+        self.floorPlanWeldPolicyComboBox.addItem("Selection center", "center")
+        self.floorPlanFlattenAxisComboBox = QtWidgets.QComboBox()
+        self.floorPlanFlattenAxisComboBox.setObjectName("mapStudioFloorPlanFlattenAxisComboBox")
+        self.floorPlanFlattenAxisComboBox.addItem("Local X", "x")
+        self.floorPlanFlattenAxisComboBox.addItem("Local Y", "y")
+        self.floorPlanMirrorAxisComboBox = QtWidgets.QComboBox()
+        self.floorPlanMirrorAxisComboBox.setObjectName("mapStudioFloorPlanMirrorAxisComboBox")
+        self.floorPlanMirrorAxisComboBox.addItem("Mirror X coordinates", "x")
+        self.floorPlanMirrorAxisComboBox.addItem("Mirror Y coordinates", "y")
+        self.floorPlanCleanupToleranceSpinBox = self._make_transform_spin(
+            "mapStudioFloorPlanCleanupToleranceSpinBox",
+            0.000001,
+            10.0,
+            " m",
+            value=0.001,
+            step=0.001,
+            decimals=6,
+        )
+        self.snapFloorPlanVertexButton = QtWidgets.QPushButton("Snap Vertex to Vertex")
+        self.snapFloorPlanVertexButton.setObjectName("mapStudioSnapFloorPlanVertexButton")
+        self.weldFloorPlanVerticesButton = QtWidgets.QPushButton("Weld Selected Vertices")
+        self.weldFloorPlanVerticesButton.setObjectName("mapStudioWeldFloorPlanVerticesButton")
+        self.flattenFloorPlanVerticesButton = QtWidgets.QPushButton("Flatten Selected Vertices")
+        self.flattenFloorPlanVerticesButton.setObjectName("mapStudioFlattenFloorPlanVerticesButton")
+        self.mirrorFloorPlanVerticesButton = QtWidgets.QPushButton("Mirror Footprint")
+        self.mirrorFloorPlanVerticesButton.setObjectName("mapStudioMirrorFloorPlanVerticesButton")
+        self.cleanupFloorPlanVerticesButton = QtWidgets.QPushButton("Cleanup Footprint")
+        self.cleanupFloorPlanVerticesButton.setObjectName("mapStudioCleanupFloorPlanVerticesButton")
+        vertex_layout.addRow(self.floorPlanVertexHintLabel)
+        vertex_layout.addRow("Room:", self.floorPlanVertexRoomComboBox)
+        vertex_layout.addRow("Source point:", self.floorPlanSourcePointSpinBox)
+        vertex_layout.addRow("Target room:", self.floorPlanVertexTargetRoomComboBox)
+        vertex_layout.addRow("Target point:", self.floorPlanTargetPointSpinBox)
+        vertex_layout.addRow(self.snapFloorPlanVertexButton)
+        vertex_layout.addRow("Selected points:", self.floorPlanSelectedPointsLineEdit)
+        vertex_layout.addRow("Weld:", self.floorPlanWeldPolicyComboBox)
+        vertex_layout.addRow(self.weldFloorPlanVerticesButton)
+        vertex_layout.addRow("Flatten axis:", self.floorPlanFlattenAxisComboBox)
+        vertex_layout.addRow(self.flattenFloorPlanVerticesButton)
+        vertex_layout.addRow("Mirror:", self.floorPlanMirrorAxisComboBox)
+        vertex_layout.addRow(self.mirrorFloorPlanVerticesButton)
+        vertex_layout.addRow("Cleanup tolerance:", self.floorPlanCleanupToleranceSpinBox)
+        vertex_layout.addRow(self.cleanupFloorPlanVerticesButton)
+        layout.addWidget(vertex_box)
         terrain_box = QtWidgets.QGroupBox("Terrain Heightfield")
         terrain_layout = QtWidgets.QFormLayout(terrain_box)
         self.terrainWorkflowLabel = QtWidgets.QLabel(
-            "Terrain workflow: create a terrain patch, choose the heightfield room, apply a shape preset, then raise/lower/smooth/flatten samples. Validate WOK slopes and walkability before export."
+            "Terrain workflow: create a terrain patch, choose the heightfield room, apply a shape preset, then sculpt with raise/lower/smooth/flatten/plateau/ramp/terrace/pinch/erode/noise brushes. Validate WOK slopes and walkability before export."
         )
         self.terrainWorkflowLabel.setObjectName("mapStudioTerrainWorkflowLabel")
         self.terrainWorkflowLabel.setWordWrap(True)
         self.terrainRoomComboBox = QtWidgets.QComboBox()
         self.terrainRoomComboBox.setObjectName("mapStudioTerrainRoomComboBox")
+        self.terrainBrushComboBox = QtWidgets.QComboBox()
+        self.terrainBrushComboBox.setObjectName("mapStudioTerrainBrushComboBox")
         self.terrainShapePresetComboBox = QtWidgets.QComboBox()
         self.terrainShapePresetComboBox.setObjectName("mapStudioTerrainShapePresetComboBox")
         self.terrainShapeHeightSpinBox = self._make_transform_spin("mapStudioTerrainShapeHeightSpinBox", -1000.0, 1000.0, " m", value=0.5, step=0.05)
@@ -167,6 +281,11 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainHintLabel = QtWidgets.QLabel("Create a terrain heightfield preset to sculpt terrain samples.")
         self.terrainHintLabel.setObjectName("mapStudioTerrainHintLabel")
         self.terrainHintLabel.setWordWrap(True)
+        self.terrainBrushStatusLabel = QtWidgets.QLabel(
+            "Brush: choose a terrain sculpt brush. Continuous strokes must stay local, coalesce input, and defer full MDL/WOK rebuilds."
+        )
+        self.terrainBrushStatusLabel.setObjectName("mapStudioTerrainBrushStatusLabel")
+        self.terrainBrushStatusLabel.setWordWrap(True)
         self.setTerrainHeightButton = QtWidgets.QPushButton("Set Sample Height")
         self.setTerrainHeightButton.setObjectName("mapStudioSetTerrainHeightButton")
         self.raiseTerrainButton = QtWidgets.QPushButton("Raise Sample")
@@ -177,10 +296,15 @@ class BuilderTab(QtWidgets.QWidget):
         self.smoothTerrainButton.setObjectName("mapStudioSmoothTerrainButton")
         self.flattenTerrainButton = QtWidgets.QPushButton("Flatten Terrain")
         self.flattenTerrainButton.setObjectName("mapStudioFlattenTerrainButton")
+        self.applyTerrainBrushButton = QtWidgets.QPushButton("Apply Sculpt Brush")
+        self.applyTerrainBrushButton.setObjectName("mapStudioApplyTerrainBrushButton")
+        self.checkLiveTerrainBrushFrameButton = QtWidgets.QPushButton("Check Live Brush Frame")
+        self.checkLiveTerrainBrushFrameButton.setObjectName("mapStudioCheckLiveTerrainBrushFrameButton")
         self.applyTerrainShapeButton = QtWidgets.QPushButton("Apply Terrain Shape")
         self.applyTerrainShapeButton.setObjectName("mapStudioApplyTerrainShapePresetButton")
         terrain_layout.addRow(self.terrainWorkflowLabel)
         terrain_layout.addRow("Terrain:", self.terrainRoomComboBox)
+        terrain_layout.addRow("Brush:", self.terrainBrushComboBox)
         terrain_layout.addRow("Shape:", self.terrainShapePresetComboBox)
         terrain_layout.addRow("Shape height:", self.terrainShapeHeightSpinBox)
         terrain_layout.addRow("Row:", self.terrainRowSpinBox)
@@ -191,6 +315,9 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_layout.addRow("Smooth passes:", self.terrainSmoothIterationsSpinBox)
         terrain_layout.addRow("Smooth strength:", self.terrainSmoothStrengthSpinBox)
         terrain_layout.addRow(self.terrainHintLabel)
+        terrain_layout.addRow(self.terrainBrushStatusLabel)
+        terrain_layout.addRow(self.checkLiveTerrainBrushFrameButton)
+        terrain_layout.addRow(self.applyTerrainBrushButton)
         terrain_layout.addRow(self.setTerrainHeightButton)
         terrain_layout.addRow(self.raiseTerrainButton)
         terrain_layout.addRow(self.lowerTerrainButton)
@@ -220,6 +347,36 @@ class BuilderTab(QtWidgets.QWidget):
         union_layout.addRow(self.mapStudioRectangularUnionHintLabel)
         union_layout.addRow(self.mapStudioApplyRectangularUnionButton)
         layout.addWidget(union_box)
+        bridge_box = QtWidgets.QGroupBox("Bridge Floor-Plan Edges")
+        bridge_layout = QtWidgets.QFormLayout(bridge_box)
+        self.floorPlanBridgeFirstRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanBridgeFirstRoomComboBox.setObjectName("mapStudioFloorPlanBridgeFirstRoomComboBox")
+        self.floorPlanBridgeFirstEdgeSpinBox = QtWidgets.QSpinBox()
+        self.floorPlanBridgeFirstEdgeSpinBox.setObjectName("mapStudioFloorPlanBridgeFirstEdgeSpinBox")
+        self.floorPlanBridgeFirstEdgeSpinBox.setRange(0, 999)
+        self.floorPlanBridgeSecondRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanBridgeSecondRoomComboBox.setObjectName("mapStudioFloorPlanBridgeSecondRoomComboBox")
+        self.floorPlanBridgeSecondEdgeSpinBox = QtWidgets.QSpinBox()
+        self.floorPlanBridgeSecondEdgeSpinBox.setObjectName("mapStudioFloorPlanBridgeSecondEdgeSpinBox")
+        self.floorPlanBridgeSecondEdgeSpinBox.setRange(0, 999)
+        self.floorPlanBridgeResultRoomLineEdit = QtWidgets.QLineEdit()
+        self.floorPlanBridgeResultRoomLineEdit.setObjectName("mapStudioFloorPlanBridgeResultRoomLineEdit")
+        self.floorPlanBridgeResultRoomLineEdit.setPlaceholderText("optional connector room resref")
+        self.floorPlanBridgeHintLabel = QtWidgets.QLabel(
+            "Bridge creates a new connector room between two compatible floor-plan edges. Use it for corridors, room seams, and simple KOTOR-safe connections."
+        )
+        self.floorPlanBridgeHintLabel.setObjectName("mapStudioFloorPlanBridgeHintLabel")
+        self.floorPlanBridgeHintLabel.setWordWrap(True)
+        self.bridgeFloorPlanEdgesButton = QtWidgets.QPushButton("Bridge Floor-Plan Edges")
+        self.bridgeFloorPlanEdgesButton.setObjectName("mapStudioBridgeFloorPlanEdgesButton")
+        bridge_layout.addRow("First room:", self.floorPlanBridgeFirstRoomComboBox)
+        bridge_layout.addRow("First edge:", self.floorPlanBridgeFirstEdgeSpinBox)
+        bridge_layout.addRow("Second room:", self.floorPlanBridgeSecondRoomComboBox)
+        bridge_layout.addRow("Second edge:", self.floorPlanBridgeSecondEdgeSpinBox)
+        bridge_layout.addRow("Connector:", self.floorPlanBridgeResultRoomLineEdit)
+        bridge_layout.addRow(self.floorPlanBridgeHintLabel)
+        bridge_layout.addRow(self.bridgeFloorPlanEdgesButton)
+        layout.addWidget(bridge_box)
         add_primitive_box = QtWidgets.QGroupBox("Add Room Primitive")
         add_primitive_layout = QtWidgets.QFormLayout(add_primitive_box)
         self.compositionPrimitiveKindComboBox = QtWidgets.QComboBox()
@@ -258,6 +415,11 @@ class BuilderTab(QtWidgets.QWidget):
         self.applyPrimitiveTransformButton.setObjectName("mapStudioApplyPrimitiveTransformButton")
         self.removePrimitiveButton = QtWidgets.QPushButton("Remove Selected Primitive")
         self.removePrimitiveButton.setObjectName("mapStudioRemoveCompositionPrimitiveButton")
+        self.roomPrimitiveSeparateResultLineEdit = QtWidgets.QLineEdit()
+        self.roomPrimitiveSeparateResultLineEdit.setObjectName("mapStudioSeparatePrimitiveResultRoomLineEdit")
+        self.roomPrimitiveSeparateResultLineEdit.setPlaceholderText("optional separated room/object resref")
+        self.separatePrimitiveButton = QtWidgets.QPushButton("Separate Selected Primitive")
+        self.separatePrimitiveButton.setObjectName("mapStudioSeparateCompositionPrimitiveButton")
         transform_layout.addRow("Primitive:", self.roomPrimitiveTransformComboBox)
         transform_layout.addRow(self.primitiveTransformHintLabel)
         transform_layout.addRow("Move X:", self.primitiveTranslateXSpinBox)
@@ -271,6 +433,8 @@ class BuilderTab(QtWidgets.QWidget):
         transform_layout.addRow("Pivot Y:", self.primitivePivotYSpinBox)
         transform_layout.addRow("Pivot Z:", self.primitivePivotZSpinBox)
         transform_layout.addRow(self.applyPrimitiveTransformButton)
+        transform_layout.addRow("Separate as:", self.roomPrimitiveSeparateResultLineEdit)
+        transform_layout.addRow(self.separatePrimitiveButton)
         transform_layout.addRow(self.removePrimitiveButton)
         layout.addWidget(transform_box)
         dimensions_box = QtWidgets.QGroupBox("Primitive Dimensions")
@@ -366,6 +530,35 @@ class BuilderTab(QtWidgets.QWidget):
         light_layout.addRow("Intensity:", self.roomLightIntensitySpinBox)
         light_layout.addRow(self.addRoomLightButton)
         layout.addWidget(light_box)
+        entry_box = QtWidgets.QGroupBox("Module Entry Point")
+        entry_layout = QtWidgets.QFormLayout(entry_box)
+        self.entryPointGuideLabel = QtWidgets.QLabel(
+            "Player start: choose the area resref and position/facing written to the module IFO. "
+            "Keep it inside the current room on walkable WOK before staging or game proof."
+        )
+        self.entryPointGuideLabel.setObjectName("mapStudioEntryPointGuideLabel")
+        self.entryPointGuideLabel.setWordWrap(True)
+        self.entryPointAreaLineEdit = QtWidgets.QLineEdit()
+        self.entryPointAreaLineEdit.setObjectName("mapStudioEntryPointAreaLineEdit")
+        self.entryPointAreaLineEdit.setPlaceholderText("area resref, usually the module root")
+        self.entryPointPosXSpinBox = self._make_transform_spin("mapStudioEntryPointPosXSpinBox", -1000.0, 1000.0, " m")
+        self.entryPointPosYSpinBox = self._make_transform_spin("mapStudioEntryPointPosYSpinBox", -1000.0, 1000.0, " m")
+        self.entryPointPosZSpinBox = self._make_transform_spin("mapStudioEntryPointPosZSpinBox", -1000.0, 1000.0, " m")
+        self.entryPointFacingSpinBox = self._make_transform_spin("mapStudioEntryPointFacingSpinBox", -360.0, 360.0, " deg", decimals=1, step=15.0)
+        self.entryPointStatusLabel = QtWidgets.QLabel("Entry point: create or load an authored module first.")
+        self.entryPointStatusLabel.setObjectName("mapStudioEntryPointStatusLabel")
+        self.entryPointStatusLabel.setWordWrap(True)
+        self.applyEntryPointButton = QtWidgets.QPushButton("Apply Module Entry Point")
+        self.applyEntryPointButton.setObjectName("mapStudioApplyEntryPointButton")
+        entry_layout.addRow(self.entryPointGuideLabel)
+        entry_layout.addRow("Area:", self.entryPointAreaLineEdit)
+        entry_layout.addRow("Pos X:", self.entryPointPosXSpinBox)
+        entry_layout.addRow("Pos Y:", self.entryPointPosYSpinBox)
+        entry_layout.addRow("Pos Z:", self.entryPointPosZSpinBox)
+        entry_layout.addRow("Facing:", self.entryPointFacingSpinBox)
+        entry_layout.addRow(self.entryPointStatusLabel)
+        entry_layout.addRow(self.applyEntryPointButton)
+        layout.addWidget(entry_box)
         placement_box = QtWidgets.QGroupBox("Gameplay Placement")
         placement_layout = QtWidgets.QFormLayout(placement_box)
         self.gameplayPlacementKindComboBox = QtWidgets.QComboBox()
@@ -471,6 +664,9 @@ class BuilderTab(QtWidgets.QWidget):
         layout.addWidget(self.note)
         layout.addStretch(1)
         self.roomPrimitivePresetComboBox.currentIndexChanged.connect(self._update_preset_description)
+        self.componentModeComboBox.currentIndexChanged.connect(self._update_modeling_tool_hint)
+        self.modelingToolComboBox.currentIndexChanged.connect(self._update_modeling_tool_hint)
+        self.snapModeComboBox.currentIndexChanged.connect(self._update_modeling_tool_hint)
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
@@ -480,17 +676,33 @@ class BuilderTab(QtWidgets.QWidget):
         self.floorPlanIncludeWallsCheckBox.stateChanged.connect(lambda _value: self._update_floor_plan_extrusion_hint())
         self.floorPlanSurfaceComboBox.currentIndexChanged.connect(self._update_floor_plan_extrusion_hint)
         self.applyFloorPlanExtrusionButton.clicked.connect(self._emit_floor_plan_extrusion)
+        self.floorPlanVertexRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
+        self.floorPlanVertexTargetRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
+        self.floorPlanSelectedPointsLineEdit.textChanged.connect(self._update_floor_plan_vertex_controls)
+        self.snapFloorPlanVertexButton.clicked.connect(self._emit_floor_plan_vertex_snap)
+        self.weldFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_weld)
+        self.flattenFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_flatten)
+        self.mirrorFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_mirror)
+        self.cleanupFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_cleanup)
         self.terrainRoomComboBox.currentIndexChanged.connect(self._update_terrain_controls)
+        self.terrainBrushComboBox.currentIndexChanged.connect(self._update_terrain_brush_controls)
         self.terrainShapePresetComboBox.currentIndexChanged.connect(self._update_terrain_shape_controls)
         self.setTerrainHeightButton.clicked.connect(lambda: self._emit_terrain_operation("set_height"))
         self.raiseTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("raise"))
         self.lowerTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("lower"))
         self.smoothTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("smooth"))
         self.flattenTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("flatten"))
+        self.checkLiveTerrainBrushFrameButton.clicked.connect(self._emit_live_terrain_brush_frame)
+        self.applyTerrainBrushButton.clicked.connect(self._emit_selected_terrain_brush)
         self.applyTerrainShapeButton.clicked.connect(self._emit_terrain_shape_preset)
         self.floorPlanUnionFirstRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
         self.floorPlanUnionSecondRoomComboBox.currentIndexChanged.connect(self._update_rectangular_union_controls)
         self.mapStudioApplyRectangularUnionButton.clicked.connect(self._emit_rectangular_union)
+        self.floorPlanBridgeFirstRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_bridge_controls)
+        self.floorPlanBridgeSecondRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_bridge_controls)
+        self.floorPlanBridgeFirstEdgeSpinBox.valueChanged.connect(lambda _value: self._update_floor_plan_bridge_controls())
+        self.floorPlanBridgeSecondEdgeSpinBox.valueChanged.connect(lambda _value: self._update_floor_plan_bridge_controls())
+        self.bridgeFloorPlanEdgesButton.clicked.connect(self._emit_floor_plan_bridge)
         self.compositionPrimitiveKindComboBox.currentIndexChanged.connect(self._update_composition_primitive_kind_hint)
         self.addCompositionPrimitiveButton.clicked.connect(self._emit_add_composition_primitive)
         self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
@@ -499,9 +711,11 @@ class BuilderTab(QtWidgets.QWidget):
         self.primitiveSurfaceComboBox.currentIndexChanged.connect(self._update_primitive_surface_hint)
         self.applyPrimitiveStyleButton.clicked.connect(self._emit_primitive_style)
         self.removePrimitiveButton.clicked.connect(self._emit_remove_composition_primitive)
+        self.separatePrimitiveButton.clicked.connect(self._emit_separate_composition_primitive)
         self.roomSurfaceComboBox.currentIndexChanged.connect(self._update_surface_hint)
         self.applyRoomStyleButton.clicked.connect(self._emit_room_style)
         self.addRoomLightButton.clicked.connect(self._emit_room_light)
+        self.applyEntryPointButton.clicked.connect(self._emit_module_entry_point)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._apply_gameplay_palette_filter)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._update_gameplay_spatial_controls)
         self.gameplayPlacementKindComboBox.currentIndexChanged.connect(self._emit_gameplay_placement_status)
@@ -516,10 +730,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.assignScriptHookButton.clicked.connect(self._emit_assign_script_hook)
         self.clearScriptHookButton.clicked.connect(self._emit_clear_script_hook)
         self._update_operation_controls()
+        self._update_modeling_tool_hint()
         self.set_terrain_room_choices(())
         self.set_terrain_shape_presets(())
         self.set_floor_plan_room_choices(())
         self._update_floor_plan_extrusion_controls()
+        self._update_floor_plan_vertex_controls()
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
         self._update_primitive_dimension_controls()
@@ -527,6 +743,7 @@ class BuilderTab(QtWidgets.QWidget):
         self._update_surface_hint()
         self._update_script_hook_field_choices()
         self._update_gameplay_spatial_controls()
+        self.set_module_entry_point(None)
 
     @staticmethod
     def _make_transform_spin(
@@ -547,6 +764,152 @@ class BuilderTab(QtWidgets.QWidget):
         spin.setValue(value)
         spin.setSuffix(suffix)
         return spin
+
+    def set_modeling_component_modes(self, modes) -> None:
+        """Populate object/component mode choices for manual Map Studio modeling."""
+
+        self.componentModeComboBox.blockSignals(True)
+        self.componentModeComboBox.clear()
+        for mode in modes or ():
+            key = str(getattr(mode, "key", "") or "")
+            label = str(getattr(mode, "label", "") or key)
+            description = str(getattr(mode, "description", "") or "")
+            guardrail = str(getattr(mode, "kotor_guardrail", "") or "")
+            if key:
+                self.componentModeComboBox.addItem(
+                    label,
+                    {
+                        "key": key,
+                        "label": label,
+                        "description": description,
+                        "guardrail": guardrail,
+                    },
+                )
+        if self.componentModeComboBox.count() <= 0:
+            self.componentModeComboBox.addItem(
+                "Object",
+                {
+                    "key": "object",
+                    "label": "Object",
+                    "description": "Select and transform authored map objects.",
+                    "guardrail": "Object edits mark staged exports and game proof stale.",
+                },
+            )
+        self.componentModeComboBox.blockSignals(False)
+        self._update_modeling_tool_hint()
+
+    def set_modeling_tools(self, tools) -> None:
+        """Populate Maya-like, KOTOR-aware modeling tools from core policy."""
+
+        self.modelingToolComboBox.blockSignals(True)
+        self.modelingToolComboBox.clear()
+        for tool in tools or ():
+            key = str(getattr(tool, "key", "") or "")
+            label = str(getattr(tool, "label", "") or key)
+            category = str(getattr(tool, "category", "") or "")
+            description = str(getattr(tool, "description", "") or "")
+            guardrail = str(getattr(tool, "kotor_guardrail", "") or "")
+            modes = tuple(str(item) for item in getattr(tool, "component_modes", ()) or ())
+            implemented = bool(getattr(tool, "implemented", False))
+            if key:
+                state = "usable" if implemented else "planned"
+                self.modelingToolComboBox.addItem(
+                    f"{label} ({state})",
+                    {
+                        "key": key,
+                        "label": label,
+                        "category": category,
+                        "description": description,
+                        "guardrail": guardrail,
+                        "component_modes": modes,
+                        "implemented": implemented,
+                    },
+                )
+        if self.modelingToolComboBox.count() <= 0:
+            self.modelingToolComboBox.addItem(
+                "Create Primitive Room (usable)",
+                {
+                    "key": "primitive_room",
+                    "label": "Create Primitive Room",
+                    "category": "Primitives",
+                    "description": "Seed a Map Studio room.",
+                    "guardrail": "Validate generated module resources before export.",
+                    "component_modes": ("object",),
+                    "implemented": True,
+                },
+            )
+        self.modelingToolComboBox.blockSignals(False)
+        self._update_modeling_tool_hint()
+
+    def set_modeling_snap_modes(self, snap_modes) -> None:
+        """Populate snap modes including vertex snapping for Map Studio editing."""
+
+        self.snapModeComboBox.blockSignals(True)
+        self.snapModeComboBox.clear()
+        for snap in snap_modes or ():
+            key = str(getattr(snap, "key", "") or "")
+            label = str(getattr(snap, "label", "") or key)
+            description = str(getattr(snap, "description", "") or "")
+            hotkey = str(getattr(snap, "hotkey", "") or "")
+            if key:
+                suffix = f" - {hotkey}" if hotkey else ""
+                self.snapModeComboBox.addItem(
+                    f"{label}{suffix}",
+                    {
+                        "key": key,
+                        "label": label,
+                        "description": description,
+                        "hotkey": hotkey,
+                    },
+                )
+        if self.snapModeComboBox.count() <= 0:
+            self.snapModeComboBox.addItem(
+                "Grid",
+                {
+                    "key": "grid",
+                    "label": "Grid",
+                    "description": "Snap edits to the Map Studio grid.",
+                    "hotkey": "",
+                },
+            )
+        self.snapModeComboBox.blockSignals(False)
+        self._update_modeling_tool_hint()
+
+    def _current_modeling_mode_data(self) -> dict:
+        data = self.componentModeComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _current_modeling_tool_data(self) -> dict:
+        data = self.modelingToolComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _current_snap_mode_data(self) -> dict:
+        data = self.snapModeComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_modeling_tool_hint(self) -> None:
+        mode = self._current_modeling_mode_data()
+        tool = self._current_modeling_tool_data()
+        snap = self._current_snap_mode_data()
+        mode_label = str(mode.get("label") or "Object")
+        mode_key = str(mode.get("key") or "object")
+        tool_label = str(tool.get("label") or "Create Primitive Room")
+        snap_label = str(snap.get("label") or "Grid")
+        snap_hotkey = str(snap.get("hotkey") or "")
+        implemented = bool(tool.get("implemented", False))
+        compatible = mode_key in tuple(tool.get("component_modes") or ()) if tool else True
+        description = str(tool.get("description") or mode.get("description") or "Choose a Map Studio modeling tool.")
+        guardrail = str(tool.get("guardrail") or mode.get("guardrail") or "")
+        state = "usable now" if implemented else "planned; validation-first"
+        if not compatible:
+            state = f"{state}; switch component mode for best fit"
+        snap_text = f"{snap_label} snap"
+        if snap_hotkey:
+            snap_text = f"{snap_text} ({snap_hotkey})"
+        self.modelingToolHintLabel.setText(f"{description} KOTOR guardrail: {guardrail}")
+        summary = f"Modeling: {mode_label} / {tool_label} / {snap_text} - {state}"
+        self.modelingStatusLabel.setText(summary)
+        self.modelingContextChanged.emit(summary)
 
     def set_primitive_presets(self, presets) -> None:
         """Populate the primitive preset selector from the controller."""
@@ -630,6 +993,35 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainShapePresetComboBox.blockSignals(False)
         self._update_terrain_shape_controls()
 
+    def set_terrain_brushes(self, brushes) -> None:
+        """Populate named terrain sculpt brushes for Map Studio."""
+
+        self.terrainBrushComboBox.blockSignals(True)
+        self.terrainBrushComboBox.clear()
+        for brush in tuple(brushes or ()):
+            key = str(getattr(brush, "key", "") or "")
+            label = str(getattr(brush, "label", "") or key)
+            operation = str(getattr(brush, "operation", "") or key)
+            description = str(getattr(brush, "description", "") or "")
+            guardrail = str(getattr(brush, "kotor_guardrail", "") or "")
+            implemented = bool(getattr(brush, "implemented", False))
+            continuous = bool(getattr(brush, "continuous_preview", True))
+            self.terrainBrushComboBox.addItem(
+                label,
+                {
+                    "key": key,
+                    "operation": operation,
+                    "description": description,
+                    "guardrail": guardrail,
+                    "implemented": implemented,
+                    "continuous": continuous,
+                },
+            )
+        if self.terrainBrushComboBox.count() <= 0:
+            self.terrainBrushComboBox.addItem("No terrain brushes", None)
+        self.terrainBrushComboBox.blockSignals(False)
+        self._update_terrain_brush_controls()
+
     def _current_terrain_data(self) -> dict:
         data = self.terrainRoomComboBox.currentData()
         return dict(data) if isinstance(data, dict) else {}
@@ -638,8 +1030,31 @@ class BuilderTab(QtWidgets.QWidget):
         data = self.terrainShapePresetComboBox.currentData()
         return dict(data) if isinstance(data, dict) else {}
 
+    def _current_terrain_brush_data(self) -> dict:
+        data = self.terrainBrushComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
     def _current_terrain_room_resref(self) -> str:
         return str(self._current_terrain_data().get("room_resref") or "").strip()
+
+    def current_terrain_brush_context(self) -> dict:
+        """Return the selected terrain brush context for viewport sculpting."""
+
+        terrain = self._current_terrain_data()
+        brush = self._current_terrain_brush_data()
+        operation = str(brush.get("operation") or "").strip()
+        return {
+            "enabled": bool(terrain) and bool(operation) and bool(brush.get("implemented")),
+            "room_resref": str(terrain.get("room_resref") or "").strip(),
+            "row_count": int(terrain.get("row_count", 0) or 0),
+            "column_count": int(terrain.get("column_count", 0) or 0),
+            "brush": operation,
+            "height": float(self.terrainHeightSpinBox.value()),
+            "delta": float(self.terrainDeltaSpinBox.value()),
+            "radius": int(self.terrainRadiusSpinBox.value()),
+            "iterations": int(self.terrainSmoothIterationsSpinBox.value()),
+            "strength": float(self.terrainSmoothStrengthSpinBox.value()),
+        }
 
     def _update_terrain_shape_controls(self) -> None:
         data = self._current_terrain_shape_data()
@@ -650,6 +1065,27 @@ class BuilderTab(QtWidgets.QWidget):
         if description and self._current_terrain_data():
             self.terrainHintLabel.setText(description)
 
+    def _update_terrain_brush_controls(self) -> None:
+        brush = self._current_terrain_brush_data()
+        if not brush:
+            self.terrainBrushStatusLabel.setText("Brush: no terrain brush is available.")
+            self.applyTerrainBrushButton.setEnabled(False)
+            self.checkLiveTerrainBrushFrameButton.setEnabled(False)
+            return
+        state = "ready" if brush.get("implemented") else "planned"
+        continuous = "continuous preview" if brush.get("continuous") else "commit-only"
+        description = str(brush.get("description") or "").strip()
+        guardrail = str(brush.get("guardrail") or "").strip()
+        text = f"Brush: {brush.get('key')} ({state}, {continuous})."
+        if description:
+            text += f" {description}"
+        if guardrail:
+            text += f" KOTOR: {guardrail}"
+        self.terrainBrushStatusLabel.setText(text)
+        enabled = bool(brush.get("implemented")) and bool(self._current_terrain_data())
+        self.applyTerrainBrushButton.setEnabled(enabled)
+        self.checkLiveTerrainBrushFrameButton.setEnabled(enabled)
+
     def _update_terrain_controls(self) -> None:
         data = self._current_terrain_data()
         enabled = bool(data)
@@ -659,6 +1095,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainColumnSpinBox.setRange(0, max(0, column_count - 1))
         for widget in (
             self.terrainRoomComboBox,
+            self.terrainBrushComboBox,
             self.terrainShapePresetComboBox,
             self.terrainShapeHeightSpinBox,
             self.terrainRowSpinBox,
@@ -673,11 +1110,14 @@ class BuilderTab(QtWidgets.QWidget):
             self.lowerTerrainButton,
             self.smoothTerrainButton,
             self.flattenTerrainButton,
+            self.applyTerrainBrushButton,
+            self.checkLiveTerrainBrushFrameButton,
             self.applyTerrainShapeButton,
         ):
             widget.setEnabled(enabled)
         if not enabled:
             self.terrainHintLabel.setText("Create a terrain heightfield preset to sculpt terrain samples.")
+            self.terrainBrushStatusLabel.setText("Brush: create or select a terrain room before sculpting.")
             return
         blocked = int(data.get("non_walk_triangle_count", 0) or 0)
         warnings = tuple(data.get("warnings", ()) or ())
@@ -692,6 +1132,7 @@ class BuilderTab(QtWidgets.QWidget):
         if warnings:
             hint += f" Warning: {warnings[0]}"
         self.terrainHintLabel.setText(hint)
+        self._update_terrain_brush_controls()
 
     def _emit_terrain_shape_preset(self) -> None:
         shape = self._current_terrain_shape_data()
@@ -727,6 +1168,31 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.terrainSmoothStrengthSpinBox.value()),
         )
 
+    def _emit_selected_terrain_brush(self) -> None:
+        brush = self._current_terrain_brush_data()
+        operation = str(brush.get("operation") or "").strip()
+        if not operation or not brush.get("implemented"):
+            return
+        self._emit_terrain_operation(f"brush_stroke:{operation}")
+
+    def _emit_live_terrain_brush_frame(self) -> None:
+        brush = self._current_terrain_brush_data()
+        operation = str(brush.get("operation") or "").strip()
+        room = self._current_terrain_room_resref()
+        if not room or not operation or not brush.get("implemented"):
+            return
+        self.terrainLiveBrushFrameRequested.emit(
+            operation,
+            room,
+            int(self.terrainRowSpinBox.value()),
+            int(self.terrainColumnSpinBox.value()),
+            float(self.terrainHeightSpinBox.value()),
+            float(self.terrainDeltaSpinBox.value()),
+            int(self.terrainRadiusSpinBox.value()),
+            int(self.terrainSmoothIterationsSpinBox.value()),
+            float(self.terrainSmoothStrengthSpinBox.value()),
+        )
+
     @staticmethod
     def _current_combo_resref(combo: QtWidgets.QComboBox) -> str:
         data = combo.currentData()
@@ -740,11 +1206,19 @@ class BuilderTab(QtWidgets.QWidget):
         extrusion_current = self._current_combo_resref(self.floorPlanExtrusionRoomComboBox)
         first_current = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
         second_current = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
+        bridge_first_current = self._current_combo_resref(self.floorPlanBridgeFirstRoomComboBox)
+        bridge_second_current = self._current_combo_resref(self.floorPlanBridgeSecondRoomComboBox)
+        vertex_current = self._current_combo_resref(self.floorPlanVertexRoomComboBox)
+        vertex_target_current = self._current_combo_resref(self.floorPlanVertexTargetRoomComboBox)
         choices = tuple(rooms or ())
         for combo, current in (
             (self.floorPlanExtrusionRoomComboBox, extrusion_current),
             (self.floorPlanUnionFirstRoomComboBox, first_current),
             (self.floorPlanUnionSecondRoomComboBox, second_current),
+            (self.floorPlanBridgeFirstRoomComboBox, bridge_first_current),
+            (self.floorPlanBridgeSecondRoomComboBox, bridge_second_current),
+            (self.floorPlanVertexRoomComboBox, vertex_current),
+            (self.floorPlanVertexTargetRoomComboBox, vertex_target_current),
         ):
             combo.blockSignals(True)
             combo.clear()
@@ -772,8 +1246,12 @@ class BuilderTab(QtWidgets.QWidget):
             combo.blockSignals(False)
         if self.floorPlanUnionSecondRoomComboBox.count() > 1 and self.floorPlanUnionSecondRoomComboBox.currentIndex() == self.floorPlanUnionFirstRoomComboBox.currentIndex():
             self.floorPlanUnionSecondRoomComboBox.setCurrentIndex(1)
+        if self.floorPlanBridgeSecondRoomComboBox.count() > 1 and self.floorPlanBridgeSecondRoomComboBox.currentIndex() == self.floorPlanBridgeFirstRoomComboBox.currentIndex():
+            self.floorPlanBridgeSecondRoomComboBox.setCurrentIndex(1)
         self._update_floor_plan_extrusion_controls()
+        self._update_floor_plan_vertex_controls()
         self._update_rectangular_union_controls()
+        self._update_floor_plan_bridge_controls()
 
     def _current_floor_plan_extrusion_data(self) -> dict:
         data = self.floorPlanExtrusionRoomComboBox.currentData()
@@ -839,6 +1317,113 @@ class BuilderTab(QtWidgets.QWidget):
             surface_id,
         )
 
+    def _current_floor_plan_vertex_room_data(self) -> dict:
+        data = self.floorPlanVertexRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _current_floor_plan_vertex_target_room_data(self) -> dict:
+        data = self.floorPlanVertexTargetRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _parse_floor_plan_point_indices(self) -> tuple[int, ...]:
+        text = self.floorPlanSelectedPointsLineEdit.text().strip()
+        if not text:
+            return ()
+        values: list[int] = []
+        for part in text.replace(";", ",").split(","):
+            item = part.strip()
+            if not item:
+                continue
+            values.append(int(item))
+        return tuple(dict.fromkeys(values))
+
+    def _update_floor_plan_vertex_controls(self) -> None:
+        room = self._current_floor_plan_vertex_room_data()
+        target_room = self._current_floor_plan_vertex_target_room_data()
+        point_count = int(room.get("point_count", 0) or 0)
+        target_point_count = int(target_room.get("point_count", 0) or 0)
+        enabled = bool(room and point_count > 0)
+        target_enabled = bool(target_room and target_point_count > 0)
+        self.floorPlanVertexRoomComboBox.setEnabled(enabled)
+        self.floorPlanVertexTargetRoomComboBox.setEnabled(enabled and target_enabled)
+        self.floorPlanSourcePointSpinBox.setEnabled(enabled)
+        self.floorPlanTargetPointSpinBox.setEnabled(enabled and target_enabled)
+        self.floorPlanSelectedPointsLineEdit.setEnabled(enabled)
+        self.floorPlanWeldPolicyComboBox.setEnabled(enabled)
+        self.floorPlanFlattenAxisComboBox.setEnabled(enabled)
+        self.floorPlanMirrorAxisComboBox.setEnabled(enabled)
+        self.floorPlanCleanupToleranceSpinBox.setEnabled(enabled)
+        self.snapFloorPlanVertexButton.setEnabled(enabled and target_enabled and point_count >= 2)
+        try:
+            selected = self._parse_floor_plan_point_indices()
+        except ValueError:
+            selected = ()
+        self.weldFloorPlanVerticesButton.setEnabled(enabled and len(selected) >= 2)
+        self.flattenFloorPlanVerticesButton.setEnabled(enabled and len(selected) >= 1)
+        self.mirrorFloorPlanVerticesButton.setEnabled(enabled and point_count >= 3)
+        self.cleanupFloorPlanVerticesButton.setEnabled(enabled and point_count >= 3)
+        self.floorPlanSourcePointSpinBox.setRange(0, max(point_count - 1, 0))
+        self.floorPlanTargetPointSpinBox.setRange(0, max(target_point_count - 1, 0))
+        if not enabled:
+            self.floorPlanVertexHintLabel.setText(
+                "Create a floor-plan room before using vertex snap, weld, flatten, or cleanup tools."
+            )
+        elif not selected:
+            self.floorPlanVertexHintLabel.setText(
+                f"Editing {room.get('room_resref')}: {point_count} points. Enter point indices to weld or flatten, snap one source point, mirror the footprint, or cleanup redundant footprint points."
+            )
+        else:
+            self.floorPlanVertexHintLabel.setText(
+                f"Editing {room.get('room_resref')}: selected points {', '.join(str(item) for item in selected)}. "
+                "These component edits will mark export and game proof stale and must pass KOTOR floor-plan validation."
+            )
+
+    def _emit_floor_plan_vertex_snap(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        target_room = str(self._current_floor_plan_vertex_target_room_data().get("room_resref") or "").strip()
+        if room:
+            self.floorPlanVertexSnapRequested.emit(
+                room,
+                int(self.floorPlanSourcePointSpinBox.value()),
+                int(self.floorPlanTargetPointSpinBox.value()),
+                target_room,
+            )
+
+    def _emit_floor_plan_vertex_weld(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if not room:
+            return
+        try:
+            selected = self._parse_floor_plan_point_indices()
+        except ValueError:
+            self.floorPlanVertexHintLabel.setText("Point indices must be comma-separated integers, e.g. 0,1,2.")
+            return
+        policy = str(self.floorPlanWeldPolicyComboBox.currentData() or "target")
+        self.floorPlanVertexWeldRequested.emit(room, selected, int(self.floorPlanTargetPointSpinBox.value()), policy)
+
+    def _emit_floor_plan_vertex_flatten(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if not room:
+            return
+        try:
+            selected = self._parse_floor_plan_point_indices()
+        except ValueError:
+            self.floorPlanVertexHintLabel.setText("Point indices must be comma-separated integers, e.g. 0,1,2.")
+            return
+        axis = str(self.floorPlanFlattenAxisComboBox.currentData() or "x")
+        self.floorPlanVertexFlattenRequested.emit(room, selected, axis, None)
+
+    def _emit_floor_plan_vertex_cleanup(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if room:
+            self.floorPlanVertexCleanupRequested.emit(room, float(self.floorPlanCleanupToleranceSpinBox.value()))
+
+    def _emit_floor_plan_vertex_mirror(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        axis = str(self.floorPlanMirrorAxisComboBox.currentData() or "x")
+        if room:
+            self.floorPlanVertexMirrorRequested.emit(room, axis)
+
     def _update_rectangular_union_controls(self) -> None:
         first = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
         second = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
@@ -867,6 +1452,58 @@ class BuilderTab(QtWidgets.QWidget):
         if not first or not second or first == second:
             return
         self.roomRectangularUnionRequested.emit(first, second, self.floorPlanUnionResultRoomLineEdit.text().strip())
+
+    def _current_floor_plan_bridge_first_data(self) -> dict:
+        data = self.floorPlanBridgeFirstRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _current_floor_plan_bridge_second_data(self) -> dict:
+        data = self.floorPlanBridgeSecondRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_floor_plan_bridge_controls(self) -> None:
+        first_data = self._current_floor_plan_bridge_first_data()
+        second_data = self._current_floor_plan_bridge_second_data()
+        first = str(first_data.get("room_resref") or "").strip()
+        second = str(second_data.get("room_resref") or "").strip()
+        first_count = int(first_data.get("point_count", 0) or 0)
+        second_count = int(second_data.get("point_count", 0) or 0)
+        ready = bool(first and second and first != second and first_count >= 3 and second_count >= 3)
+        count = max(self.floorPlanBridgeFirstRoomComboBox.count(), self.floorPlanBridgeSecondRoomComboBox.count())
+        self.floorPlanBridgeFirstRoomComboBox.setEnabled(count >= 2)
+        self.floorPlanBridgeSecondRoomComboBox.setEnabled(count >= 2)
+        self.floorPlanBridgeFirstEdgeSpinBox.setEnabled(bool(first_data and first_count >= 3))
+        self.floorPlanBridgeSecondEdgeSpinBox.setEnabled(bool(second_data and second_count >= 3))
+        self.floorPlanBridgeFirstEdgeSpinBox.setRange(0, max(first_count - 1, 0))
+        self.floorPlanBridgeSecondEdgeSpinBox.setRange(0, max(second_count - 1, 0))
+        self.floorPlanBridgeResultRoomLineEdit.setEnabled(ready)
+        self.bridgeFloorPlanEdgesButton.setEnabled(ready)
+        if count < 2:
+            self.floorPlanBridgeHintLabel.setText(
+                "Create at least two compatible floor-plan rooms before bridging edges into a connector room."
+            )
+        elif not ready:
+            self.floorPlanBridgeHintLabel.setText(
+                "Choose two different floor-plan rooms and edge indices. Bridge requires matching floor elevation, WOK surface, material, and wall settings."
+            )
+        else:
+            self.floorPlanBridgeHintLabel.setText(
+                f"Ready to bridge edge {int(self.floorPlanBridgeFirstEdgeSpinBox.value())} in {first} "
+                f"to edge {int(self.floorPlanBridgeSecondEdgeSpinBox.value())} in {second}. This creates a new connector room."
+            )
+
+    def _emit_floor_plan_bridge(self) -> None:
+        first = self._current_combo_resref(self.floorPlanBridgeFirstRoomComboBox)
+        second = self._current_combo_resref(self.floorPlanBridgeSecondRoomComboBox)
+        if not first or not second or first == second:
+            return
+        self.floorPlanBridgeRequested.emit(
+            first,
+            int(self.floorPlanBridgeFirstEdgeSpinBox.value()),
+            second,
+            int(self.floorPlanBridgeSecondEdgeSpinBox.value()),
+            self.floorPlanBridgeResultRoomLineEdit.text().strip(),
+        )
 
     def set_composition_primitive_kinds(self, kinds) -> None:
         """Populate the add-primitive palette from the controller."""
@@ -1115,7 +1752,7 @@ class BuilderTab(QtWidgets.QWidget):
         ):
             widget.setEnabled(enabled)
         if not enabled:
-            self.primitiveTransformHintLabel.setText("Create a composition room preset to edit walls, ramps, stairs, arches, cubes, and cylinders.")
+            self.primitiveTransformHintLabel.setText("Create a composition room preset to edit planes, walls, ramps, stairs, arches, cubes, and cylinders.")
             return
         self._fill_vec3(
             (self.primitiveTranslateXSpinBox, self.primitiveTranslateYSpinBox, self.primitiveTranslateZSpinBox),
@@ -1220,6 +1857,16 @@ class BuilderTab(QtWidgets.QWidget):
             str(data.get("primitive_name") or ""),
         )
 
+    def _emit_separate_composition_primitive(self) -> None:
+        data = self._current_primitive_transform_data()
+        if not data:
+            return
+        self.roomPrimitiveSeparateRequested.emit(
+            str(data.get("room_resref") or ""),
+            str(data.get("primitive_name") or ""),
+            self.roomPrimitiveSeparateResultLineEdit.text().strip(),
+        )
+
     def set_gameplay_placement_kinds(self, kinds) -> None:
         """Populate the gameplay placement kind selector from the controller."""
 
@@ -1232,6 +1879,51 @@ class BuilderTab(QtWidgets.QWidget):
             self.gameplayPlacementKindComboBox.addItem("Placeable", "placeable")
         self._update_gameplay_supported_kinds_label()
         self._apply_gameplay_palette_filter()
+
+    def set_module_entry_point(self, entry) -> None:
+        """Show the current authored module IFO player start."""
+
+        enabled = entry is not None
+        for widget in (
+            self.entryPointAreaLineEdit,
+            self.entryPointPosXSpinBox,
+            self.entryPointPosYSpinBox,
+            self.entryPointPosZSpinBox,
+            self.entryPointFacingSpinBox,
+            self.applyEntryPointButton,
+        ):
+            widget.setEnabled(enabled)
+        if not enabled:
+            self.entryPointAreaLineEdit.blockSignals(True)
+            self.entryPointAreaLineEdit.setText("")
+            self.entryPointAreaLineEdit.blockSignals(False)
+            self._fill_vec3(
+                (self.entryPointPosXSpinBox, self.entryPointPosYSpinBox, self.entryPointPosZSpinBox),
+                (0.0, 0.0, 0.0),
+                (0.0, 0.0, 0.0),
+            )
+            self.entryPointFacingSpinBox.blockSignals(True)
+            self.entryPointFacingSpinBox.setValue(0.0)
+            self.entryPointFacingSpinBox.blockSignals(False)
+            self.entryPointStatusLabel.setText("Entry point: create or load an authored module first.")
+            return
+        area = str(getattr(entry, "area_resref", "") or "")
+        position = tuple(getattr(entry, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+        facing = float(getattr(entry, "facing", 0.0) or 0.0)
+        self.entryPointAreaLineEdit.blockSignals(True)
+        self.entryPointAreaLineEdit.setText(area)
+        self.entryPointAreaLineEdit.blockSignals(False)
+        self._fill_vec3(
+            (self.entryPointPosXSpinBox, self.entryPointPosYSpinBox, self.entryPointPosZSpinBox),
+            position,
+            (0.0, 0.0, 0.0),
+        )
+        self.entryPointFacingSpinBox.blockSignals(True)
+        self.entryPointFacingSpinBox.setValue(facing)
+        self.entryPointFacingSpinBox.blockSignals(False)
+        self.entryPointStatusLabel.setText(
+            f"Entry point: {area or '(area not set)'} at {position[:3]}, facing {facing:.1f} deg."
+        )
 
     def set_gameplay_palette_entries(self, entries) -> None:
         """Populate searchable gameplay-placement resource choices."""
@@ -1397,6 +2089,15 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.gameplayBearingSpinBox.value()),
         )
 
+    def _emit_module_entry_point(self) -> None:
+        self.moduleEntryPointRequested.emit(
+            self.entryPointAreaLineEdit.text().strip(),
+            float(self.entryPointPosXSpinBox.value()),
+            float(self.entryPointPosYSpinBox.value()),
+            float(self.entryPointPosZSpinBox.value()),
+            float(self.entryPointFacingSpinBox.value()),
+        )
+
     def _emit_gameplay_placement_status(self) -> None:
         if not hasattr(self, "gameplayPlacementKindComboBox"):
             return
@@ -1499,7 +2200,8 @@ class BuilderTab(QtWidgets.QWidget):
         is_cut = operation == "rectangular_cut"
         for widget in (self.cutCenterXSpinBox, self.cutCenterYSpinBox, self.cutWidthSpinBox, self.cutDepthSpinBox):
             widget.setEnabled(is_cut)
-        self.operationDistanceSpinBox.setEnabled(operation in {"bevel", "inset"})
+        self.operationDistanceSpinBox.setEnabled(operation in {"bevel", "inset", "edge_extrude"})
+        self.operationEdgeIndexSpinBox.setEnabled(operation == "edge_extrude")
 
     def _emit_room_operation(self) -> None:
         operation = str(self.roomOperationComboBox.currentData() or "").strip()
@@ -1507,6 +2209,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.roomOperationRequested.emit(
                 operation,
                 float(self.operationDistanceSpinBox.value()),
+                int(self.operationEdgeIndexSpinBox.value()),
                 float(self.cutCenterXSpinBox.value()),
                 float(self.cutCenterYSpinBox.value()),
                 float(self.cutWidthSpinBox.value()),

@@ -145,11 +145,20 @@ def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive:
     )
 
 
-def _base_room_primitive(data: Any, room_resref: str) -> WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive:
+def _base_room_primitive(data: Any, room_resref: str) -> FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive:
     source = _dict(data)
     primitive_type = str(source.get("type") or source.get("primitive") or "").strip().lower()
     name = str(source.get("name") or f"{room_resref}_{primitive_type or 'primitive'}")
     material = _material(source.get("material"))
+    if primitive_type in {"floor", "plane", "platform"}:
+        return FloorPrimitive(
+            name=name,
+            width=_float(source.get("width"), 3.0),
+            depth=_float(source.get("depth"), 3.0),
+            z=_float(source.get("z"), 0.0),
+            surface_id=source.get("surface_id", source.get("floor_surface_id", 4)),
+            material=material,
+        )
     if primitive_type == "wall":
         return WallPrimitive(
             name=name,
@@ -436,7 +445,7 @@ def _transform_payload(transform: PrimitiveTransform) -> dict[str, Any]:
     }
 
 
-def _base_primitive_payload(primitive: WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive | PlacedRoomPrimitive) -> dict[str, Any]:
+def _base_primitive_payload(primitive: FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive | PlacedRoomPrimitive) -> dict[str, Any]:
     transform: PrimitiveTransform | None = None
     instance_name = ""
     if isinstance(primitive, PlacedRoomPrimitive):
@@ -444,7 +453,17 @@ def _base_primitive_payload(primitive: WallPrimitive | CubePrimitive | RampPrimi
         instance_name = primitive.name
         primitive = primitive.primitive
     payload: dict[str, Any]
-    if isinstance(primitive, WallPrimitive):
+    if isinstance(primitive, FloorPrimitive):
+        payload = {
+            "type": "plane",
+            "name": primitive.name,
+            "width": float(primitive.width),
+            "depth": float(primitive.depth),
+            "z": float(primitive.z),
+            "surface_id": primitive.surface_id,
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, WallPrimitive):
         payload = {
             "type": "wall",
             "name": primitive.name,
@@ -719,11 +738,36 @@ def authored_project_to_kmap_payload(
     }
 
 
-def create_dev_test_authored_module_payload(*, module_root: str = "grdev01", game: str = "K1") -> dict[str, Any]:
+def create_dev_test_authored_module_payload(
+    *,
+    module_root: str = "grdev01",
+    game: str = "K1",
+    include_test_placeable: bool = True,
+    include_start_waypoint: bool = True,
+    include_doorway_marker: bool = True,
+) -> dict[str, Any]:
     """Create the first editable from-scratch Map Studio KMAP payload."""
 
     root = normalise_resref(module_root)
     room_resref = normalise_resref(f"{root}_room01")
+    placeables = ()
+    if include_test_placeable:
+        placeables = (
+            AuthoredPlaceableInstance(
+                template_resref="plc_bench",
+                tag="grdev01_test_placeable",
+                position=(1.75, 1.5, 0.0),
+            ),
+        )
+    waypoints = ()
+    if include_start_waypoint:
+        waypoints = (
+            AuthoredWaypointInstance(
+                template_resref="sw_startloc001",
+                tag="start",
+                position=(0.0, -3.0, 0.0),
+            ),
+        )
     project = create_single_room_project(
         module_root=root,
         game=game,
@@ -735,37 +779,31 @@ def create_dev_test_authored_module_payload(*, module_root: str = "grdev01", gam
             wall_height=3.0,
             floor_surface_id=4,
             texture=normalize_authored_room_texture(DEFAULT_AUTHORED_ROOM_TEXTURE),
-            include_doorway_marker=True,
+            include_doorway_marker=bool(include_doorway_marker),
         ),
         placements=AuthoredGameplayPlacement(
             entry_point=ModuleEntryPoint(area_resref=root, position=(0.0, -3.0, 0.0)),
-            placeables=(
-                AuthoredPlaceableInstance(
-                    template_resref="plc_bench",
-                    tag="grdev01_test_placeable",
-                    position=(1.75, 1.5, 0.0),
-                ),
-            ),
-            waypoints=(
-                AuthoredWaypointInstance(
-                    template_resref="sw_startloc001",
-                    tag="start",
-                    position=(0.0, -3.0, 0.0),
-                ),
-            ),
+            placeables=placeables,
+            waypoints=waypoints,
             metadata={
                 "source": "map_studio:kmap_authored_module",
                 "player_start_is_module_entry": True,
+                "include_test_placeable": bool(include_test_placeable),
+                "include_start_waypoint": bool(include_start_waypoint),
+                "include_doorway_marker": bool(include_doorway_marker),
+                "placeable_count": len(placeables),
+                "waypoint_count": len(waypoints),
             },
         ),
         notes=(
             "T2601 from-scratch smoke module.",
-            "Editable KMAP-authored primitive room with player start and test placeable.",
+            "Editable KMAP-authored primitive room with player start and optional diagnostic placed content.",
         ),
         metadata={
             "task": "T2601",
             "source": "map_studio:kmap_authored_module",
             "room_geometry_mode": "rectangular_composition",
+            "include_doorway_marker": bool(include_doorway_marker),
         },
     )
     return authored_project_to_kmap_payload(project)

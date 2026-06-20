@@ -11,6 +11,144 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Clarifies Level Editor Edit Modes
+
+Owner: LordVaderCW
+Task: T2600 / T2605 / T2908
+Subsystem: Map Studio / Level Editor UX / mode clarity
+Intersects: Map Studio Level Editor, GUI Boundary Panels, ModuleMeshes mirror package.
+
+- Replaced the Level Editor toolbar's generic Room/Module/Blueprint selection choices with explicit Map Studio edit modes: Object, Vertex, Edge, Face, Walkmesh, Placement, Terrain, and Export.
+- Added stable toolbar combo object names and per-mode tooltips so the Map Studio UI can be tested and themed while modders can see which kind of editing context they are entering.
+- Wired toolbar edit-mode changes into the existing workflow/readiness context label and status bar, keeping the reusable modeling/export policy in core systems instead of the toolbar widget.
+- Mirrored the toolbar change into the ModuleMeshes workflow package and refreshed native Python payload hashes for GUI Boundary Panels, ModuleMeshes, and the Level Editor window.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q --basetemp .pytest_tmp_map_studio_mode_clarity`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_toolbar.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_toolbar.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py`.
+
+### [2026-06-20] Knowledgebase Adds Book-Derived Working Skill Notes
+
+Owner: LordVaderCW
+Task: Knowledgebase / Map Studio and Character Builder support
+Subsystem: Documentation / development knowledgebase
+Intersects: `knowledge_base/books`, Map Studio modeling workflow, Character Builder rigging workflow.
+
+- Inspected the local book inventory in `knowledge_base/books`, prior derived notes in `knowledge_base/book_notes`, and targeted PDF outlines/keyword anchors for mesh processing, geometry, Qt UI architecture, rigging/skinning, graphics math, and performance.
+- Added `docs/knowledgebase/skills.md` as the general skill index and source guide for future GhostRigger development decisions.
+- Added focused working-skill notes for mesh topology/export boundaries, vertex/component editing, extrusion/bridge/boolean modeling, terrain sculpting, rigging/skinning, Qt UI architecture, graphics math, and interaction performance.
+- Kept the new notes as GhostRigger-specific summaries and rules rather than copied book text.
+- Verification: local PDF inventory/outline/keyword pass with `pypdf`; `git diff --check`.
+
+### [2026-06-20] Map Studio Adds Low-Latency Terrain Sculpt Brush Set
+
+Owner: LordVaderCW
+Task: T2908 / T2907
+Subsystem: Map Studio / terrain sculpting / Level Editor tool belt
+Intersects: Map Studio Level Editor, ModuleMeshes mirror package, terrain heightfield and WOK-preview workflow.
+
+- Added executable Plateau, Ramp, Pinch, and Erode terrain brush operations to the authored terrain heightfield layer, keeping changes dirty-region scoped and deferring full MDL/WOK rebuilds until stroke commit/export.
+- Expanded the Map Studio terrain brush and customizable belt policy so Raise, Lower, Smooth, Flatten, Plateau, Ramp, Terrace, Pinch, Erode, and Noise are visible as sculpting tools instead of hidden backend-only operations.
+- Tightened the live terrain brush performance policy to an 8.33 ms frame target and 4.0 ms brush budget, with explicit stale-frame dropping, input coalescing, dirty-region updates, and no whole-module rebuilds during pointer movement.
+- Updated the Builder terrain workflow text and Level Editor belt action mapping to expose the new brushes and pass the stricter live-brush budget through viewport-driven sculpt frames.
+- Mirrored the terrain/core and Builder panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes tests/test_authored_room_operations.py::test_t2603_controller_applies_terrace_and_noise_terrain_brushes tests/test_authored_room_operations.py::test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without_full_rebuild -q --basetemp .pytest_tmp_map_studio_sculpt_brushes`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_builder_exposes_script_hook_controls -q --basetemp .pytest_tmp_map_studio_sculpt_ui`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py`.
+
+### [2026-06-20] Map Studio Readiness Shows Generated PTH Pathing
+
+Owner: LordVaderCW
+Task: T2600 / T2608
+Subsystem: Map Studio / readiness / KOTOR module pathing
+Intersects: Map Studio Level Editor readiness panel, authored module export pathing, ModuleMeshes mirror package.
+
+- Added a headless `AuthoredModulePathingReadiness` summary that reports the generated `.pth` resource name, PTH point count, connection count, and gameplay anchor labels from the same WOK/walkability/PTH compiler path used during authored module export.
+- Added an explicit Pathing line to the Map Studio readiness panel so modders can see whether pathing is ready, blocked, or still missing before exporting and warp-testing a module.
+- Mirrored the readiness logic into the ModuleMeshes workflow package and refreshed native Python payload hashes for the Domain Core Modules, ModuleMeshes workflow, and GUI Boundary Panels payloads.
+- Verification: `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_readiness_reports_generated_pth_pathing tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_pathing_readiness`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py`.
+
+### [2026-06-20] Map Studio Goal Adds Component Modeling Scope
+
+Owner: LordVaderCW
+Task: T2904 / T2907 / T2908
+Subsystem: Map Studio roadmap / Level Editor product scope
+Intersects: Map Studio Level Editor, authored-room geometry, terrain builder, WOK/LYT/VIS export workflow.
+
+- Updated the Map Studio goal statement to make it a KOTOR-aware component modeling workspace, not only a room layout/package helper.
+- Added explicit Object, Vertex, Edge, Face, and Walkmesh editing expectations, including snap, weld/merge, bridge, cut/split, extrude, bevel, inset, flatten, cleanup, pivot, freeze-transform, material/UV, terrain, and validation requirements.
+- Clarified that Maya-style modeling vocabulary is a UX language while KOTOR resource outputs, WOK intent, LYT/VIS membership, staged `.mod` packaging, and game-proof states remain the real acceptance gates.
+- Expanded M29 roadmap tasks for command-stack editing, viewport gestures, KMAP persistence, KOTOR modeling validation, material/UV/lightmap basics, and a first modeling golden module.
+- Verification: documentation-only update cross-checked against the current roadmap, README scope notes, Holocron Toolset/KotorBlender/PyKotor/KOTOR module packaging references, and Autodesk Maya modeling tool documentation.
+
+### [2026-06-20] Map Studio Adds Edge Bridge/Extrude, Vertex Cleanup Tools, and Customizable Tool Belt
+
+Owner: LordVaderCW
+Task: T2908 / T2910
+Subsystem: Map Studio / Level Editor modeling workflow
+Intersects: Map Studio Level Editor, authored-room geometry, ModuleMeshes mirror package.
+
+- Added controller-backed floor-plan edge extrusion plus vertex snap, weld, and flatten operations for KOTOR-safe room footprint cleanup.
+- Added controller-backed floor-plan footprint cleanup that removes duplicate, closing, and collinear points before MDL/WOK generation, preventing sliver walls and fragile walkmesh triangles from simple blockout mistakes.
+- Added controller-backed floor-plan edge bridging that creates a separate connector room between compatible room edges, preserving exportable MDL/WOK room boundaries instead of raw mesh stitching.
+- Exposed floor-plan edge bridging, edge extrusion, cleanup, and vertex tools in the Builder tab so modders can extend room footprints, connect rooms/corridors, and align or clean doorway/wall seams without hidden backend calls.
+- Added a headless Map Studio tool-belt contract with blockout, component modeling, terrain, gameplay layout, export proof, and session-custom presets.
+- Added a visible Level Editor tool belt with preset switching and a session customization dialog that routes actions to the existing Builder, Terrain, Walkmesh, Placement, Lighting, Script, and Validation workspaces.
+- Added KMAP-persisted Map Studio tool-belt preferences so preset/custom belt choices survive save/reopen through the `map_studio_tool_belt` extra section instead of living only in window state.
+- Added the new belt preference module and Level Editor payload hash updates to the native embedded Python manifests so packaged builds load the same Map Studio belt behavior as source runs.
+- Marked Bridge, Extrude, and Cut as usable Map Studio tools in the modeling palette and belt, constrained to compatible connector rooms, convex floor-plan edge pulls, and rectangular room splits so generated MDL/WOK output stays deterministic in this first pass.
+- Promoted the existing rectangular cut workflow into the customizable tool belt so modders can keep Cut beside Room, Primitive, Extrude, Bridge, Weld, Cleanup, terrain, and validation tools instead of hunting for it inside a combo box.
+- Added a KOTOR-safe Mirror Footprint operation for authored floor-plan rooms, backed by a reusable component-mesh mirror helper and exposed in the Builder vertex tools plus the customizable tool belt.
+- Promoted the existing floor primitive into a first-class placed Plane primitive for Map Studio composition rooms, including KMAP load/save, width/depth edits, WOK surface assignment, exportable generated WOK faces, and a direct customizable Plane belt action.
+- Expanded the customizable Map Studio shelf with direct Plane, Wall, Cube, Cylinder, Ramp, Stairs, and Door Frame buttons that add primitives through the authored-room controller instead of only focusing the generic primitive chooser.
+- Added a Door Frame shelf alias that maps to the existing deterministic arch primitive, preserving KMAP/export compatibility while using clearer KOTOR modder-facing wording.
+- Added direct Corridor and Terrain Patch belt actions that call the existing authored wide-hall and terrain-heightfield preset builders, making common room-connection and outdoor blockout starters accessible from the Maya-style customizable shelf.
+- Added headless component-editing helpers for Fill Face and Cleanup Normals, then exposed Fill, Triangulate, and Normals actions in the Map Studio modeling palette and customizable belt so modders can close face loops, deterministic-triangulate faces, and repair face winding before KOTOR validation/export.
+- Added direct Placeable, Creature, Door, Waypoint, Trigger, Encounter, Sound, Camera, and Store belt actions that focus the existing authored gameplay placement workspace, select the matching KOTOR resource kind, and leave resref/template choice plus validation in the established Builder/controller flow.
+- Added a first-class Module Entry Point control set for authored modules, routed through the domain controller into the KMAP `authored_module` payload so the IFO player start is visible, editable, and validation/export-stale rather than hidden backend metadata.
+- Added headless terrain sculpt brush policy for Raise, Lower, Smooth, and Flatten plus planned Terrace/Noise brushes, with a 60-fps interaction budget that requires input coalescing, dirty terrain/WOK updates, and deferred full MDL/WOK rebuilds during brush strokes.
+- Added a terrain brush selector and Apply Sculpt Brush control in the Builder tab, and direct Raise/Lower/Smooth/Flatten tool-belt actions that focus the existing terrain heightfield workflow instead of doing expensive work from a shelf click.
+- Added a local terrain brush-stroke operation that batches stroke sample points through the domain layer, records a dirty heightfield region, and marks full MDL/WOK rebuilds as deferred until the stroke is committed.
+- Added a computable terrain-brush performance audit on actual stroke metadata so Map Studio can enforce the live 8 ms brush budget, flag over-budget strokes for input coalescing, and keep full MDL/WOK rebuilds out of continuous sculpt interaction.
+- Added a live terrain sculpt frame/session contract that coalesces high-frequency mouse/tablet samples into bounded per-frame brush batches, applies only dirty terrain samples, and explicitly defers full MDL/WOK rebuilds until stroke commit for ZBrush-like terrain painting performance.
+- Exposed a Builder-tab live brush frame check that reports estimated sculpt frame cost, dirty affected samples, and rebuild deferral without mutating the authored module or running full readiness/export refresh.
+- Added a viewport Terrain Brush toggle that converts terrain overlay hits into heightfield samples, streams coalesced brush frames through the live sculpt API while dragging, and refreshes full Map Studio readiness/export state only once on stroke release.
+- Synced the Builder terrain room/brush selection to the viewport brush context so direct Raise/Lower/Smooth/Flatten shelf actions can enter terrain mode without bypassing KOTOR-safe sculpt validation.
+- Added a terrain brush cursor/radius overlay in the Qt viewport so live terrain sculpting shows the active brush, room, terrain sample coordinate, and brush radius before applying a stroke.
+- Updated the Viewports embedded Python payload hashes for the brush cursor overlay files so packaged native builds use the same terrain sculpt preview behavior as source runs.
+- Promoted Terrace and Noise from planned terrain brush entries into executable Map Studio sculpt brushes: Terrace blends affected samples toward deterministic height bands, while Noise applies deterministic sample-space variation and records post-stroke slope/walkability facts.
+- Added direct Terrace and Noise tool-belt actions so modders can reach stepped terrain and natural variation brushes from the Maya-style shelf without hunting through the terrain combo box.
+- Fixed gameplay placement walkmesh validation on sloped/terrain WOK faces by comparing marker Z against the actual WOK triangle plane at the marker XY position instead of the average of triangle vertex heights.
+- Added explicit Combine and Separate object modeling entries to the Map Studio palette and customizable belt. Combine routes to the existing union/composition workflow; Separate remains visible but disabled until KMAP can preserve split-object, WOK, material, and export ownership safely.
+- Promoted Separate from a disabled policy marker into a controller-backed authored-primitive operation that moves a selected composition primitive into its own KMAP room/object boundary, preserves the source room position and primitive transform, generates a unique KOTOR-safe resref, and exposes the command in the Builder tab and tool belt.
+- Added a headless Map Studio export-object boundary summary plus a readiness-panel table so separated rooms/primitives can be seen as independent MDL/MDX/WOK handoff objects for external UV/texturing workflows before staged module export.
+- Mirrored core/module panel changes into the ModuleMeshes workflow package to keep native package payloads aligned.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex tests/test_authored_room_operations.py::test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable tests/test_authored_room_operations.py::test_t2908_controller_flattens_floor_plan_vertices_for_clean_wall_alignment tests/test_authored_room_operations.py::test_t2908_controller_extrudes_floor_plan_edge_and_remains_exportable -q --basetemp .pytest_tmp_map_studio_component_tool_cluster`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_bridges_floor_plan_room_edges_and_remains_exportable -q --basetemp .pytest_tmp_map_studio_bridge`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_cleans_floor_plan_vertices_and_remains_exportable -q --basetemp .pytest_tmp_map_studio_cleanup`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_persists_map_studio_tool_belt_preferences_in_kmap -q --basetemp .pytest_tmp_map_studio_belt_preferences`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_cleanup_contract`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_cut_belt_contract`; `python -m pytest tests/test_map_studio_component_editing.py::test_t2601_mirror_vertices_reflects_selected_axis_around_center -q --basetemp .pytest_tmp_map_studio_mirror_component`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_mirrors_floor_plan_footprint_and_remains_exportable -q --basetemp .pytest_tmp_map_studio_mirror_floorplan`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_mirror_ui_contract`; `python -m json.tool native/GhostRigger.Domain.Core.Geometry/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.GUI.Boundary.Panels/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_floorplan.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_tool_belt_preferences.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m py_compile native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_floorplan.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_tool_belt_preferences.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py`; `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py tests/test_map_studio_component_editing.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `git diff --check` (only LF-to-CRLF warnings).
+- Additional verification for Plane primitive: `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_adds_plane_composition_primitive_and_generates_wok -q --basetemp .pytest_tmp_map_studio_plane_primitive`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_plane_belt_contract`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_composition.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_composition.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.GUI.Boundary.Panels/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`; `git diff --check` (only LF-to-CRLF warnings).
+- Additional verification for shelf primitives: `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_adds_plane_composition_primitive_and_generates_wok tests/test_authored_room_operations.py::test_t2908_controller_adds_door_frame_shelf_alias_as_arch_primitive -q --basetemp .pytest_tmp_map_studio_shelf_primitives`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_shelf_belt_contract`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`; `git diff --check` (only LF-to-CRLF warnings).
+- Additional verification for Corridor/Terrain Patch shelf actions: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_corridor_terrain_belt`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for Fill/Triangulate/Normals tools: `python -m pytest tests/test_map_studio_component_editing.py::test_t2601_fill_face_then_triangulate_for_room_patch tests/test_map_studio_component_editing.py::test_t2601_cleanup_face_normals_flips_faces_to_reference_axis -q --basetemp .pytest_tmp_map_studio_fill_normals_core`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_fill_normals_belt`; `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_component_editing.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Geometry/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for KOTOR placement belt actions: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_placement_belt`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for Entry Point and Terrain Sculpt/Combine/Separate belt policy: `python -m pytest tests/test_authored_room_operations.py::test_t2604_controller_updates_module_entry_point_for_ifo_export tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_sculpt_entry`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_placements.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_placements.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.GUI.Boundary.Panels/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for terrain brush stroke and sloped-WOK placement validation: `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_edits_terrain_heightfield_and_remains_exportable tests/test_authored_room_operations.py::test_t2908_controller_smooths_and_flattens_terrain_heightfield tests/test_authored_room_operations.py::test_t2603_controller_applies_local_terrain_brush_stroke_with_dirty_region tests/test_authored_room_operations.py::test_t2907_controller_applies_terrain_shape_preset_and_repairs_ground_markers tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_terrain_brush_smoke`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_objects.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_objects.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.GUI.Boundary.Panels/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for Separate authored primitive objects: `python -m pytest tests/test_authored_room_operations.py::test_t2601_controller_separates_composition_primitive_into_exportable_room tests/test_authored_room_operations.py::test_t2603_controller_applies_local_terrain_brush_stroke_with_dirty_region tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_separate_smoke`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.GUI.Boundary.Panels/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for export object boundaries and DCC/UV handoff readiness: `python -m pytest tests/test_authored_room_operations.py::test_t2601_controller_separates_composition_primitive_into_exportable_room tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_export_objects`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_export_objects.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_export_objects.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.GUI.Boundary.Panels/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Windows.Editor.Level/GhostRiggerPythonPayload.json`.
+- Additional verification for terrain sculpt interaction budget metadata: `python -m pytest tests/test_authored_room_operations.py::test_t2603_controller_applies_local_terrain_brush_stroke_with_dirty_region tests/test_authored_room_operations.py::test_t2603_terrain_brush_audit_flags_over_budget_strokes_for_coalescing -q --basetemp .pytest_tmp_map_studio_terrain_budget`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_terrain_budget_ui`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py tests/test_authored_room_operations.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`.
+- Additional verification for live terrain sculpt frame coalescing: `python -m pytest tests/test_authored_room_operations.py::test_t2603_controller_applies_local_terrain_brush_stroke_with_dirty_region tests/test_authored_room_operations.py::test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without_full_rebuild tests/test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q --basetemp .pytest_tmp_map_studio_live_sculpt`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_terrain_sculpt_session.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_terrain_sculpt_session.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m json.tool native/GhostRigger.Domain.Core.Modules/GhostRiggerPythonPayload.json`; `python -m json.tool native/GhostRigger.Tools.Workflow.ModuleMeshes/GhostRiggerPythonPayload.json`; mirror equality check for terrain sculpt session, controller, and Builder tab; `git diff --check` (only LF-to-CRLF warnings).
+- Additional verification for viewport terrain brush streaming: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract tests/test_authored_room_operations.py::test_t2603_controller_applies_local_terrain_brush_stroke_with_dirty_region tests/test_authored_room_operations.py::test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without_full_rebuild -q --basetemp .pytest_tmp_map_studio_viewport_sculpt`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; mirror equality check for viewport panel and Builder tab.
+- Additional verification for terrain brush cursor/radius overlay: `python -m pytest tests/test_authored_terrain_walkability_overlay.py::test_t2907_map_studio_viewport_draws_terrain_walkability_overlay tests/test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract tests/test_authored_room_operations.py::test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without_full_rebuild -q --basetemp .pytest_tmp_map_studio_brush_cursor`; `python -m py_compile native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_terrain_walkability_overlay.py tests/test_map_studio_workflow_panel.py`; payload JSON parse for `native/GhostRigger.GUI.Boundary.Viewports/GhostRiggerPythonPayload.json`; mirror equality check for viewport panel and Builder tab.
+- Additional verification for Terrace/Noise terrain sculpt brushes: `python -m pytest tests/test_authored_room_operations.py::test_t2603_controller_applies_terrace_and_noise_terrain_brushes tests/test_authored_room_operations.py::test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without_full_rebuild -q --basetemp .pytest_tmp_map_studio_terrain_terrace_noise`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_terrace_noise_ui`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; payload JSON parse for Domain Modules, ModuleMeshes, GUI Panels, and Level Editor manifests; mirror equality check for terrain builder, modeling tools, and Builder tab.
+
+### [2026-06-20] Map Studio Adds Modeling Mode and Snap Palette
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / Level Editor Builder UI / KOTOR-aware modeling tools
+Intersects: Map Studio Level Editor Builder panel, Module domain controller, and ModuleMeshes mirror package.
+
+- Added a headless Map Studio modeling tool palette for component modes, modeling tools, snap modes, and KOTOR-specific guardrails so the GUI does not own reusable workflow policy.
+- Added a headless component-editing kernel in the Geometry domain for vertex-to-vertex snapping, grid snapping, vertex welding with degenerate-face cleanup, flattening, triangulation, and degenerate-face cleanup.
+- Added the new Geometry component-editing module to the embedded native Python payload manifest/resources so DLL-backed builds can load it.
+- Exposed Object, Vertex, Edge, Face, and Walkmesh editing modes in the Builder tab, alongside visible tool intent for primitives, extrusion, bevel/inset, bridge, weld vertices, cut/split, boolean, terrain sculpting, and WOK surface painting.
+- Added snap-mode controls including visible vertex snapping guidance (`Hold V`) and routed active modeling context into the workflow panel status text.
+- Mirrored the core and Builder panel changes into the ModuleMeshes workflow package to keep native package contracts aligned.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_modeling_palette`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_workflow_panel_modeling`; `python -m pytest tests/test_map_studio_component_editing.py -q --basetemp .pytest_tmp_map_studio_component_editing`; `python -m pytest tests/test_map_studio_component_editing.py tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_t2601_slice`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/__init__.py tests/test_map_studio_component_editing.py`.
+
 ### [2026-06-20] Map Studio Exposes Room WOK Surface Assignment
 
 Owner: LordVaderCW
@@ -72,6 +210,7 @@ Intersects: Map Studio authored-module services and Module Editor panel payload 
 - Fixed resource-script paths to use forward slashes so `rc.exe` does not treat `\a` in authored-module filenames as an escape sequence.
 - Restored Release startup after the cleanup exposed stale payload manifests.
 - Verification: Release MSBuild `GhostRigger_Native_Core_Host`; embedded import check for `src.core.modules.authored_module_export`, `src.gui.windows.module_editor_window`, and `src.gui.qt_lib.windows.qt_main_window`; actual Release `GhostRigger.exe` startup smoke stayed alive after 8 seconds with no fatal log entry.
+
 ### [2026-06-20] Map Studio Shows Exact Warp Test Handoff
 
 Owner: LordVaderCW
@@ -82,7 +221,7 @@ Intersects: Level Editor launch/proof workflow.
 - Added an in-app launch handoff dialog that shows the exact KOTOR `warp` command, launcher script, proof manifest, proof recorder, and launch helper command before opening the game handoff.
 - Added a copy button for the warp command and made the dialog state clearly that launching KOTOR is not proof until the module is verified in-game and evidence is recorded.
 - Kept launch/proof metadata in the authored-module services; the Level Editor only displays the core-provided handoff payload.
-- Verification: `python -m pytest tests/test_map_studio_game_proof_ui.py::test_t2600_module_editor_launch_handoff_shows_exact_warp_command -q --basetemp .pytest_tmp_map_studio_launch_handoff_ui`; `python -m pytest tests/test_map_studio_game_proof_ui.py -q --basetemp .pytest_tmp_map_studio_launch_handoff_proof_ui`; `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_game_proof_ui.py`; `MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m /v:minimal`; `build\vs\x64\Release\GhostRigger.exe --native-host-debug`; `build\vs\x64\Release\GhostRigger.exe --native-embed-init-debug`.
+- Verification: `python -m pytest tests/test_map_studio_game_proof_ui.py::test_t2600_module_editor_launch_handoff_shows_exact_warp_command -q --basetemp .pytest_tmp_map_studio_launch_handoff_ui`; `python -m pytest tests/test_map_studio_game_proof_ui.py -q --basetemp .pytest_tmp_map_studio_launch_handoff_proof_ui`; `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_game_proof_ui.py`.
 
 ### [2026-06-20] Map Studio Guides First Playable Smoke Test
 
@@ -122,7 +261,6 @@ Intersects: Map Studio export panel and ModuleMeshes mirror.
 - Mirrored the export-panel update into the ModuleMeshes package and expanded source-contract coverage.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof -q --basetemp .pytest_tmp_map_studio_export_action_guide_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_export_action_guide_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py tests/test_map_studio_workflow_panel.py`.
 
-
 ### [2026-06-19] Map Studio Shows Gameplay Template Readiness Details
 
 Owner: LordVaderCW
@@ -134,7 +272,6 @@ Intersects: Map Studio readiness panel, authored gameplay placement metadata, an
 - Reused existing authored-module readiness metadata instead of moving resource dependency policy into Qt widgets.
 - Mirrored the panel update into the ModuleMeshes package and expanded source-contract coverage.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_gameplay_template_references -q --basetemp .pytest_tmp_map_studio_template_refs_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_template_refs_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_map_studio_workflow_panel.py`.
-
 
 ### [2026-06-19] Map Studio Shows Transition and Script Readiness Details
 
@@ -233,7 +370,6 @@ Intersects: KMAP outliner context actions and ModuleMeshes mirror.
 - Mirrored the outliner into the ModuleMeshes package and expanded source-contract coverage for the selection/editing workflow.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_outliner_workflow`; `python -m py_compile` on active and mirrored outliners plus focused tests; `git diff --check` on touched files.
 
-
 ### [2026-06-19] Map Studio Clarifies Validation Fix Workflow
 
 Owner: LordVaderCW
@@ -246,7 +382,6 @@ Intersects: Validation issue panel and ModuleMeshes mirror.
 - Added issue tooltips that summarize severity, message, affected item, and suggested fix without moving validation policy into the UI.
 - Mirrored the validation panel into the ModuleMeshes package and expanded source-contract coverage for actionable validation feedback.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_validation_panel`; `python -m py_compile` on active and mirrored validation panels plus focused tests; `git diff --check` on touched files.
-
 
 ### [2026-06-19] Map Studio Explains Blueprint Template Workflow
 
@@ -261,7 +396,6 @@ Intersects: Blueprints tab resource-template controls and ModuleMeshes mirror.
 - Mirrored the Blueprints tab into the ModuleMeshes package and expanded source-contract coverage for the template workflow labels and buttons.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_blueprints_workflow`; `python -m py_compile` on active and mirrored Blueprints tabs plus focused tests; `git diff --check` on touched files.
 
-
 ### [2026-06-19] Map Studio Explains Room Graph Workflow
 
 Owner: LordVaderCW
@@ -274,7 +408,6 @@ Intersects: Rooms tab LYT/VIS workflow controls and ModuleMeshes mirror.
 - Added stable object names for Rooms tab actions so workflow tests and future UI automation can target room graph controls directly.
 - Mirrored the Rooms tab into the ModuleMeshes package and expanded source-contract coverage for the room workflow labels and buttons.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_rooms_workflow`; `python -m py_compile` on active and mirrored Rooms tabs plus focused tests; `git diff --check` on touched files.
-
 
 ### [2026-06-19] Map Studio Explains Builder Room and Terrain Workflow
 
@@ -289,7 +422,6 @@ Intersects: Builder tab room/terrain authoring controls and ModuleMeshes mirror.
 - Mirrored the Builder tab into the ModuleMeshes package and expanded source-contract coverage for the Builder guidance labels.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_builder_guidance`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests; `git diff --check` on touched files.
 
-
 ### [2026-06-19] Map Studio Explains Walkmesh Authoring Workflow
 
 Owner: LordVaderCW
@@ -301,8 +433,7 @@ Intersects: Walkmesh tab and ModuleMeshes mirror.
 - Added KOTOR face-type explanations for `1 WALK`, `7 NON_WALK`, `18 DOOR`, and `23 WATER`.
 - Added validation guidance that player start, doors, triggers, waypoints, creatures, and placeables should sit on walkable faces before export/install.
 - Added stable object names for Walkmesh tab controls and mirrored the tab into the ModuleMeshes package.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_walkmesh_ui`; `python -m py_compile` on active and mirrored Walkmesh tabs plus focused tests; `git diff --check` on touched files.
-
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_walkmesh_ui`; `python -m py_compile` on active and mirrored Walkmesh tabs plus focused tests.
 
 ### [2026-06-19] Map Studio Explains Safe Export and Install Path
 
@@ -315,8 +446,7 @@ Intersects: Map Studio export panel and ModuleMeshes mirror.
 - Added safe-install language for staged output, chosen KOTOR Modules folder install, backup behavior, and live warp-test proof before calling a module game-ready.
 - Added dry-run help text so modders know when actions are preview-only versus writing staged files or installing for testing.
 - Mirrored the export panel into the ModuleMeshes package and added focused source-contract coverage for the safety labels.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_export_safety`; `python -m py_compile` on active and mirrored export panels plus focused tests; `git diff --check` on touched files.
-
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_export_safety`; `python -m py_compile` on active and mirrored export panels plus focused tests.
 
 ### [2026-06-19] Map Studio Explains Placement Resource Kinds
 
@@ -328,8 +458,7 @@ Intersects: Builder gameplay placement controls and ModuleMeshes mirror.
 - Added selected-kind guidance to the Builder gameplay placement panel so modders can see whether the current resource is a UTC creature, UTP placeable, UTD door, UTT trigger, UTE encounter, UTS sound, UTM store/merchant, waypoint, or camera marker.
 - Clarified which placement kinds create viewport markers, which support transitions, and which stores/merchants are module-level resources.
 - Mirrored the Builder tab into the ModuleMeshes package and expanded source-contract coverage for the KOTOR resource-kind help text.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_kind_guidance`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests; `git diff --check` on touched files.
-
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_kind_guidance`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests.
 
 ### [2026-06-19] Map Studio Shows Placement Resource Type Coverage
 
@@ -341,60 +470,7 @@ Intersects: Builder gameplay placement controls and ModuleMeshes mirror.
 - Added visible placement-type coverage in the Builder gameplay placement panel so modders can see supported KOTOR resource kinds before choosing a template.
 - Updated placement palette hints to name creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores/merchants while keeping placement rules in core services.
 - Mirrored the Builder tab into the ModuleMeshes package and expanded source-contract coverage for placement-kind visibility.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_types`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests; `git diff --check` on touched files.
-
-
-### [2026-06-19] Map Studio Clarifies Target Game and Test State
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / target-game and proof-state clarity
-Intersects: Level Editor workflow panel and ModuleMeshes mirror.
-
-- Added explicit Target game and Test state rows to the Map Studio workflow spine so modders can immediately see whether a KMAP targets K1/K2 and whether it is draft, previewable, export-candidate, staged, installed, or game-tested.
-- Derived the new labels from existing project/readiness metadata without moving export, proof, or game-test policy into the UI panel.
-- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for target-game and test-state visibility.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_target_game_state`; `python -m py_compile` on active and mirrored workflow panels plus focused tests; `git diff --check` on touched files.
-
-
-### [2026-06-19] Map Studio Adds Geometry Workflow Shortcut
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / room geometry authoring
-Intersects: Level Editor workflow panel, Builder geometry focus routing, and ModuleMeshes mirror.
-
-- Added an Open Geometry Tools button to the Map Studio workflow spine so modders can directly enter room/primitive geometry authoring from the Level Editor status workflow.
-- Wired the shortcut to focus the existing Builder primitive controls and label the active mode as primitive rooms, extrusion, bevel/inset, rectangular cuts, boolean union, and modular room pieces.
-- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for the geometry shortcut.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_geometry_workflow`; `python -m py_compile` on active and mirrored workflow panels, the Level Editor window, and focused tests; `git diff --check` on touched files.
-
-
-### [2026-06-19] Map Studio Surfaces Selected-Object Actions
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / selected resource editing
-Intersects: Level Editor workflow panel, selection routing, and ModuleMeshes mirror.
-
-- Added a selected-object status line to the Map Studio workflow spine so modders can see what object, room, module, placement, or room light is currently active.
-- Added visible Rename/Duplicate/Delete/Focus Selected workflow buttons and wired them to the existing Level Editor selection methods instead of moving edit policy into the panel.
-- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for selection actions and selection-context refresh.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_selection_workflow`; `python -m py_compile` on active and mirrored workflow panels, the Level Editor window, and focused tests; `git diff --check` on touched files.
-
-
-### [2026-06-19] Map Studio Adds KMAP Workflow Project Controls
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / KMAP project lifecycle
-Intersects: Level Editor workflow panel, KMAP project actions, and ModuleMeshes mirror.
-
-- Added New/Open/Save KMAP buttons to the Map Studio workflow spine so project lifecycle is visible inside the Level Editor workflow, not only in menus or toolbar actions.
-- Wired the buttons to the existing Level Editor project methods without moving KMAP file open/save logic into the workflow panel.
-- Mirrored the workflow panel into the ModuleMeshes package and expanded source-contract coverage for the new project controls.
-- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_project_lifecycle`; `python -m py_compile` on active and mirrored workflow panels, the Level Editor window, and focused tests; `git diff --check` on touched files.
-
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_types`; `python -m py_compile` on active and mirrored Builder tabs plus focused tests.
 
 ### [2026-06-19] Map Studio Shows Active Authoring Context
 
@@ -444,85 +520,6 @@ Intersects: authored module readiness, Module Editor controller, Level Editor va
 - Refreshed the Level Editor validation panel during normal Map Studio state updates so modders can see actionable fixes without hunting across separate status labels.
 - Verification: `python -m pytest tests/test_map_studio_workflow_panel.py tests/test_authored_module_validation_projection.py -q --basetemp .pytest_tmp_map_studio_readiness_validation_ui`; `python -m py_compile` on active and mirrored projection/controller modules, the Level Editor window, and focused tests.
 
-
-### [2026-06-19] Map Studio Manages Module-Level Stores
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / authored store and merchant resources
-Intersects: authored gameplay placement rows, preview markers, Builder tab placement UX, properties panel, viewport panel, and ModuleMeshes payload mirror.
-
-- Promoted authored stores/merchants into selectable non-spatial Map Studio rows so modders can rename, duplicate, delete, and inspect store resources after adding them.
-- Marked store rows as module-level resources and kept them out of viewport markers and marker geometry instead of drawing fake floor placements.
-- Updated the Builder tab to disable X/Y/Z/Bearing controls for store/merchant resources and explain that they export to the GIT StoreList without viewport markers.
-- Updated the properties panel to label non-spatial authored resources clearly and disable transform fields for them.
-- Mirrored the row, preview, Builder tab, properties, and viewport updates into the ModuleMeshes payload copy.
-- Verification: `python -m pytest tests/test_authored_gameplay_placement_selection.py::test_t2655_authored_placement_rows_have_stable_virtual_ids tests/test_authored_gameplay_placement_selection.py::test_t2600_non_spatial_store_can_be_renamed_duplicated_and_removed tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces tests/test_authored_gameplay_placements.py::test_t2653_builder_tab_exposes_gameplay_placement_controls tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_builder_exposes_script_hook_controls tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_properties_exposes_transition_controls tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_viewport_skips_non_spatial_store_rows -q --basetemp .pytest_tmp_map_studio_store_resources`; `python -m pytest tests/test_authored_gameplay_placements.py tests/test_authored_gameplay_placement_selection.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_store_resources_full`; `python -m py_compile` on active and mirrored placement/preview/Builder/properties/viewport modules plus focused tests; `git diff --check` on touched files.
-
-### [2026-06-19] Map Studio Edits Authored Transitions
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / authored transition editing
-Intersects: authored gameplay placement service, Level Editor properties panel, transition readiness metadata, and ModuleMeshes payload mirror.
-
-- Added core transition editing for authored doors, triggers, and waypoints so Map Studio can set LinkedTo, LinkedToModule, and TransitionDestin without UI-owned resource policy.
-- Projected transition fields into authored placement rows and exposed them in the Level Editor properties panel only for transition-capable placements.
-- Routed transition edits through the controller to update KMAP payloads, refresh readiness, and clear stale runtime resources/game-test proof.
-- Mirrored the placement, controller, and properties updates into the ModuleMeshes payload copy.
-- Verification: `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_authored_transition_edit_updates_rows_and_payload tests/test_authored_gameplay_placement_selection.py::test_t2600_controller_transition_edit_clears_export_and_proof_state tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_properties_exposes_transition_controls -q --basetemp .pytest_tmp_map_studio_transition_edit`; `python -m pytest tests/test_authored_gameplay_placements.py tests/test_authored_gameplay_placement_selection.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_transition_files`; `python -m py_compile` on active and mirrored placement/controller/properties modules plus the Level Editor window and focused tests; `git diff --check` on touched files.
-
-### [2026-06-19] Map Studio Edits Authored Script Hooks
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / authored ARE-IFO script hooks
-Intersects: authored module metadata compiler, Level Editor Builder tab, authored module readiness, and ModuleMeshes payload mirror.
-
-- Added a core authored script-hook editing service for validated ARE and IFO hook assignments in KMAP metadata.
-- Routed Map Studio Builder tab script-hook controls through controller methods that clear stale runtime resources and game-test proof when script metadata changes.
-- Added visible Builder tab controls for script hook scope, field, script resref, assign, and clear actions, populated from the core KOTOR field policy.
-- Mirrored the script service, controller, and Builder tab updates into the ModuleMeshes payload copy.
-- Verification: `python -m pytest tests/test_authored_module_metadata.py tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_script_hooks_full`; `python -m py_compile` on active and mirrored script/controller/Builder tab modules plus the Level Editor window and focused tests; `git diff --check` on touched files.
-### [2026-06-19] Map Studio Edits Authored Room Lights
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / authored room light editing
-Intersects: authored room lighting services, authored module readiness, Level Editor selection actions, and ModuleMeshes payload mirror.
-
-- Added core authored room light rename, duplicate, and remove operations so Map Studio can edit room lighting intent outside the UI layer.
-- Routed the existing Level Editor delete, duplicate, rename, and properties-name workflows through the authored light service for selected room lights.
-- Kept authored light edits export-safe by clearing stale runtime resources and game-test proof when the KMAP light payload changes.
-- Updated authored light readiness so the Map Studio toolchain reports the actual authored light count instead of a generic planned state.
-- Mirrored the lighting service, controller, readiness, and properties updates into the ModuleMeshes payload copy.
-- Verification: `python -m pytest tests/test_authored_module_lighting.py tests/test_authored_gameplay_placement_selection.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_light_edit_full`; `python -m py_compile` on active and mirrored lighting/readiness/controller/properties modules plus the Level Editor window and focused test; `git diff --check` on touched files.
-### [2026-06-19] Map Studio Edits Authored Resource Placements
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / authored resource placement editing
-Intersects: authored gameplay placement services, Level Editor selection actions, and ModuleMeshes payload mirror.
-
-- Added core authored gameplay placement rename, duplicate, and remove operations so Map Studio can edit KOTOR resource placements outside the UI layer.
-- Routed the existing Level Editor delete, duplicate, rename, and properties-name workflows through the authored placement service for selected gameplay resources.
-- Kept authored placement edits export-safe by clearing stale runtime resources and game-test proof when the KMAP placement payload changes.
-- Mirrored the placement service/controller/properties updates into the ModuleMeshes payload copy.
-- Verification: `python -m pytest tests/test_authored_gameplay_placement_selection.py::test_t2600_authored_placement_rename_duplicate_and_remove_update_project tests/test_authored_gameplay_placement_selection.py::test_t2600_controller_placement_edit_actions_clear_export_and_proof_state tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces -q --basetemp .pytest_tmp_map_studio_placement_edit`; `python -m pytest tests/test_authored_gameplay_placement_selection.py tests/test_authored_gameplay_placements.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_edit_full`; `python -m py_compile` on active and mirrored placement/controller/properties modules plus the Level Editor window and focused test.
-
-### [2026-06-19] Map Studio Surfaces Resource Placement Readiness
-
-Owner: LordVaderCW
-Task: T2600
-Subsystem: Map Studio / Level Editor workflow UX / KOTOR resource placement readiness
-Intersects: authored module readiness toolchain and Map Studio workflow panel.
-
-- Added core readiness metadata for the Map Studio resource placement palette: creatures, placeables, doors, triggers, encounters, cameras, sounds, merchants/stores, and waypoints.
-- Added a dedicated `Resource placement` toolchain status so authored modules distinguish optional/no-placement drafts from planned KOTOR resource layout.
-- Added a dedicated `mapStudioWorkflowPlacementLabel` to the existing Level Editor workflow panel and mirrored it into the ModuleMeshes payload copy.
-- Added focused regression coverage for placement palette metadata, placement counts, and the active/mirrored workflow panel source contract.
-- Verification: `python -m pytest tests/test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope tests/test_authored_module_readiness.py::test_t2600_readiness_reports_resource_placement_palette_and_counts tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_resource_placement`; `python -m pytest tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_resource_placement_full`; `python -m py_compile` on active and mirrored readiness/workflow panel modules plus focused tests.
-
 ### [2026-06-19] Map Studio Surfaces Lighting and Lightmap Readiness
 
 Owner: LordVaderCW
@@ -534,8 +531,7 @@ Intersects: authored module readiness toolchain and Map Studio workflow panel.
 - Updated the `Lighting` toolchain status to distinguish optional/no-light drafts from planned room lighting without making lighting a hard export blocker.
 - Added a dedicated `mapStudioWorkflowLightingLabel` to the existing Level Editor workflow panel and mirrored it into the ModuleMeshes payload copy.
 - Added focused regression coverage for authored light readiness metadata and the workflow panel source contract.
-- Verification: `python -m pytest tests/test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope tests/test_authored_module_readiness.py::test_t2600_readiness_reports_authored_room_light_coverage tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_lighting_readiness`; `python -m pytest tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_lighting_full`; `python -m py_compile` on active and mirrored readiness/workflow panel modules plus focused tests.
-
+- Verification: targeted authored-readiness and Map Studio workflow panel tests plus py_compile on active and mirrored readiness/workflow panel modules.
 
 ### [2026-06-19] Map Studio Tracks Authored Script Hooks
 
@@ -574,29 +570,506 @@ Intersects: existing Level Editor launch handoff and Map Studio readiness panel.
 - Added an `Open Warp Test Handoff` action to the existing Map Studio workflow panel so the Level Editor's main workflow spine now shows stage, install, launch/warp handoff, and proof recording together.
 - Wired the new panel signal to the existing `open_map_studio_launch_handoff()` method; no launch, packaging, proof, or module-policy logic moved into the UI.
 - Mirrored the workflow action in the ModuleMeshes payload copy and updated source-contract coverage for the panel, Level Editor wiring, and mirrored package.
+- Verification: `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_launch_handoff`; `python -m py_compile` on the Map Studio Level Editor window, workflow panels, package `__init__` files, and focused tests.
 
-Verification:
-- `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_launch_handoff`
-- `python -m py_compile native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\__init__.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py`
-### [2026-06-19] Map Studio Level Editor Workflow Spine
+### [2026-06-19] Map Studio Adds In-Editor Workflow Spine
 
 Owner: LordVaderCW
 Task: T2600
 Subsystem: Map Studio / Level Editor workflow UX / readiness display
-Intersects: existing Module Editor icon and Level Editor window.
+Intersects: existing Module Editor Level Editor window and Map Studio readiness panel.
 
-- Reframed the existing Module Editor action as the Map Studio Level Editor entry point from the main shell without creating a separate Map Studio window.
-- Rebranded the existing Level Editor window and help text around KMAP terrain, rooms, walkmesh, placements, validation, staged export, install handoff, and game proof.
-- Added a presentation-only `MapStudioWorkflowPanel` to the existing Level Editor Export page so modders can see project state, authoring state, validation stage, export/install state, game-proof state, capability honesty, missing runtime resources, and next action in one place.
-- Added workflow actions for Builder focus, starter room, doorway blockout, corridor, terrain patch, placement tools, test placeable, walkmesh tools, validation, staging, install, and proof recording; the panel emits signals and the existing Level Editor routes them to existing methods.
+- Added a presentation-only `MapStudioWorkflowPanel` to the existing Level Editor Export page so modders can see the KMAP project, authoring state, validation stage, export/install state, game-proof state, and next action in one place.
+- Surfaced the runtime resource responsibility directly in the workflow panel: `ARE/GIT/IFO/LYT/VIS/PTH` plus room `WOK/MDL/MDX`.
+- Added workflow action buttons for opening Builder, validating, staging for game test, installing for game test, and recording proof. The buttons emit panel signals and the existing Level Editor window routes them to existing methods.
+- Added starter actions for creating a rectangular authored room and a terrain heightfield from the existing Level Editor workflow panel; both route through the Builder preset/controller path instead of adding a separate Map Studio window or duplicating module logic in UI code.
+- Added quick-start actions for doorway blockouts and corridor/hall rooms using the existing authored room presets, bringing the Level Editor workflow closer to room, doorway, and corridor authoring without leaving Map Studio.
+- Added workflow actions for opening the Builder gameplay placement tools and adding a known-safe `plc_bench` test placeable through the existing authored gameplay placement service; the shortcut is enabled only after authored module content exists.
+- Added a dedicated spawn/layout readiness line to the workflow panel that reads the existing `Gameplay layout` toolchain status, showing player-start and placement readiness before staging or install.
+- Added dedicated geometry and walkmesh readiness lines that read the existing `Geometry authoring` and `Walkmesh` toolchain statuses, plus an action that focuses the existing Walkmesh tab from the Map Studio workflow panel.
+- Added explicit capability honesty and missing-resource labels to the workflow panel so modders can distinguish draft, previewable, export-candidate, staged, installed, and game-tested states before calling a module game-ready.
 - Wired the panel to the existing `ModuleEditorController.authored_module_readiness()` contract; no module packaging, validation, terrain, WOK, MDL/MDX, or resource rules were moved into the UI.
-- Mirrored the panel and shell help wording into native workflow package copies so packaged payloads keep the same Map Studio workflow surface.
-- Added focused source-contract tests for the Module Editor icon/Level Editor identity and workflow panel readiness labels, game-proof honesty text, wiring, and mirrored package copy.
+- Mirrored the panel in the ModuleMeshes workflow package so native payload copies keep the same Map Studio workflow surface.
+- Added `tests\test_map_studio_workflow_panel.py` to guard the panel labels, game-proof honesty text, existing Level Editor wiring, and mirrored package copy.
+- Added `.gitignore` exceptions for the focused Map Studio Level Editor source-contract tests so they are tracked despite the repo's default `/tests/*` ignore rule.
+- Verification: `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_workflow_panel`; `python -m py_compile` on the Map Studio Level Editor window, workflow panels, package `__init__` files, and focused tests; `git diff --check`.
+
+## 2026-06-18
+
+### [2026-06-18] Map Studio Reframes Existing Level Editor Entry Point
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor product alignment / main-shell entry point
+Intersects: existing Module Editor icon and KMAP Level Editor window branding.
+
+- Reframed the existing `ModuleEditorWindow` as `GhostRigger Map Studio - Level Editor` while preserving the same main-screen Module Editor icon/action path.
+- Updated main-shell action/help text so the Module Editor icon explicitly opens the unified Map Studio Level Editor rather than implying a separate standalone tool.
+- Added a visible `mapStudioLevelEditorScopeLabel` under the existing Level Editor toolbar so modders can see that Map Studio covers KMAP terrain, rooms, walkmesh, placements, validation, staged export, install handoff, and game proof.
+- Removed stale `standalone Module Editor` wording from active and mirrored native package files so future build payloads stay aligned with the Level Editor/Map Studio boundary.
+- Added `tests\test_map_studio_level_editor_identity.py` to guard that the existing Module Editor icon opens the existing Level Editor as Map Studio and that KMAP/UI orchestration remains in the Level Editor window.
+- Verification: `python -m pytest tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_level_editor_identity`; `python -m py_compile` on the Map Studio Level Editor window, main-shell entry/help text, integration registry, active module-editor panel/model files, mirrored workflow package copies, and `tests\test_map_studio_level_editor_identity.py`; `rg -n "standalone Module Editor|GhostRigger Module Editor|Open Module Editor|About Module Editor|Module Editor ready|Module Editor Help|The Module Editor works" native -g "*.py"` returned no matches; `git diff --check`.
+
+### [2026-06-18] Restored grdev01 to Known-Loaded Stock-Room Diagnostic
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / grdev01 runtime diagnostics
+Intersects: authored generated-room smoke package and runtime diagnostic installer.
+
+- Recorded the user-reported live crash for the generated authored-room `grdev01` package as `authored_no_marker_candidate` diagnostic evidence.
+- Restored active `grdev01.mod` to the previously proven `renamed_root_scriptless_minimal_git` stock-room bridge package, instead of leaving the crashing generated room installed.
+- Refreshed `currentgame\grdev01.mod` to the same known-loaded package after discovering it still contained the 9 KB crashing authored-room package even after `Modules\grdev01.mod` had been replaced.
+- Updated `scripts\install_grdev01_runtime_variant.py` so future diagnostic installs back up and refresh an existing stale `currentgame` cache copy, matching the authored installer behavior.
+- Updated stale-cache regression coverage in `tests\test_authored_module_export.py`, `tests\test_install_grdev01_runtime_variant_script.py`, and `tests\test_prepare_grdev01_authored_smoke_script.py`.
+- Verification: installed `renamed-root-scriptless-minimal` via `scripts\install_grdev01_runtime_variant.py`; confirmed both `Modules\grdev01.mod` and `currentgame\grdev01.mod` are 8,316,308 bytes with SHA256 `ab95e1bcf045c92cdf2170cc414821a01259bdc9619d9fa579e1a775d06c1410`; ran `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_refreshes_stale_currentgame_cache tests\test_install_grdev01_runtime_variant_script.py::test_t2601_runtime_variant_installer_refreshes_stale_currentgame_cache tests\test_prepare_grdev01_authored_smoke_script.py::test_t2601_authored_install_refreshes_stale_currentgame_cache -q --basetemp .pytest_tmp_grdev01_cache_refresh_all`; ran `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py scripts\install_grdev01_runtime_variant.py scripts\strip_plcaa_to_static_lab.py tests\test_authored_module_export.py tests\test_install_grdev01_runtime_variant_script.py tests\test_prepare_grdev01_authored_smoke_script.py tests\test_strip_plcaa_to_static_lab_script.py`.
+
+### [2026-06-18] Replaced Crashing ShaolinTestsMap PLCaa Patch with Authored Static Lab
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / ShaolinTestsMap
+Intersects: ShaolinTestsMap PLCaa static lab setup and authored Map Studio module installer.
+
+- Replaced the installed `ShaolinTestsMap.mod` that embedded a binary-patched `plcaa.mdl/mdx` with a generated authored static-lab module under the same warp command.
+- Installed `shaolintestsmap.mod` to the KOTOR `Modules` folder and refreshed the stale `currentgame\shaolintestsmap.mod` copy so the game no longer launches the crashing PLCaa-room edit.
+- Added authored-module install behavior that refreshes an existing stale `currentgame\<module>.mod` cache after a successful install, backing up the old cache first.
+- Disabled the PLCaa room-model pruning path in `scripts\strip_plcaa_to_static_lab.py` by default; the prior binary child-filter patch passed PyKotor/GhostRigger readback but crashed KOTOR in live testing.
+- Verification: generated and installed `artifacts\map_studio\shaolintestsmap_authored_static_lab\install\Modules\shaolintestsmap.mod`; confirmed installed, currentgame, and staged hashes match; read back the installed capsule and confirmed it contains authored resources `module.ifo`, `shaolintestsmap.are/git/lyt/pth/vis`, and `shaolintestsmap_.mdl/mdx/wok`; ran `python -m pytest tests\test_prepare_grdev01_authored_smoke_script.py::test_t2601_authored_install_refreshes_stale_currentgame_cache tests\test_strip_plcaa_to_static_lab_script.py -q --basetemp .pytest_tmp_shaolin_crash_fix`; ran `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py scripts\strip_plcaa_to_static_lab.py tests\test_prepare_grdev01_authored_smoke_script.py tests\test_strip_plcaa_to_static_lab_script.py`.
+
+### [2026-06-18] Removed Baked PLCaa Demo Geometry from ShaolinTestsMap
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / PLCaa static lab
+Intersects: ShaolinTestsMap PLCaa static lab setup and PyKotor/GhostRigger MDL readback.
+
+- Updated `scripts\strip_plcaa_to_static_lab.py` so `ShaolinTestsMap.mod` now overlays a binary-patched `plcaa.mdl` and original-size `plcaa.mdx`, instead of relying on the stock PLCaa room model from `models.bif`.
+- Removed the baked PLCaa demo visual nodes that still appeared in-game after the GIT/script strip: `BoxSpin*`, `Box*`, `GeoSphere*`, `ScriptLoop*`, and `ConeRef*`.
+- Replaced the first full-rewrite/pruned-room-model attempt after it crashed in-game; the new approach preserves BioWare's stock binary layout and only patches the root child count to expose the static room prefix while zeroing the local room animation count.
+- Made the helper resolve the source room model from `SearchLocation.CHITIN` so repeated rebuilds use the stock `models.bif` source rather than the previously installed `ShaolinTestsMap.mod` overlay.
+- Made installs refresh a stale `currentgame\ShaolinTestsMap.mod` cache copy when present; this was why KOTOR could keep loading the older 5 KB package after `Modules\ShaolinTestsMap.mod` had been replaced.
+- Added `tests\test_strip_plcaa_to_static_lab_script.py` to lock in baked-demo-node pruning and stale `currentgame` cache refresh behavior.
+- Verification: restored the crashing full-rewrite package to a safe backup, rebuilt and installed the binary-patched `ShaolinTestsMap.mod`; read back both `Modules\ShaolinTestsMap.mod` and `currentgame\ShaolinTestsMap.mod` with PyKotor/GhostRigger MDL reader and confirmed the capsule includes stock-size `plcaa.mdl`/`plcaa.mdx`, retained nodes are `PLCaa`, `Cylinder01`, `Plane01`, `Plane02`, `AuroraLight01`, `AuroraLight02`, `AuroraLight03`, and `aabbthang`, no local animations remain, and no removed demo-node prefixes remain; ran `python -m pytest tests\test_strip_plcaa_to_static_lab_script.py -q --basetemp .pytest_tmp_strip_plcaa_static_lab`; ran `python -m py_compile scripts\strip_plcaa_to_static_lab.py tests\test_strip_plcaa_to_static_lab_script.py`.
+
+### [2026-06-18] Surface grdev01 Gameplay Template Dependencies in Smoke Status
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / status reporting
+Intersects: grdev01 generated placeable smoke package and authored gameplay dependency checks.
+
+- Updated `scripts\check_grdev01_smoke_status.py` to read authored gameplay template dependencies from the pack manifest and include them in JSON, console, and Markdown smoke-status output.
+- Added optional dependency resolution against the selected KOTOR game root, so required external/base-game templates become visible before the live smoke test.
+- Verified the installed `grdev01` proof candidate resolves `plc_bench.utp` and `sw_startloc001.utw` from `C:\Program Files (x86)\Steam\steamapps\common\swkotor\data\templates.bif`.
+- Kept completion honest: template resolution improves pre-game confidence, but `grdev01` remains `installed_ready_for_game_test` until real in-game proof is captured.
+- Verification: `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_surfaces_authored_gameplay_template_dependencies tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_can_write_modder_readable_smoke_report tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_installed_authored_smoke_package -q --basetemp .pytest_tmp_grdev01_template_status`; `python -m py_compile scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py`; `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_generated_placeable_lab\grdev01_authored_module_game_manifest.json --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --write-report artifacts\map_studio\grdev01_generated_placeable_lab\grdev01_smoke_status_report.md --json`.
+
+### [2026-06-18] Installed grdev01 Generated Placeable Smoke Candidate
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / authored room packaging
+Intersects: grdev01 authored-room smoke package and ShaolinTestsMap PLCaa static lab setup.
+
+- Installed the full generated `grdev01` authored-room smoke candidate to `C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod`.
+- Replaced the quieter room-only `grdev01` candidate with the proof package that includes the generated room model, MDL/MDX, WOK walkmesh, ARE/GIT/IFO metadata, path graph, one start waypoint, and one visible test placeable.
+- Backed up the previous installed `grdev01.mod` as `grdev01.mod.bak47`.
+- Verified the installed MOD hash matches the staged proof package and that `currentgame\grdev01.mod` is absent, so KOTOR should load the newly installed Modules copy on the next `warp grdev01` test.
+- Status remains `installed_ready_for_game_test`; final T2601 completion still requires real in-game proof that the module loads, the player spawns on the generated floor, the placeable is visible, and walking works.
+- Verification: `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_generated_placeable_lab --overwrite-kmap --without-doorway-marker --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-module --json`; `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_generated_placeable_lab\grdev01_authored_module_game_manifest.json --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --write-report artifacts\map_studio\grdev01_generated_placeable_lab\grdev01_smoke_status_report.md --json`; `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_uses_room_only_authored_proof_checks tests\test_prepare_grdev01_authored_smoke_script.py -q --basetemp .pytest_tmp_grdev01_placeable_install`; `python -m py_compile scripts\prepare_grdev01_authored_smoke.py scripts\check_grdev01_smoke_status.py scripts\strip_plcaa_to_static_lab.py tests\test_prepare_grdev01_authored_smoke_script.py tests\test_check_grdev01_smoke_status_script.py`.
+
+### [2026-06-18] Staged ShaolinTestsMap as a Scriptless PLCaa Static Lab
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / PLCaa static lab
+Intersects: Map Studio authored-module smoke work and PLCaa module diagnostics.
+
+- Added `scripts\strip_plcaa_to_static_lab.py` to build a reusable quiet PLCaa-derived test module while preserving the original `PLCaa.mod`.
+- Staged and installed `C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\ShaolinTestsMap.mod` from the existing PLCaa room shell, keeping `plcaa` as the source area root so the base-game PLCaa floor, walls, model, layout, and walkmesh resources still resolve.
+- Removed the busy runtime content from the stripped module overlay by clearing GIT dynamic lists: cameras, creatures, doors, triggers, sounds, stores, placeables, and waypoints.
+- Cleared PLCaa module and area script hooks, including `k_pman_26a_load`, `k_pman_26a_area`, and `k_pman_26a_aread`, so `warp ShaolinTestsMap` can act as a calm level-design fixture.
+- Verification: generated and installed the package with `scripts\strip_plcaa_to_static_lab.py`; read back `ShaolinTestsMap.mod` with PyKotor and confirmed it contains only `module.ifo`, `plcaa.are`, and `plcaa.git`; confirmed all stripped GIT list counts are zero and script hooks are blank; ran `python -m py_compile scripts\strip_plcaa_to_static_lab.py`; ran `git diff --check -- scripts\strip_plcaa_to_static_lab.py CHANGES.md`.
+
+### [2026-06-18] Installed Quiet Authored grdev01 Level-Design Lab Candidate
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / custom module smoke proof / authored room packaging
+Intersects: grdev01 runtime diagnostic ladder and authored Map Studio export pipeline.
+
+- Recorded the user-reported live `warp grdev01` success for the `renamed_root_scriptless_minimal_git` stock-room bridge diagnostic, confirming KOTOR can now hand off to `grdev01` without crashing.
+- Replaced the active stock Taris-room diagnostic with a quiet generated Map Studio authored room at `artifacts\map_studio\grdev01_quiet_level_design_lab`.
+- Installed `C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod` from that authored package and backed up the previous diagnostic package as `grdev01.mod.bak46`.
+- Built the quiet candidate without authored placeables, start waypoint, or doorway marker so the next in-game proof isolates generated floor, room model, WOK, path graph, and module shell behavior rather than busy scripted/module content.
+- Tightened `scripts\check_grdev01_smoke_status.py` so room-only authored smoke packages no longer warn that a visible test placeable is expected when the proof manifest does not include `test_placeable_visible`.
+- Verification: generated and installed the quiet authored package with `scripts\prepare_grdev01_authored_smoke.py`; ran `scripts\check_grdev01_smoke_status.py` against the installed MOD; ran `scripts\compare_grdev01_stock_metadata.py`; ran `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_uses_room_only_authored_proof_checks -q --basetemp .pytest_tmp_grdev01_quiet_room_status`; ran `python -m py_compile scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py`.
+
+### [2026-06-18] Map Studio Runtime Matrix Tracks Recorded grdev01 Outcomes
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / diagnostic tooling
+Intersects: grdev01 runtime outcome recorder and package install ladder.
+
+- Made `scripts\grdev01_runtime_diagnostic_matrix.py` read recorded `grdev01` runtime outcome JSON files and report the latest outcome by diagnostic variant.
+- Added current-active-package matching by active filename, hash, and header so a crash recorded for `grdev01.mod` does not accidentally count as a test of the same bytes installed as `grdev01.rim`.
+- Added an outcome-derived next action to the matrix output, making it explicit when the currently installed package still needs a live `warp grdev01` result.
+- Extended the exact stock-byte diagnostic to stage `tar_m02aa_s.rim` as `grdev01_s.rim`, added an `exact-rim-pair` installer variant, and made the matrix distinguish root-only `grdev01.rim` from the native root/static RIM pair.
+- Hardened recorded outcome matching so `grdev01.rim` root-only tests and `grdev01.rim` + `grdev01_s.rim` pair tests are treated as separate runtime states even though the root file hash is identical.
+- Installed the exact stock root/static RIM-pair diagnostic as the active local package: `Modules\grdev01.rim` plus `Modules\grdev01_s.rim`. The previous root-only `grdev01.rim` was backed up as `grdev01.rim.bak1`, and a `not_tested` outcome record now marks the active pair as awaiting live `warp grdev01` verification.
+- Recorded the user-reported crash against the active exact stock root/static RIM-pair diagnostic.
+- Installed the `renamed-root-minimal` bridge diagnostic as the active local package: `Modules\grdev01.mod`. This package uses a `grdev01` module root with stock room geometry and stripped stock GIT runtime lists, backing up the crashed exact RIM pair as `grdev01.rim.bak2` and `grdev01_s.rim.bak1`.
+- Recorded a `not_tested` outcome for the active `renamed_root_minimal_git` package so the next live `warp grdev01` result is tied to the current `MOD V1.0` package hash.
+- Taught `scripts\check_grdev01_smoke_status.py` to recognize renamed stock-room bridge diagnostics separately from generated-room smoke packages. The status checker now validates stock `m02aa_*` room MDL/MDX/WOK triplets, uses generic MOD readback for bridge packages, avoids false generated-room/placeable blockers, and emits a runtime-outcome recorder command for bridge tests.
+- Wrote a current bridge status handoff at `artifacts\map_studio\grdev01_runtime_installs\renamed-root-minimal\grdev01_active_bridge_status.md`, confirming the installed `grdev01.mod` hash matches the staged bridge package, `currentgame\grdev01.mod` is absent, and the package is ready for the next live `warp grdev01` diagnostic test.
+- Recorded the user-reported crash against the `renamed_root_minimal_git` stock-room bridge package. The backend package still read back cleanly and KotorMCP saw all 57 active module resources, which narrowed the likely failure to runtime module/area handoff rather than generated-room geometry.
+- Added `--scriptless-root` to `scripts\prepare_grdev01_renamed_stock_area_clone.py`, clearing stock module and area event scripts such as `k_ptar_02aa_en` while preserving stock `m02aa_*` room MDL/MDX/WOK resources.
+- Added `renamed-root-scriptless-minimal` and `renamed-root-scriptless-placeable` to the runtime installer, diagnostic matrix, status handoff, and outcome recorder. The crash ladder now tests a scriptless custom-root stock-room MOD before returning to authored generated geometry.
+- Staged both scriptless bridge packages and installed `renamed-root-scriptless-minimal` as the active local `Modules\grdev01.mod`, backing up the crashing `renamed-root-minimal` package as `grdev01.mod.bak45`.
+- Wrote a current scriptless bridge status report at `artifacts\map_studio\grdev01_runtime_installs\renamed-root-scriptless-minimal\grdev01_scriptless_bridge_status.md`. The installed package hash is `ab95e1bcf045c92cdf2170cc414821a01259bdc9619d9fa579e1a775d06c1410`, `currentgame\grdev01.mod` is absent, and the package is ready for the next live `warp grdev01` diagnostic test.
+- Compared the active scriptless stock-room bridge against stock `tar_m02aa`; no blocking IFO/ARE/GIT/LYT/VIS/PTH/room-resource shape issues were found, so the remaining result depends on live engine handoff behavior.
+- Added `renamed-root-scriptless-dual-minimal` and `renamed-root-scriptless-dual-placeable` to the runtime installer, diagnostic matrix, status handoff, and outcome recorder. These packages are a prepared next rung only; they are not installed over the active scriptless single-root package yet.
+- Staged the dual-root scriptless packages at `artifacts\map_studio\grdev01_dual_root_scriptless_minimal_git` and `artifacts\map_studio\grdev01_dual_root_scriptless_minimal_git_placeable`. Their package hashes are `78cf3c578e768f187b74bbea2a26607b0c61f20852f2ccc380acb175cfb20fc5` and `35b6013fdc69712b2562b423ecf37ad8218ec64c9af7e159278d21c582deb5b4`.
 
 Verification:
-- `python -m pytest tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_status_panel`
-- `python -m py_compile native\GhostRigger.Windows.Editor.Level\Python\src\gui\windows\module_editor_window.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.GUI.Boundary.Panels\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\gui\panels\module_editor\__init__.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Windows.Shell.Main\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Tools.Workflow.ContentBrowser\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Tools.Workflow.ResourceBrowser\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Tools.Workflow.TwoDABrowser\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.GUI.Boundary.Integration\Python\src\gui\integration\tool_integration_registry.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py`
-## 2026-06-18
+- `python -m pytest tests\test_grdev01_runtime_diagnostic_matrix_script.py -q --basetemp .pytest_tmp_grdev01_matrix_outcomes`
+- `python -m py_compile scripts\grdev01_runtime_diagnostic_matrix.py tests\test_grdev01_runtime_diagnostic_matrix_script.py`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_prepare_grdev01_exact_stock_module_rename_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py -q --basetemp .pytest_tmp_grdev01_rim_pair`
+- `python -m py_compile scripts\prepare_grdev01_exact_stock_module_rename.py scripts\install_grdev01_runtime_variant.py scripts\grdev01_runtime_diagnostic_matrix.py scripts\record_grdev01_runtime_diagnostic_outcome.py tests\test_prepare_grdev01_exact_stock_module_rename_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py`
+- `python scripts\prepare_grdev01_exact_stock_module_rename.py --output-dir artifacts\map_studio\grdev01_exact_stock_module_rename --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\install_grdev01_runtime_variant.py --variant exact-rim-pair --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --overwrite --dry-run --json`
+- `python -m pytest tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_prepare_grdev01_exact_stock_module_rename_script.py -q --basetemp .pytest_tmp_grdev01_sidecar_identity`
+- `python -m py_compile scripts\grdev01_runtime_diagnostic_matrix.py scripts\record_grdev01_runtime_diagnostic_outcome.py scripts\install_grdev01_runtime_variant.py scripts\prepare_grdev01_exact_stock_module_rename.py tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_prepare_grdev01_exact_stock_module_rename_script.py`
+- `python scripts\install_grdev01_runtime_variant.py --variant exact-rim-pair --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --overwrite --json`
+- `python scripts\record_grdev01_runtime_diagnostic_outcome.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --variant active_installed --outcome not_tested --notes "Installed exact stock tar_m02aa root/static RIM pair as grdev01.rim and grdev01_s.rim; awaiting live warp grdev01 result." --json`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\record_grdev01_runtime_diagnostic_outcome.py --variant active_installed --outcome crashed --notes "User reported KOTOR crashed when warping to grdev01 with exact stock tar_m02aa root/static RIM pair installed as grdev01.rim and grdev01_s.rim." --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\install_grdev01_runtime_variant.py --variant renamed-root-minimal --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --overwrite --json`
+- `python scripts\record_grdev01_runtime_diagnostic_outcome.py --variant renamed_root_minimal_git --outcome not_tested --notes "Installed renamed-root-minimal grdev01.mod diagnostic after exact stock root/static RIM pair crash; awaiting live warp grdev01 result." --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2601_status_accepts_renamed_stock_room_bridge_profile tests\test_check_grdev01_smoke_status_script.py::test_t2601_stock_room_bridge_handoff_records_runtime_outcome tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_authored_smoke_package_before_manual_install -q --basetemp .pytest_tmp_grdev01_status_handoff_focus`
+- `python -m py_compile scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_root_unique_id_stock_rooms_minimal_git\grdev01_renamed_stock_area_clone_manifest.json --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --write-report artifacts\map_studio\grdev01_runtime_installs\renamed-root-minimal\grdev01_active_bridge_status.md --json`
+- `python scripts\record_grdev01_runtime_diagnostic_outcome.py --variant renamed_root_minimal_git --outcome crashed --notes "User tested active renamed-root-minimal grdev01.mod with warp grdev01 on 2026-06-18; KOTOR crashed during module load." --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_root_unique_id_stock_rooms_minimal_git\grdev01_renamed_stock_area_clone_manifest.json --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --kotormcp --json`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_root_unique_id_stock_rooms_scriptless_minimal_git --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --unique-module-id --minimal-git --scriptless-root --json`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_root_unique_id_stock_rooms_scriptless_minimal_git_placeable --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --unique-module-id --minimal-git --minimal-git-test-placeable --scriptless-root --json`
+- `python scripts\install_grdev01_runtime_variant.py --variant renamed-root-scriptless-minimal --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --overwrite --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_root_unique_id_stock_rooms_scriptless_minimal_git\grdev01_renamed_stock_area_clone_manifest.json --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --kotormcp --write-report artifacts\map_studio\grdev01_runtime_installs\renamed-root-scriptless-minimal\grdev01_scriptless_bridge_status.md --json`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2601_status_accepts_renamed_stock_room_bridge_profile tests\test_check_grdev01_smoke_status_script.py::test_t2601_stock_room_bridge_handoff_records_runtime_outcome tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_authored_smoke_package_before_manual_install -q --basetemp .pytest_tmp_grdev01_status_handoff_focus`
+- `python -m pytest tests\test_prepare_grdev01_renamed_stock_area_clone_script.py tests\test_check_grdev01_smoke_status_script.py::test_t2601_status_accepts_renamed_stock_room_bridge_profile tests\test_check_grdev01_smoke_status_script.py::test_t2601_stock_room_bridge_handoff_records_runtime_outcome tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_authored_smoke_package_before_manual_install -q --basetemp .pytest_tmp_grdev01_scriptless_bridge_focus`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py scripts\install_grdev01_runtime_variant.py scripts\grdev01_runtime_diagnostic_matrix.py scripts\record_grdev01_runtime_diagnostic_outcome.py scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py scripts\install_grdev01_runtime_variant.py scripts\grdev01_runtime_diagnostic_matrix.py scripts\record_grdev01_runtime_diagnostic_outcome.py scripts\check_grdev01_smoke_status.py tests\test_prepare_grdev01_renamed_stock_area_clone_script.py tests\test_check_grdev01_smoke_status_script.py`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_dual_root_scriptless_minimal_git --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --include-stock-roots --unique-module-id --minimal-git --scriptless-root --json`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_dual_root_scriptless_minimal_git_placeable --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --include-stock-roots --unique-module-id --minimal-git --minimal-git-test-placeable --scriptless-root --json`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2601_stock_room_bridge_handoff_records_runtime_outcome tests\test_install_grdev01_runtime_variant_script.py::test_t2601_runtime_variant_installer_exposes_renamed_root_bridge_variants tests\test_grdev01_runtime_diagnostic_matrix_script.py::test_t2601_runtime_matrix_includes_renamed_root_bridge_variants tests\test_record_grdev01_runtime_diagnostic_outcome_script.py::test_t2601_runtime_outcome_crashed_scriptless_recommends_dual_root tests\test_record_grdev01_runtime_diagnostic_outcome_script.py::test_t2601_runtime_outcome_loaded_scriptless_dual_recommends_dual_placeable -q --basetemp .pytest_tmp_grdev01_dual_root_focus`
+- `python -m py_compile scripts\install_grdev01_runtime_variant.py scripts\grdev01_runtime_diagnostic_matrix.py scripts\record_grdev01_runtime_diagnostic_outcome.py scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py`
+
+### [2026-06-18] Map Studio Guards Authored Module Identity and Stale Runtime Cache
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / module identity and launch readiness
+Intersects: grdev01 authored module export, stock-area diagnostic packages, and status-check tooling.
+
+- Exposed GhostRigger's deterministic authored module identity bytes from both native module payload copies and normalized the root resref before hashing.
+- Extended authored MOD readback verification to report `module_id_hex` and block packages whose `module.ifo` `Mod_ID` does not match GhostRigger's authored module identity.
+- Made the authored module verifier game-aware so K2 smoke packages are not rejected by the K1-only `Unescapable` ARE contract.
+- Passed the target game through generic authored module export verification.
+- Added smoke-status detection for stale `currentgame\<module>.mod` runtime caches that can make KOTOR load an older package even after `Modules\grdev01.mod` is replaced.
+- Added install-prep guards to both dev-smoke and authored Map Studio module flows so GhostRigger blocks installation when `currentgame\<module>.mod` contains a stale runtime cache.
+- Updated GhostRigger's MOD/RIM archive builder to emit deterministic stock-style nonzero ERF build year/day metadata instead of zeroed fields.
+- Quarantined a stale local `C:\Program Files (x86)\Steam\steamapps\common\swkotor\currentgame\grdev01.mod` cache as `grdev01.mod.stale-20260618-165559.bak`; subsequent diagnostics kept `currentgame\grdev01.mod` absent before install handoff.
+- Regenerated and installed the dual-root unique-ID stock-area diagnostic with the stock-style MOD header as `C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod`, backing up the prior diagnostic as `grdev01.mod.bak37`.
+- Staged a stricter stock-entry diagnostic package, preserving stock `m02aa` IFO/ARE/GIT/LYT/VIS/PTH roots and stock room resources inside the `grdev01.mod` filename, then removed it from the active warp target after confirming it is not a valid `warp grdev01` proof because it has no `grdev01.are`.
+- Installed a valid `grdev01`-root diagnostic package as the active `grdev01.mod`, using `grdev01` IFO/ARE/GIT/LYT/VIS/PTH roots, stock `m02aa_*` room assets, a unique `grdev01` module ID, and the stock-style MOD header. The prior stock-entry diagnostic was backed up as `grdev01.mod.bak39`.
+- Added a `--minimal-git` diagnostic mode for the renamed stock-area clone script, stripping dynamic stock GIT runtime lists while preserving stock room geometry and root file shape.
+- Installed the minimal-GIT `grdev01`-root diagnostic as the active local `Modules\grdev01.mod`, backing up the previous full-GIT diagnostic as `grdev01.mod.bak40`.
+- Added `--minimal-git-test-placeable`, an opt-in follow-up diagnostic that keeps the stripped stock GIT but adds one known-safe `plc_bench` test placement near the stock entry point.
+- Installed the minimal-GIT single-placeable diagnostic as the active local `Modules\grdev01.mod`, backing up the no-placeable minimal diagnostic as `grdev01.mod.bak41`.
+- After an in-game crash on the single-placeable diagnostic, installed the true stock-root `m02aa` area clone as the active local `Modules\grdev01.mod`, backing up the crashing single-placeable diagnostic as `grdev01.mod.bak42`. This package preserves stock internal `m02aa` IFO/ARE/GIT/LYT/VIS/PTH roots while using the filename `grdev01.mod` to isolate module package/load-path behavior.
+- Added and verified a no-doorway-marker authored `grdev01` candidate path so the next generated-room package can omit the optional visual helper mesh while preserving the test placeable proof requirement.
+- Added `scripts\prepare_grdev01_exact_stock_module_rename.py`, a byte-for-byte diagnostic that stages stock `tar_m02aa.rim` bytes as `install\Modules\grdev01.mod` without rewriting resources or using GhostRigger's MOD packager. This isolates GhostRigger archive-writing behavior from KOTOR's module filename/root handoff behavior.
+- Added `scripts\grdev01_runtime_diagnostic_matrix.py`, a read-only status report that identifies the active installed `grdev01.mod`, staged stock/MOD/RIM/generated candidates, and the ordered in-game test ladder.
+- Added `scripts\install_grdev01_runtime_variant.py`, a guarded installer for known `grdev01` runtime diagnostic variants. It validates the staged package header, requires `--overwrite` before replacing an active `Modules\grdev01.mod`, writes an install manifest, and backs up the previous active package when installing.
+- Added `scripts\record_grdev01_runtime_diagnostic_outcome.py`, a small outcome recorder for `loaded`/`crashed`/`infinite_load`/`not_tested` results so each manual `warp grdev01` test is tied to the active package header and hash.
+- Recorded the user-reported crash against the GhostRigger-built stock-area MOD baseline and installed the exact stock RIM rename diagnostic as the new active `Modules\grdev01.mod`, backing up the crashing MOD baseline as `grdev01.mod.bak43`.
+- Extended the exact stock-byte diagnostic to stage both `grdev01.mod` and `grdev01.rim`, added an `exact-rim-file` installer variant, and made the matrix/outcome recorder distinguish the active filename so KOTOR's archive-extension behavior can be isolated without confusing it with GhostRigger-authored geometry.
+- Extended `scripts\check_grdev01_smoke_status.py` with an authored module contract report covering `module.ifo` entry area/area list/entry position/`Mod_ID`, ARE room names, GIT object counts, LYT room names, and WOK walkable/non-walkable face counts. This makes the next crash result actionable by proving whether the staged package itself satisfies the expected `warp grdev01` resource handoff before game launch.
+- Added `--write-report` to `scripts\check_grdev01_smoke_status.py` so the current package status can be written as a modder-readable Markdown handoff with package hash, install/cache state, engine handoff contract, runtime resource checklist, and missing in-game proof checks.
+- Added `--dry-run` to `scripts\install_grdev01_runtime_variant.py`, producing an install plan that validates the staged package and reports destination/conflict/backup behavior without copying, backing up, or deleting files. This lets the `grdev01` smoke ladder show the exact next KOTOR-folder change before the user commits to a runtime test.
+
+Verification:
+- `python -m pytest tests\test_authored_module_metadata.py tests\test_dev_module_smoke.py tests\test_check_grdev01_smoke_status_script.py -q --basetemp .pytest_tmp_grdev01_cache_status`
+- `python -m pytest tests\test_dev_module_smoke.py::test_t2601_install_prep_blocks_stale_currentgame_module_cache tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_blocks_stale_currentgame_cache tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_blocks_stale_currentgame_module_cache -q --basetemp .pytest_tmp_grdev01_cache_install_guard`
+- `python -m pytest tests\test_module_save_pipeline.py::test_t2601_mod_archive_uses_stock_empty_locstring_offset tests\test_dev_module_smoke.py::test_t2601_exports_staged_mod_and_manifest -q --basetemp .pytest_tmp_grdev01_mod_header`
+- `python -m py_compile scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_authored_module_metadata.py tests\test_dev_module_smoke.py`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_export.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_export.py tests\test_dev_module_smoke.py tests\test_authored_module_export.py`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_save_pipeline.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_save_pipeline.py tests\test_module_save_pipeline.py`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_dual_root_unique_id_stock_area_clone\installed_after_cache_quarantine_compare.json`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_dual_root_unique_id_stock_area_clone_header --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --include-stock-roots --unique-module-id --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_dual_root_unique_id_stock_area_clone_header\installed_compare.json`
+- `python scripts\prepare_grdev01_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_stock_entry_header_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_stock_entry_header_clone\installed_compare.json`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_root_unique_id_stock_rooms_header --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --unique-module-id --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_root_unique_id_stock_rooms_header\installed_compare.json`
+- `python -m pytest tests\test_prepare_grdev01_renamed_stock_area_clone_script.py -q --basetemp .pytest_tmp_grdev01_minimal_git`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py tests\test_prepare_grdev01_renamed_stock_area_clone_script.py`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_root_unique_id_stock_rooms_minimal_git --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --unique-module-id --minimal-git --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_root_unique_id_stock_rooms_minimal_git\installed_compare.json`
+- `python -m pytest tests\test_prepare_grdev01_renamed_stock_area_clone_script.py -q --basetemp .pytest_tmp_grdev01_minimal_placeable`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py tests\test_prepare_grdev01_renamed_stock_area_clone_script.py`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_root_unique_id_stock_rooms_minimal_git_placeable --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --unique-module-id --minimal-git --minimal-git-test-placeable --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_root_unique_id_stock_rooms_minimal_git_placeable\installed_compare.json`
+- `python scripts\prepare_grdev01_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_stock_area_clone_runtime_baseline --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --json`
+- `python -m pytest tests\test_dev_module_smoke.py::test_t2601_can_stage_generated_room_without_doorway_marker tests\test_prepare_grdev01_authored_smoke_script.py::test_t2647_prepare_grdev01_without_doorway_marker_keeps_placeable_proof -q --basetemp .pytest_tmp_grdev01_no_marker`
+- `python -m py_compile scripts\prepare_grdev01_authored_smoke.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py tests\test_dev_module_smoke.py tests\test_prepare_grdev01_authored_smoke_script.py`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate --overwrite-kmap --without-doorway-marker --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\grdev01_authored_module_game_manifest.json --module-path artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\install\Modules\grdev01.mod --json`
+- `python -m pytest tests\test_prepare_grdev01_exact_stock_module_rename_script.py -q --basetemp .pytest_tmp_grdev01_exact_rename`
+- `python -m py_compile scripts\prepare_grdev01_exact_stock_module_rename.py tests\test_prepare_grdev01_exact_stock_module_rename_script.py`
+- `python scripts\prepare_grdev01_exact_stock_module_rename.py --output-dir artifacts\map_studio\grdev01_exact_stock_module_rename --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_grdev01_runtime_diagnostic_matrix_script.py -q --basetemp .pytest_tmp_grdev01_matrix`
+- `python -m py_compile scripts\grdev01_runtime_diagnostic_matrix.py tests\test_grdev01_runtime_diagnostic_matrix_script.py`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_install_grdev01_runtime_variant_script.py -q --basetemp .pytest_tmp_grdev01_runtime_variant`
+- `python -m py_compile scripts\install_grdev01_runtime_variant.py tests\test_install_grdev01_runtime_variant_script.py`
+- `python scripts\install_grdev01_runtime_variant.py --variant exact-rim --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_record_grdev01_runtime_diagnostic_outcome_script.py -q --basetemp .pytest_tmp_grdev01_outcome`
+- `python -m py_compile scripts\record_grdev01_runtime_diagnostic_outcome.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py`
+- `python scripts\record_grdev01_runtime_diagnostic_outcome.py --variant active_installed --outcome crashed --notes "User tested warp grdev01 again; game crashed on load." --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\install_grdev01_runtime_variant.py --variant exact-rim --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --overwrite --json`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_prepare_grdev01_exact_stock_module_rename_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py -q --basetemp .pytest_tmp_grdev01_runtime_ladder`
+- `python -m py_compile scripts\prepare_grdev01_exact_stock_module_rename.py scripts\install_grdev01_runtime_variant.py scripts\grdev01_runtime_diagnostic_matrix.py scripts\record_grdev01_runtime_diagnostic_outcome.py tests\test_prepare_grdev01_exact_stock_module_rename_script.py tests\test_install_grdev01_runtime_variant_script.py tests\test_grdev01_runtime_diagnostic_matrix_script.py tests\test_record_grdev01_runtime_diagnostic_outcome_script.py`
+- `python scripts\prepare_grdev01_exact_stock_module_rename.py --output-dir artifacts\map_studio\grdev01_exact_stock_module_rename --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python scripts\grdev01_runtime_diagnostic_matrix.py --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_authored_smoke_package_before_manual_install -q --basetemp .pytest_tmp_grdev01_status_one`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_installed_authored_smoke_package -q --basetemp .pytest_tmp_grdev01_status_installed`
+- `python -m py_compile scripts\check_grdev01_smoke_status.py tests\test_check_grdev01_smoke_status_script.py`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\grdev01_authored_module_game_manifest.json --module-path artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\install\Modules\grdev01.mod --json`
+- `python -m pytest tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_can_write_modder_readable_smoke_report -q --basetemp .pytest_tmp_grdev01_status_report`
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\grdev01_authored_module_game_manifest.json --module-path artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\install\Modules\grdev01.mod --write-report artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\grdev01_smoke_status_report.md --json`
+- `python -m pytest tests\test_install_grdev01_runtime_variant_script.py -q --basetemp .pytest_tmp_grdev01_install_plan`
+- `python -m py_compile scripts\install_grdev01_runtime_variant.py tests\test_install_grdev01_runtime_variant_script.py`
+- `python scripts\install_grdev01_runtime_variant.py --variant exact-rim-file --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json`
+- `python scripts\install_grdev01_runtime_variant.py --variant authored-no-marker --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --dry-run --json`
+- Local probe confirmed the dual-root unique-ID diagnostic had 62 resources, unique `Mod_ID` `01a157f079b85a329325c47dff024db8`, `Mod_Entry_Area=grdev01`, no remaining `currentgame\grdev01.mod` cache, and stock-style MOD header metadata.
+- Local probe confirmed the active stock-entry `Modules\grdev01.mod` has 57 resources, stock `module.ifo`/`m02aa` roots, zero stock metadata diffs, coherent room identity, no remaining `currentgame\grdev01.mod` cache, and stock-style MOD header metadata.
+- Local probe confirmed the active valid `grdev01`-root `Modules\grdev01.mod` has 57 resources, `grdev01.are`, `Mod_Entry_Area=grdev01`, `Mod_Area_list[0]=grdev01`, unique `Mod_ID` `01a157f079b85a329325c47dff024db8`, coherent stock `m02aa_*` room identity, no remaining `currentgame\grdev01.mod` cache, and stock-style MOD header metadata.
+- Local probe confirmed the active minimal-GIT `Modules\grdev01.mod` has 57 resources, `grdev01` IFO/ARE/GIT roots, unique `Mod_ID` `01a157f079b85a329325c47dff024db8`, no remaining `currentgame\grdev01.mod` cache, and empty Creature/Door/Placeable/Sound/Store/Trigger/Encounter/Waypoint/Camera/List GIT runtime lists.
+- Local probe confirmed the active minimal-GIT single-placeable `Modules\grdev01.mod` has 57 resources, `grdev01` IFO/ARE/GIT roots, unique `Mod_ID` `01a157f079b85a329325c47dff024db8`, no remaining `currentgame\grdev01.mod` cache, one `plc_bench` placeable tagged `grdev01_test_bench`, and empty Creature/Door/Sound/Store/Trigger/Encounter/Waypoint/Camera/List GIT runtime lists.
+- Local probe confirmed the active runtime-baseline `Modules\grdev01.mod` has 57 resources, stock `m02aa` IFO/ARE/GIT/LYT/VIS/PTH roots, coherent room identity, no blocking metadata comparison issues, no stale `currentgame\grdev01.mod` cache, and backup `grdev01.mod.bak42` preserving the prior single-placeable crash package.
+- Local status check confirmed `artifacts\map_studio\grdev01_authored_smoke_no_marker_candidate\install\Modules\grdev01.mod` has all required generated resources and a valid package readback, but remains `ready_for_manual_install` until real KOTOR proof is captured.
+- Local probe confirmed `artifacts\map_studio\grdev01_exact_stock_module_rename\install\Modules\grdev01.mod` is a byte-for-byte copy of `C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\tar_m02aa.rim` with matching SHA256 `393026c8872543f9c994b57c522999dcf43322399511ea3dea59c7a133fb1e4b`; it was staged only and not installed.
+- Runtime diagnostic matrix confirmed the active installed `Modules\grdev01.mod` is the GhostRigger-built stock-area MOD baseline with SHA256 `61d4c871f2dfde0283a797e03df9c02445c7af0fd99884b68d887dd3ad298737`; the exact stock RIM rename and authored no-marker candidate are staged but inactive.
+- Runtime variant installer preflight confirmed the staged exact-RIM fallback is valid but refuses to replace the active installed baseline unless `--overwrite` is supplied.
+
+### [2026-06-18] Map Studio Isolates grdev01 Module ID Collision Risk
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / module identity
+Intersects: grdev01 dual-root diagnostic packaging and stock-area clone crash investigation.
+
+- Added `--unique-module-id` to `scripts\prepare_grdev01_renamed_stock_area_clone.py`, replacing the cloned stock `m02aa` `Mod_ID` with a deterministic GhostRigger `grdev01` UUID when requested.
+- Installed the dual-root, unique-`Mod_ID` stock-area diagnostic as the active local `Modules\grdev01.mod`, backing up the previous dual-root package as `grdev01.mod.bak36`.
+- Verified the installed archive still has both `grdev01` and `m02aa` root resources, stock `m02aa_*` room assets, coherent room identity, and a unique `Mod_ID` of `01a157f079b85a329325c47dff024db8`.
+- Added a focused regression test proving the binary IFO `Mod_ID` is rewritten while preserving the renamed `grdev01` entry area and VO id.
+- Status remains `diagnostic_package_not_game_verified`; the next required evidence is a real KOTOR `warp grdev01` test against the installed unique-module-id diagnostic.
+
+Verification:
+- `python -m pytest tests\test_prepare_grdev01_renamed_stock_area_clone_script.py -q --basetemp .pytest_tmp_grdev01_unique_mod_id`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py tests\test_prepare_grdev01_renamed_stock_area_clone_script.py`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_dual_root_unique_id_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --include-stock-roots --unique-module-id --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_dual_root_unique_id_stock_area_clone\installed_dual_root_unique_id_compare.json`
+
+### [2026-06-18] Map Studio Adds Dual-Root grdev01 Crash Diagnostic
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / module-root handoff
+Intersects: grdev01 renamed-root diagnostic packaging and stock-area clone crash investigation.
+
+- Added an `--include-stock-roots` mode to `scripts\prepare_grdev01_renamed_stock_area_clone.py` so a diagnostic package can include both renamed `grdev01` ARE/GIT/LYT/VIS/PTH root resources and exact stock `m02aa` ARE/GIT/LYT/VIS/PTH root resources in the same MOD archive.
+- Installed this dual-root stock-area diagnostic as the active local `Modules\grdev01.mod`, backing up the previous exact-stock clone as `grdev01.mod.bak35`.
+- Verified the installed archive has 62 resources, coherent stock `m02aa_*` room MDL/MDX/WOK identity, readable `grdev01` root resources, and stock-style MOD header fields.
+- Added a focused regression test proving the dual-root diagnostic mode is recorded in the package manifest contract.
+- Added `.gitignore` exceptions so the new grdev01 diagnostic tests are visible to git instead of being hidden by the repo's broad `/tests` ignore rules.
+- Status remains `diagnostic_package_not_game_verified`; the next required evidence is a real KOTOR `warp grdev01` test against the installed dual-root package.
+
+Verification:
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py`
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_dual_root_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --include-stock-roots --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_dual_root_stock_area_clone\installed_dual_root_compare.json`
+- `python -m pytest tests\test_prepare_grdev01_renamed_stock_area_clone_script.py -q --basetemp .pytest_tmp_grdev01_dual_root`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py tests\test_prepare_grdev01_renamed_stock_area_clone_script.py`
+
+### [2026-06-18] Map Studio Adds Room Identity Coherence Diagnostics
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / room resource validation
+Intersects: grdev01 renamed-root diagnostic packaging and stock-area clone comparison helpers.
+
+- Extended `scripts\compare_grdev01_stock_metadata.py` with a room identity report that compares ARE room names, LYT room graph, VIS references, packaged MDL/MDX/WOK room resource sets, and room-name strings inside MDL bytes.
+- Confirmed the active installed `grdev01.mod` is the room-identity-preserving diagnostic: custom `grdev01` root resources with stock `m02aa_*` room graph and matching stock room MDL internals.
+- Confirmed the experimental fully renamed `grdev01_*` room diagnostic is not coherent because stock MDL internals still reference `m02aa_*`; the prepare script now warns when that mode is used.
+- Added a focused regression test for the exact mismatch class that can make a diagnostic package misleading before in-game testing.
+
+Verification:
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_renamed_stock_area_clone\installed_room_identity_report_after_validator.json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path artifacts\map_studio\grdev01_fully_renamed_stock_area_clone\install\Modules\grdev01.mod --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_fully_renamed_stock_area_clone\experimental_room_identity_report_after_validator.json`
+- `python -m pytest tests/test_compare_grdev01_stock_metadata_script.py -q --basetemp .pytest_tmp_grdev01_room_identity`
+- `python -m pytest tests/test_module_save_pipeline.py::test_t2601_mod_archive_uses_stock_empty_locstring_offset tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources -q --basetemp .pytest_tmp_grdev01_identity_smoke`
+- `python -m py_compile scripts\compare_grdev01_stock_metadata.py scripts\prepare_grdev01_renamed_stock_area_clone.py tests\test_compare_grdev01_stock_metadata_script.py`
+
+### [2026-06-18] Map Studio Installs Renamed-Root Stock grdev01 Crash Diagnostic
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / custom module handoff
+Intersects: grdev01 stock-area clone diagnostic and authored module package work.
+
+- Added `scripts/prepare_grdev01_renamed_stock_area_clone.py`, a diagnostic package that keeps stock room MDL/MDX/WOK bytes while renaming the module root resources to `grdev01`.
+- Added an explicit experimental `--rename-room-resrefs` mode, but guarded it with a warning because stock MDL internals still reference `m02aa_*`; this mode is not the active test fixture.
+- Installed the room-identity-preserving renamed-root stock diagnostic as the active local `Modules\grdev01.mod`, backing up the previous fully-renamed experimental package as `grdev01.mod.bak31`.
+- Verified the installed package has stock-style `MOD V1.0` header offsets and coherent handoff fields: `module.ifo` entry area, area list, ARE, GIT, LYT, VIS, and PTH roots use `grdev01`, while ARE room list, LYT/VIS room graph, room MDL/MDX/WOK resources, and stock MDL internals all remain `m02aa_*`.
+- Status remains `diagnostic_package_not_game_verified`; the next required proof is a real KOTOR `warp grdev01` test against this renamed-root stock package.
+
+Verification:
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_fully_renamed_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --rename-room-resrefs --json`
+- Experimental package probe confirmed `--rename-room-resrefs` removes `m02aa` from LYT/VIS but leaves stock MDL internals referencing `m02aa_*`, so it was not kept as the active test fixture.
+- `python scripts\prepare_grdev01_renamed_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_renamed_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --install --overwrite-module --json`
+- Installed package probe confirmed `MOD V1.0`, `loc_size=0`, `loc_offset=160`, `key_offset=160`, 57 resources, `grdev01` root ARE/GIT/LYT resources, stock `m02aa_*` room resources, stock `m02aa_*` LYT/VIS room graph, and matching stock room MDL internal names.
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_renamed_stock_area_clone\installed_room_identity_preserving_compare.json`
+- `python -m pytest tests/test_module_save_pipeline.py::test_t2601_mod_archive_uses_stock_empty_locstring_offset tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources -q --basetemp .pytest_tmp_grdev01_crash_followup`
+- `python -m py_compile scripts\prepare_grdev01_renamed_stock_area_clone.py scripts\compare_grdev01_stock_metadata.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_save_pipeline.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_save_pipeline.py src\core\mdl\mdl_writer.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\mdl_writer.py tests\test_module_save_pipeline.py tests\test_dev_module_smoke.py`
+
+### [2026-06-18] Map Studio Aligns MOD Header with Stock KOTOR Archives
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / module package writer / KOTOR runtime smoke isolation
+Intersects: grdev01 stock-area clone diagnostic and authored module packager.
+
+- Updated the ERF/MOD archive writer so empty localized-string tables use a stock-style offset of `160` instead of `0`.
+- Mirrored the fix in both Domain Core Modules and ModuleMeshes workflow payloads.
+- Added a focused regression test proving newly written MOD archives keep `loc_size=0`, `loc_offset=160`, and `key_offset=160`, matching the vanilla KOTOR `PLCaa.mod` header pattern.
+- Reinstalled the full stock `m02aa` area clone as the active local `Modules\grdev01.mod` after the header fix, backing up the previous diagnostic as `grdev01.mod.bak28`.
+- Status remains `diagnostic_package_not_game_verified`; the next required evidence is a real KOTOR `warp grdev01` test.
+
+Verification:
+- Compared vanilla `PLCaa.mod` against generated `grdev01.mod` header fields.
+- `python -m pytest tests/test_module_save_pipeline.py::test_t2601_mod_archive_uses_stock_empty_locstring_offset -q --basetemp .pytest_tmp_mod_header`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\module_save_pipeline.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\module_save_pipeline.py tests\test_module_save_pipeline.py`
+- `python scripts\prepare_grdev01_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --install --overwrite-module --json`
+- Installed package header confirmed `MOD V1.0`, `loc_size=0`, `loc_offset=160`, `key_offset=160`.
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_stock_area_clone\installed_stock_area_clone_compare_after_header_fix.json`
+
+### [2026-06-18] Map Studio Fixes Authored Room Mesh Bounds and Installs Stock-Area Crash Diagnostic
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / MDL writer / KOTOR runtime smoke isolation
+Intersects: grdev01 authored module smoke diagnostics and stock-area clone package.
+
+- Fixed `MDLBinaryWriter` so mesh headers fall back to `ModelNode.compute_bounds()` fields (`bb_min`, `bb_max`, `radius`) when explicit `mesh_bb_min`, `mesh_bb_max`, and `mesh_radius` fields are absent.
+- Verified regenerated authored `grdev01_room01.mdl` writes non-zero binary mesh bounding boxes, radii, and average points for the generated room mesh and helper mesh.
+- Added a focused regression assertion to the dev-module smoke test that checks the generated binary MDL mesh headers directly.
+- Installed the full stock `m02aa` area clone as the active local `Modules\grdev01.mod`, backing up the previous stock-room-shell diagnostic as `grdev01.mod.bak27`. This is a crash-isolation package, not a generated Map Studio room.
+- Status remains `diagnostic_package_not_game_verified`; if this stock-area clone still crashes on `warp grdev01`, the remaining issue is likely MOD package/load-path behavior rather than authored geometry, authored metadata, or WOK content.
+
+Verification:
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_bounds_check --overwrite-kmap --without-test-placeable --without-start-waypoint --dry-run --json`
+- Binary probe of `artifacts\map_studio\grdev01_authored_smoke_bounds_check\install\Modules\grdev01.mod` confirmed the generated `cm_baremetal` mesh headers have non-zero bounds, radius, and average point values.
+- `python scripts\prepare_grdev01_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --install --overwrite-module --json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_stock_area_clone\installed_stock_area_clone_compare.json`
+- `python -m pytest tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources -q --basetemp .pytest_tmp_grdev01_bounds`
+- `python -m py_compile src\core\mdl\mdl_writer.py native\GhostRigger.Runtime.Core.Host\Python\src\core\mdl\mdl_writer.py tests\test_dev_module_smoke.py scripts\prepare_grdev01_stock_area_clone.py scripts\prepare_grdev01_authored_smoke.py scripts\compare_grdev01_stock_metadata.py`
+
+### [2026-06-18] Map Studio Adds grdev01 Stock Metadata Comparator
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / diagnostic metadata audit
+Intersects: grdev01 stock-room and generated-room smoke diagnostics; compares generated module shell resources against stock `m02aa`.
+
+- Added `scripts/compare_grdev01_stock_metadata.py`, a diagnostic-only comparator for `module.ifo`, ARE, GIT, LYT, VIS, and PTH resources.
+- Corrected the comparator's K1 ARE expectations against actual stock `m02aa`; `AreaProperties` and `DisableTransit` are not stock K1 ARE fields for this baseline.
+- Compared the currently installed stock-room shell, the staged full stock-area clone, and the previous generated-room-only package against stock `tar_m02aa`.
+- Confirmed the generated-room-only package and active stock-room shell have the expected IFO/ARE/GIT field shape and no field type mismatches versus stock, narrowing the remaining crash investigation toward generated room MDL/MDX/WOK if the stock-room shell loads in-game.
+
+Verification:
+- `python -m py_compile scripts\compare_grdev01_stock_metadata.py`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod" --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_stock_room_shell\grdev01_stock_metadata_compare.json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path artifacts\map_studio\grdev01_stock_area_clone\install\Modules\grdev01.mod --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_stock_area_clone\grdev01_stock_metadata_compare.json`
+- `python scripts\compare_grdev01_stock_metadata.py --module-path artifacts\map_studio\grdev01_authored_smoke_room_only\install\Modules\grdev01.mod --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output artifacts\map_studio\grdev01_authored_smoke_room_only\grdev01_stock_metadata_compare.json`
+
+### [2026-06-18] Map Studio Stages Full Stock-Area grdev01 Clone Diagnostic
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / diagnostic packaging
+Intersects: current grdev01 stock-room shell diagnostic; keeps the active installed package untouched while staging a stronger fallback diagnostic.
+
+- Added `scripts/prepare_grdev01_stock_area_clone.py`, which stages a `grdev01.mod` package built from stock `tar_m02aa` metadata plus all stock `m02aa` LYT/VIS/PTH and 17 room MDL/MDX/WOK resource sets.
+- Left the currently installed K1 `Modules\grdev01.mod` unchanged so the stock-room shell remains the next clean in-game `warp grdev01` test.
+- The staged full stock-area clone gives the next diagnostic step if the stock-room shell still crashes: install it as `grdev01.mod` to distinguish generated metadata problems from package/load-path problems.
+- Status remains `diagnostic_package_not_game_verified`; this is a staged isolation fixture, not a game-tested custom module.
+
+Verification:
+- `python -m py_compile scripts\prepare_grdev01_stock_area_clone.py`
+- `python scripts\prepare_grdev01_stock_area_clone.py --output-dir artifacts\map_studio\grdev01_stock_area_clone --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --json`
+- Package readback confirmed 57 resources, including stock `module.ifo`, `m02aa.are/.git/.lyt/.vis/.pth`, and all 17 stock room MDL/MDX/WOK sets with canonical resource type IDs.
+- Confirmed the active installed `C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules\grdev01.mod` remained the smaller stock-room shell package.
+
+### [2026-06-18] Map Studio Adds Stock-Room grdev01 Crash Isolation Package
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / KOTOR runtime smoke isolation / diagnostic packaging
+Intersects: current grdev01 authored smoke hardening; isolates generated room MDL/WOK from module shell resources.
+
+- Added `scripts/prepare_grdev01_stock_room_shell.py`, a diagnostic package builder that keeps GhostRigger-generated `grdev01` ARE/GIT/IFO/LYT/VIS/PTH resources but uses BioWare stock `m02aa_03a` MDL/MDX/WOK room assets.
+- Installed the stock-room diagnostic as the active local K1 `Modules\grdev01.mod`, backing up the previous generated-room diagnostic as `grdev01.mod.bak26`.
+- The next `warp grdev01` test now distinguishes the crash source: if this stock-room shell loads, the generated room MDL/WOK path is the likely fault; if it still crashes, the fault is in the module shell/container metadata.
+- Status remains `diagnostic_package_not_game_verified`; no game-ready claim is made until KOTOR loads the module with visible proof.
+
+Verification:
+- `python -m py_compile scripts\prepare_grdev01_stock_room_shell.py`
+- `python scripts\prepare_grdev01_stock_room_shell.py --output-dir artifacts\map_studio\grdev01_stock_room_shell --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-module --json`
+- Installed package readback confirmed `grdev01.are`, `grdev01.git`, `grdev01.lyt`, `grdev01.pth`, `grdev01.vis`, `module.ifo`, and stock `m02aa_03a.mdl/.mdx/.wok` with canonical resource type IDs.
+
+### [2026-06-18] Map Studio Hardens grdev01 Runtime Smoke Package
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / authored module packaging / KOTOR runtime smoke isolation
+
+- Matched additional stock K1 module resource details for `grdev01`, including `module.ifo` `Mod_Tag=MODULE`, empty `Mod_Description` locstring, `Mod_Area_list` entry struct id `6`, K1 ARE version/field shape, `Unescapable=1`, stock-style GIT list struct ids, stock LYT/VIS text grammar, canonical BWM WOK writing, and corrected MOD archive resource ids for MDX vs THG.
+- Added diagnostic smoke-package switches so `grdev01` can be installed without optional test placeables or start-waypoint entries while preserving the real IFO player entry point, room model pair, WOK, PTH, LYT, VIS, ARE, and GIT resources.
+- Updated the room-only proof handoff so checklists, status output, capture commands, and proof command templates no longer ask for `test_placeable_visible` when the diagnostic package intentionally omits the test placeable.
+- Installed a room-only diagnostic `grdev01.mod` to the local K1 `Modules` folder for the next manual `warp grdev01` crash-isolation test; previous installed package was backed up by the prep script.
+- Status remains `installed_ready_for_game_test`; no claim of game-ready behavior is made until the module loads in KOTOR with screenshot/video proof.
+
+Verification:
+- `python -m pytest tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources tests/test_dev_module_smoke.py::test_t2601_can_build_runtime_isolation_module_without_optional_placed_content tests/test_authored_module_export.py::test_t2643_exports_diagnostic_kmap_authored_module_without_optional_placed_content -q --basetemp .pytest_tmp_grdev01_ifo_area_list`
+- `python -m pytest tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources tests/test_dev_module_smoke.py::test_t2601_can_build_runtime_isolation_module_without_optional_placed_content tests/test_authored_module_export.py::test_t2643_exports_diagnostic_kmap_authored_module_without_optional_placed_content -q --basetemp .pytest_tmp_grdev01_stock_metadata`
+- `python -m pytest tests/test_dev_module_smoke.py::test_t2601_room_only_install_prep_omits_placeable_proof_requirement tests/test_dev_module_smoke.py::test_t2601_install_prep_writes_manual_game_test_checklist tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources tests/test_dev_module_smoke.py::test_t2601_can_build_runtime_isolation_module_without_optional_placed_content -q --basetemp .pytest_tmp_grdev01_room_only_handoff`
+- `python -m pytest tests/test_authored_module_export.py::test_t2644_room_only_authored_install_omits_placeable_proof_requirement tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests/test_authored_module_export.py::test_t2643_exports_diagnostic_kmap_authored_module_without_optional_placed_content -q --basetemp .pytest_tmp_grdev01_authored_room_only_handoff`
+- `python -m pytest tests/test_check_grdev01_smoke_status_script.py::test_t2698_status_uses_room_only_authored_proof_checks tests/test_prepare_grdev01_authored_smoke_script.py::test_t2647_prepare_grdev01_room_only_summary_omits_placeable_check -q --basetemp .pytest_tmp_grdev01_room_only_status`
+- `python -m pytest tests/test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest -q --basetemp .pytest_tmp_grdev01_authored_module`
+- `python -m py_compile native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_metadata.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Domain.Core.Modules\Python\src\core\modules\dev_module_smoke.py native\GhostRigger.Tools.Workflow.ModuleMeshes\Python\src\core\modules\dev_module_smoke.py scripts\prepare_grdev01_authored_smoke.py tests\test_dev_module_smoke.py tests\test_authored_module_export.py`
+- `python scripts\prepare_grdev01_authored_smoke.py --output-dir artifacts\map_studio\grdev01_authored_smoke_room_only --overwrite-kmap --game-root-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --game-modules-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules" --overwrite-module --without-test-placeable --without-start-waypoint --json` installed backup `grdev01.mod.bak25`.
+- `python scripts\check_grdev01_smoke_status.py --proof-manifest artifacts\map_studio\grdev01_authored_smoke_room_only\grdev01_authored_module_game_manifest.json --kotormcp --json` reported package verification OK, installed bytes matched, and KotorMCP saw all required module resource types; status remains `installed_ready_for_game_test` because real in-game `warp grdev01` proof is still pending.
 
 ### [2026-06-18] Map Studio Adds KOTOR-Window Evidence Capture
 

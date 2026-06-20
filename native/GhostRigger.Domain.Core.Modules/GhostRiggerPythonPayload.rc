@@ -1,4 +1,5 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src.
+#include "GhostRiggerPythonPayloadResource.h"
+
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
 PYTHON_PAYLOAD_0001 RCDATA "Python/src/core/modules/__init__.py"
 PYTHON_PAYLOAD_0002 RCDATA "Python/src/core/modules/area_wok_integration.py"
@@ -46,3 +47,7 @@ PYTHON_PAYLOAD_0043 RCDATA "Python/src/core/modules/authored_terrain_builder.py"
 PYTHON_PAYLOAD_0044 RCDATA "Python/src/core/modules/authored_terrain_walkability_overlay.py"
 PYTHON_PAYLOAD_0045 RCDATA "Python/src/core/modules/authored_walkmesh_boundaries.py"
 PYTHON_PAYLOAD_0046 RCDATA "Python/src/core/modules/authored_walkmesh_status.py"
+PYTHON_PAYLOAD_0047 RCDATA "Python/src/core/modules/map_studio_modeling_tools.py"
+PYTHON_PAYLOAD_0048 RCDATA "Python/src/core/modules/map_studio_tool_belt_preferences.py"
+PYTHON_PAYLOAD_0049 RCDATA "Python/src/core/modules/map_studio_export_objects.py"
+PYTHON_PAYLOAD_0050 RCDATA "Python/src/core/modules/map_studio_terrain_sculpt_session.py"

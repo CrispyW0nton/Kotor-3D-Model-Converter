@@ -21,6 +21,8 @@ from typing import Any, Iterable, Optional
 
 
 CORE_RESTYPES = {"are", "git", "ifo", "lyt", "vis", "wok", "dwk", "pwk", "pth"}
+KOTOR_SAFE_ERF_BUILD_YEAR = 106
+KOTOR_SAFE_ERF_BUILD_DAY = 364
 STATIC_RESTYPES = {
     "utc",
     "utd",
@@ -61,7 +63,7 @@ RESTYPE_IDS: dict[str, int] = {
     "ini": 7,
     "txt": 10,
     "mdl": 2002,
-    "mdx": 2003,
+    "thg": 2003,
     "nss": 2009,
     "ncs": 2010,
     "mod": 2011,
@@ -107,6 +109,7 @@ RESTYPE_IDS: dict[str, int] = {
     "vis": 3001,
     "rim": 3001,
     "pth": 3003,
+    "mdx": 3008,
 }
 
 
@@ -438,11 +441,17 @@ def build_erf_v1_archive(entries: Iterable[ModuleArchiveEntry], archive_type: st
     struct.pack_into("<I", header, 8, 0)  # language count
     struct.pack_into("<I", header, 12, 0)  # localized string size
     struct.pack_into("<I", header, 16, count)
-    struct.pack_into("<I", header, 20, 0)  # localized string offset
+    # Stock KotOR MOD archives set this to the end of the 160-byte header even
+    # when the localized string table is empty.  PyKotor accepts 0 here, but the
+    # game loader is stricter during module handoff.
+    struct.pack_into("<I", header, 20, header_size)  # localized string offset
     struct.pack_into("<I", header, 24, keylist_off)
     struct.pack_into("<I", header, 28, reslist_off)
-    struct.pack_into("<I", header, 32, 0)  # build year
-    struct.pack_into("<I", header, 36, 0)  # build day
+    # Keep these deterministic but nonzero.  The game accepts stock MOD files
+    # with ERF build metadata populated, while zeroed fields are suspicious
+    # during custom module handoff even though offline readers tolerate them.
+    struct.pack_into("<I", header, 32, KOTOR_SAFE_ERF_BUILD_YEAR)
+    struct.pack_into("<I", header, 36, KOTOR_SAFE_ERF_BUILD_DAY)
     struct.pack_into("<I", header, 40, 0xFFFFFFFF)  # description strref
     return bytes(header + key_table + res_table + payload)
 

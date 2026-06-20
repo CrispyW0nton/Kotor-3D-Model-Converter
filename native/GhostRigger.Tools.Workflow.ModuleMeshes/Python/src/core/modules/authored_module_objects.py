@@ -16,6 +16,15 @@ from .authored_walkmesh_surfaces import walkable_walkmesh_surface_ids, walkmesh_
 
 Vec3 = tuple[float, float, float]
 Vec4 = tuple[float, float, float, float]
+GIT_STRUCT_ID_CAMERA = 14
+GIT_STRUCT_ID_CREATURE = 4
+GIT_STRUCT_ID_DOOR = 8
+GIT_STRUCT_ID_ENCOUNTER = 7
+GIT_STRUCT_ID_PLACEABLE = 9
+GIT_STRUCT_ID_SOUND = 6
+GIT_STRUCT_ID_STORE = 11
+GIT_STRUCT_ID_TRIGGER = 1
+GIT_STRUCT_ID_WAYPOINT = 5
 
 
 @dataclass(frozen=True)
@@ -279,6 +288,23 @@ def _walkmesh_face_at_position(wok: Any, position: Vec3) -> int:
     return int(face_at_point(float(position[0]), float(position[1])))
 
 
+def _triangle_floor_z_at_position(position: Vec3, a: Vec3, b: Vec3, c: Vec3) -> float:
+    """Return the WOK triangle plane height under a gameplay marker."""
+
+    px = float(position[0])
+    py = float(position[1])
+    ax, ay, az = float(a[0]), float(a[1]), float(a[2])
+    bx, by, bz = float(b[0]), float(b[1]), float(b[2])
+    cx, cy, cz = float(c[0]), float(c[1]), float(c[2])
+    denominator = ((by - cy) * (ax - cx)) + ((cx - bx) * (ay - cy))
+    if abs(denominator) <= 1e-9:
+        return (az + bz + cz) / 3.0
+    w_a = (((by - cy) * (px - cx)) + ((cx - bx) * (py - cy))) / denominator
+    w_b = (((cy - ay) * (px - cx)) + ((ax - cx) * (py - cy))) / denominator
+    w_c = 1.0 - w_a - w_b
+    return (w_a * az) + (w_b * bz) + (w_c * cz)
+
+
 def _walkmesh_check(label: str, position: Vec3, wok: Any, *, z_tolerance: float) -> AuthoredGameplayWalkmeshCheck:
     if not _position_ok(position):
         return AuthoredGameplayWalkmeshCheck(
@@ -335,7 +361,12 @@ def _walkmesh_check(label: str, position: Vec3, wok: Any, *, z_tolerance: float)
             surface_id=surface_id,
             message=f"{label} resolved to WOK face {face_index} with invalid vertex indices.",
         )
-    floor_z = sum(float(verts[vertex_index][2]) for vertex_index in vertex_indices) / 3.0
+    floor_z = _triangle_floor_z_at_position(
+        position,
+        tuple(verts[vertex_indices[0]]),  # type: ignore[arg-type]
+        tuple(verts[vertex_indices[1]]),  # type: ignore[arg-type]
+        tuple(verts[vertex_indices[2]]),  # type: ignore[arg-type]
+    )
     if abs(float(position[2]) - floor_z) > float(z_tolerance):
         return AuthoredGameplayWalkmeshCheck(
             label=label,
@@ -434,7 +465,7 @@ def apply_entry_point_to_ifo(root: Any, entry: ModuleEntryPoint) -> None:
 
 
 def _add_placeable(list_value: Any, index: int, placeable: AuthoredPlaceableInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_PLACEABLE)
     resref = normalise_resource_resref(placeable.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", placeable.tag or resref)
@@ -445,7 +476,7 @@ def _add_placeable(list_value: Any, index: int, placeable: AuthoredPlaceableInst
 
 
 def _add_creature(list_value: Any, index: int, creature: AuthoredCreatureInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_CREATURE)
     resref = normalise_resource_resref(creature.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", creature.tag or resref)
@@ -457,7 +488,7 @@ def _add_creature(list_value: Any, index: int, creature: AuthoredCreatureInstanc
 
 
 def _add_door(list_value: Any, index: int, door: AuthoredDoorInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_DOOR)
     resref = normalise_resource_resref(door.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", door.tag or resref)
@@ -479,7 +510,7 @@ def _add_trigger_geometry(list_value: Any, points: tuple[Vec3, ...]) -> None:
 
 
 def _add_trigger(list_value: Any, index: int, trigger: AuthoredTriggerInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_TRIGGER)
     resref = normalise_resource_resref(trigger.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", trigger.tag or resref)
@@ -495,7 +526,7 @@ def _add_trigger(list_value: Any, index: int, trigger: AuthoredTriggerInstance) 
 
 
 def _add_waypoint(list_value: Any, index: int, waypoint: AuthoredWaypointInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_WAYPOINT)
     resref = normalise_resource_resref(waypoint.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", waypoint.tag or resref)
@@ -503,12 +534,12 @@ def _add_waypoint(list_value: Any, index: int, waypoint: AuthoredWaypointInstanc
     item.set_single("XPosition", float(waypoint.position[0]))
     item.set_single("YPosition", float(waypoint.position[1]))
     item.set_single("ZPosition", float(waypoint.position[2]))
-    item.set_single("XOrientation", float(waypoint.bearing))
-    item.set_single("Bearing", float(waypoint.bearing))
+    item.set_single("XOrientation", math.cos(float(waypoint.bearing)))
+    item.set_single("YOrientation", math.sin(float(waypoint.bearing)))
 
 
 def _add_encounter(list_value: Any, index: int, encounter: AuthoredEncounterInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_ENCOUNTER)
     resref = normalise_resource_resref(encounter.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", encounter.tag or resref)
@@ -518,7 +549,7 @@ def _add_encounter(list_value: Any, index: int, encounter: AuthoredEncounterInst
 
 
 def _add_sound(list_value: Any, index: int, sound: AuthoredSoundInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_SOUND)
     resref = normalise_resource_resref(sound.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", sound.tag or resref)
@@ -530,7 +561,7 @@ def _add_sound(list_value: Any, index: int, sound: AuthoredSoundInstance) -> Non
 def _add_camera(list_value: Any, index: int, camera: AuthoredCameraInstance) -> None:
     from utility.common.geometry import Vector3, Vector4
 
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_CAMERA)
     item.set_int32("CameraID", _camera_id_value(camera.camera_id) or 0)
     item.set_single("FieldOfView", float(camera.field_of_view))
     item.set_single("Height", float(camera.height))
@@ -541,10 +572,28 @@ def _add_camera(list_value: Any, index: int, camera: AuthoredCameraInstance) -> 
 
 
 def _add_store(list_value: Any, index: int, store: AuthoredStoreInstance) -> None:
-    item = list_value.add(index)
+    item = list_value.add(GIT_STRUCT_ID_STORE)
     resref = normalise_resource_resref(store.template_resref)
     item.set_resref("TemplateResRef", resref)
     item.set_string("Tag", store.tag or resref)
+
+
+def _default_area_properties() -> Any:
+    """Build the GIT AreaProperties struct expected by KOTOR modules."""
+
+    from pykotor.resource.formats.gff.gff_data import GFFStruct
+
+    item = GFFStruct(100)
+    item.set_int32("AmbientSndDay", 0)
+    item.set_int32("AmbientSndNight", 0)
+    item.set_int32("AmbientSndDayVol", 0)
+    item.set_int32("AmbientSndNitVol", 0)
+    item.set_int32("EnvAudio", 0)
+    item.set_int32("MusicBattle", 0)
+    item.set_int32("MusicDay", 0)
+    item.set_int32("MusicNight", 0)
+    item.set_int32("MusicDelay", 30000)
+    return item
 
 
 def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
@@ -556,6 +605,7 @@ def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
     gff = _new_gff("GIT")
     root = gff.root
     root.set_uint8("UseTemplates", 1)
+    root.set_struct("AreaProperties", _default_area_properties())
 
     cameras = _empty_gff_list()
     for index, camera in enumerate(placement.cameras):
@@ -591,6 +641,7 @@ def build_git_gff(placement: AuthoredGameplayPlacement) -> Any:
     for index, store in enumerate(placement.stores):
         _add_store(stores, index, store)
     root.set_list("StoreList", stores)
+    root.set_list("List", _empty_gff_list())
 
     placeables = _empty_gff_list()
     for index, placeable in enumerate(placement.placeables):

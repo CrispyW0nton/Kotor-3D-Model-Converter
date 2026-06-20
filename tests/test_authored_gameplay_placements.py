@@ -127,6 +127,41 @@ def test_t2600_readiness_reports_authored_transitions() -> None:
     assert any("missing a destination" in warning for warning in readiness.warnings)
 
 
+def test_t2600_readiness_reports_generated_pth_pathing() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grpthrd",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="bench_anchor",
+        position=(1.0, 1.0, 0.0),
+    ).project
+
+    readiness = build_authored_module_readiness(project)
+    pathing = readiness.metadata["pathing"]
+    pathing_status = next(item for item in readiness.toolchain if item.name == "PTH pathing")
+
+    assert pathing["ready"] is True
+    assert pathing["pth_resource"] == "grpthrd.pth"
+    assert pathing["point_count"] >= 2
+    assert pathing["connection_count"] >= 2
+    assert "entry_point" in pathing["anchor_labels"]
+    assert "placeable:bench_anchor" in pathing["anchor_labels"]
+    assert pathing_status.ready is True
+    assert "grpthrd.pth" in pathing_status.value_label
+    assert "placeable:bench_anchor" in pathing_status.value_label
+
+
 def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
     _install_native_payload_paths()
 

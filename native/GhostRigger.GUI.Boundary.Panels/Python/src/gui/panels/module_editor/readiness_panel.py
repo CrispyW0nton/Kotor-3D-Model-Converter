@@ -54,6 +54,12 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.runtime_label.setObjectName("mapStudioReadinessRuntimeLabel")
         self.runtime_label.setWordWrap(True)
         root.addWidget(self.runtime_label)
+
+        self.pathing_label = QtWidgets.QLabel("Pathing: Not checked")
+        self.pathing_label.setObjectName("mapStudioReadinessPathingLabel")
+        self.pathing_label.setWordWrap(True)
+        root.addWidget(self.pathing_label)
+
         self.runtime_resource_table = QtWidgets.QTableWidget(0, 3)
         self.runtime_resource_table.setObjectName("mapStudioReadinessRuntimeResourceTable")
         self.runtime_resource_table.setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))
@@ -139,6 +145,21 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.authored_summary_label.setWordWrap(True)
         root.addWidget(self.authored_summary_label)
 
+        self.export_objects_label = QtWidgets.QLabel("Export objects: Not checked")
+        self.export_objects_label.setObjectName("mapStudioReadinessExportObjectsLabel")
+        self.export_objects_label.setWordWrap(True)
+        root.addWidget(self.export_objects_label)
+        self.export_objects_table = QtWidgets.QTableWidget(0, 4)
+        self.export_objects_table.setObjectName("mapStudioReadinessExportObjectsTable")
+        self.export_objects_table.setHorizontalHeaderLabels(("Object", "Resources", "Geometry / WOK", "DCC handoff"))
+        self.export_objects_table.verticalHeader().setVisible(False)
+        self.export_objects_table.horizontalHeader().setStretchLastSection(True)
+        self.export_objects_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.export_objects_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.export_objects_table.setMinimumHeight(76)
+        self.export_objects_table.setMaximumHeight(160)
+        root.addWidget(self.export_objects_table)
+
         self.template_references_label = QtWidgets.QLabel("Template references: Not checked")
         self.template_references_label.setObjectName("mapStudioReadinessTemplateReferencesLabel")
         self.template_references_label.setWordWrap(True)
@@ -216,6 +237,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.preview_label.setText("Preview: Not ready")
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
+            self.pathing_label.setText("Pathing: Not checked")
             self._set_runtime_resource_rows((), (), ())
             self.proof_label.setText("Game proof: Not staged")
             self.proof_recorder_label.setText("Proof recorder: Not ready")
@@ -225,6 +247,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_manifest_edit.clear()
             self._update_copy_buttons()
             self.authored_summary_label.setText("Authored content: Not checked")
+            self.export_objects_label.setText("Export objects: Not checked")
+            self._set_export_object_rows(())
             self.template_references_label.setText("Template references: Not checked")
             self._set_template_reference_rows(())
             self.transition_references_label.setText("Transitions: Not checked")
@@ -265,6 +289,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.runtime_label.setText(f"Runtime resources: {len(expected) - len(missing)}/{len(expected)} present")
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
+        self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
         self._set_runtime_resource_rows(expected, present, missing)
         metadata = dict(getattr(readiness, "metadata", {}) or {})
         proof_status = str(metadata.get("proof_status") or "not_ready")
@@ -325,6 +350,16 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             f"Authored content: {room_text or 'No room style summary'}; "
             f"{placement_total} gameplay placement(s); {lighting_count} room light(s)"
         )
+        export_objects = list(metadata.get("export_object_boundaries", ()) or ())
+        uv_handoff_count = int(metadata.get("uv_handoff_object_count", 0) or 0)
+        if export_objects:
+            self.export_objects_label.setText(
+                f"Export objects: {len(export_objects)} room/object boundary(ies); "
+                f"{uv_handoff_count} ready for external UV/texturing handoff after geometry stabilizes"
+            )
+        else:
+            self.export_objects_label.setText("Export objects: None")
+        self._set_export_object_rows(export_objects)
         template_refs = list(metadata.get("gameplay_template_references", ()) or ())
         template_count = int(metadata.get("gameplay_template_reference_count", len(template_refs)) or 0)
         packaged_template_count = int(metadata.get("gameplay_packaged_template_count", 0) or 0)
@@ -405,6 +440,29 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.copy_launch_helper_button.setEnabled(bool(self.launch_helper_edit.text().strip()))
         self.copy_proof_manifest_button.setEnabled(bool(self.proof_manifest_edit.text().strip()))
 
+    def _set_pathing_summary(self, pathing: dict[str, Any]) -> None:
+        """Show generated PTH path graph readiness without exposing file-format details."""
+
+        if not pathing:
+            self.pathing_label.setText("Pathing: Not checked")
+            return
+        resource = str(pathing.get("pth_resource") or "(no PTH resource)")
+        status = str(pathing.get("status") or "Not checked")
+        point_count = int(pathing.get("point_count", 0) or 0)
+        connection_count = int(pathing.get("connection_count", 0) or 0)
+        anchors = [str(label) for label in list(pathing.get("anchor_labels") or []) if str(label).strip()]
+        anchor_text = ", ".join(anchors[:5]) if anchors else "walkmesh center only"
+        if len(anchors) > 5:
+            anchor_text += f", +{len(anchors) - 5} more"
+        blockers = [str(message) for message in list(pathing.get("blocking_messages") or []) if str(message).strip()]
+        if blockers:
+            self.pathing_label.setText(f"Pathing: {status}. {blockers[0]}")
+            return
+        self.pathing_label.setText(
+            f"Pathing: {status}. {resource}; {point_count} point(s), "
+            f"{connection_count} connection(s); anchors: {anchor_text}"
+        )
+
     @staticmethod
     def _normalise_resource_key(resource: Any) -> tuple[str, str]:
         if isinstance(resource, tuple) and len(resource) >= 2:
@@ -454,6 +512,41 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         if isinstance(reference, dict):
             return reference.get(key, default)
         return getattr(reference, key, default)
+
+    def _set_export_object_rows(self, boundaries: tuple[Any, ...] | list[Any]) -> None:
+        """Show authored room/object export boundaries for DCC handoff."""
+
+        rows = list(boundaries or ())
+        if not rows:
+            self.export_objects_table.setRowCount(1)
+            for column, text in enumerate((
+                "No export objects yet",
+                "MDL/MDX/WOK pending",
+                "Create room geometry first",
+                "Not ready",
+            )):
+                self.export_objects_table.setItem(0, column, self._table_item(text))
+            return
+        self.export_objects_table.setRowCount(len(rows))
+        for row, boundary in enumerate(rows):
+            item = dict(boundary) if isinstance(boundary, dict) else {}
+            label = str(item.get("label") or item.get("export_resref") or "(unnamed)")
+            resources = ", ".join(
+                f"{str(resource[0])}.{str(resource[1])}"
+                for resource in item.get("resources", ()) or ()
+                if isinstance(resource, (list, tuple)) and len(resource) >= 2
+            )
+            geometry = (
+                f"{int(item.get('render_mesh_count', 0) or 0)} mesh(es), "
+                f"{int(item.get('primitive_count', 0) or 0)} primitive(s), "
+                f"{int(item.get('walkable_face_count', 0) or 0)} walkable WOK face(s)"
+            )
+            handoff = "DCC/UV handoff candidate" if bool(item.get("uv_handoff_recommended", False)) else "Keep in Map Studio"
+            if str(item.get("status") or "") == "blocked":
+                blockers = "; ".join(str(message) for message in item.get("blocking_messages", ()) or ())
+                handoff = f"Blocked: {blockers or 'fix export object'}"
+            for column, text in enumerate((label, resources or "No resources", geometry, handoff)):
+                self.export_objects_table.setItem(row, column, self._table_item(text))
 
     def _set_template_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
         """Show authored gameplay template dependency readiness."""

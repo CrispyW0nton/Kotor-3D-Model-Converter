@@ -451,6 +451,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.walkmesh_label,
             readiness,
             "Walkmesh",
+            "Walkmesh",
             "Walkmesh status unavailable.",
         )
         self._set_toolchain_label(

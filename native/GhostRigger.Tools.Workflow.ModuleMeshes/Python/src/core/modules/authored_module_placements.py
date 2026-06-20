@@ -13,6 +13,7 @@ from .authored_module_objects import (
     AuthoredEncounterInstance,
     AuthoredGameplayPlacement,
     AuthoredPlaceableInstance,
+    ModuleEntryPoint,
     AuthoredSoundInstance,
     AuthoredStoreInstance,
     AuthoredTriggerInstance,
@@ -36,6 +37,16 @@ class AuthoredGameplayPlacementUpdate:
     position: Vec3
     count: int
     placement_id: str = ""
+
+
+@dataclass(frozen=True)
+class AuthoredModuleEntryPointUpdate:
+    """Result of editing the authored module IFO player start."""
+
+    project: AuthoredModuleProject
+    area_resref: str
+    position: Vec3
+    facing: float
 
 
 @dataclass(frozen=True)
@@ -279,6 +290,55 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                 )
             )
     return tuple(rows)
+
+
+def update_authored_module_entry_point(
+    project: AuthoredModuleProject,
+    *,
+    area_resref: Any = "",
+    position: Any = (0.0, 0.0, 0.0),
+    facing: float = 0.0,
+) -> AuthoredModuleEntryPointUpdate:
+    """Update the module entry point/player start that compiles into IFO."""
+
+    area = normalise_resref(area_resref or project.module_root)
+    issue = authored_resref_blocking_issue("Module entry area", area)
+    if issue:
+        raise ValueError(issue)
+    pos = _vec3(position)
+    entry = ModuleEntryPoint(
+        area_resref=area,
+        position=pos,
+        facing=float(facing),
+    )
+    metadata = {
+        "area_resref": area,
+        "position": [float(pos[0]), float(pos[1]), float(pos[2])],
+        "facing": float(facing),
+    }
+    updated_placements = replace(
+        project.placements,
+        entry_point=entry,
+        metadata={
+            **dict(project.placements.metadata),
+            "last_entry_point_update": metadata,
+        },
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Updated Map Studio module entry point: {area}.",),
+        extra={
+            **dict(project.extra),
+            "last_entry_point_update": metadata,
+        },
+    )
+    return AuthoredModuleEntryPointUpdate(
+        project=updated,
+        area_resref=area,
+        position=pos,
+        facing=float(facing),
+    )
 
 
 def _append_placement(
@@ -767,6 +827,7 @@ def remove_authored_gameplay_placement(
 
 
 __all__ = [
+    "AuthoredModuleEntryPointUpdate",
     "AuthoredGameplayPlacementRow",
     "AuthoredGameplayPlacementUpdate",
     "SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS",
@@ -777,6 +838,7 @@ __all__ = [
     "parse_authored_gameplay_placement_id",
     "remove_authored_gameplay_placement",
     "rename_authored_gameplay_placement",
+    "update_authored_module_entry_point",
     "update_authored_gameplay_camera_properties",
     "update_authored_gameplay_placement_transform",
     "update_authored_gameplay_transition",
