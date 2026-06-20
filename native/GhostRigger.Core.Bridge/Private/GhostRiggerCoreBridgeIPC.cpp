@@ -8,10 +8,10 @@ namespace {
 constexpr const char* kVersion = "0.1.0";
 constexpr const char* kOwnerBoundary =
     R"({"schema":"core_bridge_ipc_owner_boundary.v1",)"
-    R"("module_package":"GhostRigger.Core.Bridge",)"
+    R"("module_package":"GhostRigger.Core.Bridge.vcxproj",)"
     R"("source_package":"src/adapters/qt_ipc;src/adapters/rendering;src/adapters/unreal",)"
     R"("owner_surface":"Qt IPC adapters",)"
-    R"("owner_package":"native/GhostRigger.Core.Bridge",)"
+    R"("owner_package":"native/GhostRigger.Core.Bridge.vcxproj",)"
     R"("bridge_method":"C ABI DLL",)"
     R"("diagnostic_only":false,)"
     R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
@@ -19,7 +19,7 @@ constexpr const char* kOwnerBoundary =
     R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"core_bridge_ipc_dependency_schema.v1",)"
-    R"("module_package":"GhostRigger.Core.Bridge",)"
+    R"("module_package":"GhostRigger.Core.Bridge.vcxproj",)"
     R"("source_package":"src/adapters/qt_ipc;src/adapters/rendering;src/adapters/unreal",)"
     R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
@@ -73,7 +73,7 @@ GHOSTRIGGER_CORE_BRIDGE_IPC_API const char* gr_core_bridge_ipc_version() {
 }
 
 GHOSTRIGGER_CORE_BRIDGE_IPC_API const char* gr_core_bridge_ipc_capabilities_json() {
-    return R"({"name":"GhostRigger.Core.Bridge","version":"0.1.0",)"
+    return R"({"name":"GhostRigger.Core.Bridge.vcxproj","version":"0.1.0",)"
            R"("phase":"P1 module sweep","module_package":true,)"
            R"("source_package":"src/adapters/qt_ipc;src/adapters/rendering;src/adapters/unreal",)"
            R"("owner_surface":"Qt IPC adapters","bridge_method":"C ABI DLL",)"

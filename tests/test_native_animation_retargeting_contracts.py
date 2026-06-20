@@ -9,7 +9,7 @@ from src.core.animation_retargeting import retargeter
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Workflow.AnimationRetargeting.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Workflow.dll"
 
 
 Double3 = ctypes.c_double * 3

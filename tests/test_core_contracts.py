@@ -3795,11 +3795,11 @@ def test_animation_engine_distinguishes_rigid_animation_from_skeletons() -> None
 def test_content_browser_activation_adds_generic_model_rows_without_clear_prompt() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/resource_loading.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/resource_loading.py"
     ).read_text(encoding="utf-8")
     panel_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/qt_content_browser_panel.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_content_browser_panel.py"
     ).read_text(encoding="utf-8")
 
     assert "self.asset_view.itemDoubleClicked.connect(lambda _item, _column: self._activate_selected())" in panel_source
@@ -3815,11 +3815,11 @@ def test_content_browser_activation_adds_generic_model_rows_without_clear_prompt
 def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
     construction_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/construction.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/construction.py"
     ).read_text(encoding="utf-8")
     overlay_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     ).read_text(encoding="utf-8")
     renderer_source = (
         ROOT
@@ -3827,7 +3827,7 @@ def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
     ).read_text(encoding="utf-8")
     viewport_tools_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/viewport_tools.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py"
     ).read_text(encoding="utf-8")
 
     assert "self.locomotion_disc_size_spin = QtWidgets.QSpinBox(self)" in construction_source
@@ -3848,11 +3848,11 @@ def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
 def test_viewport_hover_refreshes_after_transform_drags() -> None:
     picking_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/picking_hover.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/picking_hover.py"
     ).read_text(encoding="utf-8")
     drag_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
     ).read_text(encoding="utf-8")
 
     assert "def _refresh_viewport_hover_at" in picking_source
@@ -3868,15 +3868,15 @@ def test_viewport_hover_refreshes_after_transform_drags() -> None:
 def test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_root() -> None:
     event_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
     ).read_text(encoding="utf-8")
     selection_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py"
     ).read_text(encoding="utf-8")
     drag_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
     ).read_text(encoding="utf-8")
 
     assert "QtCore.QEvent.MouseButtonDblClick" in event_source
@@ -3891,7 +3891,7 @@ def test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_r
 def test_scene_root_transform_evicts_child_gpu_nodes() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/resource_cache.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/resource_cache.py"
     ).read_text(encoding="utf-8")
 
     assert "scene_transform_only = bool(getattr(node, \"_gr_scene_gpu_transform\", False))" in source
@@ -5203,7 +5203,7 @@ def test_qt_lighting_panel_has_min_width_and_selected_light_overflow() -> None:
 
     workspace_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
     ).read_text(encoding="utf-8")
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
@@ -10443,11 +10443,11 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
 def test_startup_theme_apply_defers_hidden_dock_panel_hooks() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/theme_layout.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/theme_layout.py"
     ).read_text(encoding="utf-8")
     dock_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
     ).read_text(encoding="utf-8")
 
     assert "def _defer_startup_theme_hook" in source
@@ -10462,11 +10462,11 @@ def test_startup_theme_apply_defers_hidden_dock_panel_hooks() -> None:
 def test_main_window_lazily_creates_heavy_animation_workbenches() -> None:
     layout_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/main_layout.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/main_layout.py"
     ).read_text(encoding="utf-8")
     workflow_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
     ).read_text(encoding="utf-8")
 
     assert "self.animation_retarget_window = QtAnimationRetargetWindow(self)" not in layout_source
@@ -10484,14 +10484,14 @@ def test_main_window_lazily_creates_heavy_animation_workbenches() -> None:
 def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/functions/app_runner.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/app_runner.py"
     ).read_text(encoding="utf-8")
     native_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/functions/native_prelaunch.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/native_prelaunch.py"
     ).read_text(encoding="utf-8")
     cpp_source = (
-        ROOT / "native/GhostRigger.Core.GUI.Display.Shell.Main/Private/GhostRiggerWindowsMainWindow.cpp"
+        ROOT / "native/GhostRigger.Core.GUI.Display/Private/GhostRiggerWindowsMainWindow.cpp"
     ).read_text(encoding="utf-8")
     host_source = (ROOT / "native/GhostRigger.Native.Core.Host/Private/main.cpp").read_text(encoding="utf-8")
     host_py_source = (ROOT / "native/GhostRigger.Native.Core.Host/main.py").read_text(encoding="utf-8")
@@ -10539,11 +10539,11 @@ def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
 def test_main_window_defers_post_show_startup_tasks_until_after_first_paint() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/qt_main_window.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py"
     ).read_text(encoding="utf-8")
     startup_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/startup_library.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/startup_library.py"
     ).read_text(encoding="utf-8")
 
     assert "self._post_show_startup_tasks_started = False" in source
@@ -10569,7 +10569,7 @@ def test_main_window_defers_post_show_startup_tasks_until_after_first_paint() ->
 def test_main_window_reapplies_startup_layout_after_show_for_button_geometry() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/theme_layout.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/theme_layout.py"
     ).read_text(encoding="utf-8")
 
     assert "def _refresh_startup_layout_after_show(self) -> None:" in source
@@ -10582,7 +10582,7 @@ def test_main_window_reapplies_startup_layout_after_show_for_button_geometry() -
 def test_startup_splash_has_launch_log_textblock() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/splash.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/splash.py"
     ).read_text(encoding="utf-8")
 
     assert "self.launch_log = QtWidgets.QPlainTextEdit()" in source
@@ -10608,7 +10608,7 @@ def test_startup_splash_has_launch_log_textblock() -> None:
 def test_prewindow_diagnostics_parallelizes_renderer_and_hardware_scans() -> None:
     source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/functions/startup_library.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/startup_library.py"
     ).read_text(encoding="utf-8")
 
     assert "from concurrent.futures import ThreadPoolExecutor" in source
@@ -10654,23 +10654,23 @@ def test_viewport_toolbar_keeps_minimum_visible_height() -> None:
 def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
     layout_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/main_layout.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/main_layout.py"
     ).read_text(encoding="utf-8")
     workflow_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
     ).read_text(encoding="utf-8")
     diagnostics_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/viewport_tools.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py"
     ).read_text(encoding="utf-8")
     default_area_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
     ).read_text(encoding="utf-8")
     chrome_source = (
         ROOT
-        / "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/application_core/shared/window_chrome.py"
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_chrome.py"
     ).read_text(encoding="utf-8")
 
     assert '"sequence_editor": (1180, 720)' in layout_source

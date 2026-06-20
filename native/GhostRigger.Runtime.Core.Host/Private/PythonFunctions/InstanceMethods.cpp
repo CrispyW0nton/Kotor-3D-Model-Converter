@@ -4,7 +4,7 @@ namespace ghostrigger::runtime::core::host {
 
 const NativeFunctionImplementation& aliasloader_construct_line_224_c5fe8728_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_AliasLoader.__init__",
@@ -13,14 +13,14 @@ const NativeFunctionImplementation& aliasloader_construct_line_224_c5fe8728_nati
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasLoader.__init__","name":"__init__","callable_type":"instance_methods","line":224,"end_line":225,"signature":{"args":["self","target"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasLoader.__init__","name":"__init__","callable_type":"instance_methods","line":224,"end_line":225,"signature":{"args":["self","target"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& aliasloader_create_module_line_227_75e53f13_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_AliasLoader.create_module",
@@ -29,14 +29,14 @@ const NativeFunctionImplementation& aliasloader_create_module_line_227_75e53f13_
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasLoader.create_module","name":"create_module","callable_type":"instance_methods","line":227,"end_line":228,"signature":{"args":["self","spec"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasLoader.create_module","name":"create_module","callable_type":"instance_methods","line":227,"end_line":228,"signature":{"args":["self","spec"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& aliasloader_exec_module_line_230_c94fed86_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_AliasLoader.exec_module",
@@ -45,14 +45,14 @@ const NativeFunctionImplementation& aliasloader_exec_module_line_230_c94fed86_na
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasLoader.exec_module","name":"exec_module","callable_type":"instance_methods","line":230,"end_line":238,"signature":{"args":["self","module"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasLoader.exec_module","name":"exec_module","callable_type":"instance_methods","line":230,"end_line":238,"signature":{"args":["self","module"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& aliasfinder_find_spec_line_242_f27746af_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_AliasFinder.find_spec",
@@ -61,14 +61,14 @@ const NativeFunctionImplementation& aliasfinder_find_spec_line_242_f27746af_nati
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasFinder.find_spec","name":"find_spec","callable_type":"instance_methods","line":242,"end_line":251,"signature":{"args":["self","fullname","path","target"],"positional_count":4,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_AliasFinder.find_spec","name":"find_spec","callable_type":"instance_methods","line":242,"end_line":251,"signature":{"args":["self","fullname","path","target"],"positional_count":4,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& lazymodule_construct_line_257_ddb72fa4_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_LazyModule.__init__",
@@ -77,14 +77,14 @@ const NativeFunctionImplementation& lazymodule_construct_line_257_ddb72fa4_nativ
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__init__","name":"__init__","callable_type":"instance_methods","line":257,"end_line":260,"signature":{"args":["self","alias","target"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__init__","name":"__init__","callable_type":"instance_methods","line":257,"end_line":260,"signature":{"args":["self","alias","target"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& lazymodule_load_line_262_2256a9af_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_LazyModule._load",
@@ -93,14 +93,14 @@ const NativeFunctionImplementation& lazymodule_load_line_262_2256a9af_native() {
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule._load","name":"_load","callable_type":"instance_methods","line":262,"end_line":270,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule._load","name":"_load","callable_type":"instance_methods","line":262,"end_line":270,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& lazymodule_getattr_line_272_e592785f_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_LazyModule.__getattr__",
@@ -109,14 +109,14 @@ const NativeFunctionImplementation& lazymodule_getattr_line_272_e592785f_native(
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__getattr__","name":"__getattr__","callable_type":"instance_methods","line":272,"end_line":273,"signature":{"args":["self","name"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__getattr__","name":"__getattr__","callable_type":"instance_methods","line":272,"end_line":273,"signature":{"args":["self","name"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& lazymodule_setattr_line_275_771d313f_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_LazyModule.__setattr__",
@@ -125,14 +125,14 @@ const NativeFunctionImplementation& lazymodule_setattr_line_275_771d313f_native(
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__setattr__","name":"__setattr__","callable_type":"instance_methods","line":275,"end_line":280,"signature":{"args":["self","name","value"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__setattr__","name":"__setattr__","callable_type":"instance_methods","line":275,"end_line":280,"signature":{"args":["self","name","value"],"positional_count":3,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& lazymodule_delattr_line_282_8529e3e5_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_LazyModule.__delattr__",
@@ -141,14 +141,14 @@ const NativeFunctionImplementation& lazymodule_delattr_line_282_8529e3e5_native(
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__delattr__","name":"__delattr__","callable_type":"instance_methods","line":282,"end_line":287,"signature":{"args":["self","name"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__delattr__","name":"__delattr__","callable_type":"instance_methods","line":282,"end_line":287,"signature":{"args":["self","name"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
 
 const NativeFunctionImplementation& lazymodule_dir_line_289_97285489_native() {
     static const NativeFunctionImplementation implementation = {
-        "GhostRigger.Runtime.Core.Host",
+        "GhostRigger.Runtime.Core.Host.vcxproj",
         "ghostrigger::runtime::core::host::core::qt_core",
         "src/core/qt_core.py",
         "_LazyModule.__dir__",
@@ -157,7 +157,7 @@ const NativeFunctionImplementation& lazymodule_dir_line_289_97285489_native() {
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__dir__","name":"__dir__","callable_type":"instance_methods","line":289,"end_line":290,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Runtime.Core.Host.vcxproj","namespace":"ghostrigger::runtime::core::host::core::qt_core","python_file":"src/core/qt_core.py","qualname":"_LazyModule.__dir__","name":"__dir__","callable_type":"instance_methods","line":289,"end_line":290,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }

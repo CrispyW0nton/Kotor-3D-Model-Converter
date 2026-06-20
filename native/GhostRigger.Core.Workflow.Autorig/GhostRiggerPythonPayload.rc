@@ -1,8 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_AUTORIG_INIT RCDATA "Python/src/autorig/__init__.py"
-PYTHON_PAYLOAD_AUTORIG_ACCURIG RCDATA "Python/src/autorig/accurig.py"
-PYTHON_PAYLOAD_AUTORIG_AUTO_RIGGER RCDATA "Python/src/autorig/auto_rigger.py"
-PYTHON_PAYLOAD_AUTORIG_CLOTH_RIG RCDATA "Python/src/autorig/cloth_rig.py"
-PYTHON_PAYLOAD_AUTORIG_GRIG RCDATA "Python/src/autorig/grig.py"
-PYTHON_PAYLOAD_AUTORIG_RETARGET_ENGINE RCDATA "Python/src/autorig/retarget_engine.py"

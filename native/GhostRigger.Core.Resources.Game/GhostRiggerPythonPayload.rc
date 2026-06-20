@@ -1,9 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CORE_GAME_INIT RCDATA "Python/src/core/game/__init__.py"
-PYTHON_PAYLOAD_CORE_GAME_GAME_LIBRARY_EXT RCDATA "Python/src/core/game/game_library_ext.py"
-PYTHON_PAYLOAD_CORE_GAME_IMPORT_NORMALISATION RCDATA "Python/src/core/game/import_normalisation.py"
-PYTHON_PAYLOAD_CORE_GAME_KOTOR_INSTALL RCDATA "Python/src/core/game/kotor_install.py"
-PYTHON_PAYLOAD_CORE_GAME_KOTOR_LOADER RCDATA "Python/src/core/game/kotor_loader.py"
-PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_BRIDGE RCDATA "Python/src/core/game/pykotor_bridge.py"
-PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_MDL_IO_FIX RCDATA "Python/src/core/game/pykotor_mdl_io_fix.py"

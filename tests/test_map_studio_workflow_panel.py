@@ -12,7 +12,7 @@ def _read(rel: str) -> str:
 
 def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
 
@@ -80,11 +80,11 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
 
 def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None:
     window_source = _read(
-        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     init_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/__init__.py"
     )
 
@@ -127,11 +127,11 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
 
 def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     mirror_source = _read(
-        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
     mirror_init = _read(
-        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/__init__.py"
     )
 

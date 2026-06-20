@@ -9,10 +9,10 @@ namespace {
 constexpr const char* kVersion = "0.1.0";
 constexpr const char* kOwnerBoundary =
     R"({"schema":"validation_owner_boundary.v1",)"
-    R"("module_package":"GhostRigger.Core.Validation",)"
+    R"("module_package":"GhostRigger.Core.Validation.vcxproj",)"
     R"("source_package":"src/core/validation",)"
     R"("owner_surface":"Validation services",)"
-    R"("owner_package":"native/GhostRigger.Core.Validation",)"
+    R"("owner_package":"native/GhostRigger.Core.Validation.vcxproj",)"
     R"("bridge_method":"C ABI DLL",)"
     R"("diagnostic_only":false,)"
     R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics","validation_bus_severity_contracts","validation_bus_subsystem_contracts"],)"
@@ -20,7 +20,7 @@ constexpr const char* kOwnerBoundary =
     R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"validation_dependency_schema.v1",)"
-    R"("module_package":"GhostRigger.Core.Validation",)"
+    R"("module_package":"GhostRigger.Core.Validation.vcxproj",)"
     R"("source_package":"src/core/validation",)"
     R"("diagnostic_only":false,)"
     R"("dependency_scan_complete":true,)"
@@ -38,7 +38,7 @@ GHOSTRIGGER_VALIDATION_API const char* gr_validation_version() {
 }
 
 GHOSTRIGGER_VALIDATION_API const char* gr_validation_capabilities_json() {
-    return R"({"name":"GhostRigger.Core.Validation","version":"0.1.0",)"
+    return R"({"name":"GhostRigger.Core.Validation.vcxproj","version":"0.1.0",)"
            R"("phase":"P2 native semantic port","module_package":true,)"
            R"("source_package":"src/core/validation",)"
            R"("owner_surface":"Validation services","bridge_method":"C ABI DLL",)"

@@ -5,38 +5,28 @@ These templates are Phase 1 scaffolding for new C++ packages in
 create native projects with the same output layout, warning level, language
 standard, ownership metadata, and Debug-configuration verification expectations.
 
-Use these templates when adding:
+Use these templates only when adding a genuinely new native binary boundary:
 
-- a shared native package used by multiple renderer/toolbox systems;
-- a renderer DLL package;
-- a toolbox DLL package;
-- a package Debug-configuration verification contract.
+- a runtime, ABI, deployment, or external-host boundary that cannot live inside
+  an existing aggregate project;
+- a package Debug-configuration verification contract for that real boundary.
 
 The anchor native projects are `GhostRigger.Native.Core.Host`, `GhostRigger.Native.Core.Foundation`,
-and `GhostRigger.Runtime.Core.Host`. Shared follow-on packages should use
-`GhostRigger.Native.Core.Foundation.{System}` for core foundations and `GhostRigger.Runtime.Shared.{System}` for
-runtime contracts consumed by multiple renderer/toolbox packages.
+and `GhostRigger.Runtime.Core.Host`. Shared follow-on code should go into an
+existing aggregate owner such as `GhostRigger.Runtime.Shared`,
+`GhostRigger.Runtime.Core`, or `GhostRigger.Native.Core.Foundation` unless a
+separate DLL is truly required.
 
-Toolbox migrations must use product-surface namespaces rather than being folded
-into the host or runtime projects. Native toolbox packages use
-`GhostRigger.Core.Tools.{Toolname}`, for example
-`GhostRigger.Core.Tools.Retargeting`, `GhostRigger.Core.Tools.Export`, or
-`GhostRigger.Core.Tools.ModuleEditor`. Visible windows, panels, dialogs,
-widgets, controls, notifications, overlays, and display-only state belong under
-`GhostRigger.Core.GUI.Display.*`. Interactive helper objects such as gizmos,
+Tool migrations must use product-surface namespaces inside the aggregate
+`GhostRigger.Core.Tools` project. Visible windows, panels, dialogs, widgets,
+controls, notifications, overlays, and display-only state belong inside
+`GhostRigger.Core.GUI.Display`. Interactive helper objects such as gizmos,
 selection pickers, transform handles, snapping helpers, and dummies belong
-under `GhostRigger.Core.GUI.Helpers.*`. Broad `GhostRigger.Core.GUI.Display.*` projects
-are legacy compatibility boundaries and are not naming precedent for new
-projects.
+inside `GhostRigger.Core.GUI.Helpers`.
 
-Renderer packages use `GhostRigger.Core.Rendering.*`. Renderer-neutral
-contracts belong in `GhostRigger.Core.Rendering`, and concrete backend packages
-use `GhostRigger.Core.Rendering.Backends.{Backend}`, for example
-`GhostRigger.Core.Rendering.Backends.D3D12` or the diagnostic
-`GhostRigger.Core.Rendering.Backends.Null`. Existing
-`GhostRigger.Core.Rendering.Contracts` and
-`GhostRigger.Core.Rendering.Backends.*` projects are the current canonical
-renderer contract/backend package names.
+Renderer-neutral contracts, render state, textures, materials, GPU policy, and
+backend implementations live inside the aggregate `GhostRigger.Core.Rendering`
+project.
 
 Shared logic that more than one tool, GUI package, renderer, or runtime package
 consumes belongs in the canonical Core, Systems, Runtime, Native Core, or
@@ -50,7 +40,7 @@ matching template and replace every `{{TOKEN}}`.
 
 | Token | Meaning |
 |-------|---------|
-| `{{PROJECT_NAME}}` | Visual Studio project and target name, such as `GhostRigger.Core.Tools.Retargeting`, `GhostRigger.Core.GUI.Display.Panels`, or `GhostRigger.Core.Rendering.Backends.D3D12`. |
+| `{{PROJECT_NAME}}` | Visual Studio project and target name, normally one of the aggregate owners such as `GhostRigger.Core.Tools`, `GhostRigger.Core.GUI.Display`, or `GhostRigger.Core.Rendering`. |
 | `{{PROJECT_GUID}}` | New project GUID in braces. |
 | `{{ROOT_NAMESPACE}}` | C++ root namespace or project namespace. |
 | `{{EXPORT_DEFINE}}` | DLL export preprocessor define, such as `GHOSTRIGGER_RENDERER_D3D12_EXPORTS`. |

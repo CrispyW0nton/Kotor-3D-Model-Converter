@@ -5,7 +5,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(GhostRiggerNativeRoot)GhostRigger.Native.Core.Foundation\Public;$(GhostRiggerNativeRoot)GhostRigger.Native.Core.Foundation;$(GhostRiggerNativeRoot)GhostRigger.Core.Rendering.Contracts\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GhostRiggerNativeRoot)GhostRigger.Native.Core.Foundation\Public;$(GhostRiggerNativeRoot)GhostRigger.Native.Core.Foundation;$(GhostRiggerNativeRoot)GhostRigger.Core.Rendering\Public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
 </Project>

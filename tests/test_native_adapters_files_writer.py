@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.File.Write.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.dll"
 
 
 def _load_dll() -> ctypes.CDLL:

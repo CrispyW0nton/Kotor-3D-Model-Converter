@@ -14,15 +14,15 @@ def test_t2600_module_editor_icon_opens_map_studio_level_editor() -> None:
     """The existing main-screen Module Editor action is the Map Studio entry point."""
 
     chrome_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/"
         "application_core/shared/window_chrome.py"
     )
     resource_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Shell.Main/Python/src/gui/windows/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/"
         "application_core/shared/resource_panels.py"
     )
     integration_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Integration/Python/src/gui/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/"
         "integration/tool_integration_registry.py"
     )
 
@@ -36,7 +36,7 @@ def test_t2600_level_editor_window_is_branded_as_map_studio_without_new_surface(
     """Map Studio remains the existing Level Editor window and KMAP workflow."""
 
     window_source = _read(
-        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 

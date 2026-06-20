@@ -62,7 +62,7 @@ application. Do not treat the repository as a flat Python app.
 - `native/templates/`: templates for new native DLL/debug-validation project
   scaffolding.
 
-The current root payload manifest covers 80 non-debug native DLL projects and
+The current root payload manifest covers 18 non-debug native DLL projects and
 1,306 embedded Python files. Treat the manifest and
 `tests/test_native_python_payloads.py` as the source of truth if counts drift.
 
@@ -77,7 +77,7 @@ state and must be migrated deliberately rather than copied into new work.
   runtime foundations, diagnostics, math, and host integration.
 - `GhostRigger.Runtime.Core.Host`: C ABI runtime host used by Python for native
   lifecycle, scene/resource descriptors, retained handles, and diagnostics.
-- `GhostRigger.Core.IO.File.*`: all reading, writing, importing, exporting,
+- `GhostRigger.Core.IO.*`: all reading, writing, importing, exporting,
   serialization, deserialization, packing, extraction, archive access,
   resource-file access, and conversion.
 - `GhostRigger.Core.Automation`: IPC, MCP, scripting bridges, external
@@ -99,7 +99,7 @@ state and must be migrated deliberately rather than copied into new work.
   contracts.
 - `GhostRigger.Core.Resources.*`: resource discovery, identity, addresses,
   references, lifetime, cache policy, and game/library resource lookup.
-- `GhostRigger.Core.IO.File.Format`: pure format structures and format-level
+- `GhostRigger.Core.IO`: pure format structures and format-level
   contracts. Formats define structure; IO reads and writes it.
 - `GhostRigger.Core.Math.*`: reusable transform, matrix, camera, pivot,
   projection, coordinate conversion, normal/tangent, skinning, frame, and

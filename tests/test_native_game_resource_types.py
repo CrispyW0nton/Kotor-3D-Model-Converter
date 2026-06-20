@@ -8,8 +8,8 @@ from src.core.game import game_library_ext
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Resources.Game"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Resources.Game.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Resources"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Resources.dll"
 
 
 def _load_game_dll() -> ctypes.CDLL:
@@ -26,8 +26,8 @@ def _load_game_dll() -> ctypes.CDLL:
 
 
 def test_game_project_declares_resource_type_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Core.Resources.Game.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Core.Resources.Game.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.Resources.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.Resources.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerGame.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "ResourceTypes.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ResourceTypes.cpp").read_text(encoding="utf-8")

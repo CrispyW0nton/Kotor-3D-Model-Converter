@@ -9,14 +9,14 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Core.Scene.Modules/Python",
-        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Rendering.Lighting/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     ):
         path = str((repo / rel).resolve())

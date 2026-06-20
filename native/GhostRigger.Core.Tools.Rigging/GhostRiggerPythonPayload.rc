@@ -1,3 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_GUI_WINDOWS_QT_CHARACTER_BUILDER_WINDOW RCDATA "Python/src/gui/windows/qt_character_builder_window.py"

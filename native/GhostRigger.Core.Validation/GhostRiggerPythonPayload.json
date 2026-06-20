@@ -15,7 +15,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_NATIVE",
             "source_path": "src/core/validation/_native.py",
             "packaged_path": "Python/src/core/validation/_native.py",
-            "sha256": "a058b7e1d382a1d0f51bfd271503afb2028a72079e419e7c74b6d8d74a1aca08"
+            "sha256": "89b8940fdc817cd2a7580aa2744dda8146ec76275e723914676e64535822e6e5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_ANIMATION_BLOCK_VALIDATOR",

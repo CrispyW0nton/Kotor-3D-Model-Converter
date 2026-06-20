@@ -50,8 +50,8 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
         and "<ConfigurationType>DynamicLibrary</ConfigurationType>" in project.read_text(encoding="utf-8")
     }
 
-    assert len(entries) == 80
-    assert len(payload_files) == 1306
+    assert len(entries) == 18
+    assert len(payload_files) == 1249
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
@@ -59,8 +59,8 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
 def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
     """Content Browser workflow data must not duplicate the shared panel surface."""
 
-    boundary_project = ROOT / "native" / "GhostRigger.Core.GUI.Display.Panels"
-    workflow_project = ROOT / "native" / "GhostRigger.Core.Tools.ContentBrowser"
+    boundary_project = ROOT / "native" / "GhostRigger.Core.GUI.Display"
+    workflow_project = ROOT / "native" / "GhostRigger.Core.Tools"
     panel_paths = (
         "Python/src/gui/panels/qt_content_browser_panel.py",
         "Python/src/gui/panels/qt_library_panel.py",
@@ -70,7 +70,7 @@ def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
     workflow_payload = json.loads((workflow_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
     boundary_packaged = {str(row["packaged_path"]) for row in boundary_payload["files"]}
     workflow_packaged = {str(row["packaged_path"]) for row in workflow_payload["files"]}
-    workflow_project_text = (workflow_project / "GhostRigger.Core.Tools.ContentBrowser.vcxproj").read_text(encoding="utf-8")
+    workflow_project_text = (workflow_project / "GhostRigger.Core.Tools.vcxproj").read_text(encoding="utf-8")
 
     for path in panel_paths:
         assert path in boundary_packaged
@@ -82,8 +82,8 @@ def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
 def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
     """Workflow 2DA Browser must consume the shared parser, not package a fork."""
 
-    owner_project = ROOT / "native" / "GhostRigger.Core.IO.File.Format"
-    workflow_project = ROOT / "native" / "GhostRigger.Core.Tools.TwoDABrowser"
+    owner_project = ROOT / "native" / "GhostRigger.Core.IO"
+    workflow_project = ROOT / "native" / "GhostRigger.Core.Tools"
     parser_paths = (
         "Python/src/core/templates/__init__.py",
         "Python/src/core/templates/twoda.py",
@@ -96,8 +96,8 @@ def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
     workflow_sources = "\n".join(
         path.read_text(encoding="utf-8")
         for path in [
-            workflow_project / "GhostRigger.Core.Tools.TwoDABrowser.vcxproj",
-            workflow_project / "GhostRigger.Core.Tools.TwoDABrowser.vcxproj.filters",
+            workflow_project / "GhostRigger.Core.Tools.vcxproj",
+            workflow_project / "GhostRigger.Core.Tools.vcxproj.filters",
             *sorted((workflow_project / "Private" / "PythonFunctions").glob("*.cpp")),
             *sorted((workflow_project / "Public" / "PythonFunctions").glob("*.h")),
         ]

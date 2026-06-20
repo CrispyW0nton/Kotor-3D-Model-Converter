@@ -79,7 +79,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER",
             "source_path": "src/adapters/rendering/moderngl_renderer.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer.py",
-            "sha256": "abf8a6c36fa2000cf5119ea2841bad04fd74b328bbede71bf9e664542ee4a1af",
+            "sha256": "32b0c052ee6e581db966c61260166146d25acec4716c6aca269fa3902d6841bf",
             "project": "GhostRigger.Core.Bridge"
         },
         {
@@ -114,7 +114,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_BINDING",
             "source_path": "src/adapters/rendering/native_core/binding.py",
             "packaged_path": "Python/src/adapters/rendering/native_core/binding.py",
-            "sha256": "ab8f4a5fb092d45920163ba5b6dd7b801941de7fa7c931378e3326d925c4f83a",
+            "sha256": "4412eeec1d426bd79fe5038057f55eaffa5da987a0abce853a3e150802a72285",
             "project": "GhostRigger.Core.Bridge"
         },
         {

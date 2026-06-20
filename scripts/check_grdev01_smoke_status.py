@@ -43,14 +43,14 @@ PROOF_EVIDENCE_EXTENSIONS = {
     ".webm",
 }
 PAYLOAD_PATHS = (
-    "native/GhostRigger.Core.Scene.Modules/Python",
-    "native/GhostRigger.Core.Resources.Game/Python",
     "native/GhostRigger.Core.Scene/Python",
-    "native/GhostRigger.Core.Scene.Walkmesh/Python",
+    "native/GhostRigger.Core.Resources/Python",
+    "native/GhostRigger.Core.Scene/Python",
+    "native/GhostRigger.Core.Scene/Python",
     "native/GhostRigger.Core.Math/Python",
     "native/GhostRigger.Core.Math/Python",
     "native/GhostRigger.Core.Math/Python",
-    "native/GhostRigger.Core.Rendering.Lighting/Python",
+    "native/GhostRigger.Core.Rendering/Python",
     "native/GhostRigger.Core.Automation/Python/src",
     ".",
 )

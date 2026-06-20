@@ -9,8 +9,8 @@ from src.math import transform_math, viewcube_math
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Native.Core.Math"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Native.Core.Math.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Native.Core.Foundation"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Native.Core.Foundation.dll"
 
 
 Double3 = ctypes.c_double * 3
@@ -140,8 +140,8 @@ def _load_math_dll() -> ctypes.CDLL:
 
 
 def test_native_core_math_project_declares_transform_and_viewcube_math_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Native.Core.Math.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Native.Core.Math.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Native.Core.Foundation.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Native.Core.Foundation.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerNativeCoreMath.h").read_text(encoding="utf-8")
     package_impl = (PROJECT_DIR / "Private" / "GhostRiggerNativeCoreMath.cpp").read_text(encoding="utf-8")
     public_transform = (PROJECT_DIR / "Public" / "TransformMath.h").read_text(encoding="utf-8")

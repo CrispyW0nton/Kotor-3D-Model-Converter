@@ -30,9 +30,9 @@ toolbox, GUI, renderer, runtime, or adapter package consumes it.
 
 ## Candidate: Retargeting Tool
 
-Native project: `GhostRigger.Core.Tools.Retargeting`
+Native project: `GhostRigger.Core.Tools`
 Owner surface: Retarget Workbench
-Owner package: `native/GhostRigger.Core.Tools.Retargeting`
+Owner package: `native/GhostRigger.Core.Tools`
 Bridge method: C ABI DLL first; `.pyd` only if the retargeting API needs richer
 Python types after the C ABI contract proves too narrow.
 
@@ -45,7 +45,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Core.Tools.Retargeting` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.Tools` in `Debug|x64`.
 - Python adapter test: targeted adapter/package availability and solve-packet
   fallback checks.
 - Backend truth check: MCP animation fixture comparison when native retargeting
@@ -55,9 +55,9 @@ Verification gates:
 
 ## Candidate: Export Tool
 
-Native project: `GhostRigger.Core.Tools.Export`
+Native project: `GhostRigger.Core.Tools`
 Owner surface: Export and validation workflow
-Owner package: `native/GhostRigger.Core.Tools.Export`
+Owner package: `native/GhostRigger.Core.Tools`
 Bridge method: C ABI DLL for validator/readback helpers before any writer
 replacement.
 
@@ -71,7 +71,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Core.Tools.Export` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.Tools` in `Debug|x64`.
 - Python adapter test: targeted export-helper fallback checks.
 - Backend truth check: PyKotor/GhostRigger reload comparison before any native
   helper becomes authoritative.
@@ -80,9 +80,9 @@ Verification gates:
 
 ## Candidate: Character Builder Tool
 
-Native project: `GhostRigger.Core.Tools.CharacterBuilder`
+Native project: `GhostRigger.Core.Tools`
 Owner surface: Character Studio
-Owner package: `native/GhostRigger.Core.Tools.CharacterBuilder`
+Owner package: `native/GhostRigger.Core.Tools`
 Bridge method: C ABI DLL for numeric autofit, skinning, and validation helpers.
 
 Data ownership:
@@ -94,7 +94,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Core.Tools.CharacterBuilder` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.Tools` in `Debug|x64`.
 - Python adapter test: targeted helper availability and missing-DLL fallback.
 - Backend truth check: representative character fixtures before native helper
   output replaces Python behavior.
@@ -103,13 +103,13 @@ Verification gates:
 
 ## Candidate: Main Window Host Surface
 
-Current legacy native project: `GhostRigger.Core.GUI.Display.Shell.Main`
-Canonical target owner: `GhostRigger.Core.GUI.Display.Widgets` for visible shell
-composition, `GhostRigger.Core.GUI.Display.Panels` for dock/panel display,
+Current legacy native project: `GhostRigger.Core.GUI.Display`
+Canonical target owner: `GhostRigger.Core.GUI.Display` for visible shell
+composition, `GhostRigger.Core.GUI.Display` for dock/panel display,
 `GhostRigger.Core.Automation.Commands` for command routing, or
 `GhostRigger.Core.Bridge.NativeHost` for native host-service glue.
 Owner surface: Main window composition shell
-Owner package: `native/GhostRigger.Core.GUI.Display.Shell.Main`
+Owner package: `native/GhostRigger.Core.GUI.Display`
 Bridge method: host module or C ABI bridge only after the Python/Qt main window
 has a narrow native service to call.
 
@@ -122,7 +122,7 @@ Data ownership:
 
 Verification gates:
 
-- Native Debug target: build `GhostRigger.Core.GUI.Display.Shell.Main` in `Debug|x64`.
+- Native Debug target: build `GhostRigger.Core.GUI.Display` in `Debug|x64`.
 - Python adapter test: targeted host-service discovery and fallback checks.
 - Backend truth check: not applicable unless the slice touches model/data
   pipelines.

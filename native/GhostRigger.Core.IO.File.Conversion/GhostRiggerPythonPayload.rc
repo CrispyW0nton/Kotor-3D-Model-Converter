@@ -1,6 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CONVERTERS_INIT RCDATA "Python/src/converters/__init__.py"
-PYTHON_PAYLOAD_CONVERTERS_BLENDER_FBX_MESH_IMPORTER RCDATA "Python/src/converters/blender_fbx_mesh_importer.py"
-PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER RCDATA "Python/src/converters/mesh_converter.py"
-PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP RCDATA "Python/src/converters/normal_map.py"

@@ -8,15 +8,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Core.Scene.Modules/Python",
-        "native/GhostRigger.Core.Scene.Level/Python",
-        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Rendering.Lighting/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -256,13 +256,13 @@ def test_t2643_dry_run_does_not_mark_runtime_resources(tmp_path: Path) -> None:
 
 def test_t2643_export_panel_exposes_authored_module_action() -> None:
     panel_source = Path(
-        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     boundary_panel_source = Path(
-        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
-        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
     ).read_text(encoding="utf-8")
 
     assert "authoredModuleRequested" in panel_source
@@ -543,13 +543,13 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
 
 def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
     panel_source = Path(
-        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     boundary_panel_source = Path(
-        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
-        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
     ).read_text(encoding="utf-8")
 
     assert "authoredModuleStageRequested" in panel_source

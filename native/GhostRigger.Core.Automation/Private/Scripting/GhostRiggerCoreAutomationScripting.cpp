@@ -6,10 +6,10 @@ namespace {
 constexpr const char* kVersion = "0.1.0";
 constexpr const char* kOwnerBoundary =
     R"({"schema":"core_automation_scripting_owner_boundary.v1",)"
-    R"("module_package":"GhostRigger.Core.Automation",)"
+    R"("module_package":"GhostRigger.Core.Automation.vcxproj",)"
     R"("source_package":"src/ipc;src/kotormcp;src/adapters/scripts",)"
     R"("owner_surface":"Script adapters",)"
-    R"("owner_package":"native/GhostRigger.Core.Automation",)"
+    R"("owner_package":"native/GhostRigger.Core.Automation.vcxproj",)"
     R"("bridge_method":"C ABI DLL",)"
     R"("diagnostic_only":true,)"
     R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
@@ -17,7 +17,7 @@ constexpr const char* kOwnerBoundary =
     R"("native_implementation_enabled":true})";
 constexpr const char* kDependencySchema =
     R"({"schema":"core_automation_scripting_dependency_schema.v1",)"
-    R"("module_package":"GhostRigger.Core.Automation",)"
+    R"("module_package":"GhostRigger.Core.Automation.vcxproj",)"
     R"("source_package":"src/ipc;src/kotormcp;src/adapters/scripts",)"
     R"("diagnostic_only":true,)"
     R"("dependency_scan_complete":true,)"
@@ -34,7 +34,7 @@ GHOSTRIGGER_CORE_AUTOMATION_SCRIPTING_API const char* gr_core_automation_scripti
 }
 
 GHOSTRIGGER_CORE_AUTOMATION_SCRIPTING_API const char* gr_core_automation_scripting_capabilities_json() {
-    return R"({"name":"GhostRigger.Core.Automation","version":"0.1.0",)"
+    return R"({"name":"GhostRigger.Core.Automation.vcxproj","version":"0.1.0",)"
            R"("phase":"P1 module sweep","module_package":true,)"
            R"("source_package":"src/ipc;src/kotormcp;src/adapters/scripts",)"
            R"("owner_surface":"Script adapters","bridge_method":"C ABI DLL",)"

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 43,
+    "file_count": 45,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -139,6 +139,12 @@
             "project": "GhostRigger.Core.Math"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_MATH_HELPERS",
+            "source_path": "src/core/rendering/frame_core/math_helpers.py",
+            "packaged_path": "Python/src/core/rendering/frame_core/math_helpers.py",
+            "sha256": "afcb76a4be5f355d938a251b036d23a49c7abb84bbaf5451c87f44cdcd38699e"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_ARCBALL_CAMERA",
             "source_path": "src/gui/camera/arcball_camera.py",
             "packaged_path": "Python/src/gui/camera/arcball_camera.py",
@@ -202,46 +208,46 @@
             "project": "GhostRigger.Core.Math"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_TRANSFORM_MATH",
+            "source_path": "src/gui/gizmo/transform_math.py",
+            "packaged_path": "Python/src/gui/gizmo/transform_math.py",
+            "sha256": "875c6f53db68dc536a08114a5fceb14693b90e2940482c18e5394904326eb3a8"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_MATH_CAMERA_MATH",
             "source_path": "src/math/camera_math.py",
             "packaged_path": "Python/src/math/camera_math.py",
-            "sha256": "ca0dd8f763af5cafbcf96ba194d523ad3671951c140bf387f7d958dad8ce6f71",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "ca0dd8f763af5cafbcf96ba194d523ad3671951c140bf387f7d958dad8ce6f71"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",
             "source_path": "src/math/frame_math.py",
             "packaged_path": "Python/src/math/frame_math.py",
-            "sha256": "05e83bc32a809672923471879075727c8a60ef46f9e8db8ded2e3be24d9d3ab5",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "a9b0c7427bd9e78cf54803d5607eaa3726a5e64706c5e9696ca817587348439b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_GPU_MATH",
             "source_path": "src/math/gpu_math.py",
             "packaged_path": "Python/src/math/gpu_math.py",
-            "sha256": "9ec4f83e22baa11eb08264f1bb7e3aad4286d304a0968ca83f5ffd062db40ec8",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "9ec4f83e22baa11eb08264f1bb7e3aad4286d304a0968ca83f5ffd062db40ec8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",
             "source_path": "src/math/module_layout_math.py",
             "packaged_path": "Python/src/math/module_layout_math.py",
-            "sha256": "679566808f1e5b76377ad3d92abe7ab20d6e83bf34218c117e3927836bae7566",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "679566808f1e5b76377ad3d92abe7ab20d6e83bf34218c117e3927836bae7566"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_TRANSFORM_MATH",
             "source_path": "src/math/transform_math.py",
             "packaged_path": "Python/src/math/transform_math.py",
-            "sha256": "b22c5dfafadc08011e83cb8539805ef365a1f895c8e2e2cf8f70fc3d43b76e6e",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "b22c5dfafadc08011e83cb8539805ef365a1f895c8e2e2cf8f70fc3d43b76e6e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_VIEWCUBE_MATH",
             "source_path": "src/math/viewcube_math.py",
             "packaged_path": "Python/src/math/viewcube_math.py",
-            "sha256": "64b19ca3f3ef2a72c4daaa33cb877147dcf1b0883fda8530ae7a978eb5e46ad3",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "64b19ca3f3ef2a72c4daaa33cb877147dcf1b0883fda8530ae7a978eb5e46ad3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_INIT",

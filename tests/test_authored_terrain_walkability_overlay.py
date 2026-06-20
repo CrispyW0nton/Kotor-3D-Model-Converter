@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     payloads = (
-        "native/GhostRigger.Core.Scene.Modules/Python",
-        "native/GhostRigger.Core.Scene.Level/Python",
-        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Rendering.Lighting/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     )
     for rel in payloads:
@@ -99,28 +99,28 @@ def test_t2907_module_editor_controller_exposes_terrain_walkability_overlay() ->
 
 def test_t2907_map_studio_viewport_draws_terrain_walkability_overlay() -> None:
     viewport_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py"
     )
     scene_models_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/scene_models.py"
     )
     overlay_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
     )
     pipeline_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Viewports/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
     )
     panel_source = _read(
-        "native/GhostRigger.Core.GUI.Display.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     mirrored_panel_source = _read(
-        "native/GhostRigger.Core.Tools.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
     )
     window_source = _read(
-        "native/GhostRigger.Core.Tools.ModuleEditor/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Core.Scene.Modules/Python/src/core/modules/module_editor_controller.py"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py"
     )
 
     assert "_map_studio_terrain_walkability_overlay = None" in viewport_source

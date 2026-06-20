@@ -1,4 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW RCDATA "Python/src/gui/windows/module_editor_window.py"
-PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR RCDATA "Python/src/gui/windows/qt_blueprint_editor.py"

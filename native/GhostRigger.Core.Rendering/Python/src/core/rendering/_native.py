@@ -29,8 +29,8 @@ def _native_rendering_candidates() -> tuple[Path, ...]:
             [
                 root / "build" / "vs" / "x64" / "Release" / _NATIVE_RENDERING_DLL,
                 root / "build" / "vs" / "x64" / "Debug" / _NATIVE_RENDERING_DLL,
-                root / "native" / "GhostRigger.Core.Rendering" / "bin" / "x64" / "Release" / _NATIVE_RENDERING_DLL,
-                root / "native" / "GhostRigger.Core.Rendering" / "bin" / "x64" / "Debug" / _NATIVE_RENDERING_DLL,
+                root / "native" / "GhostRigger.Core.Rendering.dll" / "bin" / "x64" / "Release" / _NATIVE_RENDERING_DLL,
+                root / "native" / "GhostRigger.Core.Rendering.dll" / "bin" / "x64" / "Debug" / _NATIVE_RENDERING_DLL,
             ]
         )
     return tuple(candidates)

@@ -11,23 +11,23 @@ from src.sequence.sequence_model import SequenceTime
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "GhostRigger.Core.Tools.SequenceEditor.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "GhostRigger.Core.Tools.SequenceEditor.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "Public" / "SequenceContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.Tools.SequenceEditor" / "Private" / "SequenceContracts.cpp"
+PROJECT = ROOT / "native" / "GhostRigger.Core.Tools" / "GhostRigger.Core.Tools.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.Tools" / "GhostRigger.Core.Tools.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.Tools" / "Public" / "SequenceContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Tools" / "Private" / "SequenceContracts.cpp"
 
 
 def _dll_path() -> Path:
     candidates = (
-        ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Tools.SequenceEditor.dll",
+        ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Tools.dll",
         ROOT
         / "native"
-        / "GhostRigger.Core.Tools.SequenceEditor"
+        / "GhostRigger.Core.Tools"
         / "build"
         / "vs"
         / "x64"
         / "Release"
-        / "GhostRigger.Core.Tools.SequenceEditor.dll",
+        / "GhostRigger.Core.Tools.dll",
     )
     for candidate in candidates:
         if candidate.exists():

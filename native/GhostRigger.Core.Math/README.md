@@ -1,7 +1,5 @@
 # GhostRigger.Core.Math
 
-Owner package: GhostRigger.Core.Math
-
-Single math DLL for camera, geometry, measurement, transform, viewport, and helper math.
+Merged namespace package boundary.
 
 Owner: LordVaderCW

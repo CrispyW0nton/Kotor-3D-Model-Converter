@@ -176,12 +176,12 @@ bool supports_action(const char* action) {
 
 const char* tool_command_routes_json() {
     return R"({"schema":"ipc_tool_command_routes.v1",)"
-           R"("module_package":"GhostRigger.Core.Automation",)"
-           R"("owner_package":"native/GhostRigger.Core.Automation",)"
+           R"("module_package":"GhostRigger.Core.Automation.vcxproj",)"
+           R"("owner_package":"native/GhostRigger.Core.Automation.vcxproj",)"
            R"("native_route_contract_enabled":true,)"
            R"("routes":[)"
-           R"({"action":"mesh_tool_command","method":"POST","owner_package":"native/GhostRigger.Core.Tools.Mesh","payload_keys":["command","mode","operation","options"],"synchronous_result":true},)"
-           R"({"action":"pivot_command","method":"POST","owner_package":"native/GhostRigger.Core.Tools.PivotControls","payload_keys":["command","mode","action"],"synchronous_result":true})"
+           R"({"action":"mesh_tool_command","method":"POST","owner_package":"native/GhostRigger.Core.Tools","payload_keys":["command","mode","operation","options"],"synchronous_result":true},)"
+           R"({"action":"pivot_command","method":"POST","owner_package":"native/GhostRigger.Core.Tools","payload_keys":["command","mode","action"],"synchronous_result":true})"
            R"(]})";
 }
 

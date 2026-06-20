@@ -1,6 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CORE_ASSETS_INIT RCDATA "Python/src/core/assets/__init__.py"
-PYTHON_PAYLOAD_CORE_ASSETS_ASSET_PREVIEW RCDATA "Python/src/core/assets/asset_preview.py"
-PYTHON_PAYLOAD_CORE_ASSETS_OVERRIDE_LAYER RCDATA "Python/src/core/assets/override_layer.py"
-PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER RCDATA "Python/src/core/assets/resource_manager.py"

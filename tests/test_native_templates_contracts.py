@@ -10,11 +10,11 @@ from src.core.templates.twoda import TwoDA, TwoDARow, _split_2da_line
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.File.Format.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Core.IO.File.Format" / "GhostRigger.Core.IO.File.Format.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Core.IO.File.Format" / "GhostRigger.Core.IO.File.Format.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.IO.File.Format" / "Public" / "TemplateContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.IO.File.Format" / "Private" / "TemplateContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Core.IO" / "GhostRigger.Core.IO.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.IO" / "GhostRigger.Core.IO.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.IO" / "Public" / "TemplateContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.IO" / "Private" / "TemplateContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:

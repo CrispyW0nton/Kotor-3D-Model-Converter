@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Core.Scene.Modules/Python",
-        "native/GhostRigger.Core.Scene.Level/Python",
-        "native/GhostRigger.Core.Resources.Game/Python",
         "native/GhostRigger.Core.Scene/Python",
-        "native/GhostRigger.Core.Scene.Walkmesh/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
         "native/GhostRigger.Core.Math/Python",
-        "native/GhostRigger.Core.Rendering.Lighting/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -137,7 +137,7 @@ def test_t2693_builder_tab_exposes_room_light_controls() -> None:
     source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Display.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -148,7 +148,7 @@ def test_t2693_builder_tab_exposes_room_light_controls() -> None:
     window_source = (
         repo
         / "native"
-        / "GhostRigger.Core.Tools.ModuleEditor"
+        / "GhostRigger.Core.Tools"
         / "Python"
         / "src"
         / "gui"
@@ -158,7 +158,7 @@ def test_t2693_builder_tab_exposes_room_light_controls() -> None:
     readiness_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Display.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -183,7 +183,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     outliner_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Display.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -194,7 +194,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     properties_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Display.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -205,7 +205,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     viewport_panel_source = (
         repo
         / "native"
-        / "GhostRigger.Core.GUI.Display.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -216,7 +216,7 @@ def test_t2694_module_editor_surfaces_room_lights_as_selectable_rows() -> None:
     window_source = (
         repo
         / "native"
-        / "GhostRigger.Core.Tools.ModuleEditor"
+        / "GhostRigger.Core.Tools"
         / "Python"
         / "src"
         / "gui"

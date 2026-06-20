@@ -1,4 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CORE_SKELETON_INIT RCDATA "Python/src/core/skeleton/__init__.py"
-PYTHON_PAYLOAD_CORE_SKELETON_SKELETON_BUILDER RCDATA "Python/src/core/skeleton/skeleton_builder.py"

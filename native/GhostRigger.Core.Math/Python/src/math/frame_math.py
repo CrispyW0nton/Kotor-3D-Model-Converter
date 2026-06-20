@@ -11,8 +11,8 @@ import struct as _struct
 
 _NATIVE_CORE_MATH_ENV = "GHOSTRIGGER_NATIVE_CORE_MATH"
 _NATIVE_CORE_MATH_DLLS = (
-    "GhostRigger.Native.Core.Math.dll",
-    "GhostRigger.Native.Core.Math.dll",
+    "GhostRigger.Native.Core.Foundation.dll",
+    "GhostRigger.Native.Core.Foundation.dll",
 )
 _Double3 = ctypes.c_double * 3
 _native_math_dll = None
@@ -33,10 +33,10 @@ def _native_core_math_candidates() -> tuple[Path, ...]:
         root / "build" / "vs" / "x64" / "Release",
         root / "build" / "vs" / "Win32" / "Debug",
         root / "build" / "vs" / "Win32" / "Release",
-        root / "native" / "GhostRigger.Native.Core.Math" / "build" / "vs" / "x64" / "Debug",
-        root / "native" / "GhostRigger.Native.Core.Math" / "build" / "vs" / "x64" / "Release",
-        root / "native" / "GhostRigger.Native.Core.Math" / "build" / "vs" / "x64" / "Debug",
-        root / "native" / "GhostRigger.Native.Core.Math" / "build" / "vs" / "x64" / "Release",
+        root / "native" / "GhostRigger.Native.Core.Foundation.dll" / "build" / "vs" / "x64" / "Debug",
+        root / "native" / "GhostRigger.Native.Core.Foundation.dll" / "build" / "vs" / "x64" / "Release",
+        root / "native" / "GhostRigger.Native.Core.Foundation.dll" / "build" / "vs" / "x64" / "Debug",
+        root / "native" / "GhostRigger.Native.Core.Foundation.dll" / "build" / "vs" / "x64" / "Release",
     )
     return tuple(directory / dll_name for directory in output_dirs for dll_name in _NATIVE_CORE_MATH_DLLS)
 

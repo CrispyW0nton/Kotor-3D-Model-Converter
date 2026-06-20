@@ -1,0 +1,159 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Runtime.Shared",
+    "file_count": 25,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MESH_RENDER_DATA",
+            "source_path": "src/adapters/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/adapters/rendering/mesh_render_data.py",
+            "sha256": "fe44594971e6df6790c324b28aea3381cf447d5b3f3ec5ee618251a587a9cb54"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_INIT",
+            "source_path": "src/adapters/rendering/native_core/__init__.py",
+            "packaged_path": "Python/src/adapters/rendering/native_core/__init__.py",
+            "sha256": "7a70653b5dc27b6547fc4141bdddf5c94314169b581b51a4a1c2fd42f422cdce"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_BINDING",
+            "source_path": "src/adapters/rendering/native_core/binding.py",
+            "packaged_path": "Python/src/adapters/rendering/native_core/binding.py",
+            "sha256": "4412eeec1d426bd79fe5038057f55eaffa5da987a0abce853a3e150802a72285"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_RENDERER",
+            "source_path": "src/adapters/rendering/native_core/renderer.py",
+            "packaged_path": "Python/src/adapters/rendering/native_core/renderer.py",
+            "sha256": "01d5ad12de4f0f8a83f57647b01a704bb61288e681f3c0308543b638f840609c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_OVERRIDE_LAYER",
+            "source_path": "src/core/assets/override_layer.py",
+            "packaged_path": "Python/src/core/assets/override_layer.py",
+            "sha256": "446065473cd665658dc8b33f9ef59837375a516e488f73426c615e9919cfc1b5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
+            "source_path": "src/core/assets/resource_manager.py",
+            "packaged_path": "Python/src/core/assets/resource_manager.py",
+            "sha256": "65c1b858613f738a5708ddee45599f43a59e93f2c66972bfb2b2a55bec76156b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_INIT",
+            "source_path": "src/core/ports/__init__.py",
+            "packaged_path": "Python/src/core/ports/__init__.py",
+            "sha256": "abd617e8b9df76a4da82d53425e93f67974cd84160f4be784ae79b4f290e8933"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_FILES",
+            "source_path": "src/core/ports/files.py",
+            "packaged_path": "Python/src/core/ports/files.py",
+            "sha256": "7c8ecd808d150a69e2a2874694a00dc99c5d73813e8e2efc688777716c86c079"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_RESOURCES",
+            "source_path": "src/core/ports/resources.py",
+            "packaged_path": "Python/src/core/ports/resources.py",
+            "sha256": "33b10817016f640bb8e7b89fa3a891d8ac40b230a3d5dccd1d7df17812ee939c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_SCRIPTS",
+            "source_path": "src/core/ports/scripts.py",
+            "packaged_path": "Python/src/core/ports/scripts.py",
+            "sha256": "9fb60a7a79c0d41efb84886dcd64f3b3abe36e6417b5cdf18e2f507e647321ac"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_TEXTURES",
+            "source_path": "src/core/ports/textures.py",
+            "packaged_path": "Python/src/core/ports/textures.py",
+            "sha256": "8494c46dcb8276a71da7711a1f8747b98ac4e0ddb85088d341f18cdbaf4d5177"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_VIEWPORT_RENDERER",
+            "source_path": "src/core/ports/viewport_renderer.py",
+            "packaged_path": "Python/src/core/ports/viewport_renderer.py",
+            "sha256": "4f6a5959df29e859afb29ad79ccf14d434e440102aa86818c66ab594a7d28ab5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_RESOURCE_ADDRESS",
+            "source_path": "src/core/project/resource_address.py",
+            "packaged_path": "Python/src/core/project/resource_address.py",
+            "sha256": "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
+            "source_path": "src/core/rendering/mesh_render_data.py",
+            "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
+            "sha256": "5cd1fa04f32bc134fb66eb529fdb9a2ca3c8b199f328de32d51a682f482a9f60"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_BACKEND",
+            "source_path": "src/core/rendering/renderer_backend.py",
+            "packaged_path": "Python/src/core/rendering/renderer_backend.py",
+            "sha256": "5862294435bb68600831270de0e602670afbe3f99cf819cd7a39fd5a5cebedf3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_CAPABILITIES",
+            "source_path": "src/core/rendering/renderer_capabilities.py",
+            "packaged_path": "Python/src/core/rendering/renderer_capabilities.py",
+            "sha256": "6b1008086fb5b79ee1ecadcb6df8d7d4ad9cdcb2432cf8e151ce25c6df793539"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_INTERFACE",
+            "source_path": "src/core/rendering/renderer_interface.py",
+            "packaged_path": "Python/src/core/rendering/renderer_interface.py",
+            "sha256": "d3ddda6533de69b0596b85159c75f0984910fb8e28e56cd6a43953252f95886d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",
+            "source_path": "src/core/rendering/skeleton_render_data.py",
+            "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
+            "sha256": "d5e563da0c1435b38a8795d5a94fe9f2f10992ba5afcbaa5de67bcb4de02a5c6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_INIT",
+            "source_path": "src/core/resources/__init__.py",
+            "packaged_path": "Python/src/core/resources/__init__.py",
+            "sha256": "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_GAME_RESOURCE_PROVIDER",
+            "source_path": "src/core/resources/game_resource_provider.py",
+            "packaged_path": "Python/src/core/resources/game_resource_provider.py",
+            "sha256": "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT",
+            "source_path": "src/core/scene/scene_object.py",
+            "packaged_path": "Python/src/core/scene/scene_object.py",
+            "sha256": "14626cf8fbbfc33a08335b4db8204c9aa2d54a26a3599cc3b850f781de1d967b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT_INSTANCE",
+            "source_path": "src/core/scene/scene_object_instance.py",
+            "packaged_path": "Python/src/core/scene/scene_object_instance.py",
+            "sha256": "4fc6e407607d5194c24be429ae3f180e785fc4bd412dfe922972134d8ac5bf8e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_INIT",
+            "source_path": "src/resources/__init__.py",
+            "packaged_path": "Python/src/resources/__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_DETECTOR",
+            "source_path": "src/resources/game_detector.py",
+            "packaged_path": "Python/src/resources/game_detector.py",
+            "sha256": "082f707ced2f16da2dc487d709fd9883edba96b484e6a19301abb041754502ab"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_LIBRARY",
+            "source_path": "src/resources/game_library.py",
+            "packaged_path": "Python/src/resources/game_library.py",
+            "sha256": "ba903d7c5b33ab66b52a01e64af9d8d05b1374964d78b401fc6d05eb73044392"
+        }
+    ]
+}

@@ -1,9 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_GUI_TEXTURES_INIT RCDATA "Python/src/gui/textures/__init__.py"
-PYTHON_PAYLOAD_GUI_TEXTURES_QT_TEX_ATLAS RCDATA "Python/src/gui/textures/qt_tex_atlas.py"
-PYTHON_PAYLOAD_GUI_TEXTURES_QT_TPC_RENDER_UTILS RCDATA "Python/src/gui/textures/qt_tpc_render_utils.py"
-PYTHON_PAYLOAD_GUI_TEXTURES_TEX_ATLAS RCDATA "Python/src/gui/textures/tex_atlas.py"
-PYTHON_PAYLOAD_GUI_TEXTURES_TPC RCDATA "Python/src/gui/textures/tpc.py"
-PYTHON_PAYLOAD_GUI_TEXTURES_TPC_RENDER_UTILS RCDATA "Python/src/gui/textures/tpc_render_utils.py"
-PYTHON_PAYLOAD_GUI_TEXTURES_TXI RCDATA "Python/src/gui/textures/txi.py"

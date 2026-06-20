@@ -8,11 +8,11 @@ from src.core.walkmesh import walkmesh_renderer
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Scene.Walkmesh.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Core.Scene.Walkmesh" / "GhostRigger.Core.Scene.Walkmesh.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Core.Scene.Walkmesh" / "GhostRigger.Core.Scene.Walkmesh.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.Scene.Walkmesh" / "Public" / "WalkmeshSurface.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.Scene.Walkmesh" / "Private" / "WalkmeshSurface.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Scene.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Core.Scene" / "GhostRigger.Core.Scene.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.Scene" / "GhostRigger.Core.Scene.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.Scene" / "Public" / "WalkmeshSurface.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Scene" / "Private" / "WalkmeshSurface.cpp"
 
 
 def _dll() -> ctypes.CDLL:

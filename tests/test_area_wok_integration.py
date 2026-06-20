@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 _SCENE_PAYLOAD = _REPO_ROOT / "native" / "GhostRigger.Core.Scene" / "Python"
-_MODULES_PAYLOAD = _REPO_ROOT / "native" / "GhostRigger.Core.Scene.Modules" / "Python"
+_MODULES_PAYLOAD = _REPO_ROOT / "native" / "GhostRigger.Core.Scene" / "Python"
 for _payload in (_SCENE_PAYLOAD, _MODULES_PAYLOAD):
     if str(_payload) not in sys.path:
         sys.path.insert(0, str(_payload))

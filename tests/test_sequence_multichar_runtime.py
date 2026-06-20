@@ -9,7 +9,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 for path in reversed(
     (
-        ROOT / "native/GhostRigger.Core.Tools.SequenceEditor/Python",
+        ROOT / "native/GhostRigger.Core.Tools/Python",
         ROOT / "native/GhostRigger.Core.Math/Python",
         ROOT / "native/GhostRigger.Core.Rendering/Python",
     )

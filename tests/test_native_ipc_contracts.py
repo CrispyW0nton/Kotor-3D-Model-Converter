@@ -110,5 +110,5 @@ def test_native_ipc_advertises_mesh_and_pivot_tool_routes() -> None:
     assert {"mesh_tool_command", "pivot_command"} <= route_actions
     mesh_route = next(route for route in routes["routes"] if route["action"] == "mesh_tool_command")
     pivot_route = next(route for route in routes["routes"] if route["action"] == "pivot_command")
-    assert mesh_route["owner_package"] == "native/GhostRigger.Core.Tools.Mesh"
-    assert pivot_route["owner_package"] == "native/GhostRigger.Core.Tools.PivotControls"
+    assert mesh_route["owner_package"] == "native/GhostRigger.Core.Tools.vcxproj"
+    assert pivot_route["owner_package"] == "native/GhostRigger.Core.Tools.vcxproj"

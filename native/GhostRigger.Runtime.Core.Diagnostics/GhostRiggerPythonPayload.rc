@@ -1,6 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CORE_DIAGNOSTICS_INIT RCDATA "Python/src/core/diagnostics/__init__.py"
-PYTHON_PAYLOAD_CORE_DIAGNOSTICS_DIAGNOSTICS RCDATA "Python/src/core/diagnostics/diagnostics.py"
-PYTHON_PAYLOAD_CORE_DIAGNOSTICS_MODULE_REFERENCE_SAFETY RCDATA "Python/src/core/diagnostics/module_reference_safety.py"
-PYTHON_PAYLOAD_CORE_DIAGNOSTICS_VALIDATION_SERVICE RCDATA "Python/src/core/diagnostics/validation_service.py"

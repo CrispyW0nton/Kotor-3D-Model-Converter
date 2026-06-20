@@ -1,7 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CORE_SPECIAL_INIT RCDATA "Python/src/core/special/__init__.py"
-PYTHON_PAYLOAD_CORE_SPECIAL_HOOKS RCDATA "Python/src/core/special/hooks.py"
-PYTHON_PAYLOAD_CORE_SPECIAL_LIP_READER RCDATA "Python/src/core/special/lip_reader.py"
-PYTHON_PAYLOAD_CORE_SPECIAL_RENDER_CONSTANTS RCDATA "Python/src/core/special/render_constants.py"
-PYTHON_PAYLOAD_CORE_SPECIAL_UNITY_MALAK_SMOKE RCDATA "Python/src/core/special/unity_malak_smoke.py"

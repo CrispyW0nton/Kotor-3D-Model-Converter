@@ -29,8 +29,8 @@ def _native_validation_candidates() -> tuple[Path, ...]:
             [
                 root / "build" / "vs" / "x64" / "Release" / _NATIVE_VALIDATION_DLL,
                 root / "build" / "vs" / "x64" / "Debug" / _NATIVE_VALIDATION_DLL,
-                root / "native" / "GhostRigger.Core.Validation" / "bin" / "x64" / "Release" / _NATIVE_VALIDATION_DLL,
-                root / "native" / "GhostRigger.Core.Validation" / "bin" / "x64" / "Debug" / _NATIVE_VALIDATION_DLL,
+                root / "native" / "GhostRigger.Core.Validation.vcxproj" / "bin" / "x64" / "Release" / _NATIVE_VALIDATION_DLL,
+                root / "native" / "GhostRigger.Core.Validation.vcxproj" / "bin" / "x64" / "Debug" / _NATIVE_VALIDATION_DLL,
             ]
         )
     return tuple(candidates)
