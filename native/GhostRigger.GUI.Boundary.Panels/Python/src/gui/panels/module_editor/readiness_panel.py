@@ -60,6 +60,22 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.pathing_label.setWordWrap(True)
         root.addWidget(self.pathing_label)
 
+        self.pathing_export_gate_label = QtWidgets.QLabel("Pathing export gate: Not checked")
+        self.pathing_export_gate_label.setObjectName("mapStudioReadinessPathingExportGateLabel")
+        self.pathing_export_gate_label.setWordWrap(True)
+        root.addWidget(self.pathing_export_gate_label)
+
+        self.pathing_blocker_table = QtWidgets.QTableWidget(0, 3)
+        self.pathing_blocker_table.setObjectName("mapStudioReadinessPathingBlockerTable")
+        self.pathing_blocker_table.setHorizontalHeaderLabels(("PTH / WOK issue", "Export impact", "Fix"))
+        self.pathing_blocker_table.verticalHeader().setVisible(False)
+        self.pathing_blocker_table.horizontalHeader().setStretchLastSection(True)
+        self.pathing_blocker_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.pathing_blocker_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.pathing_blocker_table.setMinimumHeight(58)
+        self.pathing_blocker_table.setMaximumHeight(130)
+        root.addWidget(self.pathing_blocker_table)
+
         self.floor_plan_geometry_label = QtWidgets.QLabel("Floor-plan geometry: Not checked")
         self.floor_plan_geometry_label.setObjectName("mapStudioReadinessFloorPlanGeometryLabel")
         self.floor_plan_geometry_label.setWordWrap(True)
@@ -253,6 +269,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
             self.pathing_label.setText("Pathing: Not checked")
+            self.pathing_export_gate_label.setText("Pathing export gate: Not checked")
+            self._set_pathing_blocker_rows((), "")
             self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
             self.doorway_transition_label.setText("Doorway/transition intent: Not checked")
             self.component_edit_label.setText("Component edits: Not checked")
@@ -466,9 +484,12 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
 
         if not pathing:
             self.pathing_label.setText("Pathing: Not checked")
+            self.pathing_export_gate_label.setText("Pathing export gate: Not checked")
+            self._set_pathing_blocker_rows((), "")
             return
         resource = str(pathing.get("pth_resource") or "(no PTH resource)")
         status = str(pathing.get("status") or "Not checked")
+        ready = bool(pathing.get("ready", False))
         point_count = int(pathing.get("point_count", 0) or 0)
         connection_count = int(pathing.get("connection_count", 0) or 0)
         anchors = [str(label) for label in list(pathing.get("anchor_labels") or []) if str(label).strip()]
@@ -476,13 +497,54 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         if len(anchors) > 5:
             anchor_text += f", +{len(anchors) - 5} more"
         blockers = [str(message) for message in list(pathing.get("blocking_messages") or []) if str(message).strip()]
+        fix_hint = str(pathing.get("fix_hint") or "Move entry points and gameplay anchors onto walkable WOK faces before export.")
         if blockers:
-            self.pathing_label.setText(f"Pathing: {status}. {blockers[0]}")
+            self.pathing_label.setText(
+                f"Pathing: {status}. PTH export blocked by {len(blockers)} WOK/path-anchor issue(s)."
+            )
+            self.pathing_export_gate_label.setText(
+                "Pathing export gate: Blocked until the module entry point, doors, triggers, "
+                "waypoints, creatures, and placeables sit on generated walkable WOK."
+            )
+            self._set_pathing_blocker_rows(tuple(blockers), fix_hint)
             return
+        self._set_pathing_blocker_rows((), fix_hint)
+        if not ready:
+            self.pathing_label.setText(f"Pathing: {status}. {resource}; waiting for WOK-backed PTH path graph readiness.")
+            self.pathing_export_gate_label.setText(
+                "Pathing export gate: PTH pathing not ready; create room WOK and a module entry point before .mod packaging."
+            )
+            return
+        self.pathing_export_gate_label.setText(
+            "Pathing export gate: PTH pathing ready for export candidate; still verify warp and walking during game proof."
+        )
         self.pathing_label.setText(
             f"Pathing: {status}. {resource}; {point_count} point(s), "
             f"{connection_count} connection(s); anchors: {anchor_text}"
         )
+
+    def _set_pathing_blocker_rows(self, blockers: tuple[str, ...], fix_hint: str) -> None:
+        """List PTH/WOK blockers that prevent safe .mod export."""
+
+        rows = tuple(str(message) for message in tuple(blockers or ()) if str(message).strip())
+        fix = str(fix_hint or "").strip() or "Move the affected anchor onto generated walkable WOK before exporting the .mod."
+        if not rows:
+            self.pathing_blocker_table.setRowCount(1)
+            for column, text in enumerate((
+                "No PTH/WOK blockers",
+                "Export gate clear when runtime resources are staged",
+                "Keep entry point and gameplay anchors on walkable WOK; verify with the warp test.",
+            )):
+                self.pathing_blocker_table.setItem(0, column, self._table_item(text))
+            return
+        self.pathing_blocker_table.setRowCount(len(rows))
+        for row, message in enumerate(rows):
+            for column, text in enumerate((
+                message,
+                "Blocks export candidate and .mod game-test packaging",
+                fix,
+            )):
+                self.pathing_blocker_table.setItem(row, column, self._table_item(text))
 
     def _set_floor_plan_geometry_summary(self, geometry_validation: dict[str, Any]) -> None:
         """Show authored floor-plan validation blockers and cleanup warnings."""

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Readiness Shows PTH Export Gate
+
+Owner: LordVaderCW
+Task: T2602 / T2605
+Subsystem: Map Studio / readiness panel / PTH pathing UX
+Intersects: GUI Boundary Panels readiness panel, ModuleMeshes mirror package, Map Studio workflow source contracts.
+
+- Added a dedicated pathing export-gate label and PTH/WOK blocker table to the Map Studio readiness panel so modders can see why a map is previewable but not yet safe to package as a `.mod`.
+- Kept the Qt panel presentation-only; the export-candidate decision still comes from authored-module readiness metadata and validation projection.
+- Mirrored the panel into the ModuleMeshes workflow package and refreshed the GUI Boundary Panels native Python payload hash.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_pathing_export_gate_ui`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Surfaces PTH Pathing Export Blockers
 
 Owner: LordVaderCW

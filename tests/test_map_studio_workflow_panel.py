@@ -1119,8 +1119,14 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
 
     for source in (readiness_source, readiness_mirror_source):
         assert "mapStudioReadinessPathingLabel" in source
+        assert "mapStudioReadinessPathingExportGateLabel" in source
+        assert "mapStudioReadinessPathingBlockerTable" in source
+        assert 'setHorizontalHeaderLabels(("PTH / WOK issue", "Export impact", "Fix"))' in source
         assert "def _set_pathing_summary" in source
+        assert "def _set_pathing_blocker_rows" in source
         assert "PTH path graph readiness" in source
+        assert "Pathing export gate: Blocked until the module entry point" in source
+        assert "Blocks export candidate and .mod game-test packaging" in source
         assert "anchors: {anchor_text}" in source
         assert "mapStudioReadinessFloorPlanGeometryLabel" in source
         assert "def _set_floor_plan_geometry_summary" in source
