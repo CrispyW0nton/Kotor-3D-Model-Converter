@@ -15,6 +15,9 @@ class BuilderTab(QtWidgets.QWidget):
     floorPlanVertexFlattenRequested = QtCore.Signal(str, object, str, object)
     floorPlanVertexCleanupRequested = QtCore.Signal(str, float)
     floorPlanVertexMirrorRequested = QtCore.Signal(str, str)
+    floorPlanFaceFillRequested = QtCore.Signal(str, object)
+    floorPlanFaceTriangulateRequested = QtCore.Signal(str)
+    floorPlanNormalsCleanupRequested = QtCore.Signal(str)
     terrainOperationRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
     terrainLiveBrushFrameRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
     roomRectangularUnionRequested = QtCore.Signal(str, str, str)
@@ -234,6 +237,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.mirrorFloorPlanVerticesButton.setObjectName("mapStudioMirrorFloorPlanVerticesButton")
         self.cleanupFloorPlanVerticesButton = QtWidgets.QPushButton("Cleanup Footprint")
         self.cleanupFloorPlanVerticesButton.setObjectName("mapStudioCleanupFloorPlanVerticesButton")
+        self.fillFloorPlanFaceButton = QtWidgets.QPushButton("Fill Selected Face Loop")
+        self.fillFloorPlanFaceButton.setObjectName("mapStudioFillFloorPlanFaceButton")
+        self.triangulateFloorPlanFaceButton = QtWidgets.QPushButton("Triangulate Footprint")
+        self.triangulateFloorPlanFaceButton.setObjectName("mapStudioTriangulateFloorPlanFaceButton")
+        self.cleanupFloorPlanNormalsButton = QtWidgets.QPushButton("Cleanup Face Normals")
+        self.cleanupFloorPlanNormalsButton.setObjectName("mapStudioCleanupFloorPlanNormalsButton")
         vertex_layout.addRow(self.floorPlanVertexHintLabel)
         vertex_layout.addRow("Room:", self.floorPlanVertexRoomComboBox)
         vertex_layout.addRow("Source point:", self.floorPlanSourcePointSpinBox)
@@ -249,6 +258,9 @@ class BuilderTab(QtWidgets.QWidget):
         vertex_layout.addRow(self.mirrorFloorPlanVerticesButton)
         vertex_layout.addRow("Cleanup tolerance:", self.floorPlanCleanupToleranceSpinBox)
         vertex_layout.addRow(self.cleanupFloorPlanVerticesButton)
+        vertex_layout.addRow(self.fillFloorPlanFaceButton)
+        vertex_layout.addRow(self.triangulateFloorPlanFaceButton)
+        vertex_layout.addRow(self.cleanupFloorPlanNormalsButton)
         layout.addWidget(vertex_box)
         terrain_box = QtWidgets.QGroupBox("Terrain Heightfield")
         terrain_layout = QtWidgets.QFormLayout(terrain_box)
@@ -684,6 +696,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.flattenFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_flatten)
         self.mirrorFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_mirror)
         self.cleanupFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_cleanup)
+        self.fillFloorPlanFaceButton.clicked.connect(self._emit_floor_plan_face_fill)
+        self.triangulateFloorPlanFaceButton.clicked.connect(self._emit_floor_plan_face_triangulate)
+        self.cleanupFloorPlanNormalsButton.clicked.connect(self._emit_floor_plan_normals_cleanup)
         self.terrainRoomComboBox.currentIndexChanged.connect(self._update_terrain_controls)
         self.terrainBrushComboBox.currentIndexChanged.connect(self._update_terrain_brush_controls)
         self.terrainShapePresetComboBox.currentIndexChanged.connect(self._update_terrain_shape_controls)
@@ -1362,6 +1377,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.flattenFloorPlanVerticesButton.setEnabled(enabled and len(selected) >= 1)
         self.mirrorFloorPlanVerticesButton.setEnabled(enabled and point_count >= 3)
         self.cleanupFloorPlanVerticesButton.setEnabled(enabled and point_count >= 3)
+        self.fillFloorPlanFaceButton.setEnabled(enabled and len(selected) >= 3)
+        self.triangulateFloorPlanFaceButton.setEnabled(enabled and point_count >= 3)
+        self.cleanupFloorPlanNormalsButton.setEnabled(enabled and point_count >= 3)
         self.floorPlanSourcePointSpinBox.setRange(0, max(point_count - 1, 0))
         self.floorPlanTargetPointSpinBox.setRange(0, max(target_point_count - 1, 0))
         if not enabled:
@@ -1370,12 +1388,12 @@ class BuilderTab(QtWidgets.QWidget):
             )
         elif not selected:
             self.floorPlanVertexHintLabel.setText(
-                f"Editing {room.get('room_resref')}: {point_count} points. Enter point indices to weld or flatten, snap one source point, mirror the footprint, or cleanup redundant footprint points."
+                f"Editing {room.get('room_resref')}: {point_count} points. Enter point indices to weld, flatten, or fill a face loop; snap one source point, mirror the footprint, triangulate it, or cleanup redundant points/normals."
             )
         else:
             self.floorPlanVertexHintLabel.setText(
                 f"Editing {room.get('room_resref')}: selected points {', '.join(str(item) for item in selected)}. "
-                "These component edits will mark export and game proof stale and must pass KOTOR floor-plan validation."
+                "These component edits can repair face loops, triangulation, or normals and will mark export/game proof stale when geometry changes."
             )
 
     def _emit_floor_plan_vertex_snap(self) -> None:
@@ -1423,6 +1441,27 @@ class BuilderTab(QtWidgets.QWidget):
         axis = str(self.floorPlanMirrorAxisComboBox.currentData() or "x")
         if room:
             self.floorPlanVertexMirrorRequested.emit(room, axis)
+
+    def _emit_floor_plan_face_fill(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if not room:
+            return
+        try:
+            selected = self._parse_floor_plan_point_indices()
+        except ValueError:
+            self.floorPlanVertexHintLabel.setText("Point indices must be comma-separated integers, e.g. 0,1,2.")
+            return
+        self.floorPlanFaceFillRequested.emit(room, selected)
+
+    def _emit_floor_plan_face_triangulate(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if room:
+            self.floorPlanFaceTriangulateRequested.emit(room)
+
+    def _emit_floor_plan_normals_cleanup(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if room:
+            self.floorPlanNormalsCleanupRequested.emit(room)
 
     def _update_rectangular_union_controls(self) -> None:
         first = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)

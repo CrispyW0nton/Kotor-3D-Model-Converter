@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Wires Face Repair Tools
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / component modeling / Level Editor
+Intersects: Domain Core Modules room operations, GUI Boundary Panels Builder tab, Windows Editor Level shell, ModuleMeshes mirror package.
+
+- Promoted floor-plan face fill, deterministic triangulation, and face-normal cleanup from tool-belt intent into executable authored-room controller operations.
+- Added Builder tab buttons and signals for Fill Selected Face Loop, Triangulate Footprint, and Cleanup Face Normals, then wired the Level Editor window to refresh readiness after each command.
+- Stored component-edit audit metadata for the new face repair operations so Map Studio warns when WOK/MDL/MDX/PTH output and recorded game proof need review.
+- Mirrored the core and Builder tab changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_fills_triangulates_and_cleans_floor_plan_faces -q --basetemp .pytest_tmp_face_repair_ops`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_face_repair_contract`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-20] Map Studio Surfaces Component Edit Readiness
 
 Owner: LordVaderCW

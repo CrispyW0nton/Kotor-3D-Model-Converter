@@ -458,6 +458,78 @@ def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> 
     assert not build.blocking_issues
 
 
+def test_t2908_controller_fills_triangulates_and_cleans_floor_plan_faces() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grface")
+
+    fill_result = controller.fill_authored_floor_plan_face(
+        room_resref="grface_room01",
+        point_indices=(0, 1, 2, 3),
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = authored.rooms[0].primitive
+    assert primitive.metadata["last_operation"] == "fill_floor_plan_face"
+    assert primitive.metadata["filled_face_indices"] == [0, 1, 2, 3]
+    assert fill_result.readiness is not None
+    assert fill_result.readiness.component_edit.latest_operation == "fill_face"
+    assert fill_result.readiness.component_edit.topology_changed is True
+    assert not build_authored_module(authored).blocking_issues
+
+    triangulate_result = controller.triangulate_authored_floor_plan_face(room_resref="grface_room01")
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = authored.rooms[0].primitive
+    assert primitive.metadata["last_operation"] == "triangulate_floor_plan_face"
+    assert primitive.metadata["triangulated_faces"] == [[0, 1, 2], [0, 2, 3]]
+    assert triangulate_result.readiness is not None
+    assert triangulate_result.readiness.component_edit.latest_operation == "triangulate_faces"
+    assert triangulate_result.readiness.component_edit.topology_changed is True
+    assert not build_authored_module(authored).blocking_issues
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grnorm",
+        game="K1",
+    )
+    clockwise = FloorPlanRoomPrimitive(
+        room_resref="grnorm_room01",
+        points=((-5.0, -5.0), (-5.0, 5.0), (5.0, 5.0), (5.0, -5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=PrimitiveMaterial(texture="default", metadata={"source": "test"}),
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    project = replace(
+        base,
+        rooms=(replace(base.rooms[0], room_resref="grnorm_room01", primitive=clockwise),),
+    )
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    normal_result = controller.cleanup_authored_floor_plan_normals(room_resref="grnorm_room01")
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = authored.rooms[0].primitive
+    assert primitive.metadata["last_operation"] == "cleanup_floor_plan_normals"
+    assert primitive.metadata["normal_cleanup_flipped_faces"] == 1
+    assert polygon_signed_area(tuple(primitive.points)) > 0
+    assert normal_result.readiness is not None
+    assert normal_result.readiness.component_edit.latest_operation == "cleanup_face_normals"
+    assert normal_result.readiness.component_edit.walkmesh_review_required is True
+    assert not build_authored_module(authored).blocking_issues
+
+
 def test_t2908_controller_flattens_floor_plan_vertices_for_clean_wall_alignment() -> None:
     _install_native_payload_paths()
 

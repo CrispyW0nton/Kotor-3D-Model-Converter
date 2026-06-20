@@ -663,6 +663,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.floorPlanVertexFlattenRequested.connect(self.flatten_authored_floor_plan_vertices)
         self.builder_tab.floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)
         self.builder_tab.floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)
+        self.builder_tab.floorPlanFaceFillRequested.connect(self.fill_authored_floor_plan_face)
+        self.builder_tab.floorPlanFaceTriangulateRequested.connect(self.triangulate_authored_floor_plan_face)
+        self.builder_tab.floorPlanNormalsCleanupRequested.connect(self.cleanup_authored_floor_plan_normals)
         self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
         self.builder_tab.terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)
         for combo_name in ("terrainRoomComboBox", "terrainBrushComboBox"):
@@ -1798,6 +1801,60 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Mirrored floor-plan footprint in {room_resref} across local {axis}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def fill_authored_floor_plan_face(
+        self,
+        room_resref: str,
+        point_indices: object,
+    ) -> None:
+        try:
+            result = self.controller.fill_authored_floor_plan_face(
+                room_resref=room_resref,
+                point_indices=tuple(point_indices or ()),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Fill Floor-Plan Face", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Filled floor-plan face loop in {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def triangulate_authored_floor_plan_face(
+        self,
+        room_resref: str,
+    ) -> None:
+        try:
+            result = self.controller.triangulate_authored_floor_plan_face(
+                room_resref=room_resref,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Triangulate Floor-Plan Face", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Triangulated floor-plan face in {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def cleanup_authored_floor_plan_normals(
+        self,
+        room_resref: str,
+    ) -> None:
+        try:
+            result = self.controller.cleanup_authored_floor_plan_normals(
+                room_resref=room_resref,
+                positive_z=True,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Cleanup Floor-Plan Normals", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Cleaned floor-plan normals in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

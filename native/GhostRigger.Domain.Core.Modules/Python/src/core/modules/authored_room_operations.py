@@ -16,10 +16,13 @@ from src.core.geometry.component_editing import (
     ComponentEditAudit,
     ComponentEditResult,
     audit_component_edit_result,
+    cleanup_face_normals,
     component_mesh,
+    fill_face,
     flatten_vertices,
     mirror_vertices,
     snap_vertex_to_vertex,
+    triangulate_faces,
     weld_vertices,
 )
 
@@ -318,6 +321,15 @@ def _room_offset(room: AuthoredRoomSpec) -> tuple[float, float, float]:
 def _floor_plan_component_mesh(primitive: FloorPlanRoomPrimitive):
     return component_mesh(
         ((float(x), float(y), float(primitive.z)) for x, y in tuple(primitive.points or ())),
+        metadata={"room_resref": normalise_resref(primitive.room_resref), "source": "floor_plan"},
+    )
+
+
+def _floor_plan_component_mesh_with_face(primitive: FloorPlanRoomPrimitive):
+    points = tuple(primitive.points or ())
+    return component_mesh(
+        ((float(x), float(y), float(primitive.z)) for x, y in points),
+        (tuple(range(len(points))),) if len(points) >= 3 else (),
         metadata={"room_resref": normalise_resref(primitive.room_resref), "source": "floor_plan"},
     )
 
@@ -1999,6 +2011,125 @@ def mirror_authored_floor_plan_vertices(
     )
 
 
+def fill_authored_floor_plan_face(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_indices: tuple[int, ...] | list[int],
+) -> AuthoredModuleProject:
+    """Record a filled floor-plan face loop for KOTOR room/WOK repair workflows."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    selected = tuple(dict.fromkeys(int(index) for index in point_indices))
+    if len(selected) < 3:
+        raise ValueError("Fill floor-plan face requires at least three ordered point indices.")
+    result = fill_face(_floor_plan_component_mesh(primitive), selected)
+    audit = audit_component_edit_result(result, component_kind="floor_plan_face", affects_walkmesh=True)
+    updated_primitive = replace(
+        primitive,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "fill_floor_plan_face",
+            "filled_face_indices": list(selected),
+            "source": "map_studio:floor_plan_face_fill",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="fill_floor_plan_face",
+        room_metadata={"filled_face_indices": list(selected), "last_component_edit_audit": _component_edit_audit_payload(audit)},
+    )
+
+
+def triangulate_authored_floor_plan_face(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+) -> AuthoredModuleProject:
+    """Precompute deterministic floor-plan fan triangles for export/readiness review."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    if len(tuple(primitive.points or ())) < 3:
+        raise ValueError("Triangulate floor-plan face requires at least three footprint points.")
+    result = triangulate_faces(_floor_plan_component_mesh_with_face(primitive))
+    audit = audit_component_edit_result(result, component_kind="floor_plan_face", affects_walkmesh=True)
+    triangles = [list(face) for face in result.mesh.faces]
+    updated_primitive = replace(
+        primitive,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "triangulate_floor_plan_face",
+            "triangulated_faces": triangles,
+            "source": "map_studio:floor_plan_face_triangulate",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="triangulate_floor_plan_face",
+        room_metadata={
+            "triangulated_faces": triangles,
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+
+
+def cleanup_authored_floor_plan_normals(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    positive_z: bool = True,
+) -> AuthoredModuleProject:
+    """Orient the floor-plan footprint winding so generated room/WOK normals are predictable."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    source_points = tuple((float(x), float(y)) for x, y in tuple(primitive.points or ()))
+    if len(source_points) < 3:
+        raise ValueError("Cleanup floor-plan normals requires at least three footprint points.")
+    result = cleanup_face_normals(
+        _floor_plan_component_mesh_with_face(primitive),
+        reference_axis="z",
+        positive=bool(positive_z),
+    )
+    audit = audit_component_edit_result(result, component_kind="floor_plan_face", affects_walkmesh=True)
+    ordered_face = result.mesh.faces[0] if result.mesh.faces else tuple(range(len(source_points)))
+    updated_points = tuple(source_points[index] for index in ordered_face)
+    updated_primitive = replace(
+        primitive,
+        points=updated_points,
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "cleanup_floor_plan_normals",
+            "normal_cleanup_positive_z": bool(positive_z),
+            "normal_cleanup_flipped_faces": result.metadata.get("flipped_face_count", 0),
+            "source": "map_studio:floor_plan_normal_cleanup",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="cleanup_floor_plan_normals",
+        room_metadata={
+            "normal_cleanup_positive_z": bool(positive_z),
+            "normal_cleanup_flipped_faces": result.metadata.get("flipped_face_count", 0),
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+
+
 def cleanup_authored_floor_plan_vertices(
     project: AuthoredModuleProject,
     *,
@@ -2064,6 +2195,23 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             project,
             room_resref=str(kwargs.get("room_resref", "")),
             tolerance=float(kwargs.get("tolerance", 0.001)),
+        )
+    if op in {"fill", "fill_face", "fill_floor_plan_face"}:
+        return fill_authored_floor_plan_face(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            point_indices=tuple(kwargs.get("point_indices", ()) or ()),
+        )
+    if op in {"triangulate", "triangulate_face", "triangulate_floor_plan_face"}:
+        return triangulate_authored_floor_plan_face(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+        )
+    if op in {"normals", "cleanup_normals", "cleanup_floor_plan_normals"}:
+        return cleanup_authored_floor_plan_normals(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            positive_z=bool(kwargs.get("positive_z", True)),
         )
     if op in {"mirror", "mirror_vertices", "mirror_floor_plan_vertices"}:
         return mirror_authored_floor_plan_vertices(
@@ -2185,7 +2333,9 @@ __all__ = [
     "authored_terrain_room_choices",
     "authored_room_composition_primitives",
     "bridge_authored_floor_plan_edges",
+    "cleanup_authored_floor_plan_normals",
     "cleanup_authored_floor_plan_vertices",
+    "fill_authored_floor_plan_face",
     "flatten_authored_floor_plan_vertices",
     "mirror_authored_floor_plan_vertices",
     "move_authored_floor_plan_point",
@@ -2197,5 +2347,6 @@ __all__ = [
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
     "snap_authored_floor_plan_vertex_to_vertex",
+    "triangulate_authored_floor_plan_face",
     "weld_authored_floor_plan_vertices",
 ]
