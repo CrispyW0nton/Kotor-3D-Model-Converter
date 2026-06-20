@@ -566,6 +566,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
+        self.builder_tab.floorPlanExtrusionRequested.connect(self.apply_authored_floor_plan_extrusion)
         self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
         self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
@@ -1193,6 +1194,31 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Applied room operation {operation}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def apply_authored_floor_plan_extrusion(
+        self,
+        room_resref: str,
+        z: float,
+        wall_height: float,
+        include_walls: bool,
+        floor_surface_id: str,
+    ) -> None:
+        try:
+            result = self.controller.set_authored_floor_plan_extrusion(
+                room_resref=room_resref,
+                z=z,
+                wall_height=wall_height,
+                include_walls=include_walls,
+                floor_surface_id=floor_surface_id,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply Floor-Plan Extrusion", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Updated floor-plan extrusion for {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

@@ -74,6 +74,7 @@ from .authored_room_operations import (
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
     remove_authored_room_composition_primitive,
+    set_authored_floor_plan_extrusion_settings,
     set_authored_room_composition_primitive_dimensions,
     set_authored_room_composition_primitive_style,
     set_authored_room_composition_primitive_transform,
@@ -558,6 +559,43 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Merged Map Studio floor-plan rooms {first_room_resref} and {second_room_resref}; previous exports/proofs are now stale."
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_floor_plan_extrusion(
+        self,
+        *,
+        room_resref: str = "",
+        z: float | None = None,
+        wall_height: float | None = None,
+        include_walls: bool | None = None,
+        floor_surface_id: int | str | None = None,
+    ):
+        """Set explicit room extrusion parameters for the current authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = set_authored_floor_plan_extrusion_settings(
+            authored,
+            room_resref=room_resref,
+            z=z,
+            wall_height=wall_height,
+            include_walls=include_walls,
+            floor_surface_id=floor_surface_id,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Updated Map Studio floor-plan extrusion settings for {room_resref or 'the selected room'}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 

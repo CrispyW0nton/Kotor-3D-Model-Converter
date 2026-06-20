@@ -8,6 +8,7 @@ and return a new project that can be saved back into KMAP.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -100,6 +101,11 @@ class AuthoredFloorPlanRoomChoice:
     label: str
     point_count: int
     room_index: int
+    z: float = 0.0
+    wall_height: float = 3.0
+    include_walls: bool = True
+    floor_surface_id: int | str = 4
+    floor_surface_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -187,12 +193,22 @@ def authored_floor_plan_room_choices(project: AuthoredModuleProject) -> tuple[Au
         resref = normalise_resref(room.room_resref)
         if not resref:
             continue
+        floor_surface_id = primitive.floor_surface_id
+        try:
+            floor_surface_name = walkmesh_surface_name(resolve_walkmesh_surface_id(floor_surface_id))
+        except Exception:
+            floor_surface_name = str(floor_surface_id or "")
         choices.append(
             AuthoredFloorPlanRoomChoice(
                 room_resref=resref,
-                label=f"{resref} ({len(tuple(primitive.points or ()))} points)",
+                label=f"{resref} ({len(tuple(primitive.points or ()))} points, {float(primitive.wall_height):.2f} m walls)",
                 point_count=len(tuple(primitive.points or ())),
                 room_index=index,
+                z=float(primitive.z),
+                wall_height=float(primitive.wall_height),
+                include_walls=bool(primitive.include_walls),
+                floor_surface_id=floor_surface_id,
+                floor_surface_name=floor_surface_name,
             )
         )
     return tuple(choices)
@@ -1025,6 +1041,55 @@ def apply_authored_floor_plan_bevel(
     return _replace_rooms(project, rooms, operation="bevel")
 
 
+def set_authored_floor_plan_extrusion_settings(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str = "",
+    z: float | None = None,
+    wall_height: float | None = None,
+    include_walls: bool | None = None,
+    floor_surface_id: int | str | None = None,
+) -> AuthoredModuleProject:
+    """Set the explicit extrusion parameters for one authored floor-plan room."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    primitive = _floor_plan_for_room(room)
+    next_z = float(primitive.z if z is None else z)
+    next_wall_height = float(primitive.wall_height if wall_height is None else wall_height)
+    if not math.isfinite(next_z):
+        raise ValueError("Floor-plan extrusion elevation must be a finite number.")
+    if not math.isfinite(next_wall_height) or next_wall_height <= 0.0:
+        raise ValueError("Floor-plan extrusion wall height must be greater than zero.")
+    next_surface_id = primitive.floor_surface_id
+    if floor_surface_id is not None and str(floor_surface_id).strip():
+        next_surface_id = resolve_walkmesh_surface_id(floor_surface_id)
+    updated_primitive = replace(
+        primitive,
+        z=next_z,
+        wall_height=next_wall_height,
+        include_walls=bool(primitive.include_walls if include_walls is None else include_walls),
+        floor_surface_id=next_surface_id,
+        metadata={
+            **dict(primitive.metadata),
+            "source": "map_studio:floor_plan_extrusion_settings",
+            "last_operation": "floor_plan_extrusion_settings",
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_primitive,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "floor_plan_extrusion",
+            "last_operation": "floor_plan_extrusion_settings",
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="floor_plan_extrusion_settings")
+
+
 def _safe_anchor_for_piece(piece: FloorPlanRoomPrimitive) -> tuple[float, float, float]:
     xs = [float(point[0]) for point in piece.points]
     ys = [float(point[1]) for point in piece.points]
@@ -1366,6 +1431,7 @@ __all__ = [
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",
     "remove_authored_room_composition_primitive",
+    "set_authored_floor_plan_extrusion_settings",
     "set_authored_room_composition_primitive_dimensions",
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",

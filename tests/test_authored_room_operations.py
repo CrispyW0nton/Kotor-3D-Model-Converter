@@ -45,6 +45,38 @@ def test_t2651_controller_bevel_converts_rectangular_dev_room_to_floor_plan() ->
     assert result.readiness.can_preview is True
 
 
+def test_t2910_controller_updates_floor_plan_extrusion_settings() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grextrude")
+
+    result = controller.set_authored_floor_plan_extrusion(
+        room_resref="grextrude_room01",
+        z=0.5,
+        wall_height=4.25,
+        include_walls=False,
+        floor_surface_id="4",
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    primitive = payload["rooms"][0]["primitive"]
+    choices = controller.authored_floor_plan_room_choices()
+    assert primitive["type"] == "floor_plan"
+    assert primitive["z"] == 0.5
+    assert primitive["wall_height"] == 4.25
+    assert primitive["include_walls"] is False
+    assert primitive["floor_surface_id"] == 4
+    assert primitive["metadata"]["last_operation"] == "floor_plan_extrusion_settings"
+    assert choices[0].wall_height == 4.25
+    assert choices[0].include_walls is False
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+
+
 def test_t2651_rectangular_cut_splits_current_room_and_remains_exportable() -> None:
     _install_native_payload_paths()
 
@@ -810,6 +842,56 @@ def test_t2679_builder_tab_exposes_rectangular_union_controls() -> None:
     assert "self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)" in window_source
     assert "self.controller.merge_authored_floor_plan_rooms" in window_source
     assert "self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)" in window_source
+
+
+def test_t2910_builder_tab_exposes_floor_plan_extrusion_controls() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    source = (
+        repo
+        / "native"
+        / "GhostRigger.GUI.Boundary.Panels"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    native_source = (
+        repo
+        / "native"
+        / "GhostRigger.Tools.Workflow.ModuleMeshes"
+        / "Python"
+        / "src"
+        / "gui"
+        / "panels"
+        / "module_editor"
+        / "builder_tab.py"
+    ).read_text(encoding="utf-8")
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    for panel_source in (source, native_source):
+        assert "floorPlanExtrusionRequested" in panel_source
+        assert "mapStudioFloorPlanExtrusionRoomComboBox" in panel_source
+        assert "mapStudioFloorPlanWallHeightSpinBox" in panel_source
+        assert "mapStudioFloorPlanFloorZSpinBox" in panel_source
+        assert "mapStudioFloorPlanIncludeWallsCheckBox" in panel_source
+        assert "mapStudioFloorPlanSurfaceComboBox" in panel_source
+        assert "mapStudioApplyFloorPlanExtrusionButton" in panel_source
+        assert "def _emit_floor_plan_extrusion" in panel_source
+        assert "wall_height" in panel_source
+        assert "include_walls" in panel_source
+    assert "self.builder_tab.floorPlanExtrusionRequested.connect(self.apply_authored_floor_plan_extrusion)" in window_source
+    assert "self.controller.set_authored_floor_plan_extrusion" in window_source
 
 
 def test_t2671_builder_tab_exposes_composition_primitive_transform_controls() -> None:

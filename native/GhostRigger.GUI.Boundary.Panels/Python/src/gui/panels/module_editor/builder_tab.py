@@ -9,6 +9,7 @@ class BuilderTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     primitivePresetRequested = QtCore.Signal(str, str)
     roomOperationRequested = QtCore.Signal(str, float, float, float, float, float)
+    floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
     terrainOperationRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
     roomRectangularUnionRequested = QtCore.Signal(str, str, str)
     roomStyleRequested = QtCore.Signal(str, str)
@@ -111,6 +112,32 @@ class BuilderTab(QtWidgets.QWidget):
         operation_layout.addRow("Cut Depth:", self.cutDepthSpinBox)
         operation_layout.addRow(self.applyRoomOperationButton)
         layout.addWidget(operation_box)
+        extrusion_box = QtWidgets.QGroupBox("Floor-Plan Extrusion")
+        extrusion_layout = QtWidgets.QFormLayout(extrusion_box)
+        self.floorPlanExtrusionHintLabel = QtWidgets.QLabel(
+            "Extrusion turns a 2D footprint into an exportable KOTOR room: floor, WOK surface, optional walls, and wall height."
+        )
+        self.floorPlanExtrusionHintLabel.setObjectName("mapStudioFloorPlanExtrusionHintLabel")
+        self.floorPlanExtrusionHintLabel.setWordWrap(True)
+        self.floorPlanExtrusionRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanExtrusionRoomComboBox.setObjectName("mapStudioFloorPlanExtrusionRoomComboBox")
+        self.floorPlanWallHeightSpinBox = self._make_transform_spin("mapStudioFloorPlanWallHeightSpinBox", 0.05, 1000.0, " m", value=3.0, step=0.1)
+        self.floorPlanFloorZSpinBox = self._make_transform_spin("mapStudioFloorPlanFloorZSpinBox", -1000.0, 1000.0, " m", value=0.0, step=0.1)
+        self.floorPlanIncludeWallsCheckBox = QtWidgets.QCheckBox("Generate wall meshes")
+        self.floorPlanIncludeWallsCheckBox.setObjectName("mapStudioFloorPlanIncludeWallsCheckBox")
+        self.floorPlanIncludeWallsCheckBox.setChecked(True)
+        self.floorPlanSurfaceComboBox = QtWidgets.QComboBox()
+        self.floorPlanSurfaceComboBox.setObjectName("mapStudioFloorPlanSurfaceComboBox")
+        self.applyFloorPlanExtrusionButton = QtWidgets.QPushButton("Apply Extrusion Settings")
+        self.applyFloorPlanExtrusionButton.setObjectName("mapStudioApplyFloorPlanExtrusionButton")
+        extrusion_layout.addRow(self.floorPlanExtrusionHintLabel)
+        extrusion_layout.addRow("Room:", self.floorPlanExtrusionRoomComboBox)
+        extrusion_layout.addRow("Wall height:", self.floorPlanWallHeightSpinBox)
+        extrusion_layout.addRow("Floor Z:", self.floorPlanFloorZSpinBox)
+        extrusion_layout.addRow(self.floorPlanIncludeWallsCheckBox)
+        extrusion_layout.addRow("WOK surface:", self.floorPlanSurfaceComboBox)
+        extrusion_layout.addRow(self.applyFloorPlanExtrusionButton)
+        layout.addWidget(extrusion_box)
         terrain_box = QtWidgets.QGroupBox("Terrain Heightfield")
         terrain_layout = QtWidgets.QFormLayout(terrain_box)
         self.terrainWorkflowLabel = QtWidgets.QLabel(
@@ -447,6 +474,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.createPrimitiveButton.clicked.connect(self._emit_primitive_preset)
         self.roomOperationComboBox.currentIndexChanged.connect(self._update_operation_controls)
         self.applyRoomOperationButton.clicked.connect(self._emit_room_operation)
+        self.floorPlanExtrusionRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_extrusion_controls)
+        self.floorPlanWallHeightSpinBox.valueChanged.connect(lambda _value: self._update_floor_plan_extrusion_hint())
+        self.floorPlanFloorZSpinBox.valueChanged.connect(lambda _value: self._update_floor_plan_extrusion_hint())
+        self.floorPlanIncludeWallsCheckBox.stateChanged.connect(lambda _value: self._update_floor_plan_extrusion_hint())
+        self.floorPlanSurfaceComboBox.currentIndexChanged.connect(self._update_floor_plan_extrusion_hint)
+        self.applyFloorPlanExtrusionButton.clicked.connect(self._emit_floor_plan_extrusion)
         self.terrainRoomComboBox.currentIndexChanged.connect(self._update_terrain_controls)
         self.terrainShapePresetComboBox.currentIndexChanged.connect(self._update_terrain_shape_controls)
         self.setTerrainHeightButton.clicked.connect(lambda: self._emit_terrain_operation("set_height"))
@@ -486,6 +519,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.set_terrain_room_choices(())
         self.set_terrain_shape_presets(())
         self.set_floor_plan_room_choices(())
+        self._update_floor_plan_extrusion_controls()
         self._update_composition_primitive_kind_hint()
         self._update_primitive_transform_controls()
         self._update_primitive_dimension_controls()
@@ -703,10 +737,12 @@ class BuilderTab(QtWidgets.QWidget):
     def set_floor_plan_room_choices(self, rooms) -> None:
         """Populate floor-plan room choices for Builder boolean operations."""
 
+        extrusion_current = self._current_combo_resref(self.floorPlanExtrusionRoomComboBox)
         first_current = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
         second_current = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
         choices = tuple(rooms or ())
         for combo, current in (
+            (self.floorPlanExtrusionRoomComboBox, extrusion_current),
             (self.floorPlanUnionFirstRoomComboBox, first_current),
             (self.floorPlanUnionSecondRoomComboBox, second_current),
         ):
@@ -720,6 +756,11 @@ class BuilderTab(QtWidgets.QWidget):
                     "room_resref": resref,
                     "point_count": int(getattr(choice, "point_count", 0) or 0),
                     "room_index": int(getattr(choice, "room_index", 0) or 0),
+                    "z": float(getattr(choice, "z", 0.0) or 0.0),
+                    "wall_height": float(getattr(choice, "wall_height", 3.0) or 3.0),
+                    "include_walls": bool(getattr(choice, "include_walls", True)),
+                    "floor_surface_id": str(getattr(choice, "floor_surface_id", "4") or "4"),
+                    "floor_surface_name": str(getattr(choice, "floor_surface_name", "") or ""),
                 }
                 combo.addItem(label, data)
                 if resref == current:
@@ -731,7 +772,72 @@ class BuilderTab(QtWidgets.QWidget):
             combo.blockSignals(False)
         if self.floorPlanUnionSecondRoomComboBox.count() > 1 and self.floorPlanUnionSecondRoomComboBox.currentIndex() == self.floorPlanUnionFirstRoomComboBox.currentIndex():
             self.floorPlanUnionSecondRoomComboBox.setCurrentIndex(1)
+        self._update_floor_plan_extrusion_controls()
         self._update_rectangular_union_controls()
+
+    def _current_floor_plan_extrusion_data(self) -> dict:
+        data = self.floorPlanExtrusionRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _current_floor_plan_surface_data(self) -> dict:
+        data = self.floorPlanSurfaceComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_floor_plan_extrusion_controls(self) -> None:
+        data = self._current_floor_plan_extrusion_data()
+        enabled = bool(data)
+        for widget in (
+            self.floorPlanExtrusionRoomComboBox,
+            self.floorPlanWallHeightSpinBox,
+            self.floorPlanFloorZSpinBox,
+            self.floorPlanIncludeWallsCheckBox,
+            self.floorPlanSurfaceComboBox,
+            self.applyFloorPlanExtrusionButton,
+        ):
+            widget.setEnabled(enabled)
+        if enabled:
+            self.floorPlanWallHeightSpinBox.blockSignals(True)
+            self.floorPlanWallHeightSpinBox.setValue(float(data.get("wall_height", 3.0) or 3.0))
+            self.floorPlanWallHeightSpinBox.blockSignals(False)
+            self.floorPlanFloorZSpinBox.blockSignals(True)
+            self.floorPlanFloorZSpinBox.setValue(float(data.get("z", 0.0) or 0.0))
+            self.floorPlanFloorZSpinBox.blockSignals(False)
+            self.floorPlanIncludeWallsCheckBox.blockSignals(True)
+            self.floorPlanIncludeWallsCheckBox.setChecked(bool(data.get("include_walls", True)))
+            self.floorPlanIncludeWallsCheckBox.blockSignals(False)
+            self._select_surface_combo_value(self.floorPlanSurfaceComboBox, str(data.get("floor_surface_id") or "4"))
+        self._update_floor_plan_extrusion_hint()
+
+    def _update_floor_plan_extrusion_hint(self) -> None:
+        data = self._current_floor_plan_extrusion_data()
+        if not data:
+            self.floorPlanExtrusionHintLabel.setText(
+                "Create a floor-plan or rectangular room preset before setting extrusion height, floor elevation, walls, and WOK surface."
+            )
+            return
+        surface = self._current_floor_plan_surface_data()
+        surface_name = surface.get("name") or data.get("floor_surface_name") or data.get("floor_surface_id") or "4"
+        walkable = bool(surface.get("walkable", True))
+        walkable_note = "walkable" if walkable else "not normally walkable"
+        self.floorPlanExtrusionHintLabel.setText(
+            f"Editing {data.get('room_resref')}: {int(data.get('point_count', 0) or 0)} footprint points, "
+            f"{float(self.floorPlanWallHeightSpinBox.value()):.2f} m walls, floor Z {float(self.floorPlanFloorZSpinBox.value()):.2f} m, "
+            f"WOK surface {surface_name} ({walkable_note})."
+        )
+
+    def _emit_floor_plan_extrusion(self) -> None:
+        data = self._current_floor_plan_extrusion_data()
+        room = str(data.get("room_resref") or "").strip()
+        if not room:
+            return
+        surface_id = str(self._current_floor_plan_surface_data().get("surface_id") or data.get("floor_surface_id") or "4")
+        self.floorPlanExtrusionRequested.emit(
+            room,
+            float(self.floorPlanFloorZSpinBox.value()),
+            float(self.floorPlanWallHeightSpinBox.value()),
+            bool(self.floorPlanIncludeWallsCheckBox.isChecked()),
+            surface_id,
+        )
 
     def _update_rectangular_union_controls(self) -> None:
         first = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
@@ -874,6 +980,8 @@ class BuilderTab(QtWidgets.QWidget):
         self._authored_walkmesh_surfaces = tuple(surfaces or ())
         self._fill_surface_combo(self.roomSurfaceComboBox, self._authored_walkmesh_surfaces)
         self._fill_surface_combo(self.primitiveSurfaceComboBox, self._authored_walkmesh_surfaces)
+        self._fill_surface_combo(self.floorPlanSurfaceComboBox, self._authored_walkmesh_surfaces)
+        self._update_floor_plan_extrusion_controls()
         self._update_surface_hint()
         self._update_primitive_style_controls()
 

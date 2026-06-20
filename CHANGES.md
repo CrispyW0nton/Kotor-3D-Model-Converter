@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Exposes Floor-Plan Extrusion Controls
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor Builder UI / authored room geometry
+Intersects: Map Studio Level Editor Builder panel, Module domain controller, and ModuleMeshes mirror package.
+
+- Added a headless authored-module operation for editing floor-plan extrusion settings: floor elevation, wall height, wall generation, and WOK floor surface.
+- Added visible Builder tab controls in the existing Level Editor so modders can select an authored floor-plan room and apply extrusion settings without hidden backend calls.
+- Routed the UI through `ModuleEditorController.set_authored_floor_plan_extrusion`, preserving the boundary where core owns authored-room mutation and Qt only wires the workflow.
+- Mirrored the core and Builder panel changes into the ModuleMeshes workflow package to keep native package contracts aligned.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2910_controller_updates_floor_plan_extrusion_settings tests/test_authored_room_operations.py::test_t2910_builder_tab_exposes_floor_plan_extrusion_controls -q --basetemp .pytest_tmp_map_studio_extrusion`; `python -m pytest tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py tests/test_authored_module_readiness.py -q --basetemp .pytest_tmp_map_studio_extrusion_smoke`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py`.
+
 ### [2026-06-20] Native Host Resolves Split Python Packages
 
 Owner: LordVaderCW
