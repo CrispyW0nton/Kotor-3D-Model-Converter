@@ -1194,6 +1194,70 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 combo.setCurrentIndex(index)
                 return
 
+    def _select_map_studio_snap_mode(self, snap_key: str) -> None:
+        """Synchronize the Builder snap selector with a tool-belt action."""
+
+        combo = getattr(self.builder_tab, "snapModeComboBox", None)
+        if combo is None:
+            return
+        wanted = str(snap_key or "").strip().lower()
+        for index in range(combo.count()):
+            data = combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("key") or "").strip().lower() == wanted:
+                combo.setCurrentIndex(index)
+                return
+
+    def _focus_map_studio_vertex_workflow(self, action_key: str) -> None:
+        """Route vertex-oriented belt actions to the Builder vertex workflow."""
+
+        key = str(action_key or "").strip()
+        tool_by_action = {
+            "vertex_snap": "snap_vertices",
+            "weld": "weld_vertices",
+            "flatten": "flatten_vertices",
+            "mirror": "mirror_footprint",
+            "cleanup": "cleanup_footprint",
+        }
+        snap_by_action = {
+            "vertex_snap": "vertex",
+            "weld": "vertex",
+            "flatten": "grid",
+            "mirror": "grid",
+            "cleanup": "grid",
+        }
+        context_by_action = {
+            "vertex_snap": (
+                "Vertex snap: move one floor-plan point to another point or room handle "
+                "without welding topology. Hold V previews point snapping; commit through "
+                "Snap Vertex so KMAP, WOK, readiness, and export-stale state update together."
+            ),
+            "weld": (
+                "Weld vertices: merge selected floor-plan points into one topology point "
+                "and repair room/WOK references before export."
+            ),
+            "flatten": "Flatten vertices: align selected points on a local X/Y line for clean walls, seams, and doorways.",
+            "mirror": "Mirror vertices: mirror authored footprint points while preserving a valid convex KOTOR room boundary.",
+            "cleanup": "Cleanup vertices: remove duplicate or collinear floor-plan points before MDL/WOK generation.",
+        }
+        log_by_action = {
+            "vertex_snap": (
+                "Map Studio Vertex Snap focused. This moves a point to another point; it does "
+                "not merge topology. Use Weld when the points should become one vertex."
+            ),
+            "weld": "Map Studio Weld focused. Welding merges topology and can change WOK/room face references.",
+            "flatten": "Map Studio Flatten focused. Align selected points before validating room seams and WOK output.",
+            "mirror": "Map Studio Mirror focused. Mirrored footprints still need convexity and WOK validation.",
+            "cleanup": "Map Studio Cleanup focused. Cleanup removes duplicate/collinear points before export.",
+        }
+        self._select_map_studio_component_mode("vertex")
+        self._select_map_studio_modeling_tool(tool_by_action.get(key, "snap_vertices"))
+        self._select_map_studio_snap_mode(snap_by_action.get(key, "grid"))
+        self.workflow_panel.set_active_authoring_context(context_by_action.get(key, context_by_action["vertex_snap"]))
+        self._log(log_by_action.get(key, log_by_action["vertex_snap"]))
+        tool = getattr(self.builder_tab, "floorPlanVertexRoomComboBox", None)
+        if tool is not None:
+            tool.setFocus()
+
     def _select_map_studio_gameplay_kind(self, placement_kind: str) -> None:
         """Focus the Builder placement controls for one KOTOR resource kind."""
 
@@ -1410,9 +1474,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 if tool is not None:
                     tool.setFocus()
             if key in {"vertex_snap", "weld", "flatten", "mirror", "cleanup"}:
-                tool = getattr(self.builder_tab, "floorPlanVertexRoomComboBox", None)
-                if tool is not None:
-                    tool.setFocus()
+                self._focus_map_studio_vertex_workflow(key)
             return
         if workspace_key == "terrain":
             self.show_map_studio_terrain_tools()

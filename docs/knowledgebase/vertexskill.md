@@ -27,6 +27,9 @@ geometric primitives/tests, Vince transforms, O'Hailey rigging workflows.
 
 - Hold-V vertex/bone snapping should identify nearby valid snap targets and
   apply one undoable move command.
+- In Map Studio, `Snap Vtx` should select the `snap_vertices` modeling tool and
+  Vertex snap mode. It must not route to `weld_vertices`; welding is a separate
+  topology-changing command.
 - Symmetry must be a toggleable policy, not a hidden side effect. Mirrored edits
   should be explicit in command metadata.
 - For bones/guide joints, hold-V snap can align endpoints or landmarks, but

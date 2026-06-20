@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Separates Vertex Snap From Weld
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor vertex workflow / tool-belt policy
+Intersects: Domain Core Modules, Windows Editor Level, ModuleMeshes mirror package, and vertex-editing knowledgebase.
+
+- Added a distinct `snap_vertices` Map Studio modeling tool so Snap Vtx no longer points at the same tool metadata as Weld.
+- Routed the Snap Vtx tool-belt action into Vertex component mode plus Vertex snap mode, with UI context/log text that explains snapping moves a point without merging topology.
+- Kept Weld as the explicit topology-changing operation and documented the distinction in the vertex skill.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_vertex_snap_policy`.
+
 ### [2026-06-20] Map Studio Shows Terrain Brush Performance Guidance
 
 Owner: LordVaderCW

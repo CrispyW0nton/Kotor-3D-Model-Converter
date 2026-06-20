@@ -522,6 +522,9 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"combine"' in source
         assert '"Combine"' in source
         assert '"Combine compatible rectangular floor-plan rooms through the supported room-union workflow; broader primitive/object combine is a future mesh-editing pass."' in source
+        assert '"snap_vertices"' in source
+        assert '"Snap Vertex"' in source
+        assert "Snapping is not welding" in source
         assert '"separate"' in source
         assert '"Separate"' in source
         assert '"Split a selected authored primitive into its own exportable KMAP room/object boundary."' in source
@@ -741,6 +744,12 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self._select_map_studio_terrain_brush(terrain_brush)" in window_source
     assert "Terrain brush: {label}. Live strokes update dirty terrain samples only" in window_source
     assert "Brush frames stay dirty-region scoped for low-latency sculpting." in window_source
+    assert "def _select_map_studio_snap_mode" in window_source
+    assert "def _focus_map_studio_vertex_workflow" in window_source
+    assert '"vertex_snap": "snap_vertices"' in window_source
+    assert '"vertex_snap": "vertex"' in window_source
+    assert "Vertex snap: move one floor-plan point to another point" in window_source
+    assert "not merge topology" in window_source
     assert "mapStudioToolBeltWidget" in window_source
     assert "mapStudioCustomizeToolBeltButton" in window_source
     assert "mapStudioToolBeltCustomizeSearchLineEdit" in window_source
