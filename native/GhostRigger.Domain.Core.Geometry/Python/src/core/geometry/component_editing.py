@@ -148,6 +148,49 @@ def fill_face(mesh: ComponentMesh, indices: Iterable[int]) -> ComponentEditResul
     )
 
 
+def bridge_edges(
+    mesh: ComponentMesh,
+    first_edge: Sequence[int],
+    second_edge: Sequence[int],
+    *,
+    flip_second: bool = True,
+) -> ComponentEditResult:
+    """Create a quad face between two explicit border edges.
+
+    Map Studio keeps this operation conservative because bridged corridors,
+    doorway frames, and terrain seams affect both visible room geometry and the
+    generated WOK. The helper creates one auditable quad and leaves triangulation
+    to the explicit triangulate/cleanup step.
+    """
+
+    first = tuple(int(index) for index in first_edge)
+    second = tuple(int(index) for index in second_edge)
+    if len(first) != 2 or len(second) != 2:
+        raise ValueError("Bridge edges requires exactly two vertices per edge.")
+    _validate_indices(len(mesh.vertices), first + second)
+    if first[0] == first[1] or second[0] == second[1]:
+        raise ValueError("Bridge edges cannot use zero-length edges.")
+    if len(set(first + second)) < 4:
+        raise ValueError("Bridge edges requires two separate edges with four unique vertices.")
+    second_order = tuple(reversed(second)) if flip_second else second
+    face = tuple(first + second_order)
+    existing_sets = {frozenset(row) for row in mesh.faces}
+    if frozenset(face) in existing_sets:
+        return ComponentEditResult(mesh=mesh, warnings=("A face already bridges the selected edge vertices.",))
+    bridged = ComponentMesh(vertices=mesh.vertices, faces=tuple(mesh.faces + (face,)), metadata=dict(mesh.metadata))
+    return ComponentEditResult(
+        mesh=bridged,
+        metadata={
+            "operation": "bridge_edges",
+            "added_face_count": 1,
+            "face_vertex_count": 4,
+            "first_edge": first,
+            "second_edge": second,
+            "flip_second": bool(flip_second),
+        },
+    )
+
+
 def cleanup_face_normals(
     mesh: ComponentMesh,
     *,
@@ -540,6 +583,7 @@ __all__ = [
     "Face",
     "Vector3",
     "audit_component_edit_result",
+    "bridge_edges",
     "cleanup_degenerate_faces",
     "cleanup_face_normals",
     "component_mesh",

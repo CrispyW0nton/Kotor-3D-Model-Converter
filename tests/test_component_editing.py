@@ -75,6 +75,66 @@ def test_t2601_component_edit_audit_marks_weld_as_topology_change() -> None:
     assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in audit.validation_messages
 
 
+def test_t2601_component_edit_audit_marks_bridge_as_topology_change() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import audit_component_edit_result, bridge_edges, component_mesh
+
+    mesh = component_mesh(
+        vertices=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 2.0, 0.0), (0.0, 2.0, 0.0)],
+        faces=(),
+    )
+
+    audit = audit_component_edit_result(
+        bridge_edges(mesh, (0, 1), (3, 2)),
+        component_kind="room seam",
+        affects_walkmesh=True,
+    )
+
+    assert audit.geometry_changed is True
+    assert audit.topology_changed is True
+    assert audit.walkmesh_review_required is True
+    assert audit.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert audit.summary == "bridge_edges on room seam: 1 added face(s)."
+    assert audit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
+
+
+def test_t2601_bridge_edges_creates_conservative_quad_for_room_seams() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import bridge_edges, component_mesh
+
+    mesh = component_mesh(
+        vertices=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 2.0, 0.0), (0.0, 2.0, 0.0)],
+        faces=(),
+        metadata={"room": "grbridge"},
+    )
+
+    bridged = bridge_edges(mesh, (0, 1), (3, 2))
+
+    assert bridged.mesh.faces == ((0, 1, 2, 3),)
+    assert bridged.mesh.metadata["room"] == "grbridge"
+    assert bridged.metadata["operation"] == "bridge_edges"
+    assert bridged.metadata["added_face_count"] == 1
+    assert bridged.metadata["first_edge"] == (0, 1)
+    assert bridged.metadata["second_edge"] == (3, 2)
+
+
+def test_t2601_bridge_edges_rejects_degenerate_or_shared_edges() -> None:
+    _install_native_geometry_path()
+
+    import pytest
+
+    from src.core.geometry import bridge_edges, component_mesh
+
+    mesh = component_mesh(vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)])
+
+    with pytest.raises(ValueError, match="four unique vertices"):
+        bridge_edges(mesh, (0, 1), (1, 2))
+    with pytest.raises(ValueError, match="zero-length"):
+        bridge_edges(mesh, (0, 0), (1, 2))
+
+
 def test_t2601_component_edit_audit_keeps_noop_from_invalidating_export() -> None:
     _install_native_geometry_path()
 

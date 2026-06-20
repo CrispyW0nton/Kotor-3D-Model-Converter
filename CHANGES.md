@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Geometry Kernel Adds Conservative Edge Bridge
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / geometry kernel / component modeling
+Intersects: Domain Core Geometry component-editing kernel and native Python payload packaging.
+
+- Added a headless `bridge_edges` operation that creates one auditable quad between two explicit border edges for future corridor, doorway-frame, room-seam, and terrain-seam workflows.
+- Kept the first bridge implementation conservative: it rejects zero-length/shared edges, preserves existing mesh metadata, and leaves triangulation/cleanup as explicit follow-up operations.
+- Exported `bridge_edges` through `src.core.geometry` and refreshed the Domain Core Geometry embedded Python payload hashes.
+- Added tracked regression coverage proving the bridge creates the expected quad, rejects unsafe edges, and marks the operation as topology-changing/stale for KOTOR runtime outputs through the component-edit audit.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/__init__.py tests/test_component_editing.py`; `python -m pytest tests/test_component_editing.py -q --basetemp .pytest_tmp_component_bridge_tracked`.
+
 ### [2026-06-20] Map Studio Component Edits Name Stale Runtime Outputs
 
 Owner: LordVaderCW
