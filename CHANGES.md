@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Knowledge Base Adds Map Studio Modeling Skill
+
+Owner: LordVaderCW
+Task: T2600 / T2601 / T2603 / T2604
+Subsystem: Documentation / Map Studio product rules / book-derived working skills
+Intersects: Map Studio roadmap and docs/knowledgebase skill index.
+
+- Added a `mapstudioskill.md` working-skill note that ties Maya/ZBrush-style modeling expectations to KOTOR authored resources, validation gates, export readiness, and game-proof honesty.
+- Updated the book-derived skill index so future Map Studio work explicitly consults the Map Studio modeling workspace rules before changing Level Editor UI or authored module systems.
+- Verification: inspected local PDF metadata/outlines with `pypdf`; reviewed existing `docs/knowledgebase` skill notes; docs-only change.
+
 ### [2026-06-20] Map Studio Adds TransitionDestin To Opening Markers
 
 Owner: LordVaderCW

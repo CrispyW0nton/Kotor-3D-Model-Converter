@@ -53,6 +53,8 @@ Use these files before making related code or roadmap decisions:
   geometry tests, and determinant/handedness checks.
 - `performanceskill.md`: no-lag interaction design, coalescing, caching,
   async jobs, bounded budgets, and validation cadence.
+- `mapstudioskill.md`: Maya/ZBrush-inspired Map Studio workspace rules tied to
+  KOTOR authored resources, validation, export readiness, and game proof.
 
 ## Program-Wide Rule
 
