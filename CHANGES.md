@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Tool Belt Adds Export Proof Actions
+
+Owner: LordVaderCW
+Task: T2604 / T2605
+Subsystem: Map Studio / export proof workflow / Level Editor tool belt
+Intersects: Domain Core Modules modeling tool catalog, Windows Editor Level shell, ModuleMeshes mirror package.
+
+- Added `Stage .mod`, `Install Test`, `Launch Handoff`, and `Record Proof` actions to the Map Studio export tool-belt preset so the safe package-to-game-proof path is visible from the main Level Editor workflow.
+- Routed those tool-belt actions to the existing authored-module staging, install, launch handoff, and proof recorder flows while preserving the Export panel dry-run preference.
+- Mirrored the action catalog into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_export_proof_belt`.
+
 ### [2026-06-20] Map Studio Tool Belt Focuses Opening Markers
 
 Owner: LordVaderCW

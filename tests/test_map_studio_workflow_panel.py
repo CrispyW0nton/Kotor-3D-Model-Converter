@@ -543,6 +543,16 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"Camera"' in source
         assert '"store"' in source
         assert '"Store"' in source
+        assert '"stage_module"' in source
+        assert '"Stage .mod"' in source
+        assert '"install_module"' in source
+        assert '"Install Test"' in source
+        assert '"launch_handoff"' in source
+        assert '"Launch Handoff"' in source
+        assert '"record_proof"' in source
+        assert '"Record Proof"' in source
+        assert "Staging creates an export candidate" in source
+        assert "real in-game evidence" in source
 
     for source in (controller_source, controller_mirror_source):
         assert "available_map_studio_tool_belt_actions" in source
@@ -633,11 +643,21 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.builder_tab.set_terrain_brushes(self.controller.available_map_studio_terrain_brushes())" in window_source
     assert "def _focus_map_studio_entry_point_controls" in window_source
     assert "def _focus_map_studio_opening_marker_controls" in window_source
+    assert "def _map_studio_export_dry_run_enabled" in window_source
+    assert "def _focus_map_studio_export_proof_workspace" in window_source
     assert "def set_authored_module_entry_point" in window_source
     assert 'if key == "entry_point":' in window_source
     assert 'if key == "opening_marker":' in window_source
     assert "floorPlanOpeningMarkerRoomComboBox" in window_source
     assert "Opening marker: create a KOTOR door, trigger, or waypoint" in window_source
+    assert 'if key == "stage_module":' in window_source
+    assert "self.stage_authored_module(self._map_studio_export_dry_run_enabled())" in window_source
+    assert 'if key == "install_module":' in window_source
+    assert "self.install_authored_module(self._map_studio_export_dry_run_enabled())" in window_source
+    assert 'if key == "launch_handoff":' in window_source
+    assert "self.open_map_studio_launch_handoff()" in window_source
+    assert 'if key == "record_proof":' in window_source
+    assert "self.record_game_smoke_proof()" in window_source
     assert "def _map_studio_belt_placement_kind" in window_source
     assert "def _map_studio_belt_terrain_brush" in window_source
     assert "def _select_map_studio_gameplay_kind" in window_source

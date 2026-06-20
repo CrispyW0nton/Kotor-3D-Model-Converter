@@ -1100,12 +1100,44 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "Map Studio opening transition marker controls focused. Choose an authored opening, marker kind, template/tag, and transition destination."
         )
 
+    def _map_studio_export_dry_run_enabled(self) -> bool:
+        """Return the current export dry-run preference from the Export panel."""
+
+        dry_run = getattr(getattr(self, "export_panel", None), "dry_run", None)
+        if dry_run is None:
+            return True
+        return bool(dry_run.isChecked())
+
+    def _focus_map_studio_export_proof_workspace(self) -> None:
+        """Focus the staged export/install/game-proof controls."""
+
+        self.right_tabs.setCurrentWidget(self.map_studio_export_page)
+        self.workflow_panel.set_active_authoring_context(
+            "Export + Game Proof: validate, stage/install, warp test, then record proof"
+        )
+
     def _handle_map_studio_tool_belt_action(self, action: Any) -> None:
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
         if key == "validate":
             self.validate_kmap()
+            return
+        if key == "stage_module":
+            self._focus_map_studio_export_proof_workspace()
+            self.stage_authored_module(self._map_studio_export_dry_run_enabled())
+            return
+        if key == "install_module":
+            self._focus_map_studio_export_proof_workspace()
+            self.install_authored_module(self._map_studio_export_dry_run_enabled())
+            return
+        if key == "launch_handoff":
+            self._focus_map_studio_export_proof_workspace()
+            self.open_map_studio_launch_handoff()
+            return
+        if key == "record_proof":
+            self._focus_map_studio_export_proof_workspace()
+            self.record_game_smoke_proof()
             return
         if key == "corridor":
             self.create_map_studio_corridor()
