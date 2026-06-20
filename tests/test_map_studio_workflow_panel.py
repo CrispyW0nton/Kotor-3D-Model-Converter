@@ -1020,6 +1020,10 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "def _set_pathing_summary" in source
         assert "PTH path graph readiness" in source
         assert "anchors: {anchor_text}" in source
+        assert "mapStudioReadinessFloorPlanGeometryLabel" in source
+        assert "def _set_floor_plan_geometry_summary" in source
+        assert "Floor-plan geometry:" in source
+        assert "geometry_validation" in source
         assert "mapStudioReadinessComponentEditLabel" in source
         assert "def _set_component_edit_summary" in source
         assert "Component edits:" in source

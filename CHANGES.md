@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Shows Floor-Plan Validation In Readiness Panel
+
+Owner: LordVaderCW
+Task: T2601 / T2911
+Subsystem: Map Studio / Level Editor UI / readiness panel
+Intersects: GUI Boundary Panels readiness panel and ModuleMeshes mirror package.
+
+- Added a dedicated `mapStudioReadinessFloorPlanGeometryLabel` to the Map Studio readiness panel so modders can see floor-plan blockers or cleanup warnings without opening metadata/toolchain internals.
+- Wired the label to the headless `geometry_validation` readiness payload, showing the first actionable blocker or warning and a compact checked-room summary when clean.
+- Mirrored the panel source into the ModuleMeshes workflow package and refreshed the GUI Boundary Panels native Python payload hash.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_floor_plan_readiness_panel`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py`.
+
 ### [2026-06-20] Map Studio Adds Floor-Plan Geometry Readiness
 
 Owner: LordVaderCW

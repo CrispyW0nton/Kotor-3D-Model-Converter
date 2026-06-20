@@ -60,6 +60,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.pathing_label.setWordWrap(True)
         root.addWidget(self.pathing_label)
 
+        self.floor_plan_geometry_label = QtWidgets.QLabel("Floor-plan geometry: Not checked")
+        self.floor_plan_geometry_label.setObjectName("mapStudioReadinessFloorPlanGeometryLabel")
+        self.floor_plan_geometry_label.setWordWrap(True)
+        root.addWidget(self.floor_plan_geometry_label)
+
         self.component_edit_label = QtWidgets.QLabel("Component edits: Not checked")
         self.component_edit_label.setObjectName("mapStudioReadinessComponentEditLabel")
         self.component_edit_label.setWordWrap(True)
@@ -243,6 +248,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
             self.pathing_label.setText("Pathing: Not checked")
+            self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
             self.component_edit_label.setText("Component edits: Not checked")
             self._set_runtime_resource_rows((), (), ())
             self.proof_label.setText("Game proof: Not staged")
@@ -297,6 +303,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
         self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
+        self._set_floor_plan_geometry_summary(dict(metadata.get("geometry_validation", {}) or {}))
         self._set_component_edit_summary(dict(metadata.get("component_edit", {}) or {}))
         self._set_runtime_resource_rows(expected, present, missing)
         proof_status = str(metadata.get("proof_status") or "not_ready")
@@ -468,6 +475,37 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.pathing_label.setText(
             f"Pathing: {status}. {resource}; {point_count} point(s), "
             f"{connection_count} connection(s); anchors: {anchor_text}"
+        )
+
+    def _set_floor_plan_geometry_summary(self, geometry_validation: dict[str, Any]) -> None:
+        """Show authored floor-plan validation blockers and cleanup warnings."""
+
+        if not geometry_validation:
+            self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
+            return
+        status = str(geometry_validation.get("status") or "Not checked")
+        try:
+            checked = int(geometry_validation.get("checked_room_count", 0) or 0)
+            total = int(geometry_validation.get("floor_plan_room_count", 0) or 0)
+            blockers = int(geometry_validation.get("blocking_issue_count", 0) or 0)
+            warning_count = int(geometry_validation.get("warning_count", 0) or 0)
+        except (TypeError, ValueError):
+            checked = total = blockers = warning_count = 0
+        blocking_messages = [
+            str(message)
+            for message in list(geometry_validation.get("blocking_messages") or [])
+            if str(message).strip()
+        ]
+        warnings = [str(message) for message in list(geometry_validation.get("warnings") or []) if str(message).strip()]
+        if blocking_messages:
+            self.floor_plan_geometry_label.setText(f"Floor-plan geometry: {status}. Fix: {blocking_messages[0]}")
+            return
+        if warnings:
+            self.floor_plan_geometry_label.setText(f"Floor-plan geometry: {status}. Review: {warnings[0]}")
+            return
+        self.floor_plan_geometry_label.setText(
+            f"Floor-plan geometry: {status}. {checked}/{total} room(s) checked; "
+            f"{blockers} blocker(s), {warning_count} warning(s)."
         )
 
     def _set_component_edit_summary(self, component_edit: dict[str, Any]) -> None:
