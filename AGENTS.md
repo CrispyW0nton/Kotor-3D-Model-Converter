@@ -24,7 +24,10 @@ The local book-derived working notes live under `docs/knowledgebase/`.
 
 - Start with `docs/knowledgebase/skills.md` when a task involves mesh topology,
   vertices, extrusion/modeling, transforms, rigging/skinning, Qt UI,
-  architecture, MCP validation, or resource pipelines.
+  architecture, MCP validation, resource pipelines, algorithms/geometry,
+  rendering/shaders, animation runtime, C++/native integration, Python
+  engineering, Unreal/technical-art workflows, game/tool experience design, or
+  audio/event tooling.
 - Load only the topic file needed from `docs/knowledgebase/learned/`.
 - Return to `docs/books/` only when the learned skill file is not detailed
   enough for the task.
@@ -63,7 +66,7 @@ application. Do not treat the repository as a flat Python app.
   scaffolding.
 
 The current root payload manifest covers 18 non-debug native DLL projects and
-1,306 embedded Python files. Treat the manifest and
+1,249 packaged Python file references. Treat the manifest and
 `tests/test_native_python_payloads.py` as the source of truth if counts drift.
 
 ### Native Package Families
@@ -73,50 +76,49 @@ project, manifest row, README, or planning note conflicts with
 `knowledge_base/package_ownership_model.md`, the existing name is legacy build
 state and must be migrated deliberately rather than copied into new work.
 
-- `GhostRigger.Native.Core.*`: native host/foundation packages for shared C++
-  runtime foundations, diagnostics, math, and host integration.
-- `GhostRigger.Runtime.Core.Host`: C ABI runtime host used by Python for native
-  lifecycle, scene/resource descriptors, retained handles, and diagnostics.
-- `GhostRigger.Core.IO.*`: all reading, writing, importing, exporting,
-  serialization, deserialization, packing, extraction, archive access,
-  resource-file access, and conversion.
-- `GhostRigger.Core.Automation`: IPC, MCP, scripting bridges, external
-  control APIs, background automation, command automation, automation events,
-  and machine-facing integrations.
-- `GhostRigger.Core.Tools.*`: product tool packages such as BAS, Character
-  Builder, Module Editor, Export, Pivot Controls, Resource Browser,
-  Retargeting, Sequence Editor, and 2DA Browser. Tools orchestrate lower
-  layers; they do not own reusable IO, parsing, rendering, resource, math,
-  validation, or scene rules.
-- `GhostRigger.Core.GUI.Display.*`: presentation, layout, styling, signals,
-  widgets, panels, dialogs, toolbars, overlays, labels, menus, visible
-  controls, icons, logos, notifications, and display-only view state.
-- `GhostRigger.Core.GUI.Helpers.*`: interactive helper objects such as gizmos,
-  dummies, manipulators, transform handles, viewport pickers, selection
-  helpers, guides, snapping helpers, and drag handles.
-- `GhostRigger.Core.Scene.*`: scene state, objects, transforms, pivots,
-  hierarchy, selection, placement, KMAX contracts, and scene serialization
-  contracts.
-- `GhostRigger.Core.Resources.*`: resource discovery, identity, addresses,
-  references, lifetime, cache policy, and game/library resource lookup.
-- `GhostRigger.Core.IO`: pure format structures and format-level
-  contracts. Formats define structure; IO reads and writes it.
-- `GhostRigger.Core.Math.*`: reusable transform, matrix, camera, pivot,
-  projection, coordinate conversion, normal/tangent, skinning, frame, and
-  viewport math.
-- `GhostRigger.Core.Rendering.*`: renderer-neutral contracts, render state,
+- `GhostRigger.Native.Core.Foundation`: shared native foundations, diagnostics,
+  version/capability reporting, and stable handle/contract patterns.
+- `GhostRigger.Native.Core.Host`: native application host executable boundary.
+- `GhostRigger.Runtime.Core` and `GhostRigger.Runtime.Core.Host`: runtime C ABI,
+  lifecycle, retained handles, descriptors, and diagnostics consumed by Python.
+- `GhostRigger.Runtime.Shared`: shared runtime contracts/descriptors/resources
+  consumed by renderer, tools, windows, and runtime packages.
+- `GhostRigger.Core.Automation`: IPC, MCP, scripting bridges, external control
+  APIs, command automation, automation events, and machine-facing integrations.
+- `GhostRigger.Core.Bridge`: technology glue for Qt, GPU, filesystem,
+  native-host, Python/C++ bridge, renderer adapter, and external-library
+  boundaries.
+- `GhostRigger.Core.GUI.Display`: presentation, layout, styling, signals,
+  widgets, panels, dialogs, toolbars, overlays, labels, menus, visible controls,
+  icons, notifications, and display-only view state.
+- `GhostRigger.Core.GUI.Helpers`: interactive helper objects such as gizmos,
+  dummies, manipulators, transform handles, viewport pickers, selection helpers,
+  guides, snapping helpers, and drag handles.
+- `GhostRigger.Core.IO`: reading, writing, importing, exporting, serialization,
+  deserialization, packing, extraction, archive access, resource-file access,
+  conversion, and pure format structures/contracts.
+- `GhostRigger.Core.Math`: reusable transform, matrix, camera, pivot,
+  projection, coordinate conversion, normal/tangent, skinning, frame, geometry,
+  measurement, and viewport math.
+- `GhostRigger.Core.Project`: project files, sessions, workspace state, recent
+  files, settings, dirty-state policy, and save/load workflow ownership.
+- `GhostRigger.Core.Qt`: Qt-facing integration boundary, not domain ownership.
+- `GhostRigger.Core.Rendering`: renderer-neutral contracts, render state,
   materials, texture upload policy, renderer resources, backend interfaces, and
   backend implementations.
-- `GhostRigger.Core.Validation.*`: validation rules, model/resource/scene
-  checks, export gates, and comparison reports.
-- `GhostRigger.Core.Project.*` and `GhostRigger.Core.Session`: project files,
-  sessions, workspace state, recent files, settings, dirty-state policy, and
-  save/load workflow ownership.
-- `GhostRigger.Core.Workflow.*` and `GhostRigger.Systems.*`: reusable
-  multi-step workflows and pipelines that are not just one tool and not just
-  GUI.
-- `GhostRigger.Core.Bridge`: technology-specific glue for Qt, GPU, filesystem,
-  native host, Python/C++ bridges, renderer adapters, and external libraries.
+- `GhostRigger.Core.Resources`: resource discovery, identity, addresses,
+  references, lifetime, cache policy, game/library lookup, and resource
+  residency policy.
+- `GhostRigger.Core.Scene`: scene state, objects, transforms, pivots, hierarchy,
+  selection, placement, KMAX contracts, and scene serialization contracts.
+- `GhostRigger.Core.Tools`: product tool orchestration such as BAS, Character
+  Builder, Module Editor, Export, Pivot Controls, Resource Browser, Retargeting,
+  Sequence Editor, and 2DA Browser. Tools consume lower layers; they do not own
+  reusable IO, parsing, rendering, resource, math, validation, or scene rules.
+- `GhostRigger.Core.Validation`: validation rules, model/resource/scene checks,
+  export gates, and comparison reports.
+- `GhostRigger.Core.Workflow`: reusable multi-step workflows and pipelines that
+  are not just one tool and not just GUI.
 
 Many Phase 1 native packages are diagnostic or boundary-only. Do not move real
 behavior into C++ merely because a native package exists. Native migration must
