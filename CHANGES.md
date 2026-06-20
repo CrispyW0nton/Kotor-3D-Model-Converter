@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Workspace Selector Stays In Sync
+
+Owner: LordVaderCW
+Task: T2600 / T2605
+Subsystem: Map Studio / Level Editor workspace navigation
+Intersects: Windows Editor Level shell and Map Studio workspace source contracts.
+
+- Added a workspace-selector synchronization helper so programmatic jumps from edit modes, tool-belt actions, or workspace buttons update the visible Workspace combo and guide text.
+- Routed Geometry, Terrain, Walkmesh, Placements, Lighting, Scripts, and Export focus paths through that helper so the UI no longer shows stale workspace state after a tool opens a panel.
+- Refreshed the Windows Editor Level native Python payload hash.
+- Verification: `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_level_editor_exposes_map_studio_workspace_switcher -q --basetemp .pytest_tmp_workspace_sync`.
+
 ### [2026-06-20] Map Studio Tool Belt Customizer Is Searchable
 
 Owner: LordVaderCW

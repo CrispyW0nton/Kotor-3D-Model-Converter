@@ -312,8 +312,16 @@ def test_t2600_level_editor_exposes_map_studio_workspace_switcher() -> None:
     assert "mapStudioOpenWorkspaceButton" in window_source
     assert "mapStudioRightTabs" in window_source
     assert "self.map_studio_workspace_combo.currentIndexChanged.connect" in window_source
+    assert "def _set_map_studio_workspace_combo_key" in window_source
     assert "def _handle_map_studio_workspace_changed" in window_source
     assert "def _open_selected_map_studio_workspace" in window_source
+    assert 'self._set_map_studio_workspace_combo_key("geometry")' in window_source
+    assert 'self._set_map_studio_workspace_combo_key("terrain")' in window_source
+    assert 'self._set_map_studio_workspace_combo_key("walkmesh")' in window_source
+    assert 'self._set_map_studio_workspace_combo_key("placements")' in window_source
+    assert 'self._set_map_studio_workspace_combo_key("lighting")' in window_source
+    assert 'self._set_map_studio_workspace_combo_key("scripts")' in window_source
+    assert 'self._set_map_studio_workspace_combo_key("export")' in window_source
     assert "self.show_map_studio_geometry_tools()" in window_source
     assert "self.show_map_studio_terrain_tools()" in window_source
     assert "self.show_map_studio_walkmesh_tools()" in window_source

@@ -880,6 +880,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _selected_map_studio_workspace_key(self) -> str:
         return str(self.map_studio_workspace_combo.currentData() or "").strip()
 
+    def _set_map_studio_workspace_combo_key(self, key: str) -> None:
+        """Keep the visible workspace selector aligned with programmatic focus changes."""
+
+        wanted = str(key or "").strip()
+        index = self.map_studio_workspace_combo.findData(wanted)
+        if index < 0:
+            return
+        if self.map_studio_workspace_combo.currentIndex() != index:
+            previous = self.map_studio_workspace_combo.blockSignals(True)
+            try:
+                self.map_studio_workspace_combo.setCurrentIndex(index)
+            finally:
+                self.map_studio_workspace_combo.blockSignals(previous)
+        self._update_map_studio_workspace_guide()
+
     def _update_map_studio_workspace_guide(self) -> None:
         key = self._selected_map_studio_workspace_key()
         mode = self._map_studio_workspace_modes.get(key)
@@ -1166,6 +1181,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _focus_map_studio_export_proof_workspace(self) -> None:
         """Focus the staged export/install/game-proof controls."""
 
+        self._set_map_studio_workspace_combo_key("export")
         self.right_tabs.setCurrentWidget(self.map_studio_export_page)
         self.workflow_panel.set_active_authoring_context(
             "Export + Game Proof: validate, stage/install, warp test, then record proof"
@@ -1279,13 +1295,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         elif workspace_key == "scripts":
             self.show_map_studio_script_tools()
         elif workspace_key == "export":
-            self.right_tabs.setCurrentWidget(self.map_studio_export_page)
+            self._focus_map_studio_export_proof_workspace()
         else:
             self.show_map_studio_builder()
 
     def show_map_studio_builder(self) -> None:
         """Focus the Builder tab inside the existing Map Studio Level Editor."""
 
+        self._set_map_studio_workspace_combo_key("geometry")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
@@ -1363,6 +1380,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def show_map_studio_geometry_tools(self) -> None:
         """Focus Builder's primitive, operation, and modular room controls."""
 
+        self._set_map_studio_workspace_combo_key("geometry")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         primitive = getattr(self.builder_tab, "roomPrimitivePresetComboBox", None)
         if primitive is not None:
@@ -1375,6 +1393,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def show_map_studio_walkmesh_tools(self) -> None:
         """Focus the existing Walkmesh tab inside the Map Studio Level Editor."""
 
+        self._set_map_studio_workspace_combo_key("walkmesh")
         self.workflow_tabs.setCurrentWidget(self.walkmesh_tab)
         self.workflow_panel.set_active_authoring_context("Walkmesh: inspect and paint walkable/non-walkable faces")
         self._log("Map Studio Walkmesh tools focused. Use these to inspect, load, or paint walkable faces.")
@@ -1382,6 +1401,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def show_map_studio_terrain_tools(self) -> None:
         """Focus Builder's terrain heightfield controls."""
 
+        self._set_map_studio_workspace_combo_key("terrain")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         terrain = getattr(self.builder_tab, "terrainRoomComboBox", None)
         if terrain is not None:
@@ -1393,6 +1413,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def show_map_studio_lighting_tools(self) -> None:
         """Focus Builder's authored room-light controls."""
 
+        self._set_map_studio_workspace_combo_key("lighting")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         name = getattr(self.builder_tab, "roomLightNameLineEdit", None)
         if name is not None:
@@ -1404,6 +1425,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def show_map_studio_placement_tools(self) -> None:
         """Focus Builder's authored gameplay placement controls."""
 
+        self._set_map_studio_workspace_combo_key("placements")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         search = getattr(self.builder_tab, "gameplayPaletteSearchLineEdit", None)
         if search is not None:
@@ -1415,6 +1437,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def show_map_studio_script_tools(self) -> None:
         """Focus Builder's authored module/area script-hook controls."""
 
+        self._set_map_studio_workspace_combo_key("scripts")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
         script = getattr(self.builder_tab, "scriptHookResrefLineEdit", None)
         if script is not None:
