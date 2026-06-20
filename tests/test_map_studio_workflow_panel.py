@@ -507,6 +507,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"opening"' in source
         assert '"wall_opening"' in source
         assert '"Wall Opening"' in source
+        assert '"opening_marker"' in source
+        assert '"Opening Marker"' in source
+        assert '"opening_transition_marker"' in source
+        assert "TransitionDestin" in source
         assert '"fill"' in source
         assert '"fill_face"' in source
         assert '"vertex_snap"' in source
@@ -628,8 +632,12 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.builder_tab.set_module_entry_point(self.controller.authored_module_entry_point())" in window_source
     assert "self.builder_tab.set_terrain_brushes(self.controller.available_map_studio_terrain_brushes())" in window_source
     assert "def _focus_map_studio_entry_point_controls" in window_source
+    assert "def _focus_map_studio_opening_marker_controls" in window_source
     assert "def set_authored_module_entry_point" in window_source
     assert 'if key == "entry_point":' in window_source
+    assert 'if key == "opening_marker":' in window_source
+    assert "floorPlanOpeningMarkerRoomComboBox" in window_source
+    assert "Opening marker: create a KOTOR door, trigger, or waypoint" in window_source
     assert "def _map_studio_belt_placement_kind" in window_source
     assert "def _map_studio_belt_terrain_brush" in window_source
     assert "def _select_map_studio_gameplay_kind" in window_source

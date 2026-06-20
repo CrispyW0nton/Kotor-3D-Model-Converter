@@ -1086,6 +1086,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 combo.setFocus()
                 return
 
+    def _focus_map_studio_opening_marker_controls(self) -> None:
+        """Focus Builder controls that convert authored openings into KOTOR transition markers."""
+
+        self.show_map_studio_geometry_tools()
+        marker_room = getattr(self.builder_tab, "floorPlanOpeningMarkerRoomComboBox", None)
+        if marker_room is not None:
+            marker_room.setFocus()
+        self.workflow_panel.set_active_authoring_context(
+            "Opening marker: create a KOTOR door, trigger, or waypoint from an authored wall opening and set LinkedTo/TransitionDestin."
+        )
+        self._log(
+            "Map Studio opening transition marker controls focused. Choose an authored opening, marker kind, template/tag, and transition destination."
+        )
+
     def _handle_map_studio_tool_belt_action(self, action: Any) -> None:
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
@@ -1101,6 +1115,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         if key == "entry_point":
             self._focus_map_studio_entry_point_controls()
+            return
+        if key == "opening_marker":
+            self._focus_map_studio_opening_marker_controls()
             return
         terrain_brush = self._map_studio_belt_terrain_brush(key)
         if terrain_brush:

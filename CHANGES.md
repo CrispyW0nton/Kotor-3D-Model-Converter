@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Tool Belt Focuses Opening Markers
+
+Owner: LordVaderCW
+Task: T2601 / T2604
+Subsystem: Map Studio / tool belt / KOTOR transition marker UX
+Intersects: Domain Core Modules modeling tool catalog, Windows Editor Level shell, ModuleMeshes mirror package.
+
+- Added an `Opening Marker` Map Studio tool-belt action so modders can jump directly from authored doorway openings to KOTOR door/trigger/waypoint transition-marker creation.
+- Wired the Level Editor action route to focus the Builder tab's opening marker controls and explain the LinkedTo/TransitionDestin workflow.
+- Mirrored the action catalog into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_opening_marker_belt`.
+
 ### [2026-06-20] Knowledge Base Adds Map Studio Modeling Skill
 
 Owner: LordVaderCW
