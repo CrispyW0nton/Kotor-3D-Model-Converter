@@ -93,7 +93,11 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
             placement_id = str(getattr(placement, "placement_id", "") or "")
             kind = str(getattr(placement, "kind", "object") or "object")
             tag = str(getattr(placement, "tag", "") or getattr(placement, "template_resref", "") or placement_id)
-            authored.addChild(self._item(f"{kind}: {tag}", placement_id, "authored_gameplay"))
+            transition = str(getattr(placement, "transition_summary", "") or "")
+            label = f"{kind}: {tag}"
+            if transition:
+                label = f"{label} ({transition})"
+            authored.addChild(self._item(label, placement_id, "authored_gameplay"))
         authored_lights = self._category("Authored Room Lights")
         root.addChild(authored_lights)
         for light in authored_room_lights or ():

@@ -65,6 +65,8 @@ class AuthoredGameplayPlacementRow:
     linked_to: str = ""
     linked_to_module: str = ""
     transition_destination: int = 0
+    transition_status: str = "not_applicable"
+    transition_summary: str = ""
     camera_id: int | str = ""
     field_of_view: float = 45.0
     height: float = 0.0
@@ -240,6 +242,25 @@ def _transition_fields_for_item(kind: str, item: Any) -> tuple[bool, str, str, i
     )
 
 
+def _transition_status_and_summary(
+    *,
+    kind: str,
+    linked_to: str,
+    linked_to_module: str,
+) -> tuple[str, str]:
+    if kind not in {"door", "trigger", "waypoint"}:
+        return "not_applicable", ""
+    destination = str(linked_to or "").strip()
+    module = normalise_resref(linked_to_module)
+    if destination and module:
+        return "module_transition", f"Links to {destination} in {module}"
+    if destination:
+        return "local_transition", f"Links to local destination {destination}"
+    if module:
+        return "missing_destination", f"Module {module} selected, destination tag missing"
+    return "not_configured", "No transition destination set"
+
+
 def _transition_metadata(*, placement_id: Any, kind: str, index: int, linked_to: str, linked_to_module: str, destination: int) -> dict[str, Any]:
     return {
         "placement_id": str(placement_id),
@@ -267,6 +288,11 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
             else:
                 position = (0.0, 0.0, 0.0)
             transition_capable, linked_to, linked_to_module, transition_destination = _transition_fields_for_item(kind, item)
+            transition_status, transition_summary = _transition_status_and_summary(
+                kind=kind,
+                linked_to=linked_to,
+                linked_to_module=linked_to_module,
+            )
             camera_id = getattr(item, "camera_id", "") if kind == "camera" else ""
             rows.append(
                 AuthoredGameplayPlacementRow(
@@ -282,6 +308,8 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     linked_to=linked_to,
                     linked_to_module=linked_to_module,
                     transition_destination=transition_destination,
+                    transition_status=transition_status,
+                    transition_summary=transition_summary,
                     camera_id=camera_id,
                     field_of_view=float(getattr(item, "field_of_view", 45.0) or 0.0) if kind == "camera" else 45.0,
                     height=float(getattr(item, "height", 0.0) or 0.0) if kind == "camera" else 0.0,

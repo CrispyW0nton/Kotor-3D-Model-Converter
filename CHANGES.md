@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Surfaces Placement Transition Status
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / authored gameplay placement UX / Level Editor selection surfaces
+Intersects: Domain Core Modules placement rows and preview markers, GUI Boundary Panels viewport/outliner/properties, ModuleMeshes mirror package.
+
+- Added reusable transition status and summary fields to authored door, trigger, and waypoint placement rows so KOTOR transition state is computed once in core.
+- Propagated transition status into gameplay preview-marker metadata for future viewport overlays, validation, and debugging.
+- Surfaced transition summaries in the Map Studio scene table, outliner labels, and selected-placement properties so modders can tell whether a marker is unlinked, local, or module-linked.
+- Mirrored the core/UI changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_placements.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_gameplay_preview.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_placements.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_gameplay_preview.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_outliner.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_properties.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_outliner.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_properties.py tests/test_authored_gameplay_placements.py tests/test_authored_gameplay_placement_selection.py`; `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_authored_transition_edit_updates_rows_and_payload tests/test_authored_gameplay_placement_selection.py::test_t2655_module_editor_projects_authored_placements_into_selection_surfaces -q --basetemp .pytest_tmp_transition_status`.
+
 ### [2026-06-20] Map Studio Creates Transition Markers From Wall Openings
 
 Owner: LordVaderCW

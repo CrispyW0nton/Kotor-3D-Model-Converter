@@ -168,6 +168,7 @@ def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
     import pytest
 
     from src.core.modules.authored_module_kmap_bridge import authored_project_to_kmap_payload
+    from src.core.modules.authored_gameplay_preview import authored_gameplay_preview_markers
     from src.core.modules.authored_module_placements import (
         add_authored_gameplay_placement,
         authored_gameplay_placement_rows,
@@ -204,6 +205,7 @@ def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
     )
     rows = authored_gameplay_placement_rows(updated.project)
     door_row = next(row for row in rows if row.placement_id == "authored:door:0")
+    door_marker = next(marker for marker in authored_gameplay_preview_markers(updated.project) if marker.placement_id == "authored:door:0")
     payload = authored_project_to_kmap_payload(updated.project)
 
     assert updated.project.placements.doors[0].linked_to == "wp_grtran02_start"
@@ -213,6 +215,12 @@ def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
     assert door_row.linked_to == "wp_grtran02_start"
     assert door_row.linked_to_module == "grtran02"
     assert door_row.transition_destination == 1
+    assert door_row.transition_status == "module_transition"
+    assert door_row.transition_summary == "Links to wp_grtran02_start in grtran02"
+    assert door_marker.metadata["transition_status"] == "module_transition"
+    assert door_marker.metadata["transition_summary"] == "Links to wp_grtran02_start in grtran02"
+    assert door_marker.metadata["linked_to"] == "wp_grtran02_start"
+    assert door_marker.metadata["linked_to_module"] == "grtran02"
     assert payload["placements"]["doors"][0]["linked_to"] == "wp_grtran02_start"
     assert payload["placements"]["doors"][0]["linked_to_module"] == "grtran02"
     assert payload["placements"]["doors"][0]["transition_destination"] == 1

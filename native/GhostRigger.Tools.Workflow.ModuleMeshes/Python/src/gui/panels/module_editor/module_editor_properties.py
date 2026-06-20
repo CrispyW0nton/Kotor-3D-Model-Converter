@@ -168,10 +168,14 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self.name_edit.setText(tag)
             self.name_edit.setEnabled(kind_key != "camera")
             scope = "spatial placement" if is_spatial else "module-level resource"
-            self.source_label.setText(
+            transition = str(getattr(authored, "transition_summary", "") or "")
+            source_text = (
                 f"{str(getattr(authored, 'template_resref', '') or '(no template)')} "
                 f"[{str(getattr(authored, 'kind', 'object') or 'object')}; {scope}]"
             )
+            if transition:
+                source_text = f"{source_text} - {transition}"
+            self.source_label.setText(source_text)
             self.visible_box.setChecked(True)
             self.locked_box.setChecked(False)
             self.visible_box.setEnabled(False)

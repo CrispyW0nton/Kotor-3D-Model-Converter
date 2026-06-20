@@ -77,6 +77,8 @@ def authored_gameplay_preview_marker_for_row(
     warning = ""
     if kind == "trigger":
         warning = "Trigger footprint is shown as an approximate volume until polygon editing is exposed."
+    transition_status = str(getattr(row, "transition_status", "") or "")
+    transition_summary = str(getattr(row, "transition_summary", "") or "")
     return AuthoredGameplayPlacementPreviewMarker(
         placement_id=str(row.placement_id),
         kind=kind,
@@ -95,6 +97,11 @@ def authored_gameplay_preview_marker_for_row(
             "index": int(row.index),
             "marker_shape": shape,
             "runtime_kind": kind,
+            "transition_capable": bool(getattr(row, "transition_capable", False)),
+            "transition_status": transition_status,
+            "transition_summary": transition_summary,
+            "linked_to": str(getattr(row, "linked_to", "") or ""),
+            "linked_to_module": str(getattr(row, "linked_to_module", "") or ""),
         },
     )
 

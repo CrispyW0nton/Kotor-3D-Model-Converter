@@ -189,7 +189,7 @@
       "resource_name": "PYTHON_PAYLOAD_0031",
       "source_path": "src/core/modules/authored_gameplay_preview.py",
       "packaged_path": "Python/src/core/modules/authored_gameplay_preview.py",
-      "sha256": "8fac9a86a1ad3f9c1a35bfc99f77650aab409b481661c083b7aae117fe20b06b"
+      "sha256": "2c529dd8239900dc23475173d69a56d0a62576d43e84196168936f1ac12b0630"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0032",
@@ -213,7 +213,7 @@
       "resource_name": "PYTHON_PAYLOAD_0035",
       "source_path": "src/core/modules/authored_module_placements.py",
       "packaged_path": "Python/src/core/modules/authored_module_placements.py",
-      "sha256": "ef2e251551e40000686dd3d2e2d3c12309de5b0773941abc812aefd18a365dd9"
+      "sha256": "67dfa022f875d6714d60929e3c2b3798969fc7e9fe4839d00ef9aab085b8ba5e"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0036",

@@ -340,11 +340,14 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     ).read_text(encoding="utf-8")
 
     assert "authored_gameplay_placements" in viewport_source
+    assert "transition_summary" in viewport_source
     assert "Authored Gameplay" in outliner_source
     assert "authored_gameplay" in outliner_source
+    assert "transition_summary" in outliner_source
     assert "_authored_placements" in properties_source
     assert "is_spatial" in properties_source
     assert "module-level resource" in properties_source
+    assert "transition_summary" in properties_source
     assert "transitionChanged = QtCore.Signal(str, str, str, int)" in properties_source
     assert "mapStudioTransitionPropertiesGroup" in properties_source
     assert "mapStudioTransitionLinkedToLineEdit" in properties_source

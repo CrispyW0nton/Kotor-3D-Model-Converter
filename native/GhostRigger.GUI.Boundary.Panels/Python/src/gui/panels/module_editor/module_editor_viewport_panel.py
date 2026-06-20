@@ -136,6 +136,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 placement_id = str(getattr(placement, "placement_id", ""))
                 marker = self._placement_markers.get(placement_id)
                 marker_label = str(getattr(marker, "shape", "") or "")
+                transition_summary = str(getattr(placement, "transition_summary", "") or "")
+                if transition_summary:
+                    marker_label = f"{marker_label}; {transition_summary}" if marker_label else transition_summary
                 bearing = float(getattr(marker, "bearing", getattr(placement, "bearing", 0.0)) or 0.0)
                 self._add_row(
                     kind,
