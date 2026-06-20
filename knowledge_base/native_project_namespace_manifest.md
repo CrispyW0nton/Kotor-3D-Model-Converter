@@ -2,7 +2,8 @@
 
 Owner: LordVaderCW
 Date: 2026-06-14
-Scope: Phase 1 audit for canonical `GhostRigger.Group.Type.ModuleName` project naming.
+Scope: Phase 1 audit snapshot. Superseded as naming authority by
+`knowledge_base/package_ownership_model.md`.
 
 ## Audit Summary
 
@@ -10,6 +11,25 @@ Scope: Phase 1 audit for canonical `GhostRigger.Group.Type.ModuleName` project n
 - Solution-folder projects in `GhostRigger.sln`: 0
 - Expected real project count: 94
 - Rename status: Native, Runtime host, Renderer, Domain, GUI Boundary, and Tools Workflow batches applied; remaining rows are pending.
+- Authority status: this table records current and historical Visual Studio
+  project names. It must not be used as the target model when it conflicts with
+  `knowledge_base/package_ownership_model.md`.
+- Compatibility note: rows such as `GhostRigger.Graphics.Renderer.*`,
+  `GhostRigger.Windows.*`, `GhostRigger.Core.IO.Formats`,
+  `GhostRigger.Core.GameLibrary`, `GhostRigger.Core.Graphics`, and broad GUI
+  category packages describe current build state or old rename batches. Future
+  package work must target the canonical owners: `GhostRigger.Core.Rendering.*`,
+  `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`,
+  `GhostRigger.Core.Formats.*`, `GhostRigger.Core.Resources.*`,
+  `GhostRigger.Core.IO.*`, `GhostRigger.Core.Automation.*`,
+  `GhostRigger.Core.Scene.*`, `GhostRigger.Core.Math.*`,
+  `GhostRigger.Core.Validation.*`, `GhostRigger.Core.Project.*`,
+  `GhostRigger.Core.Session`, `GhostRigger.Core.Workflow.*`,
+  `GhostRigger.Systems.*`, and `GhostRigger.Adapters.*`.
+- Rename rule: do not change one manifest row by itself. A native package
+  rename or merge must update directories, `.vcxproj` files, filters,
+  `GhostRigger.sln`, payload manifests, resource scripts, package registry
+  entries, tests, and compatibility shims in one focused batch.
 - Blocking anomalies:
   - `GhostRigger.Selection` is present in the requested target map but is not present in the actual solution.
   - `GhostRigger.Tools.NodeSkeletonBrowser` is present in the requested target map, but the actual solution project is `GhostRigger.Tools.NodesSkeletonBrowser`.

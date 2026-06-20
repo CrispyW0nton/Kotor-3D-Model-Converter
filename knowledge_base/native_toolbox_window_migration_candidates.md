@@ -2,26 +2,31 @@
 
 Date: 2026-06-07
 Branch: `qt-ghostrigger`
-Related: `knowledge_base/cpp_integration_phases.md`, `knowledge_base/native_migration_plan.md`, `native/README.md`
+Related: `knowledge_base/package_ownership_model.md`, `knowledge_base/cpp_integration_phases.md`, `knowledge_base/native_migration_plan.md`, `native/README.md`
 
 ## Purpose
 
 This document records the first concrete Phase 1 candidates for Python-to-C++
-toolbox and window migration. It is a planning foundation only: it does not
-move UI behavior or replace Python workflows. Each candidate names the native
-project, owner surface, bridge method, ownership boundary, and verification gate
-that must exist before implementation begins.
+toolbox, GUI Display, GUI Helpers, and host-service migration. It is a planning
+foundation only: it does not move UI behavior or replace Python workflows. Each
+candidate names the native project, owner surface, bridge method, ownership
+boundary, and verification gate that must exist before implementation begins.
 
 Shared logic used by more than one candidate must be moved into
-`GhostRigger.Native.Core.Foundation.*` or `GhostRigger.Runtime.Shared.*` before a
-toolbox or window package consumes it.
+the canonical owner in `knowledge_base/package_ownership_model.md` before a
+toolbox, GUI, renderer, runtime, or adapter package consumes it.
 
 ## Naming Rules
 
 - Toolbox packages use `GhostRigger.Core.Tools.{Toolname}`.
-- The Phase 1 native main-window package uses `GhostRigger.Windows.Shell.Main`.
-- Do not add a generic `GhostRigger.Windows.<Type>.<WindowName>` project during Phase 1
-  without first documenting the specific window owner and bridge boundary here.
+- Visible UI packages use `GhostRigger.Core.GUI.Display.*`.
+- Interactive helper packages use `GhostRigger.Core.GUI.Helpers.*`.
+- Host-service/native lifecycle surfaces use `GhostRigger.Native.Core.*`,
+  `GhostRigger.Runtime.*`, `GhostRigger.Core.Automation.*`, or
+  `GhostRigger.Adapters.NativeHost` according to ownership.
+- Existing `GhostRigger.Windows.*` packages are legacy Phase 1 compatibility
+  projects. Do not add a new generic `GhostRigger.Windows.<Type>.<WindowName>`
+  project.
 
 ## Candidate: Retargeting Tool
 
@@ -98,7 +103,11 @@ Verification gates:
 
 ## Candidate: Main Window Host Surface
 
-Native project: `GhostRigger.Windows.Shell.Main`
+Current legacy native project: `GhostRigger.Windows.Shell.Main`
+Canonical target owner: `GhostRigger.Core.GUI.Display.Widgets` for visible shell
+composition, `GhostRigger.Core.GUI.Display.Panels` for dock/panel display,
+`GhostRigger.Core.Automation.Commands` for command routing, or
+`GhostRigger.Adapters.NativeHost` for native host-service glue.
 Owner surface: Main window composition shell
 Owner package: `native/GhostRigger.Windows.Shell.Main`
 Bridge method: host module or C ABI bridge only after the Python/Qt main window

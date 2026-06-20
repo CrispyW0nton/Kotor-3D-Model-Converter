@@ -30,6 +30,10 @@ The local book-derived working notes live under `docs/knowledgebase/`.
   enough for the task.
 - The workspace-local PDF parser dependency under `.codex_deps/` is intentionally
   kept for future PDF extraction and should remain untracked.
+- The canonical package ownership model lives at
+  `knowledge_base/package_ownership_model.md`. Treat it as the authority for
+  GhostRigger package ownership, naming, merge decisions, and project
+  boundaries.
 
 ## Current Repository Structure
 
@@ -64,35 +68,61 @@ The current root payload manifest covers 93 non-debug native DLL projects and
 
 ### Native Package Families
 
-Use the package namespace to understand ownership:
+Use the package namespace to understand ownership. If an existing native
+project, manifest row, README, or planning note conflicts with
+`knowledge_base/package_ownership_model.md`, the existing name is legacy build
+state and must be migrated deliberately rather than copied into new work.
 
 - `GhostRigger.Native.Core.*`: native host/foundation packages for shared C++
   runtime foundations, diagnostics, math, and host integration.
 - `GhostRigger.Runtime.Core.Host`: C ABI runtime host used by Python for native
   lifecycle, scene/resource descriptors, retained handles, and diagnostics.
-- `GhostRigger.Runtime.Shared.*`: shared runtime contracts, descriptors, and
-  resources consumed by renderer/tool/window packages.
-- `GhostRigger.Core.*`: domain/package boundaries corresponding to durable
-  Python subsystems such as scene, MDL, resources, rendering, math, characters,
-  skeleton, validation, project, formats, modules, and workflow.
-- `GhostRigger.Core.GUI.*`: GUI category boundaries such as panels, viewports,
-  dialogs, theme, rendering, textures, lighting, integration, and sequence
-  editor UI.
+- `GhostRigger.Core.IO.*`: all reading, writing, importing, exporting,
+  serialization, deserialization, packing, extraction, archive access,
+  resource-file access, and conversion.
+- `GhostRigger.Core.Automation.*`: IPC, MCP, scripting bridges, external
+  control APIs, background automation, command automation, automation events,
+  and machine-facing integrations.
 - `GhostRigger.Core.Tools.*`: product tool packages such as BAS, Character
-  Builder, Content Browser, Export, Module Meshes, Pivot Controls, Resource
-  Browser, Retargeting, Sequence Editor, and TwoDA Browser.
-- `GhostRigger.Adapters.*`: technology adapters for files, GPU, Qt viewport,
-  Qt IPC, Qt autorig, rendering, and scripting surfaces.
-- `GhostRigger.Graphics.Renderer.Shared.Contracts`: renderer-neutral backend
-  contract package.
-- `GhostRigger.Graphics.Renderer.Backend.*`: concrete renderer backend
-  boundaries such as D3D12, ModernGL, Null, and PyGFX.
-- `GhostRigger.Windows.*`: shell, editor, legacy, and workbench window package
-  boundaries.
+  Builder, Module Editor, Export, Pivot Controls, Resource Browser,
+  Retargeting, Sequence Editor, and TwoDA Browser. Tools orchestrate lower
+  layers; they do not own reusable IO, parsing, rendering, resource, math,
+  validation, or scene rules.
+- `GhostRigger.Core.GUI.Display.*`: presentation, layout, styling, signals,
+  widgets, panels, dialogs, toolbars, overlays, labels, menus, visible
+  controls, icons, logos, notifications, and display-only view state.
+- `GhostRigger.Core.GUI.Helpers.*`: interactive helper objects such as gizmos,
+  dummies, manipulators, transform handles, viewport pickers, selection
+  helpers, guides, snapping helpers, and drag handles.
+- `GhostRigger.Core.Scene.*`: scene state, objects, transforms, pivots,
+  hierarchy, selection, placement, KMAX contracts, and scene serialization
+  contracts.
+- `GhostRigger.Core.Resources.*`: resource discovery, identity, addresses,
+  references, lifetime, cache policy, and game/library resource lookup.
+- `GhostRigger.Core.Formats.*`: pure format structures and format-level
+  contracts. Formats define structure; IO reads and writes it.
+- `GhostRigger.Core.Math.*`: reusable transform, matrix, camera, pivot,
+  projection, coordinate conversion, normal/tangent, skinning, frame, and
+  viewport math.
+- `GhostRigger.Core.Rendering.*`: renderer-neutral contracts, render state,
+  materials, texture upload policy, renderer resources, backend interfaces, and
+  backend implementations.
+- `GhostRigger.Core.Validation.*`: validation rules, model/resource/scene
+  checks, export gates, and comparison reports.
+- `GhostRigger.Core.Project.*` and `GhostRigger.Core.Session`: project files,
+  sessions, workspace state, recent files, settings, dirty-state policy, and
+  save/load workflow ownership.
+- `GhostRigger.Core.Workflow.*` and `GhostRigger.Systems.*`: reusable
+  multi-step workflows and pipelines that are not just one tool and not just
+  GUI.
+- `GhostRigger.Adapters.*`: technology-specific glue for Qt, GPU, filesystem,
+  native host, Python/C++ bridges, renderer adapters, and external libraries.
 
 Many Phase 1 native packages are diagnostic or boundary-only. Do not move real
 behavior into C++ merely because a native package exists. Native migration must
-prove ownership, parity, validation, and visible workflow behavior.
+prove ownership, parity, validation, and visible workflow behavior. Merge
+diagnostic-only or duplicate projects when they do not justify a real runtime,
+ABI, adapter, product, subsystem, dependency, or deployment boundary.
 
 ### Embedded Python Payload Rules
 
@@ -131,6 +161,12 @@ prove ownership, parity, validation, and visible workflow behavior.
 - Keep ABI/package names stable unless a batch updates project files,
   references, payload manifests, tests, bridge lookups, and compatibility shims
   together.
+- Do not create new projects from legacy namespaces such as
+  `GhostRigger.Graphics.Renderer.*` or broad `GhostRigger.Windows.*`
+  boundaries. Use the canonical owners in
+  `knowledge_base/package_ownership_model.md` and keep old names only as
+  compatibility state until a coordinated rename/merge updates all build
+  surfaces.
 - New native package READMEs should include owner surface, owner package, bridge
   method, C++ ownership, Python ownership, and verification expectations.
 - Python package availability checks live through
@@ -257,6 +293,41 @@ that is where the call starts.
 - `native/GhostRigger.*`: C++ package boundaries and embedded Python package
   copies. The namespace must mirror ownership; the existence of a native package
   does not automatically transfer behavior out of canonical Python.
+
+The high-level ownership map is:
+
+- IO owns file behavior: read/write/import/export, serialization,
+  deserialization, MDL extraction/packing, FBX import/export, archive access,
+  resource-file access, and conversion.
+- Automation owns IPC, MCP, scripting bridges, external control APIs,
+  background automation, command automation, events, and machine-facing
+  integration.
+- Tools own user-facing product workflows and orchestrate lower-level owners.
+- GUI Display owns visible presentation, layout, styling, signals, widgets,
+  panels, controls, icons, overlays, labels, menus, dialogs, notifications, and
+  display-only view state.
+- GUI Helpers own interactive helper objects such as gizmos, manipulators,
+  pickers, snapping helpers, guides, dummies, and drag handles.
+- Scene owns scene objects, transforms, pivots, hierarchy, selection,
+  placement, KMAX contracts, and scene serialization contracts.
+- Resources owns discovery, identity, addresses, references, lifetime, cache
+  policy, and game/library lookup.
+- Formats owns pure structure and format-level contracts; IO owns read/write.
+- Math owns reusable transforms, matrices, cameras, pivots, projections,
+  coordinate conversion, normals, tangents, skinning math, frame math, and
+  viewport math.
+- Rendering owns renderer-neutral contracts, render state, materials, texture
+  upload policy, renderer resources, backend interfaces, and backend
+  implementations.
+- Validation owns validation rules, model/resource/scene checks, export gates,
+  and comparison reports.
+- Adapters own technology-specific glue and must not own durable domain policy.
+- Runtime/Native Core owns native ABI, lifecycle, diagnostics, retained
+  handles, host services, and C/C++ bridge surfaces.
+- Project/Session owns project files, user sessions, workspace state, recent
+  files, settings, dirty-state policy, and save/load workflow ownership.
+- Workflow/Systems owns reusable multi-step pipelines that are not merely GUI
+  and not only one product tool.
 
 ### Adding New Behavior
 

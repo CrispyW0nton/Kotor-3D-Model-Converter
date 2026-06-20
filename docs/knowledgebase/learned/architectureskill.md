@@ -12,7 +12,11 @@ service extraction, package placement, or refactoring strategy.
 
 ## Workflow
 
-1. Name the behavior and its owner before editing. Choose core, systems, adapters, math, io/formats/resources, GUI, or native package based on responsibility.
+1. Name the behavior and its owner before editing. Use
+   `knowledge_base/package_ownership_model.md` as the package naming authority,
+   then choose core, systems, adapters, math, IO, formats, resources, GUI
+   Display, GUI Helpers, Runtime, Native Core, Project, Session, or native
+   package based on responsibility.
 2. Keep policies inward and frameworks outward. Core and systems should not import Qt or GUI packages.
 3. Use ports/adapters when infrastructure varies: filesystem, renderer backend, game resource provider, external tools, MCP, or native runtime.
 4. Use a service layer for workflow orchestration that coordinates repositories/providers/domain objects and exposes a small API to UI.
@@ -28,6 +32,36 @@ service extraction, package placement, or refactoring strategy.
 - `src/gui/...`: widgets, windows, panels, signals, user gestures, theme/layout, and calls into services.
 - `src/math/`: reusable transform, camera, pivot, projection, and coordinate-system math.
 - `src/io`, `src/formats`, `src/resources`: file formats, resource discovery, serialization/deserialization.
+
+Canonical package owners:
+
+- IO owns read/write/import/export, serialization, MDL packing/extraction, FBX,
+  archive access, resource-file access, and conversion.
+- Automation owns IPC, MCP, scripting bridges, external APIs, background
+  automation, command automation, and machine-facing events.
+- Tools own user-facing product workflows and orchestrate lower layers.
+- GUI Display owns visible presentation, layout, styling, widgets, panels,
+  controls, icons, labels, menus, dialogs, notifications, and display-only
+  state.
+- GUI Helpers owns interactive helper objects such as gizmos, manipulators,
+  transform handles, pickers, guides, dummies, snapping helpers, and drag
+  handles.
+- Scene owns scene state, objects, transforms, pivots, hierarchy, selection,
+  placement, and KMAX scene contracts.
+- Resources owns discovery, identity, addresses, references, lifetime, cache,
+  and game/library lookup.
+- Formats owns pure structures and format-level contracts; IO reads and writes
+  them.
+- Math owns reusable transforms, matrices, cameras, pivots, projections,
+  coordinate conversion, normals, tangents, skinning math, and frame math.
+- Rendering owns renderer-neutral contracts, render state, materials, texture
+  upload policy, renderer resources, backend interfaces, and backends.
+- Validation owns rules, checks, export gates, and comparison reports.
+- Adapters own technology glue and must not own durable domain policy.
+- Runtime/Native Core owns ABI, lifecycle, diagnostics, retained handles, host
+  services, and C/C++ bridge surfaces.
+- Project/Session owns project files, user sessions, workspace state, settings,
+  dirty-state policy, and save/load workflow.
 
 ## Failure Patterns
 

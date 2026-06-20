@@ -19,11 +19,12 @@ Visual Studio. Do not add parallel `.DEBUG` application projects to
 Python/ctypes ABI tests for native verification.
 
 Visual Studio project display names should follow the canonical
-`GhostRigger.Group.Type.ModuleName` shape directly in the solution. Do not use
-solution folders as a substitute for canonical project names. Keep ABI/package
-names stable during migration unless a batch explicitly updates project files,
-references, payload manifests, tests, bridge lookups, and compatibility shims
-together.
+ownership model in `knowledge_base/package_ownership_model.md` directly in the
+solution. Do not use solution folders as a substitute for canonical project
+names. Keep ABI/package names stable during migration unless a batch explicitly
+updates project files, references, payload manifests, tests, bridge lookups,
+and compatibility shims together. Legacy live project names are compatibility
+state, not authority for new packages.
 
 The first native runtime project is `GhostRigger.Runtime.Core.Host`, a DLL with a tiny C
 ABI used by Python to query native runtime version, lifecycle, retained scene
@@ -74,18 +75,27 @@ so output folders, warning levels, dependency shape, ownership metadata, and
 Debug target expectations stay consistent.
 
 Native toolbox migrations from Python must be named
-`GhostRigger.Core.Tools.{Toolname}` and should stay focused on one product tool, such
-as `GhostRigger.Core.Tools.Retargeting`, `GhostRigger.Core.Tools.Export`, or
-`GhostRigger.Core.Tools.CharacterBuilder`. The Phase 1 native main-window package is
-`GhostRigger.Windows.Shell.Main`.
-Reusable logic shared by multiple tools, windows, renderers, or runtime packages
-belongs in `GhostRigger.Native.Core.Foundation.*` or `GhostRigger.Runtime.Shared.*`
-before those product-surface packages consume it.
+`GhostRigger.Core.Tools.{Toolname}` and should stay focused on one product
+workflow, such as `GhostRigger.Core.Tools.Retargeting`,
+`GhostRigger.Core.Tools.Export`, `GhostRigger.Core.Tools.ModuleEditor`, or
+`GhostRigger.Core.Tools.CharacterBuilder`. Visible windows, panels, widgets,
+toolbars, dialogs, notifications, and view state belong under
+`GhostRigger.Core.GUI.Display.*`; interactive helper objects such as gizmos,
+pickers, dummies, transform handles, and snapping guides belong under
+`GhostRigger.Core.GUI.Helpers.*`. Broad `GhostRigger.Windows.*` projects are
+legacy Phase 1 compatibility boundaries and should be merged into GUI Display,
+GUI Helpers, Tools, Project, Session, or Automation owners when a coordinated
+rename/merge is made.
+
+Reusable logic shared by multiple tools, GUI packages, renderers, or runtime
+packages belongs in the canonical Core, Systems, Runtime, Native Core, or
+Adapters owner before product-surface packages consume it.
 
 The first toolbox and window candidates are recorded in
 `knowledge_base/native_toolbox_window_migration_candidates.md`; update that file
-before implementing a `GhostRigger.Tools.*` or `GhostRigger.Windows.Shell.Main`
-package.
+before implementing a `GhostRigger.Core.Tools.*`,
+`GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`,
+`GhostRigger.Core.Automation.*`, or `GhostRigger.Adapters.NativeHost` package.
 
 `GhostRigger.Core.Tools.Retargeting` is the first native toolbox package boundary.
 It is diagnostic-only in Phase 1: it reports package capabilities, owner
@@ -130,19 +140,24 @@ schema placeholders while keeping native attachment evaluation, node-tree
 queries, sprite-material evaluation, pivot edits, and sequence evaluation
 disabled and requiring Python fallback.
 
-`GhostRigger.Windows.Shell.Main` is the Phase 1 native window package boundary
-for main-window host services. It is diagnostic-only: it reports package
-capabilities, owner-boundary metadata, and a host-service schema placeholder
-while keeping the Python/Qt main window as the visible shell owner.
+`GhostRigger.Windows.Shell.Main` is a current legacy Phase 1 native window
+compatibility package for main-window host services. It is diagnostic-only: it
+reports package capabilities, owner-boundary metadata, and a host-service schema
+placeholder while keeping the Python/Qt main window as the visible shell owner.
+Future work should split or merge this surface into canonical GUI Display,
+Automation, Project/Session, or NativeHost owners according to
+`knowledge_base/package_ownership_model.md`.
 
 `GhostRigger.Windows.Editor.Level`,
 `GhostRigger.Windows.Workbench.AnimationRetarget`,
 `GhostRigger.Windows.Legacy.Rigging`, and
-`GhostRigger.Windows.Workbench.UnrealAnimator` are Phase 1 native window package
-boundaries for the extra standalone/workbench windows. They are
-diagnostic-only: they report package capabilities, owner-boundary metadata, and
-host-service schema placeholders while keeping the Python/Qt windows as the
-visible shell owners.
+`GhostRigger.Windows.Workbench.UnrealAnimator` are current legacy Phase 1 native
+window compatibility packages for the extra standalone/workbench windows. They
+are diagnostic-only: they report package capabilities, owner-boundary metadata,
+and host-service schema placeholders while keeping the Python/Qt windows as the
+visible shell owners. Future work should merge them into the owning Tool, GUI
+Display, GUI Helpers, Project/Session, or Automation package unless a real
+runtime, ABI, dependency, or deployment reason keeps them separate.
 
 `native/GhostRigger.Native.Core.HostModulePackages.json` records the Phase 1 full Python
 module sweep. The sweep adds diagnostic Visual Studio package boundaries for
@@ -186,25 +201,38 @@ and transition packets. Future D3D12/WGPU renderer packages should depend on
 this package for resource-state payload shapes instead of inventing local queue
 schemas.
 
-`GhostRigger.Graphics.Renderer.Shared.Contracts` owns the renderer-neutral contract boundary for
-backend capability, surface, draw-item, and frame-stat schema metadata. Concrete
-renderer packages should use `GhostRigger.Graphics.Renderer.Backend.{Backend}` names, such as
-`GhostRigger.Graphics.Renderer.Backend.D3D12`, and depend on this package before adding real
-native draw submission.
+Renderer-neutral contracts, render state, materials, texture upload policy,
+renderer resources, backend interfaces, and backend implementations now belong
+under `GhostRigger.Core.Rendering.*`. Canonical renderer package names include
+`GhostRigger.Core.Rendering`, `GhostRigger.Core.Rendering.Materials`,
+`GhostRigger.Core.Rendering.Textures`, and
+`GhostRigger.Core.Rendering.Backends.{Backend}` such as
+`GhostRigger.Core.Rendering.Backends.D3D12`,
+`GhostRigger.Core.Rendering.Backends.ModernGL`,
+`GhostRigger.Core.Rendering.Backends.Null`, and
+`GhostRigger.Core.Rendering.Backends.PyGFX`.
 
-`GhostRigger.Graphics.Renderer.Backend.Null` is the first concrete renderer backend package. It
-is diagnostic-only, depends on `GhostRigger.Graphics.Renderer.Shared.Contracts`, and proves the
-backend DLL/DEBUG-validator pattern before a hardware renderer such as
-`GhostRigger.Graphics.Renderer.Backend.D3D12` owns a real device.
+The existing `GhostRigger.Graphics.Renderer.Shared.Contracts` and
+`GhostRigger.Graphics.Renderer.Backend.*` projects are legacy Phase 1 build
+targets. They remain valid verification targets until a coordinated rename
+updates the directories, `.vcxproj` files, filters, solution, payload
+manifests, registry entries, tests, and compatibility shims together. Do not
+create new renderer packages under `GhostRigger.Graphics.Renderer.*`.
 
-`GhostRigger.Graphics.Renderer.Backend.ModernGL` and `GhostRigger.Graphics.Renderer.Backend.PyGFX` are Phase 1
-renderer package boundaries for the existing Python renderer adapters. They are
-diagnostic-only: they report package capabilities, backend metadata, and
-adapter-bridge fallback metadata while leaving ModernGL/PyGFX device and
-surface ownership in Python until later parity gates.
+The current legacy `GhostRigger.Graphics.Renderer.Backend.Null` package is
+diagnostic-only and proves the backend DLL/Debug-validator pattern before a
+hardware renderer owns a real device.
 
-`GhostRigger.Graphics.Renderer.Backend.D3D12` is the first hardware renderer backend package
-boundary. In Phase 1 it is diagnostic-only: it reports D3D12 package
+The current legacy `GhostRigger.Graphics.Renderer.Backend.ModernGL` and
+`GhostRigger.Graphics.Renderer.Backend.PyGFX` packages are Phase 1 renderer
+boundaries for the existing Python renderer adapters. They are diagnostic-only:
+they report package capabilities, backend metadata, and adapter-bridge fallback
+metadata while leaving ModernGL/PyGFX device and surface ownership in Python
+until later parity gates.
+
+The current legacy `GhostRigger.Graphics.Renderer.Backend.D3D12` package is the
+first hardware renderer backend boundary. In Phase 1 it is diagnostic-only: it
+reports D3D12 package
 capabilities, backend metadata, device requirements, DXGI adapter-probe output,
 feature-level 12_0 device-readiness without retaining a device, and
 command-queue/swap-chain readiness requirements without creating either object,
@@ -354,8 +382,9 @@ build\vs\x64\Debug\GhostRigger.Runtime.Shared.Resources.dll
 Python can query the resource package through
 `src.adapters.native_core.package_registry.query_runtime_shared_resources_status()`.
 
-Build `GhostRigger.Graphics.Renderer.Shared.Contracts` in `Debug|x64` to verify the renderer
-contract ABI without starting Python or the GUI:
+Build the current legacy `GhostRigger.Graphics.Renderer.Shared.Contracts` in
+`Debug|x64` to verify the renderer contract ABI without starting Python or the
+GUI:
 
 ```text
 build\vs\x64\Debug\GhostRigger.Graphics.Renderer.Shared.Contracts.dll
@@ -364,8 +393,9 @@ build\vs\x64\Debug\GhostRigger.Graphics.Renderer.Shared.Contracts.dll
 Python can query the renderer contract package through
 `src.adapters.native_core.package_registry.query_renderer_contracts_status()`.
 
-Build `GhostRigger.Graphics.Renderer.Backend.Null` in `Debug|x64` to verify the diagnostic
-renderer backend ABI without starting Python or the GUI:
+Build the current legacy `GhostRigger.Graphics.Renderer.Backend.Null` in
+`Debug|x64` to verify the diagnostic renderer backend ABI without starting
+Python or the GUI:
 
 ```text
 build\vs\x64\Debug\GhostRigger.Graphics.Renderer.Backend.Null.dll
@@ -374,9 +404,10 @@ build\vs\x64\Debug\GhostRigger.Graphics.Renderer.Backend.Null.dll
 Python can query the diagnostic renderer backend package through
 `src.adapters.native_core.package_registry.query_renderer_null_status()`.
 
-Build `GhostRigger.Graphics.Renderer.Backend.ModernGL` and `GhostRigger.Graphics.Renderer.Backend.PyGFX` in
-`Debug|x64` to verify the Python-adapter renderer package
-ABI boundaries without starting Python or the GUI:
+Build the current legacy `GhostRigger.Graphics.Renderer.Backend.ModernGL` and
+`GhostRigger.Graphics.Renderer.Backend.PyGFX` in `Debug|x64` to verify the
+Python-adapter renderer package ABI boundaries without starting Python or the
+GUI:
 
 ```text
 build\vs\x64\Debug\GhostRigger.Graphics.Renderer.Backend.ModernGL.dll
@@ -387,8 +418,9 @@ Python can query those renderer packages through
 `src.adapters.native_core.package_registry.query_renderer_moderngl_status()` and
 `src.adapters.native_core.package_registry.query_renderer_pygfx_status()`.
 
-Build `GhostRigger.Graphics.Renderer.Backend.D3D12` in `Debug|x64` to verify the D3D12 renderer
-package ABI, DXGI adapter-probe export, D3D12 device-readiness export,
+Build the current legacy `GhostRigger.Graphics.Renderer.Backend.D3D12` in
+`Debug|x64` to verify the D3D12 renderer package ABI, DXGI adapter-probe
+export, D3D12 device-readiness export,
 queue/swap-chain readiness export, diagnostic context create/destroy/export,
 descriptor-heap/command-allocator readiness export, command-list readiness
 export, native surface/swap-chain readiness export, render-target/back-buffer

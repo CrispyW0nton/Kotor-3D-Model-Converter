@@ -97,22 +97,20 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
     assert "GhostRigger.Native.Core.Foundation.{System}" in readme
     assert "GhostRigger.Runtime.Shared.{System}" in readme
     assert "GhostRigger.Core.Tools.{Toolname}" in readme
-    assert "GhostRigger.Windows.Shell.Main" in readme
+    assert "GhostRigger.Core.GUI.Display.*" in readme
+    assert "GhostRigger.Core.GUI.Helpers.*" in readme
+    assert "knowledge_base/package_ownership_model.md" in readme
     assert "GhostRigger.Runtime.Shared.Descriptors" in (ROOT / "native" / "README.md").read_text(
         encoding="utf-8"
     )
     assert "GhostRigger.Runtime.Shared.Resources" in (ROOT / "native" / "README.md").read_text(
         encoding="utf-8"
     )
-    assert "GhostRigger.Graphics.Renderer.Shared.Contracts" in (ROOT / "native" / "README.md").read_text(
-        encoding="utf-8"
-    )
-    assert "GhostRigger.Graphics.Renderer.Backend.Null" in (ROOT / "native" / "README.md").read_text(
-        encoding="utf-8"
-    )
-    assert "GhostRigger.Graphics.Renderer.Backend.D3D12" in (ROOT / "native" / "README.md").read_text(
-        encoding="utf-8"
-    )
+    native_readme = (ROOT / "native" / "README.md").read_text(encoding="utf-8")
+    assert "GhostRigger.Core.Rendering.Backends.D3D12" in native_readme
+    assert "GhostRigger.Core.Rendering.Backends.Null" in native_readme
+    assert "GhostRigger.Graphics.Renderer.*" in native_readme
+    assert "legacy Phase 1 build" in native_readme
     assert "Owner surface" in readme
     assert "Owner package" in readme
     assert "Bridge method" in readme
@@ -155,18 +153,28 @@ def test_native_namespace_manifest_covers_solution_projects() -> None:
     assert "GhostRigger.Selection" not in solution_names
 
 
-def test_native_docs_define_toolbox_and_window_project_naming() -> None:
+def test_native_docs_define_canonical_package_ownership_model() -> None:
     docs = "\n".join(
         [
+            (ROOT / "AGENTS.md").read_text(encoding="utf-8"),
             (ROOT / "native" / "README.md").read_text(encoding="utf-8"),
             (ROOT / "knowledge_base" / "cpp_integration_phases.md").read_text(encoding="utf-8"),
             (ROOT / "knowledge_base" / "native_migration_plan.md").read_text(encoding="utf-8"),
+            (ROOT / "knowledge_base" / "package_ownership_model.md").read_text(encoding="utf-8"),
         ]
     )
 
     assert "GhostRigger.Core.Tools.{Toolname}" in docs
     assert "GhostRigger.Core.Tools.Retargeting" in docs
-    assert "GhostRigger.Windows.Shell.Main" in docs
+    assert "GhostRigger.Core.GUI.Display.*" in docs
+    assert "GhostRigger.Core.GUI.Helpers.*" in docs
+    assert "GhostRigger.Core.Rendering.Backends.{Backend}" in docs
+    assert "GhostRigger.Core.IO.*" in docs
+    assert "GhostRigger.Core.Automation.*" in docs
+    assert "GhostRigger.Core.Resources.*" in docs
+    assert "GhostRigger.Core.Formats.*" in docs
+    assert "GhostRigger.Adapters.*" in docs
+    assert "legacy" in docs
 
 
 def test_native_toolbox_window_migration_candidates_define_first_phase_one_surfaces() -> None:
@@ -178,6 +186,9 @@ def test_native_toolbox_window_migration_candidates_define_first_phase_one_surfa
     assert "GhostRigger.Core.Tools.Export" in candidates
     assert "GhostRigger.Core.Tools.CharacterBuilder" in candidates
     assert "GhostRigger.Windows.Shell.Main" in candidates
+    assert "GhostRigger.Core.GUI.Display.*" in candidates
+    assert "GhostRigger.Core.GUI.Helpers.*" in candidates
+    assert "Canonical target owner" in candidates
     assert "Owner surface: Retarget Workbench" in candidates
     assert "Owner surface: Export and validation workflow" in candidates
     assert "Owner surface: Character Studio" in candidates

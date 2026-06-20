@@ -10,6 +10,19 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-20
+### [2026-06-20] Establish Package Ownership Authority
+
+Owner: LordVaderCW
+Subsystem: Architecture documentation / native package planning / documentation contracts
+
+- Added `knowledge_base/package_ownership_model.md` as the canonical authority for GhostRigger package ownership, naming, merge rules, and project-boundary decisions.
+- Updated `AGENTS.md`, native README/template guidance, C++ integration planning, native migration planning, namespace manifest notes, toolbox/window candidate notes, and the architecture learned skill to align new work with IO, Automation, Tools, GUI Display, GUI Helpers, Scene, Resources, Formats, Math, Rendering, Validation, Adapters, Runtime/Native Core, Project/Session, and Workflow/Systems owners.
+- Marked legacy `GhostRigger.Graphics.Renderer.*` and broad `GhostRigger.Windows.*` project names as current build compatibility state rather than future naming precedent.
+- Updated focused native documentation contract tests to assert the new canonical ownership model while leaving live project scaffold tests tied to the existing build names.
+
+Verification:
+- `python -m pytest tests/test_native_project_templates.py -q` passed 65 tests.
+
 ### [2026-06-20] Native Package Ownership Boundary Rename
 
 Owner: LordVaderCW
