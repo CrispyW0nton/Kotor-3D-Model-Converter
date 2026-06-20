@@ -4,6 +4,10 @@ Use this before changing the Level Editor / Map Studio modeling workspace,
 tool belt, terrain sculpting, authored room geometry, walkmesh generation,
 placement authoring, or module packaging UX.
 
+Also read `toolbeltskill.md` before changing action belts, command search,
+shortcuts, or customization; read `objectseparationskill.md` before changing
+separate/combine, DCC handoff, or export-object ownership.
+
 Sources inspected: Mukundan mesh processing, de Berg computational geometry,
 Hayes OpenGL, Marschner/Shirley computer graphics fundamentals, Dunn/Parberry
 3D math, Vince graphics math, Qt 6 GUI cookbook, Fitzpatrick/Summerfield Qt,

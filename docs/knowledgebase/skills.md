@@ -43,6 +43,10 @@ Use these files before making related code or roadmap decisions:
   selection, validation, and undo expectations.
 - `extrusionskill.md`: extrusion, bevel, inset, bridge, boolean, split/fill,
   and cleanup tools for Map Studio.
+- `toolbeltskill.md`: Maya-like action belts, command keys, customization,
+  mode grouping, shortcuts, and workflow-specific UI ownership.
+- `objectseparationskill.md`: separate/combine, object identity, resource
+  ownership, DCC/UV handoff, and KOTOR export boundary readiness.
 - `computationalgeometryskill.md`: robust predicates, polygon operations,
   spatial queries, triangulation, tolerances, and degeneracy handling.
 - `terrainsculptskill.md`: low-latency terrain sculpting, heightfields,
@@ -75,6 +79,12 @@ Practical source-to-skill mapping:
 - Marschner/Shirley, Hayes, Vince, Dunn/Parberry, and Kneusel drive transforms,
   robust math, coordinate conventions, rendering data flow, and performance
   budgets.
+- Qt and Maya workflow sources drive the tool-belt/action model: stable command
+  IDs, model/view palettes, undoable commands, hotkeys, and customizable
+  presets that stay inside the owning studio window.
+- Mesh-processing and KOTOR export notes drive the object-boundary model:
+  separate/combine must preserve stable IDs, resource ownership, material/UV
+  intent, WOK responsibility, and stale-output readiness.
 - O'Hailey plus the automatic skinning/weight-retargeting paper drive
   Character Builder guide-joint, donor-weight, bind-pose, and deformation
   preview rules.

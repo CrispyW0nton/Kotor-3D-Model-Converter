@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Knowledgebase Adds Tool Belt And Object Separation Skills
+
+Owner: LordVaderCW
+Task: T2908
+Subsystem: Development knowledgebase / Map Studio productization guidance
+Intersects: Map Studio modeling workspace planning and docs knowledgebase.
+
+- Added book-derived `toolbeltskill.md` guidance for stable action IDs, customizable Maya-like tool belts, command search, hotkeys, undoable commands, and keeping workflow controls in the owning studio window.
+- Added `objectseparationskill.md` guidance for object separate/combine, KMAP identity, KOTOR resource ownership, DCC/UV handoff, WOK responsibility, and stale-output readiness.
+- Updated the skill index and Map Studio skill routing so future Map Studio prompts reference these focused skills before changing the Level Editor.
+- Verification: `rg -n "toolbeltskill|objectseparationskill|Tool Belt Skill|Object Separation Skill" docs/knowledgebase/skills.md docs/knowledgebase/mapstudioskill.md docs/knowledgebase/toolbeltskill.md docs/knowledgebase/objectseparationskill.md`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Explains Stale Component-Edit Runtime Outputs
 
 Owner: LordVaderCW
