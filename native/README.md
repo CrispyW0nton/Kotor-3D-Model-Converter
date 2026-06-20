@@ -82,7 +82,7 @@ workflow, such as `GhostRigger.Core.Tools.Retargeting`,
 toolbars, dialogs, notifications, and view state belong under
 `GhostRigger.Core.GUI.Display.*`; interactive helper objects such as gizmos,
 pickers, dummies, transform handles, and snapping guides belong under
-`GhostRigger.Core.GUI.Helpers.*`. Broad `GhostRigger.Windows.*` projects are
+`GhostRigger.Core.GUI.Helpers.*`. Broad `GhostRigger.Core.GUI.Display.*` projects are
 legacy Phase 1 compatibility boundaries and should be merged into GUI Display,
 GUI Helpers, Tools, Project, Session, or Automation owners when a coordinated
 rename/merge is made.

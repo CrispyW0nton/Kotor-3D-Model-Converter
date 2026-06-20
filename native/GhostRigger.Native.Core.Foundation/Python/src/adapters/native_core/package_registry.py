@@ -12,33 +12,9 @@ from typing import Iterable
 
 
 _NATIVE_CORE_DLL = "GhostRigger.Native.Core.Foundation.dll"
-_LEGACY_NATIVE_CORE_DLL = "GhostRigger.Native.NativeCore.dll"
 _CORE_DLL_PREFIX = "GhostRigger.Core."
 _CORE_GUI_DLL_PREFIX = "GhostRigger.Core.GUI."
 _CORE_TOOLS_DLL_PREFIX = "GhostRigger.Core.Tools."
-_ADAPTERS_CANONICAL_DLL_NAMES = {
-    "GhostRigger.Adapters.Files.dll": "GhostRigger.Adapters.Files.dll",
-    "GhostRigger.Adapters.GPU.dll": "GhostRigger.Adapters.GPU.dll",
-    "GhostRigger.Adapters.Qt.Autorig.dll": "GhostRigger.Adapters.QtAutorig.dll",
-    "GhostRigger.Adapters.Qt.IPC.dll": "GhostRigger.Adapters.QtIPC.dll",
-    "GhostRigger.Adapters.Qt.Viewport.dll": "GhostRigger.Adapters.QtViewport.dll",
-    "GhostRigger.Adapters.Rendering.dll": "GhostRigger.Adapters.Rendering.dll",
-    "GhostRigger.Adapters.Scripting.dll": "GhostRigger.Adapters.Scripts.dll",
-}
-_SYSTEMS_LEGACY_DLL_NAMES = {
-    "GhostRigger.Core.Tools.BAS.dll": "GhostRigger.Systems.BAS.dll",
-}
-_WINDOWS_CANONICAL_DLL_NAMES = {
-    "GhostRigger.Core.Tools.Retargeting.Workbench.dll": (
-        "GhostRigger.Windows.AnimationRetargetWorkbench.dll"
-    ),
-    "GhostRigger.Core.Tools.Rigging.dll": "GhostRigger.Windows.LegacyRiggingWindow.dll",
-    "GhostRigger.Core.Tools.ModuleEditor.dll": "GhostRigger.Windows.LevelEditor.dll",
-    "GhostRigger.Core.GUI.Display.Shell.Main.dll": "GhostRigger.Windows.MainWindow.dll",
-    "GhostRigger.Core.Tools.UnrealAnimator.dll": (
-        "GhostRigger.Windows.UnrealAnimatorWindow.dll"
-    ),
-}
 _DLL_SUFFIX = ".dll"
 
 
@@ -66,7 +42,6 @@ class NativePackageSpec:
 NATIVE_CORE_PACKAGE = NativePackageSpec(
     name="GhostRigger.Native.Core.Foundation",
     dll_name=_NATIVE_CORE_DLL,
-    fallback_dll_names=(_LEGACY_NATIVE_CORE_DLL,),
     env_var="GHOSTRIGGER_NATIVE_CORE",
     version_export="gr_native_core_version",
     capabilities_export="gr_native_core_capabilities_json",
@@ -99,10 +74,6 @@ RUNTIME_SHARED_RESOURCES_PACKAGE = NativePackageSpec(
 RENDERER_CONTRACTS_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Rendering.Contracts",
     dll_name="GhostRigger.Core.Rendering.Contracts.dll",
-    fallback_dll_names=(
-        "GhostRigger.Renderer.Shared.Contracts.dll",
-        "GhostRigger.Renderer.Contracts.dll",
-    ),
     env_var="GHOSTRIGGER_RENDERER_CONTRACTS",
     version_export="gr_renderer_contracts_version",
     capabilities_export="gr_renderer_contracts_capabilities_json",
@@ -111,10 +82,6 @@ RENDERER_CONTRACTS_PACKAGE = NativePackageSpec(
 RENDERER_NULL_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Rendering.Backends.Null",
     dll_name="GhostRigger.Core.Rendering.Backends.Null.dll",
-    fallback_dll_names=(
-        "GhostRigger.Renderer.Backend.Null.dll",
-        "GhostRigger.Renderer.Null.dll",
-    ),
     env_var="GHOSTRIGGER_RENDERER_NULL",
     version_export="gr_renderer_null_version",
     capabilities_export="gr_renderer_null_capabilities_json",
@@ -123,10 +90,6 @@ RENDERER_NULL_PACKAGE = NativePackageSpec(
 RENDERER_D3D12_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Rendering.Backends.D3D12",
     dll_name="GhostRigger.Core.Rendering.Backends.D3D12.dll",
-    fallback_dll_names=(
-        "GhostRigger.Renderer.Backend.D3D12.dll",
-        "GhostRigger.Renderer.D3D12.dll",
-    ),
     env_var="GHOSTRIGGER_RENDERER_D3D12",
     version_export="gr_renderer_d3d12_version",
     capabilities_export="gr_renderer_d3d12_capabilities_json",
@@ -135,10 +98,6 @@ RENDERER_D3D12_PACKAGE = NativePackageSpec(
 RENDERER_MODERNGL_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Rendering.Backends.ModernGL",
     dll_name="GhostRigger.Core.Rendering.Backends.ModernGL.dll",
-    fallback_dll_names=(
-        "GhostRigger.Renderer.Backend.ModernGL.dll",
-        "GhostRigger.Renderer.ModernGL.dll",
-    ),
     env_var="GHOSTRIGGER_RENDERER_MODERNGL",
     version_export="gr_renderer_moderngl_version",
     capabilities_export="gr_renderer_moderngl_capabilities_json",
@@ -147,10 +106,6 @@ RENDERER_MODERNGL_PACKAGE = NativePackageSpec(
 RENDERER_PYGFX_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Rendering.Backends.PyGFX",
     dll_name="GhostRigger.Core.Rendering.Backends.PyGFX.dll",
-    fallback_dll_names=(
-        "GhostRigger.Renderer.Backend.PyGFX.dll",
-        "GhostRigger.Renderer.PyGFX.dll",
-    ),
     env_var="GHOSTRIGGER_RENDERER_PYGFX",
     version_export="gr_renderer_pygfx_version",
     capabilities_export="gr_renderer_pygfx_capabilities_json",
@@ -247,11 +202,6 @@ TOOLS_MODULE_MESHES_PACKAGE = NativePackageSpec(
 TOOLS_BODY_ATTACHMENT_SYSTEM_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Tools.BAS",
     dll_name="GhostRigger.Core.Tools.BAS.dll",
-    fallback_dll_names=(
-        "GhostRigger.Tools.Workflow.BodyAttachmentSystem.dll",
-        "GhostRigger.Systems.Feature.BAS.dll",
-        "GhostRigger.Systems.BAS.dll",
-    ),
     env_var="GHOSTRIGGER_TOOLS_BODY_ATTACHMENT_SYSTEM",
     version_export="gr_tools_body_attachment_system_version",
     capabilities_export="gr_tools_body_attachment_system_capabilities_json",
@@ -284,11 +234,6 @@ TOOLS_PIVOT_CONTROLS_PACKAGE = NativePackageSpec(
 TOOLS_SEQUENCE_EDITOR_PACKAGE = NativePackageSpec(
     name="GhostRigger.Core.Tools.SequenceEditor",
     dll_name="GhostRigger.Core.Tools.SequenceEditor.dll",
-    fallback_dll_names=(
-        "GhostRigger.Tools.Workflow.SequenceEditor.dll",
-        "GhostRigger.Domain.Core.Sequence.dll",
-        "GhostRigger.Sequence.dll",
-    ),
     env_var="GHOSTRIGGER_TOOLS_SEQUENCE_EDITOR",
     version_export="gr_tools_sequence_editor_version",
     capabilities_export="gr_tools_sequence_editor_capabilities_json",
@@ -366,7 +311,6 @@ RENDERER_D3D12_GUARDED_METADATA_CAPABILITIES = (
 NATIVE_CORE_DIAGNOSTICS_PACKAGE = NativePackageSpec(
     name="GhostRigger.Native.Core.Diagnostics",
     dll_name="GhostRigger.Native.Core.Diagnostics.dll",
-    fallback_dll_names=("GhostRigger.Native.NativeCore.Diagnostics.dll",),
     env_var="GHOSTRIGGER_NATIVE_CORE_DIAGNOSTICS",
     version_export="gr_native_core_diagnostics_version",
     capabilities_export="gr_native_core_diagnostics_capabilities_json",
@@ -375,62 +319,16 @@ NATIVE_CORE_DIAGNOSTICS_PACKAGE = NativePackageSpec(
 NATIVE_CORE_MATH_PACKAGE = NativePackageSpec(
     name="GhostRigger.Native.Core.Math",
     dll_name="GhostRigger.Native.Core.Math.dll",
-    fallback_dll_names=("GhostRigger.Native.NativeCore.Math.dll",),
     env_var="GHOSTRIGGER_NATIVE_CORE_MATH",
     version_export="gr_native_core_math_version",
     capabilities_export="gr_native_core_math_capabilities_json",
 )
 
 
-def _legacy_domain_dll_names(dll_name: str) -> tuple[str, ...]:
-    if not dll_name.startswith(_CORE_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
-        return ()
-    module_name = dll_name[len(_CORE_DLL_PREFIX) : -len(_DLL_SUFFIX)]
-    legacy_module_name = "Infra" if module_name == "Infrastructure" else module_name
-    return (f"GhostRigger.{legacy_module_name}.dll",)
-
-
-def _legacy_gui_boundary_dll_names(dll_name: str) -> tuple[str, ...]:
-    if not dll_name.startswith(_CORE_GUI_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
-        return ()
-    module_name = dll_name[len(_CORE_GUI_DLL_PREFIX) : -len(_DLL_SUFFIX)]
-    return (f"GhostRigger.GUI.{module_name}.dll",)
-
-
-def _legacy_tools_workflow_dll_names(dll_name: str) -> tuple[str, ...]:
-    if not dll_name.startswith(_CORE_TOOLS_DLL_PREFIX) or not dll_name.endswith(_DLL_SUFFIX):
-        return ()
-    module_name = dll_name[len(_CORE_TOOLS_DLL_PREFIX) : -len(_DLL_SUFFIX)]
-    legacy_module_name = "NodesSkeletonBrowser" if module_name == "NodeSkeletonBrowser" else module_name
-    return (f"GhostRigger.Tools.{legacy_module_name}.dll",)
-
-
-def _legacy_windows_dll_names(dll_name: str) -> tuple[str, ...]:
-    legacy_name = _WINDOWS_CANONICAL_DLL_NAMES.get(dll_name)
-    return (legacy_name,) if legacy_name else ()
-
-
-def _legacy_adapters_dll_names(dll_name: str) -> tuple[str, ...]:
-    legacy_name = _ADAPTERS_CANONICAL_DLL_NAMES.get(dll_name)
-    return (legacy_name,) if legacy_name else ()
-
-
-def _legacy_systems_dll_names(dll_name: str) -> tuple[str, ...]:
-    legacy_name = _SYSTEMS_LEGACY_DLL_NAMES.get(dll_name)
-    return (legacy_name,) if legacy_name else ()
-
-
 def _dll_names_for_spec(spec: NativePackageSpec) -> tuple[str, ...]:
     names: list[str] = []
     for dll_name in (
         spec.dll_name,
-        *spec.fallback_dll_names,
-        *_legacy_domain_dll_names(spec.dll_name),
-        *_legacy_gui_boundary_dll_names(spec.dll_name),
-        *_legacy_tools_workflow_dll_names(spec.dll_name),
-        *_legacy_adapters_dll_names(spec.dll_name),
-        *_legacy_systems_dll_names(spec.dll_name),
-        *_legacy_windows_dll_names(spec.dll_name),
     ):
         if dll_name not in names:
             names.append(dll_name)

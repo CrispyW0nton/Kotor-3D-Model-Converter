@@ -24,8 +24,8 @@ toolbox, GUI, renderer, runtime, or adapter package consumes it.
 - Host-service/native lifecycle surfaces use `GhostRigger.Native.Core.*`,
   `GhostRigger.Runtime.*`, `GhostRigger.Core.Automation.*`, or
   `GhostRigger.Adapters.NativeHost` according to ownership.
-- Existing `GhostRigger.Windows.*` packages are legacy Phase 1 compatibility
-  projects. Do not add a new generic `GhostRigger.Windows.<Type>.<WindowName>`
+- Existing `GhostRigger.Core.GUI.Display.*` packages are legacy Phase 1 compatibility
+  projects. Do not add a new generic `GhostRigger.Core.GUI.Display.<Type>.<WindowName>`
   project.
 
 ## Candidate: Retargeting Tool

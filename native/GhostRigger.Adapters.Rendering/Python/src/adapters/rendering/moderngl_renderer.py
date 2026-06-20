@@ -16,9 +16,9 @@ from src.core.rendering.renderer_capabilities import MODERNGL_DISPLAY_MODES, Ren
 _NATIVE_MODERNGL_ENV = "GHOSTRIGGER_RENDERER_MODERNGL"
 _NATIVE_MODERNGL_DLLS = (
     "GhostRigger.Core.Rendering.Backends.ModernGL.dll",
-    "GhostRigger.Renderer.Backend.ModernGL.dll",
+    "GhostRigger.Core.Rendering.Backends.ModernGL.dll",
     "GhostRigger.Core.Rendering.ModernGL.dll",
-    "GhostRigger.Renderer.ModernGL.dll",
+    "GhostRigger.Core.Rendering.Backends.ModernGL.dll",
 )
 _native_moderngl_dll: ctypes.CDLL | None = None
 _native_moderngl_attempted = False

@@ -139,14 +139,14 @@ def test_native_namespace_manifest_covers_solution_projects() -> None:
     assert len(manifest) == 94
     assert expected_solution_names == solution_names
     assert manifest["GhostRigger.Native"] == "GhostRigger.Native.Core.Host"
-    assert manifest["GhostRigger.Native.NativeCore"] == "GhostRigger.Native.Core.Foundation"
+    assert manifest["GhostRigger.Native.Core.Foundation"] == "GhostRigger.Native.Core.Foundation"
     assert (
-        manifest["GhostRigger.Native.NativeCore.Diagnostics"]
+        manifest["GhostRigger.Native.Core.Diagnostics"]
         == "GhostRigger.Native.Core.Diagnostics"
     )
-    assert manifest["GhostRigger.Native.NativeCore.Math"] == "GhostRigger.Native.Core.Math"
+    assert manifest["GhostRigger.Native.Core.Math"] == "GhostRigger.Native.Core.Math"
     assert manifest["GhostRigger.Skeleton"] == "GhostRigger.Core.Scene.Skeleton"
-    assert manifest["GhostRigger.Sequence"] == "GhostRigger.Core.Tools.SequenceEditor"
+    assert manifest["GhostRigger.Core.Tools.SequenceEditor"] == "GhostRigger.Core.Tools.SequenceEditor"
     assert (
         manifest["GhostRigger.Tools.NodesSkeletonBrowser"]
         == "GhostRigger.Core.Tools.NodeSkeletonBrowser"
@@ -384,19 +384,19 @@ def test_native_host_executable_owns_splash_resources_without_a_second_exe() -> 
     rc = (project_dir / "GhostRiggerNativeSplash.rc").read_text(encoding="utf-8")
     header = (project_dir / "Public" / "GhostRiggerNativeSplashResource.h").read_text(encoding="utf-8")
 
-    assert "GhostRigger.Windows.Splash" not in solution
+    assert "GhostRigger.Core.GUI.Display.Shell.Main.Splash" not in solution
     assert "<TargetName>GhostRigger</TargetName>" in project
     assert "<ResourceCompile Include=\"GhostRiggerNativeSplash.rc\" />" in project
     assert "QtInstallDir" not in project
     assert "Qt6Widgets.lib" not in project
-    assert "GhostRigger.Windows.Splash.vcxproj" not in project
+    assert "GhostRigger.Core.GUI.Display.Shell.Main.Splash.vcxproj" not in project
     assert "Private\\GhostRiggerWindowsSplash.cpp" not in project
     assert "IDR_NATIVE_SPLASH_LOGO" in header
     assert "assets/icons/ghostrigger_1024x1024.png" in rc
     assert "Resources\\icons" in filters
     assert "Resources\\svg" in filters
     assert "IDR_NATIVE_SPLASH_LOGO RCDATA" in rc
-    assert not (ROOT / "native" / "GhostRigger.Windows.Splash" / "GhostRigger.Windows.Splash.vcxproj").exists()
+    assert not (ROOT / "native" / "GhostRigger.Core.GUI.Display.Shell.Main.Splash" / "GhostRigger.Core.GUI.Display.Shell.Main.Splash.vcxproj").exists()
 
 
 def test_windows_main_window_exports_diagnostic_c_abi_boundary() -> None:

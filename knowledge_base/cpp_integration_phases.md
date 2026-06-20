@@ -73,7 +73,7 @@ expressive Python API and still preserves a targeted native DEBUG path.
   runtime, ABI, adapter, product, subsystem, dependency, or deployment boundary
   justifies keeping them separate.
 - Do not create new projects under broad compatibility namespaces such as
-  `GhostRigger.Windows.*` boundaries. Use `GhostRigger.Core.Rendering.*`,
+  `GhostRigger.Core.GUI.Display.*` boundaries. Use `GhostRigger.Core.Rendering.*`,
   `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`,
   `GhostRigger.Core.Tools.*`, `GhostRigger.Core.Project.*`,
   `GhostRigger.Core.Session`, or `GhostRigger.Core.Automation.*` as the
@@ -471,7 +471,7 @@ Native project naming foundation:
   `GhostRigger.Core.Tools.CharacterBuilder`.
 - Visible UI packages use `GhostRigger.Core.GUI.Display.*`; interactive helper
   packages use `GhostRigger.Core.GUI.Helpers.*`. Existing
-  `GhostRigger.Windows.*` projects are legacy Phase 1 compatibility packages,
+  `GhostRigger.Core.GUI.Display.*` projects are legacy Phase 1 compatibility packages,
   not new naming precedent.
 - Python module sweep packages must map to the canonical owners in
   `knowledge_base/package_ownership_model.md`: `GhostRigger.Core.IO.*`,

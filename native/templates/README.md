@@ -25,7 +25,7 @@ into the host or runtime projects. Native toolbox packages use
 widgets, controls, notifications, overlays, and display-only state belong under
 `GhostRigger.Core.GUI.Display.*`. Interactive helper objects such as gizmos,
 selection pickers, transform handles, snapping helpers, and dummies belong
-under `GhostRigger.Core.GUI.Helpers.*`. Broad `GhostRigger.Windows.*` projects
+under `GhostRigger.Core.GUI.Helpers.*`. Broad `GhostRigger.Core.GUI.Display.*` projects
 are legacy compatibility boundaries and are not naming precedent for new
 projects.
 

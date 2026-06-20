@@ -14,7 +14,7 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 - Authority status: this table records current and historical Visual Studio
   project names. It must not be used as the target model when it conflicts with
   `knowledge_base/package_ownership_model.md`.
-- Compatibility note: rows such as `GhostRigger.Windows.*`,
+- Compatibility note: rows such as `GhostRigger.Core.GUI.Display.*`,
   `GhostRigger.Core.Rendering.Textures`, and broad GUI
   category packages describe current build state or old rename batches. Future
   package work must target the canonical owners: `GhostRigger.Core.Rendering.*`,
@@ -32,7 +32,7 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 - Blocking anomalies:
   - `GhostRigger.Selection` is present in the requested target map but is not present in the actual solution.
   - `GhostRigger.Tools.NodeSkeletonBrowser` is present in the requested target map, but the actual solution project is `GhostRigger.Tools.NodesSkeletonBrowser`.
-  - The prompt map omits actual projects `GhostRigger.Native`, `GhostRigger.Skeleton`, and `GhostRigger.Sequence`; proposed canonical targets are included below so the manifest covers all 94 projects.
+  - The prompt map omits actual projects `GhostRigger.Native`, `GhostRigger.Skeleton`, and `GhostRigger.Core.Tools.SequenceEditor`; proposed canonical targets are included below so the manifest covers all 94 projects.
 
 ## Missing / Corrected Project Reasons
 
@@ -40,7 +40,7 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | --- | --- | --- |
 | `GhostRigger.Native` | `GhostRigger.Native.Core.Host` | Native C++ executable host for the embedded Python/Qt application and Visual Studio Debug target. |
 | `GhostRigger.Skeleton` | `GhostRigger.Core.Scene.Skeleton` | Headless skeleton domain package owning skeleton builder/data contracts. |
-| `GhostRigger.Sequence` | `GhostRigger.Core.Tools.SequenceEditor` | Merged into the canonical native SequenceEditor tool surface. |
+| `GhostRigger.Core.Tools.SequenceEditor` | `GhostRigger.Core.Tools.SequenceEditor` | Merged into the canonical native SequenceEditor tool surface. |
 | `GhostRigger.Tools.NodesSkeletonBrowser` | `GhostRigger.Core.Tools.NodeSkeletonBrowser` | Actual solution spelling uses `NodesSkeletonBrowser`; canonical workflow name should use the requested singular `NodeSkeletonBrowser`. |
 
 ## Project Manifest
@@ -48,9 +48,9 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | OldProjectName | NewProjectName | Group | Type | ModuleName | ProjectFile | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GhostRigger.Native` | `GhostRigger.Native.Core.Host` | Native | Core | Host | `native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj` | renamed in Native batch; missing from requested map |
-| `GhostRigger.Native.NativeCore` | `GhostRigger.Native.Core.Foundation` | Native | Core | Foundation | `native\GhostRigger.Native.Core.Foundation\GhostRigger.Native.Core.Foundation.vcxproj` | renamed in Native batch |
-| `GhostRigger.Native.NativeCore.Diagnostics` | `GhostRigger.Native.Core.Diagnostics` | Native | Core | Diagnostics | `native\GhostRigger.Native.Core.Diagnostics\GhostRigger.Native.Core.Diagnostics.vcxproj` | renamed in Native batch |
-| `GhostRigger.Native.NativeCore.Math` | `GhostRigger.Native.Core.Math` | Native | Core | Math | `native\GhostRigger.Native.Core.Math\GhostRigger.Native.Core.Math.vcxproj` | renamed in Native batch |
+| `GhostRigger.Native.Core.Foundation` | `GhostRigger.Native.Core.Foundation` | Native | Core | Foundation | `native\GhostRigger.Native.Core.Foundation\GhostRigger.Native.Core.Foundation.vcxproj` | renamed in Native batch |
+| `GhostRigger.Native.Core.Diagnostics` | `GhostRigger.Native.Core.Diagnostics` | Native | Core | Diagnostics | `native\GhostRigger.Native.Core.Diagnostics\GhostRigger.Native.Core.Diagnostics.vcxproj` | renamed in Native batch |
+| `GhostRigger.Native.Core.Math` | `GhostRigger.Native.Core.Math` | Native | Core | Math | `native\GhostRigger.Native.Core.Math\GhostRigger.Native.Core.Math.vcxproj` | renamed in Native batch |
 | `GhostRigger.Runtime` | `GhostRigger.Runtime.Core.Host` | Runtime | Core | Host | `native\GhostRigger.Runtime.Core.Host\GhostRigger.Runtime.Core.Host.vcxproj` | renamed in Runtime batch |
 | `GhostRigger.Runtime.Shared.Contracts` | `GhostRigger.Runtime.Shared.Contracts` | Runtime | Shared | Contracts | `native\GhostRigger.Runtime.Shared.Contracts\GhostRigger.Runtime.Shared.Contracts.vcxproj` | already canonical |
 | `GhostRigger.Runtime.Shared.Descriptors` | `GhostRigger.Runtime.Shared.Descriptors` | Runtime | Shared | Descriptors | `native\GhostRigger.Runtime.Shared.Descriptors\GhostRigger.Runtime.Shared.Descriptors.vcxproj` | already canonical |
@@ -76,11 +76,11 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | `GhostRigger.Tools.SequenceEditor` | `GhostRigger.Core.Tools.SequenceEditor` | Tools | Workflow | SequenceEditor | `native\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj` | renamed in Sequence merge |
 | `GhostRigger.Tools.SpriteMaterials` | `GhostRigger.Core.Tools.SpriteMaterials` | Tools | Workflow | SpriteMaterials | `native\GhostRigger.Core.Tools.SpriteMaterials\GhostRigger.Core.Tools.SpriteMaterials.vcxproj` | renamed in Tools Workflow batch |
 | `GhostRigger.Tools.TwoDABrowser` | `GhostRigger.Core.Tools.TwoDABrowser` | Tools | Workflow | TwoDABrowser | `native\GhostRigger.Core.Tools.TwoDABrowser\GhostRigger.Core.Tools.TwoDABrowser.vcxproj` | renamed in Tools Workflow batch |
-| `GhostRigger.Windows.AnimationRetargetWorkbench` | `GhostRigger.Core.Tools.Retargeting.Workbench` | Windows | Workbench | AnimationRetarget | `native\GhostRigger.Core.Tools.Retargeting.Workbench\GhostRigger.Core.Tools.Retargeting.Workbench.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.LegacyRiggingWindow` | `GhostRigger.Core.Tools.Rigging` | Windows | Legacy | Rigging | `native\GhostRigger.Core.Tools.Rigging\GhostRigger.Core.Tools.Rigging.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.LevelEditor` | `GhostRigger.Core.Tools.ModuleEditor` | Windows | Editor | Level | `native\GhostRigger.Core.Tools.ModuleEditor\GhostRigger.Core.Tools.ModuleEditor.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.MainWindow` | `GhostRigger.Core.GUI.Display.Shell.Main` | Windows | Shell | Main | `native\GhostRigger.Core.GUI.Display.Shell.Main\GhostRigger.Core.GUI.Display.Shell.Main.vcxproj` | renamed in Windows batch |
-| `GhostRigger.Windows.UnrealAnimatorWindow` | `GhostRigger.Core.Tools.UnrealAnimator` | Windows | Workbench | UnrealAnimator | `native\GhostRigger.Core.Tools.UnrealAnimator\GhostRigger.Core.Tools.UnrealAnimator.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Core.Tools.Retargeting.Workbench` | `GhostRigger.Core.Tools.Retargeting.Workbench` | Windows | Workbench | AnimationRetarget | `native\GhostRigger.Core.Tools.Retargeting.Workbench\GhostRigger.Core.Tools.Retargeting.Workbench.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Core.Tools.Rigging` | `GhostRigger.Core.Tools.Rigging` | Windows | Legacy | Rigging | `native\GhostRigger.Core.Tools.Rigging\GhostRigger.Core.Tools.Rigging.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Core.Tools.ModuleEditor` | `GhostRigger.Core.Tools.ModuleEditor` | Windows | Editor | Level | `native\GhostRigger.Core.Tools.ModuleEditor\GhostRigger.Core.Tools.ModuleEditor.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Core.GUI.Display.Shell.Main` | `GhostRigger.Core.GUI.Display.Shell.Main` | Windows | Shell | Main | `native\GhostRigger.Core.GUI.Display.Shell.Main\GhostRigger.Core.GUI.Display.Shell.Main.vcxproj` | renamed in Windows batch |
+| `GhostRigger.Core.Tools.UnrealAnimator` | `GhostRigger.Core.Tools.UnrealAnimator` | Windows | Workbench | UnrealAnimator | `native\GhostRigger.Core.Tools.UnrealAnimator\GhostRigger.Core.Tools.UnrealAnimator.vcxproj` | renamed in Windows batch |
 | `GhostRigger.Animation` | `GhostRigger.Core.Workflow.Animation` | Domain | Core | Animation | `native\GhostRigger.Core.Workflow.Animation\GhostRigger.Core.Workflow.Animation.vcxproj` | renamed in Domain batch |
 | `GhostRigger.AnimationRetargeting` | `GhostRigger.Core.Workflow.AnimationRetargeting` | Domain | Core | AnimationRetargeting | `native\GhostRigger.Core.Workflow.AnimationRetargeting\GhostRigger.Core.Workflow.AnimationRetargeting.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Assets` | `GhostRigger.Core.Resources.Assets` | Domain | Core | Assets | `native\GhostRigger.Core.Resources.Assets\GhostRigger.Core.Resources.Assets.vcxproj` | renamed in Domain batch |
@@ -113,7 +113,7 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | `GhostRigger.Resources` | `GhostRigger.Core.Resources` | Domain | Core | Resources | `native\GhostRigger.Core.Resources\GhostRigger.Core.Resources.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Retargeting` | `GhostRigger.Core.Workflow.Retargeting` | Domain | Core | Retargeting | `native\GhostRigger.Core.Workflow.Retargeting\GhostRigger.Core.Workflow.Retargeting.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Scene` | `GhostRigger.Core.Scene` | Domain | Core | Scene | `native\GhostRigger.Core.Scene\GhostRigger.Core.Scene.vcxproj` | renamed in Domain batch |
-| `GhostRigger.Sequence` | `GhostRigger.Core.Tools.SequenceEditor` | Domain | Core | Sequence | `native\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj` | renamed in Sequence merge; retired from solution |
+| `GhostRigger.Core.Tools.SequenceEditor` | `GhostRigger.Core.Tools.SequenceEditor` | Domain | Core | Sequence | `native\GhostRigger.Core.Tools.SequenceEditor\GhostRigger.Core.Tools.SequenceEditor.vcxproj` | renamed in Sequence merge; retired from solution |
 | `GhostRigger.Skeleton` | `GhostRigger.Core.Scene.Skeleton` | Domain | Core | Skeleton | `native\GhostRigger.Core.Scene.Skeleton\GhostRigger.Core.Scene.Skeleton.vcxproj` | renamed in Domain batch; missing from requested map |
 | `GhostRigger.Special` | `GhostRigger.Core.Tools.Special` | Domain | Core | Special | `native\GhostRigger.Core.Tools.Special\GhostRigger.Core.Tools.Special.vcxproj` | renamed in Domain batch |
 | `GhostRigger.Templates` | `GhostRigger.Core.Formats.TwoDA` | Domain | Core | Templates | `native\GhostRigger.Core.Formats.TwoDA\GhostRigger.Core.Formats.TwoDA.vcxproj` | renamed in Domain batch |
@@ -140,4 +140,4 @@ Scope: Phase 1 audit snapshot. Superseded as naming authority by
 | `GhostRigger.Adapters.QtViewport` | `GhostRigger.Adapters.Qt.Viewport` | Adapters | Qt | Viewport | `native\GhostRigger.Adapters.Qt.Viewport\GhostRigger.Adapters.Qt.Viewport.vcxproj` | renamed in Adapters batch |
 | `GhostRigger.Adapters.Rendering` | `GhostRigger.Adapters.Rendering` | Adapters | Rendering | Core | `native\GhostRigger.Adapters.Rendering\GhostRigger.Adapters.Rendering.vcxproj` | renamed in Adapters batch |
 | `GhostRigger.Adapters.Scripts` | `GhostRigger.Adapters.Scripting` | Adapters | Scripting | Core | `native\GhostRigger.Adapters.Scripting\GhostRigger.Adapters.Scripting.vcxproj` | renamed in Adapters batch |
-| `GhostRigger.Systems.BAS` | `GhostRigger.Core.Tools.BAS` | Systems | Feature | BAS | `native\GhostRigger.Core.Tools.BAS\GhostRigger.Core.Tools.BAS.vcxproj` | renamed in BAS merge; retired from solution |
+| `GhostRigger.Core.Tools.BAS` | `GhostRigger.Core.Tools.BAS` | Systems | Feature | BAS | `native\GhostRigger.Core.Tools.BAS\GhostRigger.Core.Tools.BAS.vcxproj` | renamed in BAS merge; retired from solution |

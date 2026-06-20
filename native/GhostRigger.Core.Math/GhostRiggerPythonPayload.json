@@ -15,7 +15,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",
             "source_path": "src/math/frame_math.py",
             "packaged_path": "Python/src/math/frame_math.py",
-            "sha256": "00e7f374fe549573fbc57369842c69849941295a9887fc42b5fbefb03145bf2b"
+            "sha256": "05e83bc32a809672923471879075727c8a60ef46f9e8db8ded2e3be24d9d3ab5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_GPU_MATH",

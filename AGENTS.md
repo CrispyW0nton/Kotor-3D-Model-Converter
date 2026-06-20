@@ -162,7 +162,7 @@ ABI, adapter, product, subsystem, dependency, or deployment boundary.
   references, payload manifests, tests, bridge lookups, and compatibility shims
   together.
 - Do not create new projects from broad compatibility namespaces such as
-  `GhostRigger.Windows.*`. Renderer projects already use the canonical
+  `GhostRigger.Core.GUI.Display.*`. Renderer projects already use the canonical
   `GhostRigger.Core.Rendering.*` owner; use the canonical owners in
   `knowledge_base/package_ownership_model.md` and keep old names only as
   compatibility state until a coordinated rename/merge updates all build

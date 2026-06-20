@@ -242,7 +242,7 @@ Canonical names include:
 - `GhostRigger.Core.Workflow.Import`
 - `GhostRigger.Core.Workflow.Export`
 - `GhostRigger.Core.Workflow.Retargeting`
-- `GhostRigger.Systems.BAS`
+- `GhostRigger.Core.Tools.BAS`
 - `GhostRigger.Systems.ModelPipeline`
 
 ## Merge Rules

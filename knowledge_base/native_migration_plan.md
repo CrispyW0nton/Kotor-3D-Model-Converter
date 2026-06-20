@@ -300,7 +300,7 @@ Native project naming:
 - Adapter packages: `GhostRigger.Adapters.*`.
 
 Current Phase 1 projects such as `GhostRigger.Core.Rendering.*` and
-`GhostRigger.Windows.*` are legacy build targets. Rename or merge them only in
+`GhostRigger.Core.GUI.Display.*` are legacy build targets. Rename or merge them only in
 coordinated batches that update project directories, `.vcxproj` files, filters,
 the solution, payload manifests, registry entries, tests, and compatibility
 shims together.
