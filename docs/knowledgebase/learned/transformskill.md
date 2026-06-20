@@ -19,6 +19,27 @@ camera transforms, animation transforms, and object/world/local conversion bugs.
 5. For pivot-only edits, keep visible geometry stable by compensating object transforms as required by the scene contract.
 6. For mirrored or imported rigs, verify local axes and handedness before blaming animation clips.
 
+## Matrix Convention Checklist
+
+- Is the matrix row-major or column-major in memory?
+- Are vectors multiplied on the left or right?
+- Is composition parent-to-child or child-to-parent?
+- Are transforms local, parent, object, world, view, projection, or clip space?
+- Does the renderer expect right-handed or left-handed coordinates?
+- Is translation stored in the row/column the consuming API expects?
+- Are normals using inverse-transpose when non-uniform scale is present?
+
+## Pivot And Gizmo Checks
+
+- A pivot is not just a position; it affects rotation/scale reference and object
+  compensation.
+- Pivot-only edits should update pivot state while compensating transforms so
+  visible geometry stays in place.
+- Local/reference/world axes must be chosen through the owning reference
+  controller, not ad hoc viewport state.
+- Camera-facing gizmos need a stable screen-space scale policy and picking
+  priority.
+
 ## GhostRigger Checks
 
 - Shared math belongs in `src/math` or the corresponding native math package.

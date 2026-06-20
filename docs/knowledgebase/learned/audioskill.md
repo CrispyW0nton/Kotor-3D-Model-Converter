@@ -30,6 +30,29 @@ mixing, randomization, debugging tools, and future sound/foley workflows.
 7. Build debugging surfaces that show active objects/events, recent triggers,
    states, volumes/weights, and missing assets.
 
+## Event Schema
+
+For any audio-like or timeline event system, define:
+
+- `event_id`: stable identity for debugging and deduplication.
+- `source`: animation, scene object, validator, timeline, input, or tool action.
+- `time`: scene time, clip time, wall time, or frame index.
+- `payload`: typed data needed by the receiver.
+- `priority`: conflict or mixing priority.
+- `lifetime`: one-shot, looping, sustained, queued, or cancellable.
+- `state`: pending, active, fading, completed, cancelled, or failed.
+- `debug`: seed, selected variation, missing asset, or routing trace.
+
+## Real-Time Safety Patterns
+
+- Producers may allocate and validate; real-time consumers should avoid blocking
+  calls, filesystem access, heavy locks, and unbounded work.
+- Command buffers should have explicit flush and shutdown behavior.
+- Random systems need enough variation to avoid repetition but enough logging to
+  debug one bad choice.
+- Dynamic state systems should separate detection from response so tool UI can
+  inspect both.
+
 ## GhostRigger Applications
 
 - Future audio/foley support.

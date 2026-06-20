@@ -35,6 +35,30 @@ GhostRigger-to-Unreal handoff.
 7. Prefer staged export and proof artifacts over direct mutation of user
    projects.
 
+## Editor Tool Contract
+
+- Every editor action should have undo/redo or a clear reason it is read-only.
+- Tool settings should be inspectable and persisted through the editor's normal
+  settings path when they affect repeated work.
+- Long operations should expose progress and cancellation.
+- List/tree views should support the columns, sorting, filtering, and context
+  actions that make the data useful.
+- Data visualization should be designed for someone returning months later, not
+  only for the person who wrote the tool.
+- Engine edits are last resort. If unavoidable, mark and isolate them so future
+  merges can identify the modified region.
+
+## Technical-Art Handoff Checklist
+
+- Source references and goals are recorded.
+- World/level/blockout ownership is clear.
+- Generated assets have predictable names and folder placement.
+- Materials identify required textures, material functions, layers, and
+  parameter defaults.
+- Landscape/heightmap workflows preserve dimensions, scale, and layer semantics.
+- Staged exports include validation/proof files before any external project is
+  modified.
+
 ## GhostRigger Applications
 
 - Unreal Animator workbench.

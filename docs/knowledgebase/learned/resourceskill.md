@@ -20,6 +20,29 @@ asset pipeline handoff, renderer residency, and debug tooling.
 6. For resource browsers and module tools, use model/view data and avoid blocking the UI during scanning or decode.
 7. Add debug affordances that reveal actual asset state: IDs, resrefs, paths, dimensions/counts, material slots, cache hits, and backend residency.
 
+## Asset Lifecycle Details
+
+- Discovery finds candidate assets and metadata without heavy decode.
+- Resolution maps logical addresses/resrefs to concrete source files or game
+  resources.
+- Decode parses bytes into structured data with version and format metadata.
+- Validation checks required fields, dimensions, counts, references, and
+  compatibility before runtime use.
+- Cache stores decoded or uploaded state with an invalidation key.
+- Presentation adapts resource data for UI/renderer without taking ownership of
+  source truth.
+- Release/invalidate clears CPU/GPU residency without losing source references.
+
+## Debug Fields To Expose
+
+- Source address/resref and game.
+- File/path/archive origin when available.
+- Decoded dimensions/counts/format/version.
+- Material slot and texture/lightmap names.
+- Cache key and dirty/reload state.
+- Backend resource handle/residency state.
+- Validation warnings and missing dependency list.
+
 ## GhostRigger Checks
 
 - KMAP and KMAX files should stay versioned, human-readable, and reference heavy assets rather than storing blobs.

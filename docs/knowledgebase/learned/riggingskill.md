@@ -20,6 +20,29 @@ deformation cleanup, retargeting, and animation workflow bugs.
 6. For retargeting, compare source and target topology/skeleton assumptions before transferring weights or animation.
 7. Polish deformation after controls exist. Base skinning can look acceptable until full range-of-motion exposes joint, overlap, or stretch artifacts.
 
+## Skinning And Controller Details
+
+- Skin envelopes are a starting point, not proof. Final weights must be checked
+  at joints and overlap/stretch areas through range-of-motion poses.
+- FK chains should have predictable local axes and zeroed controls.
+- IK controls need explicit parent/main-control relationships so hands/feet do
+  not unexpectedly stay behind or double-transform.
+- Helper/controller nodes should be named and grouped separately from export
+  skeleton authority.
+- Lock or hide channels that should not be animated, but avoid hiding state that
+  validation or export needs.
+- Mirroring joints or weights requires side-name conventions and axis validation
+  before copying behavior.
+
+## Deformation Review Pass
+
+- Test neutral pose, extreme bends, twist, scale/root movement, and mirrored
+  sides.
+- Inspect chest/hip/shoulder/wing-like dense intersections for weight bleed.
+- Prefer weight cleanup before adding corrective deformation.
+- Corrective layers should document their driver pose and fallback if the driver
+  is unavailable.
+
 ## GhostRigger Checks
 
 - For animation testing, use `N_DarthMalak` with the `walk` animation looped unless the user names another fixture.

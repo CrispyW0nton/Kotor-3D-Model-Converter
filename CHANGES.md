@@ -18,11 +18,13 @@ Subsystem: Documentation / agent knowledgebase
 - Distilled the newly added local books into additional learned skill files for algorithms/computational geometry, rendering/shaders, animation runtime, native C++ integration, Python engineering, Unreal/technical-art workflows, game/tool experience design, and audio/event tooling.
 - Updated `docs/knowledgebase/skills.md` with the expanded source library map, skill index, and operating rules for algorithms, rendering, and native C++ payload work.
 - Updated `AGENTS.md` so its knowledgebase routing includes the new skill domains and its native project summary reflects the current collapsed Visual Studio package hierarchy.
+- Added a second-pass detail expansion across the learned skill files, including algorithm decision patterns, geometry robustness checks, renderer pipeline/shader debugging checklists, animation pose data flow, C++ ABI hygiene, Python embedded-payload care, Unreal editor tool contracts, game/tool experience questions, audio event schemas, mesh topology inspection, vertex interpolation rules, extrusion operation details, transform matrix conventions, rigging deformation review, resource lifecycle fields, Qt model/view guidance, and native/embedded-Python architecture boundaries.
 
 Verification:
 - Extracted PDF outlines and targeted relevant pages with the workspace-local `pypdf` dependency.
 - Rechecked the current native tree and `native/GhostRigger.PythonPayloadManifest.json`, confirming 19 native projects, 18 non-debug payload DLL projects, and 1,249 packaged Python file references.
 - Noted that `Systems_Programming_-_John_J_Donovan.pdf` and `Unreal_Engine_Blueprint_Game_Developer_-_Asadullah_Alam.pdf` did not yield machine-readable text through the current extractor, so the new notes do not claim detailed rules from those books.
+- Re-sampled targeted chapters from the algorithms, computational geometry, rendering, DirectX animation, C++, Python, Unreal editor, game audio, and graphics fundamentals books before expanding the skill notes.
 
 ## 2026-06-20
 ### [2026-06-20] Canonicalize Native Renderer Package Ownership

@@ -36,6 +36,31 @@ payload care.
    miscellaneous code into broad utility modules.
 8. For concurrency, state thread/process ownership and UI-thread handoff rules.
 
+## Patterns By Task
+
+- Data shaping: prefer list/dict/set comprehensions for simple transformations;
+  use named loops when conditions or side effects need explanation.
+- Streaming: use generators when reading large files, scanning resource trees,
+  or producing validation rows incrementally.
+- Structured text: use `csv`, `json`, XML parsers, or binary struct tools rather
+  than ad hoc string slicing when the format has structure.
+- Filesystem: use `pathlib.Path`, explicit encodings, and context managers.
+- Modules/packages: keep public exports intentional; avoid import-time work that
+  scans files, opens windows, or loads heavy optional dependencies.
+- Exceptions: catch narrow exceptions, add domain context, and preserve the
+  original cause when useful.
+- C/ctypes boundaries: validate argument types, return codes, byte/string
+  encoding, buffer lifetime, and platform-specific DLL lookup.
+- Tests: keep fixtures small, deterministic, and close to the owning layer.
+
+## Embedded Payload Care
+
+- A root `src` edit may require native payload regeneration even when tests pass
+  against the root source.
+- Do not patch a packaged copy as a shortcut; it will be overwritten by the
+  payload generator and may fail byte-identity tests.
+- When package-local Python is intentional, document why no root source owns it.
+
 ## GhostRigger Applications
 
 - Canonical source edits under `src/`.

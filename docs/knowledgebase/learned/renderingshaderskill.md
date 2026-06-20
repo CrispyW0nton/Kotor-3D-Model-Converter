@@ -38,6 +38,35 @@ shader debugging.
 7. Add debug views when possible: normals, UVs, depth, material slots, lightmaps,
    shadow maps, draw IDs, and resource residency.
 
+## Pipeline Checklist
+
+- CPU input: mesh vertices/indices, material slots, textures, lightmaps, bones,
+  weights, transforms, and scene object identity.
+- Upload/resource state: buffer size, stride, usage flags, lifetime, cache key,
+  dirty range, texture format, mip policy, and transition state.
+- Vertex stage: attribute binding, index format, model/view/projection order,
+  skinning palette, normal/tangent transform, handedness, and culling.
+- Raster stage: viewport, scissor, depth test/write, face winding, blending,
+  multisample/antialiasing, and clip-space conventions.
+- Fragment/pixel stage: material uniforms, texture samplers, light data, color
+  space, alpha policy, and fallback textures.
+- Post-process: framebuffer size, attachment format, pass order, texture
+  feedback hazards, and final presentation/swap-chain readiness.
+
+## Shader Debugging Patterns
+
+- Output constants first to prove the pass runs.
+- Output UVs, normals, depth, material ID, or bone weight heatmaps to isolate
+  bad inputs.
+- For normal mapping, check tangent basis orientation before tuning lighting.
+- For shadows, debug the depth map separately from the lit pass; bias fixes
+  acne/peter-panning only after projection, culling, and depth formats are
+  correct.
+- For procedural/noise shaders, expose seed, frequency, amplitude, and domain
+  transform as inspectable parameters.
+- For image filters/convolution, verify kernel normalization, edge handling, and
+  render-target color format before judging the visual result.
+
 ## GhostRigger Applications
 
 - D3D12/ModernGL/PyGFX/native renderer parity.
@@ -55,3 +84,5 @@ shader debugging.
   resource binding, shader compile/link, viewport size, draw count, and culling.
 - For wrong colors, check color space, texture decode, material slot, lightmap,
   shader uniform, and blending state.
+- For animated mesh artifacts, check CPU pose truth, skin palette upload,
+  attribute layout, weight normalization, and object-scoped pose selection.

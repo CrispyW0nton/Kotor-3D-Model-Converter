@@ -39,6 +39,44 @@ validation algorithms.
    dynamic-programming recurrence, flow reduction, heuristic, approximation, or
    brute-force fallback.
 
+## Decision Patterns
+
+- Use BFS/DFS for reachability, connected components, dependency reachability,
+  bipartite checks, and unweighted shortest paths.
+- Use topological ordering when edits or resources form a directed acyclic
+  dependency graph. If a cycle is possible, detect and report the cycle instead
+  of failing later with missing state.
+- Use union-find for repeated connectivity/merge queries such as mesh islands,
+  equivalence classes, or Kruskal-style minimum spanning structures.
+- Use Dijkstra only when edge weights are non-negative. Use Bellman-Ford-style
+  reasoning or reject the input when negative weights can appear.
+- Use greedy algorithms only when an exchange/stays-ahead argument is plausible;
+  otherwise prefer DP, graph search, or an explicit heuristic label.
+- Use dynamic programming when subproblems overlap and a recurrence can be
+  stated in terms of smaller ranges, prefixes, intervals, or states.
+- Use network flow/min-cut thinking for assignment, matching, capacity,
+  segmentation, and constrained grouping problems.
+
+## Geometry Robustness Checklist
+
+- Pick a coordinate tolerance once per algorithm and give it a name.
+- Sort lexicographically where equal x/y coordinates can break sweep or hull
+  order.
+- Treat collinear, coincident, duplicate, and zero-length entities as first-class
+  inputs.
+- For sweep-line segment intersection, keep event queue identity separate from
+  sweep status order; neighbors in the status structure are the only candidates
+  that need immediate intersection checks after an insert/delete/swap.
+- For polygon overlay/boolean operations, preserve labels from both input
+  polygons so union/intersection/difference can be selected from the same
+  overlay graph.
+- For point location, choose the cheapest structure that fits query frequency:
+  direct face scan, slab binary search, trapezoidal map, or cached spatial
+  index.
+- For Delaunay/Voronoi use, document whether the output is for visual mesh
+  quality, nearest-site queries, height interpolation, or navigation reasoning;
+  each use has different tolerance and boundary requirements.
+
 ## GhostRigger Applications
 
 - Selection and picking: ray/triangle tests, point-in-polygon, nearest feature,
@@ -60,3 +98,5 @@ validation algorithms.
 - Use small hand-checkable fixtures for geometry algorithms.
 - Compare optimized implementations against a simple reference implementation
   when feasible.
+- Record expected complexity only when it affects the design choice. A slower
+  reference path is acceptable for tests and rare editor operations.

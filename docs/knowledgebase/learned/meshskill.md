@@ -19,6 +19,30 @@ topology validation, and mesh data contracts.
 5. For renderer bugs, separate geometry truth from display state: raw vertices/indices, transformed vertices, normals/tangents, UVs, material slots, texture bindings, and draw-call residency.
 6. When imported modules are involved, use `K2:001ebo1` / `001EBO1` for visible renderer parity unless the user names another module.
 
+## Topology Inspection Pass
+
+- Count vertices, edges, triangles/polys, material slots, UV channels, bones,
+  and draw groups before changing behavior.
+- Classify boundaries: expected open border, accidental hole, seam, split UV,
+  detached island, or nonmanifold edge.
+- Check face winding and normal direction separately. A face can have valid
+  topology and still render wrong because winding or normal transform is wrong.
+- Find isolated vertices, duplicate vertices, duplicate faces, T-vertices,
+  overlapping faces, missing UVs, flipped UV faces, and zero-area triangles.
+- Build adjacency maps from indices rather than trusting spatial proximity.
+  Spatial merges are destructive unless explicitly requested.
+- Preserve material and smoothing/normal groups when converting or generating
+  geometry.
+
+## Mesh Operation Rules
+
+- Selection operations should report whether they operate on objects, faces,
+  edges, vertices, bones, or scene instances.
+- Repair tools should produce a change report: removed vertices, merged edges,
+  flipped faces, filled holes, regenerated normals, or skipped unsafe cases.
+- Renderer mesh data should be immutable or versioned once queued for a frame;
+  edits should create a new revision or dirty range.
+
 ## GhostRigger Checks
 
 - For MDL mesh pipeline changes, follow AGENTS.md MCP order: `compare_model_pipelines`, `inspect_mdl`, `inspect_mdl_ghostrigger`, fix, then compare again.

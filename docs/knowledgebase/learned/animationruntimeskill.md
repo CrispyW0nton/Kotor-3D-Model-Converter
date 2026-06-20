@@ -34,6 +34,33 @@ bugs.
 7. Preserve source clips. Timeline trim, scale, move, and sequence operations
    should edit clip instances unless the user explicitly edits source data.
 
+## Pose Data Flow
+
+1. Resolve source model, skeleton, and animation clip.
+2. Select clip instance timing: source in/out, clip start/end, loop mode,
+   playback speed, time scale, and blend windows.
+3. Sample keyframes into local bone transforms.
+4. Compose parent/child hierarchy into model/object-space pose transforms.
+5. Apply retarget/root-motion/additive/override layers as the owning workflow
+   requires.
+6. Build the skin palette in the exact bone order expected by the mesh.
+7. Scope the pose to the scene object/character before the renderer consumes it.
+
+## Runtime Checks
+
+- Time-based movement should multiply by elapsed time and be stable under frame
+  rate changes.
+- Frame hierarchy updates must propagate parent transforms to children, while
+  siblings should not inherit each other.
+- Bone orientation edits should prefer rotation; translation changes can
+  invalidate skeleton proportions unless the workflow explicitly supports them.
+- Scaling in a hierarchy is contagious. Verify child effects before using it as
+  a fix.
+- Bone-to-frame mapping must be rebuilt or validated after loading skinned mesh
+  data; do not assume names are already resolved.
+- Animation sets from external formats should be treated as source data. Runtime
+  clips/sequence items reference them.
+
 ## GhostRigger Applications
 
 - Animation Browser playback.

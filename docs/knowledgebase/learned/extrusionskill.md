@@ -20,6 +20,31 @@ and any feature that creates new vertices/faces from existing topology.
 6. Decide what happens to UVs and weights. For GhostRigger, generated topology that belongs to a skinned mesh must either copy/interpolate weights or be marked unsupported by the tool.
 7. Run topology cleanup: remove zero-area faces, merge only intentional duplicate vertices, and flag open boundaries that are not expected.
 
+## Operation Details
+
+- Region extrusion keeps selected faces connected and creates side walls along
+  the region boundary.
+- Individual face extrusion duplicates and moves each face separately; adjacent
+  selected faces no longer share the same new side-wall behavior.
+- Edge extrusion creates new faces from selected boundary edges and requires a
+  direction or target plane.
+- Bevel offsets edges/faces and creates transition faces; it must define segment
+  count, profile, clamp/overlap behavior, and smoothing/normal rules.
+- Inset creates smaller faces inside selected faces; concave polygons and narrow
+  features need special handling.
+- Bridge connects two compatible boundary loops; loop orientation, vertex count,
+  and twist offset must be explicit.
+
+## Generated Data Rules
+
+- New vertices inherit or interpolate source UVs, colors, normals, and weights
+  by a documented policy.
+- New side faces inherit material slots from the source face or use a selected
+  side material.
+- Generated normals can be copied, averaged, face-flat, or recomputed; choose
+  deliberately.
+- Every generated element should be selectable and undoable through stable IDs.
+
 ## Validation Checklist
 
 - New faces have consistent winding and visible normals.

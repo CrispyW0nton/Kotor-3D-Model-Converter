@@ -22,6 +22,29 @@ and visible workflow testing.
 7. Design dense workbench UIs with clear hierarchy and spacing. Use labels sparingly; emphasize the value/action, not decorative chrome.
 8. Test visible behavior in the real Debug application when the change affects startup, viewport, theme/layout, or workflow.
 
+## Model/View And Tooling Details
+
+- Use model/view for data that can be sorted, filtered, refreshed, selected, or
+  edited independently of its visual presentation.
+- Keep role data explicit: display text, icon, tooltip, status, validation
+  severity, source object ID, and sort key should not be conflated.
+- Tool windows should expose enough state for repeated work: current selection,
+  filters, readiness, validation, pending changes, and last action result.
+- Actions should have one owner and one signal path. Avoid wiring the same
+  behavior through multiple panels unless they call a shared service.
+- Long-running imports, validation, scans, and exports need progress,
+  cancellation where possible, and UI-thread handoff for results.
+- Undo/redo or explicit confirmation is required for destructive visible edits.
+
+## Visual Debugging Details
+
+- Add temporary diagnostic text/logging only if it can be hidden or scoped to a
+  debug surface.
+- For data-heavy panels, prefer compact rows with status icons and tooltips over
+  large explanatory blocks.
+- Light/Classic theme checks must include disabled controls, table headers,
+  selected rows, placeholder text, and validation warnings.
+
 ## GhostRigger Checks
 
 - New visible UI should support Default/native, Matrix, Droid, Dark, Light, and Classic themes.

@@ -53,6 +53,34 @@ integration.
 7. Do not migrate behavior into C++ just because a package exists. Native
    migration must prove ownership, parity, validation, and visible workflow.
 
+## ABI Checklist
+
+- Exported functions should have stable names, explicit calling convention where
+  needed, and C-compatible types.
+- Return status, version, capabilities, or JSON payloads through narrow ABI
+  surfaces; keep complex C++ objects private.
+- Document string ownership: static string, caller-provided buffer, allocated
+  buffer, or JSON copied by Python.
+- Never let C++ exceptions escape a C ABI. Convert to status/error payloads at
+  the boundary.
+- Version every payload shape that Python or tests parse.
+- Keep fallback DLL names only when preserving an existing compatibility path.
+  Remove stale fallbacks during canonical rename batches.
+
+## C++ Hygiene
+
+- Separate declaration and definition deliberately; headers are contracts, not
+  dumping grounds.
+- Avoid dangerous macros for behavior. Prefer constants, templates, functions,
+  or build-system definitions.
+- Use smart pointers to express ownership and references/values for non-owning
+  or value-like relationships.
+- Watch for double-delete, use-after-free, stale references, iterator
+  invalidation, and object lifetime across DLL boundaries.
+- Prefer pre-increment for iterators and profile before making performance
+  changes.
+- Treat `.vcxproj` and `.filters` XML validity as part of the change.
+
 ## GhostRigger Native Rules
 
 - Canonical Python remains under root `src/` unless a package explicitly owns

@@ -31,6 +31,24 @@ states, onboarding flows, task loops, or game-facing user experiences.
 7. Keep planning horizons short enough to learn from real tool behavior, but
    long enough to avoid incoherent one-off UI.
 
+## Tool Experience Questions
+
+- What is the user trying to accomplish in one sitting?
+- What state must be visible before they act?
+- What feedback confirms the action worked?
+- What recovery path exists if validation fails?
+- Which choices are meaningful and which are busywork?
+- Can the same concept use the same word/icon/state across panels?
+- Does the workflow teach through interaction rather than long explanatory text?
+
+## Design Failure Patterns
+
+- Too many controls before the user has a concrete task.
+- Hidden readiness state that forces trial and error.
+- Inconsistent labels for the same concept across workbenches.
+- Validation messages that name symptoms but not the object/resource involved.
+- Tool loops that require broad scans or exports to answer a small question.
+
 ## GhostRigger Applications
 
 - Map Studio workflow spines and readiness panels.

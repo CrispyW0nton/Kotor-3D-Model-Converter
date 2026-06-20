@@ -19,6 +19,27 @@ vertex selection, and per-vertex validation.
 5. For skinning, validate weight count, normalization, bone indices, palette order, and whether the runtime supports more influences than the source model provides.
 6. Preserve vertex ordering when external formats depend on it. If a tool must reorder vertices for cache locality or deduplication, emit a remap table.
 
+## Per-Vertex Data Checklist
+
+- Position: object/bind/pose/world space.
+- Normal: normalized direction, transformed separately from position.
+- Tangent/bitangent: handedness and UV orientation.
+- UVs: channel count, per-face-corner vs per-vertex ownership, missing values.
+- Color: format, color space, alpha policy.
+- Skinning: bone indices, weights, influence count, normalization, palette
+  mapping.
+- Provenance: source vertex ID, generated vertex ID, remap table, and owning
+  scene object.
+
+## Interpolation And Picking
+
+- Barycentric coordinates are useful for hit interpolation, height lookup,
+  UV/material sampling, and weight transfer, but only after rejecting degenerate
+  triangles.
+- Ray tests must use the same coordinate space for ray and triangle.
+- Edge hits need a tolerance policy distinct from face-inside tests.
+- Interpolated normals/weights should be renormalized after interpolation.
+
 ## GhostRigger Checks
 
 - Use MCP pipeline comparison before changing MDL loading, transforms, or skinning behavior.
