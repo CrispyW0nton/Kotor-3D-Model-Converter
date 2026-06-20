@@ -106,6 +106,10 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Target game:" in panel_source
     assert "Test state:" in panel_source
     assert "Export candidate. Stage/install before in-game proof" in panel_source
+    assert "can_export_candidate" in panel_source
+    assert "PTH/WOK pathing blocked" in panel_source
+    assert "self.stage_button.setEnabled(bool(enabled and can_export))" in panel_source
+    assert "self.install_button.setEnabled(bool(enabled and can_export))" in panel_source
     assert "Game-tested. Live warp proof is recorded" in panel_source
     assert "Not game-ready until a live KOTOR warp test is recorded" in panel_source
     assert "Capability: Export candidate" in panel_source
@@ -202,6 +206,7 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "export_layout.addWidget(self.workflow_panel)" in window_source
     assert "readiness_result = self.controller.authored_module_readiness()" in window_source
     assert "self.workflow_panel.set_state(self.project, readiness_result.readiness)" in window_source
+    assert "self.export_panel.set_readiness(readiness_result.readiness)" in window_source
     assert "self.workflow_panel.newProjectRequested.connect(self.new_kmap)" in window_source
     assert "self.workflow_panel.openProjectRequested.connect(self.open_kmap)" in window_source
     assert "self.workflow_panel.saveProjectRequested.connect(self.save_kmap)" in window_source
@@ -1064,6 +1069,13 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "mapStudioExportSafetyLabel" in source
         assert "mapStudioExportDryRunCheckBox" in source
         assert "mapStudioExportDryRunHintLabel" in source
+        assert "mapStudioExportReadinessGateLabel" in source
+        assert "mapStudioExportBlockerTable" in source
+        assert 'setHorizontalHeaderLabels(("Blocker", "KOTOR export impact", "Next fix"))' in source
+        assert "def set_readiness" in source
+        assert "can_export_candidate" in source
+        assert "Blocked by PTH/WOK pathing" in source
+        assert "Blocks authored .mod package, stage, and install actions." in source
         assert "mapStudioExportActionGuideLabel" in source
         assert "mapStudioExportActionGuideTable" in source
         assert 'setHorizontalHeaderLabels(("Action", "Writes", "Use when", "Game proof"))' in source
@@ -1586,6 +1598,10 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "walkmeshToolsRequested = QtCore.Signal()" in mirror_source
     assert "launchHandoffRequested = QtCore.Signal()" in mirror_source
     assert "Capability: Export candidate" in mirror_source
+    assert "can_export_candidate" in mirror_source
+    assert "PTH/WOK pathing blocked" in mirror_source
+    assert "self.stage_button.setEnabled(bool(enabled and can_export))" in mirror_source
+    assert "self.install_button.setEnabled(bool(enabled and can_export))" in mirror_source
     assert "Target game:" in mirror_source
     assert "Test state:" in mirror_source
     assert "def _test_state_text" in mirror_source

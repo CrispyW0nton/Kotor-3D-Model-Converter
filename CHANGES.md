@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Export Panel Gates Authored Module Packaging
+
+Owner: LordVaderCW
+Task: T2602 / T2605
+Subsystem: Map Studio / Export tab / authored-module package readiness
+Intersects: GUI Boundary Panels export/workflow panels, ModuleMeshes mirror package, Windows Editor Level shell.
+
+- Added a current authored-module export gate and blocker table to the Export panel so PTH/WOK pathing and readiness blockers are visible beside the package/stage/install buttons.
+- Disabled authored `.mod` package, stage, and install actions until core readiness reports `can_export_candidate`, while leaving external FBX handoff and the standalone grdev01 dev-test button outside the current-KMAP gate.
+- Routed the existing Level Editor readiness refresh into the Export panel and gated the workflow spine's Stage/Install buttons from the same readiness state.
+- Mirrored the panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/workflow_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/workflow_panel.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof tests/test_map_studio_workflow_panel.py::test_t2600_level_editor_wires_workflow_panel_to_readiness_contract -q --basetemp .pytest_tmp_export_gate_panel`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine tests/test_map_studio_workflow_panel.py::test_t2600_workflow_panel_is_mirrored_for_module_meshes_package -q --basetemp .pytest_tmp_workflow_export_gate`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Readiness Shows PTH Export Gate
 
 Owner: LordVaderCW

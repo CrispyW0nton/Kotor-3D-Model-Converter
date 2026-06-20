@@ -48,6 +48,22 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.dry_run_hint_label.setObjectName("mapStudioExportDryRunHintLabel")
         self.dry_run_hint_label.setWordWrap(True)
         root.addWidget(self.dry_run_hint_label)
+        self.export_gate_label = QtWidgets.QLabel(
+            "Current authored-module export gate: Not checked. Readiness must pass before KOTOR .mod packaging."
+        )
+        self.export_gate_label.setObjectName("mapStudioExportReadinessGateLabel")
+        self.export_gate_label.setWordWrap(True)
+        root.addWidget(self.export_gate_label)
+        self.export_blocker_table = QtWidgets.QTableWidget(0, 3)
+        self.export_blocker_table.setObjectName("mapStudioExportBlockerTable")
+        self.export_blocker_table.setHorizontalHeaderLabels(("Blocker", "KOTOR export impact", "Next fix"))
+        self.export_blocker_table.verticalHeader().setVisible(False)
+        self.export_blocker_table.horizontalHeader().setStretchLastSection(True)
+        self.export_blocker_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.export_blocker_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.export_blocker_table.setMinimumHeight(72)
+        self.export_blocker_table.setMaximumHeight(150)
+        root.addWidget(self.export_blocker_table)
         self.action_guide_label = QtWidgets.QLabel(
             "Export action guide: choose FBX only for external DCC handoff; choose authored-module actions when testing a KOTOR .mod."
         )
@@ -87,6 +103,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.authored_install_button.setToolTip("Package the authored module, copy it to a chosen KOTOR Modules folder, and write a checklist/proof manifest.")
         self.authored_install_button.clicked.connect(lambda: self.authoredModuleInstallRequested.emit(self.dry_run.isChecked()))
         root.addWidget(self.authored_install_button)
+        self.set_readiness(None)
         root.addStretch(1)
 
     def _populate_action_guide(self) -> None:
@@ -122,3 +139,108 @@ class ModuleExportPanel(QtWidgets.QWidget):
                 item = QtWidgets.QTableWidgetItem(text)
                 item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
                 self.action_guide_table.setItem(row, column, item)
+
+    def set_readiness(self, readiness: object | None) -> None:
+        """Reflect authored-module export readiness without owning validation policy."""
+
+        if readiness is None:
+            self.export_gate_label.setText(
+                "Current authored-module export gate: Not checked. Create/open a KMAP and run readiness before packaging a KOTOR .mod."
+            )
+            self._set_authored_module_buttons_enabled(False)
+            self._set_export_blocker_rows(
+                (
+                    (
+                        "No readiness result",
+                        "Current authored KMAP package actions stay locked.",
+                        "Create or open a KMAP, then use Builder and Validate before staging/installing.",
+                    ),
+                )
+            )
+            return
+
+        can_export = bool(getattr(readiness, "can_export_candidate", False))
+        export_status = str(getattr(readiness, "export_status", "Not ready") or "Not ready")
+        next_action = str(getattr(readiness, "next_action", "") or "")
+        metadata = dict(getattr(readiness, "metadata", {}) or {})
+        pathing = dict(metadata.get("pathing") or {})
+        pathing_blockers = tuple(str(item) for item in tuple(pathing.get("blockers", ()) or ()) if str(item).strip())
+        blocking_messages = tuple(
+            str(item) for item in tuple(getattr(readiness, "blocking_messages", ()) or ()) if str(item).strip()
+        )
+        fix_hint = str(pathing.get("fix_hint") or "Use Builder/Walkmesh tools to put the module entry point and gameplay anchors on generated walkable WOK.")
+
+        self._set_authored_module_buttons_enabled(can_export)
+        if can_export:
+            self.export_gate_label.setText(
+                "Current authored-module export gate: Ready to stage as a KOTOR .mod candidate. Still record a live warp test before calling it game-ready."
+            )
+            self._set_export_blocker_rows(
+                (
+                    (
+                        "No current export blockers",
+                        "Authored .mod package actions are unlocked.",
+                        "Stage or install, warp in-game, and record proof before game-ready status.",
+                    ),
+                )
+            )
+            return
+
+        if pathing_blockers:
+            self.export_gate_label.setText(
+                f"Current authored-module export gate: Blocked by PTH/WOK pathing. {export_status}"
+            )
+            self._set_export_blocker_rows(
+                tuple(
+                    (
+                        blocker,
+                        "Blocks authored .mod package, stage, and install actions.",
+                        fix_hint,
+                    )
+                    for blocker in pathing_blockers
+                )
+            )
+            return
+
+        if blocking_messages:
+            self.export_gate_label.setText(
+                f"Current authored-module export gate: Blocked by readiness validation. {export_status}"
+            )
+            self._set_export_blocker_rows(
+                tuple(
+                    (
+                        message,
+                        "Blocks authored .mod package, stage, and install actions.",
+                        next_action or "Resolve the blocking readiness issue, then run Validate again.",
+                    )
+                    for message in blocking_messages[:8]
+                )
+            )
+            return
+
+        self.export_gate_label.setText(f"Current authored-module export gate: Not ready. {export_status}")
+        self._set_export_blocker_rows(
+            (
+                (
+                    export_status,
+                    "Authored .mod package actions stay locked.",
+                    next_action or "Generate missing KOTOR runtime resources before staging/installing.",
+                ),
+            )
+        )
+
+    def _set_authored_module_buttons_enabled(self, enabled: bool) -> None:
+        for button in (
+            self.authored_module_button,
+            self.authored_stage_button,
+            self.authored_install_button,
+        ):
+            button.setEnabled(enabled)
+
+    def _set_export_blocker_rows(self, rows: tuple[tuple[str, str, str], ...]) -> None:
+        self.export_blocker_table.setRowCount(len(rows))
+        for row, values in enumerate(rows):
+            for column, text in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(str(text))
+                item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+                self.export_blocker_table.setItem(row, column, item)

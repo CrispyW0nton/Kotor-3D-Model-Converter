@@ -337,7 +337,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.save_kmap_button.setEnabled(project is not None)
 
         if project is None:
-            self._set_action_enabled(False, can_place=False, can_proof=False)
+            self._set_action_enabled(False, can_place=False, can_export=False, can_proof=False)
             self.project_label.setText("Project: No KMAP open")
             self.target_game_label.setText("Target game: not selected")
             self.capability_label.setText("Capability: Draft. Create or open a KMAP before authoring.")
@@ -359,7 +359,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.next_action_label.setText("Next: create or open a KMAP project.")
             return
 
-        self._set_action_enabled(True, can_place=False, can_proof=False)
+        self._set_action_enabled(True, can_place=False, can_export=False, can_proof=False)
         project_name = str(getattr(project, "name", "") or "(unnamed)")
         game = str(getattr(project, "game", "") or "(game not selected)")
         dirty = " *" if bool(getattr(project, "dirty", False)) else ""
@@ -394,7 +394,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.scripts_label.setText("Scripts: Add module or area script hooks when this map needs scripted behavior.")
 
         if readiness is None:
-            self._set_action_enabled(True, can_place=has_authored_module, can_proof=False)
+            self._set_action_enabled(True, can_place=has_authored_module, can_export=False, can_proof=False)
             self.validation_label.setText("Validation: Not checked")
             self.export_label.setText("Export/install: Not ready")
             self.proof_label.setText("Game proof: Required before game-ready")
@@ -407,7 +407,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         next_action = str(getattr(readiness, "next_action", "") or "")
         game_tested = bool(getattr(readiness, "game_tested", False))
         ready_for_game_test = bool(getattr(readiness, "ready_for_game_test", False))
+        can_export_candidate = bool(getattr(readiness, "can_export_candidate", False))
         metadata = dict(getattr(readiness, "metadata", {}) or {})
+        pathing = dict(metadata.get("pathing") or {})
+        pathing_blockers = tuple(pathing.get("blockers", ()) or ())
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
         readiness_game = str(getattr(readiness, "game", "") or game)
@@ -415,6 +418,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self._set_action_enabled(
             True,
             can_place=has_authored_module,
+            can_export=can_export_candidate,
             can_launch=bool(proof_manifest or installed_path or ready_for_game_test),
             can_proof=bool(proof_manifest or installed_path or ready_for_game_test),
         )
@@ -496,6 +500,10 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.export_label.setText(f"Export/install: Installed for warp test. {installed_path}")
         elif proof_manifest:
             self.export_label.setText(f"Export/install: Staged for game test. {export_status}.")
+        elif pathing_blockers:
+            self.export_label.setText(
+                f"Export/install: PTH/WOK pathing blocked. Fix {len(pathing_blockers)} path anchor issue(s) before staging."
+            )
         else:
             self.export_label.setText(f"Export/install: {export_status}.")
         if game_tested:
@@ -504,7 +512,15 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.proof_label.setText("Game proof: Not game-ready until a live KOTOR warp test is recorded.")
         self.next_action_label.setText(f"Next: {next_action}" if next_action else "")
 
-    def _set_action_enabled(self, enabled: bool, *, can_place: bool, can_proof: bool, can_launch: bool = False) -> None:
+    def _set_action_enabled(
+        self,
+        enabled: bool,
+        *,
+        can_place: bool,
+        can_export: bool,
+        can_proof: bool,
+        can_launch: bool = False,
+    ) -> None:
         for button in (
             self.open_builder_button,
             self.geometry_tools_button,
@@ -518,11 +534,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.script_tools_button,
             self.walkmesh_tools_button,
             self.validate_button,
-            self.stage_button,
-            self.install_button,
         ):
             button.setEnabled(enabled)
         self.test_placeable_button.setEnabled(bool(enabled and can_place))
+        self.stage_button.setEnabled(bool(enabled and can_export))
+        self.install_button.setEnabled(bool(enabled and can_export))
         self.launch_handoff_button.setEnabled(bool(enabled and can_launch))
         self.proof_button.setEnabled(bool(can_proof))
 
