@@ -17,7 +17,7 @@
 | `MANDATORY_CHECKLIST.md` | Pre-task protocol | ALWAYS, before any task |
 | `cross_reference_map.md` | Feature-to-repo-to-book mapping | When implementing any feature |
 | `book_extracts.md` | Key principles from 3 reference books | When making architecture/algorithm decisions |
-| `../roadmap/02_roadmap_2026_05.md` | Current Qt-branch roadmap (M0–M11) | When planning work order |
+| `../roadmap/02_roadmap_2026_05.md` | Active suite roadmap, regenerated 2026-06 | When planning work order |
 | `ROADMAP_legacy_2026_04.md` | Pre-Qt iteration roadmap (historical) | Background context only |
 
 ### Deliverable Knowledge Files (in `deliverables/`)

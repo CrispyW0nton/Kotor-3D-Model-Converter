@@ -10,6 +10,41 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-21
+### [2026-06-21] Rewrite Root README Front Page
+
+Owner: LordVaderCW
+Subsystem: README / documentation / product roadmap
+
+- Rewrote the root `README.md` as a polished project front page with the application icon from `assets/icons/ghostrigger_icon.png`.
+- Reframed the intro around the current hybrid Visual Studio C++ host plus embedded Python Qt/PySide6 application and the four-studio product shape: Character Studio, Retarget Studio, Module Studio, and Map Studio.
+- Added professional sections for highlights, current critical path, requirements, quick start, PyInstaller build, native solution work, main workflows, FBX backends, validation/export safety, testing, repository map, documentation, branch policy, and legal notes.
+- Refreshed the content to point at the regenerated active roadmap, package ownership model, native migration docs, and current `qt-ghostrigger` development priorities.
+
+Verification:
+- `git diff -- README.md`
+- `rg -n '[^\x00-\x7F]' README.md` returned no matches.
+- `git diff --check -- README.md` passed, with only standard Windows LF-to-CRLF warnings.
+- Confirmed `assets/icons/ghostrigger_icon.png` exists for the README icon.
+
+### [2026-06-21] Regenerate Active Roadmap
+
+Owner: LordVaderCW
+Subsystem: Roadmap / product planning / documentation
+
+- Replaced the stale May-era Character Builder roadmap in `knowledge_base/roadmap/02_roadmap_2026_05.md` with a regenerated 2026-06 active suite roadmap.
+- Reframed the roadmap around the current four-studio product shape: Character Studio, Retarget Studio, Module Studio, and Map Studio over shared project/resource/validation/export/native-runtime foundations.
+- Updated roadmap statuses from current repository evidence, including the native package collapse, embedded Python payload discipline, shared project/resource/export foundations, Retarget Studio progress, Character Studio native KOTOR DAG risk, Module/Map backend maturity, and `grdev01` game-proof gap.
+- Added current milestone lanes M23-M33, immediate sprint recommendations, beta gates, and a task-ID collision note reserving existing `T2601` Map Studio usage.
+- Refreshed `knowledge_base/roadmap/README.md`, `knowledge_base/README.md`, and `knowledge_base/reference/INDEX.md` so index pages point to the regenerated active roadmap instead of the obsolete M0-M11 May status.
+
+Verification:
+- Read `docs/knowledgebase/skills.md`, `docs/knowledgebase/learned/architectureskill.md`, `knowledge_base/package_ownership_model.md`, the existing roadmap docs, and current `CHANGES.md` entries before editing.
+- Searched current source/tests/docs for suite foundation, retarget, Character Studio, Module Studio, Map Studio, native package, and proof-task evidence.
+- `rg -n '[^\x00-\x7F]' knowledge_base/roadmap/02_roadmap_2026_05.md knowledge_base/roadmap/README.md knowledge_base/README.md knowledge_base/reference/INDEX.md` returned no matches.
+- `rg -n "M0-M11|M0.M11|post-M12|2026-05 Edition|Last revised: 2026-05|Current Qt-branch roadmap \(M0" knowledge_base/roadmap knowledge_base/README.md knowledge_base/reference/INDEX.md` only found the intentionally historical document-history mention of the original M0-M11 roadmap.
+- `git diff --check -- CHANGES.md knowledge_base/README.md knowledge_base/reference/INDEX.md knowledge_base/roadmap/02_roadmap_2026_05.md knowledge_base/roadmap/README.md` passed, with only standard Windows LF-to-CRLF warnings.
+- Reviewed `git diff` for the regenerated roadmap and index updates.
+
 ### [2026-06-21] Expand Book-Derived Knowledgebase Skills
 
 Owner: LordVaderCW
