@@ -138,6 +138,13 @@ def _face_normal(mesh: ComponentMesh, face: Face) -> Vector3:
     return _cross(_sub(b, a), _sub(c, a))
 
 
+def _triangle_area(mesh: ComponentMesh, face: Face) -> float:
+    if len(face) != 3 or len(set(face)) < 3:
+        return 0.0
+    a, b, c = (mesh.vertices[index] for index in face)
+    return 0.5 * _length(_cross(_sub(b, a), _sub(c, a)))
+
+
 def fill_face(mesh: ComponentMesh, indices: Iterable[int]) -> ComponentEditResult:
     """Create one face from an ordered vertex loop.
 
@@ -366,6 +373,7 @@ def audit_component_edit_result(
     removed_vertices = _metadata_int(metadata, "removed_vertex_count")
     flipped_faces = _metadata_int(metadata, "flipped_face_count")
     skipped_faces = _metadata_int(metadata, "skipped_face_count")
+    skipped_triangles = _metadata_int(metadata, "skipped_triangle_count")
     topology_changed = any(
         value > 0
         for value in (
@@ -401,6 +409,8 @@ def audit_component_edit_result(
         messages.append("Review WOK surface intent before exporting the module.")
     if skipped_faces:
         messages.append("Some faces could not be normal-audited; inspect normals before export.")
+    if skipped_triangles:
+        messages.append("Some fan triangles collapsed during triangulation; inspect topology before export.")
     stale_outputs: tuple[str, ...] = ()
     next_action = "No export action required."
     if geometry_changed:
@@ -425,6 +435,8 @@ def audit_component_edit_result(
         change_bits.append(f"{result.removed_face_count} removed face(s)")
     if triangulated_faces:
         change_bits.append(f"{triangulated_faces} triangulated face set(s)")
+    if skipped_triangles:
+        change_bits.append(f"{skipped_triangles} skipped degenerate triangle(s)")
     if flipped_faces:
         change_bits.append(f"{flipped_faces} flipped face(s)")
     if not change_bits:
@@ -450,6 +462,7 @@ def audit_component_edit_result(
             "triangulated_face_count": triangulated_faces,
             "removed_vertex_count": removed_vertices,
             "flipped_face_count": flipped_faces,
+            "skipped_triangle_count": skipped_triangles,
             "affects_walkmesh": bool(affects_walkmesh),
         },
     )
@@ -570,22 +583,53 @@ def cleanup_degenerate_faces(mesh: ComponentMesh) -> ComponentEditResult:
     )
 
 
-def triangulate_faces(mesh: ComponentMesh) -> ComponentEditResult:
-    """Fan-triangulate n-gon faces while leaving triangles unchanged."""
+def triangulate_faces(mesh: ComponentMesh, *, area_epsilon: float = 1.0e-9) -> ComponentEditResult:
+    """Fan-triangulate n-gon faces while rejecting degenerate triangles.
+
+    KOTOR room MDL/WOK generation depends on deterministic, non-collapsed
+    triangles. This helper stays intentionally conservative: it performs a
+    stable fan triangulation suitable for convex Map Studio room footprints and
+    removes triangles whose area is below ``area_epsilon`` so export readiness
+    can warn before a bad WOK or room model is staged.
+    """
 
     triangles: list[Face] = []
     changed = 0
+    skipped = 0
+    removed_faces = 0
     for face in mesh.faces:
+        if len(set(face)) < 3:
+            removed_faces += 1
+            continue
         if len(face) == 3:
+            if _triangle_area(mesh, face) <= area_epsilon:
+                removed_faces += 1
+                continue
             triangles.append(face)
             continue
         changed += 1
         first = face[0]
         for offset in range(1, len(face) - 1):
-            triangles.append((first, face[offset], face[offset + 1]))
+            triangle = (first, face[offset], face[offset + 1])
+            if _triangle_area(mesh, triangle) <= area_epsilon:
+                skipped += 1
+                continue
+            triangles.append(triangle)
+    warnings: list[str] = []
+    if skipped:
+        warnings.append(f"Skipped {skipped} degenerate fan triangle(s) during triangulation.")
+    if removed_faces:
+        warnings.append(f"Removed {removed_faces} degenerate face(s) during triangulation.")
     return ComponentEditResult(
         mesh=ComponentMesh(vertices=mesh.vertices, faces=tuple(triangles), metadata=dict(mesh.metadata)),
-        metadata={"operation": "triangulate_faces", "triangulated_face_count": changed},
+        removed_face_count=removed_faces,
+        warnings=tuple(warnings),
+        metadata={
+            "operation": "triangulate_faces",
+            "triangulated_face_count": changed,
+            "skipped_triangle_count": skipped,
+            "area_epsilon": float(area_epsilon),
+        },
     )
 
 

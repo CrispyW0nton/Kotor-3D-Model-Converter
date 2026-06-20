@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Triangulation Rejects Degenerate WOK Candidates
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / component geometry kernel / KOTOR export readiness
+Intersects: Domain Core Geometry component editing and Map Studio component-audit tests.
+
+- Strengthened the headless `triangulate_faces` component kernel so fan triangulation skips collapsed triangles and removes degenerate faces before they can reach room MDL/WOK export.
+- Extended component-edit audit metadata and validation messages to report skipped degenerate fan triangles as topology issues that stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs and require game proof again.
+- Added focused regression coverage for direct triangulation output and the KOTOR readiness audit summary.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py tests/test_map_studio_component_editing.py tests/test_component_editing.py`; `python -m pytest tests/test_map_studio_component_editing.py::test_t2601_triangulate_skips_degenerate_fan_triangles_for_wok_safety tests/test_component_editing.py::test_t2601_component_edit_audit_reports_degenerate_triangulation_cleanup -q --basetemp .pytest_tmp_map_studio_triangulate_degenerate`.
+
 ### [2026-06-20] Map Studio Edit Modes Sync the Visible Tool Belt
 
 Owner: LordVaderCW

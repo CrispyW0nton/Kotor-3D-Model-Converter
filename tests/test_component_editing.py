@@ -192,6 +192,40 @@ def test_t2601_component_edit_audit_marks_extrude_as_topology_change() -> None:
     assert audit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
 
 
+def test_t2601_component_edit_audit_reports_degenerate_triangulation_cleanup() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import audit_component_edit_result, component_mesh, triangulate_faces
+
+    mesh = component_mesh(
+        vertices=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        faces=[(0, 1, 2, 3, 4), (0, 0, 1)],
+    )
+
+    audit = audit_component_edit_result(
+        triangulate_faces(mesh),
+        component_kind="wok face",
+        affects_walkmesh=True,
+    )
+
+    assert audit.geometry_changed is True
+    assert audit.topology_changed is True
+    assert audit.metadata["triangulated_face_count"] == 1
+    assert audit.metadata["skipped_triangle_count"] == 1
+    assert audit.summary == (
+        "triangulate_faces on wok face: 1 removed face(s), "
+        "1 triangulated face set(s), 1 skipped degenerate triangle(s)."
+    )
+    assert "Some fan triangles collapsed during triangulation; inspect topology before export." in audit.validation_messages
+    assert audit.next_action == "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game."
+
+
 def test_t2601_extrude_face_rejects_invalid_or_degenerate_faces() -> None:
     _install_native_geometry_path()
 
