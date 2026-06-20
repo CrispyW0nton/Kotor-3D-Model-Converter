@@ -26,6 +26,38 @@ from .authored_walkmesh_surfaces import walkmesh_surface_name
 RuntimeResourceKey = tuple[str, str]
 
 
+_COMPONENT_EDIT_RESOURCE_IMPACTS: dict[str, tuple[str, str]] = {
+    "MDL": (
+        "Room model geometry changed.",
+        "Regenerate the room MDL before staging the module.",
+    ),
+    "MDX": (
+        "Room vertex buffers changed.",
+        "Regenerate the paired MDX with the room MDL.",
+    ),
+    "WOK": (
+        "Walkmesh may no longer match the edited floor or openings.",
+        "Review walkable surfaces, edges, and blockers before export.",
+    ),
+    "LYT": (
+        "Room layout membership may be stale.",
+        "Rebuild the module layout after room geometry changes.",
+    ),
+    "VIS": (
+        "Visibility links may no longer match the room shape.",
+        "Review room visibility/portal intent and rebuild VIS.",
+    ),
+    "PTH": (
+        "Path graph may cross invalid WOK space.",
+        "Rebuild PTH after walkmesh and entry/transition checks pass.",
+    ),
+    ".mod": (
+        "Packaged module is stale.",
+        "Re-stage the .mod and record fresh in-game proof.",
+    ),
+}
+
+
 @dataclass(frozen=True)
 class AuthoredModuleInputStatus:
     """One user-facing Map Studio input and its readiness state."""
@@ -136,6 +168,7 @@ class AuthoredComponentEditReadiness:
     export_candidate_stale: bool = False
     game_proof_stale: bool = False
     stale_outputs: tuple[str, ...] = ()
+    resource_impacts: tuple[dict[str, str], ...] = ()
     next_action: str = ""
     validation_messages: tuple[str, ...] = ()
     fix_hint: str = ""
@@ -670,6 +703,7 @@ def _component_edit_readiness(project: AuthoredModuleProject) -> AuthoredCompone
             if str(output).strip()
         )
     )
+    resource_impacts = _component_edit_resource_impacts(stale_outputs)
     next_action = str(latest.get("next_action") or "").strip()
     ready = not risky
     fix_hint = (
@@ -690,10 +724,30 @@ def _component_edit_readiness(project: AuthoredModuleProject) -> AuthoredCompone
         export_candidate_stale=export_stale,
         game_proof_stale=proof_stale,
         stale_outputs=stale_outputs,
+        resource_impacts=resource_impacts,
         next_action=next_action or fix_hint,
         validation_messages=latest_messages,
         fix_hint=fix_hint,
     )
+
+
+def _component_edit_resource_impacts(stale_outputs: Iterable[str]) -> tuple[dict[str, str], ...]:
+    """Map stale KOTOR outputs to modder-facing export impact rows."""
+
+    impacts: list[dict[str, str]] = []
+    for output in stale_outputs:
+        resource = str(output or "").strip()
+        if not resource:
+            continue
+        why, fix = _COMPONENT_EDIT_RESOURCE_IMPACTS.get(
+            resource,
+            (
+                "Generated runtime resource may be stale.",
+                "Regenerate this resource before packaging the module.",
+            ),
+        )
+        impacts.append({"resource": resource, "why_stale": why, "fix": fix})
+    return tuple(impacts)
 
 
 def _floor_plan_points(points: Any) -> tuple[tuple[float, float], ...]:
@@ -1486,6 +1540,7 @@ def build_authored_module_readiness(
                 "export_candidate_stale": component_edit.export_candidate_stale,
                 "game_proof_stale": component_edit.game_proof_stale,
                 "stale_outputs": list(component_edit.stale_outputs),
+                "resource_impacts": [dict(row) for row in component_edit.resource_impacts],
                 "next_action": component_edit.next_action,
                 "validation_messages": list(component_edit.validation_messages),
                 "fix_hint": component_edit.fix_hint,

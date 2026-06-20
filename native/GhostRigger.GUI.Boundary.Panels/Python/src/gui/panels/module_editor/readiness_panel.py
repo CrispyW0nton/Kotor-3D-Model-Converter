@@ -91,6 +91,17 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.component_edit_label.setWordWrap(True)
         root.addWidget(self.component_edit_label)
 
+        self.component_edit_resource_table = QtWidgets.QTableWidget(0, 3)
+        self.component_edit_resource_table.setObjectName("mapStudioReadinessComponentEditResourceTable")
+        self.component_edit_resource_table.setHorizontalHeaderLabels(("Stale output", "Why it matters", "Fix before export"))
+        self.component_edit_resource_table.verticalHeader().setVisible(False)
+        self.component_edit_resource_table.horizontalHeader().setStretchLastSection(True)
+        self.component_edit_resource_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.component_edit_resource_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.component_edit_resource_table.setMinimumHeight(76)
+        self.component_edit_resource_table.setMaximumHeight(150)
+        root.addWidget(self.component_edit_resource_table)
+
         self.runtime_resource_table = QtWidgets.QTableWidget(0, 3)
         self.runtime_resource_table.setObjectName("mapStudioReadinessRuntimeResourceTable")
         self.runtime_resource_table.setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))
@@ -613,6 +624,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
 
         if not component_edit:
             self.component_edit_label.setText("Component edits: Not checked")
+            self._set_component_edit_resource_rows(())
             return
         status = str(component_edit.get("status") or "Not checked")
         latest_room = str(component_edit.get("latest_room_resref") or "").strip()
@@ -644,6 +656,30 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         elif risky_count:
             details = f"{details} Review WOK/MDL/MDX/PTH output before export.".strip()
         self.component_edit_label.setText(f"Component edits: {status}. {details}".rstrip())
+        self._set_component_edit_resource_rows(tuple(component_edit.get("resource_impacts") or ()))
+
+    def _set_component_edit_resource_rows(self, resource_impacts: tuple[Any, ...]) -> None:
+        """Show stale KOTOR outputs caused by the latest component edit."""
+
+        rows = [dict(row) for row in resource_impacts if isinstance(row, dict)]
+        if not rows:
+            self.component_edit_resource_table.setRowCount(1)
+            for column, text in enumerate((
+                "No stale component-edit outputs",
+                "No topology or WOK/export review is currently waiting.",
+                "Keep editing, then validate before staging.",
+            )):
+                self.component_edit_resource_table.setItem(0, column, self._table_item(text))
+            return
+        self.component_edit_resource_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            values = (
+                str(row.get("resource") or "(unknown output)"),
+                str(row.get("why_stale") or "Generated runtime resource may be stale."),
+                str(row.get("fix") or "Regenerate this resource before packaging."),
+            )
+            for column, text in enumerate(values):
+                self.component_edit_resource_table.setItem(row_index, column, self._table_item(text))
 
     @staticmethod
     def _normalise_resource_key(resource: Any) -> tuple[str, str]:

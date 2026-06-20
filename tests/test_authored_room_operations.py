@@ -717,6 +717,11 @@ def test_t2601_controller_records_selected_vertex_floor_plan_face_split() -> Non
     assert result.readiness.component_edit.ready is False
     assert result.readiness.component_edit.latest_operation == "split_face_with_edge"
     assert result.readiness.component_edit.topology_changed is True
+    impacts = {row["resource"]: row for row in result.readiness.component_edit.resource_impacts}
+    assert impacts["WOK"]["why_stale"] == "Walkmesh may no longer match the edited floor or openings."
+    assert impacts["PTH"]["fix"] == "Rebuild PTH after walkmesh and entry/transition checks pass."
+    assert impacts[".mod"]["fix"] == "Re-stage the .mod and record fresh in-game proof."
+    assert result.readiness.metadata["component_edit"]["resource_impacts"][-1]["resource"] == ".mod"
     assert not build_authored_module(authored).blocking_issues
 
 

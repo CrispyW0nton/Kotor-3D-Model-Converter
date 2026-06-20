@@ -637,6 +637,9 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "def _component_edit_readiness" in source
         assert "component_edit: AuthoredComponentEditReadiness" in source
         assert '"component_edit"' in source
+        assert "resource_impacts" in source
+        assert "_component_edit_resource_impacts" in source
+        assert "Walkmesh may no longer match the edited floor or openings." in source
         assert '"Component edit audit"' in source
         assert '"Needs WOK/export review"' in source
         assert "class AuthoredFloorPlanGeometryReadiness" in source
@@ -662,11 +665,15 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "source_operation" in source
         assert "owns WOK" in source
         assert "mapStudioReadinessComponentEditLabel" in source
+        assert "mapStudioReadinessComponentEditResourceTable" in source
         assert "mapStudioReadinessDoorwayTransitionLabel" in source
         assert "def _set_doorway_transition_summary" in source
         assert "Doorway/transition intent: Not checked" in source
         assert "def _set_component_edit_summary" in source
+        assert "def _set_component_edit_resource_rows" in source
         assert "Component edits: Not checked" in source
+        assert "Fix before export" in source
+        assert "No stale component-edit outputs" in source
         assert "Stale outputs:" in source
         assert "Next:" in source
         assert "Review WOK/MDL/MDX/PTH output before export" in source
@@ -1244,8 +1251,11 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "Floor-plan geometry:" in source
         assert "geometry_validation" in source
         assert "mapStudioReadinessComponentEditLabel" in source
+        assert "mapStudioReadinessComponentEditResourceTable" in source
         assert "def _set_component_edit_summary" in source
+        assert "def _set_component_edit_resource_rows" in source
         assert "Component edits:" in source
+        assert "Fix before export" in source
         assert "Stale outputs:" in source
         assert "Next:" in source
         assert "mapStudioReadinessRuntimeResourceTable" in source

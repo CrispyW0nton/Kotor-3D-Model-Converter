@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Explains Stale Component-Edit Runtime Outputs
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / authored module readiness / Level Editor readiness panel
+Intersects: Domain Core Modules, GUI Boundary Panels, ModuleMeshes mirror package, and Map Studio readiness tests.
+
+- Added structured component-edit resource impact rows so stale MDL, MDX, WOK, LYT, VIS, PTH, and .mod outputs each explain why they matter and what a KOTOR modder should regenerate before export.
+- Rendered those rows in a dedicated Map Studio readiness table instead of burying KOTOR runtime-resource impact in a single status sentence.
+- Mirrored the readiness contract and panel changes into the ModuleMeshes workflow package.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_controller_records_selected_vertex_floor_plan_face_split tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_component_stale_resources`.
+
 ### [2026-06-20] Map Studio Exposes Floor-Plan Face Split Controls
 
 Owner: LordVaderCW
