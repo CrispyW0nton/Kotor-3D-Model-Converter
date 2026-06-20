@@ -1054,6 +1054,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 combo.setFocus()
                 return
 
+    def _select_map_studio_component_mode(self, component_key: str) -> None:
+        """Synchronize the Builder component selector with the toolbar edit mode."""
+
+        combo = getattr(self.builder_tab, "componentModeComboBox", None)
+        if combo is None:
+            return
+        wanted = str(component_key or "").strip().lower()
+        for index in range(combo.count()):
+            data = combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("key") or "").strip().lower() == wanted:
+                combo.setCurrentIndex(index)
+                return
+
     def _select_map_studio_gameplay_kind(self, placement_kind: str) -> None:
         """Focus the Builder placement controls for one KOTOR resource kind."""
 
@@ -1235,10 +1248,61 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
 
+    def _focus_map_studio_edit_mode_workspace(self, label: str) -> None:
+        """Route the toolbar edit mode to the closest usable Map Studio workspace."""
+
+        mode_key = str(label or "Object").strip().lower()
+        if mode_key == "object":
+            self.show_map_studio_builder()
+            self._select_map_studio_component_mode("object")
+            self._select_map_studio_modeling_tool("primitive_room")
+            self.left_tabs.setCurrentWidget(self.outliner)
+            return
+        if mode_key == "vertex":
+            self.show_map_studio_geometry_tools()
+            self._select_map_studio_component_mode("vertex")
+            self._select_map_studio_modeling_tool("weld_vertices")
+            tool = getattr(self.builder_tab, "floorPlanVertexRoomComboBox", None)
+            if tool is not None:
+                tool.setFocus()
+            return
+        if mode_key == "edge":
+            self.show_map_studio_geometry_tools()
+            self._select_map_studio_component_mode("edge")
+            self._select_map_studio_modeling_tool("bridge")
+            tool = getattr(self.builder_tab, "floorPlanBridgeFirstRoomComboBox", None)
+            if tool is not None:
+                tool.setFocus()
+            return
+        if mode_key == "face":
+            self.show_map_studio_geometry_tools()
+            self._select_map_studio_component_mode("face")
+            self._select_map_studio_modeling_tool("fill_face")
+            tool = getattr(self.builder_tab, "fillFloorPlanFaceButton", None)
+            if tool is not None:
+                tool.setFocus()
+            return
+        if mode_key == "walkmesh":
+            self._select_map_studio_component_mode("walkmesh")
+            self._select_map_studio_modeling_tool("paint_wok")
+            self.show_map_studio_walkmesh_tools()
+            return
+        if mode_key == "placement":
+            self.show_map_studio_placement_tools()
+            return
+        if mode_key == "terrain":
+            self.show_map_studio_terrain_tools()
+            self._select_map_studio_modeling_tool("terrain_sculpt")
+            return
+        if mode_key == "export":
+            self._focus_map_studio_export_proof_workspace()
+            return
+
     def _handle_map_studio_edit_mode_changed(self, mode: str) -> None:
         """Reflect the toolbar edit mode in the Map Studio workflow/readiness panel."""
 
         label = str(mode or "Object").strip() or "Object"
+        self._focus_map_studio_edit_mode_workspace(label)
         descriptions = {
             "Object": "select, move, duplicate, and organize rooms, placements, lights, and module objects",
             "Vertex": "edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools",

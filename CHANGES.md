@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Edit Modes Focus The Right Workspaces
+
+Owner: LordVaderCW
+Task: T2600 / T2603 / T2604 / T2605
+Subsystem: Map Studio / Level Editor edit modes / workflow focus
+Intersects: Windows Editor Level shell and Map Studio workflow panel source contracts.
+
+- Routed the Map Studio toolbar edit-mode selector to the matching usable workspace instead of only updating status text.
+- Synchronized Object, Vertex, Edge, Face, and Walkmesh modes with the Builder component/tool controls so the top mode selector and manual modeling controls no longer drift apart.
+- Focused Placement, Terrain, Walkmesh, and Export modes on their dedicated Map Studio workspaces, including the staged export/game-proof page.
+- Refreshed the Windows Editor Level native Python payload hash.
+- Verification: `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q --basetemp .pytest_tmp_edit_mode_workspace`.
+
 ### [2026-06-20] Map Studio Tool Belt Adds Export Proof Actions
 
 Owner: LordVaderCW

@@ -918,9 +918,19 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
 
     assert "self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)" in window_source
     assert "def _handle_map_studio_edit_mode_changed" in window_source
+    assert "def _focus_map_studio_edit_mode_workspace" in window_source
+    assert 'self._select_map_studio_component_mode("vertex")' in window_source
+    assert 'self._select_map_studio_modeling_tool("weld_vertices")' in window_source
+    assert 'self._select_map_studio_modeling_tool("bridge")' in window_source
+    assert 'self._select_map_studio_modeling_tool("fill_face")' in window_source
+    assert 'self._select_map_studio_component_mode("walkmesh")' in window_source
+    assert 'self._select_map_studio_modeling_tool("paint_wok")' in window_source
+    assert 'self._select_map_studio_modeling_tool("terrain_sculpt")' in window_source
+    assert "self._focus_map_studio_export_proof_workspace()" in window_source
     assert 'context = f"{label} mode:' in window_source
     assert '"Vertex": "edit room and walkmesh vertices' in window_source
     assert '"Terrain": "sculpt terrain heightfields' in window_source
+    assert "self._focus_map_studio_edit_mode_workspace(label)" in window_source
     assert "self.workflow_panel.set_active_authoring_context(context)" in window_source
     assert 'self._log(f"Map Studio edit mode changed: {context}")' in window_source
 
