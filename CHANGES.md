@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-19
 
+### [2026-06-19] Map Studio Shows Runtime Resource Checklist
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / readiness resource visibility
+Intersects: Map Studio readiness panel and ModuleMeshes mirror.
+
+- Added a visible runtime resource checklist to the Map Studio readiness panel so modders can see each expected ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX file and whether it is present, missing, or still expected.
+- Reused the existing headless readiness contract instead of moving resource policy into Qt widgets.
+- Mirrored the readiness panel update into the ModuleMeshes package and expanded UI source-contract coverage.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_runtime_resource_ui`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_runtime_resource_workflow`; `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-19] Map Studio Shows Authored Walkmesh Status
 
 Owner: LordVaderCW

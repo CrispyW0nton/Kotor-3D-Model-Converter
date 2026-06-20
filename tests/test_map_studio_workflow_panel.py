@@ -344,6 +344,27 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "Clear it only when you are ready to write staged files or install for testing" in source
 
 
+def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
+    readiness_source = _read(
+        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+    readiness_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "module_editor/readiness_panel.py"
+    )
+
+    for source in (readiness_source, readiness_mirror_source):
+        assert "mapStudioReadinessRuntimeResourceTable" in source
+        assert 'setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))' in source
+        assert "def _set_runtime_resource_rows" in source
+        assert "expected_runtime_resources" in source
+        assert "present_runtime_resources" in source
+        assert "missing_runtime_resources" in source
+        assert "Generate or stage this runtime file before export/install." in source
+        assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX readiness" in source
+
+
 def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
     walkmesh_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

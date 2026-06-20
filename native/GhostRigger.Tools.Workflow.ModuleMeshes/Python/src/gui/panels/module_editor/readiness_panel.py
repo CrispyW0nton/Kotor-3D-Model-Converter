@@ -54,6 +54,16 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.runtime_label.setObjectName("mapStudioReadinessRuntimeLabel")
         self.runtime_label.setWordWrap(True)
         root.addWidget(self.runtime_label)
+        self.runtime_resource_table = QtWidgets.QTableWidget(0, 3)
+        self.runtime_resource_table.setObjectName("mapStudioReadinessRuntimeResourceTable")
+        self.runtime_resource_table.setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))
+        self.runtime_resource_table.verticalHeader().setVisible(False)
+        self.runtime_resource_table.horizontalHeader().setStretchLastSection(True)
+        self.runtime_resource_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.runtime_resource_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.runtime_resource_table.setMinimumHeight(96)
+        self.runtime_resource_table.setMaximumHeight(180)
+        root.addWidget(self.runtime_resource_table)
 
         self.proof_label = QtWidgets.QLabel("Game proof: Not staged")
         self.proof_label.setObjectName("mapStudioReadinessGameProofLabel")
@@ -166,6 +176,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.preview_label.setText("Preview: Not ready")
             self.export_label.setText("Export: Not ready")
             self.runtime_label.setText("Runtime resources: Not checked")
+            self._set_runtime_resource_rows((), (), ())
             self.proof_label.setText("Game proof: Not staged")
             self.proof_recorder_label.setText("Proof recorder: Not ready")
             self.launch_label.setText("Launch handoff: Not ready")
@@ -185,6 +196,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         game = str(getattr(readiness, "game", "") or "(game not selected)")
         stage = str(getattr(readiness, "capability_stage", "blocked") or "blocked").replace("_", " ")
         expected = tuple(getattr(readiness, "expected_runtime_resources", ()) or ())
+        present = tuple(getattr(readiness, "present_runtime_resources", ()) or ())
         missing = tuple(getattr(readiness, "missing_runtime_resources", ()) or ())
         blocking = tuple(getattr(readiness, "blocking_messages", ()) or ())
         warnings = tuple(getattr(readiness, "warnings", ()) or ())
@@ -208,6 +220,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.runtime_label.setText(f"Runtime resources: {len(expected) - len(missing)}/{len(expected)} present")
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
+        self._set_runtime_resource_rows(expected, present, missing)
         metadata = dict(getattr(readiness, "metadata", {}) or {})
         proof_status = str(metadata.get("proof_status") or "not_ready")
         installed_path = str(metadata.get("installed_module_path") or "")
@@ -317,6 +330,56 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.copy_warp_command_button.setEnabled(bool(self.warp_command_edit.text().strip()))
         self.copy_launch_helper_button.setEnabled(bool(self.launch_helper_edit.text().strip()))
         self.copy_proof_manifest_button.setEnabled(bool(self.proof_manifest_edit.text().strip()))
+
+    @staticmethod
+    def _normalise_resource_key(resource: Any) -> tuple[str, str]:
+        if isinstance(resource, tuple) and len(resource) >= 2:
+            return (str(resource[0] or "").strip().lower(), str(resource[1] or "").strip().lower().lstrip("."))
+        return (str(resource or "").strip().lower(), "")
+
+    @staticmethod
+    def _format_resource_key(resource: Any) -> str:
+        resref, restype = ModuleReadinessPanel._normalise_resource_key(resource)
+        if resref and restype:
+            return f"{resref}.{restype}"
+        return resref or "(unknown resource)"
+
+    def _set_runtime_resource_rows(self, expected: tuple[Any, ...], present: tuple[Any, ...], missing: tuple[Any, ...]) -> None:
+        """Show which KOTOR runtime files are expected, present, or missing."""
+
+        present_keys = {self._normalise_resource_key(item) for item in present}
+        missing_keys = {self._normalise_resource_key(item) for item in missing}
+        resources = tuple(expected or ())
+        if not resources:
+            self.runtime_resource_table.setRowCount(1)
+            for column, text in enumerate((
+                "No runtime resource list yet",
+                "Not checked",
+                "Create or open an authored KMAP module to see ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX readiness.",
+            )):
+                self.runtime_resource_table.setItem(0, column, self._table_item(text))
+            return
+
+        self.runtime_resource_table.setRowCount(len(resources))
+        for row, resource in enumerate(resources):
+            key = self._normalise_resource_key(resource)
+            if key in present_keys:
+                status = "Present"
+                fix = "Ready for packaging/staging."
+            elif key in missing_keys:
+                status = "Missing"
+                fix = "Generate or stage this runtime file before export/install."
+            else:
+                status = "Expected"
+                fix = "Expected by the module contract; validate/export to confirm."
+            for column, text in enumerate((self._format_resource_key(resource), status, fix)):
+                self.runtime_resource_table.setItem(row, column, self._table_item(text))
+
+    @staticmethod
+    def _table_item(text: str) -> QtWidgets.QTableWidgetItem:
+        item = QtWidgets.QTableWidgetItem(str(text or ""))
+        item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+        return item
 
 
 __all__ = ["ModuleReadinessPanel"]
