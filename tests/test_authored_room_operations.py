@@ -277,6 +277,7 @@ def test_t2601_wall_opening_can_create_linked_transition_marker() -> None:
         tag="south_exit_trigger",
         linked_to="wp_dest",
         linked_to_module="grnext01",
+        transition_destination=2,
     )
     trigger = marked.placements.triggers[-1]
     readiness = build_authored_module_readiness(marked)
@@ -287,9 +288,11 @@ def test_t2601_wall_opening_can_create_linked_transition_marker() -> None:
     assert trigger.position == (0.0, -5.0, 0.0)
     assert trigger.linked_to == "wp_dest"
     assert trigger.linked_to_module == "grnext01"
+    assert trigger.transition_destination == 2
     assert marker_metadata["opening_name"] == "south_door"
     assert marker_metadata["marker_kind"] == "trigger"
     assert marker_metadata["position"] == [0.0, -5.0, 0.0]
+    assert marker_metadata["transition_destination"] == 2
     assert readiness.doorway_transition.opening_count == 1
     assert readiness.doorway_transition.transition_reference_count == 1
     assert readiness.doorway_transition.linked_transition_count == 1

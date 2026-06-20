@@ -411,6 +411,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioFloorPlanOpeningMarkerRoomComboBox" in source
         assert "mapStudioFloorPlanOpeningMarkerNameComboBox" in source
         assert "mapStudioFloorPlanOpeningMarkerKindComboBox" in source
+        assert "mapStudioFloorPlanOpeningMarkerTransitionDestSpinBox" in source
         assert "mapStudioCreateOpeningTransitionMarkerButton" in source
         assert "def _emit_floor_plan_opening_marker" in source
         assert "Floor-Plan Vertex Tools" in source

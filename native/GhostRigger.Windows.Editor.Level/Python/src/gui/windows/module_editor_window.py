@@ -1724,6 +1724,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         tag: str,
         linked_to: str,
         linked_to_module: str,
+        transition_destination: int,
     ) -> None:
         try:
             result = self.controller.apply_authored_room_operation(
@@ -1735,6 +1736,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 tag=tag,
                 linked_to=linked_to,
                 linked_to_module=linked_to_module,
+                transition_destination=transition_destination,
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Create Opening Transition Marker", str(exc))

@@ -28,7 +28,7 @@ from src.core.geometry.component_editing import (
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, authored_resref_blocking_issue, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
-from .authored_module_placements import add_authored_gameplay_placement
+from .authored_module_placements import add_authored_gameplay_placement, update_authored_gameplay_transition
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import (
     FloorPlanAxisSplitOperation,
@@ -1865,6 +1865,7 @@ def add_authored_floor_plan_opening_transition_marker(
     tag: str = "",
     linked_to: str = "",
     linked_to_module: str = "",
+    transition_destination: int = 0,
 ) -> AuthoredModuleProject:
     """Create a KOTOR door/trigger/waypoint marker from a wall opening."""
 
@@ -1889,6 +1890,19 @@ def add_authored_floor_plan_opening_transition_marker(
         linked_to_module=linked_to_module,
         trigger_size=max(float(opening.width), 0.5),
     )
+    try:
+        destination = int(transition_destination or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Opening transition marker destination must be an integer.") from exc
+    updated_project = update.project
+    if destination or str(linked_to or "").strip() or str(linked_to_module or "").strip():
+        updated_project = update_authored_gameplay_transition(
+            updated_project,
+            update.placement_id,
+            linked_to=linked_to,
+            linked_to_module=linked_to_module,
+            transition_destination=destination,
+        ).project
     metadata = {
         "room_resref": normalise_resref(room.room_resref),
         "opening_name": opening_label,
@@ -1901,24 +1915,25 @@ def add_authored_floor_plan_opening_transition_marker(
         "bearing": float(bearing),
         "linked_to": str(linked_to or "").strip(),
         "linked_to_module": normalise_resref(linked_to_module),
+        "transition_destination": destination,
         "source": "map_studio:opening_transition_marker",
     }
     placements = replace(
-        update.project.placements,
+        updated_project.placements,
         metadata={
-            **dict(update.project.placements.metadata),
+            **dict(updated_project.placements.metadata),
             "last_opening_transition_marker": metadata,
         },
     )
     return replace(
-        update.project,
+        updated_project,
         placements=placements,
-        notes=tuple(update.project.notes)
+        notes=tuple(updated_project.notes)
         + (
             f"Created Map Studio {update.kind} marker {update.tag} from opening {opening_label}.",
         ),
         extra={
-            **dict(update.project.extra),
+            **dict(updated_project.extra),
             "last_opening_transition_marker": metadata,
             "last_room_operation": "opening_transition_marker",
         },
@@ -2513,6 +2528,7 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             tag=str(kwargs.get("tag", "")),
             linked_to=str(kwargs.get("linked_to", "")),
             linked_to_module=str(kwargs.get("linked_to_module", "")),
+            transition_destination=int(kwargs.get("transition_destination", 0)),
         )
     raise ValueError(f"Unsupported authored floor-plan operation: {operation}.")
 

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds TransitionDestin To Opening Markers
+
+Owner: LordVaderCW
+Task: T2601 / T2604
+Subsystem: Map Studio / authored-room operations / Level Editor Builder tools
+Intersects: Domain Core Modules room operations, GUI Boundary Panels Builder tab, Windows Editor Level shell, ModuleMeshes mirror package.
+
+- Added `TransitionDestin` support to the opening-to-marker operation by reusing the existing authored gameplay transition update service after marker creation.
+- Added a `TransitionDestin` spin box to the Builder tab's Opening Transition Marker controls so KOTOR transition index intent can be set during marker creation.
+- Mirrored the core/UI changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_wall_opening_can_create_linked_transition_marker tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_opening_transition_dest`.
+
 ### [2026-06-20] Map Studio Surfaces Placement Transition Status
 
 Owner: LordVaderCW

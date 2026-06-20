@@ -11,7 +11,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)
     floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
     floorPlanOpeningRequested = QtCore.Signal(str, str, int, float, float, float, float)
-    floorPlanOpeningMarkerRequested = QtCore.Signal(str, str, str, str, str, str, str)
+    floorPlanOpeningMarkerRequested = QtCore.Signal(str, str, str, str, str, str, str, int)
     floorPlanVertexSnapRequested = QtCore.Signal(str, int, int, str)
     floorPlanVertexWeldRequested = QtCore.Signal(str, object, int, str)
     floorPlanVertexFlattenRequested = QtCore.Signal(str, object, str, object)
@@ -248,6 +248,10 @@ class BuilderTab(QtWidgets.QWidget):
         self.floorPlanOpeningMarkerLinkedModuleLineEdit = QtWidgets.QLineEdit()
         self.floorPlanOpeningMarkerLinkedModuleLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerLinkedModuleLineEdit")
         self.floorPlanOpeningMarkerLinkedModuleLineEdit.setPlaceholderText("destination module resref")
+        self.floorPlanOpeningMarkerTransitionDestSpinBox = QtWidgets.QSpinBox()
+        self.floorPlanOpeningMarkerTransitionDestSpinBox.setObjectName("mapStudioFloorPlanOpeningMarkerTransitionDestSpinBox")
+        self.floorPlanOpeningMarkerTransitionDestSpinBox.setRange(0, 999)
+        self.floorPlanOpeningMarkerTransitionDestSpinBox.setToolTip("KOTOR GIT TransitionDestin value. Leave 0 unless the destination type needs a specific transition index.")
         self.createFloorPlanOpeningMarkerButton = QtWidgets.QPushButton("Create Opening Marker")
         self.createFloorPlanOpeningMarkerButton.setObjectName("mapStudioCreateOpeningTransitionMarkerButton")
         marker_layout.addRow(self.floorPlanOpeningMarkerHintLabel)
@@ -258,6 +262,7 @@ class BuilderTab(QtWidgets.QWidget):
         marker_layout.addRow("Tag:", self.floorPlanOpeningMarkerTagLineEdit)
         marker_layout.addRow("Links to:", self.floorPlanOpeningMarkerLinkedToLineEdit)
         marker_layout.addRow("Module:", self.floorPlanOpeningMarkerLinkedModuleLineEdit)
+        marker_layout.addRow("TransitionDestin:", self.floorPlanOpeningMarkerTransitionDestSpinBox)
         marker_layout.addRow(self.createFloorPlanOpeningMarkerButton)
         layout.addWidget(marker_box)
         vertex_box = QtWidgets.QGroupBox("Floor-Plan Vertex Tools")
@@ -1495,6 +1500,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanOpeningMarkerTagLineEdit,
             self.floorPlanOpeningMarkerLinkedToLineEdit,
             self.floorPlanOpeningMarkerLinkedModuleLineEdit,
+            self.floorPlanOpeningMarkerTransitionDestSpinBox,
             self.createFloorPlanOpeningMarkerButton,
         ):
             widget.setEnabled(enabled)
@@ -1529,6 +1535,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanOpeningMarkerTagLineEdit.text().strip(),
             self.floorPlanOpeningMarkerLinkedToLineEdit.text().strip(),
             self.floorPlanOpeningMarkerLinkedModuleLineEdit.text().strip(),
+            int(self.floorPlanOpeningMarkerTransitionDestSpinBox.value()),
         )
 
     def _current_floor_plan_vertex_room_data(self) -> dict:
