@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Floor-Plan Bridge Uses Component Audit
+
+Owner: LordVaderCW
+Task: T2601 / T2605
+Subsystem: Map Studio / floor-plan bridge service / component-readiness audit
+Intersects: Domain Core Modules authored-room operations, ModuleMeshes mirror package, and component-edit readiness metadata.
+
+- Routed floor-plan connector-room bridge generation through the headless `bridge_edges` component kernel so the visible Bridge Floor-Plan Edges workflow shares the tested edge-bridge topology contract.
+- Stored the resulting component-edit audit on the generated connector room and its floor-plan primitive, marking bridge-created connector geometry as a topology edit that needs MDL/MDX/WOK/LYT/VIS/PTH/.mod regeneration and game proof.
+- Updated the connector bridge regression test to assert readiness reports the connector room as the latest component edit with topology-change status.
+- Mirrored the authored-room operation update into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py tests/test_authored_room_operations.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_bridges_floor_plan_room_edges_and_remains_exportable -q --basetemp .pytest_tmp_floorplan_bridge_audit`.
+
 ### [2026-06-20] Map Studio Geometry Kernel Adds Conservative Face Extrusion
 
 Owner: LordVaderCW

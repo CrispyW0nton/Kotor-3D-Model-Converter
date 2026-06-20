@@ -889,9 +889,18 @@ def test_t2908_controller_bridges_floor_plan_room_edges_and_remains_exportable()
     assert bridge.metadata["first_room_resref"] == "grbridge_a"
     assert bridge.metadata["second_room_resref"] == "grbridge_b"
     assert bridge_room.metadata["last_operation"] == "bridge_edges"
+    audit = bridge_room.metadata["last_component_edit_audit"]
+    assert audit["operation"] == "bridge_edges"
+    assert audit["component_kind"] == "floor_plan_edge"
+    assert audit["topology_changed"] is True
+    assert audit["stale_outputs"] == ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"]
+    assert bridge.metadata["last_component_edit_audit"] == audit
     assert tuple(bridge_room.visible_rooms) == ("grbridge_a", "grbridge_b", "grbridge_link")
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+    assert result.readiness.component_edit.latest_room_resref == "grbridge_link"
+    assert result.readiness.component_edit.latest_operation == "bridge_edges"
+    assert result.readiness.component_edit.topology_changed is True
     assert not build.blocking_issues
     assert ("grbridge_a", "mdl") in build.resources
     assert ("grbridge_b", "mdl") in build.resources

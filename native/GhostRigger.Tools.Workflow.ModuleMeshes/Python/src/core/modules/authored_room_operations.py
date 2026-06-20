@@ -16,6 +16,7 @@ from src.core.geometry.component_editing import (
     ComponentEditAudit,
     ComponentEditResult,
     audit_component_edit_result,
+    bridge_edges,
     cleanup_face_normals,
     component_mesh,
     fill_face,
@@ -1442,19 +1443,22 @@ def _unique_bridge_resref(project: AuthoredModuleProject, first_room_resref: str
 def _bridge_floor_plan_points(
     first_edge: tuple[tuple[float, float], tuple[float, float]],
     second_edge: tuple[tuple[float, float], tuple[float, float]],
-) -> tuple[tuple[float, float], ...]:
+) -> tuple[tuple[tuple[float, float], ...], ComponentEditResult]:
     a0, a1 = first_edge
     b0, b1 = second_edge
-    candidates = (
-        (a0, a1, b1, b0),
-        (a0, a1, b0, b1),
+    mesh = component_mesh(
+        ((a0[0], a0[1], 0.0), (a1[0], a1[1], 0.0), (b0[0], b0[1], 0.0), (b1[0], b1[1], 0.0)),
+        metadata={"source": "floor_plan_bridge"},
     )
     blocking_messages: list[str] = []
-    for points in candidates:
+    for flip_second in (True, False):
+        result = bridge_edges(mesh, (0, 1), (2, 3), flip_second=flip_second)
+        face = result.mesh.faces[-1]
+        points = tuple((float(result.mesh.vertices[index][0]), float(result.mesh.vertices[index][1])) for index in face)
         candidate = FloorPlanRoomPrimitive(room_resref="bridge_preview", points=tuple(points))
         validation = validate_floor_plan_room_primitive(candidate)
         if validation.ok and abs(float(validation.area)) > 1.0e-7:
-            return tuple((float(x), float(y)) for x, y in points)
+            return (tuple((float(x), float(y)) for x, y in points), result)
         blocking_messages.extend(str(item) for item in validation.blocking_issues)
     detail = f" {' '.join(blocking_messages)}" if blocking_messages else ""
     raise ValueError(f"Bridge edges do not form one valid convex connector room.{detail}")
@@ -1482,7 +1486,8 @@ def bridge_authored_floor_plan_edges(
     world_z = _require_bridge_compatible_floor_plans(first_room, first_primitive, second_room, second_primitive)
     first_edge = _world_floor_plan_edge(first_room, first_primitive, int(first_edge_index))
     second_edge = _world_floor_plan_edge(second_room, second_primitive, int(second_edge_index))
-    points = _bridge_floor_plan_points(first_edge, second_edge)
+    points, bridge_result = _bridge_floor_plan_points(first_edge, second_edge)
+    audit = audit_component_edit_result(bridge_result, component_kind="floor_plan_edge", affects_walkmesh=True)
     target_resref = _unique_bridge_resref(project, first_room.room_resref, second_room.room_resref, result_room_resref)
     primitive = FloorPlanRoomPrimitive(
         room_resref=target_resref,
@@ -1501,6 +1506,7 @@ def bridge_authored_floor_plan_edges(
             "first_edge_index": int(first_edge_index),
             "second_room_resref": normalise_resref(second_room.room_resref),
             "second_edge_index": int(second_edge_index),
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
         },
     )
     connector_room = AuthoredRoomSpec(
@@ -1514,6 +1520,7 @@ def bridge_authored_floor_plan_edges(
             "last_operation": "bridge_edges",
             "bridge_first_room": normalise_resref(first_room.room_resref),
             "bridge_second_room": normalise_resref(second_room.room_resref),
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
         },
     )
     rooms = tuple(project.rooms or ()) + (connector_room,)
