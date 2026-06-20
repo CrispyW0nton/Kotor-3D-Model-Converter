@@ -31,11 +31,13 @@ from .authored_module_validation_projection import authored_module_readiness_val
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
 from .map_studio_modeling_tools import (
     available_map_studio_component_modes,
+    available_map_studio_edit_mode_contexts,
     available_map_studio_modeling_tools,
     available_map_studio_snap_modes,
     available_map_studio_terrain_brushes,
     available_map_studio_tool_belt_actions,
     available_map_studio_tool_belt_presets,
+    map_studio_edit_mode_context,
     map_studio_modeling_tool_summary,
     map_studio_tool_belt_actions_for_preset,
     map_studio_viewport_performance_policy,
@@ -335,6 +337,16 @@ class ModuleEditorController:
         """Return visible object/component edit modes for Map Studio modeling."""
 
         return available_map_studio_component_modes()
+
+    def available_map_studio_edit_mode_contexts(self):
+        """Return visible top-level edit-mode context for Map Studio UX."""
+
+        return available_map_studio_edit_mode_contexts()
+
+    def map_studio_edit_mode_context(self, mode_label: str = "Object"):
+        """Return the KOTOR-specific UX context for a visible edit mode."""
+
+        return map_studio_edit_mode_context(mode_label)
 
     def available_map_studio_modeling_tools(self):
         """Return visible Maya-like, KOTOR-aware modeling tools."""

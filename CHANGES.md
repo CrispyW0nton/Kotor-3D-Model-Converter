@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Workflow Shows Explicit Edit Mode Context
+
+Owner: LordVaderCW
+Task: T2600 / T2605
+Subsystem: Map Studio / Level Editor workflow spine / edit-mode UX
+Intersects: Domain Core Modules modeling-tool policy, ModuleMeshes mirror package, GUI Boundary Panels workflow panel, Windows Editor Level shell.
+
+- Added headless Map Studio edit-mode context records for Object, Vertex, Edge, Face, Walkmesh, Placement, Terrain, and Export modes with KOTOR-specific editing targets, guardrails, and next actions.
+- Exposed the mode-context records through the Level Editor controller instead of keeping edit-mode vocabulary hardcoded in the window.
+- Added visible workflow-spine labels for current mode and editing target, including the KOTOR rule and next action, so modders can tell what they are editing and why it matters for export.
+- Synced mode context on both direct toolbar changes and programmatic workspace focus changes, then mirrored the core/panel updates into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/workflow_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/workflow_panel.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_edit_mode_context_is_headless_policy tests/test_map_studio_workflow_panel.py::test_t2600_workflow_panel_is_mirrored_for_module_meshes_package -q --basetemp .pytest_tmp_map_studio_mode_context`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Export Blocker Rows Jump to Fix Targets
 
 Owner: LordVaderCW

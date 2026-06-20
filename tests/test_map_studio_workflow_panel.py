@@ -23,6 +23,8 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowTestStateLabel" in panel_source
     assert "mapStudioWorkflowAuthoringLabel" in panel_source
     assert "mapStudioWorkflowActiveContextLabel" in panel_source
+    assert "mapStudioWorkflowModeLabel" in panel_source
+    assert "mapStudioWorkflowEditingTargetLabel" in panel_source
     assert "mapStudioWorkflowSelectionLabel" in panel_source
     assert "mapStudioWorkflowResourcesLabel" in panel_source
     assert "mapStudioWorkflowMissingResourcesLabel" in panel_source
@@ -184,6 +186,8 @@ def test_t2600_map_studio_new_project_dialog_exposes_module_identity() -> None:
     assert "player start" in panel_source
     assert "Use Builder to create terrain, rooms, or a dev-test map" in panel_source
     assert "def set_active_authoring_context" in panel_source
+    assert "def set_edit_mode_context" in panel_source
+    assert "KOTOR rule:" in panel_source
     assert "Active tool:" in panel_source
     assert "def set_selection_context" in panel_source
     assert "Selected: none" in panel_source
@@ -952,6 +956,9 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert "self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)" in window_source
     assert "def _handle_map_studio_edit_mode_changed" in window_source
     assert "def _focus_map_studio_edit_mode_workspace" in window_source
+    assert "def _sync_map_studio_edit_mode_context" in window_source
+    assert "self.controller.map_studio_edit_mode_context(label)" in window_source
+    assert "self.workflow_panel.set_edit_mode_context" in window_source
     assert 'self._select_map_studio_component_mode("vertex")' in window_source
     assert 'self._select_map_studio_modeling_tool("weld_vertices")' in window_source
     assert 'self._select_map_studio_modeling_tool("bridge")' in window_source
@@ -966,6 +973,40 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert "self._focus_map_studio_edit_mode_workspace(label)" in window_source
     assert "self.workflow_panel.set_active_authoring_context(context)" in window_source
     assert 'self._log(f"Map Studio edit mode changed: {context}")' in window_source
+
+
+def test_t2605_map_studio_edit_mode_context_is_headless_policy() -> None:
+    model_tools_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "map_studio_modeling_tools.py"
+    )
+    model_tools_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "map_studio_modeling_tools.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    controller_mirror_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+
+    for source in (model_tools_source, model_tools_mirror_source):
+        assert "class MapStudioEditModeContext" in source
+        assert "_EDIT_MODE_CONTEXTS" in source
+        assert "available_map_studio_edit_mode_contexts" in source
+        assert "def map_studio_edit_mode_context" in source
+        assert "room mesh vertices and WOK vertices" in source
+        assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX and staged .mod proof" in source
+        assert "live KOTOR warp proof" in source
+
+    for source in (controller_source, controller_mirror_source):
+        assert "available_map_studio_edit_mode_contexts" in source
+        assert "map_studio_edit_mode_context" in source
+        assert "def available_map_studio_edit_mode_contexts" in source
+        assert "def map_studio_edit_mode_context" in source
 
 
 def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
@@ -1579,6 +1620,8 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowCapabilityLabel" in mirror_source
     assert "mapStudioWorkflowTestStateLabel" in mirror_source
     assert "mapStudioWorkflowActiveContextLabel" in mirror_source
+    assert "mapStudioWorkflowModeLabel" in mirror_source
+    assert "mapStudioWorkflowEditingTargetLabel" in mirror_source
     assert "mapStudioWorkflowSelectionLabel" in mirror_source
     assert "mapStudioWorkflowNewKmapButton" in mirror_source
     assert "mapStudioWorkflowOpenKmapButton" in mirror_source
@@ -1646,6 +1689,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Gameplay layout" in mirror_source
     assert "Transitions:" in mirror_source
     assert "Scripts:" in mirror_source
+    assert "def set_edit_mode_context" in mirror_source
     assert "def set_selection_context" in mirror_source
     assert "MapStudioWorkflowPanel" in mirror_init
 

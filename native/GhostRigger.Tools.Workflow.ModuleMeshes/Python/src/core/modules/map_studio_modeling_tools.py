@@ -45,6 +45,18 @@ class MapStudioSnapMode:
 
 
 @dataclass(frozen=True)
+class MapStudioEditModeContext:
+    """One top-level Map Studio edit mode shown in the Level Editor shell."""
+
+    key: str
+    label: str
+    editing_target: str
+    description: str
+    kotor_guardrail: str
+    next_action: str
+
+
+@dataclass(frozen=True)
 class MapStudioTerrainBrush:
     """One terrain sculpt brush and its performance/export contract."""
 
@@ -124,6 +136,74 @@ _COMPONENT_MODES: tuple[MapStudioComponentMode, ...] = (
         "Walkmesh",
         "Inspect and paint WOK faces separately from render geometry before export/game proof.",
         "Walkmesh edits define player traversal and must be validated before the module is called playable.",
+    ),
+)
+
+
+_EDIT_MODE_CONTEXTS: tuple[MapStudioEditModeContext, ...] = (
+    MapStudioEditModeContext(
+        key="object",
+        label="Object",
+        editing_target="rooms, primitives, lights, placements, and module objects",
+        description="Select, move, duplicate, rename, and organize authored map objects.",
+        kotor_guardrail="Object edits must preserve stable KMAP ids and mark staged exports/game proof stale.",
+        next_action="Select an object, then transform, duplicate, focus, validate, or open its owning tools.",
+    ),
+    MapStudioEditModeContext(
+        key="vertex",
+        label="Vertex",
+        editing_target="room mesh vertices and WOK vertices",
+        description="Edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools.",
+        kotor_guardrail="Vertex edits must avoid degenerate WOK triangles, cracked room seams, and invalid transition edges.",
+        next_action="Use snap/weld/flatten on selected vertices, then validate geometry and pathing.",
+    ),
+    MapStudioEditModeContext(
+        key="edge",
+        label="Edge",
+        editing_target="room seams, doorway borders, corridor joins, and walkmesh edges",
+        description="Edit seams, door or corridor borders, bridge edges, bevels, and rectangular cuts.",
+        kotor_guardrail="Edge edits must keep doorway/portal seams and walkmesh face boundaries clean.",
+        next_action="Bridge, bevel, cut, or align selected edges, then check LYT/VIS/WOK readiness.",
+    ),
+    MapStudioEditModeContext(
+        key="face",
+        label="Face",
+        editing_target="room faces, material faces, and WOK surface faces",
+        description="Edit room faces, material intent, WOK surface intent, triangulation, and cleanup.",
+        kotor_guardrail="Face edits must keep visible MDL geometry and generated WOK surface ids in sync.",
+        next_action="Assign surface/material intent, fill or triangulate, then validate normals and WOK output.",
+    ),
+    MapStudioEditModeContext(
+        key="walkmesh",
+        label="Walkmesh",
+        editing_target="WOK walkable, non-walkable, door, water, and transition faces",
+        description="Inspect and paint KOTOR walkmesh surfaces and traversal readiness.",
+        kotor_guardrail="Walkmesh edits must keep entry points and gameplay anchors on reachable walkable faces.",
+        next_action="Paint WOK surface types, validate PTH pathing, then fix any off-walkmesh anchors.",
+    ),
+    MapStudioEditModeContext(
+        key="placement",
+        label="Placement",
+        editing_target="GIT creatures, placeables, doors, triggers, cameras, sounds, and waypoints",
+        description="Place and transform KOTOR runtime resources in the authored module.",
+        kotor_guardrail="Placement edits must preserve valid template resrefs and sit on generated walkable WOK when required.",
+        next_action="Choose a resource template, place it, then validate GIT/ARE/IFO references.",
+    ),
+    MapStudioEditModeContext(
+        key="terrain",
+        label="Terrain",
+        editing_target="terrain heightfields, ramps, plateaus, slopes, and walkability",
+        description="Sculpt terrain heightfields and terrain-derived room geometry.",
+        kotor_guardrail="Terrain edits must stay performant during brush strokes and regenerate WOK before export.",
+        next_action="Choose a terrain brush, sculpt, commit, then validate slope and walkmesh output.",
+    ),
+    MapStudioEditModeContext(
+        key="export",
+        label="Export",
+        editing_target="ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX and staged .mod proof",
+        description="Validate, stage, install, hand off, warp-test, and record game proof.",
+        kotor_guardrail="Export is only a candidate until staged/install-safe packaging and live KOTOR warp proof are recorded.",
+        next_action="Resolve blockers, stage or install safely, run the warp test, then record proof.",
     ),
 )
 
@@ -1071,6 +1151,22 @@ def available_map_studio_component_modes() -> tuple[MapStudioComponentMode, ...]
     """Return component scopes exposed by the Map Studio modeling workspace."""
 
     return _COMPONENT_MODES
+
+
+def available_map_studio_edit_mode_contexts() -> tuple[MapStudioEditModeContext, ...]:
+    """Return top-level Map Studio edit modes with KOTOR-specific UX context."""
+
+    return _EDIT_MODE_CONTEXTS
+
+
+def map_studio_edit_mode_context(mode_label: str = "Object") -> MapStudioEditModeContext:
+    """Return context for a visible toolbar edit-mode label or key."""
+
+    wanted = str(mode_label or "Object").strip().lower().replace(" ", "_")
+    for context in _EDIT_MODE_CONTEXTS:
+        if wanted in {context.key.lower(), context.label.lower().replace(" ", "_")}:
+            return context
+    return _EDIT_MODE_CONTEXTS[0]
 
 
 def available_map_studio_modeling_tools() -> tuple[MapStudioModelingTool, ...]:

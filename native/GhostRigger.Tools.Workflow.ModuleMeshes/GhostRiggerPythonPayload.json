@@ -123,7 +123,7 @@
       "resource_name": "PYTHON_PAYLOAD_0020",
       "source_path": "src/core/modules/module_editor_controller.py",
       "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-      "sha256": "178608ef79acfc5b592b3eefcb3bdf03715978c55baf33f905214bc2dfeb4a69"
+      "sha256": "a70852b8b04f3578ecc24709c04e74212663c02cfcef74a860236f51f05619b9"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0021",
@@ -447,7 +447,7 @@
       "resource_name": "PYTHON_PAYLOAD_0074",
       "source_path": "src/core/modules/map_studio_modeling_tools.py",
       "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-      "sha256": "53dc7b93123bf0deee4f3d2141b4ce070cc8600af757a1c0110627701307978c"
+      "sha256": "9a426c1917a2e8e99ae4f9fe23ea530e0692667ae3c5854e3688530d175d8a60"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0075",

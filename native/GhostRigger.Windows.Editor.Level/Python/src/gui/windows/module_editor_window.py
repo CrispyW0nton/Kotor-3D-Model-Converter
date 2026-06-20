@@ -909,12 +909,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         wanted = str(label or "").strip()
         index = combo.findText(wanted)
         if index < 0 or combo.currentIndex() == index:
+            self._sync_map_studio_edit_mode_context(wanted)
             return
         previous = combo.blockSignals(True)
         try:
             combo.setCurrentIndex(index)
         finally:
             combo.blockSignals(previous)
+        self._sync_map_studio_edit_mode_context(wanted)
+
+    def _sync_map_studio_edit_mode_context(self, label: str) -> None:
+        """Refresh workflow-panel mode context from headless Map Studio mode policy."""
+
+        context = self.controller.map_studio_edit_mode_context(label)
+        self.workflow_panel.set_edit_mode_context(
+            mode_label=str(getattr(context, "label", "") or label or "Object"),
+            editing_target=str(getattr(context, "editing_target", "") or ""),
+            kotor_guardrail=str(getattr(context, "kotor_guardrail", "") or ""),
+            next_action=str(getattr(context, "next_action", "") or ""),
+        )
 
     def _update_map_studio_workspace_guide(self) -> None:
         key = self._selected_map_studio_workspace_key()
@@ -1416,6 +1429,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
         label = str(mode or "Object").strip() or "Object"
         self._focus_map_studio_edit_mode_workspace(label)
+        self._sync_map_studio_edit_mode_context(label)
         descriptions = {
             "Object": "select, move, duplicate, and organize rooms, placements, lights, and module objects",
             "Vertex": "edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools",

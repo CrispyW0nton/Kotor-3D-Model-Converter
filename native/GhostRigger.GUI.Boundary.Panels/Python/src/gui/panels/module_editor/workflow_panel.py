@@ -135,6 +135,16 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.active_context_label.setWordWrap(True)
         root.addWidget(self.active_context_label)
 
+        self.mode_label = QtWidgets.QLabel("Mode: Object")
+        self.mode_label.setObjectName("mapStudioWorkflowModeLabel")
+        self.mode_label.setWordWrap(True)
+        root.addWidget(self.mode_label)
+
+        self.editing_target_label = QtWidgets.QLabel("Editing: rooms, placements, and module objects")
+        self.editing_target_label.setObjectName("mapStudioWorkflowEditingTargetLabel")
+        self.editing_target_label.setWordWrap(True)
+        root.addWidget(self.editing_target_label)
+
         self.selection_label = QtWidgets.QLabel("Selected: none")
         self.selection_label.setObjectName("mapStudioWorkflowSelectionLabel")
         self.selection_label.setWordWrap(True)
@@ -547,6 +557,28 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
 
         value = str(text or "").strip()
         self.active_context_label.setText(f"Active tool: {value}" if value else "Active tool: none selected")
+
+    def set_edit_mode_context(
+        self,
+        *,
+        mode_label: str,
+        editing_target: str = "",
+        kotor_guardrail: str = "",
+        next_action: str = "",
+    ) -> None:
+        """Show the current Map Studio mode, target, safety rule, and next action."""
+
+        mode = str(mode_label or "Object").strip() or "Object"
+        target = str(editing_target or "rooms, placements, and module objects").strip()
+        guardrail = str(kotor_guardrail or "").strip()
+        action = str(next_action or "").strip()
+        self.mode_label.setText(f"Mode: {mode}")
+        details = f"Editing: {target}"
+        if guardrail:
+            details = f"{details}. KOTOR rule: {guardrail}"
+        if action:
+            details = f"{details} Next: {action}"
+        self.editing_target_label.setText(details)
 
     def set_selection_context(self, text: str) -> None:
         """Show and enable actions for the current Map Studio selection."""
