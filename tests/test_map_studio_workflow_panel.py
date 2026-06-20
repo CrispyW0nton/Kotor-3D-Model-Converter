@@ -445,6 +445,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioCreateOpeningTransitionMarkerButton" in source
         assert "def _emit_floor_plan_opening_marker" in source
         assert "Floor-Plan Vertex Tools" in source
+        assert "floorPlanVertexSnapPreviewRequested = QtCore.Signal" in source
         assert "floorPlanVertexSnapRequested = QtCore.Signal" in source
         assert "floorPlanVertexWeldRequested = QtCore.Signal" in source
         assert "floorPlanVertexFlattenRequested = QtCore.Signal" in source
@@ -454,6 +455,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioSnapFloorPlanVertexButton" in source
         assert "mapStudioWeldFloorPlanVerticesButton" in source
         assert "mapStudioFlattenFloorPlanVerticesButton" in source
+        assert "def set_floor_plan_vertex_snap_candidates" in source
+        assert "Click Snap Vertex to commit; this preview does not weld topology." in source
         assert "mapStudioFloorPlanMirrorAxisComboBox" in source
         assert "mapStudioMirrorFloorPlanVerticesButton" in source
         assert "mapStudioFloorPlanCleanupToleranceSpinBox" in source
@@ -788,6 +791,9 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)" in window_source
     assert "floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)" in window_source
     assert "floorPlanOpeningMarkerRequested.connect(self.create_authored_opening_transition_marker)" in window_source
+    assert "floorPlanVertexSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)" in window_source
+    assert "def preview_authored_floor_plan_vertex_snap_candidates" in window_source
+    assert "self.controller.authored_floor_plan_vertex_snap_candidates" in window_source
     assert "floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)" in window_source
     assert "floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)" in window_source
     assert "floorPlanFaceFillRequested.connect(self.fill_authored_floor_plan_face)" in window_source

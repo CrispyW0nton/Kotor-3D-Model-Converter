@@ -707,6 +707,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.floorPlanExtrusionRequested.connect(self.apply_authored_floor_plan_extrusion)
         self.builder_tab.floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)
         self.builder_tab.floorPlanOpeningMarkerRequested.connect(self.create_authored_opening_transition_marker)
+        self.builder_tab.floorPlanVertexSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)
         self.builder_tab.floorPlanVertexSnapRequested.connect(self.snap_authored_floor_plan_vertex)
         self.builder_tab.floorPlanVertexWeldRequested.connect(self.weld_authored_floor_plan_vertices)
         self.builder_tab.floorPlanVertexFlattenRequested.connect(self.flatten_authored_floor_plan_vertices)
@@ -1257,6 +1258,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         tool = getattr(self.builder_tab, "floorPlanVertexRoomComboBox", None)
         if tool is not None:
             tool.setFocus()
+        preview = getattr(self.builder_tab, "request_floor_plan_vertex_snap_preview", None)
+        if callable(preview):
+            preview()
 
     def _select_map_studio_gameplay_kind(self, placement_kind: str) -> None:
         """Focus the Builder placement controls for one KOTOR resource kind."""
@@ -2174,6 +2178,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)
+
+    def preview_authored_floor_plan_vertex_snap_candidates(self, room_resref: str, point_index: int) -> None:
+        """Show nearest non-mutating floor-plan vertex snap candidates."""
+
+        setter = getattr(self.builder_tab, "set_floor_plan_vertex_snap_candidates", None)
+        if not callable(setter):
+            return
+        try:
+            candidates = self.controller.authored_floor_plan_vertex_snap_candidates(
+                room_resref=room_resref,
+                point_index=int(point_index),
+                limit=4,
+            )
+        except Exception:
+            return
+        setter(candidates)
 
     def weld_authored_floor_plan_vertices(
         self,

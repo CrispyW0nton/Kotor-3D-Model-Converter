@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Shows Vertex Snap Preview Targets
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor vertex workflow / Builder tab UX
+Intersects: Domain Core Modules snap-candidate service, GUI Boundary Panels, Windows Editor Level, and ModuleMeshes mirror package.
+
+- Wired the Builder tab to request non-mutating floor-plan snap candidates for the selected room/source point and display the nearest same-room or cross-room target before committing a snap.
+- Refreshed the Snap Vtx tool-belt focus path so choosing the tool also refreshes the preview hint, while Snap Vertex remains the explicit commit operation and Weld remains the topology-changing operation.
+- Kept snap target discovery in the controller/domain service; the UI only requests candidates and renders the result.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_snap_preview_ui`.
+
 ### [2026-06-20] Map Studio Adds Vertex Snap Target Queries
 
 Owner: LordVaderCW

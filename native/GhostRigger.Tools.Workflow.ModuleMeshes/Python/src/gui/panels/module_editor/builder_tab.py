@@ -12,6 +12,7 @@ class BuilderTab(QtWidgets.QWidget):
     floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
     floorPlanOpeningRequested = QtCore.Signal(str, str, int, float, float, float, float)
     floorPlanOpeningMarkerRequested = QtCore.Signal(str, str, str, str, str, str, str, int)
+    floorPlanVertexSnapPreviewRequested = QtCore.Signal(str, int)
     floorPlanVertexSnapRequested = QtCore.Signal(str, int, int, str)
     floorPlanVertexWeldRequested = QtCore.Signal(str, object, int, str)
     floorPlanVertexFlattenRequested = QtCore.Signal(str, object, str, object)
@@ -778,6 +779,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.createFloorPlanOpeningMarkerButton.clicked.connect(self._emit_floor_plan_opening_marker)
         self.floorPlanVertexRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
         self.floorPlanVertexTargetRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
+        self.floorPlanSourcePointSpinBox.valueChanged.connect(lambda _value=0: self._emit_floor_plan_vertex_snap_preview())
         self.floorPlanSelectedPointsLineEdit.textChanged.connect(self._update_floor_plan_vertex_controls)
         self.snapFloorPlanVertexButton.clicked.connect(self._emit_floor_plan_vertex_snap)
         self.weldFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_weld)
@@ -1607,6 +1609,43 @@ class BuilderTab(QtWidgets.QWidget):
                 f"Editing {room.get('room_resref')}: selected points {', '.join(str(item) for item in selected)}. "
                 "These component edits can repair face loops, triangulation, or normals and will mark export/game proof stale when geometry changes."
             )
+        if enabled:
+            self._emit_floor_plan_vertex_snap_preview()
+
+    def _emit_floor_plan_vertex_snap_preview(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if room:
+            self.floorPlanVertexSnapPreviewRequested.emit(room, int(self.floorPlanSourcePointSpinBox.value()))
+
+    def request_floor_plan_vertex_snap_preview(self) -> None:
+        """Ask the controller/window to refresh the non-mutating snap target preview."""
+
+        self._emit_floor_plan_vertex_snap_preview()
+
+    def set_floor_plan_vertex_snap_candidates(self, candidates) -> None:
+        """Display nearest snap target candidates returned by the headless controller."""
+
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if not room:
+            return
+        items = tuple(candidates or ())
+        source_point = int(self.floorPlanSourcePointSpinBox.value())
+        if not items:
+            self.floorPlanVertexHintLabel.setText(
+                f"Editing {room}: source point {source_point}. No snap target is available yet. "
+                "Choose another point or room, or create another floor-plan room to align seams."
+            )
+            return
+        nearest = items[0]
+        target_room = str(getattr(nearest, "room_resref", "") or "")
+        target_point = int(getattr(nearest, "point_index", 0) or 0)
+        distance = float(getattr(nearest, "distance", 0.0) or 0.0)
+        same_room = bool(getattr(nearest, "same_room", False))
+        scope = "same room" if same_room else "cross-room"
+        self.floorPlanVertexHintLabel.setText(
+            f"Editing {room}: source point {source_point}. Nearest snap target is {target_room} point {target_point} "
+            f"at {distance:.3f} m ({scope}). Click Snap Vertex to commit; this preview does not weld topology."
+        )
 
     def _emit_floor_plan_vertex_snap(self) -> None:
         room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
