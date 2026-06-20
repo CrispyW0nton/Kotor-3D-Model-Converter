@@ -129,3 +129,31 @@ def test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder() -> None
     assert "record_map_studio_game_proof" in controller_source
     assert "record_dev_module_game_proof" in controller_source
     assert "record_authored_module_game_proof" in controller_source
+
+
+def test_t2600_module_editor_launch_handoff_shows_exact_warp_command() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    window_source = (
+        repo
+        / "native"
+        / "GhostRigger.Windows.Editor.Level"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    assert "class _MapStudioLaunchHandoffDialog" in window_source
+    assert "mapStudioLaunchHandoffWarningLabel" in window_source
+    assert "Launching KOTOR is not game proof" in window_source
+    assert "Run this exact KOTOR console command" in window_source
+    assert "mapStudioLaunchWarpCommandLineEdit" in window_source
+    assert "mapStudioLaunchCopyWarpCommandButton" in window_source
+    assert "mapStudioLaunchProofManifestLineEdit" in window_source
+    assert "mapStudioLaunchProofRecorderLineEdit" in window_source
+    assert "mapStudioLaunchHelperCommandEdit" in window_source
+    assert 'warp_command = str(payload.get("warp_command")' in window_source
+    assert "_MapStudioLaunchHandoffDialog(" in window_source
+    assert "Map Studio warp command:" in window_source
+    assert "QtGui.QGuiApplication.clipboard().setText" in window_source

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Shows Exact Warp Test Handoff
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / launch handoff and game-proof clarity
+Intersects: Level Editor launch/proof workflow.
+
+- Added an in-app launch handoff dialog that shows the exact KOTOR `warp` command, launcher script, proof manifest, proof recorder, and launch helper command before opening the game handoff.
+- Added a copy button for the warp command and made the dialog state clearly that launching KOTOR is not proof until the module is verified in-game and evidence is recorded.
+- Kept launch/proof metadata in the authored-module services; the Level Editor only displays the core-provided handoff payload.
+- Verification: `python -m pytest tests/test_map_studio_game_proof_ui.py::test_t2600_module_editor_launch_handoff_shows_exact_warp_command -q --basetemp .pytest_tmp_map_studio_launch_handoff_ui`; `python -m pytest tests/test_map_studio_game_proof_ui.py -q --basetemp .pytest_tmp_map_studio_launch_handoff_proof_ui`; `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_game_proof_ui.py`; `MSBuild.exe GhostRigger.sln /t:GhostRigger_Native_Core_Host /p:Configuration=Release /p:Platform=x64 /m /v:minimal`; `build\vs\x64\Release\GhostRigger.exe --native-host-debug`; `build\vs\x64\Release\GhostRigger.exe --native-embed-init-debug`.
+
 ### [2026-06-20] Map Studio Guides First Playable Smoke Test
 
 Owner: LordVaderCW

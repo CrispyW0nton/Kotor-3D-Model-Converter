@@ -131,6 +131,79 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
             self.evidence_edit.setText(path)
 
 
+class _MapStudioLaunchHandoffDialog(QtWidgets.QDialog):
+    """Show the exact manual warp-test handoff before opening KOTOR."""
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        warp_command: str,
+        launcher_path: str = "",
+        proof_manifest_path: str = "",
+        proof_recording_script_path: str = "",
+        launch_helper_command: str = "",
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Map Studio Warp Test Handoff")
+        self.setModal(True)
+        root = QtWidgets.QVBoxLayout(self)
+
+        self.warning_label = QtWidgets.QLabel(
+            "Launching KOTOR is not game proof. After the game opens, run the exact warp command, "
+            "verify spawn/walk/placeables in-game, then record proof with screenshot or video evidence."
+        )
+        self.warning_label.setObjectName("mapStudioLaunchHandoffWarningLabel")
+        self.warning_label.setWordWrap(True)
+        root.addWidget(self.warning_label)
+
+        form = QtWidgets.QFormLayout()
+        root.addLayout(form)
+
+        self.warp_command_edit = QtWidgets.QLineEdit(warp_command)
+        self.warp_command_edit.setObjectName("mapStudioLaunchWarpCommandLineEdit")
+        self.warp_command_edit.setReadOnly(True)
+        copy_warp_button = QtWidgets.QPushButton("Copy")
+        copy_warp_button.setObjectName("mapStudioLaunchCopyWarpCommandButton")
+        warp_row = QtWidgets.QHBoxLayout()
+        warp_row.addWidget(self.warp_command_edit, 1)
+        warp_row.addWidget(copy_warp_button)
+        form.addRow("Run this exact KOTOR console command", warp_row)
+
+        self.launcher_path_edit = QtWidgets.QLineEdit(launcher_path)
+        self.launcher_path_edit.setObjectName("mapStudioLaunchScriptPathLineEdit")
+        self.launcher_path_edit.setReadOnly(True)
+        form.addRow("Launch script", self.launcher_path_edit)
+
+        self.proof_manifest_edit = QtWidgets.QLineEdit(proof_manifest_path)
+        self.proof_manifest_edit.setObjectName("mapStudioLaunchProofManifestLineEdit")
+        self.proof_manifest_edit.setReadOnly(True)
+        form.addRow("Proof manifest", self.proof_manifest_edit)
+
+        self.proof_recorder_edit = QtWidgets.QLineEdit(proof_recording_script_path)
+        self.proof_recorder_edit.setObjectName("mapStudioLaunchProofRecorderLineEdit")
+        self.proof_recorder_edit.setReadOnly(True)
+        form.addRow("Proof recorder", self.proof_recorder_edit)
+
+        self.helper_command_edit = QtWidgets.QPlainTextEdit(launch_helper_command)
+        self.helper_command_edit.setObjectName("mapStudioLaunchHelperCommandEdit")
+        self.helper_command_edit.setReadOnly(True)
+        self.helper_command_edit.setMaximumHeight(64)
+        form.addRow("CLI helper", self.helper_command_edit)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.button(QtWidgets.QDialogButtonBox.Ok).setText(
+            "Open Launcher" if launcher_path else "Open Proof Folder"
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+        copy_warp_button.clicked.connect(
+            lambda: QtGui.QGuiApplication.clipboard().setText(self.warp_command_edit.text())
+        )
+
+
 class _MapStudioNewProjectDialog(QtWidgets.QDialog):
     """Collect the KOTOR-facing identity for a new Map Studio KMAP."""
 
@@ -977,27 +1050,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         launcher_path = Path(str(payload.get("elevated_launch_script_path") or ""))
         proof_path = Path(str(payload.get("proof_manifest_path") or ""))
         proof_recorder_path = Path(str(payload.get("proof_recording_script_path") or ""))
-        if launcher_path.is_file():
-            recorder_line = (
-                f"\n\nAfter capturing screenshot/video evidence, run:\n{proof_recorder_path}"
-                if proof_recorder_path.is_file()
-                else ""
-            )
-            response = QtWidgets.QMessageBox.question(
+        module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "").strip()
+        warp_command = str(payload.get("warp_command") or (f"warp {module_root}" if module_root else "warp <module>"))
+        launch_helper_command = str(payload.get("launch_helper_command") or "")
+        if launcher_path.is_file() or proof_path.is_file():
+            dialog = _MapStudioLaunchHandoffDialog(
                 self,
-                "Open Launch Handoff",
-                "Open the elevated KOTOR launcher for this authored module smoke test? Windows may ask for administrator approval. This only starts the game; you still need to run the warp command and record proof."
-                + recorder_line,
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                warp_command=warp_command,
+                launcher_path=str(launcher_path) if launcher_path.is_file() else "",
+                proof_manifest_path=str(proof_path) if proof_path.is_file() else "",
+                proof_recording_script_path=str(proof_recorder_path) if proof_recorder_path.is_file() else "",
+                launch_helper_command=launch_helper_command,
             )
-            if response != QtWidgets.QMessageBox.Yes:
+            if dialog.exec() != QtWidgets.QDialog.Accepted:
                 return
-            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(launcher_path)))
-            self._log(f"Opened launch handoff: {launcher_path}")
-            return
-        if proof_path.is_file():
-            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(proof_path.parent)))
-            self._log(f"Opened proof folder: {proof_path.parent}")
+            if launcher_path.is_file():
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(launcher_path)))
+                self._log(f"Opened launch handoff: {launcher_path}")
+            elif proof_path.is_file():
+                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(proof_path.parent)))
+                self._log(f"Opened proof folder: {proof_path.parent}")
+            self._log(f"Map Studio warp command: {warp_command}")
             return
         QtWidgets.QMessageBox.information(
             self,
