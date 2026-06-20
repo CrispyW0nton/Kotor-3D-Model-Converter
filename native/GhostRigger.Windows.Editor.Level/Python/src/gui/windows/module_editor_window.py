@@ -659,6 +659,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.roomOperationRequested.connect(self.apply_authored_room_operation)
         self.builder_tab.floorPlanExtrusionRequested.connect(self.apply_authored_floor_plan_extrusion)
         self.builder_tab.floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)
+        self.builder_tab.floorPlanOpeningMarkerRequested.connect(self.create_authored_opening_transition_marker)
         self.builder_tab.floorPlanVertexSnapRequested.connect(self.snap_authored_floor_plan_vertex)
         self.builder_tab.floorPlanVertexWeldRequested.connect(self.weld_authored_floor_plan_vertices)
         self.builder_tab.floorPlanVertexFlattenRequested.connect(self.flatten_authored_floor_plan_vertices)
@@ -1710,6 +1711,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         readiness = result.readiness
         opening_label = name or f"edge {edge_index}"
         message = f"Updated wall opening {opening_label} in {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def create_authored_opening_transition_marker(
+        self,
+        room_resref: str,
+        opening_name: str,
+        marker_kind: str,
+        template_resref: str,
+        tag: str,
+        linked_to: str,
+        linked_to_module: str,
+    ) -> None:
+        try:
+            result = self.controller.apply_authored_room_operation(
+                operation="opening_transition_marker",
+                room_resref=room_resref,
+                opening_name=opening_name,
+                marker_kind=marker_kind,
+                template_resref=template_resref,
+                tag=tag,
+                linked_to=linked_to,
+                linked_to_module=linked_to_module,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Create Opening Transition Marker", str(exc))
+            return
+        readiness = result.readiness
+        marker_label = tag or opening_name or marker_kind
+        message = f"Created {marker_kind} marker {marker_label} from wall opening; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

@@ -245,6 +245,57 @@ def test_t2601_wall_opening_authoring_compiles_doorway_panels() -> None:
     assert (room.normalised_resref(), "mdx") in build.resources
 
 
+def test_t2601_wall_opening_can_create_linked_transition_marker() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_operations import apply_authored_floor_plan_operation
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="gropen02",
+        game="K1",
+    )
+    opened = apply_authored_floor_plan_operation(
+        project,
+        "wall_opening",
+        name="south_door",
+        edge_index=0,
+        center_fraction=0.5,
+        width=1.5,
+        height=2.0,
+        bottom=0.0,
+    )
+    marked = apply_authored_floor_plan_operation(
+        opened,
+        "opening_transition_marker",
+        room_resref=opened.rooms[0].room_resref,
+        opening_name="south_door",
+        marker_kind="trigger",
+        template_resref="trg_exit",
+        tag="south_exit_trigger",
+        linked_to="wp_dest",
+        linked_to_module="grnext01",
+    )
+    trigger = marked.placements.triggers[-1]
+    readiness = build_authored_module_readiness(marked)
+    marker_metadata = marked.extra["last_opening_transition_marker"]
+
+    assert trigger.tag == "south_exit_trigger"
+    assert trigger.template_resref == "trg_exit"
+    assert trigger.position == (0.0, -5.0, 0.0)
+    assert trigger.linked_to == "wp_dest"
+    assert trigger.linked_to_module == "grnext01"
+    assert marker_metadata["opening_name"] == "south_door"
+    assert marker_metadata["marker_kind"] == "trigger"
+    assert marker_metadata["position"] == [0.0, -5.0, 0.0]
+    assert readiness.doorway_transition.opening_count == 1
+    assert readiness.doorway_transition.transition_reference_count == 1
+    assert readiness.doorway_transition.linked_transition_count == 1
+    assert readiness.doorway_transition.ready is True
+
+
 def test_t2679_controller_unions_adjacent_floor_plan_rooms_and_remains_exportable() -> None:
     _install_native_payload_paths()
 

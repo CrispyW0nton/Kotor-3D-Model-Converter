@@ -400,12 +400,19 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioFloorPlanBridgeSecondEdgeSpinBox" in source
         assert "mapStudioBridgeFloorPlanEdgesButton" in source
         assert "floorPlanOpeningRequested = QtCore.Signal" in source
+        assert "floorPlanOpeningMarkerRequested = QtCore.Signal" in source
         assert "Floor-Plan Wall Opening" in source
         assert "mapStudioFloorPlanOpeningRoomComboBox" in source
         assert "mapStudioFloorPlanOpeningEdgeSpinBox" in source
         assert "mapStudioFloorPlanOpeningCenterSpinBox" in source
         assert "mapStudioApplyFloorPlanOpeningButton" in source
         assert "def _emit_floor_plan_opening" in source
+        assert "Opening Transition Marker" in source
+        assert "mapStudioFloorPlanOpeningMarkerRoomComboBox" in source
+        assert "mapStudioFloorPlanOpeningMarkerNameComboBox" in source
+        assert "mapStudioFloorPlanOpeningMarkerKindComboBox" in source
+        assert "mapStudioCreateOpeningTransitionMarkerButton" in source
+        assert "def _emit_floor_plan_opening_marker" in source
         assert "Floor-Plan Vertex Tools" in source
         assert "floorPlanVertexSnapRequested = QtCore.Signal" in source
         assert "floorPlanVertexWeldRequested = QtCore.Signal" in source
@@ -679,6 +686,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.add_authored_room_primitive(primitive_kind, \"\")" in window_source
     assert "floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)" in window_source
     assert "floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)" in window_source
+    assert "floorPlanOpeningMarkerRequested.connect(self.create_authored_opening_transition_marker)" in window_source
     assert "floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)" in window_source
     assert "floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)" in window_source
     assert "floorPlanFaceFillRequested.connect(self.fill_authored_floor_plan_face)" in window_source
@@ -687,6 +695,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def bridge_authored_floor_plan_edges" in window_source
     assert "def set_authored_floor_plan_wall_opening" in window_source
     assert 'operation="wall_opening"' in window_source
+    assert "def create_authored_opening_transition_marker" in window_source
+    assert 'operation="opening_transition_marker"' in window_source
     assert "def cleanup_authored_floor_plan_vertices" in window_source
     assert "def mirror_authored_floor_plan_vertices" in window_source
     assert "def fill_authored_floor_plan_face" in window_source

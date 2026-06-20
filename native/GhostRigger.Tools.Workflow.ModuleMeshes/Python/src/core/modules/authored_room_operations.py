@@ -28,6 +28,7 @@ from src.core.geometry.component_editing import (
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, authored_resref_blocking_issue, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
+from .authored_module_placements import add_authored_gameplay_placement
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import (
     FloorPlanAxisSplitOperation,
@@ -129,6 +130,8 @@ class AuthoredFloorPlanRoomChoice:
     include_walls: bool = True
     floor_surface_id: int | str = 4
     floor_surface_name: str = ""
+    opening_count: int = 0
+    opening_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -233,6 +236,8 @@ def authored_floor_plan_room_choices(project: AuthoredModuleProject) -> tuple[Au
                 include_walls=bool(primitive.include_walls),
                 floor_surface_id=floor_surface_id,
                 floor_surface_name=floor_surface_name,
+                opening_count=len(tuple(primitive.openings or ())),
+                opening_names=tuple(str(opening.name or "").strip() for opening in tuple(primitive.openings or ()) if str(opening.name or "").strip()),
             )
         )
     return tuple(choices)
@@ -1805,6 +1810,121 @@ def set_authored_floor_plan_wall_opening(
     )
 
 
+def _find_floor_plan_wall_opening(
+    primitive: FloorPlanRoomPrimitive,
+    *,
+    opening_name: str = "",
+    edge_index: int | None = None,
+) -> FloorPlanWallOpening:
+    openings = tuple(primitive.openings or ())
+    if not openings:
+        raise ValueError(f"Room {primitive.room_resref} has no authored wall openings yet.")
+    target_name = str(opening_name or "").strip()
+    if target_name:
+        for opening in openings:
+            if str(opening.name or "").strip() == target_name:
+                return opening
+        raise ValueError(f"Room {primitive.room_resref} has no wall opening named '{target_name}'.")
+    if edge_index is not None:
+        edge = int(edge_index)
+        for opening in openings:
+            if int(opening.edge_index) == edge:
+                return opening
+        raise ValueError(f"Room {primitive.room_resref} has no wall opening on edge {edge}.")
+    return openings[0]
+
+
+def _floor_plan_wall_opening_marker_pose(
+    room: AuthoredRoomSpec,
+    primitive: FloorPlanRoomPrimitive,
+    opening: FloorPlanWallOpening,
+) -> tuple[tuple[float, float, float], float]:
+    points = tuple(primitive.points or ())
+    edge = int(opening.edge_index)
+    if edge < 0 or edge >= len(points):
+        raise ValueError(f"Opening {opening.name or edge} references missing wall edge {edge}.")
+    start = points[edge]
+    end = points[(edge + 1) % len(points)]
+    fraction = float(opening.center_fraction)
+    room_offset = _room_offset(room)
+    x = float(start[0]) + ((float(end[0]) - float(start[0])) * fraction) + room_offset[0]
+    y = float(start[1]) + ((float(end[1]) - float(start[1])) * fraction) + room_offset[1]
+    z = float(primitive.z) + float(opening.bottom) + room_offset[2]
+    bearing = math.atan2(float(end[1]) - float(start[1]), float(end[0]) - float(start[0]))
+    return (x, y, z), bearing
+
+
+def add_authored_floor_plan_opening_transition_marker(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str = "",
+    opening_name: str = "",
+    edge_index: int | None = None,
+    marker_kind: str = "door",
+    template_resref: str = "",
+    tag: str = "",
+    linked_to: str = "",
+    linked_to_module: str = "",
+) -> AuthoredModuleProject:
+    """Create a KOTOR door/trigger/waypoint marker from a wall opening."""
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    opening = _find_floor_plan_wall_opening(primitive, opening_name=opening_name, edge_index=edge_index)
+    kind = str(marker_kind or "door").strip().lower()
+    if kind not in {"door", "trigger", "waypoint"}:
+        raise ValueError("Opening transition markers must be authored as a door, trigger, or waypoint.")
+    position, bearing = _floor_plan_wall_opening_marker_pose(room, primitive, opening)
+    opening_label = str(opening.name or "").strip() or f"edge_{int(opening.edge_index)}"
+    placement_tag = str(tag or "").strip() or f"{normalise_resref(opening_label)}_{kind}"
+    update = add_authored_gameplay_placement(
+        project,
+        kind=kind,
+        template_resref=template_resref,
+        tag=placement_tag,
+        position=position,
+        bearing=bearing,
+        linked_to=linked_to,
+        linked_to_module=linked_to_module,
+        trigger_size=max(float(opening.width), 0.5),
+    )
+    metadata = {
+        "room_resref": normalise_resref(room.room_resref),
+        "opening_name": opening_label,
+        "edge_index": int(opening.edge_index),
+        "marker_kind": update.kind,
+        "template_resref": update.template_resref,
+        "tag": update.tag,
+        "placement_id": str(update.placement_id),
+        "position": [float(position[0]), float(position[1]), float(position[2])],
+        "bearing": float(bearing),
+        "linked_to": str(linked_to or "").strip(),
+        "linked_to_module": normalise_resref(linked_to_module),
+        "source": "map_studio:opening_transition_marker",
+    }
+    placements = replace(
+        update.project.placements,
+        metadata={
+            **dict(update.project.placements.metadata),
+            "last_opening_transition_marker": metadata,
+        },
+    )
+    return replace(
+        update.project,
+        placements=placements,
+        notes=tuple(update.project.notes)
+        + (
+            f"Created Map Studio {update.kind} marker {update.tag} from opening {opening_label}.",
+        ),
+        extra={
+            **dict(update.project.extra),
+            "last_opening_transition_marker": metadata,
+            "last_room_operation": "opening_transition_marker",
+        },
+    )
+
+
 def apply_authored_floor_plan_rectangular_union(
     project: AuthoredModuleProject,
     *,
@@ -2380,6 +2500,20 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             height=float(kwargs.get("height", 2.1)),
             bottom=float(kwargs.get("bottom", 0.0)),
         )
+    if op in {"opening_transition_marker", "doorway_marker", "transition_marker", "opening_marker"}:
+        raw_edge = kwargs.get("edge_index", None)
+        edge_index = None if raw_edge is None or str(raw_edge).strip() == "" else int(raw_edge)
+        return add_authored_floor_plan_opening_transition_marker(
+            project,
+            room_resref=str(kwargs.get("room_resref", "")),
+            opening_name=str(kwargs.get("opening_name", kwargs.get("name", ""))),
+            edge_index=edge_index,
+            marker_kind=str(kwargs.get("marker_kind", kwargs.get("kind", "door"))),
+            template_resref=str(kwargs.get("template_resref", "")),
+            tag=str(kwargs.get("tag", "")),
+            linked_to=str(kwargs.get("linked_to", "")),
+            linked_to_module=str(kwargs.get("linked_to_module", "")),
+        )
     raise ValueError(f"Unsupported authored floor-plan operation: {operation}.")
 
 
@@ -2473,6 +2607,7 @@ __all__ = [
     "AuthoredCompositionPrimitiveTransform",
     "AuthoredFloorPlanRoomChoice",
     "AuthoredTerrainRoomChoice",
+    "add_authored_floor_plan_opening_transition_marker",
     "add_authored_room_composition_primitive",
     "apply_authored_terrain_operation",
     "apply_authored_floor_plan_axis_split",

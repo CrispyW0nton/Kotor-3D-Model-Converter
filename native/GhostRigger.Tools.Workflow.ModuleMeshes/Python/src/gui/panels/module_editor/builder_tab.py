@@ -11,6 +11,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)
     floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
     floorPlanOpeningRequested = QtCore.Signal(str, str, int, float, float, float, float)
+    floorPlanOpeningMarkerRequested = QtCore.Signal(str, str, str, str, str, str, str)
     floorPlanVertexSnapRequested = QtCore.Signal(str, int, int, str)
     floorPlanVertexWeldRequested = QtCore.Signal(str, object, int, str)
     floorPlanVertexFlattenRequested = QtCore.Signal(str, object, str, object)
@@ -219,6 +220,46 @@ class BuilderTab(QtWidgets.QWidget):
         opening_layout.addRow("Bottom:", self.floorPlanOpeningBottomSpinBox)
         opening_layout.addRow(self.applyFloorPlanOpeningButton)
         layout.addWidget(opening_box)
+        marker_box = QtWidgets.QGroupBox("Opening Transition Marker")
+        marker_layout = QtWidgets.QFormLayout(marker_box)
+        self.floorPlanOpeningMarkerHintLabel = QtWidgets.QLabel(
+            "Create a KOTOR door, trigger, or waypoint marker at an authored wall opening. Use destination fields when the marker leaves this area."
+        )
+        self.floorPlanOpeningMarkerHintLabel.setObjectName("mapStudioFloorPlanOpeningMarkerHintLabel")
+        self.floorPlanOpeningMarkerHintLabel.setWordWrap(True)
+        self.floorPlanOpeningMarkerRoomComboBox = QtWidgets.QComboBox()
+        self.floorPlanOpeningMarkerRoomComboBox.setObjectName("mapStudioFloorPlanOpeningMarkerRoomComboBox")
+        self.floorPlanOpeningMarkerNameComboBox = QtWidgets.QComboBox()
+        self.floorPlanOpeningMarkerNameComboBox.setObjectName("mapStudioFloorPlanOpeningMarkerNameComboBox")
+        self.floorPlanOpeningMarkerNameComboBox.setEditable(True)
+        self.floorPlanOpeningMarkerKindComboBox = QtWidgets.QComboBox()
+        self.floorPlanOpeningMarkerKindComboBox.setObjectName("mapStudioFloorPlanOpeningMarkerKindComboBox")
+        self.floorPlanOpeningMarkerKindComboBox.addItem("Door marker (UTD)", "door")
+        self.floorPlanOpeningMarkerKindComboBox.addItem("Trigger marker (UTT)", "trigger")
+        self.floorPlanOpeningMarkerKindComboBox.addItem("Waypoint marker (UTW)", "waypoint")
+        self.floorPlanOpeningMarkerTemplateLineEdit = QtWidgets.QLineEdit()
+        self.floorPlanOpeningMarkerTemplateLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerTemplateLineEdit")
+        self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("door/trigger/waypoint template resref")
+        self.floorPlanOpeningMarkerTagLineEdit = QtWidgets.QLineEdit("opening_transition")
+        self.floorPlanOpeningMarkerTagLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerTagLineEdit")
+        self.floorPlanOpeningMarkerLinkedToLineEdit = QtWidgets.QLineEdit()
+        self.floorPlanOpeningMarkerLinkedToLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerLinkedToLineEdit")
+        self.floorPlanOpeningMarkerLinkedToLineEdit.setPlaceholderText("destination tag or waypoint")
+        self.floorPlanOpeningMarkerLinkedModuleLineEdit = QtWidgets.QLineEdit()
+        self.floorPlanOpeningMarkerLinkedModuleLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerLinkedModuleLineEdit")
+        self.floorPlanOpeningMarkerLinkedModuleLineEdit.setPlaceholderText("destination module resref")
+        self.createFloorPlanOpeningMarkerButton = QtWidgets.QPushButton("Create Opening Marker")
+        self.createFloorPlanOpeningMarkerButton.setObjectName("mapStudioCreateOpeningTransitionMarkerButton")
+        marker_layout.addRow(self.floorPlanOpeningMarkerHintLabel)
+        marker_layout.addRow("Room:", self.floorPlanOpeningMarkerRoomComboBox)
+        marker_layout.addRow("Opening:", self.floorPlanOpeningMarkerNameComboBox)
+        marker_layout.addRow("Marker:", self.floorPlanOpeningMarkerKindComboBox)
+        marker_layout.addRow("Template:", self.floorPlanOpeningMarkerTemplateLineEdit)
+        marker_layout.addRow("Tag:", self.floorPlanOpeningMarkerTagLineEdit)
+        marker_layout.addRow("Links to:", self.floorPlanOpeningMarkerLinkedToLineEdit)
+        marker_layout.addRow("Module:", self.floorPlanOpeningMarkerLinkedModuleLineEdit)
+        marker_layout.addRow(self.createFloorPlanOpeningMarkerButton)
+        layout.addWidget(marker_box)
         vertex_box = QtWidgets.QGroupBox("Floor-Plan Vertex Tools")
         vertex_layout = QtWidgets.QFormLayout(vertex_box)
         self.floorPlanVertexHintLabel = QtWidgets.QLabel(
@@ -723,6 +764,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.applyFloorPlanExtrusionButton.clicked.connect(self._emit_floor_plan_extrusion)
         self.floorPlanOpeningRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_opening_controls)
         self.applyFloorPlanOpeningButton.clicked.connect(self._emit_floor_plan_opening)
+        self.floorPlanOpeningMarkerRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_opening_marker_controls)
+        self.floorPlanOpeningMarkerKindComboBox.currentIndexChanged.connect(self._update_floor_plan_opening_marker_controls)
+        self.createFloorPlanOpeningMarkerButton.clicked.connect(self._emit_floor_plan_opening_marker)
         self.floorPlanVertexRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
         self.floorPlanVertexTargetRoomComboBox.currentIndexChanged.connect(self._update_floor_plan_vertex_controls)
         self.floorPlanSelectedPointsLineEdit.textChanged.connect(self._update_floor_plan_vertex_controls)
@@ -1255,6 +1299,8 @@ class BuilderTab(QtWidgets.QWidget):
 
         extrusion_current = self._current_combo_resref(self.floorPlanExtrusionRoomComboBox)
         opening_current = self._current_combo_resref(self.floorPlanOpeningRoomComboBox)
+        marker_current = self._current_combo_resref(self.floorPlanOpeningMarkerRoomComboBox)
+        marker_opening_current = self.floorPlanOpeningMarkerNameComboBox.currentText().strip()
         first_current = self._current_combo_resref(self.floorPlanUnionFirstRoomComboBox)
         second_current = self._current_combo_resref(self.floorPlanUnionSecondRoomComboBox)
         bridge_first_current = self._current_combo_resref(self.floorPlanBridgeFirstRoomComboBox)
@@ -1265,6 +1311,7 @@ class BuilderTab(QtWidgets.QWidget):
         for combo, current in (
             (self.floorPlanExtrusionRoomComboBox, extrusion_current),
             (self.floorPlanOpeningRoomComboBox, opening_current),
+            (self.floorPlanOpeningMarkerRoomComboBox, marker_current),
             (self.floorPlanUnionFirstRoomComboBox, first_current),
             (self.floorPlanUnionSecondRoomComboBox, second_current),
             (self.floorPlanBridgeFirstRoomComboBox, bridge_first_current),
@@ -1287,6 +1334,8 @@ class BuilderTab(QtWidgets.QWidget):
                     "include_walls": bool(getattr(choice, "include_walls", True)),
                     "floor_surface_id": str(getattr(choice, "floor_surface_id", "4") or "4"),
                     "floor_surface_name": str(getattr(choice, "floor_surface_name", "") or ""),
+                    "opening_count": int(getattr(choice, "opening_count", 0) or 0),
+                    "opening_names": tuple(getattr(choice, "opening_names", ()) or ()),
                 }
                 combo.addItem(label, data)
                 if resref == current:
@@ -1302,6 +1351,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanBridgeSecondRoomComboBox.setCurrentIndex(1)
         self._update_floor_plan_extrusion_controls()
         self._update_floor_plan_opening_controls()
+        self._update_floor_plan_opening_marker_controls(marker_opening_current)
         self._update_floor_plan_vertex_controls()
         self._update_rectangular_union_controls()
         self._update_floor_plan_bridge_controls()
@@ -1416,6 +1466,69 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.floorPlanOpeningWidthSpinBox.value()),
             float(self.floorPlanOpeningHeightSpinBox.value()),
             float(self.floorPlanOpeningBottomSpinBox.value()),
+        )
+
+    def _current_floor_plan_opening_marker_data(self) -> dict:
+        data = self.floorPlanOpeningMarkerRoomComboBox.currentData()
+        return dict(data) if isinstance(data, dict) else {}
+
+    def _update_floor_plan_opening_marker_controls(self, selected_opening: str = "") -> None:
+        data = self._current_floor_plan_opening_marker_data()
+        opening_names = tuple(str(name).strip() for name in tuple(data.get("opening_names", ()) or ()) if str(name).strip())
+        enabled = bool(data and opening_names)
+        previous = str(selected_opening or self.floorPlanOpeningMarkerNameComboBox.currentText() or "").strip()
+        self.floorPlanOpeningMarkerNameComboBox.blockSignals(True)
+        self.floorPlanOpeningMarkerNameComboBox.clear()
+        if opening_names:
+            for name in opening_names:
+                self.floorPlanOpeningMarkerNameComboBox.addItem(name, name)
+            match = self.floorPlanOpeningMarkerNameComboBox.findText(previous)
+            self.floorPlanOpeningMarkerNameComboBox.setCurrentIndex(match if match >= 0 else 0)
+        else:
+            self.floorPlanOpeningMarkerNameComboBox.addItem("No authored openings yet", "")
+        self.floorPlanOpeningMarkerNameComboBox.blockSignals(False)
+        for widget in (
+            self.floorPlanOpeningMarkerRoomComboBox,
+            self.floorPlanOpeningMarkerNameComboBox,
+            self.floorPlanOpeningMarkerKindComboBox,
+            self.floorPlanOpeningMarkerTemplateLineEdit,
+            self.floorPlanOpeningMarkerTagLineEdit,
+            self.floorPlanOpeningMarkerLinkedToLineEdit,
+            self.floorPlanOpeningMarkerLinkedModuleLineEdit,
+            self.createFloorPlanOpeningMarkerButton,
+        ):
+            widget.setEnabled(enabled)
+        kind = str(self.floorPlanOpeningMarkerKindComboBox.currentData() or "door")
+        if kind == "door":
+            self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("UTD template resref, e.g. door_t01")
+        elif kind == "trigger":
+            self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("UTT template resref, e.g. tr_transition")
+        else:
+            self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("UTW template resref, e.g. wp_transition")
+        if enabled:
+            self.floorPlanOpeningMarkerHintLabel.setText(
+                f"Editing {data.get('room_resref')}: create a {kind} marker from one authored opening. "
+                "Fill destination fields only when this opening changes area."
+            )
+        else:
+            self.floorPlanOpeningMarkerHintLabel.setText(
+                "Add a floor-plan wall opening before creating a KOTOR door, trigger, or waypoint marker from it."
+            )
+
+    def _emit_floor_plan_opening_marker(self) -> None:
+        data = self._current_floor_plan_opening_marker_data()
+        room = str(data.get("room_resref") or "").strip()
+        opening = str(self.floorPlanOpeningMarkerNameComboBox.currentData() or self.floorPlanOpeningMarkerNameComboBox.currentText() or "").strip()
+        if not room or not opening:
+            return
+        self.floorPlanOpeningMarkerRequested.emit(
+            room,
+            opening,
+            str(self.floorPlanOpeningMarkerKindComboBox.currentData() or "door"),
+            self.floorPlanOpeningMarkerTemplateLineEdit.text().strip(),
+            self.floorPlanOpeningMarkerTagLineEdit.text().strip(),
+            self.floorPlanOpeningMarkerLinkedToLineEdit.text().strip(),
+            self.floorPlanOpeningMarkerLinkedModuleLineEdit.text().strip(),
         )
 
     def _current_floor_plan_vertex_room_data(self) -> dict:
