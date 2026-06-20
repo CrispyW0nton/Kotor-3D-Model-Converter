@@ -114,6 +114,17 @@ def _dot(a: Vector3, b: Vector3) -> float:
     return (a[0] * b[0]) + (a[1] * b[1]) + (a[2] * b[2])
 
 
+def _length(value: Vector3) -> float:
+    return math.sqrt(_dot(value, value))
+
+
+def _normalise(value: Vector3, *, label: str = "vector") -> Vector3:
+    length = _length(value)
+    if length <= 1.0e-9:
+        raise ValueError(f"{label} cannot be zero-length.")
+    return (value[0] / length, value[1] / length, value[2] / length)
+
+
 def _face_normal(mesh: ComponentMesh, face: Face) -> Vector3:
     unique: list[int] = []
     for index in face:
@@ -187,6 +198,70 @@ def bridge_edges(
             "first_edge": first,
             "second_edge": second,
             "flip_second": bool(flip_second),
+        },
+    )
+
+
+def extrude_face(
+    mesh: ComponentMesh,
+    face_index: int,
+    *,
+    distance: float,
+    direction: Sequence[float] | None = None,
+    keep_source_face: bool = False,
+) -> ComponentEditResult:
+    """Extrude one face into side walls and a cap face.
+
+    This first-pass Map Studio extrusion is intentionally explicit and
+    deterministic. It creates new vertices and faces, rejects degenerate input,
+    and leaves bevels, triangulation, and normal cleanup as separate auditable
+    operations before MDL/WOK export.
+    """
+
+    if distance <= 0.0:
+        raise ValueError("Face extrusion distance must be positive.")
+    index = int(face_index)
+    if index < 0 or index >= len(mesh.faces):
+        raise ValueError(f"Face extrusion references missing face {face_index}.")
+    face = tuple(mesh.faces[index])
+    if len(set(face)) < 3:
+        raise ValueError("Face extrusion requires a face with at least three unique vertices.")
+    if direction is None:
+        extrude_axis = _normalise(_face_normal(mesh, face), label="Face extrusion normal")
+    else:
+        extrude_axis = _normalise(_finite_vertex(direction), label="Face extrusion direction")
+    offset = tuple(coord * float(distance) for coord in extrude_axis)
+    vertices = list(mesh.vertices)
+    new_indices: list[int] = []
+    for vertex_index in face:
+        vertex = mesh.vertices[vertex_index]
+        new_indices.append(len(vertices))
+        vertices.append((vertex[0] + offset[0], vertex[1] + offset[1], vertex[2] + offset[2]))
+
+    faces = list(mesh.faces)
+    removed_faces = 0
+    if not keep_source_face:
+        faces.pop(index)
+        removed_faces = 1
+    side_faces: list[Face] = []
+    for offset_index, vertex_index in enumerate(face):
+        next_offset = (offset_index + 1) % len(face)
+        side_faces.append((vertex_index, face[next_offset], new_indices[next_offset], new_indices[offset_index]))
+    cap_face = tuple(new_indices)
+    faces.extend(side_faces)
+    faces.append(cap_face)
+    return ComponentEditResult(
+        mesh=ComponentMesh(vertices=tuple(vertices), faces=tuple(faces), metadata=dict(mesh.metadata)),
+        removed_face_count=removed_faces,
+        metadata={
+            "operation": "extrude_face",
+            "face_index": index,
+            "distance": float(distance),
+            "direction": extrude_axis,
+            "keep_source_face": bool(keep_source_face),
+            "added_vertex_count": len(new_indices),
+            "added_face_count": len(side_faces) + 1,
+            "removed_source_face": removed_faces,
         },
     )
 
@@ -287,6 +362,7 @@ def audit_component_edit_result(
     operation = str(metadata.get("operation") or "component_edit")
     added_faces = _metadata_int(metadata, "added_face_count")
     triangulated_faces = _metadata_int(metadata, "triangulated_face_count")
+    added_vertices = _metadata_int(metadata, "added_vertex_count")
     removed_vertices = _metadata_int(metadata, "removed_vertex_count")
     flipped_faces = _metadata_int(metadata, "flipped_face_count")
     skipped_faces = _metadata_int(metadata, "skipped_face_count")
@@ -294,6 +370,7 @@ def audit_component_edit_result(
         value > 0
         for value in (
             added_faces,
+            added_vertices,
             result.removed_face_count,
             triangulated_faces,
             removed_vertices,
@@ -305,6 +382,7 @@ def audit_component_edit_result(
             result.changed_vertex_count,
             result.removed_face_count,
             added_faces,
+            added_vertices,
             triangulated_faces,
             removed_vertices,
             flipped_faces,
@@ -339,6 +417,8 @@ def audit_component_edit_result(
     change_bits: list[str] = []
     if result.changed_vertex_count:
         change_bits.append(f"{result.changed_vertex_count} vertex change(s)")
+    if added_vertices:
+        change_bits.append(f"{added_vertices} added vertex(s)")
     if added_faces:
         change_bits.append(f"{added_faces} added face(s)")
     if result.removed_face_count:
@@ -366,6 +446,7 @@ def audit_component_edit_result(
             "changed_vertex_count": result.changed_vertex_count,
             "removed_face_count": result.removed_face_count,
             "added_face_count": added_faces,
+            "added_vertex_count": added_vertices,
             "triangulated_face_count": triangulated_faces,
             "removed_vertex_count": removed_vertices,
             "flipped_face_count": flipped_faces,
@@ -587,6 +668,7 @@ __all__ = [
     "cleanup_degenerate_faces",
     "cleanup_face_normals",
     "component_mesh",
+    "extrude_face",
     "fill_face",
     "flatten_vertices",
     "mirror_vertices",

@@ -9,7 +9,7 @@
       "resource_name": "PYTHON_PAYLOAD_0001",
       "source_path": "src/core/geometry/__init__.py",
       "packaged_path": "Python/src/core/geometry/__init__.py",
-      "sha256": "fbef8e52fdba79e204cd144de437177f6b38c283fd02622887bd35f401568b8e"
+      "sha256": "bd21b5b0e7d90bb12ffe4b71aef298cfd0d78b28acc30ca448c24f83e811820d"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0002",
@@ -39,7 +39,7 @@
       "resource_name": "PYTHON_PAYLOAD_0006",
       "source_path": "src/core/geometry/component_editing.py",
       "packaged_path": "Python/src/core/geometry/component_editing.py",
-      "sha256": "6dfa984dc53d5c92046abadb5297e93142222f6c0019b29fc839a5e7795cedb1"
+      "sha256": "92b23fdc7a6a07499863cf5cfc8c6722422a8ae1f283615743403ba2b858dd14"
     }
   ]
 }

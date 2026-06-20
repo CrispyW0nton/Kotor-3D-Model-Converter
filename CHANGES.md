@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Geometry Kernel Adds Conservative Face Extrusion
+
+Owner: LordVaderCW
+Task: T2601
+Subsystem: Map Studio / geometry kernel / component modeling
+Intersects: Domain Core Geometry component-editing kernel and native Python payload packaging.
+
+- Added a headless `extrude_face` operation that turns one selected face into side faces plus a cap for future walls, ledges, ramps, terrain lips, and room blockout tools.
+- Kept extrusion conservative and auditable: invalid distance, missing faces, and zero-normal faces are rejected; triangulation, beveling, and normal cleanup remain explicit follow-up steps before export.
+- Extended the component-edit audit to track added vertices so extrusion summaries and KOTOR stale-output status correctly report topology changes.
+- Exported `extrude_face` through `src.core.geometry` and refreshed the Domain Core Geometry embedded Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/__init__.py tests/test_component_editing.py`; `python -m pytest tests/test_component_editing.py -q --basetemp .pytest_tmp_component_extrude_tracked`.
+
 ### [2026-06-20] Map Studio Geometry Kernel Adds Conservative Edge Bridge
 
 Owner: LordVaderCW
