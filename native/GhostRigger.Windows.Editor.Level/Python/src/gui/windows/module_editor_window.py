@@ -1015,6 +1015,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._persist_map_studio_tool_belt_preferences()
         self._refresh_map_studio_tool_belt()
 
+    def _sync_map_studio_tool_belt_preset_for_edit_mode(self, label: str) -> None:
+        """Show the most relevant built-in tool belt for the active edit mode."""
+
+        current_preset = self._selected_map_studio_tool_belt_preset_key()
+        if current_preset == "custom":
+            return
+        mode_key = str(label or "Object").strip().lower()
+        preset_key = {
+            "object": "blockout",
+            "vertex": "component",
+            "edge": "component",
+            "face": "component",
+            "walkmesh": "component",
+            "placement": "gameplay",
+            "terrain": "terrain",
+            "export": "export",
+        }.get(mode_key, "blockout")
+        index = self.map_studio_tool_belt_preset_combo.findData(preset_key)
+        if index < 0 or self.map_studio_tool_belt_preset_combo.currentIndex() == index:
+            return
+        previous = self.map_studio_tool_belt_preset_combo.blockSignals(True)
+        try:
+            self.map_studio_tool_belt_preset_combo.setCurrentIndex(index)
+        finally:
+            self.map_studio_tool_belt_preset_combo.blockSignals(previous)
+        self._refresh_map_studio_tool_belt()
+
     def _clear_map_studio_tool_belt_layout(self) -> None:
         while self.map_studio_tool_belt_layout.count():
             item = self.map_studio_tool_belt_layout.takeAt(0)
@@ -1428,6 +1455,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         """Reflect the toolbar edit mode in the Map Studio workflow/readiness panel."""
 
         label = str(mode or "Object").strip() or "Object"
+        self._sync_map_studio_tool_belt_preset_for_edit_mode(label)
         self._focus_map_studio_edit_mode_workspace(label)
         self._sync_map_studio_edit_mode_context(label)
         descriptions = {

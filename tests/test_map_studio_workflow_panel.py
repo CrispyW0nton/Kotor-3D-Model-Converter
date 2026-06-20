@@ -957,6 +957,16 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
 
     assert "self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)" in window_source
     assert "def _handle_map_studio_edit_mode_changed" in window_source
+    assert "def _sync_map_studio_tool_belt_preset_for_edit_mode" in window_source
+    assert 'current_preset == "custom"' in window_source
+    assert '"vertex": "component"' in window_source
+    assert '"edge": "component"' in window_source
+    assert '"face": "component"' in window_source
+    assert '"walkmesh": "component"' in window_source
+    assert '"placement": "gameplay"' in window_source
+    assert '"terrain": "terrain"' in window_source
+    assert '"export": "export"' in window_source
+    assert "self._sync_map_studio_tool_belt_preset_for_edit_mode(label)" in window_source
     assert "def _focus_map_studio_edit_mode_workspace" in window_source
     assert "def _sync_map_studio_edit_mode_context" in window_source
     assert "self.controller.map_studio_edit_mode_context(label)" in window_source

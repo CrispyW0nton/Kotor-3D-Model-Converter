@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Edit Modes Sync the Visible Tool Belt
+
+Owner: LordVaderCW
+Task: T2904 / T2908
+Subsystem: Map Studio / Level Editor toolbar / modder tool belt
+Intersects: Level Editor window package and Map Studio workflow-panel source contracts.
+
+- Synced the visible Map Studio tool-belt preset to the active toolbar edit mode so Object, component editing, Terrain, Gameplay Placement, and Export modes show the tools a modder expects without manual preset switching.
+- Preserved the user's Custom tool belt by skipping automatic preset changes when the custom belt is active.
+- Added source-contract coverage to keep future merges from disconnecting toolbar edit modes from the visible tool belt.
+- Verification: `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q --basetemp .pytest_tmp_map_studio_tool_belt_mode`.
+
 ### [2026-06-20] Map Studio Floor-Plan Bridge Uses Component Audit
 
 Owner: LordVaderCW
