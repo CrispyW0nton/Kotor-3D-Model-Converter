@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Export Blockers Offer Fix Navigation
+
+Owner: LordVaderCW
+Task: T2602 / T2605
+Subsystem: Map Studio / Export tab / blocker navigation UX
+Intersects: GUI Boundary Panels export panel, ModuleMeshes mirror package, Windows Editor Level shell.
+
+- Added Export tab fix-action controls that route blockers to the existing Builder, Walkmesh, Placement, and Validate workflows instead of leaving modders to hunt for the right panel.
+- Corrected the Export panel's PTH/WOK blocker lookup to use readiness metadata `pathing.blocking_messages`, matching the core authored-module readiness contract.
+- Wired the new Export panel fix signals into the Level Editor's existing workspace focus methods without moving map-building policy into the window.
+- Mirrored the Export panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof tests/test_map_studio_workflow_panel.py::test_t2600_level_editor_wires_workflow_panel_to_readiness_contract -q --basetemp .pytest_tmp_export_fix_actions`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_workflow_panel_is_mirrored_for_module_meshes_package -q --basetemp .pytest_tmp_export_fix_mirror`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Export Panel Gates Authored Module Packaging
 
 Owner: LordVaderCW

@@ -695,6 +695,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
         self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)
         self.export_panel.authoredModuleInstallRequested.connect(self.install_authored_module)
+        self.export_panel.builderFixRequested.connect(self.show_map_studio_builder)
+        self.export_panel.walkmeshFixRequested.connect(self.show_map_studio_walkmesh_tools)
+        self.export_panel.placementFixRequested.connect(self.show_map_studio_placement_tools)
+        self.export_panel.validateRequested.connect(self.validate_kmap)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)

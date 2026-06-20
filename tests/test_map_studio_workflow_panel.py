@@ -233,6 +233,10 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.workflow_panel.installRequested.connect(lambda: self.install_authored_module" in window_source
     assert "self.workflow_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)" in window_source
     assert "self.workflow_panel.proofRequested.connect(self.record_game_smoke_proof)" in window_source
+    assert "self.export_panel.builderFixRequested.connect(self.show_map_studio_builder)" in window_source
+    assert "self.export_panel.walkmeshFixRequested.connect(self.show_map_studio_walkmesh_tools)" in window_source
+    assert "self.export_panel.placementFixRequested.connect(self.show_map_studio_placement_tools)" in window_source
+    assert "self.export_panel.validateRequested.connect(self.validate_kmap)" in window_source
     assert "self.workflow_panel.set_selection_context(self._selected_item_label(item_id))" in window_source
     assert "def _selected_item_label" in window_source
     assert 'self.workflow_panel.set_selection_context("")' in window_source
@@ -1071,11 +1075,23 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "mapStudioExportDryRunHintLabel" in source
         assert "mapStudioExportReadinessGateLabel" in source
         assert "mapStudioExportBlockerTable" in source
+        assert "mapStudioExportFixActionLabel" in source
+        assert "mapStudioExportFixBuilderButton" in source
+        assert "mapStudioExportFixWalkmeshButton" in source
+        assert "mapStudioExportFixPlacementButton" in source
+        assert "mapStudioExportFixValidateButton" in source
+        assert "builderFixRequested = QtCore.Signal()" in source
+        assert "walkmeshFixRequested = QtCore.Signal()" in source
+        assert "placementFixRequested = QtCore.Signal()" in source
+        assert "validateRequested = QtCore.Signal()" in source
         assert 'setHorizontalHeaderLabels(("Blocker", "KOTOR export impact", "Next fix"))' in source
         assert "def set_readiness" in source
         assert "can_export_candidate" in source
+        assert 'pathing.get("blocking_messages"' in source
         assert "Blocked by PTH/WOK pathing" in source
         assert "Blocks authored .mod package, stage, and install actions." in source
+        assert "def _set_fix_action_state" in source
+        assert "Fix action: No blocker action needed" in source
         assert "mapStudioExportActionGuideLabel" in source
         assert "mapStudioExportActionGuideTable" in source
         assert 'setHorizontalHeaderLabels(("Action", "Writes", "Use when", "Game proof"))' in source

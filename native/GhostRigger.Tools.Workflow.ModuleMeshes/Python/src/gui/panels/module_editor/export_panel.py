@@ -11,6 +11,10 @@ class ModuleExportPanel(QtWidgets.QWidget):
     authoredModuleRequested = QtCore.Signal(bool)
     authoredModuleStageRequested = QtCore.Signal(bool)
     authoredModuleInstallRequested = QtCore.Signal(bool)
+    builderFixRequested = QtCore.Signal()
+    walkmeshFixRequested = QtCore.Signal()
+    placementFixRequested = QtCore.Signal()
+    validateRequested = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -64,6 +68,35 @@ class ModuleExportPanel(QtWidgets.QWidget):
         self.export_blocker_table.setMinimumHeight(72)
         self.export_blocker_table.setMaximumHeight(150)
         root.addWidget(self.export_blocker_table)
+        self.fix_action_label = QtWidgets.QLabel(
+            "Fix action: Resolve blockers in Builder, Walkmesh, Placement, then Validate before staging."
+        )
+        self.fix_action_label.setObjectName("mapStudioExportFixActionLabel")
+        self.fix_action_label.setWordWrap(True)
+        root.addWidget(self.fix_action_label)
+        fix_actions = QtWidgets.QHBoxLayout()
+        fix_actions.setContentsMargins(0, 0, 0, 0)
+        fix_actions.setSpacing(4)
+        self.fix_builder_button = QtWidgets.QPushButton("Open Builder")
+        self.fix_builder_button.setObjectName("mapStudioExportFixBuilderButton")
+        self.fix_walkmesh_button = QtWidgets.QPushButton("Open Walkmesh Tools")
+        self.fix_walkmesh_button.setObjectName("mapStudioExportFixWalkmeshButton")
+        self.fix_placement_button = QtWidgets.QPushButton("Open Placement Tools")
+        self.fix_placement_button.setObjectName("mapStudioExportFixPlacementButton")
+        self.fix_validate_button = QtWidgets.QPushButton("Validate Again")
+        self.fix_validate_button.setObjectName("mapStudioExportFixValidateButton")
+        self.fix_builder_button.clicked.connect(self.builderFixRequested.emit)
+        self.fix_walkmesh_button.clicked.connect(self.walkmeshFixRequested.emit)
+        self.fix_placement_button.clicked.connect(self.placementFixRequested.emit)
+        self.fix_validate_button.clicked.connect(self.validateRequested.emit)
+        for button in (
+            self.fix_builder_button,
+            self.fix_walkmesh_button,
+            self.fix_placement_button,
+            self.fix_validate_button,
+        ):
+            fix_actions.addWidget(button)
+        root.addLayout(fix_actions)
         self.action_guide_label = QtWidgets.QLabel(
             "Export action guide: choose FBX only for external DCC handoff; choose authored-module actions when testing a KOTOR .mod."
         )
@@ -148,6 +181,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
                 "Current authored-module export gate: Not checked. Create/open a KMAP and run readiness before packaging a KOTOR .mod."
             )
             self._set_authored_module_buttons_enabled(False)
+            self._set_fix_action_state(builder=True, walkmesh=False, placement=False, validate=True)
             self._set_export_blocker_rows(
                 (
                     (
@@ -164,7 +198,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
         next_action = str(getattr(readiness, "next_action", "") or "")
         metadata = dict(getattr(readiness, "metadata", {}) or {})
         pathing = dict(metadata.get("pathing") or {})
-        pathing_blockers = tuple(str(item) for item in tuple(pathing.get("blockers", ()) or ()) if str(item).strip())
+        pathing_blockers = tuple(str(item) for item in tuple(pathing.get("blocking_messages", ()) or ()) if str(item).strip())
         blocking_messages = tuple(
             str(item) for item in tuple(getattr(readiness, "blocking_messages", ()) or ()) if str(item).strip()
         )
@@ -175,6 +209,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
             self.export_gate_label.setText(
                 "Current authored-module export gate: Ready to stage as a KOTOR .mod candidate. Still record a live warp test before calling it game-ready."
             )
+            self._set_fix_action_state(builder=False, walkmesh=False, placement=False, validate=False)
             self._set_export_blocker_rows(
                 (
                     (
@@ -190,6 +225,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
             self.export_gate_label.setText(
                 f"Current authored-module export gate: Blocked by PTH/WOK pathing. {export_status}"
             )
+            self._set_fix_action_state(builder=True, walkmesh=True, placement=True, validate=True)
             self._set_export_blocker_rows(
                 tuple(
                     (
@@ -206,6 +242,16 @@ class ModuleExportPanel(QtWidgets.QWidget):
             self.export_gate_label.setText(
                 f"Current authored-module export gate: Blocked by readiness validation. {export_status}"
             )
+            self._set_fix_action_state(
+                builder=True,
+                walkmesh=any("wok" in message.lower() or "walkmesh" in message.lower() for message in blocking_messages),
+                placement=any(
+                    key in message.lower()
+                    for message in blocking_messages
+                    for key in ("entry_point", "creature", "placeable", "door", "trigger", "waypoint", "encounter")
+                ),
+                validate=True,
+            )
             self._set_export_blocker_rows(
                 tuple(
                     (
@@ -219,6 +265,7 @@ class ModuleExportPanel(QtWidgets.QWidget):
             return
 
         self.export_gate_label.setText(f"Current authored-module export gate: Not ready. {export_status}")
+        self._set_fix_action_state(builder=True, walkmesh=True, placement=False, validate=True)
         self._set_export_blocker_rows(
             (
                 (
@@ -236,6 +283,25 @@ class ModuleExportPanel(QtWidgets.QWidget):
             self.authored_install_button,
         ):
             button.setEnabled(enabled)
+
+    def _set_fix_action_state(self, *, builder: bool, walkmesh: bool, placement: bool, validate: bool) -> None:
+        self.fix_builder_button.setEnabled(builder)
+        self.fix_walkmesh_button.setEnabled(walkmesh)
+        self.fix_placement_button.setEnabled(placement)
+        self.fix_validate_button.setEnabled(validate)
+        enabled = []
+        if builder:
+            enabled.append("Builder")
+        if walkmesh:
+            enabled.append("Walkmesh")
+        if placement:
+            enabled.append("Placement")
+        if validate:
+            enabled.append("Validate")
+        if enabled:
+            self.fix_action_label.setText("Fix action: " + " / ".join(enabled) + " tools are relevant for the current blocker.")
+        else:
+            self.fix_action_label.setText("Fix action: No blocker action needed; stage/install, then record live game proof.")
 
     def _set_export_blocker_rows(self, rows: tuple[tuple[str, str, str], ...]) -> None:
         self.export_blocker_table.setRowCount(len(rows))
