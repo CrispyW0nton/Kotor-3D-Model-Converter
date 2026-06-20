@@ -15,6 +15,7 @@ from typing import Any, Iterable
 
 from .authored_module_metadata import authored_area_script_hooks, authored_module_script_hooks
 from .authored_module_objects import normalise_resource_resref, validate_authored_gameplay_placement_against_walkmesh
+from .authored_module_placements import authored_gameplay_placement_rows
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area, validate_floor_plan_room_primitive
@@ -115,6 +116,7 @@ class AuthoredModulePathingReadiness:
     anchor_labels: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     blocking_messages: tuple[str, ...] = ()
+    blocking_targets: tuple[dict[str, Any], ...] = ()
     fix_hint: str = ""
 
 
@@ -501,6 +503,59 @@ def _path_anchors_from_walkability(project: AuthoredModuleProject, walkability: 
     return tuple(anchors)
 
 
+def _pathing_blocking_targets(project: AuthoredModuleProject, walkability: Any) -> tuple[dict[str, Any], ...]:
+    """Map failed pathing checks to selectable Map Studio anchors."""
+
+    rows = tuple(authored_gameplay_placement_rows(project))
+    by_kind_and_label: dict[tuple[str, str], Any] = {}
+    for row in rows:
+        kind = str(getattr(row, "kind", "") or "").strip().lower()
+        labels = {
+            str(getattr(row, "tag", "") or "").strip(),
+            str(getattr(row, "template_resref", "") or "").strip(),
+            f"{kind}_{int(getattr(row, 'index', 0)) + 1}",
+        }
+        for label in labels:
+            if label:
+                by_kind_and_label[(kind, label)] = row
+
+    targets: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for check in tuple(getattr(walkability, "checks", ()) or ()):
+        if bool(getattr(check, "ok", False)):
+            continue
+        label = str(getattr(check, "label", "") or "").strip()
+        if not label:
+            continue
+        if label == "entry_point":
+            target = {
+                "anchor_label": label,
+                "target_id": "entry_point",
+                "workspace": "entry_point",
+                "fix_action": "Focus the module entry point controls and move the player start onto generated walkable WOK.",
+            }
+        else:
+            parts = label.split(":")
+            kind = parts[0].strip().lower()
+            placement_label = parts[1].strip() if len(parts) > 1 else ""
+            row = by_kind_and_label.get((kind, placement_label))
+            target_id = str(getattr(row, "placement_id", "") or "") if row is not None else ""
+            target = {
+                "anchor_label": label,
+                "target_id": target_id,
+                "workspace": "placement",
+                "placement_kind": kind,
+                "fix_action": f"Select the {kind or 'gameplay'} placement and move it onto generated walkable WOK.",
+            }
+        key = (str(target.get("workspace") or ""), str(target.get("target_id") or target.get("anchor_label") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        target["message"] = str(getattr(check, "message", "") or "")
+        targets.append(target)
+    return tuple(targets)
+
+
 def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingReadiness:
     root = normalise_resref(project.module_root)
     if not root:
@@ -540,11 +595,13 @@ def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingR
     walkability = validate_authored_gameplay_placement_against_walkmesh(project.placements, entry_wok)
     blocking.extend(str(issue) for issue in tuple(getattr(walkability, "blocking_issues", ()) or ()))
     if blocking:
+        blocking_targets = _pathing_blocking_targets(project, walkability)
         return AuthoredModulePathingReadiness(
             ready=False,
             status="Blocked",
             pth_resource=f"{root}.pth",
             blocking_messages=tuple(blocking),
+            blocking_targets=blocking_targets,
             fix_hint="Move entry points and gameplay anchors onto walkable WOK faces before export.",
         )
 
@@ -1376,6 +1433,7 @@ def build_authored_module_readiness(
                 "anchor_labels": list(pathing.anchor_labels),
                 "warnings": list(pathing.warnings),
                 "blocking_messages": list(pathing.blocking_messages),
+                "blocking_targets": list(pathing.blocking_targets),
                 "fix_hint": pathing.fix_hint,
             },
             "geometry_validation": {

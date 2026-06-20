@@ -219,7 +219,7 @@
       "resource_name": "PYTHON_PAYLOAD_0036",
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "cdac447c14807d0d07d17cfd8c270b36710fa21cd8f0f4c9516932c5ea2a4118"
+      "sha256": "52c3d55cf7c2435712e6b14fb9b8306bb832c3c4002d9ab4a1425e1b49c8124d"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0037",

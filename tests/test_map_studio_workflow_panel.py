@@ -237,6 +237,10 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "self.export_panel.walkmeshFixRequested.connect(self.show_map_studio_walkmesh_tools)" in window_source
     assert "self.export_panel.placementFixRequested.connect(self.show_map_studio_placement_tools)" in window_source
     assert "self.export_panel.validateRequested.connect(self.validate_kmap)" in window_source
+    assert "self.export_panel.selectFixTargetRequested.connect(self._select_map_studio_export_fix_target)" in window_source
+    assert "def _select_map_studio_export_fix_target" in window_source
+    assert "self._focus_map_studio_entry_point_controls()" in window_source
+    assert "self.select_item(target)" in window_source
     assert "self.workflow_panel.set_selection_context(self._selected_item_label(item_id))" in window_source
     assert "def _selected_item_label" in window_source
     assert 'self.workflow_panel.set_selection_context("")' in window_source
@@ -1079,18 +1083,24 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "mapStudioExportFixBuilderButton" in source
         assert "mapStudioExportFixWalkmeshButton" in source
         assert "mapStudioExportFixPlacementButton" in source
+        assert "mapStudioExportFixSelectTargetButton" in source
         assert "mapStudioExportFixValidateButton" in source
         assert "builderFixRequested = QtCore.Signal()" in source
         assert "walkmeshFixRequested = QtCore.Signal()" in source
         assert "placementFixRequested = QtCore.Signal()" in source
+        assert "selectFixTargetRequested = QtCore.Signal(str)" in source
         assert "validateRequested = QtCore.Signal()" in source
         assert 'setHorizontalHeaderLabels(("Blocker", "KOTOR export impact", "Next fix"))' in source
         assert "def set_readiness" in source
         assert "can_export_candidate" in source
         assert 'pathing.get("blocking_messages"' in source
+        assert 'pathing.get("blocking_targets"' in source
         assert "Blocked by PTH/WOK pathing" in source
         assert "Blocks authored .mod package, stage, and install actions." in source
         assert "def _set_fix_action_state" in source
+        assert "def _emit_fix_target" in source
+        assert "def _first_fix_target_id" in source
+        assert "def _fix_hint_for_target" in source
         assert "Fix action: No blocker action needed" in source
         assert "mapStudioExportActionGuideLabel" in source
         assert "mapStudioExportActionGuideTable" in source

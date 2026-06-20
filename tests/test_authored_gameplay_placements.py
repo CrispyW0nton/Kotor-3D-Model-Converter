@@ -195,13 +195,48 @@ def test_t2602_pathing_blocker_blocks_export_candidate_and_validation_issue() ->
     assert readiness.export_status == "Pathing blocked"
     assert pathing["ready"] is False
     assert pathing["blocking_messages"]
+    assert pathing["blocking_targets"]
     assert any("entry_point" in message for message in pathing["blocking_messages"])
+    assert pathing["blocking_targets"][0]["target_id"] == "entry_point"
+    assert pathing["blocking_targets"][0]["workspace"] == "entry_point"
     assert pathing_status.ready is False
     assert pathing_status.status == "Blocked"
     assert any(issue.code == "MAP_STUDIO_PTH_PATHING_BLOCKER" for issue in issues)
     pathing_issue = next(issue for issue in issues if issue.code == "MAP_STUDIO_PTH_PATHING_BLOCKER")
     assert pathing_issue.severity == "Error"
     assert "walkable WOK" in pathing_issue.suggested_fix
+
+
+def test_t2602_pathing_blocker_targets_off_walkmesh_authored_placement() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grpthtg",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="bench_far",
+        position=(100.0, 100.0, 0.0),
+    ).project
+
+    readiness = build_authored_module_readiness(project)
+    pathing = readiness.metadata["pathing"]
+    target = next(item for item in pathing["blocking_targets"] if item.get("placement_kind") == "placeable")
+
+    assert readiness.can_export_candidate is False
+    assert pathing["ready"] is False
+    assert target["anchor_label"] == "placeable:bench_far"
+    assert target["target_id"].startswith("authored:placeable:")
+    assert target["workspace"] == "placement"
+    assert "move it onto generated walkable WOK" in target["fix_action"]
 
 
 def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:

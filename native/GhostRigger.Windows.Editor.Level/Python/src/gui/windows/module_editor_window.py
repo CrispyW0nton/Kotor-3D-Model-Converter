@@ -699,6 +699,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.walkmeshFixRequested.connect(self.show_map_studio_walkmesh_tools)
         self.export_panel.placementFixRequested.connect(self.show_map_studio_placement_tools)
         self.export_panel.validateRequested.connect(self.validate_kmap)
+        self.export_panel.selectFixTargetRequested.connect(self._select_map_studio_export_fix_target)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
@@ -1214,6 +1215,31 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.set_active_authoring_context(
             "Export + Game Proof: validate, stage/install, warp test, then record proof"
         )
+
+    def _select_map_studio_export_fix_target(self, target_id: str) -> None:
+        """Select the authored object or entry-point controls named by export readiness."""
+
+        target = str(target_id or "").strip()
+        if not target:
+            return
+        if target == "entry_point":
+            self._focus_map_studio_entry_point_controls()
+            self.statusBar().showMessage("Focused Map Studio module entry point for the current PTH/WOK blocker.")
+            return
+        if target.startswith("authored:"):
+            self.show_map_studio_placement_tools()
+            self.select_item(target)
+            try:
+                self.viewport_panel.focus_selected()
+            except Exception:
+                pass
+            self.workflow_panel.set_active_authoring_context(
+                "Placement fix: move the selected authored resource onto generated walkable WOK, then Validate again."
+            )
+            self._log(f"Selected export blocker target {target}. Move it onto walkable WOK before staging.")
+            return
+        self.select_item(target)
+        self._log(f"Selected export blocker target {target}.")
 
     def _handle_map_studio_tool_belt_action(self, action: Any) -> None:
         key = str(getattr(action, "key", "") or "")

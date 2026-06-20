@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Export Fixes Select Blocking Path Anchors
+
+Owner: LordVaderCW
+Task: T2602 / T2605
+Subsystem: Map Studio / PTH readiness / Export tab blocker targeting
+Intersects: Domain Core Modules readiness metadata, ModuleMeshes mirror package, GUI Boundary Panels export panel, Windows Editor Level shell.
+
+- Added PTH/WOK blocking target metadata so failed pathing checks identify the selectable entry point or authored placement that needs attention.
+- Added an Export tab `Select Blocking Anchor` action that focuses the entry point controls or selects the offending authored placement in Map Studio.
+- Kept the fix routing presentation-only in the Qt layer; pathing readiness and export gating remain owned by authored-module core readiness.
+- Mirrored the readiness/export panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_gameplay_placements.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_gameplay_placements.py::test_t2602_pathing_blocker_blocks_export_candidate_and_validation_issue tests/test_authored_gameplay_placements.py::test_t2602_pathing_blocker_targets_off_walkmesh_authored_placement -q --basetemp .pytest_tmp_pathing_blocker_target`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof tests/test_map_studio_workflow_panel.py::test_t2600_level_editor_wires_workflow_panel_to_readiness_contract -q --basetemp .pytest_tmp_export_fix_target_ui`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Export Blockers Offer Fix Navigation
 
 Owner: LordVaderCW
