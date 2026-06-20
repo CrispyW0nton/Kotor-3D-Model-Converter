@@ -62,7 +62,7 @@ application. Do not treat the repository as a flat Python app.
 - `native/templates/`: templates for new native DLL/debug-validation project
   scaffolding.
 
-The current root payload manifest covers 91 non-debug native DLL projects and
+The current root payload manifest covers 80 non-debug native DLL projects and
 1,306 embedded Python files. Treat the manifest and
 `tests/test_native_python_payloads.py` as the source of truth if counts drift.
 
@@ -77,15 +77,15 @@ state and must be migrated deliberately rather than copied into new work.
   runtime foundations, diagnostics, math, and host integration.
 - `GhostRigger.Runtime.Core.Host`: C ABI runtime host used by Python for native
   lifecycle, scene/resource descriptors, retained handles, and diagnostics.
-- `GhostRigger.Core.IO.*`: all reading, writing, importing, exporting,
+- `GhostRigger.Core.IO.File.*`: all reading, writing, importing, exporting,
   serialization, deserialization, packing, extraction, archive access,
   resource-file access, and conversion.
-- `GhostRigger.Core.Automation.*`: IPC, MCP, scripting bridges, external
+- `GhostRigger.Core.Automation`: IPC, MCP, scripting bridges, external
   control APIs, background automation, command automation, automation events,
   and machine-facing integrations.
 - `GhostRigger.Core.Tools.*`: product tool packages such as BAS, Character
   Builder, Module Editor, Export, Pivot Controls, Resource Browser,
-  Retargeting, Sequence Editor, and TwoDA Browser. Tools orchestrate lower
+  Retargeting, Sequence Editor, and 2DA Browser. Tools orchestrate lower
   layers; they do not own reusable IO, parsing, rendering, resource, math,
   validation, or scene rules.
 - `GhostRigger.Core.GUI.Display.*`: presentation, layout, styling, signals,
@@ -99,7 +99,7 @@ state and must be migrated deliberately rather than copied into new work.
   contracts.
 - `GhostRigger.Core.Resources.*`: resource discovery, identity, addresses,
   references, lifetime, cache policy, and game/library resource lookup.
-- `GhostRigger.Core.Formats.*`: pure format structures and format-level
+- `GhostRigger.Core.IO.File.Format`: pure format structures and format-level
   contracts. Formats define structure; IO reads and writes it.
 - `GhostRigger.Core.Math.*`: reusable transform, matrix, camera, pivot,
   projection, coordinate conversion, normal/tangent, skinning, frame, and
@@ -115,7 +115,7 @@ state and must be migrated deliberately rather than copied into new work.
 - `GhostRigger.Core.Workflow.*` and `GhostRigger.Systems.*`: reusable
   multi-step workflows and pipelines that are not just one tool and not just
   GUI.
-- `GhostRigger.Adapters.*`: technology-specific glue for Qt, GPU, filesystem,
+- `GhostRigger.Core.Bridge`: technology-specific glue for Qt, GPU, filesystem,
   native host, Python/C++ bridges, renderer adapters, and external libraries.
 
 Many Phase 1 native packages are diagnostic or boundary-only. Do not move real
@@ -321,7 +321,7 @@ The high-level ownership map is:
   implementations.
 - Validation owns validation rules, model/resource/scene checks, export gates,
   and comparison reports.
-- Adapters own technology-specific glue and must not own durable domain policy.
+- Bridge packages own runtime glue; Qt packages own Qt-specific surfaces.
 - Runtime/Native Core owns native ABI, lifecycle, diagnostics, retained
   handles, host services, and C/C++ bridge surfaces.
 - Project/Session owns project files, user sessions, workspace state, recent

@@ -7,7 +7,7 @@ constexpr const char* kVersion = "0.1.0";
 constexpr const char* kOwnerBoundary =
     R"({"schema":"math_owner_boundary.v1",)"
     R"("module_package":"GhostRigger.Core.Math",)"
-    R"("source_package":"src/math",)"
+    R"("source_package":"src/math;src/core/camera;src/core/geometry;src/core/measurement;src/gui/camera",)"
     R"("owner_surface":"Shared math helpers",)"
     R"("owner_package":"native/GhostRigger.Core.Math",)"
     R"("bridge_method":"C ABI DLL",)"
@@ -18,7 +18,7 @@ constexpr const char* kOwnerBoundary =
 constexpr const char* kDependencySchema =
     R"({"schema":"math_dependency_schema.v1",)"
     R"("module_package":"GhostRigger.Core.Math",)"
-    R"("source_package":"src/math",)"
+    R"("source_package":"src/math;src/core/camera;src/core/geometry;src/core/measurement;src/gui/camera",)"
     R"("diagnostic_only":true,)"
     R"("dependency_scan_complete":true,)"
     R"("native_dependencies_declared":[],)"
@@ -36,7 +36,7 @@ GHOSTRIGGER_MATH_API const char* gr_math_version() {
 GHOSTRIGGER_MATH_API const char* gr_math_capabilities_json() {
     return R"({"name":"GhostRigger.Core.Math","version":"0.1.0",)"
            R"("phase":"P1 module sweep","module_package":true,)"
-           R"("source_package":"src/math",)"
+           R"("source_package":"src/math;src/core/camera;src/core/geometry;src/core/measurement;src/gui/camera",)"
            R"("owner_surface":"Shared math helpers","bridge_method":"C ABI DLL",)"
            R"("diagnostic_only":true,"native_implementation_enabled":false,)"
            R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics"],)"

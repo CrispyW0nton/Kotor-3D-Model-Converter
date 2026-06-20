@@ -2,50 +2,78 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.GUI.Helpers.Gizmo",
-    "file_count": 7,
+    "file_count": 10,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_INIT",
             "source_path": "src/core/gizmo/__init__.py",
             "packaged_path": "Python/src/core/gizmo/__init__.py",
-            "sha256": "9941176a06cc8539e08405fa26d29ddd688d4f4607625a5c50bec9af7f789afc"
+            "sha256": "9941176a06cc8539e08405fa26d29ddd688d4f4607625a5c50bec9af7f789afc",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_DRAW_DATA",
             "source_path": "src/core/gizmo/gizmo_draw_data.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_draw_data.py",
-            "sha256": "2ad0e0b9af3b5ccc1ea551d5e9d0dc87b3cb2cac41f0cd76124785d094f6e095"
+            "sha256": "2ad0e0b9af3b5ccc1ea551d5e9d0dc87b3cb2cac41f0cd76124785d094f6e095",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_MODE",
             "source_path": "src/core/gizmo/gizmo_mode.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_mode.py",
-            "sha256": "75dbf24a21cafea9588af93d4dc5547cf2d7aac70029293e006d9388656951ee"
+            "sha256": "75dbf24a21cafea9588af93d4dc5547cf2d7aac70029293e006d9388656951ee",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_PICKER",
             "source_path": "src/core/gizmo/gizmo_picker.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_picker.py",
-            "sha256": "47acf33c4f6dfcd9019f102b5e8958770583ebe778f26622a806d1ed221c216a"
+            "sha256": "47acf33c4f6dfcd9019f102b5e8958770583ebe778f26622a806d1ed221c216a",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_RENDERER",
             "source_path": "src/core/gizmo/gizmo_renderer.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_renderer.py",
-            "sha256": "acca41a6134516af190560207725f62a7bee39dd3a9eda5557bda2c455e5e36c"
+            "sha256": "acca41a6134516af190560207725f62a7bee39dd3a9eda5557bda2c455e5e36c",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_CONTROLLER",
             "source_path": "src/core/gizmo/transform_controller.py",
             "packaged_path": "Python/src/core/gizmo/transform_controller.py",
-            "sha256": "37fa23c159de7872948a8128081e5fa456aa3a0ab386fe17d7bfa3e7e91ae164"
+            "sha256": "37fa23c159de7872948a8128081e5fa456aa3a0ab386fe17d7bfa3e7e91ae164",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_GIZMO",
             "source_path": "src/core/gizmo/transform_gizmo.py",
             "packaged_path": "Python/src/core/gizmo/transform_gizmo.py",
-            "sha256": "98632feeebe96455330a0a708e9621faf73bb580e8309b2d25bd2f3ece6a754b"
+            "sha256": "98632feeebe96455330a0a708e9621faf73bb580e8309b2d25bd2f3ece6a754b",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_GIZMO_RENDERER",
+            "source_path": "src/gui/camera/camera_gizmo_renderer.py",
+            "packaged_path": "Python/src/gui/camera/camera_gizmo_renderer.py",
+            "sha256": "d18d2b91dbe2c0a32890a333d9ce4ea5846f899dd0ed6e55ff6f254f17d61292",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_PICKER",
+            "source_path": "src/gui/camera/camera_picker.py",
+            "packaged_path": "Python/src/gui/camera/camera_picker.py",
+            "sha256": "9a8b33e78bbee3d9e7d541eadb81e233dc5dbc50dcac91315008a99a5cfae224",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_SELECTION",
+            "source_path": "src/gui/camera/camera_selection.py",
+            "packaged_path": "Python/src/gui/camera/camera_selection.py",
+            "sha256": "c7b9a483d48950afcd1854d42bdc5d8ee5f396435c4da0c9a6f980a96f7eef9f",
+            "project": "GhostRigger.Core.GUI.Helpers.Gizmo"
         }
     ]
 }

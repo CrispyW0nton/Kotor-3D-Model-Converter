@@ -35,7 +35,7 @@ DLG  = 2029   .dlg  dialog tree
 WOK  = 2016   .wok  room walkmesh (BWM)
 LYT  = 3000   .lyt  area layout
 VIS  = 3001   .vis  area visibility
-2DA  = 2017   .2da  two-dimensional array
+TwoDA  = 2017   .2da  two-dimensional array
 GIT  = 2015   .git  area instance template
 NSS  = 2009   .nss  NWScript source
 NCS  = 2010   .ncs  NWScript compiled
@@ -347,7 +347,7 @@ class ResourceManager:
         return self.get(name, RES_2DA, game)
 
     def get_2da(self, name: str, game: str = 'K1') -> Optional[object]:
-        """Return a parsed TwoDA table using the shared templates parser."""
+        """Return a parsed 2DA table using the shared templates parser."""
         key = (game.upper(), name.lower())
         cached = self._2da_cache.get(key)
         if cached is not None:

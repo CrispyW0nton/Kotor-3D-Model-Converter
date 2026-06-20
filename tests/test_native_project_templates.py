@@ -121,7 +121,7 @@ def test_native_template_readme_names_required_phase_one_metadata() -> None:
 
 def test_native_solution_keeps_real_projects_without_solution_folders() -> None:
     solution = (ROOT / "GhostRigger.sln").read_text(encoding="utf-8")
-    assert len(_solution_project_names(solution)) == 92
+    assert len(_solution_project_names(solution)) == 81
     assert _solution_folder_names(solution) == []
     assert "GlobalSection(NestedProjects)" not in solution
 
@@ -170,11 +170,11 @@ def test_native_docs_define_canonical_package_ownership_model() -> None:
     assert "GhostRigger.Core.GUI.Display.*" in docs
     assert "GhostRigger.Core.GUI.Helpers.*" in docs
     assert "GhostRigger.Core.Rendering.Backends.{Backend}" in docs
-    assert "GhostRigger.Core.IO.*" in docs
-    assert "GhostRigger.Core.Automation.*" in docs
+    assert "GhostRigger.Core.IO.File.*" in docs
+    assert "GhostRigger.Core.Automation" in docs
     assert "GhostRigger.Core.Resources.*" in docs
-    assert "GhostRigger.Core.Formats.*" in docs
-    assert "GhostRigger.Adapters.*" in docs
+    assert "GhostRigger.Core.IO.File.Format" in docs
+    assert "GhostRigger.Core.Bridge" in docs
     assert "legacy" in docs
 
 
@@ -532,9 +532,9 @@ def test_browser_tool_project_scaffolds_match_phase_one_boundaries() -> None:
         (
             "GhostRigger.Core.Tools.TwoDABrowser",
             "GHOSTRIGGER_TOOLS_TWO_DA_BROWSER_EXPORTS",
-            "GhostRiggerToolsTwoDABrowser.h",
-            "GhostRiggerToolsTwoDABrowser.cpp",
-            "GhostRiggerToolsTwoDABrowserDEBUG.cpp",
+            "GhostRiggerTools2DABrowser.h",
+            "GhostRiggerTools2DABrowser.cpp",
+            "GhostRiggerTools2DABrowserDEBUG.cpp",
             "2DA Browser",
             "table_schema",
         ),

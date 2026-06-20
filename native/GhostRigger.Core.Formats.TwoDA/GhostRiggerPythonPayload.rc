@@ -1,6 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_CORE_TEMPLATES_INIT RCDATA "Python/src/core/templates/__init__.py"
-PYTHON_PAYLOAD_CORE_TEMPLATES_NATIVE RCDATA "Python/src/core/templates/_native.py"
-PYTHON_PAYLOAD_CORE_TEMPLATES_TEMPLATE_BUILDER RCDATA "Python/src/core/templates/template_builder.py"
-PYTHON_PAYLOAD_CORE_TEMPLATES_TWODA RCDATA "Python/src/core/templates/twoda.py"

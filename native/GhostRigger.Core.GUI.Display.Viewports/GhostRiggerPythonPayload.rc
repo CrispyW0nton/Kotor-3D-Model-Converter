@@ -1,5 +1,11 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_GUI_CAMERA_INIT RCDATA "Python/src/gui/camera/__init__.py"
+PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_OVERLAYS RCDATA "Python/src/gui/camera/camera_overlays.py"
+PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_VIEWPORT_ADAPTER RCDATA "Python/src/gui/camera/camera_viewport_adapter.py"
+PYTHON_PAYLOAD_GUI_CAMERA_FRAME_RENDERER RCDATA "Python/src/gui/camera/frame_renderer.py"
+PYTHON_PAYLOAD_GUI_CAMERA_RENDER_MANIFEST RCDATA "Python/src/gui/camera/render_manifest.py"
+PYTHON_PAYLOAD_GUI_CAMERA_RENDER_OUTPUT RCDATA "Python/src/gui/camera/render_output.py"
 PYTHON_PAYLOAD_GUI_VIEWPORTS_INIT RCDATA "Python/src/gui/viewports/__init__.py"
 PYTHON_PAYLOAD_GUI_VIEWPORTS_FRAME_RENDERER RCDATA "Python/src/gui/viewports/frame_renderer.py"
 PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_TRANSFORM_TYPEIN_BAR RCDATA "Python/src/gui/viewports/qt_transform_typein_bar.py"

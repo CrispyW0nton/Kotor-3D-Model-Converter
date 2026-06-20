@@ -224,7 +224,7 @@ def _import_mdl_runtime() -> tuple[Any, Any]:
         repo = _repo_root_from_here()
         md = _load_module(
             "src.core.geometry.model_data",
-            repo / "native" / "GhostRigger.Core.Math.Geometry" / "Python" / "src" / "core" / "geometry" / "model_data.py",
+            repo / "native" / "GhostRigger.Core.Math" / "Python" / "src" / "core" / "geometry" / "model_data.py",
         )
         writer_module = _load_module(
             "src.core.mdl.mdl_writer",

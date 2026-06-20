@@ -15,7 +15,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "bdcd362a46b32f443c3faf95062b4937d5b62f59dbfe3c9bf84d462f4522b1c1"
+            "sha256": "65c1b858613f738a5708ddee45599f43a59e93f2c66972bfb2b2a55bec76156b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_RESOURCES",
@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_LIBRARY",
             "source_path": "src/resources/game_library.py",
             "packaged_path": "Python/src/resources/game_library.py",
-            "sha256": "0ac39f73154c06826230aa2272393a8641c7b435354994950b227a690625924b"
+            "sha256": "ba903d7c5b33ab66b52a01e64af9d8d05b1374964d78b401fc6d05eb73044392"
         }
     ]
 }

@@ -51,7 +51,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_INTEGRATION_TOOL_INTEGRATION_REGISTRY",
             "source_path": "src/gui/integration/tool_integration_registry.py",
             "packaged_path": "Python/src/gui/integration/tool_integration_registry.py",
-            "sha256": "935a8485365c47f6abc6300cd8bbee6bdf50c542d60ee4162588db5e616eaec5"
+            "sha256": "a24155077b82c523ec89f888d84a29dbb3d39738c9626ca39ced7e132ae7a4be"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_QT_LIB",

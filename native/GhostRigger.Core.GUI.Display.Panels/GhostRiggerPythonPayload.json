@@ -171,7 +171,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL",
             "source_path": "src/gui/panels/qt_library_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_library_panel.py",
-            "sha256": "93f50561e9a996b3af84aa45036e50e9acf05e63b2fb6ab99bc1200d8437277c"
+            "sha256": "3b32af1eceb0f4eb7e128821d4780055f1fe1142ec1690c0bd96fd543c720247"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIGHTING_PANEL",
@@ -231,7 +231,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_RESOURCE_PANEL",
             "source_path": "src/gui/panels/qt_resource_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_resource_panel.py",
-            "sha256": "2e71bacd24f7af651f7b6498850e4505778871fe998abdbb64056192b88e48b2"
+            "sha256": "94437bbbeb210fd7d4d2d9a4046330bcbdd8f63785cdd5e36efee090ffcfc1e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_RIG_PANEL",

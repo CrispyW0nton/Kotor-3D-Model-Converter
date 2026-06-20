@@ -48,7 +48,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Private\GhostRiggerToolsTwoDABrowser.cpp">
+    <ClCompile Include="Private\GhostRiggerTools2DABrowser.cpp">
       <Filter>Private</Filter>
     </ClCompile>
     <ClCompile Include="Private\PythonFunctions\ClassMethods.cpp">
@@ -71,7 +71,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Public\GhostRiggerToolsTwoDABrowser.h">
+    <ClInclude Include="Public\GhostRiggerTools2DABrowser.h">
       <Filter>Public</Filter>
     </ClInclude>
     <ClInclude Include="Public\PythonFunctions\ClassMethods.h">

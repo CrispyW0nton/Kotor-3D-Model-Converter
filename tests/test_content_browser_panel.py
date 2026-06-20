@@ -31,7 +31,7 @@ def _minimal_gff(file_type: str, fields: dict[str, tuple[str, object]]) -> bytes
     return GffWriter(GffFile(file_type=file_type, root=root)).serialize()
 
 
-class _FakeTwoDARow(dict):
+class _Fake2DARow(dict):
     def __init__(self, index: int, **values: object):
         super().__init__({key.lower(): value for key, value in values.items()})
         self.index = index
@@ -40,8 +40,8 @@ class _FakeTwoDARow(dict):
         return super().get(key.lower(), default)
 
 
-class _FakeTwoDA:
-    def __init__(self, rows: list[_FakeTwoDARow]):
+class _Fake2DA:
+    def __init__(self, rows: list[_Fake2DARow]):
         self._rows = rows
 
     def __iter__(self):
@@ -1098,8 +1098,8 @@ def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() 
         def get_2da(self, name: str, game: str = "K1"):
             assert game == "K1"
             if name == "appearance":
-                return _FakeTwoDA([
-                    _FakeTwoDARow(
+                return _Fake2DA([
+                    _Fake2DARow(
                         0,
                         label="P_MAL_C_MED",
                         modeltype="B",
@@ -1108,9 +1108,9 @@ def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() 
                     ),
                 ])
             if name == "baseitems":
-                return _FakeTwoDA([
-                    _FakeTwoDARow(38, label="armor_class_4", bodyvar="C", name="1001"),
-                    _FakeTwoDARow(39, label="combat_suit", bodyvar="D", name="1000"),
+                return _Fake2DA([
+                    _Fake2DARow(38, label="armor_class_4", bodyvar="C", name="1001"),
+                    _Fake2DARow(39, label="combat_suit", bodyvar="D", name="1000"),
                 ])
             return None
 

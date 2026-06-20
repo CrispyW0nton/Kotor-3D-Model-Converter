@@ -47,11 +47,11 @@ PAYLOAD_PATHS = (
     "native/GhostRigger.Core.Resources.Game/Python",
     "native/GhostRigger.Core.Scene/Python",
     "native/GhostRigger.Core.Scene.Walkmesh/Python",
-    "native/GhostRigger.Core.Math.Geometry/Python",
-    "native/GhostRigger.Core.Math.Camera/Python",
+    "native/GhostRigger.Core.Math/Python",
+    "native/GhostRigger.Core.Math/Python",
     "native/GhostRigger.Core.Math/Python",
     "native/GhostRigger.Core.Rendering.Lighting/Python",
-    "native/GhostRigger.Core.Automation.MCP/Python/src",
+    "native/GhostRigger.Core.Automation/Python/src",
     ".",
 )
 KOTORMCP_REQUIRED_RESOURCE_TYPES = ("ARE", "GIT", "IFO", "LYT", "PTH", "VIS", "MDL", "WOK")

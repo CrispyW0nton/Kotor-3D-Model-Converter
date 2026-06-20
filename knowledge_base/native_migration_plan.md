@@ -281,11 +281,11 @@ Native project naming:
   `GhostRigger.Runtime.Core.Host`.
 - Shared core extensions: `GhostRigger.Native.Core.Foundation.{System}`.
 - Shared runtime contracts: `GhostRigger.Runtime.Shared.{System}`.
-- IO packages: `GhostRigger.Core.IO.*`.
-- Automation packages: `GhostRigger.Core.Automation.*`.
+- IO packages: `GhostRigger.Core.IO.File.*`.
+- Automation packages: `GhostRigger.Core.Automation`.
 - Scene packages: `GhostRigger.Core.Scene.*`.
 - Resource packages: `GhostRigger.Core.Resources.*`.
-- Format packages: `GhostRigger.Core.Formats.*`.
+- Format packages: `GhostRigger.Core.IO.File.Format`.
 - Math packages: `GhostRigger.Core.Math.*`.
 - Renderer contracts and state: `GhostRigger.Core.Rendering`.
 - Renderer backends: `GhostRigger.Core.Rendering.Backends.{Backend}`.
@@ -297,7 +297,7 @@ Native project naming:
 - Toolbox migrations from Python: `GhostRigger.Core.Tools.{Toolname}`.
 - GUI display packages: `GhostRigger.Core.GUI.Display.*`.
 - GUI helper packages: `GhostRigger.Core.GUI.Helpers.*`.
-- Adapter packages: `GhostRigger.Adapters.*`.
+- Adapter packages: `GhostRigger.Core.Bridge`.
 
 Current Phase 1 projects such as `GhostRigger.Core.Rendering.*` and
 `GhostRigger.Core.GUI.Display.*` are legacy build targets. Rename or merge them only in

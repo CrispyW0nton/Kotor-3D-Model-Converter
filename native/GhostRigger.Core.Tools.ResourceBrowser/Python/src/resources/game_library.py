@@ -682,7 +682,7 @@ class GameLibrary:
         self.textures: List[str] = []
         self._model_index: Dict[str, ModelLibraryEntry] = {}  # resref.lower() → entry
         # 2DA cache (loaded on demand)
-        self._2da_cache: Dict[str, object] = {}    # name_lower → TwoDA
+        self._2da_cache: Dict[str, object] = {}    # name_lower → 2DA
         # TLK readers
         self._k1_tlk: Optional[object] = None
         self._k2_tlk: Optional[object] = None
@@ -1035,8 +1035,8 @@ class GameLibrary:
 
     def get_2da(self, name: str, game: str = "K1") -> Optional[object]:
         """
-        Get a parsed TwoDA table by name.
-        Cached after first load. Returns a TwoDA instance or None.
+        Get a parsed 2DA table by name.
+        Cached after first load. Returns a 2DA instance or None.
         """
         from .game_library import KEYBIFReader  # avoid circular
 

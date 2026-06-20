@@ -8,8 +8,8 @@ from src.io.fbx import fbx_sdk_paths, fbx_sdk_setup
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.IO.FBX"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.FBX.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.IO.File.Format"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.IO.File.Format.dll"
 
 
 def _load_io_dll() -> ctypes.CDLL:
@@ -23,8 +23,8 @@ def _load_io_dll() -> ctypes.CDLL:
 
 
 def test_io_declares_native_fbx_sdk_settings_files() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Core.IO.FBX.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Core.IO.FBX.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.IO.File.Format.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.IO.File.Format.vcxproj.filters").read_text(encoding="utf-8")
     header = (PROJECT_DIR / "Public" / "FbxSdkSettings.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "FbxSdkSettings.cpp").read_text(encoding="utf-8")
 

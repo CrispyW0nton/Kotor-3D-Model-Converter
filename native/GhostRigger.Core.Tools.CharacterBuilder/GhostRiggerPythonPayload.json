@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_APPEARANCE",
             "source_path": "src/core/characters/creature_appearance.py",
             "packaged_path": "Python/src/core/characters/creature_appearance.py",
-            "sha256": "1635d97278a232d3a986ea1451dfb1133e0c95841e92d6cac8aabafb4557810c"
+            "sha256": "8137d103959ff1b2a704dfe41d2d312640ebf103cf316c537680d5531608ea27"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",

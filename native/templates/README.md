@@ -40,7 +40,7 @@ renderer contract/backend package names.
 
 Shared logic that more than one tool, GUI package, renderer, or runtime package
 consumes belongs in the canonical Core, Systems, Runtime, Native Core, or
-Adapters owner first. Follow `knowledge_base/package_ownership_model.md` before
+Core owner first. Follow `knowledge_base/package_ownership_model.md` before
 choosing a new package name.
 
 Do not copy an existing feature project and then strip it down. Start from the

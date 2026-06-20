@@ -10295,13 +10295,13 @@ const NativeFunctionImplementation& qttwodabrowserpanel_construct_line_16_ec9365
         "GhostRigger.Core.GUI.Display.Panels",
         "ghostrigger::core::gui::panels::qt_resource_panel",
         "src/gui/panels/qt_resource_panel.py",
-        "QtTwoDaBrowserPanel.__init__",
+        "Qt2DABrowserPanel.__init__",
         "instance_methods",
         "native_contract_pending_semantic_port",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Core.GUI.Display.Panels","namespace":"ghostrigger::core::gui::panels::qt_resource_panel","python_file":"src/gui/panels/qt_resource_panel.py","qualname":"QtTwoDaBrowserPanel.__init__","name":"__init__","callable_type":"instance_methods","line":16,"end_line":18,"signature":{"args":["self","parent"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Core.GUI.Display.Panels","namespace":"ghostrigger::core::gui::panels::qt_resource_panel","python_file":"src/gui/panels/qt_resource_panel.py","qualname":"Qt2DABrowserPanel.__init__","name":"__init__","callable_type":"instance_methods","line":16,"end_line":18,"signature":{"args":["self","parent"],"positional_count":2,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }
@@ -10311,13 +10311,13 @@ const NativeFunctionImplementation& qttwodabrowserpanel_build_line_20_04a1e317_n
         "GhostRigger.Core.GUI.Display.Panels",
         "ghostrigger::core::gui::panels::qt_resource_panel",
         "src/gui/panels/qt_resource_panel.py",
-        "QtTwoDaBrowserPanel._build",
+        "Qt2DABrowserPanel._build",
         "instance_methods",
         "native_contract_pending_semantic_port",
         true,
         false,
         true,
-        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Core.GUI.Display.Panels","namespace":"ghostrigger::core::gui::panels::qt_resource_panel","python_file":"src/gui/panels/qt_resource_panel.py","qualname":"QtTwoDaBrowserPanel._build","name":"_build","callable_type":"instance_methods","line":20,"end_line":44,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
+        R"grjson({"schema":"ghostrigger.native.cpp_function.v1","project":"GhostRigger.Core.GUI.Display.Panels","namespace":"ghostrigger::core::gui::panels::qt_resource_panel","python_file":"src/gui/panels/qt_resource_panel.py","qualname":"Qt2DABrowserPanel._build","name":"_build","callable_type":"instance_methods","line":20,"end_line":44,"signature":{"args":["self"],"positional_count":1,"keyword_only_count":0,"has_vararg":false,"has_kwarg":false},"native_language":"C++","native_status":"native_contract_pending_semantic_port","native_first":true,"python_runtime_required":false,"python_fallback_allowed":true,"semantic_port_required":true})grjson"
     };
     return implementation;
 }

@@ -1,0 +1,82 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{839a781d-bf55-a683-c1ed-c775b06b6362}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{00fd0e9b-07de-1ef4-7fb9-0c8e92e672b4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{caef7e6a-4625-2cb6-a1aa-2ddcb89ecbd9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{f92a963e-06ec-1918-62ab-92e4ccd625d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{01f52ea6-ef90-059d-a259-4b69e4182f05}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{a4861815-3d88-c5ad-9061-f5060b5462c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters">
+      <UniqueIdentifier>{4392237d-3220-7f64-c665-9534a739d3a8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\adapters\qt_viewport">
+      <UniqueIdentifier>{a8917c0c-7207-43e0-2028-dc73d4d370c1}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerCoreQtViewport.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerCoreQtViewport.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
+    <None Include="Python\src\adapters\qt_viewport\__init__.py">
+      <Filter>Python\src\adapters\qt_viewport</Filter>
+    </None>
+    <None Include="Python\src\adapters\qt_viewport\camera_gizmo_renderer.py">
+      <Filter>Python\src\adapters\qt_viewport</Filter>
+    </None>
+    <None Include="Python\src\adapters\qt_viewport\camera_overlays.py">
+      <Filter>Python\src\adapters\qt_viewport</Filter>
+    </None>
+    <None Include="Python\src\adapters\qt_viewport\frame_renderer.py">
+      <Filter>Python\src\adapters\qt_viewport</Filter>
+    </None>
+    <None Include="Python\src\adapters\qt_viewport\lighting_viewport_controller.py">
+      <Filter>Python\src\adapters\qt_viewport</Filter>
+    </None>
+    <None Include="Python\src\adapters\qt_viewport\still_frame_renderer.py">
+      <Filter>Python\src\adapters\qt_viewport</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

@@ -43,7 +43,7 @@ def test_native_module_manifest_covers_python_package_boundaries() -> None:
     names = {entry["name"] for entry in entries}
     sources = {entry["source_package"] for entry in entries}
 
-    assert len(entries) == 58
+    assert len(entries) == 47
     assert "GhostRigger.Core.Scene.Modules" in names
     assert "GhostRigger.Core.Scene.Level" in names
     assert "GhostRigger.Core.Scene" in names

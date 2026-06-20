@@ -76,7 +76,7 @@ expressive Python API and still preserves a targeted native DEBUG path.
   `GhostRigger.Core.GUI.Display.*` boundaries. Use `GhostRigger.Core.Rendering.*`,
   `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`,
   `GhostRigger.Core.Tools.*`, `GhostRigger.Core.Project.*`,
-  `GhostRigger.Core.Session`, or `GhostRigger.Core.Automation.*` as the
+  `GhostRigger.Core.Session`, or `GhostRigger.Core.Automation` as the
   ownership model requires.
 
 ## Native Project Shape
@@ -428,7 +428,7 @@ Current completed foundation:
   owner-boundary metadata, and dependency-schema placeholders without Python or
   the GUI.
 - `native/GhostRigger.PythonPayloadManifest.json` records the Phase 1.5
-  embedded Python payload sweep. The payload map covers all 91 non-DEBUG native
+  embedded Python payload sweep. The payload map covers all 80 non-DEBUG native
   DLL projects and every `src/**/*.py` file at least once.
 - The Phase 1.5 payload copies live under
   `native/<Project>/Python/src/...` and are built into native DLLs as
@@ -474,15 +474,15 @@ Native project naming foundation:
   `GhostRigger.Core.GUI.Display.*` projects are legacy Phase 1 compatibility packages,
   not new naming precedent.
 - Python module sweep packages must map to the canonical owners in
-  `knowledge_base/package_ownership_model.md`: `GhostRigger.Core.IO.*`,
-  `GhostRigger.Core.Automation.*`, `GhostRigger.Core.Scene.*`,
-  `GhostRigger.Core.Resources.*`, `GhostRigger.Core.Formats.*`,
+  `knowledge_base/package_ownership_model.md`: `GhostRigger.Core.IO.File.*`,
+  `GhostRigger.Core.Automation`, `GhostRigger.Core.Scene.*`,
+  `GhostRigger.Core.Resources.*`, `GhostRigger.Core.IO.File.Format`,
   `GhostRigger.Core.Math.*`, `GhostRigger.Core.Rendering.*`,
   `GhostRigger.Core.Validation.*`, `GhostRigger.Core.Project.*`,
   `GhostRigger.Core.Session`, `GhostRigger.Core.Workflow.*`,
   `GhostRigger.Systems.*`, `GhostRigger.Core.Tools.*`,
   `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`, and
-  `GhostRigger.Adapters.*`.
+  `GhostRigger.Core.Bridge`.
 - Concrete renderer packages use `GhostRigger.Core.Rendering.Backends.{Backend}`
   naming, for example `GhostRigger.Core.Rendering.Backends.D3D12` or the
   diagnostic `GhostRigger.Core.Rendering.Backends.Null`.

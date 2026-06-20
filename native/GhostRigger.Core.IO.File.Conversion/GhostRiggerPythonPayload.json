@@ -1,0 +1,33 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.IO.File.Conversion",
+    "file_count": 4,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_CONVERTERS_INIT",
+            "source_path": "src/converters/__init__.py",
+            "packaged_path": "Python/src/converters/__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CONVERTERS_BLENDER_FBX_MESH_IMPORTER",
+            "source_path": "src/converters/blender_fbx_mesh_importer.py",
+            "packaged_path": "Python/src/converters/blender_fbx_mesh_importer.py",
+            "sha256": "ce781a5073193a43adccb7db5dca2eb18f4d60a85f80fe26c1f292ec168f8ebd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
+            "source_path": "src/converters/mesh_converter.py",
+            "packaged_path": "Python/src/converters/mesh_converter.py",
+            "sha256": "8fe201d6e035e02f5e52e62320ac66ae6c85711a0eb62a7fa77e6a0d362c3ffe"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",
+            "source_path": "src/converters/normal_map.py",
+            "packaged_path": "Python/src/converters/normal_map.py",
+            "sha256": "c948148a7d7915730f224df4fd243dbdb1d5084c8150a0a370f75f213492efc8"
+        }
+    ]
+}

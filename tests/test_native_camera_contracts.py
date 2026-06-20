@@ -13,11 +13,11 @@ from src.math.camera_math import focal_length_to_fov, fov_to_focal_length, norma
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Math.Camera.dll"
-PROJECT = ROOT / "native" / "GhostRigger.Core.Math.Camera" / "GhostRigger.Core.Math.Camera.vcxproj"
-FILTERS = ROOT / "native" / "GhostRigger.Core.Math.Camera" / "GhostRigger.Core.Math.Camera.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.Math.Camera" / "Public" / "CameraContracts.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.Math.Camera" / "Private" / "CameraContracts.cpp"
+DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Math.dll"
+PROJECT = ROOT / "native" / "GhostRigger.Core.Math" / "GhostRigger.Core.Math.vcxproj"
+FILTERS = ROOT / "native" / "GhostRigger.Core.Math" / "GhostRigger.Core.Math.vcxproj.filters"
+HEADER = ROOT / "native" / "GhostRigger.Core.Math" / "Public" / "CameraContracts.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Math" / "Private" / "CameraContracts.cpp"
 
 
 def _dll() -> ctypes.CDLL:

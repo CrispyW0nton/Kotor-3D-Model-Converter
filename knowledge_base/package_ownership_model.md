@@ -32,8 +32,8 @@ archive access, resource-file access, and format conversion.
 
 Canonical names include:
 
-- `GhostRigger.Core.IO.MDL`
-- `GhostRigger.Core.IO.FBX`
+- `GhostRigger.Core.IO.File.Format`
+- `GhostRigger.Core.IO.File.Format`
 - `GhostRigger.Core.IO.Import`
 - `GhostRigger.Core.IO.Export`
 - `GhostRigger.Core.IO.Resources`
@@ -47,10 +47,10 @@ events, and machine-facing integration.
 
 Canonical names include:
 
-- `GhostRigger.Core.Automation.IPC`
-- `GhostRigger.Core.Automation.MCP`
+- `GhostRigger.Core.Automation`
+- `GhostRigger.Core.Automation`
 - `GhostRigger.Core.Automation.Commands`
-- `GhostRigger.Core.Automation.Scripting`
+- `GhostRigger.Core.Automation`
 
 ### Tools
 
@@ -139,11 +139,11 @@ and writes it.
 
 Canonical names include:
 
-- `GhostRigger.Core.Formats.MDL`
-- `GhostRigger.Core.Formats.TPC`
-- `GhostRigger.Core.Formats.TwoDA`
-- `GhostRigger.Core.Formats.KMAX`
-- `GhostRigger.Core.Formats.KMAP`
+- `GhostRigger.Core.IO.File.Format.MDL`
+- `GhostRigger.Core.IO.File.Format.TPC`
+- `GhostRigger.Core.IO.File.Format`
+- `GhostRigger.Core.IO.File.Format.KMAX`
+- `GhostRigger.Core.IO.File.Format.KMAP`
 
 ### Math
 
@@ -154,7 +154,7 @@ math, and viewport math.
 Canonical names include:
 
 - `GhostRigger.Core.Math.Transforms`
-- `GhostRigger.Core.Math.Camera`
+- `GhostRigger.Core.Math`
 - `GhostRigger.Core.Math.Pivots`
 - `GhostRigger.Core.Math.Projection`
 - `GhostRigger.Core.Math.Skinning`
@@ -191,7 +191,7 @@ Canonical names include:
 - `GhostRigger.Core.Validation.Export`
 - `GhostRigger.Core.Validation.Resources`
 
-### Adapters
+### Qt And Bridge
 
 Technology-specific glue belongs under Adapters: Qt adapters, GPU adapters,
 filesystem adapters, native host bridges, Python/C++ bridges, renderer
@@ -200,11 +200,11 @@ external runtimes and must not own durable domain policy.
 
 Canonical names include:
 
-- `GhostRigger.Adapters.Qt`
-- `GhostRigger.Adapters.GPU`
-- `GhostRigger.Adapters.Files`
-- `GhostRigger.Adapters.NativeHost`
-- `GhostRigger.Adapters.Rendering`
+- `GhostRigger.Core.Qt`
+- `GhostRigger.Core.Rendering.GPU`
+- `GhostRigger.Core.IO.File.Write`
+- `GhostRigger.Core.Bridge.NativeHost`
+- `GhostRigger.Core.Bridge`
 
 ### Runtime / Native Host
 

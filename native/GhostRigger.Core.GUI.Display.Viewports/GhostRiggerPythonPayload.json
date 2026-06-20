@@ -2,242 +2,323 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.GUI.Display.Viewports",
-    "file_count": 39,
+    "file_count": 45,
     "originals_remain_in_src": true,
     "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_INIT",
+            "source_path": "src/gui/camera/__init__.py",
+            "packaged_path": "Python/src/gui/camera/__init__.py",
+            "sha256": "d03509407f9c8617d9fb59a9820848bd6ef019f0b1835d54d8551d232c138418",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_OVERLAYS",
+            "source_path": "src/gui/camera/camera_overlays.py",
+            "packaged_path": "Python/src/gui/camera/camera_overlays.py",
+            "sha256": "f256f260e7698dc096fc215b9a3bc63faf438665804077beff6a4ab59a8255df",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_VIEWPORT_ADAPTER",
+            "source_path": "src/gui/camera/camera_viewport_adapter.py",
+            "packaged_path": "Python/src/gui/camera/camera_viewport_adapter.py",
+            "sha256": "715964e827ad56c219b65922b747337d973d9765175cbb802790836698bbb3a7",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_FRAME_RENDERER",
+            "source_path": "src/gui/camera/frame_renderer.py",
+            "packaged_path": "Python/src/gui/camera/frame_renderer.py",
+            "sha256": "1f77ea2771f312d6d715637863e798fa226529dde1e6d54a68f94ba29916d18e",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_RENDER_MANIFEST",
+            "source_path": "src/gui/camera/render_manifest.py",
+            "packaged_path": "Python/src/gui/camera/render_manifest.py",
+            "sha256": "1daadbf63e944f4d7281b5c93933dd2dc01b5a55f149eee446d96d0384b38cc1",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_RENDER_OUTPUT",
+            "source_path": "src/gui/camera/render_output.py",
+            "packaged_path": "Python/src/gui/camera/render_output.py",
+            "sha256": "a23e818d8b0d76e33787a0e9c1b9712521914099431f7df55c48adbba99b0d20",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
+        },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_INIT",
             "source_path": "src/gui/viewports/__init__.py",
             "packaged_path": "Python/src/gui/viewports/__init__.py",
-            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_FRAME_RENDERER",
             "source_path": "src/gui/viewports/frame_renderer.py",
             "packaged_path": "Python/src/gui/viewports/frame_renderer.py",
-            "sha256": "d6e0a6985757006238142f79403cc9aa275a1532e821dd172c23f5536e1c3d67"
+            "sha256": "d6e0a6985757006238142f79403cc9aa275a1532e821dd172c23f5536e1c3d67",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_TRANSFORM_TYPEIN_BAR",
             "source_path": "src/gui/viewports/qt_transform_typein_bar.py",
             "packaged_path": "Python/src/gui/viewports/qt_transform_typein_bar.py",
-            "sha256": "a129a5919e321e57398ff82cf9174ee52a8551566d37fd7174d2838314029313"
+            "sha256": "a129a5919e321e57398ff82cf9174ee52a8551566d37fd7174d2838314029313",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_UV_VIEWER",
             "source_path": "src/gui/viewports/qt_uv_viewer.py",
             "packaged_path": "Python/src/gui/viewports/qt_uv_viewer.py",
-            "sha256": "b33b27d35a505e659536d5d4f4e99353bec3388077b74b958277565d823b9884"
+            "sha256": "b33b27d35a505e659536d5d4f4e99353bec3388077b74b958277565d823b9884",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_VIEWPORT",
             "source_path": "src/gui/viewports/qt_viewport.py",
             "packaged_path": "Python/src/gui/viewports/qt_viewport.py",
-            "sha256": "d78bcdd043b08b447965852c79ee3008a57c5cadaffed0b71203daaae1f5344f"
+            "sha256": "d78bcdd043b08b447965852c79ee3008a57c5cadaffed0b71203daaae1f5344f",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWCUBE",
             "source_path": "src/gui/viewports/viewcube.py",
             "packaged_path": "Python/src/gui/viewports/viewcube.py",
-            "sha256": "1529b05714a365e01adf2d235f5a52ea59f3a4b100693fb134d98f0ee1918c28"
+            "sha256": "1529b05714a365e01adf2d235f5a52ea59f3a4b100693fb134d98f0ee1918c28",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWCUBE_MATH",
             "source_path": "src/gui/viewports/viewcube_math.py",
             "packaged_path": "Python/src/gui/viewports/viewcube_math.py",
-            "sha256": "67627e4cd9c16285c78356842d7c41c0db57d6aec10aef9ef6d7071473022872"
+            "sha256": "67627e4cd9c16285c78356842d7c41c0db57d6aec10aef9ef6d7071473022872",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_INIT",
             "source_path": "src/gui/viewports/viewport_core/__init__.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/__init__.py",
-            "sha256": "316cc219747cf9f604d03dccb1f7efbace17ba29d61ccf93b80d305999b74fa9"
+            "sha256": "316cc219747cf9f604d03dccb1f7efbace17ba29d61ccf93b80d305999b74fa9",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_INIT",
             "source_path": "src/gui/viewports/viewport_core/shared/__init__.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/__init__.py",
-            "sha256": "2bdf4876bed77a297db7632537cfaf1cf424e7633bde467514b7fd8e90ca9a17"
+            "sha256": "2bdf4876bed77a297db7632537cfaf1cf424e7633bde467514b7fd8e90ca9a17",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_DEPENDENCIES",
             "source_path": "src/gui/viewports/viewport_core/shared/dependencies.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/dependencies.py",
-            "sha256": "42c14a7ae6d89821371469352c672d15756aa1a60bd55f5e5cd1d465664b088c"
+            "sha256": "42c14a7ae6d89821371469352c672d15756aa1a60bd55f5e5cd1d465664b088c",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_ICONS",
             "source_path": "src/gui/viewports/viewport_core/shared/icons.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/icons.py",
-            "sha256": "e8335cc5b58f69ec3e2e06b08f2874e6534ef4238fe2754a7f7e918ade0bdfe9"
+            "sha256": "e8335cc5b58f69ec3e2e06b08f2874e6534ef4238fe2754a7f7e918ade0bdfe9",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_JOINT_PALETTE",
             "source_path": "src/gui/viewports/viewport_core/shared/joint_palette.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/joint_palette.py",
-            "sha256": "e1bbb666194750f802fde9d43ca54ef95b1d6d1ea6b3e2f653b70926975496aa"
+            "sha256": "e1bbb666194750f802fde9d43ca54ef95b1d6d1ea6b3e2f653b70926975496aa",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_SELECTION_MODES",
             "source_path": "src/gui/viewports/viewport_core/shared/selection_modes.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/selection_modes.py",
-            "sha256": "34f32ba2378d9af2c2004c0d7ff557b883541bb25addcff132ff555f77df82cf"
+            "sha256": "34f32ba2378d9af2c2004c0d7ff557b883541bb25addcff132ff555f77df82cf",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_WEIGHT_HEATMAP",
             "source_path": "src/gui/viewports/viewport_core/shared/weight_heatmap.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/weight_heatmap.py",
-            "sha256": "e036071c373f80bec1f6a230ffc7b7109441c53f33f4a7b8339f5ff12c57e396"
+            "sha256": "e036071c373f80bec1f6a230ffc7b7109441c53f33f4a7b8339f5ff12c57e396",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGET",
             "source_path": "src/gui/viewports/viewport_core/widget.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widget.py",
-            "sha256": "5232deb93b74240843890f009ee413f2e0066bfea026e9e7f019099b80f0c339"
+            "sha256": "5232deb93b74240843890f009ee413f2e0066bfea026e9e7f019099b80f0c339",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGET_SCAFFOLD",
             "source_path": "src/gui/viewports/viewport_core/widget_scaffold.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widget_scaffold.py",
-            "sha256": "6c39164e86807432318500608926446fce3e78c3728dd7f23fba45d304db6221"
+            "sha256": "6c39164e86807432318500608926446fce3e78c3728dd7f23fba45d304db6221",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_INIT",
             "source_path": "src/gui/viewports/viewport_core/widgets/__init__.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/__init__.py",
-            "sha256": "1578c86d4b9a18f57b4e47b0c34c54d7641eb86a23055413103478adce184d6c"
+            "sha256": "1578c86d4b9a18f57b4e47b0c34c54d7641eb86a23055413103478adce184d6c",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_CAMERA_WORKFLOW",
             "source_path": "src/gui/viewports/viewport_core/widgets/camera_workflow.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/camera_workflow.py",
-            "sha256": "2f42e934ea7ae6bbbc9d9a25bd3866c46dbcfc01a879aaee2daccf16e490d578"
+            "sha256": "2f42e934ea7ae6bbbc9d9a25bd3866c46dbcfc01a879aaee2daccf16e490d578",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_CONSTRUCTION",
             "source_path": "src/gui/viewports/viewport_core/widgets/construction.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/construction.py",
-            "sha256": "a142b728b21bae3128814418453a4179ac000b7e55e1ff959748e5792629dba3"
+            "sha256": "a142b728b21bae3128814418453a4179ac000b7e55e1ff959748e5792629dba3",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DISPLAY_CONTROLS",
             "source_path": "src/gui/viewports/viewport_core/widgets/display_controls.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/display_controls.py",
-            "sha256": "662d7439aa1c2c25901c73d77339d6024e585ed7911e5f4580685b834e6ae1fe"
+            "sha256": "662d7439aa1c2c25901c73d77339d6024e585ed7911e5f4580685b834e6ae1fe",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DRAG_INTERACTIONS",
             "source_path": "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py",
-            "sha256": "0306437ab082477c71e478e87786e1942dadcfd3a68334006654fda2fffd5f6c"
+            "sha256": "0306437ab082477c71e478e87786e1942dadcfd3a68334006654fda2fffd5f6c",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_EVENT_NAVIGATION",
             "source_path": "src/gui/viewports/viewport_core/widgets/event_navigation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/event_navigation.py",
-            "sha256": "25e438cc5ec82969fa5f5b377e43a338fb6a9c0f842213f8cdba0437b811af0b"
+            "sha256": "25e438cc5ec82969fa5f5b377e43a338fb6a9c0f842213f8cdba0437b811af0b",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_HISTORY_ANIMATION",
             "source_path": "src/gui/viewports/viewport_core/widgets/history_animation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/history_animation.py",
-            "sha256": "2c40aced14696fba607555140273ffe3ff111e6bbb933fb19ce7926127208ad5"
+            "sha256": "2c40aced14696fba607555140273ffe3ff111e6bbb933fb19ce7926127208ad5",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_MEASUREMENT_CONTROLS",
             "source_path": "src/gui/viewports/viewport_core/widgets/measurement_controls.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/measurement_controls.py",
-            "sha256": "912f7047519278b05ceff4c1588f9336929f80f11fd2ca0a255512d0f5d8608b"
+            "sha256": "912f7047519278b05ceff4c1588f9336929f80f11fd2ca0a255512d0f5d8608b",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_MINI_THUMBNAIL",
             "source_path": "src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
-            "sha256": "276b8cc357650a4cb77426e4fa01717a90033ac2df5ffb10e75efe3cb935111b"
+            "sha256": "276b8cc357650a4cb77426e4fa01717a90033ac2df5ffb10e75efe3cb935111b",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_OVERLAY_LAYERS",
             "source_path": "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py",
-            "sha256": "4ebe7bd1887d3d2e2ba4a08f365039a6931198fbe43cb8319994d9a76fb4f75c"
+            "sha256": "4ebe7bd1887d3d2e2ba4a08f365039a6931198fbe43cb8319994d9a76fb4f75c",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_PICKING_HOVER",
             "source_path": "src/gui/viewports/viewport_core/widgets/picking_hover.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/picking_hover.py",
-            "sha256": "c45c3333ad7e8f31cf75769e1dd6da12b9492104070410c46251e272141cc7a5"
+            "sha256": "c45c3333ad7e8f31cf75769e1dd6da12b9492104070410c46251e272141cc7a5",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_RENDERING_PIPELINE",
             "source_path": "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
-            "sha256": "b43eb02a9f107716b2baa7293aacd849ae18841ed6b7882c7c92eec28010bd38"
+            "sha256": "b43eb02a9f107716b2baa7293aacd849ae18841ed6b7882c7c92eec28010bd38",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_RESOURCE_CACHE",
             "source_path": "src/gui/viewports/viewport_core/widgets/resource_cache.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/resource_cache.py",
-            "sha256": "8c5bedca95a0552803b785d265ac245351ea1c8eef74ce418d7bc87edc76a04b"
+            "sha256": "8c5bedca95a0552803b785d265ac245351ea1c8eef74ce418d7bc87edc76a04b",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SCENE_MODELS",
             "source_path": "src/gui/viewports/viewport_core/widgets/scene_models.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/scene_models.py",
-            "sha256": "0aa38dc8916cdd045bdbb09cd23ada280f2c87dab970921f3d81819754ebb372"
+            "sha256": "0aa38dc8916cdd045bdbb09cd23ada280f2c87dab970921f3d81819754ebb372",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SELECTION_MESH",
             "source_path": "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py",
-            "sha256": "c3b123882b198cf6c2167131fadbd47df2c48ff66219e1d96c442ac2dc46b37f"
+            "sha256": "c3b123882b198cf6c2167131fadbd47df2c48ff66219e1d96c442ac2dc46b37f",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SNAP_VIEW_BAR",
             "source_path": "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
-            "sha256": "f45015fb9fb106054bb41ea9503c6450013078106806955176ed387cb8e40b4f"
+            "sha256": "f45015fb9fb106054bb41ea9503c6450013078106806955176ed387cb8e40b4f",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_STATE_HELPERS",
             "source_path": "src/gui/viewports/viewport_core/widgets/state_helpers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/state_helpers.py",
-            "sha256": "4095e67f18c49da15fbae2f0f1722a6daeeccd055399c945585e9f1954f6043d"
+            "sha256": "4095e67f18c49da15fbae2f0f1722a6daeeccd055399c945585e9f1954f6043d",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_TRANSFORM_CAMERA",
             "source_path": "src/gui/viewports/viewport_core/widgets/transform_camera.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/transform_camera.py",
-            "sha256": "a884df732e882d06e360fb30c42f9d0f87aec30bb633147cb44f6e1756c444d1"
+            "sha256": "a884df732e882d06e360fb30c42f9d0f87aec30bb633147cb44f6e1756c444d1",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_VARIANTS",
             "source_path": "src/gui/viewports/viewport_core/widgets/variants.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/variants.py",
-            "sha256": "08dbec5b5bd33368c14893c56b1252730598df61a73d966514d2a8877b62d8e4"
+            "sha256": "08dbec5b5bd33368c14893c56b1252730598df61a73d966514d2a8877b62d8e4",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_VIEWPORT_WIDGET",
             "source_path": "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py",
-            "sha256": "3dcb84d58ebc3956be160f02ba96a377f873a1c819e23c25842b8367412b24f0"
+            "sha256": "3dcb84d58ebc3956be160f02ba96a377f873a1c819e23c25842b8367412b24f0",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_DISPLAY",
             "source_path": "src/gui/viewports/viewport_display.py",
             "packaged_path": "Python/src/gui/viewports/viewport_display.py",
-            "sha256": "a95e4eaf72cb1e9aac9ab7451c9d740957a90d2bdac580cbd68308a8075c7a3c"
+            "sha256": "a95e4eaf72cb1e9aac9ab7451c9d740957a90d2bdac580cbd68308a8075c7a3c",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_HOST",
             "source_path": "src/gui/viewports/viewport_host.py",
             "packaged_path": "Python/src/gui/viewports/viewport_host.py",
-            "sha256": "708a65ce4e80bce25a6e7cfb6dffeb5a89068ad65b9c7dfccca9169c4915e9a1"
+            "sha256": "708a65ce4e80bce25a6e7cfb6dffeb5a89068ad65b9c7dfccca9169c4915e9a1",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_NAVIGATION",
             "source_path": "src/gui/viewports/viewport_navigation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_navigation.py",
-            "sha256": "97a5b15c361fcb22e3e5453c45a99ea26e7d8195d8a782167de8bff6d147f76e"
+            "sha256": "97a5b15c361fcb22e3e5453c45a99ea26e7d8195d8a782167de8bff6d147f76e",
+            "project": "GhostRigger.Core.GUI.Display.Viewports"
         }
     ]
 }

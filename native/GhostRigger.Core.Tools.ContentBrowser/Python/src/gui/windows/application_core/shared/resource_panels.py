@@ -1,4 +1,4 @@
-"""Resource browser, 2DA, IPC, module-editor, and rig window handlers."""
+"""Resource browser, TwoDA, IPC, module-editor, and rig window handlers."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from src.gui.qt_lib.windows.module_editor_window import ModuleEditorWindow
 
 
 class ResourcePanelsMixin:
-    """Resource browser, 2DA, IPC, module-editor, and rig window handlers."""
+    """Resource browser, TwoDA, IPC, module-editor, and rig window handlers."""
 
     def _populate_resource_panel(self):
         if not hasattr(self, "resource_panel"):

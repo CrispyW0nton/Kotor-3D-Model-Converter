@@ -9,7 +9,7 @@ from PySide6 import QtCore, QtWidgets
 from src.gui.qt_lib.assets.qt_theme import heading
 
 
-class QtTwoDaBrowserPanel(QtWidgets.QWidget):
+class Qt2DABrowserPanel(QtWidgets.QWidget):
     refreshRequested = QtCore.Signal(str)
     tableSelected = QtCore.Signal(str, str)
 

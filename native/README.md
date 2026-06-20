@@ -89,13 +89,13 @@ rename/merge is made.
 
 Reusable logic shared by multiple tools, GUI packages, renderers, or runtime
 packages belongs in the canonical Core, Systems, Runtime, Native Core, or
-Adapters owner before product-surface packages consume it.
+Bridge or Core owner before product-surface packages consume it.
 
 The first toolbox and window candidates are recorded in
 `knowledge_base/native_toolbox_window_migration_candidates.md`; update that file
 before implementing a `GhostRigger.Core.Tools.*`,
 `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`,
-`GhostRigger.Core.Automation.*`, or `GhostRigger.Adapters.NativeHost` package.
+`GhostRigger.Core.Automation`, or `GhostRigger.Core.Bridge.NativeHost` package.
 
 `GhostRigger.Core.Tools.Retargeting` is the first native toolbox package boundary.
 It is diagnostic-only in Phase 1: it reports package capabilities, owner
@@ -174,7 +174,7 @@ owns the current implementation until a later migration slice proves parity.
 Python payload sweep. It maps every non-DEBUG native DLL project to packaged
 Python source copies under `native/<Project>/Python/src/...` and builds
 them into the DLL as `RCDATA` resources through `GhostRiggerPythonPayload.rc`.
-The manifest covers all 91 native DLL projects and 1,306 packaged Python file
+The manifest covers all 80 native DLL projects and 1,306 packaged Python file
 references; duplicated references are intentional when toolbox, renderer,
 window, or shared-runtime package boundaries depend on the same Python owner.
 These are packaged copies only; the active Python application still imports the

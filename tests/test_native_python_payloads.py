@@ -50,7 +50,7 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
         and "<ConfigurationType>DynamicLibrary</ConfigurationType>" in project.read_text(encoding="utf-8")
     }
 
-    assert len(entries) == 91
+    assert len(entries) == 80
     assert len(payload_files) == 1306
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
@@ -80,9 +80,9 @@ def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
 
 
 def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
-    """Workflow TwoDA Browser must consume the shared parser, not package a fork."""
+    """Workflow 2DA Browser must consume the shared parser, not package a fork."""
 
-    owner_project = ROOT / "native" / "GhostRigger.Core.Formats.TwoDA"
+    owner_project = ROOT / "native" / "GhostRigger.Core.IO.File.Format"
     workflow_project = ROOT / "native" / "GhostRigger.Core.Tools.TwoDABrowser"
     parser_paths = (
         "Python/src/core/templates/__init__.py",

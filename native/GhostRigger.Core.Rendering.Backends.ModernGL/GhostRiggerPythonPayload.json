@@ -9,7 +9,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_GPU_MODERNGL_CONTEXT",
             "source_path": "src/adapters/gpu/moderngl_context.py",
             "packaged_path": "Python/src/adapters/gpu/moderngl_context.py",
-            "sha256": "09b00c3818e50a8fd2672b755c539b408ec235bc2abe2e24afda54cd5232d883"
+            "sha256": "f2c20d5ca355ef548ee2935bdbd9d1d5824f2450d2a2b046a75abeaa8f5d8265"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_GPU_MODERNGL_RUNTIME",

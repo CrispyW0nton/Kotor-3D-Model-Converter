@@ -18,7 +18,7 @@ from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanel, QtPythonTerminalPanel
 from src.gui.qt_lib.panels.qt_mesh_tools_panel import QtMeshToolsPanel
 from src.gui.qt_lib.panels.qt_properties_panel import QtPropertiesPanel
-from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, QtTwoDaBrowserPanel
+from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, Qt2DABrowserPanel
 from src.gui.qt_lib.panels.qt_rig_panel import QtRigWindow
 from src.gui.qt_lib.panels.qt_scene_outliner_panel import QtSceneOutlinerPanel
 from src.gui.qt_lib.panels.qt_skeleton_panel import QtSkeletonPanel
@@ -129,7 +129,7 @@ class MainWindowLayoutMixin:
         self._retarget_workbench_controls_connected = False
         self._unreal_source_row: Optional[dict] = None
         self._unreal_source_game = ""
-        self.twoda_panel = QtTwoDaBrowserPanel(self)
+        self.twoda_panel = Qt2DABrowserPanel(self)
         self.twoda_panel.refreshRequested.connect(self._refresh_twoda_panel)
         self.twoda_panel.tableSelected.connect(self._load_twoda_table)
         self.resource_panel = QtResourceBrowserPanel(self)

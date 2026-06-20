@@ -227,8 +227,8 @@ class CreatureAppearance:
 
 def resolve_utc_appearance(
     utc_gff_bytes: bytes,
-    appearance_2da,                    # TwoDA object (from src.core.twoda)
-    heads_2da=None,                    # TwoDA object or None
+    appearance_2da,                    # 2DA object (from src.core.twoda)
+    heads_2da=None,                    # 2DA object or None
     alignment: int = 50,               # UTC.alignment (0–100; 50 = neutral)
     armor_bodyvar: Optional[str] = None,   # e.g. 'b' when wearing armor
     armor_tex_variation: int = 1,          # UTI.texture_variation (1–N)
@@ -240,8 +240,8 @@ def resolve_utc_appearance(
     Parameters
     ----------
     utc_gff_bytes     : raw bytes of the .utc GFF file
-    appearance_2da    : TwoDA for 'appearance.2da' (src.core.twoda.TwoDA)
-    heads_2da         : TwoDA for 'heads.2da', or None (head model skipped)
+    appearance_2da    : 2DA for 'appearance.2da' (src.core.twoda.2DA)
+    heads_2da         : 2DA for 'heads.2da', or None (head model skipped)
     alignment         : creature's alignment (0=darkside, 100=lightside, 50=neutral)
     armor_bodyvar     : armor slot letter ('a','b',…'j') when wearing armor,
                         or None for default/unarmored
@@ -378,7 +378,7 @@ def resolve_utc_appearance(
 
 
 def _col_exists(row, col: str) -> bool:
-    """Return True if the TwoDA row has a non-empty, non-sentinel value for col."""
+    """Return True if the 2DA row has a non-empty, non-sentinel value for col."""
     val = row.get(col, '').strip()
     return bool(val) and val != '****'
 
@@ -606,7 +606,7 @@ def parse_appearance_tables(
     """
     Parse appearance.2da and optionally heads.2da from raw bytes.
 
-    Returns (appearance_2da, heads_2da) as TwoDA objects.
+    Returns (appearance_2da, heads_2da) as 2DA objects.
     heads_2da may be None if heads_bytes is None.
     """
     from ..templates.twoda import TwoDA

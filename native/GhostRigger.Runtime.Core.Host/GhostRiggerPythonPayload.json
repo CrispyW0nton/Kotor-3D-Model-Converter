@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_QT_CORE",
             "source_path": "src/core/qt_core.py",
             "packaged_path": "Python/src/core/qt_core.py",
-            "sha256": "556af5130b94be5862a38229a382dfecf7c0d840316d5137afc1964bf684ea68"
+            "sha256": "522e735ca051c1c65ae7e9d50913684082c7b35c6d1724c7048b2b3f47443ea6"
         }
     ]
 }

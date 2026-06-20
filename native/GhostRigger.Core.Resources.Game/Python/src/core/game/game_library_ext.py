@@ -418,8 +418,8 @@ class GFFReader:
 # Convenience functions
 # ─────────────────────────────────────────────────────────────────────────────
 
-def read_2da_from_library(library, name: str, game: str = "K1") -> Optional['TwoDA']:
-    """Convenience wrapper: get a TwoDA by name from a GameLibrary."""
+def read_2da_from_library(library, name: str, game: str = "K1") -> Optional['2DA']:
+    """Convenience wrapper: get a 2DA by name from a GameLibrary."""
     from ..templates.twoda import TwoDA
     reader = library._k1_key if game == "K1" else library._k2_key
     if reader is None:
