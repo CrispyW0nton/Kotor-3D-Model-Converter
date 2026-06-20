@@ -610,6 +610,17 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_room_outline_geometry(None)
 
+    def set_map_studio_room_outline_snap_highlight(self, highlight: object | None) -> None:
+        """Display the active Map Studio vertex snap target."""
+
+        self._map_studio_room_outline_snap_highlight = highlight if isinstance(highlight, dict) else None
+        self._request_render(fast=True, reason="map studio room outline snap target changed", overlay=True)
+
+    def clear_map_studio_room_outline_snap_highlight(self) -> None:
+        """Remove the active Map Studio vertex snap target."""
+
+        self.set_map_studio_room_outline_snap_highlight(None)
+
     def set_map_studio_terrain_walkability_overlay(self, overlay: object | None) -> None:
         """Display Map Studio terrain WOK walkability classification."""
 

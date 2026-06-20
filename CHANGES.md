@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Highlights Hold-V Vertex Snap Targets
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor viewport overlays / vertex workflow
+Intersects: GUI Boundary Viewports, GUI Boundary Panels, and ModuleMeshes mirror package.
+
+- Added a viewport snap-target highlight overlay for authored room outline vertex snapping so Hold-V snapping shows the exact target point in the Level Editor scene.
+- Routed active snap candidates from the Map Studio viewport panel into the viewport overlay and cleared the highlight when V is released or the drag ends.
+- Updated native Python payload manifests so packaged builds include the new viewport overlay and panel routing code.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py tests/test_map_studio_room_outline_overlay.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_room_outline_overlay.py tests/test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q --basetemp .pytest_tmp_map_studio_snap_highlight`; `python -m json.tool` on touched payload manifests; `git diff --check`.
+
 ### [2026-06-20] Map Studio Wires Hold-V Vertex Snap Dragging
 
 Owner: LordVaderCW

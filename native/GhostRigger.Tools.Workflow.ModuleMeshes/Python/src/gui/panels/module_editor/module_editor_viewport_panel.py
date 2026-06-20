@@ -223,7 +223,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 if key == QtCore.Qt.Key_V:
                     self._vertex_snap_modifier_active = event_type == QtCore.QEvent.KeyPress
                     if self._room_outline_point_drag is not None:
-                        self._request_room_outline_snap_preview_for_drag()
+                        if self._vertex_snap_modifier_active:
+                            self._request_room_outline_snap_preview_for_drag()
+                        else:
+                            self._clear_room_outline_snap_highlight()
                     return False
             if event_type == QtCore.QEvent.MouseButtonPress:
                 if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
@@ -723,8 +726,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if candidate_position is not None:
                 pending = candidate_position
                 self._room_outline_point_drag["pending_snap_candidate"] = candidate
+                self._set_room_outline_snap_highlight_for_candidate(candidate)
         else:
             self._room_outline_point_drag.pop("pending_snap_candidate", None)
+            self._clear_room_outline_snap_highlight()
         self._room_outline_point_drag["active"] = True
         self._room_outline_point_drag["pending_position"] = pending
         return True
@@ -736,6 +741,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._update_room_outline_point_drag(event)
         drag = self._room_outline_point_drag
         self._room_outline_point_drag = None
+        self._clear_room_outline_snap_highlight()
         if not bool(drag.get("active", False)):
             return True
         snap_candidate = drag.get("pending_snap_candidate") if bool(self._vertex_snap_modifier_active) else None
@@ -779,9 +785,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             target_room = str(getattr(nearest, "room_resref", "") or "")
             target_point = int(getattr(nearest, "point_index", -1) or -1)
             distance = float(getattr(nearest, "distance", 0.0) or 0.0)
+            self._set_room_outline_snap_highlight_for_candidate(nearest)
             self.marker_summary_label.setText(
                 f"Vertex snap target: {target_room} point {target_point} ({distance:.3f} m). Release while holding V to commit."
             )
+        else:
+            self._clear_room_outline_snap_highlight()
 
     def _active_room_outline_snap_candidate(self):
         if not bool(self._vertex_snap_modifier_active) or self._room_outline_point_drag is None:
@@ -797,6 +806,33 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if len(position) < 3:
             return None
         return (float(position[0]), float(position[1]), float(position[2]))
+
+    def _set_room_outline_snap_highlight_for_candidate(self, candidate) -> None:
+        position = self._candidate_world_position(candidate)
+        setter = getattr(self.viewport, "set_map_studio_room_outline_snap_highlight", None)
+        if position is None or not callable(setter):
+            self._clear_room_outline_snap_highlight()
+            return
+        target_room = str(getattr(candidate, "room_resref", "") or "")
+        target_point = int(getattr(candidate, "point_index", -1) or -1)
+        distance = float(getattr(candidate, "distance", 0.0) or 0.0)
+        setter(
+            {
+                "world_position": position,
+                "room_resref": target_room,
+                "point_index": target_point,
+                "label": f"Snap {target_room}:{target_point} ({distance:.3f} m)",
+                "color": "#ffd84a",
+            }
+        )
+
+    def _clear_room_outline_snap_highlight(self) -> None:
+        clearer = getattr(self.viewport, "clear_map_studio_room_outline_snap_highlight", None)
+        setter = getattr(self.viewport, "set_map_studio_room_outline_snap_highlight", None)
+        if callable(clearer):
+            clearer()
+        elif callable(setter):
+            setter(None)
 
     def _begin_room_primitive_drag(self, hit: tuple[str, str, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
         start_screen = self._event_position(event)

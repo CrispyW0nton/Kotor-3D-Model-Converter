@@ -1133,6 +1133,10 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "roomOutlinePointSnapped = QtCore.Signal(str, int, int, str)" in source
         assert "QtCore.Qt.Key_V" in source
         assert "set_room_outline_vertex_snap_candidates" in source
+        assert "set_map_studio_room_outline_snap_highlight" in source
+        assert "clear_map_studio_room_outline_snap_highlight" in source
+        assert "_set_room_outline_snap_highlight_for_candidate" in source
+        assert "_clear_room_outline_snap_highlight" in source
         assert "pending_snap_candidate" in source
         assert "Release while holding V to commit" in source
         assert "terrainBrushFrameRequested = QtCore.Signal(str, str, object)" in source

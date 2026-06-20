@@ -311,6 +311,7 @@ class ViewportOverlayLayersMixin:
                     draw.line([(start[0], start[1]), (end[0], end[1])], fill=(0, 0, 0, 150), width=width + 2)
                     draw.line([(start[0], start[1]), (end[0], end[1])], fill=color, width=width)
             self._draw_map_studio_room_primitive_handles(draw, primitive_handles, w, h)
+            self._draw_map_studio_room_outline_snap_highlight(draw, w, h)
         except Exception as exc:
             log.debug("Map Studio room outline overlay failed: %s", exc)
 
@@ -437,6 +438,55 @@ class ViewportOverlayLayersMixin:
             label = str(getattr(handle, "primitive_type", "") or "")
             if label:
                 draw.text((cx + 8, cy - 8), label, fill=color)
+
+    def _draw_map_studio_room_outline_snap_highlight(self, draw, w: int, h: int) -> None:
+        highlight = getattr(self, "_map_studio_room_outline_snap_highlight", None)
+        if not isinstance(highlight, dict):
+            return
+        position = highlight.get("world_position", ())
+        projected = self._map_studio_project_point(position, w, h)
+        if projected is None:
+            return
+        try:
+            cx, cy = float(projected[0]), float(projected[1])
+            color = self._map_studio_marker_rgba(highlight.get("color", "#ffd84a"), 245)
+            outer = 11.0
+            inner = 4.0
+            draw.ellipse(
+                [cx - outer, cy - outer, cx + outer, cy + outer],
+                outline=(0, 0, 0, 215),
+                width=5,
+            )
+            draw.ellipse(
+                [cx - outer, cy - outer, cx + outer, cy + outer],
+                outline=color,
+                width=3,
+            )
+            draw.ellipse(
+                [cx - inner, cy - inner, cx + inner, cy + inner],
+                fill=color,
+                outline=(0, 0, 0, 210),
+                width=1,
+            )
+            draw.line([(cx - 15.0, cy), (cx - 7.0, cy)], fill=color, width=2)
+            draw.line([(cx + 7.0, cy), (cx + 15.0, cy)], fill=color, width=2)
+            draw.line([(cx, cy - 15.0), (cx, cy - 7.0)], fill=color, width=2)
+            draw.line([(cx, cy + 7.0), (cx, cy + 15.0)], fill=color, width=2)
+            label = str(highlight.get("label", "") or "")
+            if label:
+                text_pos = (cx + 14.0, cy - 12.0)
+                try:
+                    text_box = draw.textbbox(text_pos, label)
+                    draw.rectangle(
+                        (text_box[0] - 4, text_box[1] - 2, text_box[2] + 4, text_box[3] + 2),
+                        fill=(0, 0, 0, 165),
+                        outline=(color[0], color[1], color[2], 175),
+                    )
+                except Exception:
+                    pass
+                draw.text(text_pos, label, fill=color)
+        except Exception as exc:
+            log.debug("Map Studio room outline snap highlight failed: %s", exc)
 
     @staticmethod
     def _draw_map_studio_dashed_line(draw, start, end, *, color: tuple[int, int, int, int], width: int = 2) -> None:

@@ -26,11 +26,15 @@ def test_t2664_viewport_exposes_room_outline_overlay_state_and_draw_path() -> No
     )
 
     assert "_map_studio_room_outline_geometry = None" in viewport_source
+    assert "_map_studio_room_outline_snap_highlight = None" in viewport_source
     assert "_map_studio_room_outline_hit_zones" in viewport_source
     assert "_map_studio_room_primitive_hit_zones" in viewport_source
     assert "def set_map_studio_room_outline_geometry" in scene_models_source
     assert "def clear_map_studio_room_outline_geometry" in scene_models_source
+    assert "def set_map_studio_room_outline_snap_highlight" in scene_models_source
+    assert "def clear_map_studio_room_outline_snap_highlight" in scene_models_source
     assert "def _draw_map_studio_room_outlines" in overlay_source
+    assert "def _draw_map_studio_room_outline_snap_highlight" in overlay_source
     assert "def _draw_map_studio_room_primitive_handles" in overlay_source
     assert "def _draw_map_studio_dashed_line" in overlay_source
     assert "def map_studio_room_outline_point_at_screen" in overlay_source
@@ -39,6 +43,7 @@ def test_t2664_viewport_exposes_room_outline_overlay_state_and_draw_path() -> No
     assert "def _add_map_studio_room_primitive_hit_zone" in overlay_source
     assert "world_point=point" in overlay_source
     assert "primitive_handles" in overlay_source
+    assert "Snap" in overlay_source or "snap" in overlay_source
     assert 'role == "wall_height"' in overlay_source
     assert 'role == "opening"' in overlay_source
     assert pipeline_source.index("self._draw_map_studio_room_outlines") < pipeline_source.index(
