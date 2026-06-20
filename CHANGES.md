@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Workspace Switcher
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Map Studio / Level Editor workflow UX / workspace clarity
+Intersects: Map Studio Level Editor window and ModuleMeshes mirror controller workspace definitions.
+
+- Added a core-owned Map Studio workspace contract for Project, Room Geometry, Terrain Builder, Walkmesh, Placements, Lighting, Scripts + Transitions, and Export + Game Proof.
+- Added a visible workspace selector and guide strip to the existing Level Editor so modders can tell what Map Studio task they are editing and jump to the correct tool panel.
+- Kept reusable workspace labels and next-action guidance in the module controller/model layer; the Qt window only populates controls and routes to existing focus methods.
+- Verification: `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_level_editor_exposes_map_studio_workspace_switcher -q --basetemp .pytest_tmp_map_studio_workspace_switcher`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_workspace_workflow`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_model.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_model.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`.
+
 ### [2026-06-20] Native Host Includes Map Studio Payload Files
 
 Owner: LordVaderCW

@@ -1,4 +1,4 @@
-"""Headless state container for the standalone Module Editor."""
+"""Headless state container for the Map Studio Level Editor."""
 
 from __future__ import annotations
 
@@ -13,6 +13,16 @@ class ModuleEditorMessage:
     severity: str
     text: str
     code: str = ""
+
+
+@dataclass(frozen=True)
+class MapStudioWorkspaceMode:
+    """One modder-facing workspace inside the Map Studio Level Editor."""
+
+    key: str
+    label: str
+    summary: str
+    next_action: str
 
 
 @dataclass

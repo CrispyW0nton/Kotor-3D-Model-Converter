@@ -280,6 +280,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.layout_manager = layout_manager or getattr(parent, "layout_manager", None)
         self._last_output_dir = ""
         self._library_rows: list[dict[str, Any]] = []
+        self._map_studio_workspace_modes: dict[str, Any] = {}
         self.resource_manager: Any = None
         self._build_actions()
         self._build_menus()
@@ -378,6 +379,29 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_scope_label.setObjectName("mapStudioLevelEditorScopeLabel")
         self.map_studio_scope_label.setWordWrap(True)
         root.addWidget(self.map_studio_scope_label)
+        workspace_row = QtWidgets.QHBoxLayout()
+        workspace_row.setContentsMargins(0, 0, 0, 0)
+        workspace_row.setSpacing(6)
+        self.map_studio_workspace_label = QtWidgets.QLabel("Workspace")
+        self.map_studio_workspace_label.setObjectName("mapStudioWorkspaceLabel")
+        self.map_studio_workspace_combo = QtWidgets.QComboBox()
+        self.map_studio_workspace_combo.setObjectName("mapStudioWorkspaceComboBox")
+        for mode in self.controller.map_studio_workspace_modes():
+            key = str(getattr(mode, "key", "") or "")
+            if not key:
+                continue
+            self._map_studio_workspace_modes[key] = mode
+            self.map_studio_workspace_combo.addItem(str(getattr(mode, "label", key) or key), key)
+        self.map_studio_workspace_guide_label = QtWidgets.QLabel("")
+        self.map_studio_workspace_guide_label.setObjectName("mapStudioWorkspaceGuideLabel")
+        self.map_studio_workspace_guide_label.setWordWrap(True)
+        self.map_studio_open_workspace_button = QtWidgets.QPushButton("Open Workspace")
+        self.map_studio_open_workspace_button.setObjectName("mapStudioOpenWorkspaceButton")
+        workspace_row.addWidget(self.map_studio_workspace_label)
+        workspace_row.addWidget(self.map_studio_workspace_combo)
+        workspace_row.addWidget(self.map_studio_workspace_guide_label, 1)
+        workspace_row.addWidget(self.map_studio_open_workspace_button)
+        root.addLayout(workspace_row)
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         root.addWidget(self.main_splitter, 1)
 
@@ -437,16 +461,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel = MapStudioWorkflowPanel(right)
         self.readiness_panel = ModuleReadinessPanel(right)
         self.export_panel = ModuleExportPanel(right)
-        right_tabs = QtWidgets.QTabWidget()
-        right_tabs.addTab(self.properties, "Properties")
-        export_page = QtWidgets.QWidget(right_tabs)
+        self.right_tabs = QtWidgets.QTabWidget()
+        self.right_tabs.setObjectName("mapStudioRightTabs")
+        self.right_tabs.addTab(self.properties, "Properties")
+        export_page = QtWidgets.QWidget(self.right_tabs)
+        self.map_studio_export_page = export_page
         export_layout = QtWidgets.QVBoxLayout(export_page)
         export_layout.setContentsMargins(0, 0, 0, 0)
         export_layout.addWidget(self.workflow_panel)
         export_layout.addWidget(self.readiness_panel)
         export_layout.addWidget(self.export_panel)
-        right_tabs.addTab(export_page, "Export")
-        right_layout.addWidget(right_tabs, 1)
+        self.right_tabs.addTab(export_page, "Export")
+        right_layout.addWidget(self.right_tabs, 1)
         self.main_splitter.addWidget(right)
 
         self.bottom_tabs = QtWidgets.QTabWidget()
@@ -463,6 +489,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setStretchFactor(2, 0)
         self.main_splitter.setSizes([285, 1220, 320])
+        self._update_map_studio_workspace_guide()
 
     def _connect(self) -> None:
         self.new_action.triggered.connect(self.new_kmap)
@@ -484,6 +511,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.open_output_action.triggered.connect(self.open_output_folder)
         self.help_action.triggered.connect(lambda: self._show_help("Map Studio"))
         self.kmap_help_action.triggered.connect(lambda: self._show_help("KMAP Format"))
+        self.map_studio_workspace_combo.currentIndexChanged.connect(self._handle_map_studio_workspace_changed)
+        self.map_studio_open_workspace_button.clicked.connect(lambda: self._open_selected_map_studio_workspace())
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
         self.asset_browser.importRequested.connect(self.import_library_asset)
@@ -690,6 +719,57 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         errors = sum(1 for issue in issues if issue.severity.lower() == "error")
         self._log(f"Validation complete: {len(issues)} issue(s), {errors} error(s).")
         self.bottom_tabs.setCurrentWidget(self.validation_panel)
+
+    def _selected_map_studio_workspace_key(self) -> str:
+        return str(self.map_studio_workspace_combo.currentData() or "").strip()
+
+    def _update_map_studio_workspace_guide(self) -> None:
+        key = self._selected_map_studio_workspace_key()
+        mode = self._map_studio_workspace_modes.get(key)
+        if mode is None:
+            self.map_studio_workspace_guide_label.setText(
+                "Choose the Map Studio workspace for the current KOTOR level-authoring task."
+            )
+            return
+        summary = str(getattr(mode, "summary", "") or "")
+        next_action = str(getattr(mode, "next_action", "") or "")
+        text = summary
+        if next_action:
+            text = f"{summary} Next: {next_action}" if summary else f"Next: {next_action}"
+        self.map_studio_workspace_guide_label.setText(text)
+
+    def _handle_map_studio_workspace_changed(self, _index: int) -> None:
+        self._update_map_studio_workspace_guide()
+        self._open_selected_map_studio_workspace(log_focus=False)
+
+    def _open_selected_map_studio_workspace(self, *, log_focus: bool = True) -> None:
+        key = self._selected_map_studio_workspace_key()
+        if key == "geometry":
+            self.show_map_studio_geometry_tools()
+        elif key == "terrain":
+            self.show_map_studio_terrain_tools()
+        elif key == "walkmesh":
+            self.show_map_studio_walkmesh_tools()
+        elif key == "placements":
+            self.show_map_studio_placement_tools()
+        elif key == "lighting":
+            self.show_map_studio_lighting_tools()
+        elif key == "scripts":
+            self.show_map_studio_script_tools()
+        elif key == "export":
+            self.right_tabs.setCurrentWidget(self.map_studio_export_page)
+            self.workflow_panel.set_active_authoring_context(
+                "Export + Game Proof: validate, stage/install, warp test, then record proof"
+            )
+            if log_focus:
+                self._log("Map Studio export and game-proof workspace focused.")
+        else:
+            self.left_tabs.setCurrentWidget(self.outliner)
+            self.workflow_panel.set_active_authoring_context(
+                "Project: KMAP identity, target game, outliner, asset browser, and save/open state"
+            )
+            if log_focus:
+                self._log("Map Studio project workspace focused.")
 
     def show_map_studio_builder(self) -> None:
         """Focus the Builder tab inside the existing Map Studio Level Editor."""

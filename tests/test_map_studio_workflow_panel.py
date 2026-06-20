@@ -258,6 +258,65 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "MapStudioWorkflowPanel" in init_source
 
 
+def test_t2600_level_editor_exposes_map_studio_workspace_switcher() -> None:
+    window_source = _read(
+        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+    controller_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    mirror_controller_source = _read(
+        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "module_editor_controller.py"
+    )
+    model_source = _read(
+        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "module_editor_model.py"
+    )
+
+    assert "class MapStudioWorkspaceMode" in model_source
+    for source in (controller_source, mirror_controller_source):
+        assert "def map_studio_workspace_modes" in source
+        assert 'key="project"' in source
+        assert 'label="Project"' in source
+        assert 'key="geometry"' in source
+        assert 'label="Room Geometry"' in source
+        assert 'key="terrain"' in source
+        assert 'label="Terrain Builder"' in source
+        assert 'key="walkmesh"' in source
+        assert 'label="Walkmesh"' in source
+        assert 'key="placements"' in source
+        assert 'label="Placements"' in source
+        assert 'key="lighting"' in source
+        assert 'label="Lighting"' in source
+        assert 'key="scripts"' in source
+        assert 'label="Scripts + Transitions"' in source
+        assert 'key="export"' in source
+        assert 'label="Export + Game Proof"' in source
+        assert "creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores" in source
+        assert "Validate first; only call the module game-ready after a staged install and recorded warp proof." in source
+
+    assert "self.controller.map_studio_workspace_modes()" in window_source
+    assert "mapStudioWorkspaceLabel" in window_source
+    assert "mapStudioWorkspaceComboBox" in window_source
+    assert "mapStudioWorkspaceGuideLabel" in window_source
+    assert "mapStudioOpenWorkspaceButton" in window_source
+    assert "mapStudioRightTabs" in window_source
+    assert "self.map_studio_workspace_combo.currentIndexChanged.connect" in window_source
+    assert "def _handle_map_studio_workspace_changed" in window_source
+    assert "def _open_selected_map_studio_workspace" in window_source
+    assert "self.show_map_studio_geometry_tools()" in window_source
+    assert "self.show_map_studio_terrain_tools()" in window_source
+    assert "self.show_map_studio_walkmesh_tools()" in window_source
+    assert "self.show_map_studio_placement_tools()" in window_source
+    assert "self.show_map_studio_lighting_tools()" in window_source
+    assert "self.show_map_studio_script_tools()" in window_source
+    assert "self.right_tabs.setCurrentWidget(self.map_studio_export_page)" in window_source
+    assert "Export + Game Proof: validate, stage/install, warp test, then record proof" in window_source
+
+
 def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     builder_source = _read(
         "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"

@@ -11,7 +11,7 @@ from src.core.scene.module_scene_import import resolve_module_room_placement
 
 from .module_blueprint_service import ModuleBlueprintService
 from .module_builder_service import ModuleBuilderService
-from .module_editor_model import ModuleEditorModel
+from .module_editor_model import MapStudioWorkspaceMode, ModuleEditorModel
 from .authored_module_export import (
     AuthoredModuleExportRequest,
     AuthoredModuleGameProofRequest,
@@ -206,6 +206,60 @@ class ModuleEditorController:
         """Return Map Studio authored-module readiness for the current KMAP."""
 
         return build_kmap_authored_module_readiness(self.project)
+
+    def map_studio_workspace_modes(self) -> tuple[MapStudioWorkspaceMode, ...]:
+        """Return the modder-facing Map Studio workspaces exposed by the Level Editor."""
+
+        return (
+            MapStudioWorkspaceMode(
+                key="project",
+                label="Project",
+                summary="KMAP identity, target game, outliner, asset browser, and save/open state.",
+                next_action="Create or open a KMAP, then choose the workspace for the current map task.",
+            ),
+            MapStudioWorkspaceMode(
+                key="geometry",
+                label="Room Geometry",
+                summary="Build floors, walls, corridors, doorway blockouts, primitive rooms, bevels, cuts, and boolean unions.",
+                next_action="Create a starter room or select a room primitive to shape the authored layout.",
+            ),
+            MapStudioWorkspaceMode(
+                key="terrain",
+                label="Terrain Builder",
+                summary="Create terrain patches, sculpt heightfield samples, and check slope/walkability intent.",
+                next_action="Create a terrain patch, choose a heightfield room, then raise/lower/smooth terrain samples.",
+            ),
+            MapStudioWorkspaceMode(
+                key="walkmesh",
+                label="Walkmesh",
+                summary="Inspect WOK surfaces, walkable faces, non-walkable barriers, and traversal readiness.",
+                next_action="Generate or inspect WOK faces before staging a playable module.",
+            ),
+            MapStudioWorkspaceMode(
+                key="placements",
+                label="Placements",
+                summary="Place KOTOR creatures, placeables, doors, triggers, encounters, cameras, sounds, waypoints, and stores.",
+                next_action="Search the game library or type a template resref, then place the resource in the viewport.",
+            ),
+            MapStudioWorkspaceMode(
+                key="lighting",
+                label="Lighting",
+                summary="Author room lights and plan future lightmap coverage before export/game testing.",
+                next_action="Add key/fill/ambient lights per room and validate lighting coverage in readiness.",
+            ),
+            MapStudioWorkspaceMode(
+                key="scripts",
+                label="Scripts + Transitions",
+                summary="Assign ARE/IFO script hooks and configure door, trigger, or waypoint transition targets.",
+                next_action="Set script resrefs or transition destination tags/modules when the map needs behavior or exits.",
+            ),
+            MapStudioWorkspaceMode(
+                key="export",
+                label="Export + Game Proof",
+                summary="Validate, stage, install, open warp-test handoff, and record live KOTOR proof.",
+                next_action="Validate first; only call the module game-ready after a staged install and recorded warp proof.",
+            ),
+        )
 
     def create_dev_test_authored_module(self, *, module_root: str = "grdev01"):
         """Store the editable first Map Studio dev-test module in the KMAP."""
