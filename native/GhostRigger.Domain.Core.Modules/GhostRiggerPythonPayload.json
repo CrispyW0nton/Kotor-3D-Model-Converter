@@ -2,7 +2,7 @@
   "schema": "ghostrigger_python_payload.v1",
   "phase": "P1.5 embedded python payload",
   "project": "GhostRigger.Domain.Core.Modules",
-  "file_count": 30,
+  "file_count": 46,
   "originals_remain_in_src": true,
   "files": [
     {
@@ -15,7 +15,7 @@
       "resource_name": "PYTHON_PAYLOAD_0002",
       "source_path": "src/core/modules/area_wok_integration.py",
       "packaged_path": "Python/src/core/modules/area_wok_integration.py",
-      "sha256": "c3a71bbd02b2c95e0efb25f1a593e4c543e7b74816277ad48bba5e5afe026563"
+      "sha256": "ea0a37d7ca6667c885b4e5b56a37682b910666b09aac2650ebba13ca570f7108"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0003",
@@ -45,19 +45,19 @@
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src/core/modules/module_editor_controller.py",
       "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-      "sha256": "1b40c51c184145f24e6feae040f6caeaf55a1960f18a3a1139ed12e868481fd7"
+      "sha256": "3d949c528b5f2f40c6bf272642ba5728f0aad644936713d197ea9058bbdb7229"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
       "source_path": "src/core/modules/module_editor_model.py",
       "packaged_path": "Python/src/core/modules/module_editor_model.py",
-      "sha256": "e9d2e601896eb4450bc362de73284c3414cc67d96ad9cf89ea848fee36d854cb"
+      "sha256": "8bcd4ed7adac0a423d953b2bd1c6e81c1738ef027fe1eaa72c4475dfb5850835"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0009",
       "source_path": "src/core/modules/module_format.py",
       "packaged_path": "Python/src/core/modules/module_format.py",
-      "sha256": "60e7f37f2a26bc1fb00b9ad3d3400af8bda0d5ccf893351ee594013766814ca0"
+      "sha256": "3a9ce192b44a47b10ec693d2d158b4ceae4a640005d0c6148cf747fb043373c7"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0010",
@@ -93,7 +93,7 @@
       "resource_name": "PYTHON_PAYLOAD_0015",
       "source_path": "src/core/modules/module_save_pipeline.py",
       "packaged_path": "Python/src/core/modules/module_save_pipeline.py",
-      "sha256": "da56d9fbcf2c1fe526aa4a375c20129dd57a45e600b580029eb4fbd3df08cd91"
+      "sha256": "7026ee0d60f73b3fdf4e7333f7410e6a7d3590f4c62f2100b7c6057248d88c58"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0016",
@@ -105,12 +105,12 @@
       "resource_name": "PYTHON_PAYLOAD_0017",
       "source_path": "src/core/modules/dev_module_smoke.py",
       "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-      "sha256": "b05f2d2eabe282775f9c3c4896aa09c276ca7690d47d1f7ef84911eaf04cc6f9"
+      "sha256": "14d54a14d0513a4984f5f75149a7ba9bb80b0b54be36d7841b6865110f5f60b4"
     },
     {
+      "resource_name": "PYTHON_PAYLOAD_0018",
       "source_path": "src/core/modules/authored_walkmesh_surfaces.py",
       "packaged_path": "Python/src/core/modules/authored_walkmesh_surfaces.py",
-      "resource_name": "PYTHON_PAYLOAD_0018",
       "sha256": "0f22c9cf0b3fe30e243ef1c70a451310b0bb13f56623c89d46b6e474aff7b86d"
     },
     {
@@ -120,76 +120,166 @@
       "sha256": "19905392237e696846904e357529e31ad71591466bef21b0787d700d53fb44c5"
     },
     {
+      "resource_name": "PYTHON_PAYLOAD_0020",
       "source_path": "src/core/modules/authored_room_materials.py",
       "packaged_path": "Python/src/core/modules/authored_room_materials.py",
-      "sha256": "0883aa54be3bca5b9fcd269ff8d34824a3a317f357b8f023aa638a5a1d09724c",
-      "resource_name": "PYTHON_PAYLOAD_0027"
-    },
-    {
-      "source_path": "src/core/modules/authored_room_composition.py",
-      "packaged_path": "Python/src/core/modules/authored_room_composition.py",
-      "resource_name": "PYTHON_PAYLOAD_0020",
-      "sha256": "e193f120832152c7de5d0bf48dad401ba9b752a93d5792f43b94ef85b26fb9c8"
+      "sha256": "0883aa54be3bca5b9fcd269ff8d34824a3a317f357b8f023aa638a5a1d09724c"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0021",
-      "source_path": "src/core/modules/authored_module_objects.py",
-      "packaged_path": "Python/src/core/modules/authored_module_objects.py",
-      "sha256": "c90c9a15495edc17ca8e024070de1fc1a00ebf7ddb86955ed2ad2bb7730468ad"
+      "source_path": "src/core/modules/authored_room_composition.py",
+      "packaged_path": "Python/src/core/modules/authored_room_composition.py",
+      "sha256": "e193f120832152c7de5d0bf48dad401ba9b752a93d5792f43b94ef85b26fb9c8"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0022",
-      "source_path": "src/core/modules/authored_module_project.py",
-      "packaged_path": "Python/src/core/modules/authored_module_project.py",
-      "sha256": "e7992add5401b0239510a73d2c2cfa9de906571d359651744dbbaf84469fc8df"
-    },
-    {
-      "source_path": "src/core/modules/authored_module_layout.py",
-      "packaged_path": "Python/src/core/modules/authored_module_layout.py",
-      "resource_name": "PYTHON_PAYLOAD_0023",
-      "sha256": "45a60a86a96625b37b90bb5f4bdb931014bf5d47ff83df94ae6f76508bdab4eb"
-    },
-    {
-      "source_path": "src/core/modules/authored_module_metadata.py",
-      "packaged_path": "Python/src/core/modules/authored_module_metadata.py",
-      "sha256": "e94fd5d51aace68788b0efcb036c77952431a1aa8fa5d551b594cddd79dd19c5",
-      "resource_name": "PYTHON_PAYLOAD_0024"
-    },
-    {
-      "source_path": "src/core/modules/authored_module_pathing.py",
-      "packaged_path": "Python/src/core/modules/authored_module_pathing.py",
-      "sha256": "f66e6b4e0b924300d97d118620c6797ee01f0f3ce3ae971670daddcd9175b74b",
-      "resource_name": "PYTHON_PAYLOAD_0025"
-    },
-    {
-      "resource_name": "PYTHON_PAYLOAD_0028",
       "source_path": "src/core/modules/authored_room_floorplan.py",
       "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-      "sha256": "f0e4e19ff0f61d7f5bde44dedc825fef9bf012687e8db8d0bdbadf614ec87d92"
+      "sha256": "f49546fd400f7c12f845f0f929a0e560a7c9e510688232079ec347adad8eeb37"
     },
     {
-      "resource_name": "PYTHON_PAYLOAD_0026",
+      "resource_name": "PYTHON_PAYLOAD_0023",
       "source_path": "src/core/modules/authored_room_primitives.py",
       "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
       "sha256": "537556cfe7a711cc41a5d7c89367c12bc3a6414569f31f3489a919774bf383d1"
     },
     {
+      "resource_name": "PYTHON_PAYLOAD_0024",
+      "source_path": "src/core/modules/authored_module_objects.py",
+      "packaged_path": "Python/src/core/modules/authored_module_objects.py",
+      "sha256": "edc73bcbe24371cf19566db86400bb65b64fdc920cd6a9d2570264061ab1f0d7"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0025",
+      "source_path": "src/core/modules/authored_module_project.py",
+      "packaged_path": "Python/src/core/modules/authored_module_project.py",
+      "sha256": "9b73411323bdf7f92644b9713af8c8af7181fbb453296f51323cd34239aba56b"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0026",
+      "source_path": "src/core/modules/authored_module_layout.py",
+      "packaged_path": "Python/src/core/modules/authored_module_layout.py",
+      "sha256": "45a60a86a96625b37b90bb5f4bdb931014bf5d47ff83df94ae6f76508bdab4eb"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0027",
+      "source_path": "src/core/modules/authored_module_metadata.py",
+      "packaged_path": "Python/src/core/modules/authored_module_metadata.py",
+      "sha256": "7f8fff00b47705bd1a833f84343e13039290a09a188f68899c25aa037ebd2c68"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0028",
+      "source_path": "src/core/modules/authored_module_pathing.py",
+      "packaged_path": "Python/src/core/modules/authored_module_pathing.py",
+      "sha256": "f66e6b4e0b924300d97d118620c6797ee01f0f3ce3ae971670daddcd9175b74b"
+    },
+    {
       "resource_name": "PYTHON_PAYLOAD_0029",
-      "source_path": "src/core/modules/authored_module_readiness.py",
-      "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "44207244cd4e9273db3f54827822b1479bc23165d3224493395cc035ebc172dd"
+      "source_path": "src/core/modules/authored_gameplay_marker_geometry.py",
+      "packaged_path": "Python/src/core/modules/authored_gameplay_marker_geometry.py",
+      "sha256": "d96c694ce8edaf63f80f68ec511020b29b16f5826a1d2121762229d4045c1138"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0030",
-      "source_path": "src/core/modules/authored_module_kmap_bridge.py",
-      "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
-      "sha256": "66e07340f12436d63fa90a117c5dd37ebfc4d2bf2fb0c2d404895cb16677f6d8"
+      "source_path": "src/core/modules/authored_gameplay_palette.py",
+      "packaged_path": "Python/src/core/modules/authored_gameplay_palette.py",
+      "sha256": "05281b0203b85cb136e129759cbf4c614bd31771523312a23878a8d0035ebb39"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0031",
+      "source_path": "src/core/modules/authored_gameplay_preview.py",
+      "packaged_path": "Python/src/core/modules/authored_gameplay_preview.py",
+      "sha256": "8fac9a86a1ad3f9c1a35bfc99f77650aab409b481661c083b7aae117fe20b06b"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0032",
       "source_path": "src/core/modules/authored_module_export.py",
       "packaged_path": "Python/src/core/modules/authored_module_export.py",
-        "sha256": "37fca671dd972271a5da45b801066c1752f68913d40722f36e64da06cf97ace9"
+      "sha256": "4cb69ceef82d1f3a2be84b848bd150db58fa9d4be7be3a912b10cf85621d504f"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0033",
+      "source_path": "src/core/modules/authored_module_kmap_bridge.py",
+      "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
+      "sha256": "ea8cb41b1793b1d5fbeeaa6d431dc62f5b96131f569b3ea4026ebc0d987ec083"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0034",
+      "source_path": "src/core/modules/authored_module_lighting.py",
+      "packaged_path": "Python/src/core/modules/authored_module_lighting.py",
+      "sha256": "c890da63ee4591e0b61f53e82dd97cb47dd572b5316a75b37e9fc7f61a71c131"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0035",
+      "source_path": "src/core/modules/authored_module_placements.py",
+      "packaged_path": "Python/src/core/modules/authored_module_placements.py",
+      "sha256": "73d9e0c8a4e3fa4fcd100c5fd657b1fd1989113037e3a565866ce024f1b9a706"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0036",
+      "source_path": "src/core/modules/authored_module_readiness.py",
+      "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
+      "sha256": "350dd817716ad9af72b60252f637ffd502e8120b17156a6053f784e5aa80b859"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0037",
+      "source_path": "src/core/modules/authored_module_scripts.py",
+      "packaged_path": "Python/src/core/modules/authored_module_scripts.py",
+      "sha256": "4203e7f7cd6f83b8dcf64bc9cec71dfb228a7745010663fa04b4cee12e35b692"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0038",
+      "source_path": "src/core/modules/authored_module_validation_projection.py",
+      "packaged_path": "Python/src/core/modules/authored_module_validation_projection.py",
+      "sha256": "e51f1b8de1eed876d0380bb80797a38e635b815c0160f3ab5f420ace42de6253"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0039",
+      "source_path": "src/core/modules/authored_room_operations.py",
+      "packaged_path": "Python/src/core/modules/authored_room_operations.py",
+      "sha256": "bf639f3314bfb61bca3929d4eee99020431d818dbee0af48b64f9bfb06eeb0dc"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0040",
+      "source_path": "src/core/modules/authored_room_outline_geometry.py",
+      "packaged_path": "Python/src/core/modules/authored_room_outline_geometry.py",
+      "sha256": "711775613eeea27e4bf95dbbda98020fe9842b0fc72f769c7dd31bea6dda89ab"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0041",
+      "source_path": "src/core/modules/authored_room_presets.py",
+      "packaged_path": "Python/src/core/modules/authored_room_presets.py",
+      "sha256": "cf3ba5d358819ef184612a46321366ca742edea5574978a88a6741a391412d5d"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0042",
+      "source_path": "src/core/modules/authored_room_style.py",
+      "packaged_path": "Python/src/core/modules/authored_room_style.py",
+      "sha256": "10a5d4a9eaeb84ecd9017f86c6a7c1efabcdecf564c5e296b7795b0371df0062"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0043",
+      "source_path": "src/core/modules/authored_terrain_builder.py",
+      "packaged_path": "Python/src/core/modules/authored_terrain_builder.py",
+      "sha256": "98aadeebfb51638fc1b50c92a45a46e343ab8085b41e85bf2b8844c5df25387a"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0044",
+      "source_path": "src/core/modules/authored_terrain_walkability_overlay.py",
+      "packaged_path": "Python/src/core/modules/authored_terrain_walkability_overlay.py",
+      "sha256": "977698d23b4a52dda16e0b11ff59dd3de754bc3c1a21fcfcdd0a1050e1ee4f34"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0045",
+      "source_path": "src/core/modules/authored_walkmesh_boundaries.py",
+      "packaged_path": "Python/src/core/modules/authored_walkmesh_boundaries.py",
+      "sha256": "26452d201f085c353490c97d7f0173d2d0e59de1c01d3f5ada57e9b9f800180b"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0046",
+      "source_path": "src/core/modules/authored_walkmesh_status.py",
+      "packaged_path": "Python/src/core/modules/authored_walkmesh_status.py",
+      "sha256": "54d6a9731621b7c917665873e872429e037258b9804768572c09a5be3a8e04ed"
     }
   ]
 }

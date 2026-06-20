@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Native Host Includes Map Studio Payload Files
+
+Owner: LordVaderCW
+Task: T2600
+Subsystem: Native Python payload packaging / Map Studio startup
+Intersects: Map Studio authored-module services and Module Editor panel payload manifests.
+
+- Regenerated the embedded Python payload manifests/resources for the Module domain, ModuleMeshes workflow, and GUI panels packages so `authored_module_export.py`, readiness services, and Module Editor panel code are actually embedded in the Release DLLs.
+- Fixed resource-script paths to use forward slashes so `rc.exe` does not treat `\a` in authored-module filenames as an escape sequence.
+- Restored Release startup after the cleanup exposed stale payload manifests.
+- Verification: Release MSBuild `GhostRigger_Native_Core_Host`; embedded import check for `src.core.modules.authored_module_export`, `src.gui.windows.module_editor_window`, and `src.gui.qt_lib.windows.qt_main_window`; actual Release `GhostRigger.exe` startup smoke stayed alive after 8 seconds with no fatal log entry.
 ### [2026-06-20] Map Studio Shows Exact Warp Test Handoff
 
 Owner: LordVaderCW

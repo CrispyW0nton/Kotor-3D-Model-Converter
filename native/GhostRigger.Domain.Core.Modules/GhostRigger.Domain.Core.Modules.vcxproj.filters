@@ -158,6 +158,60 @@
     <None Include="Python\src\core\modules\authored_module_pathing.py">
       <Filter>Python\src\core\modules</Filter>
     </None>
+    <None Include="Python\src\core\modules\authored_gameplay_marker_geometry.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_gameplay_palette.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_gameplay_preview.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_export.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_kmap_bridge.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_lighting.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_placements.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_readiness.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_scripts.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_module_validation_projection.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_room_operations.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_room_outline_geometry.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_room_presets.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_room_style.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_terrain_builder.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_terrain_walkability_overlay.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_walkmesh_boundaries.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
+    <None Include="Python\src\core\modules\authored_walkmesh_status.py">
+      <Filter>Python\src\core\modules</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />

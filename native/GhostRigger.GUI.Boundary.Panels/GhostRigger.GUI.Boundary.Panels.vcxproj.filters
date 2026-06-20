@@ -110,6 +110,9 @@
     <None Include="Python\src\gui\panels\module_editor\porter_tab.py">
       <Filter>Python\src\gui\panels\module_editor</Filter>
     </None>
+    <None Include="Python\src\gui\panels\module_editor\readiness_panel.py">
+      <Filter>Python\src\gui\panels\module_editor</Filter>
+    </None>
     <None Include="Python\src\gui\panels\module_editor\rooms_tab.py">
       <Filter>Python\src\gui\panels\module_editor</Filter>
     </None>
