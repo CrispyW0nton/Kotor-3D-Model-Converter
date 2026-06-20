@@ -10,6 +10,33 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-20
+### [2026-06-20] Rewrite Agent Operating Manual
+
+Owner: LordVaderCW
+Subsystem: Agent instructions / documentation
+
+- Rewrote `AGENTS.md` into a structured operating manual that preserves the MCP validation rules, targeted testing policy, visible fixture defaults, architecture boundaries, Qt/Tk/viewport constraints, theme/layout rules, KMAX/KMAP rules, and changelog requirements.
+- Added references to the new local book-derived knowledgebase skill index and learned skill files so future agents can load topic-specific guidance before editing.
+- Added the current native C++ package hierarchy and embedded Python payload contract, including namespace families, canonical source ownership, payload regeneration rules, native package migration rules, and focused native payload/package tests.
+
+Verification:
+- Reviewed the rewritten manual against the previous instruction file and the new `docs/knowledgebase/skills.md` index.
+- Scanned `AGENTS.md` for mojibake/TODO/tab markers and confirmed it contains only ASCII text.
+- Inspected `native/README.md`, `native/templates/README.md`, representative native package folders, `native/GhostRigger.PythonPayloadManifest.json`, and native payload/package tests to ground the C++/embedded-Python section.
+
+### [2026-06-20] Local Book-Derived Knowledgebase Skills
+
+Owner: LordVaderCW
+Subsystem: Documentation / agent knowledgebase
+
+- Added a book-derived skill index for the local `docs/books` library covering rigging, skinning, mesh topology, vertex math, transforms, Qt UI, architecture, MCP validation, and resource pipelines.
+- Added focused learned skill notes under `docs/knowledgebase/learned/` so future agents can load task-specific guidance without rereading entire PDFs.
+- Added narrow Git ignore exceptions for the knowledgebase Markdown while keeping local books and the workspace-local PDF parser dependency out of source tracking.
+
+Verification:
+- Extracted PDF outlines and targeted relevant pages with workspace-local `pypdf` to ground the notes in the available books.
+- Reviewed generated Markdown for repo-specific ownership, testing, and MCP/visible-testing rules.
+
 ### [2026-06-20] Restore Native MDL Project Tracking
 
 Owner: LordVaderCW

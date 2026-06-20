@@ -302,4 +302,12 @@ knowledge_base/test_artifacts/*.zip
 /knowledge_base/books
 /docs/architecture
 /docs
+!/docs/
+/.codex_deps/
+/docs/*
+!/docs/knowledgebase/
+!/docs/knowledgebase/*.md
+!/docs/knowledgebase/skills.md
+!/docs/knowledgebase/learned/
+!/docs/knowledgebase/learned/*.md
 /native/GhostRigger.Core.MDL/build

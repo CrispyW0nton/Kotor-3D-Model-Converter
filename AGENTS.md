@@ -1,310 +1,503 @@
-# GhostRigger Agent Instructions
+# GhostRigger Agent Manual
 
-## MCP tools are for backend/model-pipeline validation only
+This file is the operating contract for agents working in GhostRigger. Treat it
+as project law unless the user gives a more specific instruction for the current
+task.
 
-Before writing or modifying backend code that handles MDL loading, vertex
-transforms, textures, skinning, model pipeline comparison, or game-file parsing,
-FIRST query the MCP tools to get ground-truth data from the actual game files.
-Do not guess. Do not assume based on code comments.
+## Prime Directives
+
+- Work from evidence. For game-file and model-pipeline behavior, use the MCP
+  validation tools before changing code.
+- Keep ownership clean. Put reusable behavior in the correct core, system,
+  adapter, math, IO, format, resource, or GUI layer.
+- Test the thing the user actually cares about. Backend truth checks do not
+  replace visible UI/workflow testing.
+- Prefer focused, targeted verification. Do not run broad sweeps unless the user
+  explicitly approves them for the task.
+- Preserve user data. Do not silently clear scenes, overwrite source KOTOR data,
+  corrupt transforms, or store large blobs in human-readable project formats.
+- Record completed changes in `CHANGES.md` with owner and verification details.
+
+## Knowledgebase And Local Books
+
+The local book-derived working notes live under `docs/knowledgebase/`.
+
+- Start with `docs/knowledgebase/skills.md` when a task involves mesh topology,
+  vertices, extrusion/modeling, transforms, rigging/skinning, Qt UI,
+  architecture, MCP validation, or resource pipelines.
+- Load only the topic file needed from `docs/knowledgebase/learned/`.
+- Return to `docs/books/` only when the learned skill file is not detailed
+  enough for the task.
+- The workspace-local PDF parser dependency under `.codex_deps/` is intentionally
+  kept for future PDF extraction and should remain untracked.
+
+## Current Repository Structure
+
+GhostRigger is now a hybrid Visual Studio C++ host plus embedded Python
+application. Do not treat the repository as a flat Python app.
+
+### Canonical Source Tree
+
+- `src/`: canonical Python source for the current application and domain logic.
+  This is still the active implementation for most behavior.
+- `native/`: Visual Studio C++ package tree. Each `native/GhostRigger.*`
+  directory is a distinct package/project boundary with its own `.vcxproj`.
+- `native/<Project>/Public/`: public C++ headers for that package.
+- `native/<Project>/Private/`: private C++ implementation for that package.
+- `native/<Project>/Python/src/...`: embedded Python payload copy for that
+  package. These are packaged copies, not the primary edit target when a
+  matching file exists under root `src/`.
+- `native/<Project>/GhostRiggerPythonPayload.json`: per-project embedded Python
+  manifest.
+- `native/<Project>/GhostRiggerPythonPayload.rc`: per-project `RCDATA` resource
+  list for the embedded Python files.
+- `native/<Project>/GeneratePythonPayload.py`: project-local wrapper around
+  `scripts/native_python_payload_generator.py`.
+- `native/GhostRigger.PythonPayloadManifest.json`: root manifest mapping every
+  non-debug native DLL project to its packaged Python payload.
+- `native/templates/`: templates for new native DLL/debug-validation project
+  scaffolding.
+
+The current root payload manifest covers 93 non-debug native DLL projects and
+1,272 embedded Python files. Treat the manifest and
+`tests/test_native_python_payloads.py` as the source of truth if counts drift.
+
+### Native Package Families
+
+Use the package namespace to understand ownership:
+
+- `GhostRigger.Native.Core.*`: native host/foundation packages for shared C++
+  runtime foundations, diagnostics, math, and host integration.
+- `GhostRigger.Runtime.Core.Host`: C ABI runtime host used by Python for native
+  lifecycle, scene/resource descriptors, retained handles, and diagnostics.
+- `GhostRigger.Runtime.Shared.*`: shared runtime contracts, descriptors, and
+  resources consumed by renderer/tool/window packages.
+- `GhostRigger.Core.*`: domain/package boundaries corresponding to durable
+  Python subsystems such as scene, MDL, resources, rendering, math, characters,
+  skeleton, validation, project, formats, modules, and workflow.
+- `GhostRigger.Core.GUI.*`: GUI category boundaries such as panels, viewports,
+  dialogs, theme, rendering, textures, lighting, integration, and sequence
+  editor UI.
+- `GhostRigger.Core.Tools.*`: product tool packages such as BAS, Character
+  Builder, Content Browser, Export, Module Meshes, Pivot Controls, Resource
+  Browser, Retargeting, Sequence Editor, and TwoDA Browser.
+- `GhostRigger.Adapters.*`: technology adapters for files, GPU, Qt viewport,
+  Qt IPC, Qt autorig, rendering, and scripting surfaces.
+- `GhostRigger.Graphics.Renderer.Shared.Contracts`: renderer-neutral backend
+  contract package.
+- `GhostRigger.Graphics.Renderer.Backend.*`: concrete renderer backend
+  boundaries such as D3D12, ModernGL, Null, and PyGFX.
+- `GhostRigger.Windows.*`: shell, editor, legacy, and workbench window package
+  boundaries.
+
+Many Phase 1 native packages are diagnostic or boundary-only. Do not move real
+behavior into C++ merely because a native package exists. Native migration must
+prove ownership, parity, validation, and visible workflow behavior.
+
+### Embedded Python Payload Rules
+
+- Edit the canonical root `src/...` file first when a matching source file
+  exists there.
+- Regenerate payload copies after canonical Python changes that are packaged
+  into native DLLs.
+- Do not manually patch `native/<Project>/Python/src/...` copies to diverge from
+  root `src/...`. `tests/test_native_python_payloads.py` checks byte identity
+  for payload files whose source exists.
+- If a package intentionally owns Python that has no root `src` source, document
+  the owner package and why it is package-local.
+- Keep each package's payload manifest, `.rc` file, `.vcxproj`, and filters in
+  sync.
+- Use `python scripts/native_python_payload_generator.py <Project>` to
+  regenerate one package payload.
+- Use `python scripts/native_python_payload_generator.py --all` only when the
+  change genuinely affects many payload packages.
+- Use `python scripts/native_python_payload_generator.py --write-project-generators`
+  when project-local generator wrappers or build targets need repair.
+- Build targets run `GeneratePythonPayload.py` before `PrepareForBuild` when the
+  wrapper exists.
+
+### Native Project Creation And Migration Rules
+
+- Read `native/README.md`, `native/templates/README.md`,
+  `knowledge_base/cpp_integration_phases.md`, and
+  `knowledge_base/native_migration_plan.md` before adding or reshaping native
+  packages.
+- Start new native packages from `native/templates/`; do not copy an existing
+  feature project and strip it down.
+- Do not add parallel `.DEBUG` application projects to `GhostRigger.sln`. Debug
+  validation runs through the real owning project in `Debug|x64`.
+- Use canonical Visual Studio project names directly. Do not rely on solution
+  folders as a substitute for package names.
+- Keep ABI/package names stable unless a batch updates project files,
+  references, payload manifests, tests, bridge lookups, and compatibility shims
+  together.
+- New native package READMEs should include owner surface, owner package, bridge
+  method, C++ ownership, Python ownership, and verification expectations.
+- Python package availability checks live through
+  `src.adapters.native_core.package_registry` and its packaged copies.
+
+## MCP Validation Rules
+
+MCP tools are for backend/model-pipeline truth only. Use them for MDL loading,
+vertex transforms, textures, skinning, model-pipeline comparison, and game-file
+parsing.
 
 Do not use MCP tools, headless widget construction, or backend probes as a
-substitute for visual UI/workflow testing. Use them only for backend logic and
-data-pipeline truth checks.
+substitute for visual UI/workflow testing.
 
-## Backend MCP tools do not require the GUI
+The MCP tools in `ghostrigger_tools.py` import GhostRigger Python modules
+directly. The `PYTHONPATH` in `.cursor/mcp.json` includes the GhostRigger root.
+If an MCP import fails, fix the import path. Do not ask the user to open
+GhostRigger.
 
-The MCP tools in ghostrigger_tools.py import GhostRigger's Python modules directly.
-The PYTHONPATH in .cursor/mcp.json includes the GhostRigger root directory.
-If you get an ImportError, fix the import path — don't ask the user to open GhostRigger.
+### Bug-Fix Order For Model/Data Pipeline Work
 
-## When fixing a bug:
-1. Use compare_model_pipelines(game, resref) to confirm the bug exists
-2. Use inspect_mdl(game, resref) to get PyKotor ground truth
-3. Use inspect_mdl_ghostrigger(game, resref) to see what GhostRigger produces
-4. Identify the divergence
-5. Fix the code
-6. Re-run compare_model_pipelines to confirm the fix
-7. Run only targeted regression checks by default. Do not run broad/full scans unless the user explicitly approves them for that task.
+1. Run `compare_model_pipelines(game, resref)` to confirm the bug exists.
+2. Run `inspect_mdl(game, resref)` for PyKotor ground truth.
+3. Run `inspect_mdl_ghostrigger(game, resref)` for GhostRigger output.
+4. Identify the divergence.
+5. Fix the owning code.
+6. Re-run `compare_model_pipelines(game, resref)` to confirm the fix.
+7. Run only targeted regressions by default.
 
-## When running tests:
-- Prefer `python -m py_compile ...`, targeted single test files, or specific `pytest path::test_name` cases tied to the change.
-- Do not run broad suites such as `pytest tests/`, `pytest tests/ -x`, `pytest tests/ -m "not slow"`, or full-scan tests unless the user explicitly asks for them.
-- Do not run `pytest tests/test_mcp_full_scan.py` unless the user explicitly asks for the complete 6,078-model validation.
-- When testing whether application behavior works, launch the actual
-  GhostRigger Debug application from the active Visual Studio instance and test
-  it on screen. Visible testing is required for UI, startup, viewport,
-  theme/layout, and workflow checks. Do not replace this with MCP calls, direct
-  widget screenshots, or backend-only probes.
+Never run broad/full scans unless the user explicitly approves them. Do not run
+`pytest tests/test_mcp_full_scan.py` unless the user explicitly asks for the
+complete 6,078-model validation.
 
-## Core visible test fixtures
+## Testing Rules
 
-When testing simple application behavior, prefer the smallest fixture that
-exercises the workflow:
+- Prefer `python -m py_compile ...`, targeted single test files, or specific
+  `pytest path::test_name` cases tied to the change.
+- Do not run broad suites such as `pytest tests/`, `pytest tests/ -x`, or
+  `pytest tests/ -m "not slow"` unless the user explicitly asks for them.
+- For native payload edits, prefer focused cases from
+  `tests/test_native_python_payloads.py`, `tests/test_native_core_package_registry.py`,
+  `tests/test_native_module_package_sweep.py`, `tests/test_native_project_templates.py`,
+  and any package-specific contract tests touched by the change.
+- Visible behavior must be tested in the actual GhostRigger Debug application
+  launched from the active Visual Studio instance.
+- Visible testing is required for UI, startup, viewport, theme/layout, workflow,
+  animation playback, renderer behavior, and user-facing scene operations.
+- Backend probes, direct widget screenshots, and headless widget construction do
+  not count as visible workflow tests.
 
-- Static-object workflows: use `PLC_bench` for selection, selection modes, mesh
-  tools, and pivot tools on static meshes. It is the fastest baseline for
-  object-tool testing.
-- Animation workflows: use `N_DarthMalak` as the whole-model animation baseline
-  with the `walk` animation looped unless the user explicitly names another
-  model or animation. For headless/body-part coverage, use Carth's body with
-  Carth's head attached. For cloth-model coverage, use Bastila's body and head.
-- Module and lighting workflows: use the Ebon Hawk module, preferably
-  `K2:001ebo1` / `001EBO1` unless the user explicitly names another module.
+### Default Visible Fixtures
 
-## Renderer module test fixture
+Use the smallest fixture that proves the workflow.
 
-When working on renderer behavior for imported modules, use `K2:001ebo1` /
-`001EBO1` as the primary visible test module unless the user explicitly names
-another module. It is the baseline module for OpenGL-vs-D3D lighting,
-lightmap, texture, and material parity checks.
+- Static object workflows: `PLC_bench` for selection, selection modes, mesh
+  tools, and pivot tools.
+- Animation workflows: `N_DarthMalak` with the `walk` animation looped unless
+  the user names another model or animation.
+- Head/body coverage: Carth body with Carth head attached.
+- Cloth/body coverage: Bastila body and head.
+- Module, lighting, texture, material, and renderer parity workflows:
+  `K2:001ebo1` / `001EBO1` unless the user names another module.
 
-## Animation test fixture
+## Change Log And Commit Rules
 
-When testing animations, use `N_DarthMalak` with the `walk` animation looped
-unless the user explicitly names another model or animation.
+After every completed fix or software change, update `CHANGES.md`.
 
-## Change log
+Each new entry must include:
 
-After any fix or software change is successfully completed, update `CHANGES.md`
-with a dated entry. Include the relevant `T###` roadmap task ID when one applies,
-a concise summary of the change, the affected files or subsystem, and the
-verification performed. Keep entries factual so future agents can avoid repeating
-completed work.
+- The date.
+- `Owner: LordVaderCW`.
+- The relevant `T###` roadmap task ID when one applies.
+- A concise summary of the change.
+- The affected subsystem or files.
+- Verification performed.
 
-Every new `CHANGES.md` entry must include an owner line using the project owner's
-GitHub username: `Owner: LordVaderCW`. If the change overlaps, merges, rebases,
-or otherwise intersects work from another contributor, also include an
-`Intersects:` line naming the other user or branch/commit when known and briefly
-state the touched subsystem, for example `Intersects: upstream/qt-ghostrigger
-Character Builder export changes`. This keeps concurrent changelog edits
-attributable and easier to merge.
+If the change overlaps, merges, rebases, or otherwise intersects work from
+another contributor, include an `Intersects:` line naming the other user,
+branch, or commit when known, plus the touched subsystem.
 
-Before merging an upstream or long-lived branch, create a temporary pre-merge
-safety branch from the current HEAD, for example
-`codex/pre-merge-<branch>-<YYYYMMDD>`. After the merge is committed and the
-post-merge checks pass, delete that temporary safety branch so it does not remain
-as stale branch clutter. Keep the merge commit and changelog entry; the temporary
-branch is only a rollback handle during the merge.
+When adding, changing, or discovering useful embedded Python terminal commands,
+update `CHEETSHEET.md` with paste-ready commands.
 
-## Python terminal cheatsheet
+Commit messages must use one of these forms and include the relevant `T###` task
+ID when roadmap work applies:
 
-When adding, changing, or discovering useful commands for the embedded Python
-terminal, update `CHEETSHEET.md`. Keep it focused on commands a user can paste
-into the terminal, especially helpers exposed by the GUI such as selected-model,
-viewport, animation, export, diagnostic, or debugging commands.
+- `fix(scope): short description`
+- `feat(scope): short description`
+- `chore(cleanup): short description`
+- `test(scope): short description`
 
-## Commit format:
-fix(scope): short description
-feat(scope): short description  
-chore(cleanup): short description
-test(scope): short description
+The active development branch is `qt-ghostrigger`. The roadmap is
+`knowledge_base/roadmap/02_roadmap_2026_05.md`. Open PRs against
+`qt-ghostrigger`, never `main`.
 
-## Active branch — `qt-ghostrigger` (M0–M11 roadmap)
+Before merging an upstream or long-lived branch:
 
-The active development branch is `qt-ghostrigger`. The roadmap lives at
-`knowledge_base/roadmap/02_roadmap_2026_05.md`. Every commit message must
-reference its `T###` task ID. Open PRs against `qt-ghostrigger`, never `main`.
+1. Create a temporary safety branch from current `HEAD`, for example
+   `codex/pre-merge-<branch>-<YYYYMMDD>`.
+2. Merge and run post-merge checks.
+3. Keep the merge commit and changelog entry.
+4. Delete the temporary safety branch after checks pass.
 
-## Architecture and system boundaries
+## Architecture Boundaries
 
-GhostRigger now uses a separated filesystem architecture. Before adding or
-moving code, identify the owning layer and put the change in that layer first;
-do not append new behavior to a convenient window, panel, viewport, or helper
-file just because that is where the call starts.
+Before adding or moving code, identify the owning layer. Do not append new
+behavior to a convenient window, panel, viewport, or helper file just because
+that is where the call starts.
 
-- `src/core/<domain>/` owns headless domain models, services, validation,
+- `src/core/<domain>/`: headless domain models, services, validation,
   scene/project state, resource rules, import/export decisions, and workflow
   policies. Core code must not import Qt or `src.gui.*`.
-- `src/systems/<system_name>/` owns focused feature systems and model pipelines
-  that sit above core primitives, such as BAS assembly/composition. New durable
-  systems should get their own package here instead of being embedded in GUI
-  windows or viewport modules.
-- `src/adapters/<technology_or_surface>/` owns glue to external runtimes,
-  renderer backends, Qt-facing adapters, file/runtime APIs, and integration
-  boundaries. Keep technology-specific details here when they are not pure core
-  logic and not direct widget code.
-- `src/gui/windows/`, `src/gui/panels/`, `src/gui/dialogs/`, and
-  `src/gui/viewports/` own presentation, widgets, signals, user gestures,
-  theme/layout application, and calls into services. They must not become the
-  owner of parsing, model-pipeline logic, transform math, resource lifetime
-  rules, export formats, validation policy, or reusable business functions.
-- `src/math/` owns reusable math. Do not hide new transform, camera, layout,
-  pivot, projection, or coordinate-system math inside GUI files.
-- `src/io/`, `src/formats/`, and `src/resources/` own file formats, resource
-  discovery, and serialization/deserialization concerns. Do not implement
-  game-file parsing or format writing inside windows, panels, or viewport code.
+- `src/systems/<system_name>/`: focused feature systems and model pipelines that
+  sit above core primitives, such as BAS assembly/composition.
+- `src/adapters/<technology_or_surface>/`: glue to external runtimes, renderer
+  backends, Qt-facing adapters, file/runtime APIs, and integration boundaries.
+- `src/gui/windows/`, `src/gui/panels/`, `src/gui/dialogs/`,
+  `src/gui/viewports/`: presentation, widgets, signals, user gestures,
+  theme/layout application, and calls into services.
+- `src/math/`: reusable math for transforms, cameras, pivots, projection,
+  coordinate systems, frame math, GPU math, and viewcube math.
+- `src/io/`, `src/formats/`, `src/resources/`: file formats, resource discovery,
+  serialization, deserialization, and resource lifetime concerns.
+- `native/GhostRigger.*`: C++ package boundaries and embedded Python package
+  copies. The namespace must mirror ownership; the existence of a native package
+  does not automatically transfer behavior out of canonical Python.
 
-When adding a new function or system:
+### Adding New Behavior
 
-1. Search for the existing owner with `rg` and inspect nearby packages before
-   editing.
-2. Name the owning product surface and owning code package in the change notes
-   or plan, for example `src/systems/bas`, `src/core/scene`,
-   `src/core/modules`, `src/adapters/qt_viewport`, or `src/gui/panels`.
+1. Search for the existing owner with `rg` and inspect nearby packages.
+2. Name the owning product surface and code package in the plan, change notes,
+   or changelog.
 3. If no owner exists, create a focused module/package in the correct layer and
-   expose a small API for the UI to call. Do not create another broad
-   `helpers.py`, `utils.py`, or window-local function pile.
+   expose a small API for callers.
 4. Keep dependency direction clean: GUI may call core/systems/adapters; adapters
-   may wrap core/systems for a runtime; core and systems must stay usable
-   without importing GUI widgets.
-5. Window files such as `qt_main_window.py`, `module_editor_window.py`,
+   may wrap core/systems for a runtime; core and systems must stay GUI-free.
+5. Let windows such as `qt_main_window.py`, `module_editor_window.py`,
    `qt_character_builder_window.py`, `qt_retarget_window.py`, and files under
-   `src/gui/windows/application_core/shared/` may orchestrate workflows, but
-   new reusable logic belongs in the owning core/system/adapter module first.
+   `src/gui/windows/application_core/shared/` orchestrate workflows only.
 6. If a window or panel change needs more than signal wiring, widget state, or a
-   short call into a service, extract the function into the owning subsystem and
-   keep the GUI as the caller.
-7. Add or update focused tests/contracts for the owning layer. Prefer testing
-   core/system behavior without Qt, then add visible GUI checks only for the
-   actual UI workflow.
+   short service call, extract the reusable logic to the owning subsystem.
+7. Add focused tests/contracts for the owning layer. Prefer core/system tests
+   without Qt, then add visible GUI checks for UI workflows.
 
-## Tk removal — completed in M3 / T302
+Do not create broad new `helpers.py`, `utils.py`, or window-local function piles.
 
-Milestone M3 / T302 deleted the eight legacy Tk modules that previously
-lived under `src/gui/`. They are gone from the working tree and survive
-only in git history (commit `838831f` is the last ref before deletion):
+## UI And Workbench Boundaries
 
-- `src/gui/main_window.py`              — legacy Tk main window
-- `src/gui/character_builder_window.py` — legacy Tk Character Builder
-- `src/gui/blueprint_editor.py`         — legacy Tk UTC/UTP/UTD editor
-- `src/gui/modular_panel.py`            — legacy Tk module-editor panel
-- `src/gui/matrix_background.py`        — legacy Tk MP4 background engine
-- `src/gui/icon_manager.py`             — legacy Tk PhotoImage icon loader
-- `src/gui/viewport_tk.py`              — Tk widgets split out of viewport.py (T001)
-- `src/gui/viewport.py`                 — backward-compat shim that re-exported both
+Respect separate product surfaces: Main Viewport/KMAX, Retarget Workbench,
+Character Studio, Module Studio, Map Studio, Resource Browser, Validation,
+Export, and Project/session infrastructure.
 
-All UI work now happens under the grouped `src/gui/` category folders and is
-imported through the central `src/gui/qt_lib.py` facade. The `src/gui` package
-root should contain only `qt_lib.py`, `__init__.py`, and documentation.
-`tests/test_qt_only_imports.py` includes guards (`test_legacy_tk_modules_are_deleted`,
-`test_no_gui_module_imports_tkinter`, `test_gui_root_only_keeps_central_qt_lib`)
-that fail CI if any of the eight files return, if a new root shim appears, or
-if a new file under `src/gui/` imports tkinter.
+- GUI windows are composition roots and presentation shells.
+- Parsing, import/export decisions, resource placement, transform algorithms,
+  model composition, validation policy, renderer residency, and reusable
+  workflow policy belong outside GUI files.
+- Workflow-specific controls belong in their owning window or panel. For
+  example, retarget mode, source/target animation choices, output animation
+  naming, and retarget readiness belong in the Animation Retargeting Workbench,
+  not the main viewport command bar.
+- The main window may provide shared services such as `ProjectManager`, current
+  scene/model access, game-library rows, file dialogs, logging, theme/layout
+  registration, and command routing.
+- Shared architecture such as `GhostRiggerProject`, `ResourceAddress`,
+  `GameResourceProvider`, `ValidationBus`, and `ExportJob` should stay headless
+  or service-oriented.
+- When roadmap work begins, include a module-boundary checkpoint: owning
+  studio/window, user task, source/target resource type, validation/export gates,
+  and what must remain outside the slice.
 
-## Qt imports
+## Qt, Tk, And Viewport Structure
 
-- `src.gui.rendering.frame_core.renderer` - Tk-free software frame-rendering backend.
-- `src.gui.camera.arcball_camera` - ArcBall camera state.
-- `src.gui.textures.tpc` / `src.gui.textures.txi` - TPC/TXI texture helpers.
-- `src.gui.qt_lib.viewports.viewport_display` - viewport display mode state.
-- `src.gui.qt_lib.viewports.viewport_navigation` - viewport navigation profiles.
-- `src.gui.qt_lib.viewports.qt_viewport` - Qt viewport widgets.
-- `src.gui.qt_lib.windows.qt_main_window` - Qt main window entry point.
-- `src.gui.qt_lib.<category>.<module>` - canonical Qt GUI import route.
+Milestone M3 / T302 removed the legacy Tk UI. Do not reintroduce Tk modules or
+root-level GUI shims.
 
-Do not add `from .viewport import ...` anywhere; that shim no longer exists.
+Deleted legacy Tk files:
+
+- `src/gui/main_window.py`
+- `src/gui/character_builder_window.py`
+- `src/gui/blueprint_editor.py`
+- `src/gui/modular_panel.py`
+- `src/gui/matrix_background.py`
+- `src/gui/icon_manager.py`
+- `src/gui/viewport_tk.py`
+- `src/gui/viewport.py`
+
+The last ref before deletion is commit `838831f`. The `src/gui` package root
+should contain only `qt_lib.py`, `__init__.py`, and documentation. Guards live
+in `tests/test_qt_only_imports.py`.
+
+Canonical Qt import routes:
+
+- `src.gui.rendering.frame_core.renderer`: Tk-free software frame-rendering
+  backend.
+- `src.gui.camera.arcball_camera`: ArcBall camera state.
+- `src.gui.textures.tpc` / `src.gui.textures.txi`: TPC/TXI texture helpers.
+- `src.gui.qt_lib.viewports.viewport_display`: viewport display mode state.
+- `src.gui.qt_lib.viewports.viewport_navigation`: viewport navigation profiles.
+- `src.gui.qt_lib.viewports.qt_viewport`: Qt viewport widgets.
+- `src.gui.qt_lib.windows.qt_main_window`: Qt main window entry point.
+- `src.gui.qt_lib.<category>.<module>`: canonical Qt GUI import route.
+
+Do not add `from .viewport import ...`. That shim no longer exists.
+
 Import `FrameRenderer`, `ArcBallCamera`, `_load_tpc_bytes`, `_is_tpc_data`,
-  `_clean_tex_name`, etc. through `src.math.frame_math`.
-  Viewport display and navigation modules live under `src/gui/viewports/`;
-  do not add new viewport-owned modules under `src/gui/rendering/`.
-  The software frame-renderer backend lives under `src/gui/rendering/frame_core/`,
-  ArcBall camera state under `src/gui/camera/`, and TPC/TXI texture helpers under
-  `src/gui/textures/`. Keep the `src/gui/viewports/frame_renderer.py` facade thin.
+`_clean_tex_name`, and related helpers through their canonical math/GUI routes.
+Viewport display and navigation modules live under `src/gui/viewports/`; do not
+add new viewport-owned modules under `src/gui/rendering/`. Keep
+`src/gui/viewports/frame_renderer.py` as a thin facade.
 
-## Math helpers
+### Viewport Module Rules
+
+- Keep `src/gui/viewports/qt_viewport.py` as a lazy public compatibility facade.
+- Keep `src/gui/viewports/viewport_core/widget.py` as a lazy widget facade.
+- Shared viewport imports and helper APIs belong under
+  `src/gui/viewports/viewport_core/shared/`.
+- Actual viewport widgets belong under
+  `src/gui/viewports/viewport_core/widgets/`.
+- Patch the owning `QtViewportWidget` mixin instead of unrelated viewport
+  behavior. Existing mixins include `construction`, `scene_models`,
+  `display_controls`, `camera_workflow`, `measurement_controls`,
+  `transform_camera`, `selection_mesh`, `history_animation`,
+  `event_navigation`, `rendering_pipeline`, `overlay_layers`, `picking_hover`,
+  `drag_interactions`, `resource_cache`, and `state_helpers`.
+- If a new viewport feature needs many methods, create a focused mixin and add
+  it to `QtViewportWidget` deliberately.
+- Preserve the public import path through
+  `src.gui.qt_lib.viewports.qt_viewport`.
+- Update source-contract tests that assemble viewport source from split files
+  when adding a viewport module those contracts need to inspect.
+
+## Math Rules
 
 - Shared project math helpers live under `src/math/`.
-- Do not add new math helper modules under `src/gui/`, renderer backend folders,
-  viewport folders, camera folders, or gizmo folders. Keep those old paths as
-  compatibility shims only when needed.
+- Do not add new math helper modules under GUI, renderer backend, viewport,
+  camera, or gizmo folders.
+- Keep old math paths as compatibility shims only when needed.
 - Import canonical math helpers directly from `src.math.*`, for example
   `src.math.frame_math`, `src.math.gpu_math`, `src.math.camera_math`,
   `src.math.transform_math`, and `src.math.viewcube_math`.
+- Always name spaces in transform work: source file, bind, object, parent,
+  world, camera, clip, screen, UI/gizmo, and pose space.
+- Points, vectors, normals, and pivots have different transform semantics.
 
-## Qt viewport module structure
+## Theme And Layout System
 
-- Keep `src/gui/viewports/qt_viewport.py` as a lazy public compatibility
-  facade. Do not put implementation back into this file.
-- Keep `src/gui/viewports/viewport_core/widget.py` as a lazy widget facade.
-  Do not grow it into another large implementation module.
-- Shared viewport imports and helper APIs belong under
-  `src/gui/viewports/viewport_core/shared/`, split by responsibility:
-  dependency imports, icon helpers, selection-mode constants, joint-dot
-  palette helpers, weight heat-map helpers, and similar non-widget support.
-- Actual viewport widgets belong under `src/gui/viewports/viewport_core/widgets/`.
-  New standalone viewport widgets should be added as focused modules there and
-  exported through the lazy facade when they are part of the public viewport API.
-- `QtViewportWidget` behavior is composed from focused mixin modules in
-  `viewport_core/widgets/` (`construction`, `scene_models`, `display_controls`,
-  `camera_workflow`, `measurement_controls`, `transform_camera`,
-  `selection_mesh`, `history_animation`, `event_navigation`,
-  `rendering_pipeline`, `overlay_layers`, `picking_hover`,
-  `drag_interactions`, `resource_cache`, and `state_helpers`). Patch the owning
-  mixin module instead of editing unrelated viewport behavior.
-- If a new viewport feature needs many methods, create a new focused mixin
-  module and add it to `QtViewportWidget` deliberately. Preserve the existing
-  public import path through `src.gui.qt_lib.viewports.qt_viewport`.
-- Update the source-contract tests that assemble viewport source from split
-  files when adding a new viewport module that those contracts need to inspect.
+- Do not hardcode new UI colors. Add or consume tokens through
+  `src/gui/libtheme/` and the active `ThemeManager`.
+- Do not hardcode major GUI sizes, splitter proportions, or toolbar density.
+  Add or consume layout metrics through `LayoutManager` and XML files in
+  `config/themes/layouts/`.
+- The Matrix look is a selectable XML theme at
+  `config/themes/themes/matrix.xml`, not a global style constant.
+- New GUI modules should be theme-aware and use stylesheet tokens where
+  possible.
+- Add `apply_ghost_theme(theme)` for custom painting.
+- Add `apply_ghost_layout(layout)` for standalone windows or major dock panels
+  that own splitter sizes, toolbar density, row heights, or fixed control sizes.
+- New panels should have stable layout IDs so community layouts can size, hide,
+  or reposition them.
+- Standalone windows opened from the main shell should register with the active
+  `ThemeManager` when practical, or receive the current theme/layout from their
+  parent.
+- New UI must be checked in Default/native, Matrix, Droid, Dark, Light, and
+  Classic. Classic/Light must not ship low-contrast labels, disabled text,
+  table headers, or input fields.
+- Avoid blocking the UI thread during theme application. Use cached
+  stylesheets/icons, debounce hot reload/settings-triggered apply calls, and do
+  not trigger a second full theme apply from a `themeChanged` handler.
+- When adding visible UI, update `config/themes/README.md` and
+  `knowledge_base/theme_layout_system.md` if new theme tokens, layout IDs, or
+  button modes are introduced.
 
-## UI/workbench boundaries
+## KMAX Scene Editor Rules
 
-- Respect separate modules, panels, and standalone workbench windows. Before
-  adding a feature, identify the owning product surface: Main Viewport/KMAX,
-  Retarget Workbench, Character Studio, Module Studio, Map Studio, Resource
-  Browser, Validation, Export, or Project/session infrastructure.
-- Treat GUI windows as composition roots and presentation shells. They may wire
-  menus, actions, panels, dialogs, signals, progress, and theme/layout state,
-  but they should call into the owning `src/core/`, `src/systems/`, or
-  `src/adapters/` module for reusable behavior.
-- Do not add parsing, import/export decisions, resource placement, transform
-  algorithms, model composition, validation, renderer residency, or workflow
-  policy directly to `src/gui/windows/*`, `src/gui/panels/*`, or
-  `src/gui/viewports/*`. Add that code to the matching subsystem and keep the
-  UI layer thin.
-- Keep workflow-specific controls inside their owning window or panel. For
-  example, retarget mode, source/target animation choices, output animation
-  naming, and retarget readiness belong in the Animation Retargeting Workbench,
-  not the main viewport header or command bar.
-- The main window may provide shared services such as `ProjectManager`,
-  current scene/model access, game-library rows, file dialogs, logging,
-  theme/layout registration, and command routing, but it should not display
-  persistent controls for a workflow-specific mode unless that workflow is the
-  main viewport itself.
-- Shared architecture such as `GhostRiggerProject`, `ResourceAddress`,
-  `GameResourceProvider`, `ValidationBus`, and `ExportJob` should stay headless
-  or service-oriented. UI code should consume those services through the
-  appropriate studio/window boundary rather than bypassing the owning module.
-- When roadmap work begins, include a module-boundary checkpoint: owning
-  studio/window, user task, source/target resource type, validation/export
-  gates, and what must remain outside the slice.
-
-## Theme and layout system
-
-- Do not hardcode new UI colours. Add or consume tokens through `src/gui/libtheme/` and the active `ThemeManager`.
-- Do not hardcode major GUI sizes, splitter proportions, or toolbar density. Add or consume layout metrics through `LayoutManager` and XML files in `config/themes/layouts/`.
-- The Matrix look is a selectable XML theme (`config/themes/themes/matrix.xml`), not a global style constant.
-- New GUI modules should be theme-aware: use application stylesheet tokens where possible, and add an `apply_ghost_theme(theme)` hook for custom painting.
-- New standalone windows and major dock panels should also expose `apply_ghost_layout(layout)` when they own splitter sizes, toolbar density, row heights, or fixed control sizes.
-- New panels should have stable layout ids so community layouts can size, hide, or reposition them.
-- Standalone windows opened from the main shell must register with the active `ThemeManager` when practical, or receive the current theme/layout from their parent during construction.
-- New UI must be checked in Default/native, Matrix, Droid, Dark, Light, and Classic. Classic/Light must not ship low-contrast labels, disabled text, table headers, or input fields.
-- Avoid blocking the UI thread during theme application. Use cached stylesheets/icons, debounce hot-reload or settings-triggered apply calls, and never trigger a second full theme apply from a `themeChanged` handler.
-- When adding visible UI, update `config/themes/README.md` and `knowledge_base/theme_layout_system.md` if new theme tokens, layout ids, or button modes are introduced.
-
-## Module Editor / KMAP
-
-- KMAP files must be versioned and human-readable.
-- Do not store heavy mesh, animation, or texture blobs in `.kmap` unless a future schema explicitly requires it.
-- Use stable IDs for KMAP projects, modules, rooms, walkmeshes, textures, materials, blueprints, lights, cameras, and scene objects.
-- Preserve source KOTOR module data unless the user explicitly chooses an export/write operation.
-- New Module Editor windows and panels must be theme/layout aware and must not hardcode Matrix-only colours or major fixed sizes.
-- Store source asset references plus editable scene overrides in KMAP; preserve unknown metadata for forward compatibility.
-
-## KMAX Scene Editor
-
-- Do not treat GhostRigger as a single-model viewer.
-- The main viewport must always be scene-based and usable when the scene is empty.
-- Do not clear scenes silently; destructive scene actions must be explicit and dirty scenes must prompt to save.
+- GhostRigger is not a single-model viewer. The main viewport must be
+  scene-based and usable when the scene is empty.
+- Do not clear scenes silently. Destructive scene actions must be explicit, and
+  dirty scenes must prompt to save.
 - Double-click model import must respect the user's clear/add/cancel choice.
 - `.kmax` files must be versioned, human-readable scene files.
-- Do not store huge raw mesh, animation, or texture data in `.kmax` unless a future schema explicitly requires it.
-- Preserve stable scene object IDs, source references, transforms, material overrides, and unknown metadata.
+- Do not store huge raw mesh, animation, or texture data in `.kmax` unless a
+  future schema explicitly requires it.
+- Preserve stable scene object IDs, source references, transforms, pivots,
+  material overrides, and unknown metadata.
 - Use `KMaxSceneManager` for active KMAX scene state.
 - New viewport systems must support empty scenes and multi-object scenes.
-- Do not replace existing viewport, gizmo, renderer, or scene systems when adding viewport tools.
-- Pivot tools must integrate with `SceneObjectInstance.transform` and `SceneObjectInstance.pivot`.
+- Do not replace existing viewport, gizmo, renderer, or scene systems when
+  adding viewport tools.
+- Pivot tools must integrate with `SceneObjectInstance.transform` and
+  `SceneObjectInstance.pivot`.
 - Axis/reference modes must use `TransformReferenceController`.
 - New viewport controls must be theme/layout aware.
-- Do not silently corrupt object transforms when moving pivots; visible geometry should remain stable for pivot-only edits.
+- Pivot-only edits must keep visible geometry stable.
 - Preserve `.kmax` compatibility for scenes that do not yet contain pivot data.
+
+## Module Editor And KMAP Rules
+
+- KMAP files must be versioned and human-readable.
+- Do not store heavy mesh, animation, or texture blobs in `.kmap` unless a
+  future schema explicitly requires it.
+- Use stable IDs for KMAP projects, modules, rooms, walkmeshes, textures,
+  materials, blueprints, lights, cameras, and scene objects.
+- Preserve source KOTOR module data unless the user explicitly chooses an
+  export/write operation.
+- New Module Editor windows and panels must be theme/layout aware and must not
+  hardcode Matrix-only colors or major fixed sizes.
+- Store source asset references plus editable scene overrides in KMAP.
+- Preserve unknown metadata for forward compatibility.
+
+## Resource And Renderer Rules
+
+- Separate source references, loaded resources, decoded assets, renderer
+  resources, and user-authored overrides.
+- Keep resource discovery and serialization in resource/IO/format layers.
+- Keep renderer residency in renderer/adapters packages.
+- Track lifecycle explicitly: discover, resolve, decode, validate, cache,
+  present, release/invalidate.
+- For textures and materials, separate texture bytes, decoded image,
+  sampler/material policy, UV mapping, lightmap handling, and backend upload.
+- For imported module renderer behavior, use `K2:001ebo1` / `001EBO1` as the
+  primary visible test module unless the user names another module.
+- Texture, material, lightmap, and MDL parsing changes require MCP-backed
+  ground truth checks.
+
+## Rigging, Skinning, And Animation Rules
+
+- Treat rigs as layered assets: source geometry cleanup, skeleton/bones, base
+  skinning, animation controls, deformation/corrective layer, and final cleanup.
+- Validate naming and side conventions before export, mirroring, or remapping.
+- Check pivots and local rotation axes before diagnosing animation data.
+- For skinning, compare bind pose, bone order, weights, normalized influence
+  totals, and deformation at high-bend joints.
+- For retargeting, compare source and target topology/skeleton assumptions
+  before transferring weights or animation.
+- Use `N_DarthMalak` with looped `walk` for default animation proof.
+- Use visible Debug app testing for playback, pose, viewport, and workflow
+  behavior.
+
+## Mesh, Vertex, And Modeling Rules
+
+- Treat mesh edits as topology contracts.
+- Validate face winding, normals, open edges, duplicate/overlapping faces,
+  isolated vertices, T-vertices, missing UVs, flipped UV faces, and degenerate
+  triangles.
+- Preserve stable object/subobject IDs when formats or scene contracts depend on
+  them.
+- For per-vertex math, name the space before transforming: object, bind, pose,
+  parent, world, camera, screen, or UV.
+- Transform points, vectors, normals, and tangents correctly. Normals usually
+  need separate handling under non-uniform scale.
+- Generated topology from extrusion, bevel, inset, or bridge tools must define
+  material, UV, normal/tangent, selection, and skin-weight behavior.
+- Reusable modeling algorithms belong in core/system/math owners, not windows or
+  viewport mixins.
+
+## Final Pre-Response Checklist
+
+Before declaring work complete:
+
+- Confirm the newest user request has been answered.
+- Confirm any required `CHANGES.md` entry exists and includes
+  `Owner: LordVaderCW`.
+- Confirm targeted checks were run or explain why they were not.
+- Confirm visible testing was used when the change touched UI/workflow behavior.
+- Confirm no broad scans were run without explicit approval.
+- Confirm ignored/local artifacts such as `docs/books/` and `.codex_deps/` were
+  not accidentally staged.
+- Confirm native embedded Python payload copies were regenerated and checked if
+  canonical Python files packaged into native DLLs changed.
