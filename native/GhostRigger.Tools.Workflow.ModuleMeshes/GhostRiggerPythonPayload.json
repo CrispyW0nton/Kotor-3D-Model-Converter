@@ -297,7 +297,7 @@
       "resource_name": "PYTHON_PAYLOAD_0049",
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "b6aeb7342f32b363aec4619f9c6ecadcb061e21658cfd3ee89f31e854b10747e"
+      "sha256": "0b7e30581efd4ebce8471d87e02e5c2b8c1d611deec3bfeb65182944c031f1a3"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0050",

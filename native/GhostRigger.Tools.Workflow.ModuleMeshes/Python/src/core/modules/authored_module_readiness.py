@@ -154,6 +154,20 @@ class AuthoredFloorPlanGeometryReadiness:
 
 
 @dataclass(frozen=True)
+class AuthoredDoorwayTransitionReadiness:
+    """Doorway/transition intent summary for authored wall openings."""
+
+    ready: bool
+    status: str
+    opening_count: int = 0
+    transition_marker_count: int = 0
+    transition_reference_count: int = 0
+    linked_transition_count: int = 0
+    warnings: tuple[str, ...] = ()
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredModuleReadiness:
     """Capability-honest summary for a from-scratch Map Studio module."""
 
@@ -165,6 +179,9 @@ class AuthoredModuleReadiness:
     toolchain: tuple[AuthoredModuleToolchainStatus, ...] = ()
     geometry_validation: AuthoredFloorPlanGeometryReadiness = field(
         default_factory=lambda: AuthoredFloorPlanGeometryReadiness(True, "No floor-plan rooms")
+    )
+    doorway_transition: AuthoredDoorwayTransitionReadiness = field(
+        default_factory=lambda: AuthoredDoorwayTransitionReadiness(True, "No wall openings")
     )
     component_edit: AuthoredComponentEditReadiness = field(
         default_factory=lambda: AuthoredComponentEditReadiness(True, "No component edits")
@@ -717,6 +734,89 @@ def _floor_plan_geometry_readiness(project: AuthoredModuleProject) -> AuthoredFl
     )
 
 
+def _doorway_transition_readiness(
+    project: AuthoredModuleProject,
+    *,
+    geometry_validation: AuthoredFloorPlanGeometryReadiness,
+    transition_references: tuple[AuthoredModuleTransitionReference, ...],
+) -> AuthoredDoorwayTransitionReadiness:
+    """Summarize whether authored openings have KOTOR door/transition intent."""
+
+    opening_count = int(geometry_validation.opening_count)
+    placements = project.placements
+    transition_marker_count = (
+        len(tuple(getattr(placements, "doors", ()) or ()))
+        + len(tuple(getattr(placements, "triggers", ()) or ()))
+        + len(tuple(getattr(placements, "waypoints", ()) or ()))
+    )
+    transition_reference_count = len(tuple(transition_references or ()))
+    linked_transition_count = sum(1 for ref in transition_references if bool(getattr(ref, "complete", False)))
+    warnings: list[str] = []
+    if opening_count <= 0:
+        return AuthoredDoorwayTransitionReadiness(
+            ready=True,
+            status="No wall openings",
+            opening_count=0,
+            transition_marker_count=transition_marker_count,
+            transition_reference_count=transition_reference_count,
+            linked_transition_count=linked_transition_count,
+            fix_hint="Add a floor-plan wall opening when this room needs a doorway, portal, or transition blockout.",
+        )
+    if transition_marker_count <= 0:
+        warnings.append(
+            f"{opening_count} floor-plan opening(s) exist without authored door, trigger, or waypoint markers. "
+            "Add a KOTOR door/transition marker and review DOOR WOK surface intent before game proof."
+        )
+        return AuthoredDoorwayTransitionReadiness(
+            ready=False,
+            status="Needs door/trigger/waypoint marker",
+            opening_count=opening_count,
+            transition_marker_count=transition_marker_count,
+            transition_reference_count=transition_reference_count,
+            linked_transition_count=linked_transition_count,
+            warnings=tuple(warnings),
+            fix_hint="Use Placement > Door, Trigger, or Waypoint near the opening, then set transition destinations if it leaves the area.",
+        )
+    if transition_reference_count <= 0:
+        warnings.append(
+            f"{opening_count} floor-plan opening(s) and {transition_marker_count} door/trigger/waypoint marker(s) exist, "
+            "but no transition destination is configured yet."
+        )
+        return AuthoredDoorwayTransitionReadiness(
+            ready=False,
+            status="Needs transition review",
+            opening_count=opening_count,
+            transition_marker_count=transition_marker_count,
+            transition_reference_count=transition_reference_count,
+            linked_transition_count=linked_transition_count,
+            warnings=tuple(warnings),
+            fix_hint="If the opening is an area exit, set the linked tag/waypoint and module resref on the door, trigger, or waypoint.",
+        )
+    if linked_transition_count < transition_reference_count:
+        warnings.append(
+            f"{transition_reference_count - linked_transition_count} authored transition(s) near doorway work still need destination tags/waypoints."
+        )
+        return AuthoredDoorwayTransitionReadiness(
+            ready=False,
+            status="Needs linked transition destination",
+            opening_count=opening_count,
+            transition_marker_count=transition_marker_count,
+            transition_reference_count=transition_reference_count,
+            linked_transition_count=linked_transition_count,
+            warnings=tuple(warnings),
+            fix_hint="Complete linked_to and linked_to_module for each authored transition before game proof.",
+        )
+    return AuthoredDoorwayTransitionReadiness(
+        ready=True,
+        status="Ready",
+        opening_count=opening_count,
+        transition_marker_count=transition_marker_count,
+        transition_reference_count=transition_reference_count,
+        linked_transition_count=linked_transition_count,
+        fix_hint="Doorway openings have authored transition markers. Verify DOOR WOK surfaces and door alignment in game.",
+    )
+
+
 def _lighting_count(project: AuthoredModuleProject) -> int:
     return len(tuple(getattr(project, "lights", ()) or ()))
 
@@ -871,6 +971,7 @@ def _toolchain_statuses(
     game_tested: bool,
     proof_recording_script_path: str,
     geometry_validation: AuthoredFloorPlanGeometryReadiness,
+    doorway_transition: AuthoredDoorwayTransitionReadiness,
     component_edit: AuthoredComponentEditReadiness,
 ) -> tuple[AuthoredModuleToolchainStatus, ...]:
     """Summarize the full Map Studio path from geometry intent to game proof."""
@@ -957,9 +1058,21 @@ def _toolchain_statuses(
             geometry_validation.status,
             (
                 f"{geometry_validation.checked_room_count}/{geometry_validation.floor_plan_room_count} floor-plan room(s) checked; "
+                f"{geometry_validation.opening_count} opening(s); "
                 f"{geometry_validation.blocking_issue_count} blocker(s), {geometry_validation.warning_count} warning(s)"
             ),
             geometry_validation.fix_hint,
+        ),
+        AuthoredModuleToolchainStatus(
+            "Doorway/transition intent",
+            doorway_transition.ready,
+            doorway_transition.status,
+            (
+                f"{doorway_transition.opening_count} opening(s); "
+                f"{doorway_transition.transition_marker_count} door/trigger/waypoint marker(s); "
+                f"{doorway_transition.linked_transition_count}/{doorway_transition.transition_reference_count} linked transition(s)"
+            ),
+            doorway_transition.fix_hint,
         ),
         AuthoredModuleToolchainStatus(
             "Component edit audit",
@@ -1097,6 +1210,11 @@ def build_authored_module_readiness(
     pathing = _pathing_readiness(project)
     component_edit = _component_edit_readiness(project)
     geometry_validation = _floor_plan_geometry_readiness(project)
+    doorway_transition = _doorway_transition_readiness(
+        project,
+        geometry_validation=geometry_validation,
+        transition_references=transition_references,
+    )
     export_object_boundaries = map_studio_export_object_boundaries(project)
     external_template_count = sum(1 for ref in template_references if not ref.packaged)
     incomplete_transition_count = sum(1 for ref in transition_references if not ref.complete)
@@ -1124,6 +1242,7 @@ def build_authored_module_readiness(
     warnings = (
         tuple(validation.warnings)
         + geometry_validation.warnings
+        + doorway_transition.warnings
         + template_warnings
         + transition_warnings
         + script_warnings
@@ -1209,6 +1328,7 @@ def build_authored_module_readiness(
         game_tested=proof_game_tested,
         proof_recording_script_path=proof_recording_script_path,
         geometry_validation=geometry_validation,
+        doorway_transition=doorway_transition,
         component_edit=component_edit,
     )
     return AuthoredModuleReadiness(
@@ -1219,6 +1339,7 @@ def build_authored_module_readiness(
         rooms=rooms,
         toolchain=toolchain,
         geometry_validation=geometry_validation,
+        doorway_transition=doorway_transition,
         component_edit=component_edit,
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
@@ -1261,6 +1382,16 @@ def build_authored_module_readiness(
                 "blocking_messages": list(geometry_validation.blocking_messages),
                 "warnings": list(geometry_validation.warnings),
                 "fix_hint": geometry_validation.fix_hint,
+            },
+            "doorway_transition": {
+                "ready": doorway_transition.ready,
+                "status": doorway_transition.status,
+                "opening_count": doorway_transition.opening_count,
+                "transition_marker_count": doorway_transition.transition_marker_count,
+                "transition_reference_count": doorway_transition.transition_reference_count,
+                "linked_transition_count": doorway_transition.linked_transition_count,
+                "warnings": list(doorway_transition.warnings),
+                "fix_hint": doorway_transition.fix_hint,
             },
             "component_edit": {
                 "ready": component_edit.ready,

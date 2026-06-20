@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Doorway Transition Readiness
+
+Owner: LordVaderCW
+Task: T2601 / T2604
+Subsystem: Map Studio / authored-module readiness / KOTOR doorway workflow
+Intersects: Domain Core Modules readiness, GUI Boundary Panels readiness panel, ModuleMeshes mirror package.
+
+- Added headless doorway/transition readiness that connects floor-plan wall openings to KOTOR door, trigger, waypoint, and transition-destination intent.
+- Surfaced a dedicated `Doorway/transition intent` toolchain row and readiness-panel label so modders can see when an opening is only geometry versus when it has authored KOTOR transition markers.
+- Kept the check warning-level rather than a geometry/export blocker because wall openings can be decorative, while still warning before game proof when transition intent is incomplete.
+- Mirrored the readiness core/panel changes into the ModuleMeshes workflow package and refreshed native Python payload hashes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_wall_opening_authoring_compiles_doorway_panels -q --basetemp .pytest_tmp_doorway_intent`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_transition_and_script_references -q --basetemp .pytest_tmp_doorway_intent_ui`.
+
 ### [2026-06-20] Map Studio Shows Floor-Plan Opening Counts In Readiness
 
 Owner: LordVaderCW

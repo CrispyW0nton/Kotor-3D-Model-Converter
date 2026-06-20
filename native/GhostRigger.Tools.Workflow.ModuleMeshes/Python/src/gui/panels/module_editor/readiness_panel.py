@@ -65,6 +65,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.floor_plan_geometry_label.setWordWrap(True)
         root.addWidget(self.floor_plan_geometry_label)
 
+        self.doorway_transition_label = QtWidgets.QLabel("Doorway/transition intent: Not checked")
+        self.doorway_transition_label.setObjectName("mapStudioReadinessDoorwayTransitionLabel")
+        self.doorway_transition_label.setWordWrap(True)
+        root.addWidget(self.doorway_transition_label)
+
         self.component_edit_label = QtWidgets.QLabel("Component edits: Not checked")
         self.component_edit_label.setObjectName("mapStudioReadinessComponentEditLabel")
         self.component_edit_label.setWordWrap(True)
@@ -249,6 +254,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.runtime_label.setText("Runtime resources: Not checked")
             self.pathing_label.setText("Pathing: Not checked")
             self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
+            self.doorway_transition_label.setText("Doorway/transition intent: Not checked")
             self.component_edit_label.setText("Component edits: Not checked")
             self._set_runtime_resource_rows((), (), ())
             self.proof_label.setText("Game proof: Not staged")
@@ -304,6 +310,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.runtime_label.setText("Runtime resources: Not checked")
         self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
         self._set_floor_plan_geometry_summary(dict(metadata.get("geometry_validation", {}) or {}))
+        self._set_doorway_transition_summary(dict(metadata.get("doorway_transition", {}) or {}))
         self._set_component_edit_summary(dict(metadata.get("component_edit", {}) or {}))
         self._set_runtime_resource_rows(expected, present, missing)
         proof_status = str(metadata.get("proof_status") or "not_ready")
@@ -507,6 +514,29 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.floor_plan_geometry_label.setText(
             f"Floor-plan geometry: {status}. {checked}/{total} room(s) checked; "
             f"{opening_count} opening(s); {blockers} blocker(s), {warning_count} warning(s)."
+        )
+
+    def _set_doorway_transition_summary(self, doorway_transition: dict[str, Any]) -> None:
+        """Show whether wall openings have KOTOR door/transition intent."""
+
+        if not doorway_transition:
+            self.doorway_transition_label.setText("Doorway/transition intent: Not checked")
+            return
+        status = str(doorway_transition.get("status") or "Not checked")
+        try:
+            opening_count = int(doorway_transition.get("opening_count", 0) or 0)
+            marker_count = int(doorway_transition.get("transition_marker_count", 0) or 0)
+            reference_count = int(doorway_transition.get("transition_reference_count", 0) or 0)
+            linked_count = int(doorway_transition.get("linked_transition_count", 0) or 0)
+        except (TypeError, ValueError):
+            opening_count = marker_count = reference_count = linked_count = 0
+        warnings = [str(message) for message in list(doorway_transition.get("warnings") or []) if str(message).strip()]
+        if warnings:
+            self.doorway_transition_label.setText(f"Doorway/transition intent: {status}. Review: {warnings[0]}")
+            return
+        self.doorway_transition_label.setText(
+            f"Doorway/transition intent: {status}. {opening_count} opening(s); "
+            f"{marker_count} door/trigger/waypoint marker(s); {linked_count}/{reference_count} linked transition(s)."
         )
 
     def _set_component_edit_summary(self, component_edit: dict[str, Any]) -> None:

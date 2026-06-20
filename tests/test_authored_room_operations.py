@@ -227,8 +227,14 @@ def test_t2601_wall_opening_authoring_compiles_doorway_panels() -> None:
 
     assert room.metadata["last_opening_name"] == "south_door"
     assert len(room.primitive.openings) == 1
+    assert readiness.can_preview is True
     assert readiness.geometry_validation.opening_count == 1
     assert readiness.metadata["geometry_validation"]["opening_count"] == 1
+    assert readiness.doorway_transition.opening_count == 1
+    assert readiness.doorway_transition.transition_marker_count == 1
+    assert readiness.doorway_transition.ready is False
+    assert "transition destination" in " ".join(readiness.doorway_transition.warnings)
+    assert readiness.metadata["doorway_transition"]["opening_count"] == 1
     assert geometry.metadata["opening_count"] == 1
     assert any(mesh.metadata.get("opening_name") == "south_door" for mesh in geometry.helper_meshes)
     assert any(mesh.metadata.get("wall_panel") == "opening_lintel" for mesh in geometry.helper_meshes)
