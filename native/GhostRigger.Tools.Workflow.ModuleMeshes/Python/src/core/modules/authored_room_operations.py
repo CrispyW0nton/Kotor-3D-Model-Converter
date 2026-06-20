@@ -12,7 +12,16 @@ import math
 from dataclasses import dataclass, replace
 from typing import Any
 
-from src.core.geometry.component_editing import component_mesh, flatten_vertices, mirror_vertices, snap_vertex_to_vertex, weld_vertices
+from src.core.geometry.component_editing import (
+    ComponentEditAudit,
+    ComponentEditResult,
+    audit_component_edit_result,
+    component_mesh,
+    flatten_vertices,
+    mirror_vertices,
+    snap_vertex_to_vertex,
+    weld_vertices,
+)
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, authored_resref_blocking_issue, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
@@ -315,6 +324,21 @@ def _floor_plan_component_mesh(primitive: FloorPlanRoomPrimitive):
 
 def _floor_plan_points_from_component_vertices(vertices: tuple[tuple[float, float, float], ...]) -> tuple[tuple[float, float], ...]:
     return tuple((float(vertex[0]), float(vertex[1])) for vertex in vertices)
+
+
+def _component_edit_audit_payload(audit: ComponentEditAudit) -> dict[str, Any]:
+    return {
+        "operation": audit.operation,
+        "component_kind": audit.component_kind,
+        "geometry_changed": audit.geometry_changed,
+        "topology_changed": audit.topology_changed,
+        "walkmesh_review_required": audit.walkmesh_review_required,
+        "export_candidate_stale": audit.export_candidate_stale,
+        "game_proof_stale": audit.game_proof_stale,
+        "summary": audit.summary,
+        "validation_messages": list(audit.validation_messages),
+        "metadata": dict(audit.metadata),
+    }
 
 
 def _points_close(a: tuple[float, float], b: tuple[float, float], tolerance: float) -> bool:
@@ -1801,6 +1825,12 @@ def snap_authored_floor_plan_vertex_to_vertex(
         updated_points_list = list(source_points)
         updated_points_list[source_vertex_index] = (target_world[0] - source_offset[0], target_world[1] - source_offset[1])
         updated_points = tuple((float(x), float(y)) for x, y in updated_points_list)
+        result = ComponentEditResult(
+            mesh=_floor_plan_component_mesh(replace(source_primitive, points=updated_points)),
+            changed_vertex_count=1,
+            metadata={"operation": "snap_floor_plan_vertex", "source_index": source_vertex_index, "target_index": target_vertex_index},
+        )
+    audit = audit_component_edit_result(result, component_kind="floor_plan_vertex", affects_walkmesh=True)
 
     updated_primitive = replace(
         source_primitive,
@@ -1812,6 +1842,7 @@ def snap_authored_floor_plan_vertex_to_vertex(
             "snap_target_room": normalise_resref(target_room.room_resref),
             "snap_target_index": target_vertex_index,
             "source": "map_studio:floor_plan_vertex_snap",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
         },
     )
     return _replace_floor_plan_room(
@@ -1823,6 +1854,7 @@ def snap_authored_floor_plan_vertex_to_vertex(
             "last_vertex_edit": source_vertex_index,
             "snap_target_room": normalise_resref(target_room.room_resref),
             "snap_target_index": target_vertex_index,
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
         },
     )
 
@@ -1849,6 +1881,7 @@ def weld_authored_floor_plan_vertices(
         target_index=target_point_index,
         position_policy=str(position_policy or "target").strip().lower() or "target",
     )
+    audit = audit_component_edit_result(result, component_kind="floor_plan_vertex", affects_walkmesh=True)
     updated_points = _floor_plan_points_from_component_vertices(result.mesh.vertices)
     if len(updated_points) < 3:
         raise ValueError("Weld floor-plan vertices would leave fewer than three footprint points.")
@@ -1861,6 +1894,7 @@ def weld_authored_floor_plan_vertices(
             "welded_vertices": list(selected),
             "weld_policy": str(position_policy or "target").strip().lower() or "target",
             "source": "map_studio:floor_plan_vertex_weld",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
         },
     )
     return _replace_floor_plan_room(
@@ -1868,7 +1902,7 @@ def weld_authored_floor_plan_vertices(
         room_index,
         updated_primitive,
         operation="weld_floor_plan_vertices",
-        room_metadata={"welded_vertices": list(selected)},
+        room_metadata={"welded_vertices": list(selected), "last_component_edit_audit": _component_edit_audit_payload(audit)},
     )
 
 

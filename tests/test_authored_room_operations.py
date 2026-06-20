@@ -363,6 +363,13 @@ def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None
     assert tuple(authored.rooms[0].primitive.points)[1] == (5.0, -5.0)
     assert authored.rooms[0].metadata["last_operation"] == "snap_floor_plan_vertex"
     assert authored.rooms[0].metadata["snap_target_room"] == "grsnapv_room02"
+    audit = authored.rooms[0].metadata["last_component_edit_audit"]
+    assert audit["operation"] == "snap_floor_plan_vertex"
+    assert audit["geometry_changed"] is True
+    assert audit["topology_changed"] is False
+    assert audit["walkmesh_review_required"] is True
+    assert audit["game_proof_stale"] is True
+    assert "Review WOK surface intent before exporting the module." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
     assert not build.blocking_issues
@@ -423,6 +430,13 @@ def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> 
     assert tuple(authored.rooms[0].primitive.points) == ((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0))
     assert authored.rooms[0].metadata["last_operation"] == "weld_floor_plan_vertices"
     assert authored.rooms[0].metadata["welded_vertices"] == [1, 2]
+    audit = authored.rooms[0].metadata["last_component_edit_audit"]
+    assert audit["operation"] == "weld_vertices"
+    assert audit["geometry_changed"] is True
+    assert audit["topology_changed"] is True
+    assert audit["walkmesh_review_required"] is True
+    assert audit["metadata"]["removed_vertex_count"] == 1
+    assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
     assert not build.blocking_issues

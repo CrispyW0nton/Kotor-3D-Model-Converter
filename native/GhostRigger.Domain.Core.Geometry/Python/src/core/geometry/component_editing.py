@@ -37,6 +37,22 @@ class ComponentEditResult:
     metadata: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ComponentEditAudit:
+    """KOTOR-aware export/readiness impact summary for one component edit."""
+
+    operation: str
+    component_kind: str
+    geometry_changed: bool
+    topology_changed: bool
+    walkmesh_review_required: bool
+    export_candidate_stale: bool
+    game_proof_stale: bool
+    validation_messages: tuple[str, ...] = ()
+    summary: str = ""
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
 def _finite_vertex(value: Sequence[float]) -> Vector3:
     if len(value) < 3:
         raise ValueError("Vertex must contain at least three coordinates.")
@@ -198,6 +214,103 @@ def snap_vertex_to_vertex(mesh: ComponentMesh, source_index: int, target_index: 
         mesh=snapped,
         changed_vertex_count=1,
         metadata={"operation": "snap_vertex_to_vertex", "source_index": source, "target_index": target},
+    )
+
+
+def _metadata_int(metadata: dict[str, object], key: str) -> int:
+    try:
+        return int(metadata.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def audit_component_edit_result(
+    result: ComponentEditResult,
+    *,
+    component_kind: str = "room",
+    affects_walkmesh: bool = True,
+) -> ComponentEditAudit:
+    """Classify one component edit for Map Studio readiness/export messaging.
+
+    The geometry helpers intentionally stay file-format agnostic, but Map
+    Studio still needs every edit to explain its KOTOR consequences. This audit
+    is the shared bridge: UI panels can show it, readiness checks can reference
+    it, and export gates can treat stale MDL/MDX/WOK/PTH proof explicitly.
+    """
+
+    metadata = dict(result.metadata or {})
+    operation = str(metadata.get("operation") or "component_edit")
+    added_faces = _metadata_int(metadata, "added_face_count")
+    triangulated_faces = _metadata_int(metadata, "triangulated_face_count")
+    removed_vertices = _metadata_int(metadata, "removed_vertex_count")
+    flipped_faces = _metadata_int(metadata, "flipped_face_count")
+    skipped_faces = _metadata_int(metadata, "skipped_face_count")
+    topology_changed = any(
+        value > 0
+        for value in (
+            added_faces,
+            result.removed_face_count,
+            triangulated_faces,
+            removed_vertices,
+        )
+    )
+    geometry_changed = any(
+        value > 0
+        for value in (
+            result.changed_vertex_count,
+            result.removed_face_count,
+            added_faces,
+            triangulated_faces,
+            removed_vertices,
+            flipped_faces,
+        )
+    )
+    kind = str(component_kind or "room").strip().lower() or "room"
+    walkmesh_review_required = bool(geometry_changed and affects_walkmesh)
+    messages: list[str] = list(result.warnings)
+    if geometry_changed:
+        messages.append("Previous staged exports and recorded game proof are stale.")
+    if topology_changed:
+        messages.append("Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging.")
+    elif result.changed_vertex_count:
+        messages.append("Re-run WOK/walkability preview if this edit affects traversal or doorway seams.")
+    if walkmesh_review_required:
+        messages.append("Review WOK surface intent before exporting the module.")
+    if skipped_faces:
+        messages.append("Some faces could not be normal-audited; inspect normals before export.")
+    change_bits: list[str] = []
+    if result.changed_vertex_count:
+        change_bits.append(f"{result.changed_vertex_count} vertex change(s)")
+    if added_faces:
+        change_bits.append(f"{added_faces} added face(s)")
+    if result.removed_face_count:
+        change_bits.append(f"{result.removed_face_count} removed face(s)")
+    if triangulated_faces:
+        change_bits.append(f"{triangulated_faces} triangulated face set(s)")
+    if flipped_faces:
+        change_bits.append(f"{flipped_faces} flipped face(s)")
+    if not change_bits:
+        change_bits.append("no geometry changes")
+    summary = f"{operation} on {kind}: {', '.join(change_bits)}."
+    return ComponentEditAudit(
+        operation=operation,
+        component_kind=kind,
+        geometry_changed=geometry_changed,
+        topology_changed=topology_changed,
+        walkmesh_review_required=walkmesh_review_required,
+        export_candidate_stale=geometry_changed,
+        game_proof_stale=geometry_changed,
+        validation_messages=tuple(dict.fromkeys(messages)),
+        summary=summary,
+        metadata={
+            "changed_vertex_count": result.changed_vertex_count,
+            "removed_face_count": result.removed_face_count,
+            "added_face_count": added_faces,
+            "triangulated_face_count": triangulated_faces,
+            "removed_vertex_count": removed_vertices,
+            "flipped_face_count": flipped_faces,
+            "affects_walkmesh": bool(affects_walkmesh),
+        },
     )
 
 
@@ -404,10 +517,12 @@ def weld_vertices(
 
 
 __all__ = [
+    "ComponentEditAudit",
     "ComponentEditResult",
     "ComponentMesh",
     "Face",
     "Vector3",
+    "audit_component_edit_result",
     "cleanup_degenerate_faces",
     "cleanup_face_normals",
     "component_mesh",

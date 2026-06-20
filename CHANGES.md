@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Component Edit Audit Metadata
+
+Owner: LordVaderCW
+Task: T2601 / T2602 / T2908
+Subsystem: Map Studio / geometry kernel / export readiness
+Intersects: Map Studio floor-plan vertex tools, ModuleMeshes mirror package, native Geometry payload.
+
+- Added a headless `ComponentEditAudit` model that classifies component edits as geometry-changing, topology-changing, WOK-review-required, export-stale, and game-proof-stale.
+- Added KOTOR-aware audit messages for snap, weld, fill, triangulate, normal cleanup, and no-op component edits so UI/export gates can explain MDL/MDX/WOK/PTH consequences instead of showing generic mesh warnings.
+- Stored component-edit audit payloads on floor-plan snap and weld room metadata, including cross-room vertex snapping, so KMAP-authored rooms can carry the last risky edit summary through readiness/export workflows.
+- Mirrored the room-operation audit payload support into the ModuleMeshes workflow package and refreshed native Python payload hashes for Geometry, Domain Core Modules, and ModuleMeshes.
+- Verification: `python -m pytest tests/test_component_editing.py tests/test_authored_room_operations.py::test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex tests/test_authored_room_operations.py::test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable -q --basetemp .pytest_tmp_component_audit_room_ops`; `python -m py_compile native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/component_editing.py native/GhostRigger.Domain.Core.Geometry/Python/src/core/geometry/__init__.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py tests/test_component_editing.py tests/test_authored_room_operations.py`.
+
 ### [2026-06-20] Map Studio Clarifies Level Editor Edit Modes
 
 Owner: LordVaderCW
